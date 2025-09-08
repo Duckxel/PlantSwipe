@@ -1,172 +1,19 @@
 import React, { useMemo, useState } from "react";
-import { motion, AnimatePresence, useMotionValue } from "framer-motion";
-import { Search, Leaf, Droplets, SunMedium, Info, X, ChevronLeft, ChevronRight, Sparkles, Grid3X3, ScrollText, LogIn, UserPlus, ListFilter } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { useMotionValue } from "framer-motion";
+import { Search } from "lucide-react";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-
-// --- Types ---
-interface Plant {
-  id: string
-  name: string
-  scientificName: string
-  colors: string[]
-  seasons: ("Spring" | "Summer" | "Autumn" | "Winter")[]
-  rarity: "Common" | "Uncommon" | "Rare" | "Legendary"
-  meaning: string
-  description: string
-  image?: string
-  care: {
-    sunlight: "Low" | "Medium" | "High"
-    water: "Low" | "Medium" | "High"
-    soil: string
-    difficulty: "Easy" | "Moderate" | "Hard"
-  }
-  seedsAvailable: boolean
-}
-
-// --- Sample Data (replace with your DB later) ---
-const PLANTS: Plant[] = [
-  {
-    id: "rose",
-    name: "Rose",
-    scientificName: "Rosa spp.",
-    colors: ["Red", "Pink", "White", "Yellow", "Orange"],
-    seasons: ["Spring", "Summer"],
-    rarity: "Common",
-    meaning: "Love, admiration, remembrance.",
-    description:
-      "Classic flowering shrub prized for fragrant blooms. Prefers full sun and well‑drained, rich soil.",
-    image:
-      "https://images.unsplash.com/photo-1509557964280-ead5b1a3f7b9?q=80&w=1400&auto=format&fit=crop",
-    care: { sunlight: "High", water: "Medium", soil: "Loamy, well‑drained", difficulty: "Moderate" },
-    seedsAvailable: true,
-  },
-  {
-    id: "lavender",
-    name: "Lavender",
-    scientificName: "Lavandula angustifolia",
-    colors: ["Purple", "Blue"],
-    seasons: ["Summer"],
-    rarity: "Common",
-    meaning: "Calm, devotion, serenity.",
-    description:
-      "Mediterranean herb with aromatic spikes. Drought tolerant, great for pollinators and sachets.",
-    image:
-      "https://images.unsplash.com/photo-1501706362039-c06b2d715385?q=80&w=1400&auto=format&fit=crop",
-    care: { sunlight: "High", water: "Low", soil: "Sandy, well‑drained", difficulty: "Easy" },
-    seedsAvailable: true,
-  },
-  {
-    id: "sunflower",
-    name: "Sunflower",
-    scientificName: "Helianthus annuus",
-    colors: ["Yellow", "Orange", "Red"],
-    seasons: ["Summer", "Autumn"],
-    rarity: "Common",
-    meaning: "Happiness, loyalty, longevity.",
-    description:
-      "Tall annual with large, cheerful flower heads that track the sun. Excellent cut flower.",
-    image:
-      "https://images.unsplash.com/photo-1466690672306-5f92132f7248?q=80&w=1400&auto=format&fit=crop",
-    care: { sunlight: "High", water: "Medium", soil: "Fertile, well‑drained", difficulty: "Easy" },
-    seedsAvailable: true,
-  },
-  {
-    id: "hydrangea",
-    name: "Hydrangea",
-    scientificName: "Hydrangea macrophylla",
-    colors: ["Blue", "Pink", "White", "Purple"],
-    seasons: ["Summer"],
-    rarity: "Uncommon",
-    meaning: "Gratitude, heartfelt emotion.",
-    description:
-      "Showy shrubs with color‑shifting blooms depending on soil pH. Prefer partial shade and moisture.",
-    image:
-      "https://images.unsplash.com/photo-1562664385-7096c0b7c54e?q=80&w=1400&auto=format&fit=crop",
-    care: { sunlight: "Medium", water: "High", soil: "Moist, rich", difficulty: "Moderate" },
-    seedsAvailable: false,
-  },
-  {
-    id: "monstera",
-    name: "Monstera",
-    scientificName: "Monstera deliciosa",
-    colors: ["Green"],
-    seasons: ["Spring", "Summer", "Autumn", "Winter"],
-    rarity: "Uncommon",
-    meaning: "Growth, exuberance.",
-    description:
-      "Iconic houseplant with split leaves. Thrives in bright, indirect light and regular humidity.",
-    image:
-      "https://images.unsplash.com/photo-1528825871115-3581a5387919?q=80&w=1400&auto=format&fit=crop",
-    care: { sunlight: "Medium", water: "Medium", soil: "Chunky, well‑draining mix", difficulty: "Easy" },
-    seedsAvailable: false,
-  },
-  {
-    id: "maple",
-    name: "Japanese Maple",
-    scientificName: "Acer palmatum",
-    colors: ["Red", "Green", "Purple"],
-    seasons: ["Spring", "Summer", "Autumn"],
-    rarity: "Rare",
-    meaning: "Elegance, peace, balance.",
-    description:
-      "Graceful small tree famed for delicate leaves and fiery autumn color. Likes dappled light.",
-    image:
-      "https://images.unsplash.com/photo-1519680772-4b6f05b6c763?q=80&w=1400&auto=format&fit=crop",
-    care: { sunlight: "Medium", water: "Medium", soil: "Acidic, well‑drained", difficulty: "Moderate" },
-    seedsAvailable: false,
-  },
-  {
-    id: "tulip",
-    name: "Tulip",
-    scientificName: "Tulipa spp.",
-    colors: ["Red", "Yellow", "Purple", "White", "Pink"],
-    seasons: ["Spring"],
-    rarity: "Common",
-    meaning: "Perfect love, cheerfulness.",
-    description:
-      "Bulbous spring favorite with clean silhouettes. Plant in autumn for spring displays.",
-    image:
-      "https://images.unsplash.com/photo-1491002052546-bf38f186af17?q=80&w=1400&auto=format&fit=crop",
-    care: { sunlight: "High", water: "Medium", soil: "Well‑drained", difficulty: "Easy" },
-    seedsAvailable: true,
-  },
-  {
-    id: "orchid",
-    name: "Phalaenopsis Orchid",
-    scientificName: "Phalaenopsis spp.",
-    colors: ["White", "Pink", "Purple", "Yellow"],
-    seasons: ["Spring", "Summer", "Autumn", "Winter"],
-    rarity: "Uncommon",
-    meaning: "Beauty, refinement.",
-    description:
-      "Long‑lasting indoor blooms. Likes bright, indirect light and careful watering.",
-    image:
-      "https://images.unsplash.com/photo-1510502774390-4e5ec1a7512a?q=80&w=1400&auto=format&fit=crop",
-    care: { sunlight: "Medium", water: "Low", soil: "Orchid bark mix", difficulty: "Moderate" },
-    seedsAvailable: false,
-  },
-]
-
-// --- Helpers ---
-const rarityTone: Record<Plant["rarity"], string> = {
-  Common: "bg-emerald-100 text-emerald-800",
-  Uncommon: "bg-cyan-100 text-cyan-800",
-  Rare: "bg-violet-100 text-violet-800",
-  Legendary: "bg-amber-100 text-amber-900",
-}
-
-const seasonBadge: Record<string, string> = {
-  Spring: "bg-green-100 text-green-800",
-  Summer: "bg-yellow-100 text-yellow-800",
-  Autumn: "bg-orange-100 text-orange-800",
-  Winter: "bg-blue-100 text-blue-800",
-}
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { TopBar } from "@/components/layout/TopBar";
+import { BottomBar } from "@/components/layout/BottomBar";
+import { SwipePage } from "@/pages/SwipePage";
+import { GalleryPage } from "@/pages/GalleryPage";
+import { SearchPage } from "@/pages/SearchPage";
+import type { Plant } from "@/types/plant";
+import { PlantDetails } from "@/components/plant/PlantDetails";
 
 // --- Main Component ---
 export default function PlantSwipe() {
@@ -182,17 +29,57 @@ export default function PlantSwipe() {
   const [authOpen, setAuthOpen] = useState(false)
   const [authMode, setAuthMode] = useState<"login" | "signup">("login")
 
+  const [plants, setPlants] = useState<Plant[]>([])
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const resp = await fetch('/api/plants')
+        const data = await resp.json()
+        if (!resp.ok) {
+          throw new Error(data?.error || `HTTP ${resp.status}`)
+        }
+        // Basic runtime validation / parsing to Plant shape
+        const parsed: Plant[] = (Array.isArray(data) ? data : []).map((p: any) => ({
+          id: String(p.id),
+            name: String(p.name),
+            scientificName: String(p.scientificName || p.scientific_name || ''),
+            colors: Array.isArray(p.colors) ? p.colors.map(String) : [],
+            seasons: Array.isArray(p.seasons) ? p.seasons.map(String) : [],
+            rarity: p.rarity as Plant['rarity'],
+            meaning: p.meaning ? String(p.meaning) : '',
+            description: p.description ? String(p.description) : '',
+            image: p.image || p.image_url || '',
+            care: {
+              sunlight: (p.care?.sunlight || p.care_sunlight || 'Low') as Plant['care']['sunlight'],
+              water: (p.care?.water || p.care_water || 'Low') as Plant['care']['water'],
+              soil: String(p.care?.soil || p.care_soil || ''),
+              difficulty: (p.care?.difficulty || p.care_difficulty || 'Easy') as Plant['care']['difficulty']
+            },
+            seedsAvailable: Boolean(p.seedsAvailable ?? p.seeds_available ?? false)
+        }))
+        setPlants(parsed)
+      } catch (e: any) {
+        setLoadError(e?.message || 'Failed to load plants')
+      } finally {
+        setLoading(false)
+      }
+    })()
+  }, [])
+
   const filtered = useMemo(() => {
-    return PLANTS.filter((p) => {
+    return plants.filter((p: Plant) => {
       const matchesQ = `${p.name} ${p.scientificName} ${p.meaning} ${p.colors.join(" ")}`
         .toLowerCase()
         .includes(query.toLowerCase())
       const matchesSeason = seasonFilter ? p.seasons.includes(seasonFilter as any) : true
-      const matchesColor = colorFilter ? p.colors.map((c) => c.toLowerCase()).includes(colorFilter.toLowerCase()) : true
+      const matchesColor = colorFilter ? p.colors.map((c: string) => c.toLowerCase()).includes(colorFilter.toLowerCase()) : true
       const matchesSeeds = onlySeeds ? p.seedsAvailable : true
       return matchesQ && matchesSeason && matchesColor && matchesSeeds
     })
-  }, [query, seasonFilter, colorFilter, onlySeeds])
+  }, [plants, query, seasonFilter, colorFilter, onlySeeds])
 
   const current = filtered[index]
 
@@ -221,30 +108,7 @@ export default function PlantSwipe() {
 
   return (
     <div className="min-h-screen w-full bg-gradient-to-b from-stone-50 to-stone-100 p-4 md:p-8">
-      {/* Header */}
-      <header className="max-w-5xl mx-auto flex items-center gap-3">
-        <div className="h-10 w-10 rounded-2xl bg-green-200 flex items-center justify-center shadow">
-          <Leaf className="h-5 w-5" />
-        </div>
-        <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">PlantSwipe</h1>
-
-        {/* Nav */}
-        <nav className="ml-4 hidden md:flex gap-2">
-          <NavPill active={view === 'swipe'} onClick={() => setView('swipe')} icon={<ScrollText className="h-4 w-4" />} label="Swipe" />
-          <NavPill active={view === 'gallery'} onClick={() => setView('gallery')} icon={<Grid3X3 className="h-4 w-4" />} label="Gallery" />
-          <NavPill active={view === 'search'} onClick={() => setView('search')} icon={<Search className="h-4 w-4" />} label="Search" />
-        </nav>
-
-        <div className="ml-auto flex items-center gap-2">
-          <Badge variant="secondary">Prototype</Badge>
-          <Button className="rounded-2xl" variant="secondary" onClick={openSignup}>
-            <UserPlus className="h-4 w-4 mr-2" /> Sign up
-          </Button>
-          <Button className="rounded-2xl" variant="default" onClick={openLogin}>
-            <LogIn className="h-4 w-4 mr-2" /> Login
-          </Button>
-        </div>
-      </header>
+  <TopBar view={view} setView={setView} openLogin={openLogin} openSignup={openSignup} />
 
       {/* Mobile nav */}
       <div className="max-w-5xl mx-auto mt-4 md:hidden grid grid-cols-3 gap-2">
@@ -253,82 +117,132 @@ export default function PlantSwipe() {
         <button onClick={() => setView('search')} className={`px-3 py-2 rounded-xl border text-sm ${view==='search' ? 'bg-black text-white' : 'bg-white'}`}>Search</button>
       </div>
 
-      {/* Controls (shared filters) */}
-      <div className="max-w-5xl mx-auto mt-6 grid grid-cols-1 md:grid-cols-4 gap-3">
-        <div className="md:col-span-2">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-60" />
-            <Input
-              className="pl-9"
-              placeholder="Search name, meaning, color…"
-              value={query}
-              onChange={(e) => {
-                setQuery(e.target.value)
-                setIndex(0)
-              }}
-            />
-          </div>
-        </div>
-        <div className="flex gap-2 overflow-x-auto items-center">
-          {(["Spring", "Summer", "Autumn", "Winter"] as const).map((s) => (
-            <button
-              key={s}
-              onClick={() => setSeasonFilter((cur) => (cur === s ? null : s))}
-              className={`px-3 py-1 rounded-2xl text-sm shadow-sm border ${
-                seasonFilter === s ? "bg-black text-white" : "bg-white"
-              }`}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
-        <div className="flex gap-2 overflow-x-auto items-center">
-          {["Red", "Pink", "Yellow", "White", "Purple", "Blue", "Orange", "Green"].map((c) => (
-            <button
-              key={c}
-              onClick={() => setColorFilter((cur) => (cur === c ? null : c))}
-              className={`px-3 py-1 rounded-2xl text-sm shadow-sm border ${
-                colorFilter === c ? "bg-black text-white" : "bg-white"
-              }`}
-            >
-              {c}
-            </button>
-          ))}
-          <button
-            onClick={() => setOnlySeeds((v) => !v)}
-            className={`px-3 py-1 rounded-2xl text-sm shadow-sm border whitespace-nowrap ${
-              onlySeeds ? "bg-emerald-600 text-white" : "bg-white"
-            }`}
-          >
-            Seeds only
-          </button>
-        </div>
+      {/* Layout: filters only visible in search view */}
+      <div className="max-w-6xl mx-auto mt-6 lg:grid lg:grid-cols-[260px_1fr] lg:gap-10">
+        {/* Sidebar / Filters */}
+        {view === 'search' && (
+        <aside className="mb-8 lg:mb-0 space-y-6 lg:sticky lg:top-4 self-start" aria-label="Filters">
+          {/* Search */}
+            <div>
+              <Label htmlFor="plant-search" className="sr-only">Search plants</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-60" />
+                <Input
+                  id="plant-search"
+                  className="pl-9"
+                  placeholder="Search name, meaning, color…"
+                  value={query}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                    setQuery(e.target.value)
+                    setIndex(0)
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Seasons */}
+            <div>
+              <div className="text-xs font-medium mb-2 uppercase tracking-wide opacity-60">Season</div>
+              <div className="flex flex-wrap gap-2">
+                {(["Spring", "Summer", "Autumn", "Winter"] as const).map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => setSeasonFilter((cur) => (cur === s ? null : s))}
+                    className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${seasonFilter === s ? "bg-black text-white" : "bg-white hover:bg-stone-50"}`}
+                    aria-pressed={seasonFilter === s}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Colors */}
+            <div>
+              <div className="text-xs font-medium mb-2 uppercase tracking-wide opacity-60">Color</div>
+              <div className="flex flex-wrap gap-2">
+                {["Red", "Pink", "Yellow", "White", "Purple", "Blue", "Orange", "Green"].map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => setColorFilter((cur) => (cur === c ? null : c))}
+                    className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${colorFilter === c ? "bg-black text-white" : "bg-white hover:bg-stone-50"}`}
+                    aria-pressed={colorFilter === c}
+                  >
+                    {c}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Toggles */}
+            <div className="pt-2">
+              <button
+                onClick={() => setOnlySeeds((v) => !v)}
+                className={`w-full justify-center px-3 py-2 rounded-2xl text-sm shadow-sm border flex items-center gap-2 transition ${
+                  onlySeeds ? "bg-emerald-600 text-white" : "bg-white hover:bg-stone-50"
+                }`}
+                aria-pressed={onlySeeds}
+              >
+                <span className="inline-block h-2 w-2 rounded-full bg-current" /> Seeds only
+              </button>
+            </div>
+
+            {/* Active filters summary */}
+            <div className="text-xs space-y-1">
+              <div className="font-medium uppercase tracking-wide opacity-60">Active</div>
+              <div className="flex flex-wrap gap-2">
+                {seasonFilter && (
+                  <Badge variant="secondary" className="rounded-xl">{seasonFilter}</Badge>
+                )}
+                {colorFilter && (
+                  <Badge variant="secondary" className="rounded-xl">{colorFilter}</Badge>
+                )}
+                {onlySeeds && (
+                  <Badge variant="secondary" className="rounded-xl">Seeds</Badge>
+                )}
+                {!seasonFilter && !colorFilter && !onlySeeds && (
+                  <span className="opacity-50">None</span>
+                )}
+              </div>
+            </div>
+  </aside>
+  )}
+
+        {/* Main content area */}
+        <main className="min-h-[60vh]" aria-live="polite">
+          {loading && <div className="p-8 text-center text-sm opacity-60">Connecting to database…</div>}
+          {loadError && <div className="p-8 text-center text-sm text-red-600">Database error: {loadError}</div>}
+          {!loading && !loadError && (
+            <>
+              {plants.length === 0 && !query && !loadError && !loading && (
+                <div className="p-8 text-center text-sm opacity-60">
+                  No plants found. Insert rows into table "plants" (columns: id, name, scientific_name, colors[], seasons[], rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available) then refresh.
+                </div>
+              )}
+              {view === 'swipe' && plants.length > 0 && (
+                <SwipePage
+                  current={current}
+                  index={index}
+                  setIndex={setIndex}
+                  x={x}
+                  onDragEnd={onDragEnd}
+                  handleInfo={handleInfo}
+                  handlePass={handlePass}
+                />
+              )}
+              {view === 'gallery' && plants.length > 0 && (
+                <GalleryPage plants={plants} onOpen={(p) => setOpenInfo(p)} />
+              )}
+              {view === 'search' && (
+                <SearchPage plants={filtered} openInfo={(p) => setOpenInfo(p)} />
+              )}
+            </>
+          )}
+        </main>
       </div>
 
-      {/* Views */}
-      {view === 'swipe' && (
-        <SwipeDeck
-          current={current}
-          index={index}
-          setIndex={setIndex}
-          filtered={filtered}
-          x={x}
-          onDragEnd={onDragEnd}
-          handleInfo={handleInfo}
-          handlePass={handlePass}
-        />
-      )}
-
-      {view === 'gallery' && (
-        <GalleryGrid plants={filtered} onOpen={(p) => setOpenInfo(p)} />
-      )}
-
-      {view === 'search' && (
-        <SearchPage plants={filtered} openInfo={(p) => setOpenInfo(p)} />
-      )}
-
       {/* Info Sheet */}
-      <Sheet open={!!openInfo} onOpenChange={(o) => !o && setOpenInfo(null)}>
+      <Sheet open={!!openInfo} onOpenChange={(o: boolean) => !o && setOpenInfo(null)}>
         <SheetContent side="bottom" className="max-h-[86vh] overflow-y-auto rounded-t-3xl">
           {openInfo && <PlantDetails plant={openInfo} onClose={() => setOpenInfo(null)} />}
         </SheetContent>
@@ -377,271 +291,7 @@ export default function PlantSwipe() {
         </DialogContent>
       </Dialog>
 
-      {/* Footer */}
-      <footer className="max-w-5xl mx-auto mt-10 text-center text-xs opacity-60">
-        Built with React, Tailwind, shadcn/ui & framer‑motion. Swipe, browse the gallery, or search.
-      </footer>
-    </div>
-  )
-}
-
-// --- Subcomponents ---
-function NavPill({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
-  return (
-    <button onClick={onClick} className={`flex items-center gap-2 px-3 py-1.5 rounded-2xl border text-sm shadow-sm ${active ? 'bg-black text-white' : 'bg-white'}`}>
-      {icon}
-      <span>{label}</span>
-    </button>
-  )
-}
-
-function SwipeDeck({ current, index, setIndex, filtered, x, onDragEnd, handleInfo, handlePass }: any) {
-  return (
-    <div className="max-w-2xl mx-auto mt-8">
-      <div className="relative h-[520px]">
-        <AnimatePresence initial={false}>
-          {current ? (
-            <motion.div
-              key={current.id + index}
-              drag="x"
-              style={{ x }}
-              dragConstraints={{ left: 0, right: 0 }}
-              onDragEnd={onDragEnd}
-              initial={{ scale: 0.98, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ type: "spring", stiffness: 400, damping: 30 }}
-              className="absolute inset-0"
-            >
-              <Card className="h-full rounded-3xl overflow-hidden shadow-xl">
-                <div className="h-2/3 relative">
-                  {/* Image */}
-                  <div
-                    className="absolute inset-0 bg-cover bg-center"
-                    style={{ backgroundImage: `url(${current.image})` }}
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
-                  <div className="absolute bottom-0 p-5 text-white">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Badge className={`${rarityTone[current.rarity]} backdrop-blur bg-opacity-80`}>{current.rarity}</Badge>
-                      {current.seasons.map((s: string) => (
-                        <span key={s} className={`text-[10px] px-2 py-0.5 rounded-full ${seasonBadge[s]}`}>{s}</span>
-                      ))}
-                    </div>
-                    <h2 className="text-2xl font-semibold drop-shadow-sm">{current.name}</h2>
-                    <p className="opacity-90 text-sm italic">{current.scientificName}</p>
-                  </div>
-                </div>
-
-                <CardContent className="h-1/3 p-4 flex flex-col gap-3">
-                  <p className="text-sm line-clamp-3">{current.description}</p>
-                  <div className="flex flex-wrap gap-2">
-                    {current.colors.slice(0, 6).map((c: string) => (
-                      <Badge key={c} variant="secondary" className="rounded-xl">{c}</Badge>
-                    ))}
-                  </div>
-
-                  <div className="mt-auto flex items-center justify-between">
-                    <Button variant="secondary" className="rounded-2xl" onClick={handlePass}>
-                      <ChevronLeft className="h-4 w-4 mr-1" /> Pass
-                    </Button>
-                    <div className="text-xs opacity-60 select-none">Swipe: left = pass, right = info</div>
-                    <Button className="rounded-2xl" onClick={handleInfo}>
-                      More info <ChevronRight className="h-4 w-4 ml-1" />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          ) : (
-            <EmptyState onReset={() => setIndex(0)} />
-          )}
-        </AnimatePresence>
-      </div>
-
-      {/* Action Hints */}
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        <ActionHint label="Pass" icon={<X className="h-5 w-5" />} />
-        <ActionHint label="More info" icon={<Info className="h-5 w-5" />} />
-      </div>
-    </div>
-  )
-}
-
-function GalleryGrid({ plants, onOpen }: { plants: Plant[]; onOpen: (p: Plant) => void }) {
-  return (
-    <div className="max-w-5xl mx-auto mt-8">
-      <div className="text-sm opacity-60 mb-3">{plants.length} result{plants.length !== 1 ? 's' : ''}</div>
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-        {plants.map((p) => (
-          <button key={p.id} onClick={() => onOpen(p)} className="text-left">
-            <Card className="rounded-2xl overflow-hidden hover:shadow-lg transition-shadow">
-              <div className="h-36 bg-cover bg-center" style={{ backgroundImage: `url(${p.image})` }} />
-              <CardContent className="p-3">
-                <div className="flex items-center gap-2 mb-1">
-                  <Badge className={`${rarityTone[p.rarity]} rounded-xl`}>{p.rarity}</Badge>
-                  {p.seasons.slice(0, 1).map((s) => (
-                    <span key={s} className={`text-[10px] px-2 py-0.5 rounded-full ${seasonBadge[s]}`}>{s}</span>
-                  ))}
-                </div>
-                <div className="font-medium text-sm leading-tight">{p.name}</div>
-                <div className="text-xs opacity-60 italic leading-tight">{p.scientificName}</div>
-              </CardContent>
-            </Card>
-          </button>
-        ))}
-      </div>
-      {plants.length === 0 && (
-        <EmptyState onReset={() => {}} />
-      )}
-    </div>
-  )
-}
-
-function SearchPage({ plants, openInfo }: { plants: Plant[]; openInfo: (p: Plant) => void }) {
-  return (
-    <div className="max-w-5xl mx-auto mt-8">
-      <div className="flex items-center gap-2 text-sm mb-3">
-        <ListFilter className="h-4 w-4" />
-        <span className="opacity-60">Refine with filters above. Click a card for full details.</span>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {plants.map((p) => (
-          <Card key={p.id} className="rounded-2xl overflow-hidden">
-            <div className="grid grid-cols-3 gap-0">
-              <button onClick={() => openInfo(p)} className="col-span-1 h-36 bg-cover bg-center" style={{ backgroundImage: `url(${p.image})` }} />
-              <div className="col-span-2 p-3">
-                <div className="flex items-center gap-2 mb-1">
-                  <Badge className={`${rarityTone[p.rarity]} rounded-xl`}>{p.rarity}</Badge>
-                  {p.seasons.map((s) => (
-                    <span key={s} className={`text-[10px] px-2 py-0.5 rounded-full ${seasonBadge[s]}`}>{s}</span>
-                  ))}
-                </div>
-                <div className="font-medium">{p.name}</div>
-                <div className="text-xs italic opacity-60">{p.scientificName}</div>
-                <p className="text-sm mt-1 line-clamp-2">{p.description}</p>
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {p.colors.map((c) => (
-                    <Badge key={c} variant="secondary" className="rounded-xl text-[11px]">{c}</Badge>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </Card>
-        ))}
-      </div>
-      {plants.length === 0 && <EmptyState onReset={() => {}} />}
-    </div>
-  )
-}
-
-function ActionHint({ label, icon }: { label: string; icon: React.ReactNode }) {
-  return (
-    <div className="flex items-center gap-2 rounded-2xl bg-white p-3 shadow border">
-      <div className="h-8 w-8 rounded-xl bg-stone-100 flex items-center justify-center">{icon}</div>
-      <div className="text-sm font-medium">{label}</div>
-    </div>
-  )
-}
-
-function EmptyState({ onReset }: { onReset: () => void }) {
-  return (
-    <Card className="rounded-3xl p-8 text-center">
-      <CardHeader>
-        <CardTitle className="flex items-center justify-center gap-2">
-          <Sparkles className="h-5 w-5" /> No results
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <p className="text-sm opacity-70 max-w-md mx-auto">
-          Try another search or adjust your filters.
-        </p>
-        <div className="flex items-center justify-center gap-3">
-          <Button variant="secondary" className="rounded-2xl" onClick={onReset}>
-            Reset
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-function PlantDetails({ plant, onClose }: { plant: Plant; onClose: () => void }) {
-  return (
-    <div className="space-y-4">
-      <SheetHeader>
-        <SheetTitle className="text-xl">{plant.name}</SheetTitle>
-        <SheetDescription className="italic">{plant.scientificName}</SheetDescription>
-      </SheetHeader>
-
-      {/* Hero */}
-      <div className="rounded-2xl overflow-hidden shadow">
-        <div
-          className="h-48 bg-cover bg-center"
-          style={{ backgroundImage: `url(${plant.image})` }}
-        />
-      </div>
-
-      {/* Quick facts */}
-      <div className="grid md:grid-cols-3 gap-3">
-        <Fact icon={<SunMedium className="h-4 w-4" />} label="Sunlight" value={plant.care.sunlight} />
-        <Fact icon={<Droplets className="h-4 w-4" />} label="Water" value={plant.care.water} />
-        <Fact icon={<Leaf className="h-4 w-4" />} label="Difficulty" value={plant.care.difficulty} />
-      </div>
-
-      <Card className="rounded-2xl">
-        <CardHeader>
-          <CardTitle className="text-base">Overview</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3 text-sm">
-          <p>{plant.description}</p>
-          <div className="flex flex-wrap gap-2">
-            <Badge className={`${rarityTone[plant.rarity]} rounded-xl`}>{plant.rarity}</Badge>
-            {plant.seasons.map((s) => (
-              <span key={s} className={`text-[10px] px-2 py-0.5 rounded-full ${seasonBadge[s]}`}>{s}</span>
-            ))}
-            {plant.colors.map((c) => (
-              <Badge key={c} variant="secondary" className="rounded-xl">{c}</Badge>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="rounded-2xl">
-        <CardHeader>
-          <CardTitle className="text-base">Meaning</CardTitle>
-        </CardHeader>
-        <CardContent className="text-sm">{plant.meaning}</CardContent>
-      </Card>
-
-      <Card className="rounded-2xl">
-        <CardHeader>
-          <CardTitle className="text-base">Care Guide</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm">
-          <div><span className="font-medium">Sunlight:</span> {plant.care.sunlight}</div>
-          <div><span className="font-medium">Water:</span> {plant.care.water}</div>
-          <div><span className="font-medium">Soil:</span> {plant.care.soil}</div>
-          <div><span className="font-medium">Difficulty:</span> {plant.care.difficulty}</div>
-          <div><span className="font-medium">Seeds available:</span> {plant.seedsAvailable ? "Yes" : "No"}</div>
-        </CardContent>
-      </Card>
-
-      <div className="flex justify-end">
-        <Button className="rounded-2xl" onClick={onClose}>Close</Button>
-      </div>
-    </div>
-  )
-}
-
-function Fact({ icon, label, value }: { icon: React.ReactNode; label: string; value: React.ReactNode }) {
-  return (
-    <div className="flex items-center gap-3 rounded-2xl border bg-white p-3 shadow-sm">
-      <div className="h-9 w-9 rounded-xl bg-stone-100 flex items-center justify-center">{icon}</div>
-      <div>
-        <div className="text-xs opacity-60">{label}</div>
-        <div className="text-sm font-medium">{value}</div>
-      </div>
+      <BottomBar />
     </div>
   )
 }

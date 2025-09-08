@@ -29,4 +29,8 @@ npx tailwindcss init -p
 npm i -D tailwindcss@3 postcss@8 autoprefixer@10 tailwindcss-animate
 npx shadcn@latest init -d
 npx shadcn@latest add button card input badge sheet dialog label
+npm install @tailwindcss/line-clamp@^0.4.4 --save-dev
+
+npm run dev -- --host 127.0.0.1 --port 3000
+
 
