@@ -1,36 +1,73 @@
-# PlantSwipe
+# 🌱 PlantSwipe  
 
-Application cherchant a repertorier les plantes et les graines dans une base de donnees.
+PlantSwipe is an application that catalogs plants and seeds in a collaborative database.  
+It allows users to search, filter, and add new entries based on criteria such as **name**, **family**, or other characteristics.  
 
+---
 
-L'application permet aux utilisateurs de rechercher des plantes et des graines en utilisant des critères tels que le nom, la famille, ou d'autres caractéristiques. Les utilisateurs peuvent également ajouter de nouvelles entrées à la base de données, contribuant ainsi à l'enrichir.
+## 🚀 Features
+- 🔍 Search for plants and seeds by different criteria  
+- ➕ Add new plants to the database  
+- 🌍 Collaborative database enriched by users  
 
-# RUN THE CODE :
+---
 
-1. Clone the repository
+## 🛠️ Installation & Setup
 
-Use Git to clone the repository:
-
+### 1. Clone the repository
+Clone the project with Git:  
 ```bash
 git clone https://github.com/yourusername/PlantSwipe.git
+````
+
+---
+
+### 2. Install dependencies
+
+Make sure you have **Node.js** installed.
+👉 [Download Node.js](https://nodejs.org/en/download)
+
+Then run:
+
+```bash
+cd plant-swipe
+npm install
 ```
 
+---
 
-2. Install dependencies
+### 3. Configure environment variables
 
-Install Node JS
+Create a **.env** file at the root of the project and add:
 
-https://nodejs.org/en/download
+```env
+VITE_SUPABASE_URL=[URL]
+VITE_SUPABASE_ANON_KEY=[API]
+SUPABASE_DB_PASSWORD=[PASSWORD]
+```
 
-npm create vite@latest plant-swipe -- --template react-ts
-cd plant-swipe
-npm i framer-motion lucide-react
-npx tailwindcss init -p
-npm i -D tailwindcss@3 postcss@8 autoprefixer@10 tailwindcss-animate
-npx shadcn@latest init -d
-npx shadcn@latest add button card input badge sheet dialog label
-npm install @tailwindcss/line-clamp@^0.4.4 --save-dev
+---
 
+### 4. Start the project
+
+Run the app locally:
+
+```bash
 npm run dev -- --host 127.0.0.1 --port 3000
+```
+
+The application will be available at:
+👉 [http://127.0.0.1:3000](http://127.0.0.1:3000)
+
+---
+
+## 📂 Tech Stack
+
+* **Frontend**: Vite + React
+* **Backend**: Supabase (PostgreSQL)
+* **Auth & DB**: Supabase
 
 
+---
+
+✨ Happy digital gardening with *PlantSwipe*!
