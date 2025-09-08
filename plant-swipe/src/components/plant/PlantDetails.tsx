@@ -1,4 +1,5 @@
 import React from "react";
+import { motion, useMotionValue } from "framer-motion";
 import { SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,15 +9,21 @@ import type { Plant } from "@/types/plant";
 import { rarityTone, seasonBadge } from "@/constants/badges";
 
 export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void }> = ({ plant, onClose }) => {
+  const y = useMotionValue(0)
+  const threshold = 120
+  const onDragEnd = (_: any, info: { offset: { y: number }; velocity: { y: number } }) => {
+    const dy = info.offset.y + info.velocity.y * 0.2
+    if (dy > threshold) onClose()
+  }
   return (
-    <div className="space-y-4">
+    <motion.div className="space-y-4 select-none" drag="y" style={{ y }} dragConstraints={{ top: 0, bottom: 0 }} onDragEnd={onDragEnd}>
       <SheetHeader>
         <SheetTitle className="text-xl">{plant.name}</SheetTitle>
         <SheetDescription className="italic">{plant.scientificName}</SheetDescription>
       </SheetHeader>
 
       <div className="rounded-2xl overflow-hidden shadow">
-        <div className="h-48 bg-cover bg-center" style={{ backgroundImage: `url(${plant.image})` }} />
+        <div className="h-56 bg-cover bg-center select-none" style={{ backgroundImage: `url(${plant.image})`, userSelect: 'none' as any }} />
       </div>
 
       <div className="grid md:grid-cols-3 gap-3">
@@ -66,7 +73,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void }> = ({ 
       <div className="flex justify-end">
         <Button className="rounded-2xl" onClick={onClose}>Close</Button>
       </div>
-    </div>
+    </motion.div>
   );
 };
 

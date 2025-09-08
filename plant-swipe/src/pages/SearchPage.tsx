@@ -8,7 +8,7 @@ import { ListFilter } from "lucide-react"
 interface SearchPageProps { plants: Plant[]; openInfo: (p: Plant) => void }
 
 export const SearchPage: React.FC<SearchPageProps> = ({ plants, openInfo }) => (
-  <div className="max-w-5xl mx-auto mt-8">
+  <div className="max-w-6xl mx-auto mt-8 px-4 md:px-0">
     <div className="flex items-center gap-2 text-sm mb-3">
       <ListFilter className="h-4 w-4" />
       <span className="opacity-60">Refine with filters above. Click a card for full details.</span>

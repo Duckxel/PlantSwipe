@@ -19,7 +19,7 @@ interface SwipePageProps {
 
 export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, x, onDragEnd, handleInfo, handlePass }) => {
   return (
-    <div className="max-w-2xl mx-auto mt-8">
+    <div className="max-w-3xl mx-auto mt-8 px-4 md:px-0">
       <div className="relative h-[520px]">
         <AnimatePresence initial={false}>
           {current ? (

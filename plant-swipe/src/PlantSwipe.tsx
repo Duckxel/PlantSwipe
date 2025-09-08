@@ -14,9 +14,12 @@ import { GalleryPage } from "@/pages/GalleryPage";
 import { SearchPage } from "@/pages/SearchPage";
 import type { Plant } from "@/types/plant";
 import { PlantDetails } from "@/components/plant/PlantDetails";
+import { useAuth } from "@/context/AuthContext";
+import { ProfilePage } from "@/pages/ProfilePage";
 
 // --- Main Component ---
 export default function PlantSwipe() {
+  const { user, signIn, signUp, signOut, profile } = useAuth()
   const [query, setQuery] = useState("")
   const [seasonFilter, setSeasonFilter] = useState<string | null>(null)
   const [colorFilter, setColorFilter] = useState<string | null>(null)
@@ -25,9 +28,14 @@ export default function PlantSwipe() {
   const [index, setIndex] = useState(0)
   const [openInfo, setOpenInfo] = useState<Plant | null>(null)
 
-  const [view, setView] = useState<"swipe" | "gallery" | "search">("swipe")
+  const [view, setView] = useState<"swipe" | "gallery" | "search" | "profile">("swipe")
   const [authOpen, setAuthOpen] = useState(false)
   const [authMode, setAuthMode] = useState<"login" | "signup">("login")
+  const [authError, setAuthError] = useState<string | null>(null)
+  const [authEmail, setAuthEmail] = useState("")
+  const [authPassword, setAuthPassword] = useState("")
+  const [authPassword2, setAuthPassword2] = useState("")
+  const [authDisplayName, setAuthDisplayName] = useState("")
 
   const [plants, setPlants] = useState<Plant[]>([])
   const [loading, setLoading] = useState(true)
@@ -81,10 +89,32 @@ export default function PlantSwipe() {
     })
   }, [plants, query, seasonFilter, colorFilter, onlySeeds])
 
-  const current = filtered[index]
+  // Swiping-only randomized order with continuous wrap-around
+  const [shuffleEpoch, setShuffleEpoch] = useState(0)
+  const swipeList = useMemo(() => {
+    const arr = filtered.slice()
+    // Fisher-Yates shuffle
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      const tmp = arr[i]
+      arr[i] = arr[j]
+      arr[j] = tmp
+    }
+    return arr
+  }, [filtered, shuffleEpoch])
+
+  const current = swipeList.length > 0 ? swipeList[index % swipeList.length] : undefined
 
   const handlePass = () => {
-    if (index < filtered.length - 1) setIndex((i) => i + 1)
+    if (swipeList.length === 0) return
+    setIndex((i) => {
+      const next = i + 1
+      // When we complete a full cycle, reshuffle for variety
+      if (swipeList.length > 0 && next % swipeList.length === 0) {
+        setShuffleEpoch((e) => e + 1)
+      }
+      return next
+    })
   }
 
   const handleInfo = () => {
@@ -106,9 +136,35 @@ export default function PlantSwipe() {
   const openLogin = () => { setAuthMode("login"); setAuthOpen(true) }
   const openSignup = () => { setAuthMode("signup"); setAuthOpen(true) }
 
+  const submitAuth = async () => {
+    setAuthError(null)
+    if (authMode === 'signup') {
+      if (authPassword !== authPassword2) {
+        setAuthError('Passwords do not match')
+        return
+      }
+      const { error } = await signUp({ email: authEmail, password: authPassword, displayName: authDisplayName })
+      if (error) { setAuthError(error); return }
+      setAuthOpen(false)
+    } else {
+      const { error } = await signIn({ email: authEmail, password: authPassword })
+      if (error) { setAuthError(error); return }
+      setAuthOpen(false)
+    }
+  }
+
   return (
     <div className="min-h-screen w-full bg-gradient-to-b from-stone-50 to-stone-100 p-4 md:p-8">
-  <TopBar view={view} setView={setView} openLogin={openLogin} openSignup={openSignup} />
+  <TopBar
+    view={view}
+    setView={setView}
+    openLogin={openLogin}
+    openSignup={openSignup}
+    user={user}
+    displayName={profile?.display_name || null}
+    onProfile={() => setView('profile')}
+    onLogout={async () => { await signOut(); setView('swipe') }}
+  />
 
       {/* Mobile nav */}
       <div className="max-w-5xl mx-auto mt-4 md:hidden grid grid-cols-3 gap-2">
@@ -117,8 +173,8 @@ export default function PlantSwipe() {
         <button onClick={() => setView('search')} className={`px-3 py-2 rounded-xl border text-sm ${view==='search' ? 'bg-black text-white' : 'bg-white'}`}>Search</button>
       </div>
 
-      {/* Layout: filters only visible in search view */}
-      <div className="max-w-6xl mx-auto mt-6 lg:grid lg:grid-cols-[260px_1fr] lg:gap-10">
+      {/* Layout: grid only when search view (to avoid narrow column in other views) */}
+      <div className={`max-w-6xl mx-auto mt-6 ${view === 'search' ? 'lg:grid lg:grid-cols-[260px_1fr] lg:gap-10' : ''}`}>
         {/* Sidebar / Filters */}
         {view === 'search' && (
         <aside className="mb-8 lg:mb-0 space-y-6 lg:sticky lg:top-4 self-start" aria-label="Filters">
@@ -236,6 +292,9 @@ export default function PlantSwipe() {
               {view === 'search' && (
                 <SearchPage plants={filtered} openInfo={(p) => setOpenInfo(p)} />
               )}
+              {view === 'profile' && user && (
+                <ProfilePage />
+              )}
             </>
           )}
         </main>
@@ -243,13 +302,13 @@ export default function PlantSwipe() {
 
       {/* Info Sheet */}
       <Sheet open={!!openInfo} onOpenChange={(o: boolean) => !o && setOpenInfo(null)}>
-        <SheetContent side="bottom" className="max-h-[86vh] overflow-y-auto rounded-t-3xl">
+        <SheetContent side="bottom" className="max-h-[90vh] overflow-y-auto rounded-t-3xl">
           {openInfo && <PlantDetails plant={openInfo} onClose={() => setOpenInfo(null)} />}
         </SheetContent>
       </Sheet>
 
       {/* Auth Dialog (Login / Sign up) */}
-      <Dialog open={authOpen} onOpenChange={setAuthOpen}>
+      <Dialog open={authOpen && !user} onOpenChange={setAuthOpen}>
         <DialogContent className="rounded-2xl">
           <DialogHeader>
             <DialogTitle>{authMode === 'login' ? 'Log in' : 'Create your account'}</DialogTitle>
@@ -261,24 +320,25 @@ export default function PlantSwipe() {
             {authMode === 'signup' && (
               <div className="grid gap-2">
                 <Label htmlFor="name">Display name</Label>
-                <Input id="name" type="text" placeholder="Your name" />
+                <Input id="name" type="text" placeholder="Your name" value={authDisplayName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthDisplayName(e.target.value)} />
               </div>
             )}
             <div className="grid gap-2">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" placeholder="you@example.com" />
+              <Input id="email" type="email" placeholder="you@example.com" value={authEmail} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthEmail(e.target.value)} />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" placeholder="••••••••" />
+              <Input id="password" type="password" placeholder="••••••••" value={authPassword} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword(e.target.value)} />
             </div>
             {authMode === 'signup' && (
               <div className="grid gap-2">
                 <Label htmlFor="confirm">Confirm password</Label>
-                <Input id="confirm" type="password" placeholder="••••••••" />
+                <Input id="confirm" type="password" placeholder="••••••••" value={authPassword2} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword2(e.target.value)} />
               </div>
             )}
-            <Button className="w-full rounded-2xl">{authMode === 'login' ? 'Continue' : 'Create account'}</Button>
+            {authError && <div className="text-sm text-red-600">{authError}</div>}
+            <Button className="w-full rounded-2xl" onClick={submitAuth}>{authMode === 'login' ? 'Continue' : 'Create account'}</Button>
             <div className="text-center text-xs opacity-60">Demo only – hook up to your auth later (e.g., Supabase, Clerk, Auth.js)</div>
             <div className="text-center text-sm">
               {authMode === 'login' ? (

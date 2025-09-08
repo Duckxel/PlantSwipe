@@ -2,6 +2,7 @@ import * as React from "react"
 import * as SheetPrimitive from "@radix-ui/react-dialog"
 import { cva, type VariantProps } from "class-variance-authority"
 import { X } from "lucide-react"
+import { motion, useMotionValue } from "framer-motion"
 
 import { cn } from "@/lib/utils"
 
@@ -54,22 +55,42 @@ interface SheetContentProps
 const SheetContent = React.forwardRef<
   React.ElementRef<typeof SheetPrimitive.Content>,
   SheetContentProps
->(({ side = "right", className, children, ...props }, ref) => (
-  <SheetPortal>
-    <SheetOverlay />
-    <SheetPrimitive.Content
-      ref={ref}
-      className={cn(sheetVariants({ side }), className)}
-      {...props}
-    >
-      <SheetPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-secondary">
+>(({ side = "right", className, children, ...props }, ref) => {
+  const y = useMotionValue(0)
+  const closeRef = React.useRef<HTMLButtonElement | null>(null)
+  const onDragEnd = (_: any, info: { offset: { y: number }; velocity: { y: number } }) => {
+    const dy = (info?.offset?.y || 0) + (info?.velocity?.y || 0) * 0.2
+    if (dy > 120) {
+      // Programmatically close via hidden close button
+      closeRef.current?.click()
+    }
+  }
+  const content = (
+    <>
+      <SheetPrimitive.Close ref={closeRef} className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-secondary">
         <X className="h-4 w-4" />
         <span className="sr-only">Close</span>
       </SheetPrimitive.Close>
       {children}
-    </SheetPrimitive.Content>
-  </SheetPortal>
-))
+    </>
+  )
+  return (
+    <SheetPortal>
+      <SheetOverlay />
+      {side === 'bottom' ? (
+        <SheetPrimitive.Content asChild ref={ref} {...props}>
+          <motion.div drag="y" style={{ y }} onDragEnd={onDragEnd} className={cn(sheetVariants({ side }), className)}>
+            {content}
+          </motion.div>
+        </SheetPrimitive.Content>
+      ) : (
+        <SheetPrimitive.Content ref={ref} className={cn(sheetVariants({ side }), className)} {...props}>
+          {content}
+        </SheetPrimitive.Content>
+      )}
+    </SheetPortal>
+  )
+})
 SheetContent.displayName = SheetPrimitive.Content.displayName
 
 const SheetHeader = ({

@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge"
 interface GalleryPageProps { plants: Plant[]; onOpen: (p: Plant) => void }
 
 export const GalleryPage: React.FC<GalleryPageProps> = ({ plants, onOpen }) => (
-  <div className="max-w-5xl mx-auto mt-8">
+  <div className="max-w-6xl mx-auto mt-8 px-4 md:px-0">
     <div className="text-sm opacity-60 mb-3">{plants.length} result{plants.length !== 1 ? 's' : ''}</div>
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
       {plants.map((p) => (

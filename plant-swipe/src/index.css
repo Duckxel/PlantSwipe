@@ -26,6 +26,9 @@ body {
   min-width: 320px;
   min-height: 100vh;
   /* Removed flex centering from Vite template so the app can control its own layout */
+  -webkit-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
 }
 
 h1 {

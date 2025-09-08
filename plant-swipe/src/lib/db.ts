@@ -1,4 +1,5 @@
 import Dexie, { Table } from 'dexie'
+// Local Dexie remains for app data; Supabase handles auth and profiles
 import type { Plant } from '@/types/plant'
 import { PLANT_SEED } from '@/data/plants'
 

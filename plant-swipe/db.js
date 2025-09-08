@@ -9,24 +9,30 @@ function hydrateEnvFromDotenvIfNeeded() {
 	if (process.env.DATABASE_URL || (process.env.SUPABASE_URL && process.env.SUPABASE_DB_PASSWORD)) return
 	// Load from .env in current working directory and parent directory (monorepo/root)
 	try { dotenv.config({ path: path.resolve(process.cwd(), '.env') }) } catch {}
+	try { dotenv.config({ path: path.resolve(process.cwd(), '.env.local') }) } catch {}
 	try { dotenv.config({ path: path.resolve(process.cwd(), '..', '.env') }) } catch {}
+	try { dotenv.config({ path: path.resolve(process.cwd(), '..', '.env.local') }) } catch {}
 	// Fallback minimal manual parse from cwd if dotenv didn't populate
 	try {
-		const envPath = path.resolve(process.cwd(), '.env')
-		if (fs.existsSync(envPath)) {
-			const raw = fs.readFileSync(envPath, 'utf-8')
-			raw.split(/\r?\n/).forEach(line => {
-				if (!line || line.startsWith('#')) return
-				const eq = line.indexOf('=')
-				if (eq === -1) return
-				const key = line.slice(0, eq).trim()
-				let value = line.slice(eq + 1).trim()
-				if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-					value = value.slice(1, -1)
-				}
-				if (!(key in process.env)) process.env[key] = value
-			})
+		const tryParse = (filename) => {
+			const envPath = path.resolve(process.cwd(), filename)
+			if (fs.existsSync(envPath)) {
+				const raw = fs.readFileSync(envPath, 'utf-8')
+				raw.split(/\r?\n/).forEach(line => {
+					if (!line || line.startsWith('#')) return
+					const eq = line.indexOf('=')
+					if (eq === -1) return
+					const key = line.slice(0, eq).trim()
+					let value = line.slice(eq + 1).trim()
+					if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+						value = value.slice(1, -1)
+					}
+					if (!(key in process.env)) process.env[key] = value
+				})
+			}
 		}
+		tryParse('.env')
+		tryParse('.env.local')
 	} catch {}
 }
 
@@ -53,9 +59,11 @@ function buildConnectionString() {
 		}
 	}
 	// Supabase convenience fallback
-	if (!cs && process.env.SUPABASE_URL && process.env.SUPABASE_DB_PASSWORD) {
+	if (!cs && (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL) && (process.env.SUPABASE_DB_PASSWORD || process.env.VITE_SUPABASE_DB_PASSWORD)) {
+		const supaUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
+		const supaPwd = process.env.SUPABASE_DB_PASSWORD || process.env.VITE_SUPABASE_DB_PASSWORD
 		const host = (() => {
-			try { return new URL(process.env.SUPABASE_URL).host } catch { return null }
+			try { return new URL(supaUrl).host } catch { return null }
 		})()
 		// Convert <ref>.supabase.co -> db.<ref>.supabase.co for direct Postgres
 		let pgHost = host
@@ -66,7 +74,7 @@ function buildConnectionString() {
 			}
 		}
 		const database = process.env.PGDATABASE || process.env.POSTGRES_DB || 'postgres'
-		if (pgHost) cs = `postgresql://postgres:${encodeURIComponent(process.env.SUPABASE_DB_PASSWORD)}@${pgHost}:5432/${database}`
+		if (pgHost) cs = `postgresql://postgres:${encodeURIComponent(supaPwd)}@${pgHost}:5432/${database}`
 	}
 	// Ensure TLS for remote hosts unless explicitly configured
 	if (cs) {
