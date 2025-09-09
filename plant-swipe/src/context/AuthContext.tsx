@@ -53,15 +53,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     ;(async () => {
       // Before first paint: load session then profile (if any) and only then render
       await loadSession()
-      await refreshProfile()
+      // Profile in background to reduce chances of startup stalls
+      refreshProfile().catch(() => {})
       setLoading(false)
     })()
-    const { data: sub } = supabase.auth.onAuthStateChange(async () => {
-      await loadSession()
-      // Do not block auth state handling on profile fetch
-      refreshProfile().catch(() => {})
-    })
-    return () => { sub.subscription.unsubscribe() }
+    // No onAuthStateChange subscription to avoid any hidden waits; rely on reload-driven hydration
+    return () => {}
   }, [loadSession, refreshProfile])
 
   const signUp: AuthContextValue['signUp'] = async ({ email, password, displayName }) => {

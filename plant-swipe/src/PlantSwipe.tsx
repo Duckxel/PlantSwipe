@@ -142,29 +142,48 @@ export default function PlantSwipe() {
     setAuthError(null)
     setAuthSubmitting(true)
     try {
+      console.log('[auth] submit start', { mode: authMode })
       if (authMode === 'signup') {
         if (authPassword !== authPassword2) {
+          console.warn('[auth] password mismatch')
           setAuthError('Passwords do not match')
           setAuthSubmitting(false)
           return
         }
         const { error } = await signUp({ email: authEmail, password: authPassword, displayName: authDisplayName })
         if (error) {
+          console.error('[auth] signup error', error)
           setAuthError(error)
           setAuthSubmitting(false)
           return
         }
+        console.log('[auth] signup ok')
       } else {
         const { error } = await signIn({ email: authEmail, password: authPassword })
         if (error) {
+          console.error('[auth] login error', error)
           setAuthError(error)
           setAuthSubmitting(false)
           return
         }
+        console.log('[auth] login ok')
       }
-      setAuthOpen(false)
-      window.location.reload()
+      try {
+        setAuthOpen(false)
+      } catch (e) {
+        console.warn('[auth] failed to close dialog', e)
+      }
+      setTimeout(() => {
+        try {
+          console.log('[auth] forcing reload via replace')
+          window.location.replace(window.location.href)
+        } catch (e) {
+          console.warn('[auth] replace failed, using reload', e)
+          try { window.location.reload() } catch (er) { console.error('[auth] reload failed', er) }
+        }
+      }, 0)
     } catch (e: any) {
+      console.error('[auth] unexpected error', e)
       setAuthError(e?.message || 'Unexpected error')
       setAuthSubmitting(false)
     }
