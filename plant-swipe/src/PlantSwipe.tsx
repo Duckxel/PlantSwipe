@@ -159,7 +159,7 @@ export default function PlantSwipe() {
         const { error } = await withTimeout(signIn({ email: authEmail, password: authPassword }))
         if (error) { setAuthError(error); return }
       }
-      // On success: save is handled by Supabase persistSession; do a full reload to show updated info
+      // On success: profile has been fetched and saved by AuthProvider; reload to render with persisted data
       window.location.reload()
     } catch (e: any) {
       setAuthError(e?.message || 'Unexpected error')
