@@ -28,9 +28,22 @@ function buildConnectionString() {
   if (!cs && process.env.SUPABASE_URL && process.env.SUPABASE_DB_PASSWORD) {
     try {
       const host = new URL(process.env.SUPABASE_URL).host
-      const pgHost = host.startsWith('db.') ? host : `db.${host.split('.')[0]}.supabase.co`
-      const database = process.env.PGDATABASE || 'postgres'
-      cs = `postgresql://postgres:${encodeURIComponent(process.env.SUPABASE_DB_PASSWORD)}@${pgHost}:5432/${database}`
+      let pgHost
+      if (host.endsWith('.supabase.co')) {
+        const parts = host.split('.')
+        const isProjectHost = parts.length === 3 && parts[1] === 'supabase' && parts[2] === 'co' && !!parts[0]
+        const isDbHost = parts.length === 4 && parts[0] === 'db' && !!parts[1] && parts[2] === 'supabase' && parts[3] === 'co'
+        if (isDbHost) {
+          pgHost = host
+        } else if (isProjectHost) {
+          const project = parts[0]
+          pgHost = `db.${project}.supabase.co`
+        }
+      }
+      if (pgHost) {
+        const database = process.env.PGDATABASE || 'postgres'
+        cs = `postgresql://postgres:${encodeURIComponent(process.env.SUPABASE_DB_PASSWORD)}@${pgHost}:5432/${database}`
+      }
     } catch {}
   }
   if (cs) {
