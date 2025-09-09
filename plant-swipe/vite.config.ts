@@ -16,5 +16,14 @@ export default defineConfig({
   base: './',
   plugins: [react()],
   envPrefix: ['VITE_', 'SUPABASE_'],
-  resolve: { alias: { '@': path.resolve(__dirname, 'src') } }
+  resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+        // Do not rewrite, keep /api so Express route matches
+      }
+    }
+  }
 })
