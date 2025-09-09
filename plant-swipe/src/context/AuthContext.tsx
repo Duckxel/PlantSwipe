@@ -27,7 +27,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loadSession = React.useCallback(async () => {
     const { data } = await supabase.auth.getSession()
     const s = data.session
-    setUser(s?.user ? { id: s.user.id, email: s.user.email } : null)
+    setUser(s?.user ? { id: s.user.id, email: s.user.email ?? null } : null)
   }, [])
 
   const refreshProfile = React.useCallback(async () => {

@@ -13,6 +13,7 @@ import { SwipePage } from "@/pages/SwipePage";
 import { GalleryPage } from "@/pages/GalleryPage";
 import { SearchPage } from "@/pages/SearchPage";
 import type { Plant } from "@/types/plant";
+import { PLANT_SEED } from "@/data/plants";
 import { PlantDetails } from "@/components/plant/PlantDetails";
 import { useAuth } from "@/context/AuthContext";
 import { ProfilePage } from "@/pages/ProfilePage";
@@ -40,42 +41,11 @@ export default function PlantSwipe() {
 
   const [plants, setPlants] = useState<Plant[]>([])
   const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState<string | null>(null)
+  // const [loadError, setLoadError] = useState<string | null>(null)
 
   React.useEffect(() => {
-    (async () => {
-      try {
-        const resp = await fetch('/api/plants')
-        const data = await resp.json()
-        if (!resp.ok) {
-          throw new Error(data?.error || `HTTP ${resp.status}`)
-        }
-        // Basic runtime validation / parsing to Plant shape
-        const parsed: Plant[] = (Array.isArray(data) ? data : []).map((p: any) => ({
-          id: String(p.id),
-            name: String(p.name),
-            scientificName: String(p.scientificName || p.scientific_name || ''),
-            colors: Array.isArray(p.colors) ? p.colors.map(String) : [],
-            seasons: Array.isArray(p.seasons) ? p.seasons.map(String) : [],
-            rarity: p.rarity as Plant['rarity'],
-            meaning: p.meaning ? String(p.meaning) : '',
-            description: p.description ? String(p.description) : '',
-            image: p.image || p.image_url || '',
-            care: {
-              sunlight: (p.care?.sunlight || p.care_sunlight || 'Low') as Plant['care']['sunlight'],
-              water: (p.care?.water || p.care_water || 'Low') as Plant['care']['water'],
-              soil: String(p.care?.soil || p.care_soil || ''),
-              difficulty: (p.care?.difficulty || p.care_difficulty || 'Easy') as Plant['care']['difficulty']
-            },
-            seedsAvailable: Boolean(p.seedsAvailable ?? p.seeds_available ?? false)
-        }))
-        setPlants(parsed)
-      } catch (e: any) {
-        setLoadError(e?.message || 'Failed to load plants')
-      } finally {
-        setLoading(false)
-      }
-    })()
+    setPlants(PLANT_SEED)
+    setLoading(false)
   }, [])
 
   const filtered = useMemo(() => {
@@ -284,13 +254,12 @@ export default function PlantSwipe() {
 
         {/* Main content area */}
         <main className="min-h-[60vh]" aria-live="polite">
-          {loading && <div className="p-8 text-center text-sm opacity-60">Connecting to database…</div>}
-          {loadError && <div className="p-8 text-center text-sm text-red-600">Database error: {loadError}</div>}
-          {!loading && !loadError && (
+          {loading && <div className="p-8 text-center text-sm opacity-60">Loading plants…</div>}
+          {!loading && (
             <>
-              {plants.length === 0 && !query && !loadError && !loading && (
+              {plants.length === 0 && !query && !loading && (
                 <div className="p-8 text-center text-sm opacity-60">
-                  No plants found. Insert rows into table "plants" (columns: id, name, scientific_name, colors[], seasons[], rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available) then refresh.
+                  No plants found.
                 </div>
               )}
               {view === 'swipe' && plants.length > 0 && (
