@@ -141,54 +141,28 @@ export default function PlantSwipe() {
     if (authSubmitting) return
     setAuthError(null)
     setAuthSubmitting(true)
-    const waitForSession = async (ms = 5000) => {
-      const start = Date.now()
-      while (Date.now() - start < ms) {
-        try {
-          const { data } = await supabase.auth.getSession()
-          if (data.session) return true
-        } catch {}
-        await new Promise((r) => setTimeout(r, 120))
-      }
-      return false
-    }
-    const doAuth = async () => {
+    try {
       if (authMode === 'signup') {
         if (authPassword !== authPassword2) {
-          return { error: 'Passwords do not match' }
+          setAuthError('Passwords do not match')
+          setAuthSubmitting(false)
+          return
         }
-        return await signUp({ email: authEmail, password: authPassword, displayName: authDisplayName })
+        const { error } = await signUp({ email: authEmail, password: authPassword, displayName: authDisplayName })
+        if (error) {
+          setAuthError(error)
+          setAuthSubmitting(false)
+          return
+        }
       } else {
-        return await signIn({ email: authEmail, password: authPassword })
+        const { error } = await signIn({ email: authEmail, password: authPassword })
+        if (error) {
+          setAuthError(error)
+          setAuthSubmitting(false)
+          return
+        }
       }
-    }
-    try {
-      const authPromise = doAuth()
-      authPromise.catch(() => {})
-      const winner = await Promise.race([
-        authPromise.then((r) => (r && (r as any).error ? 'auth:error' : 'auth:ok')).catch(() => 'auth:error'),
-        waitForSession().then((ok) => (ok ? 'session:ok' : 'session:timeout')),
-      ])
-      if (winner === 'auth:error') {
-        const r = await authPromise.catch((e) => ({ error: e?.message || 'Login failed' }))
-        setAuthError((r as any)?.error || 'Login failed')
-        setAuthSubmitting(false)
-        return
-      }
-      if (winner === 'session:ok' || winner === 'auth:ok') {
-        window.location.reload()
-        return
-      }
-      // session:timeout -> fall back to auth result if it resolved, else show timeout
-      const r = await Promise.race([
-        authPromise,
-        new Promise((resolve) => setTimeout(() => resolve({ error: 'Request timed out. Please try again.' }), 100))
-      ])
-      if ((r as any)?.error) {
-        setAuthError((r as any).error)
-        setAuthSubmitting(false)
-        return
-      }
+      setAuthOpen(false)
       window.location.reload()
     } catch (e: any) {
       setAuthError(e?.message || 'Unexpected error')
