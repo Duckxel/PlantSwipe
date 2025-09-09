@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { Routes, Route, NavLink, useLocation, useNavigate, Navigate } from "react-router-dom";
 import { useMotionValue } from "framer-motion";
 import { Search } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -30,7 +31,14 @@ export default function PlantSwipe() {
   const [index, setIndex] = useState(0)
   const [openInfo, setOpenInfo] = useState<Plant | null>(null)
 
-  const [view, setView] = useState<"swipe" | "gallery" | "search" | "profile" | "create">("swipe")
+  const location = useLocation()
+  const navigate = useNavigate()
+  const currentView: "swipe" | "gallery" | "search" | "profile" | "create" =
+    location.pathname === "/" ? "swipe" :
+    location.pathname.startsWith("/gallery") ? "gallery" :
+    location.pathname.startsWith("/search") ? "search" :
+    location.pathname.startsWith("/profile") ? "profile" :
+    location.pathname.startsWith("/create") ? "create" : "swipe"
   const [authOpen, setAuthOpen] = useState(false)
   const [authMode, setAuthMode] = useState<"login" | "signup">("login")
   const [authError, setAuthError] = useState<string | null>(null)
@@ -81,7 +89,7 @@ export default function PlantSwipe() {
 
   React.useEffect(() => {
     loadPlants()
-  }, [loadPlants])
+  }, [loadPlants, location.pathname])
 
   const filtered = useMemo(() => {
     return plants.filter((p: Plant) => {
@@ -194,38 +202,37 @@ export default function PlantSwipe() {
     }
   }
 
-  // Close auth dialog and route to swipe once the user object becomes available
+  // Close auth dialog once the user object becomes available
   React.useEffect(() => {
     if (user) {
       setAuthOpen(false)
-      setView('swipe')
     }
   }, [user])
 
   return (
     <div className="min-h-screen w-full bg-gradient-to-b from-stone-50 to-stone-100 p-4 md:p-8">
   <TopBar
-    view={view}
-    setView={setView}
+    view={currentView}
+    setView={() => {}}
     openLogin={openLogin}
     openSignup={openSignup}
     user={user}
     displayName={profile?.display_name || null}
-    onProfile={() => setView('profile')}
-    onLogout={async () => { await signOut(); setView('swipe') }}
+    onProfile={() => navigate('/profile')}
+    onLogout={async () => { await signOut(); navigate('/') }}
   />
 
       {/* Mobile nav */}
       <div className="max-w-5xl mx-auto mt-4 md:hidden grid grid-cols-3 gap-2">
-        <button onClick={() => setView('swipe')} className={`px-3 py-2 rounded-xl border text-sm ${view==='swipe' ? 'bg-black text-white' : 'bg-white'}`}>Swipe</button>
-        <button onClick={() => setView('gallery')} className={`px-3 py-2 rounded-xl border text-sm ${view==='gallery' ? 'bg-black text-white' : 'bg-white'}`}>Gallery</button>
-        <button onClick={() => setView('search')} className={`px-3 py-2 rounded-xl border text-sm ${view==='search' ? 'bg-black text-white' : 'bg-white'}`}>Search</button>
+        <NavLink to="/" end className={({ isActive }) => `px-3 py-2 rounded-xl border text-sm ${isActive ? 'bg-black text-white' : 'bg-white'}`}>Swipe</NavLink>
+        <NavLink to="/gallery" className={({ isActive }) => `px-3 py-2 rounded-xl border text-sm ${isActive ? 'bg-black text-white' : 'bg-white'}`}>Gallery</NavLink>
+        <NavLink to="/search" className={({ isActive }) => `px-3 py-2 rounded-xl border text-sm ${isActive ? 'bg-black text-white' : 'bg-white'}`}>Search</NavLink>
       </div>
 
       {/* Layout: grid only when search view (to avoid narrow column in other views) */}
-      <div className={`max-w-6xl mx-auto mt-6 ${view === 'search' ? 'lg:grid lg:grid-cols-[260px_1fr] lg:gap-10' : ''}`}>
+      <div className={`max-w-6xl mx-auto mt-6 ${currentView === 'search' ? 'lg:grid lg:grid-cols-[260px_1fr] lg:gap-10' : ''}`}>
         {/* Sidebar / Filters */}
-        {view === 'search' && (
+        {currentView === 'search' && (
         <aside className="mb-8 lg:mb-0 space-y-6 lg:sticky lg:top-4 self-start" aria-label="Filters">
           {/* Search */}
             <div>
@@ -324,32 +331,36 @@ export default function PlantSwipe() {
                   No plants found. Insert rows into table "plants" (columns: id, name, scientific_name, colors[], seasons[], rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available) then refresh.
                 </div>
               )}
-              {view === 'swipe' && plants.length > 0 && (
-                <SwipePage
-                  current={current}
-                  index={index}
-                  setIndex={setIndex}
-                  x={x}
-                  onDragEnd={onDragEnd}
-                  handleInfo={handleInfo}
-                  handlePass={handlePass}
+              <Routes>
+                <Route
+                  path="/"
+                  element={plants.length > 0 ? (
+                    <SwipePage
+                      current={current}
+                      index={index}
+                      setIndex={setIndex}
+                      x={x}
+                      onDragEnd={onDragEnd}
+                      handleInfo={handleInfo}
+                      handlePass={handlePass}
+                    />
+                  ) : (
+                    <></>
+                  )}
                 />
-              )}
-              {view === 'gallery' && plants.length > 0 && (
-                <GalleryPage plants={plants} onOpen={(p) => setOpenInfo(p)} />
-              )}
-              {view === 'search' && (
-                <SearchPage plants={filtered} openInfo={(p) => setOpenInfo(p)} />
-              )}
-              {view === 'profile' && user && (
-                <ProfilePage />
-              )}
-              {view === 'create' && user && (
-                <CreatePlantPage
-                  onCancel={() => setView('swipe')}
-                  onSaved={async () => { await loadPlants(); setView('gallery') }}
-                />
-              )}
+                <Route path="/gallery" element={<GalleryPage plants={plants} onOpen={(p) => setOpenInfo(p)} />} />
+                <Route path="/search" element={<SearchPage plants={filtered} openInfo={(p) => setOpenInfo(p)} />} />
+                <Route path="/profile" element={user ? <ProfilePage /> : <Navigate to="/" replace />} />
+                <Route path="/create" element={user ? (
+                  <CreatePlantPage
+                    onCancel={() => navigate('/')}
+                    onSaved={async () => { await loadPlants(); navigate('/gallery') }}
+                  />
+                ) : (
+                  <Navigate to="/" replace />
+                )} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
             </>
           )}
         </main>
