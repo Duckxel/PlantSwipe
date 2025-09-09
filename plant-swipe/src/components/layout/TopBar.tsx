@@ -1,5 +1,5 @@
 import React from "react"
-import { NavLink, useNavigate, Link } from "react-router-dom"
+import { useNavigate, Link, useLocation } from "react-router-dom"
 import { Leaf, Grid3X3, ScrollText, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
@@ -14,6 +14,7 @@ interface TopBarProps {
 
 export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, displayName, onProfile, onLogout }) => {
   const navigate = useNavigate()
+  const location = useLocation()
   const [menuOpen, setMenuOpen] = React.useState(false)
   const menuRef = React.useRef<HTMLDivElement | null>(null)
   React.useEffect(() => {
@@ -39,9 +40,9 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
         PLANT SWIPE
       </Link>
       <nav className="ml-4 hidden md:flex gap-2">
-        <NavPill to="/" icon={<ScrollText className="h-4 w-4" />} label="Swipe" />
-        <NavPill to="/gallery" icon={<Grid3X3 className="h-4 w-4" />} label="Gallery" />
-        <NavPill to="/search" icon={<Search className="h-4 w-4" />} label="Search" />
+        <NavPill to="/" isActive={location.pathname === '/'} icon={<ScrollText className="h-4 w-4" />} label="Swipe" />
+        <NavPill to="/gallery" isActive={location.pathname.startsWith('/gallery')} icon={<Grid3X3 className="h-4 w-4" />} label="Gallery" />
+        <NavPill to="/search" isActive={location.pathname.startsWith('/search')} icon={<Search className="h-4 w-4" />} label="Search" />
       </nav>
   <div className="ml-auto flex items-center gap-2">
         {user && (
@@ -81,16 +82,15 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
   )
 }
 
-function NavPill({ to, icon, label }: { to: string; icon: React.ReactNode; label: string }) {
+function NavPill({ to, isActive, icon, label }: { to: string; isActive: boolean; icon: React.ReactNode; label: string }) {
   return (
-    <NavLink
+    <Link
       to={to}
-      className={({ isActive }) => `flex items-center gap-2 px-3 py-1.5 rounded-2xl border text-sm shadow-sm no-underline ${isActive ? 'bg-black text-white' : 'bg-white text-black'} hover:text-black visited:text-black active:text-black focus:text-black focus-visible:outline-none outline-none`}
-      end
+      className={`flex items-center gap-2 px-3 py-1.5 rounded-2xl border text-sm shadow-sm no-underline ${isActive ? 'bg-black text-white' : 'bg-white text-black'} hover:text-black visited:text-black active:text-black focus:text-black focus-visible:outline-none outline-none`}
       style={{ WebkitTapHighlightColor: 'transparent' }}
     >
       {icon}
       <span>{label}</span>
-    </NavLink>
+    </Link>
   )
 }
