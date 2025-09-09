@@ -12,6 +12,7 @@ import { BottomBar } from "@/components/layout/BottomBar";
 import { SwipePage } from "@/pages/SwipePage";
 import { GalleryPage } from "@/pages/GalleryPage";
 import { SearchPage } from "@/pages/SearchPage";
+import { CreatePlantPage } from "@/pages/CreatePlantPage";
 import type { Plant } from "@/types/plant";
 import { PlantDetails } from "@/components/plant/PlantDetails";
 import { useAuth } from "@/context/AuthContext";
@@ -29,7 +30,7 @@ export default function PlantSwipe() {
   const [index, setIndex] = useState(0)
   const [openInfo, setOpenInfo] = useState<Plant | null>(null)
 
-  const [view, setView] = useState<"swipe" | "gallery" | "search" | "profile">("swipe")
+  const [view, setView] = useState<"swipe" | "gallery" | "search" | "profile" | "create">("swipe")
   const [authOpen, setAuthOpen] = useState(false)
   const [authMode, setAuthMode] = useState<"login" | "signup">("login")
   const [authError, setAuthError] = useState<string | null>(null)
@@ -43,40 +44,44 @@ export default function PlantSwipe() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
 
-  React.useEffect(() => {
-    (async () => {
-      try {
-        const { data, error } = await supabase
-          .from('plants')
-          .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available')
-          .order('name', { ascending: true })
-        if (error) throw error
-        const parsed: Plant[] = (Array.isArray(data) ? data : []).map((p: any) => ({
-          id: String(p.id),
-          name: String(p.name),
-          scientificName: String(p.scientific_name || ''),
-          colors: Array.isArray(p.colors) ? p.colors.map(String) : [],
-          seasons: Array.isArray(p.seasons) ? p.seasons.map(String) : [],
-          rarity: p.rarity as Plant['rarity'],
-          meaning: p.meaning ? String(p.meaning) : '',
-          description: p.description ? String(p.description) : '',
-          image: p.image_url || '',
-          care: {
-            sunlight: (p.care_sunlight || 'Low') as Plant['care']['sunlight'],
-            water: (p.care_water || 'Low') as Plant['care']['water'],
-            soil: String(p.care_soil || ''),
-            difficulty: (p.care_difficulty || 'Easy') as Plant['care']['difficulty']
-          },
-          seedsAvailable: Boolean(p.seeds_available ?? false)
-        }))
-        setPlants(parsed)
-      } catch (e: any) {
-        setLoadError(e?.message || 'Failed to load plants')
-      } finally {
-        setLoading(false)
-      }
-    })()
+  const loadPlants = React.useCallback(async () => {
+    setLoading(true)
+    setLoadError(null)
+    try {
+      const { data, error } = await supabase
+        .from('plants')
+        .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available')
+        .order('name', { ascending: true })
+      if (error) throw error
+      const parsed: Plant[] = (Array.isArray(data) ? data : []).map((p: any) => ({
+        id: String(p.id),
+        name: String(p.name),
+        scientificName: String(p.scientific_name || ''),
+        colors: Array.isArray(p.colors) ? p.colors.map(String) : [],
+        seasons: Array.isArray(p.seasons) ? p.seasons.map(String) : [],
+        rarity: p.rarity as Plant['rarity'],
+        meaning: p.meaning ? String(p.meaning) : '',
+        description: p.description ? String(p.description) : '',
+        image: p.image_url || '',
+        care: {
+          sunlight: (p.care_sunlight || 'Low') as Plant['care']['sunlight'],
+          water: (p.care_water || 'Low') as Plant['care']['water'],
+          soil: String(p.care_soil || ''),
+          difficulty: (p.care_difficulty || 'Easy') as Plant['care']['difficulty']
+        },
+        seedsAvailable: Boolean(p.seeds_available ?? false)
+      }))
+      setPlants(parsed)
+    } catch (e: any) {
+      setLoadError(e?.message || 'Failed to load plants')
+    } finally {
+      setLoading(false)
+    }
   }, [])
+
+  React.useEffect(() => {
+    loadPlants()
+  }, [loadPlants])
 
   const filtered = useMemo(() => {
     return plants.filter((p: Plant) => {
@@ -338,6 +343,12 @@ export default function PlantSwipe() {
               )}
               {view === 'profile' && user && (
                 <ProfilePage />
+              )}
+              {view === 'create' && user && (
+                <CreatePlantPage
+                  onCancel={() => setView('swipe')}
+                  onSaved={async () => { await loadPlants(); setView('gallery') }}
+                />
               )}
             </>
           )}
