@@ -86,7 +86,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signIn: AuthContextValue['signIn'] = async ({ email, password }) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) return { error: error.message }
-    await refreshProfile()
+    // Do not block UI on profile fetch; onAuthStateChange will refresh as well
+    refreshProfile().catch(() => {})
     return {}
   }
 

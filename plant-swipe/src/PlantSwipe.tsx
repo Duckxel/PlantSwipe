@@ -142,15 +142,21 @@ export default function PlantSwipe() {
     setAuthError(null)
     setAuthSubmitting(true)
     try {
+      const withTimeout = async <T,>(promise: Promise<T>, ms = 12000): Promise<T> => {
+        return await Promise.race([
+          promise,
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Request timed out. Please try again.')), ms))
+        ])
+      }
       if (authMode === 'signup') {
         if (authPassword !== authPassword2) {
           setAuthError('Passwords do not match')
           return
         }
-        const { error } = await signUp({ email: authEmail, password: authPassword, displayName: authDisplayName })
+        const { error } = await withTimeout(signUp({ email: authEmail, password: authPassword, displayName: authDisplayName }))
         if (error) { setAuthError(error); return }
       } else {
-        const { error } = await signIn({ email: authEmail, password: authPassword })
+        const { error } = await withTimeout(signIn({ email: authEmail, password: authPassword }))
         if (error) { setAuthError(error); return }
       }
       // Optimistically update UI; effect below will also ensure closure when user updates
