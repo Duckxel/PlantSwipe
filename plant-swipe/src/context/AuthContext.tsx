@@ -77,6 +77,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     })
     if (perr) return { error: perr.message }
 
+    // Ensure local state updates immediately without waiting for onAuthStateChange
+    await loadSession()
     await refreshProfile()
     return {}
   }

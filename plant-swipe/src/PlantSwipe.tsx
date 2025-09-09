@@ -36,6 +36,7 @@ export default function PlantSwipe() {
   const [authPassword, setAuthPassword] = useState("")
   const [authPassword2, setAuthPassword2] = useState("")
   const [authDisplayName, setAuthDisplayName] = useState("")
+  const [authSubmitting, setAuthSubmitting] = useState(false)
 
   const [plants, setPlants] = useState<Plant[]>([])
   const [loading, setLoading] = useState(true)
@@ -137,21 +138,38 @@ export default function PlantSwipe() {
   const openSignup = () => { setAuthMode("signup"); setAuthOpen(true) }
 
   const submitAuth = async () => {
+    if (authSubmitting) return
     setAuthError(null)
-    if (authMode === 'signup') {
-      if (authPassword !== authPassword2) {
-        setAuthError('Passwords do not match')
-        return
+    setAuthSubmitting(true)
+    try {
+      if (authMode === 'signup') {
+        if (authPassword !== authPassword2) {
+          setAuthError('Passwords do not match')
+          return
+        }
+        const { error } = await signUp({ email: authEmail, password: authPassword, displayName: authDisplayName })
+        if (error) { setAuthError(error); return }
+      } else {
+        const { error } = await signIn({ email: authEmail, password: authPassword })
+        if (error) { setAuthError(error); return }
       }
-      const { error } = await signUp({ email: authEmail, password: authPassword, displayName: authDisplayName })
-      if (error) { setAuthError(error); return }
+      // Optimistically update UI; effect below will also ensure closure when user updates
       setAuthOpen(false)
-    } else {
-      const { error } = await signIn({ email: authEmail, password: authPassword })
-      if (error) { setAuthError(error); return }
-      setAuthOpen(false)
+      setView('swipe')
+    } catch (e: any) {
+      setAuthError(e?.message || 'Unexpected error')
+    } finally {
+      setAuthSubmitting(false)
     }
   }
+
+  // Close auth dialog and route to swipe once the user object becomes available
+  React.useEffect(() => {
+    if (user) {
+      setAuthOpen(false)
+      setView('swipe')
+    }
+  }, [user])
 
   return (
     <div className="min-h-screen w-full bg-gradient-to-b from-stone-50 to-stone-100 p-4 md:p-8">
@@ -325,20 +343,22 @@ export default function PlantSwipe() {
             )}
             <div className="grid gap-2">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" placeholder="you@example.com" value={authEmail} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthEmail(e.target.value)} />
+              <Input id="email" type="email" placeholder="you@example.com" value={authEmail} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthEmail(e.target.value)} disabled={authSubmitting} />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" placeholder="••••••••" value={authPassword} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword(e.target.value)} />
+              <Input id="password" type="password" placeholder="••••••••" value={authPassword} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword(e.target.value)} disabled={authSubmitting} />
             </div>
             {authMode === 'signup' && (
               <div className="grid gap-2">
                 <Label htmlFor="confirm">Confirm password</Label>
-                <Input id="confirm" type="password" placeholder="••••••••" value={authPassword2} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword2(e.target.value)} />
+                <Input id="confirm" type="password" placeholder="••••••••" value={authPassword2} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword2(e.target.value)} disabled={authSubmitting} />
               </div>
             )}
             {authError && <div className="text-sm text-red-600">{authError}</div>}
-            <Button className="w-full rounded-2xl" onClick={submitAuth}>{authMode === 'login' ? 'Continue' : 'Create account'}</Button>
+            <Button className="w-full rounded-2xl" onClick={submitAuth} disabled={authSubmitting}>
+              {authSubmitting ? (authMode === 'login' ? 'Signing in…' : 'Creating account…') : (authMode === 'login' ? 'Continue' : 'Create account')}
+            </Button>
             <div className="text-center text-xs opacity-60">Demo only – hook up to your auth later (e.g., Supabase, Clerk, Auth.js)</div>
             <div className="text-center text-sm">
               {authMode === 'login' ? (
@@ -355,3 +375,4 @@ export default function PlantSwipe() {
     </div>
   )
 }
+
