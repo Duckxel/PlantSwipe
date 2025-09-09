@@ -84,17 +84,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     })
     if (perr) return { error: perr.message }
 
-    // Update local session & profile immediately, then request a reload upstream
+    // Update local session immediately; profile fetch runs in background
     await loadSession()
-    await refreshProfile()
+    refreshProfile().catch(() => {})
     return {}
   }
 
   const signIn: AuthContextValue['signIn'] = async ({ email, password }) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) return { error: error.message }
-    // Immediately fetch profile so caller can persist and reload without waiting on auth state events
-    await refreshProfile()
+    // Fetch profile in background; do not block sign-in completion
+    refreshProfile().catch(() => {})
     return {}
   }
 

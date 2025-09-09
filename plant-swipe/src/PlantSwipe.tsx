@@ -159,7 +159,7 @@ export default function PlantSwipe() {
         const { error } = await withTimeout(signIn({ email: authEmail, password: authPassword }))
         if (error) { setAuthError(error); return }
       }
-      // On success: profile has been fetched and saved by AuthProvider; reload to render with persisted data
+      // On success: reload immediately; do not wait for any other operation
       window.location.reload()
     } catch (e: any) {
       setAuthError(e?.message || 'Unexpected error')
