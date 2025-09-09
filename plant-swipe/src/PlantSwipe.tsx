@@ -16,6 +16,7 @@ import type { Plant } from "@/types/plant";
 import { PlantDetails } from "@/components/plant/PlantDetails";
 import { useAuth } from "@/context/AuthContext";
 import { ProfilePage } from "@/pages/ProfilePage";
+import { supabase } from "@/lib/supabaseClient";
 
 // --- Main Component ---
 export default function PlantSwipe() {
@@ -45,26 +46,28 @@ export default function PlantSwipe() {
   React.useEffect(() => {
     (async () => {
       try {
-        const res = await fetch('/api/plants')
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const data = await res.json()
+        const { data, error } = await supabase
+          .from('plants')
+          .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available')
+          .order('name', { ascending: true })
+        if (error) throw error
         const parsed: Plant[] = (Array.isArray(data) ? data : []).map((p: any) => ({
           id: String(p.id),
           name: String(p.name),
-          scientificName: String(p.scientificName || ''),
+          scientificName: String(p.scientific_name || ''),
           colors: Array.isArray(p.colors) ? p.colors.map(String) : [],
           seasons: Array.isArray(p.seasons) ? p.seasons.map(String) : [],
           rarity: p.rarity as Plant['rarity'],
           meaning: p.meaning ? String(p.meaning) : '',
           description: p.description ? String(p.description) : '',
-          image: p.image || '',
+          image: p.image_url || '',
           care: {
-            sunlight: (p.care?.sunlight || 'Low') as Plant['care']['sunlight'],
-            water: (p.care?.water || 'Low') as Plant['care']['water'],
-            soil: String(p.care?.soil || ''),
-            difficulty: (p.care?.difficulty || 'Easy') as Plant['care']['difficulty']
+            sunlight: (p.care_sunlight || 'Low') as Plant['care']['sunlight'],
+            water: (p.care_water || 'Low') as Plant['care']['water'],
+            soil: String(p.care_soil || ''),
+            difficulty: (p.care_difficulty || 'Easy') as Plant['care']['difficulty']
           },
-          seedsAvailable: Boolean(p.seedsAvailable ?? false)
+          seedsAvailable: Boolean(p.seeds_available ?? false)
         }))
         setPlants(parsed)
       } catch (e: any) {
@@ -281,8 +284,8 @@ export default function PlantSwipe() {
 
         {/* Main content area */}
         <main className="min-h-[60vh]" aria-live="polite">
-          {loading && <div className="p-8 text-center text-sm opacity-60">Loading plants…</div>}
-          {loadError && <div className="p-8 text-center text-sm text-red-600">Error: {loadError}</div>}
+          {loading && <div className="p-8 text-center text-sm opacity-60">Loading from Supabase…</div>}
+          {loadError && <div className="p-8 text-center text-sm text-red-600">Supabase error: {loadError}</div>}
           {!loading && !loadError && (
             <>
               {plants.length === 0 && !query && !loadError && !loading && (
