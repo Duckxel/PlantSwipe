@@ -16,10 +16,5 @@ export default defineConfig({
   base: './',
   plugins: [react()],
   envPrefix: ['VITE_', 'SUPABASE_'],
-  resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
-  server: {
-    proxy: {
-      '/api': 'http://localhost:3000'
-    }
-  }
+  resolve: { alias: { '@': path.resolve(__dirname, 'src') } }
 })
