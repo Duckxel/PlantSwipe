@@ -12,6 +12,7 @@ import { BottomBar } from "@/components/layout/BottomBar";
 import { SwipePage } from "@/pages/SwipePage";
 import { GalleryPage } from "@/pages/GalleryPage";
 import { SearchPage } from "@/pages/SearchPage";
+import { CreatePlantPage } from "@/pages/CreatePlantPage";
 import type { Plant } from "@/types/plant";
 import { PlantDetails } from "@/components/plant/PlantDetails";
 import { useAuth } from "@/context/AuthContext";
@@ -29,7 +30,7 @@ export default function PlantSwipe() {
   const [index, setIndex] = useState(0)
   const [openInfo, setOpenInfo] = useState<Plant | null>(null)
 
-  const [view, setView] = useState<"swipe" | "gallery" | "search" | "profile">("swipe")
+  const [view, setView] = useState<"swipe" | "gallery" | "search" | "profile" | "create">("swipe")
   const [authOpen, setAuthOpen] = useState(false)
   const [authMode, setAuthMode] = useState<"login" | "signup">("login")
   const [authError, setAuthError] = useState<string | null>(null)
@@ -338,6 +339,12 @@ export default function PlantSwipe() {
               )}
               {view === 'profile' && user && (
                 <ProfilePage />
+              )}
+              {view === 'create' && user && (
+                <CreatePlantPage
+                  onCancel={() => setView('swipe')}
+                  onSaved={() => setView('gallery')}
+                />
               )}
             </>
           )}

@@ -1,5 +1,5 @@
 import React from "react"
-import { Leaf, Grid3X3, ScrollText, Search, LogIn, UserPlus, User, LogOut, ChevronDown } from "lucide-react"
+import { Leaf, Grid3X3, ScrollText, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 interface TopBarProps {
@@ -31,13 +31,18 @@ export const TopBar: React.FC<TopBarProps> = ({ view, setView, openLogin, openSi
       <div className="h-10 w-10 rounded-2xl bg-green-200 flex items-center justify-center shadow">
         <Leaf className="h-5 w-5" />
       </div>
-      <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">PlantSwipe</h1>
+      <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">PLANT SWIPE</h1>
       <nav className="ml-4 hidden md:flex gap-2">
         <NavPill active={view === 'swipe'} onClick={() => setView('swipe')} icon={<ScrollText className="h-4 w-4" />} label="Swipe" />
         <NavPill active={view === 'gallery'} onClick={() => setView('gallery')} icon={<Grid3X3 className="h-4 w-4" />} label="Gallery" />
         <NavPill active={view === 'search'} onClick={() => setView('search')} icon={<Search className="h-4 w-4" />} label="Search" />
       </nav>
   <div className="ml-auto flex items-center gap-2">
+        {user && (
+          <Button className="rounded-2xl" variant="default" onClick={() => setView('create')}>
+            <Plus className="h-4 w-4 mr-2" /> Add Plant
+          </Button>
+        )}
         {!user ? (
           <>
             <Button className="rounded-2xl" variant="secondary" onClick={openSignup}>
