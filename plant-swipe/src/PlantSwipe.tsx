@@ -141,29 +141,57 @@ export default function PlantSwipe() {
     if (authSubmitting) return
     setAuthError(null)
     setAuthSubmitting(true)
-    try {
-      const withTimeout = async <T,>(promise: Promise<T>, ms = 12000): Promise<T> => {
-        return await Promise.race([
-          promise,
-          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Request timed out. Please try again.')), ms))
-        ])
+    const waitForSession = async (ms = 5000) => {
+      const start = Date.now()
+      while (Date.now() - start < ms) {
+        try {
+          const { data } = await supabase.auth.getSession()
+          if (data.session) return true
+        } catch {}
+        await new Promise((r) => setTimeout(r, 120))
       }
+      return false
+    }
+    const doAuth = async () => {
       if (authMode === 'signup') {
         if (authPassword !== authPassword2) {
-          setAuthError('Passwords do not match')
-          return
+          return { error: 'Passwords do not match' }
         }
-        const { error } = await withTimeout(signUp({ email: authEmail, password: authPassword, displayName: authDisplayName }))
-        if (error) { setAuthError(error); return }
+        return await signUp({ email: authEmail, password: authPassword, displayName: authDisplayName })
       } else {
-        const { error } = await withTimeout(signIn({ email: authEmail, password: authPassword }))
-        if (error) { setAuthError(error); return }
+        return await signIn({ email: authEmail, password: authPassword })
       }
-      // On success: reload immediately; do not wait for any other operation
+    }
+    try {
+      const authPromise = doAuth()
+      authPromise.catch(() => {})
+      const winner = await Promise.race([
+        authPromise.then((r) => (r && (r as any).error ? 'auth:error' : 'auth:ok')).catch(() => 'auth:error'),
+        waitForSession().then((ok) => (ok ? 'session:ok' : 'session:timeout')),
+      ])
+      if (winner === 'auth:error') {
+        const r = await authPromise.catch((e) => ({ error: e?.message || 'Login failed' }))
+        setAuthError((r as any)?.error || 'Login failed')
+        setAuthSubmitting(false)
+        return
+      }
+      if (winner === 'session:ok' || winner === 'auth:ok') {
+        window.location.reload()
+        return
+      }
+      // session:timeout -> fall back to auth result if it resolved, else show timeout
+      const r = await Promise.race([
+        authPromise,
+        new Promise((resolve) => setTimeout(() => resolve({ error: 'Request timed out. Please try again.' }), 100))
+      ])
+      if ((r as any)?.error) {
+        setAuthError((r as any).error)
+        setAuthSubmitting(false)
+        return
+      }
       window.location.reload()
     } catch (e: any) {
       setAuthError(e?.message || 'Unexpected error')
-    } finally {
       setAuthSubmitting(false)
     }
   }
@@ -361,8 +389,8 @@ export default function PlantSwipe() {
               </div>
             )}
             {authError && <div className="text-sm text-red-600">{authError}</div>}
-            <Button className="w-full rounded-2xl" onClick={submitAuth} disabled={authSubmitting}>
-              {authSubmitting ? (authMode === 'login' ? 'Signing in…' : 'Creating account…') : (authMode === 'login' ? 'Continue' : 'Create account')}
+            <Button className="w-full rounded-2xl" onClick={submitAuth}>
+              {authMode === 'login' ? 'Continue' : 'Create account'}
             </Button>
             <div className="text-center text-xs opacity-60">Demo only – hook up to your auth later (e.g., Supabase, Clerk, Auth.js)</div>
             <div className="text-center text-sm">
