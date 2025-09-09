@@ -1,5 +1,5 @@
 import React from "react"
-import { NavLink, useNavigate } from "react-router-dom"
+import { NavLink, useNavigate, Link } from "react-router-dom"
 import { Leaf, Grid3X3, ScrollText, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
@@ -31,7 +31,7 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
       <div className="h-10 w-10 rounded-2xl bg-green-200 flex items-center justify-center shadow">
         <Leaf className="h-5 w-5" />
       </div>
-      <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">PLANT SWIPE</h1>
+      <Link to="/" className="text-2xl md:text-3xl font-semibold tracking-tight no-underline text-inherit hover:opacity-90">PLANT SWIPE</Link>
       <nav className="ml-4 hidden md:flex gap-2">
         <NavPill to="/" icon={<ScrollText className="h-4 w-4" />} label="Swipe" />
         <NavPill to="/gallery" icon={<Grid3X3 className="h-4 w-4" />} label="Gallery" />
@@ -79,7 +79,7 @@ function NavPill({ to, icon, label }: { to: string; icon: React.ReactNode; label
   return (
     <NavLink
       to={to}
-      className={({ isActive }) => `flex items-center gap-2 px-3 py-1.5 rounded-2xl border text-sm shadow-sm ${isActive ? 'bg-black text-white' : 'bg-white'}`}
+      className={({ isActive }) => `flex items-center gap-2 px-3 py-1.5 rounded-2xl border text-sm shadow-sm no-underline ${isActive ? 'bg-black text-white' : 'bg-white text-black'}`}
       end
     >
       {icon}
