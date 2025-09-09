@@ -70,4 +70,27 @@ The application will be available at:
 
 ---
 
+Server update 
+```bash
+git pull
+```
+```bash
+cd plant-swipe
+```
+```bash
+npm ci
+```
+```bash
+npm run build
+```
+```bash
+sudo rsync -avh --delete ./dist/ /var/www/plant-swipe/
+```
+```bash
+sudo systemctl reload nginx
+```
+
+
+
+---
 ✨ Happy digital gardening with *PlantSwipe*!
