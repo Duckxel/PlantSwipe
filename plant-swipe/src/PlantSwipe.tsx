@@ -212,8 +212,6 @@ export default function PlantSwipe() {
   return (
     <div className="min-h-screen w-full bg-gradient-to-b from-stone-50 to-stone-100 p-4 md:p-8">
   <TopBar
-    view={currentView}
-    setView={() => {}}
     openLogin={openLogin}
     openSignup={openSignup}
     user={user}
