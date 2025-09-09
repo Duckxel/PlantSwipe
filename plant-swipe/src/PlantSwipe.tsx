@@ -142,23 +142,49 @@ export default function PlantSwipe() {
     setAuthError(null)
     setAuthSubmitting(true)
     try {
+      console.log('[auth] submit start', { mode: authMode })
       if (authMode === 'signup') {
         if (authPassword !== authPassword2) {
+          console.warn('[auth] password mismatch')
           setAuthError('Passwords do not match')
+          setAuthSubmitting(false)
           return
         }
         const { error } = await signUp({ email: authEmail, password: authPassword, displayName: authDisplayName })
-        if (error) { setAuthError(error); return }
+        if (error) {
+          console.error('[auth] signup error', error)
+          setAuthError(error)
+          setAuthSubmitting(false)
+          return
+        }
+        console.log('[auth] signup ok')
       } else {
         const { error } = await signIn({ email: authEmail, password: authPassword })
-        if (error) { setAuthError(error); return }
+        if (error) {
+          console.error('[auth] login error', error)
+          setAuthError(error)
+          setAuthSubmitting(false)
+          return
+        }
+        console.log('[auth] login ok')
       }
-      // Optimistically update UI; effect below will also ensure closure when user updates
-      setAuthOpen(false)
-      setView('swipe')
+      try {
+        setAuthOpen(false)
+      } catch (e) {
+        console.warn('[auth] failed to close dialog', e)
+      }
+      setTimeout(() => {
+        try {
+          console.log('[auth] forcing reload via replace')
+          window.location.replace(window.location.href)
+        } catch (e) {
+          console.warn('[auth] replace failed, using reload', e)
+          try { window.location.reload() } catch (er) { console.error('[auth] reload failed', er) }
+        }
+      }, 0)
     } catch (e: any) {
+      console.error('[auth] unexpected error', e)
       setAuthError(e?.message || 'Unexpected error')
-    } finally {
       setAuthSubmitting(false)
     }
   }
@@ -356,8 +382,8 @@ export default function PlantSwipe() {
               </div>
             )}
             {authError && <div className="text-sm text-red-600">{authError}</div>}
-            <Button className="w-full rounded-2xl" onClick={submitAuth} disabled={authSubmitting}>
-              {authSubmitting ? (authMode === 'login' ? 'Signing in…' : 'Creating account…') : (authMode === 'login' ? 'Continue' : 'Create account')}
+            <Button className="w-full rounded-2xl" onClick={submitAuth}>
+              {authMode === 'login' ? 'Continue' : 'Create account'}
             </Button>
             <div className="text-center text-xs opacity-60">Demo only – hook up to your auth later (e.g., Supabase, Clerk, Auth.js)</div>
             <div className="text-center text-sm">

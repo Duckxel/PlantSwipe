@@ -34,6 +34,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const currentId = (await supabase.auth.getUser()).data.user?.id
     if (!currentId) {
       setProfile(null)
+      try { localStorage.removeItem('plantswipe.profile') } catch {}
       return
     }
     const { data, error } = await supabase
@@ -41,18 +42,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .select('id, display_name, avatar_url, liked_plant_ids')
       .eq('id', currentId)
       .maybeSingle()
-    if (!error) setProfile(data as any)
+    if (!error) {
+      setProfile(data as any)
+      // Persist profile alongside session so reloads can hydrate faster
+      try { localStorage.setItem('plantswipe.profile', JSON.stringify(data)) } catch {}
+    }
   }, [])
 
   React.useEffect(() => {
     ;(async () => {
+      // Before first paint: load session then profile (if any) and only then render
       await loadSession()
-      await refreshProfile()
+      // Profile in background to reduce chances of startup stalls
+      refreshProfile().catch(() => {})
       setLoading(false)
     })()
-    const { data: sub } = supabase.auth.onAuthStateChange(async () => {
-      await loadSession()
-      await refreshProfile()
+    const { data: sub } = supabase.auth.onAuthStateChange(() => {
+      // Non-blocking: update in background
+      loadSession()
+      refreshProfile().catch(() => {})
     })
     return () => { sub.subscription.unsubscribe() }
   }, [loadSession, refreshProfile])
@@ -77,22 +85,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     })
     if (perr) return { error: perr.message }
 
-    // Ensure local state updates immediately without waiting for onAuthStateChange
+    // Update local session immediately; profile fetch runs in background
     await loadSession()
-    await refreshProfile()
+    refreshProfile().catch(() => {})
     return {}
   }
 
   const signIn: AuthContextValue['signIn'] = async ({ email, password }) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) return { error: error.message }
-    await refreshProfile()
+    // Fetch profile in background; do not block sign-in completion
+    refreshProfile().catch(() => {})
     return {}
   }
 
   const signOut: AuthContextValue['signOut'] = async () => {
     // Optimistically clear local state and storage to ensure UI updates immediately
-    try { localStorage.removeItem('plantswipe.auth') } catch {}
+    try {
+      localStorage.removeItem('plantswipe.auth')
+      localStorage.removeItem('plantswipe.profile')
+    } catch {}
     setProfile(null)
     setUser(null)
     await supabase.auth.signOut()
