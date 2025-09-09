@@ -28,7 +28,8 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: true,
+    // Disable URL session detection to avoid any unnecessary waiting on success paths
+    detectSessionInUrl: false,
     storageKey: 'plantswipe.auth',
   },
   global: {
