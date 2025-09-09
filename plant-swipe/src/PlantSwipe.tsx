@@ -45,7 +45,8 @@ export default function PlantSwipe() {
   React.useEffect(() => {
     (async () => {
       try {
-        const resp = await fetch('/api/plants')
+        const apiBase = (import.meta as any).env?.VITE_API_BASE || ''
+        const resp = await fetch(`${apiBase}/api/plants`)
         const data = await resp.json()
         if (!resp.ok) {
           throw new Error(data?.error || `HTTP ${resp.status}`)
