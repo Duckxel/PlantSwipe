@@ -159,9 +159,8 @@ export default function PlantSwipe() {
         const { error } = await withTimeout(signIn({ email: authEmail, password: authPassword }))
         if (error) { setAuthError(error); return }
       }
-      // Optimistically update UI; effect below will also ensure closure when user updates
-      setAuthOpen(false)
-      setView('swipe')
+      // On success: save is handled by Supabase persistSession; do a full reload to show updated info
+      window.location.reload()
     } catch (e: any) {
       setAuthError(e?.message || 'Unexpected error')
     } finally {

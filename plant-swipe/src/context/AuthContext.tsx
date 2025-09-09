@@ -47,12 +47,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   React.useEffect(() => {
     ;(async () => {
       await loadSession()
-      await refreshProfile()
       setLoading(false)
+      // Fetch profile in background; do not block app readiness
+      refreshProfile().catch(() => {})
     })()
     const { data: sub } = supabase.auth.onAuthStateChange(async () => {
       await loadSession()
-      await refreshProfile()
+      // Do not block auth state handling on profile fetch
+      refreshProfile().catch(() => {})
     })
     return () => { sub.subscription.unsubscribe() }
   }, [loadSession, refreshProfile])
@@ -77,9 +79,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     })
     if (perr) return { error: perr.message }
 
-    // Ensure local state updates immediately without waiting for onAuthStateChange
+    // Ensure local state updates immediately; profile fetch is backgrounded
     await loadSession()
-    await refreshProfile()
+    refreshProfile().catch(() => {})
     return {}
   }
 
