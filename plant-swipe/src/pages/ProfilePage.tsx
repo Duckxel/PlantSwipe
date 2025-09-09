@@ -56,16 +56,16 @@ export const ProfilePage: React.FC = () => {
         <CardContent className="p-6 md:p-8 space-y-4">
           {/* Removed User ID from UI */}
           <div className="grid gap-2">
-            <Label>Email</Label>
-            <Input value={(user as any)?.email || ''} disabled />
+            <Label htmlFor="profile-email">Email</Label>
+            <Input id="profile-email" name="email" value={(user as any)?.email || ''} disabled />
           </div>
           <div className="grid gap-2">
-            <Label>Display name</Label>
-            <Input value={displayName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDisplayName(e.target.value)} />
+            <Label htmlFor="profile-display-name">Display name</Label>
+            <Input id="profile-display-name" name="displayName" value={displayName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDisplayName(e.target.value)} />
           </div>
           <div className="grid gap-2">
-            <Label>Avatar URL</Label>
-            <Input value={avatarUrl} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAvatarUrl(e.target.value)} />
+            <Label htmlFor="profile-avatar-url">Avatar URL</Label>
+            <Input id="profile-avatar-url" name="avatarUrl" value={avatarUrl} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAvatarUrl(e.target.value)} />
           </div>
           {error && <div className="text-sm text-red-600">{error}</div>}
           {ok && <div className="text-sm text-green-600">{ok}</div>}

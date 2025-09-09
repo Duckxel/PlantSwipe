@@ -7,7 +7,4 @@ declare module 'url' {
   export const fileURLToPath: any
   export const pathToFileURL: any
 }
-declare module './db.js' {
-  const sql: any
-  export default sql
-}
+// No longer exposing db.js
