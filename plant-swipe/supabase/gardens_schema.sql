@@ -80,46 +80,106 @@ alter table public.garden_transactions enable row level security;
 
 -- Policies
 -- Gardens: members can select; owners can update/delete; authenticated can insert own garden
-create policy if not exists gardens_select on public.gardens for select
-  using (exists (select 1 from public.garden_members gm where gm.garden_id = id and gm.user_id = auth.uid()));
-create policy if not exists gardens_insert on public.gardens for insert to authenticated
-  with check (created_by = auth.uid());
-create policy if not exists gardens_update on public.gardens for update to authenticated
-  using (created_by = auth.uid());
-create policy if not exists gardens_delete on public.gardens for delete to authenticated
-  using (created_by = auth.uid());
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'gardens' and policyname = 'gardens_select') then
+    create policy gardens_select on public.gardens for select
+      using (exists (select 1 from public.garden_members gm where gm.garden_id = id and gm.user_id = auth.uid()));
+  end if;
+end $$;
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'gardens' and policyname = 'gardens_insert') then
+    create policy gardens_insert on public.gardens for insert to authenticated
+      with check (created_by = auth.uid());
+  end if;
+end $$;
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'gardens' and policyname = 'gardens_update') then
+    create policy gardens_update on public.gardens for update to authenticated
+      using (created_by = auth.uid());
+  end if;
+end $$;
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'gardens' and policyname = 'gardens_delete') then
+    create policy gardens_delete on public.gardens for delete to authenticated
+      using (created_by = auth.uid());
+  end if;
+end $$;
 
 -- Garden members: members can select; owners can insert members; members can delete themselves
-create policy if not exists gm_select on public.garden_members for select
-  using (user_id = auth.uid() or exists (select 1 from public.garden_members gm2 where gm2.garden_id = garden_id and gm2.user_id = auth.uid()));
-create policy if not exists gm_insert on public.garden_members for insert to authenticated
-  with check (exists (select 1 from public.gardens g where g.id = garden_id and g.created_by = auth.uid()) and user_id is not null);
-create policy if not exists gm_delete on public.garden_members for delete to authenticated
-  using (user_id = auth.uid() or exists (select 1 from public.gardens g where g.id = garden_id and g.created_by = auth.uid()));
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_members' and policyname = 'gm_select') then
+    create policy gm_select on public.garden_members for select
+      using (user_id = auth.uid() or exists (select 1 from public.garden_members gm2 where gm2.garden_id = garden_id and gm2.user_id = auth.uid()));
+  end if;
+end $$;
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_members' and policyname = 'gm_insert') then
+    create policy gm_insert on public.garden_members for insert to authenticated
+      with check (exists (select 1 from public.gardens g where g.id = garden_id and g.created_by = auth.uid()) and user_id is not null);
+  end if;
+end $$;
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_members' and policyname = 'gm_delete') then
+    create policy gm_delete on public.garden_members for delete to authenticated
+      using (user_id = auth.uid() or exists (select 1 from public.gardens g where g.id = garden_id and g.created_by = auth.uid()));
+  end if;
+end $$;
 
 -- Garden plants: members can select; members can insert/update/delete
-create policy if not exists gp_select on public.garden_plants for select
-  using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()));
-create policy if not exists gp_iud on public.garden_plants for all to authenticated
-  using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()))
-  with check (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()));
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_plants' and policyname = 'gp_select') then
+    create policy gp_select on public.garden_plants for select
+      using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()));
+  end if;
+end $$;
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_plants' and policyname = 'gp_iud') then
+    create policy gp_iud on public.garden_plants for all to authenticated
+      using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()))
+      with check (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()));
+  end if;
+end $$;
 
 -- Events: members can select/insert
-create policy if not exists gpe_select on public.garden_plant_events for select
-  using (exists (select 1 from public.garden_plants gp where gp.id = garden_plant_id and exists (select 1 from public.garden_members gm where gm.garden_id = gp.garden_id and gm.user_id = auth.uid())));
-create policy if not exists gpe_insert on public.garden_plant_events for insert to authenticated
-  with check (exists (select 1 from public.garden_plants gp where gp.id = garden_plant_id and exists (select 1 from public.garden_members gm where gm.garden_id = gp.garden_id and gm.user_id = auth.uid())));
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_plant_events' and policyname = 'gpe_select') then
+    create policy gpe_select on public.garden_plant_events for select
+      using (exists (select 1 from public.garden_plants gp where gp.id = garden_plant_id and exists (select 1 from public.garden_members gm where gm.garden_id = gp.garden_id and gm.user_id = auth.uid())));
+  end if;
+end $$;
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_plant_events' and policyname = 'gpe_insert') then
+    create policy gpe_insert on public.garden_plant_events for insert to authenticated
+      with check (exists (select 1 from public.garden_plants gp where gp.id = garden_plant_id and exists (select 1 from public.garden_members gm where gm.garden_id = gp.garden_id and gm.user_id = auth.uid())));
+  end if;
+end $$;
 
 -- Inventory: members can select/insert/update
-create policy if not exists gi_select on public.garden_inventory for select
-  using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()));
-create policy if not exists gi_iud on public.garden_inventory for all to authenticated
-  using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()))
-  with check (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()));
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_inventory' and policyname = 'gi_select') then
+    create policy gi_select on public.garden_inventory for select
+      using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()));
+  end if;
+end $$;
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_inventory' and policyname = 'gi_iud') then
+    create policy gi_iud on public.garden_inventory for all to authenticated
+      using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()))
+      with check (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()));
+  end if;
+end $$;
 
 -- Transactions: members can select; insert allowed for members
-create policy if not exists gt_select on public.garden_transactions for select
-  using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()));
-create policy if not exists gt_insert on public.garden_transactions for insert to authenticated
-  with check (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()));
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_transactions' and policyname = 'gt_select') then
+    create policy gt_select on public.garden_transactions for select
+      using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()));
+  end if;
+end $$;
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_transactions' and policyname = 'gt_insert') then
+    create policy gt_insert on public.garden_transactions for insert to authenticated
+      with check (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()));
+  end if;
+end $$;
 
