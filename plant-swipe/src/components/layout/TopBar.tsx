@@ -1,10 +1,9 @@
 import React from "react"
+import { useNavigate, Link, useLocation } from "react-router-dom"
 import { Leaf, Grid3X3, ScrollText, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 interface TopBarProps {
-  view: string
-  setView: (v: any) => void
   openLogin: () => void
   openSignup: () => void
   user?: { id: string | null } | null
@@ -13,7 +12,9 @@ interface TopBarProps {
   onLogout?: () => void
 }
 
-export const TopBar: React.FC<TopBarProps> = ({ view, setView, openLogin, openSignup, user, displayName, onProfile, onLogout }) => {
+export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, displayName, onProfile, onLogout }) => {
+  const navigate = useNavigate()
+  const location = useLocation()
   const [menuOpen, setMenuOpen] = React.useState(false)
   const menuRef = React.useRef<HTMLDivElement | null>(null)
   React.useEffect(() => {
@@ -31,15 +32,21 @@ export const TopBar: React.FC<TopBarProps> = ({ view, setView, openLogin, openSi
       <div className="h-10 w-10 rounded-2xl bg-green-200 flex items-center justify-center shadow">
         <Leaf className="h-5 w-5" />
       </div>
-      <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">PLANT SWIPE</h1>
+      <Link
+        to="/"
+        className="text-2xl md:text-3xl font-semibold tracking-tight no-underline text-black hover:text-black visited:text-black active:text-black focus:text-black focus-visible:outline-none outline-none hover:opacity-90"
+        style={{ WebkitTapHighlightColor: 'transparent' }}
+      >
+        PLANT SWIPE
+      </Link>
       <nav className="ml-4 hidden md:flex gap-2">
-        <NavPill active={view === 'swipe'} onClick={() => setView('swipe')} icon={<ScrollText className="h-4 w-4" />} label="Swipe" />
-        <NavPill active={view === 'gallery'} onClick={() => setView('gallery')} icon={<Grid3X3 className="h-4 w-4" />} label="Gallery" />
-        <NavPill active={view === 'search'} onClick={() => setView('search')} icon={<Search className="h-4 w-4" />} label="Search" />
+        <NavPill to="/" isActive={location.pathname === '/'} icon={<ScrollText className="h-4 w-4" />} label="Swipe" />
+        <NavPill to="/gallery" isActive={location.pathname.startsWith('/gallery')} icon={<Grid3X3 className="h-4 w-4" />} label="Gallery" />
+        <NavPill to="/search" isActive={location.pathname.startsWith('/search')} icon={<Search className="h-4 w-4" />} label="Search" />
       </nav>
   <div className="ml-auto flex items-center gap-2">
         {user && (
-          <Button className="rounded-2xl" variant="default" onClick={() => setView('create')}>
+          <Button className="rounded-2xl" variant="default" onClick={() => navigate('/create')}>
             <Plus className="h-4 w-4 mr-2" /> Add Plant
           </Button>
         )}
@@ -60,7 +67,7 @@ export const TopBar: React.FC<TopBarProps> = ({ view, setView, openLogin, openSi
             </Button>
             {menuOpen && (
               <div className="absolute right-0 mt-2 w-40 rounded-xl border bg-white shadow z-20 p-1">
-                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); onProfile && onProfile() }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 flex items-center gap-2">
+                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); onProfile ? onProfile() : navigate('/profile') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 flex items-center gap-2">
                   <User className="h-4 w-4" /> Profile
                 </button>
                 <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); onLogout && onLogout() }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 text-red-600 flex items-center gap-2">
@@ -75,11 +82,19 @@ export const TopBar: React.FC<TopBarProps> = ({ view, setView, openLogin, openSi
   )
 }
 
-function NavPill({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
+function NavPill({ to, isActive, icon, label }: { to: string; isActive: boolean; icon: React.ReactNode; label: string }) {
   return (
-    <button onClick={onClick} className={`flex items-center gap-2 px-3 py-1.5 rounded-2xl border text-sm shadow-sm ${active ? 'bg-black text-white' : 'bg-white'}`}>
-      {icon}
-      <span>{label}</span>
-    </button>
+    <Button
+      asChild
+      variant={'secondary'}
+      className={isActive ? "rounded-2xl bg-black text-white hover:bg-black/90 hover:text-white" : "rounded-2xl bg-white text-black hover:bg-stone-100 hover:text-black"}
+    >
+      <Link to={to} className="no-underline">
+        <span className="flex items-center gap-2">
+          {icon}
+          <span>{label}</span>
+        </span>
+      </Link>
+    </Button>
   )
 }
