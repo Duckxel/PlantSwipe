@@ -119,18 +119,7 @@ export const GardenDashboardPage: React.FC = () => {
     }
   }
 
-  const inviteUser = async (userId: string) => {
-    if (!id) return
-    try {
-      const { addGardenMember } = await import('@/lib/gardens')
-      await addGardenMember({ gardenId: id, userId, role: 'member' })
-      setInviteOpen(false)
-      setInviteQuery('')
-      await load()
-    } catch (e: any) {
-      setError(e?.message || 'Failed to add member')
-    }
-  }
+  // invite by email only (implemented in submitInvite)
 
   return (
     <div className="max-w-6xl mx-auto mt-6 grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-6">
