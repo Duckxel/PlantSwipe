@@ -1,5 +1,8 @@
 -- Gardens schema for Supabase
 
+-- Enable required extension for gen_random_uuid()
+create extension if not exists pgcrypto;
+
 create table if not exists public.gardens (
   id uuid primary key default gen_random_uuid(),
   name text not null,
@@ -15,6 +18,19 @@ create table if not exists public.garden_members (
   joined_at timestamptz not null default now(),
   primary key (garden_id, user_id)
 );
+
+-- Also relate members to our public.profiles table for easy joins
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'garden_members_user_id_profiles_fk'
+  ) then
+    alter table public.garden_members
+      add constraint garden_members_user_id_profiles_fk
+      foreign key (user_id) references public.profiles(id) on delete cascade;
+  end if;
+end $$;
 
 create table if not exists public.garden_plants (
   id uuid primary key default gen_random_uuid(),
