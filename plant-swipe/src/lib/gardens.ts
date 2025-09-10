@@ -276,6 +276,13 @@ export async function deleteGardenPlant(gardenPlantId: string): Promise<void> {
   if (error) throw new Error(error.message)
 }
 
+export async function fetchServerNowISO(): Promise<string> {
+  const { data, error } = await supabase.rpc('get_server_now')
+  if (error) throw new Error(error.message)
+  const iso = new Date(String(data)).toISOString()
+  return iso
+}
+
 export async function getGardenInventory(gardenId: string): Promise<Array<{ plantId: string; seedsOnHand: number; plantsOnHand: number; plant?: Plant | null }>> {
   const { data, error } = await supabase
     .from('garden_inventory')

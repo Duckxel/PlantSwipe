@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import type { Garden } from '@/types/garden'
 import type { Plant } from '@/types/plant'
-import { getGarden, getGardenPlants, getGardenMembers, addMemberByEmail, fetchScheduleForPlants, markGardenPlantWatered, updateGardenPlantFrequency, deleteGardenPlant, reseedSchedule, addPlantToGarden } from '@/lib/gardens'
+import { getGarden, getGardenPlants, getGardenMembers, addMemberByEmail, fetchScheduleForPlants, markGardenPlantWatered, updateGardenPlantFrequency, deleteGardenPlant, reseedSchedule, addPlantToGarden, fetchServerNowISO } from '@/lib/gardens'
 import { supabase } from '@/lib/supabaseClient'
 
 
@@ -20,6 +20,7 @@ export const GardenDashboardPage: React.FC = () => {
   const [members, setMembers] = React.useState<Array<{ userId: string; displayName?: string | null; role: 'owner' | 'member' }>>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
+  const [serverToday, setServerToday] = React.useState<string | null>(null)
 
   const [addOpen, setAddOpen] = React.useState(false)
   const [plantQuery, setPlantQuery] = React.useState('')
@@ -42,7 +43,9 @@ export const GardenDashboardPage: React.FC = () => {
       setPlants(gps)
       const ms = await getGardenMembers(id)
       setMembers(ms.map(m => ({ userId: m.userId, displayName: m.displayName ?? null, role: m.role })))
-      await fetchScheduleForPlants(gps.map((gp: any) => gp.id), 30)
+      await fetchScheduleForPlants(gps.map((gp: any) => gp.id), 45)
+      const nowIso = await fetchServerNowISO()
+      setServerToday(nowIso.slice(0,10))
     } catch (e: any) {
       setError(e?.message || 'Failed to load garden')
     } finally {
@@ -145,7 +148,7 @@ export const GardenDashboardPage: React.FC = () => {
           </aside>
           <main className="min-h-[60vh]">
             {tab === 'overview' && (
-              <OverviewSection plants={plants} membersCount={members.length} />
+              <OverviewSection plants={plants} membersCount={members.length} serverToday={serverToday} />
             )}
 
             {tab === 'plants' && (
@@ -280,12 +283,15 @@ function RoutineSection({ plants, onLogWater }: { plants: any[]; onLogWater: (id
   )
 }
 
-function OverviewSection({ plants, membersCount }: { plants: any[]; membersCount: number }) {
+function OverviewSection({ plants, membersCount, serverToday }: { plants: any[]; membersCount: number; serverToday: string | null }) {
   const totalToWater = plants.length
   const wateredToday = 0
   const progressPct = totalToWater === 0 ? 100 : Math.min(100, Math.round((wateredToday / totalToWater) * 100))
+  const anchor = serverToday ? new Date(serverToday) : new Date()
   const days = Array.from({ length: 30 }, (_, i) => {
-    const dayNum = i + 1
+    const d = new Date(anchor)
+    d.setDate(d.getDate() - (29 - i))
+    const dayNum = d.getDate()
     return { dayNum, validated: totalToWater === 0 }
   })
   const streak = days.reduce((s, d) => (d.validated ? s + 1 : 0), 0)
