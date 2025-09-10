@@ -35,7 +35,7 @@ end $$;
 create table if not exists public.garden_plants (
   id uuid primary key default gen_random_uuid(),
   garden_id uuid not null references public.gardens(id) on delete cascade,
-  plant_id uuid not null references public.plants(id) on delete cascade,
+  plant_id text not null references public.plants(id) on delete cascade,
   nickname text,
   seeds_planted integer not null default 0,
   planted_at timestamptz,
@@ -54,7 +54,7 @@ create table if not exists public.garden_plant_events (
 create table if not exists public.garden_inventory (
   id uuid primary key default gen_random_uuid(),
   garden_id uuid not null references public.gardens(id) on delete cascade,
-  plant_id uuid not null references public.plants(id) on delete cascade,
+  plant_id text not null references public.plants(id) on delete cascade,
   seeds_on_hand integer not null default 0,
   plants_on_hand integer not null default 0,
   unique (garden_id, plant_id)
@@ -63,7 +63,7 @@ create table if not exists public.garden_inventory (
 create table if not exists public.garden_transactions (
   id uuid primary key default gen_random_uuid(),
   garden_id uuid not null references public.gardens(id) on delete cascade,
-  plant_id uuid not null references public.plants(id) on delete cascade,
+  plant_id text not null references public.plants(id) on delete cascade,
   type text not null check (type in ('buy_seeds','sell_seeds','buy_plants','sell_plants')),
   quantity integer not null check (quantity >= 0),
   occurred_at timestamptz not null default now(),
