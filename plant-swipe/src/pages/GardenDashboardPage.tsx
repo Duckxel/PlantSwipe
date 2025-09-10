@@ -6,10 +6,10 @@ import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import type { Garden } from '@/types/garden'
 import type { Plant } from '@/types/plant'
-import { getGarden, getGardenPlants, addPlantToGarden, logWaterEvent, getGardenMembers } from '@/lib/gardens'
+import { getGarden, getGardenPlants, addPlantToGarden, logWaterEvent, getGardenMembers, addMemberByEmail } from '@/lib/gardens'
 import { supabase } from '@/lib/supabaseClient'
 
-type TabKey = 'overview' | 'plants' | 'routine' | 'inventory' | 'members'
+type TabKey = 'overview' | 'plants' | 'routine' | 'members'
 
 export const GardenDashboardPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
@@ -27,8 +27,8 @@ export const GardenDashboardPage: React.FC = () => {
   const [adding, setAdding] = React.useState(false)
 
   const [inviteOpen, setInviteOpen] = React.useState(false)
-  const [inviteQuery, setInviteQuery] = React.useState('')
-  const [inviteResults, setInviteResults] = React.useState<Array<{ id: string; display_name: string | null }>>([])
+  const [inviteEmail, setInviteEmail] = React.useState('')
+  const [inviteError, setInviteError] = React.useState<string | null>(null)
 
   const load = React.useCallback(async () => {
     if (!id) return
@@ -79,19 +79,18 @@ export const GardenDashboardPage: React.FC = () => {
     return () => { ignore = true }
   }, [plantQuery])
 
-  React.useEffect(() => {
-    let ignore = false
-    if (!inviteQuery.trim()) { setInviteResults([]); return }
-    ;(async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('id, display_name')
-        .ilike('display_name', `%${inviteQuery}%`)
-        .limit(10)
-      if (!ignore) setInviteResults((data || []) as any)
-    })()
-    return () => { ignore = true }
-  }, [inviteQuery])
+  const submitInvite = async () => {
+    if (!id || !inviteEmail.trim()) return
+    setInviteError(null)
+    const res = await addMemberByEmail({ gardenId: id, email: inviteEmail.trim() })
+    if (!res.ok) {
+      setInviteError(res.reason === 'no_account' ? 'No account with this email' : 'Failed to add member')
+      return
+    }
+    setInviteOpen(false)
+    setInviteEmail('')
+    await load()
+  }
 
   const addSelectedPlant = async () => {
     if (!id || !selectedPlant || adding) return
@@ -142,11 +141,10 @@ export const GardenDashboardPage: React.FC = () => {
           <aside className="space-y-2 lg:sticky lg:top-4 self-start">
             <div className="text-xl font-semibold">{garden.name}</div>
             <nav className="flex lg:flex-col gap-2">
-              {([
+              {([ 
                 ['overview','Overview'],
                 ['plants','Plants'],
                 ['routine','Routine'],
-                ['inventory','Inventory'],
                 ['members','Members'],
               ] as Array<[TabKey, string]>).map(([k, label]) => (
                 <Button key={k} variant={tab === k ? 'default' : 'secondary'} className="rounded-2xl" onClick={() => setTab(k)}>{label}</Button>
@@ -155,26 +153,7 @@ export const GardenDashboardPage: React.FC = () => {
           </aside>
           <main className="min-h-[60vh]">
             {tab === 'overview' && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card className="rounded-2xl p-4">
-                  <div className="text-xs opacity-60">Plants</div>
-                  <div className="text-2xl font-semibold">{plants.length}</div>
-                </Card>
-                <Card className="rounded-2xl p-4">
-                  <div className="text-xs opacity-60">Seeds planted</div>
-                  <div className="text-2xl font-semibold">{plants.reduce((s, p) => s + (p.seedsPlanted || 0), 0)}</div>
-                </Card>
-                <Card className="rounded-2xl p-4">
-                  <div className="text-xs opacity-60">Members</div>
-                  <div className="text-2xl font-semibold">{members.length}</div>
-                </Card>
-                <div className="md:col-span-3">
-                  <Card className="rounded-2xl p-4">
-                    <div className="font-medium mb-2">Next tasks</div>
-                    <div className="text-sm opacity-60">Water and care reminders show up after you add plants and log actions.</div>
-                  </Card>
-                </div>
-              </div>
+              <OverviewSection plants={plants} membersCount={members.length} />
             )}
 
             {tab === 'plants' && (
@@ -203,28 +182,10 @@ export const GardenDashboardPage: React.FC = () => {
             )}
 
             {tab === 'routine' && (
-              <div className="space-y-3">
-                <div className="text-lg font-medium">Watering and care</div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {plants.map((gp: any) => (
-                    <Card key={gp.id} className="rounded-2xl p-4">
-                      <div className="font-medium">{gp.plant?.name}{gp.nickname ? ` · ${gp.nickname}` : ''}</div>
-                      <div className="text-sm opacity-70">Water need: {gp.plant?.care.water}</div>
-                      <div className="mt-2 flex items-center gap-2">
-                        <Button className="rounded-2xl" onClick={() => logWater(gp.id)}>Log watered</Button>
-                      </div>
-                    </Card>
-                  ))}
-                </div>
-              </div>
+              <RoutineSection plants={plants} onLogWater={logWater} />
             )}
 
-            {tab === 'inventory' && (
-              <div className="space-y-3">
-                <div className="text-lg font-medium">Inventory</div>
-                <div className="text-sm opacity-60">Track seeds and plants. Buying/selling flows can be added here.</div>
-              </div>
-            )}
+            
 
             {tab === 'members' && (
               <div className="space-y-3">
@@ -278,22 +239,100 @@ export const GardenDashboardPage: React.FC = () => {
                 <DialogTitle>Add member</DialogTitle>
               </DialogHeader>
               <div className="space-y-3">
-                <Input placeholder="Search users by display name…" value={inviteQuery} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInviteQuery(e.target.value)} />
-                <div className="max-h-60 overflow-auto rounded-xl border">
-                  {inviteResults.map(u => (
-                    <button key={u.id} onClick={() => inviteUser(u.id)} className="w-full text-left px-3 py-2 hover:bg-stone-50">
-                      <div className="font-medium">{u.display_name || u.id}</div>
-                    </button>
-                  ))}
-                  {inviteQuery && inviteResults.length === 0 && (
-                    <div className="px-3 py-6 text-sm opacity-60">No results</div>
-                  )}
+                <Input placeholder="member@email.com" type="email" value={inviteEmail} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInviteEmail(e.target.value)} />
+                {inviteError && <div className="text-sm text-red-600">{inviteError}</div>}
+                <div className="flex justify-end gap-2">
+                  <Button variant="secondary" className="rounded-2xl" onClick={() => setInviteOpen(false)}>Cancel</Button>
+                  <Button className="rounded-2xl" onClick={submitInvite} disabled={!inviteEmail.trim()}>Add member</Button>
                 </div>
               </div>
             </DialogContent>
           </Dialog>
         </>
       )}
+    </div>
+  )
+}
+
+function RoutineSection({ plants, onLogWater }: { plants: any[]; onLogWater: (id: string) => Promise<void> }) {
+  // Placeholder: weekly mini bar chart and due list
+  // Count water events in last 7 days is not implemented server-side yet; show mock using seedsPlanted as proxy
+  const bars = [0,1,2,3,4,5,6].map((i) => ({ day: i, value: Math.min(5, plants.reduce((s, p) => s + (p.seedsPlanted ? 1 : 0), 0)) }))
+  return (
+    <div className="space-y-4">
+      <div className="text-lg font-medium">Watering routine</div>
+      <Card className="rounded-2xl p-4">
+        <div className="text-sm opacity-60 mb-2">Past week</div>
+        <div className="flex gap-2 items-end h-24">
+          {bars.map((b, idx) => (
+            <div key={idx} className="w-6 bg-emerald-200 rounded" style={{ height: `${10 + b.value * 18}px` }} />
+          ))}
+        </div>
+      </Card>
+      <div className="flex justify-between items-center">
+        <div className="text-base font-medium">Today</div>
+        <Button className="rounded-2xl" onClick={async () => { for (const gp of plants) { await onLogWater(gp.id) } }}>Watered all plants</Button>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {plants.map((gp: any) => (
+          <Card key={gp.id} className="rounded-2xl p-4">
+            <div className="font-medium">{gp.plant?.name}{gp.nickname ? ` · ${gp.nickname}` : ''}</div>
+            <div className="text-sm opacity-70">Water need: {gp.plant?.care.water}</div>
+            <div className="mt-2 flex items-center gap-2">
+              <Button className="rounded-2xl" onClick={() => onLogWater(gp.id)}>Mark watered</Button>
+              <Button variant="secondary" className="rounded-2xl opacity-60" disabled>Upcoming</Button>
+            </div>
+          </Card>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function OverviewSection({ plants, membersCount }: { plants: any[]; membersCount: number }) {
+  // Compute a simple daily goal: number of plants to water today equals count of plants
+  const totalToWater = plants.length
+  const wateredToday = 0 // Placeholder until events are fetched; treat 0
+  const progressPct = totalToWater === 0 ? 100 : Math.min(100, Math.round((wateredToday / totalToWater) * 100))
+  // Build a simple 20-day streak-like calendar: mark validated if totalToWater===0
+  const days = Array.from({ length: 20 }, (_, i) => ({
+    day: i,
+    validated: totalToWater === 0,
+  }))
+  const streak = days.reduce((s, d) => (d.validated ? s + 1 : 0), 0)
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card className="rounded-2xl p-4">
+          <div className="text-xs opacity-60">Plants</div>
+          <div className="text-2xl font-semibold">{plants.length}</div>
+        </Card>
+        <Card className="rounded-2xl p-4">
+          <div className="text-xs opacity-60">Members</div>
+          <div className="text-2xl font-semibold">{membersCount}</div>
+        </Card>
+        <Card className="rounded-2xl p-4">
+          <div className="text-xs opacity-60">Streak</div>
+          <div className="text-2xl font-semibold">{streak} days</div>
+        </Card>
+      </div>
+
+      <Card className="rounded-2xl p-4">
+        <div className="font-medium mb-2">Today's progress</div>
+        <div className="text-sm opacity-60 mb-2">{wateredToday} / {totalToWater || 0} watered</div>
+        <div className="h-3 bg-stone-200 rounded-full overflow-hidden">
+          <div className="h-3 bg-emerald-500" style={{ width: `${progressPct}%` }} />
+        </div>
+      </Card>
+
+      <Card className="rounded-2xl p-4">
+        <div className="font-medium mb-3">Last 20 days</div>
+        <div className="grid grid-cols-10 gap-2">
+          {days.map((d, idx) => (
+            <div key={idx} className={`h-6 rounded ${d.validated ? 'bg-emerald-400' : 'bg-stone-300'}`} />
+          ))}
+        </div>
+      </Card>
     </div>
   )
 }

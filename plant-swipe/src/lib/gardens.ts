@@ -178,7 +178,7 @@ export async function logWaterEvent(params: { gardenPlantId: string }): Promise<
 export async function getGardenMembers(gardenId: string): Promise<GardenMember[]> {
   const { data, error } = await supabase
     .from('garden_members')
-    .select('garden_id, user_id, role, joined_at, profiles:profiles(display_name)')
+    .select('garden_id, user_id, role, joined_at, profiles:profiles(display_name, email)')
     .eq('garden_id', gardenId)
   if (error) throw new Error(error.message)
   return (data || []).map((r: any) => ({
@@ -186,7 +186,7 @@ export async function getGardenMembers(gardenId: string): Promise<GardenMember[]
     userId: String(r.user_id),
     role: r.role,
     joinedAt: String(r.joined_at),
-    displayName: r.profiles?.display_name ?? null,
+    displayName: r.profiles?.display_name ?? r.profiles?.email ?? null,
   }))
 }
 
@@ -196,6 +196,22 @@ export async function addGardenMember(params: { gardenId: string; userId: string
     .from('garden_members')
     .insert({ garden_id: gardenId, user_id: userId, role })
   if (error) throw new Error(error.message)
+}
+
+export async function addMemberByEmail(params: { gardenId: string; email: string }): Promise<{ ok: boolean; reason?: string }> {
+  const { gardenId, email } = params
+  const { data: userRow } = await supabase
+    .from('profiles')
+    .select('id')
+    .ilike('email', email)
+    .maybeSingle()
+  if (!userRow?.id) return { ok: false, reason: 'no_account' }
+  try {
+    await addGardenMember({ gardenId, userId: userRow.id, role: 'member' })
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, reason: 'insert_failed' }
+  }
 }
 
 export async function getGardenInventory(gardenId: string): Promise<Array<{ plantId: string; seedsOnHand: number; plantsOnHand: number; plant?: Plant | null }>> {

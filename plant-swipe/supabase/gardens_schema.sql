@@ -105,24 +105,35 @@ do $$ begin
   end if;
 end $$;
 
--- Garden members: members can select; owners can insert members; members can delete themselves
+-- Non-recursive policies for garden_members
 do $$ begin
-  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_members' and policyname = 'gm_select') then
-    create policy gm_select on public.garden_members for select
-      using (user_id = auth.uid() or exists (select 1 from public.garden_members gm2 where gm2.garden_id = garden_id and gm2.user_id = auth.uid()));
+  if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_members' and policyname = 'gm_select') then
+    drop policy gm_select on public.garden_members;
   end if;
+  create policy gm_select on public.garden_members for select to authenticated
+    using (
+      user_id = auth.uid() or exists (
+        select 1 from public.gardens g where g.id = garden_id and g.created_by = auth.uid()
+      )
+    );
 end $$;
 do $$ begin
-  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_members' and policyname = 'gm_insert') then
-    create policy gm_insert on public.garden_members for insert to authenticated
-      with check (exists (select 1 from public.gardens g where g.id = garden_id and g.created_by = auth.uid()) and user_id is not null);
+  if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_members' and policyname = 'gm_insert') then
+    drop policy gm_insert on public.garden_members;
   end if;
+  create policy gm_insert on public.garden_members for insert to authenticated
+    with check (
+      exists (select 1 from public.gardens g where g.id = garden_id and g.created_by = auth.uid()) and user_id is not null
+    );
 end $$;
 do $$ begin
-  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_members' and policyname = 'gm_delete') then
-    create policy gm_delete on public.garden_members for delete to authenticated
-      using (user_id = auth.uid() or exists (select 1 from public.gardens g where g.id = garden_id and g.created_by = auth.uid()));
+  if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_members' and policyname = 'gm_delete') then
+    drop policy gm_delete on public.garden_members;
   end if;
+  create policy gm_delete on public.garden_members for delete to authenticated
+    using (
+      user_id = auth.uid() or exists (select 1 from public.gardens g where g.id = garden_id and g.created_by = auth.uid())
+    );
 end $$;
 
 -- Garden plants: members can select; members can insert/update/delete
