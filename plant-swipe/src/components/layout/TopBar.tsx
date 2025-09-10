@@ -84,13 +84,17 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
 
 function NavPill({ to, isActive, icon, label }: { to: string; isActive: boolean; icon: React.ReactNode; label: string }) {
   return (
-    <Link
-      to={to}
-      className={`flex items-center gap-2 px-3 py-1.5 rounded-2xl border text-sm shadow-sm no-underline ${isActive ? 'bg-black text-white' : 'bg-white text-black'} hover:text-black visited:text-black active:text-black focus:text-black focus-visible:outline-none outline-none`}
-      style={{ WebkitTapHighlightColor: 'transparent' }}
+    <Button
+      asChild
+      variant={isActive ? 'default' : 'secondary'}
+      className="rounded-2xl"
     >
-      {icon}
-      <span>{label}</span>
-    </Link>
+      <Link to={to} className="no-underline">
+        <span className="flex items-center gap-2">
+          {icon}
+          <span>{label}</span>
+        </span>
+      </Link>
+    </Button>
   )
 }

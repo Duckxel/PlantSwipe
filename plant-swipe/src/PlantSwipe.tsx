@@ -222,28 +222,15 @@ export default function PlantSwipe() {
 
       {/* Mobile nav */}
       <div className="max-w-5xl mx-auto mt-4 md:hidden grid grid-cols-3 gap-2">
-        <NavLink
-          to="/"
-          end
-          className={({ isActive }) => `px-3 py-2 rounded-xl border text-sm no-underline ${isActive ? 'bg-black text-white' : 'bg-white text-black'} hover:text-black visited:text-black active:text-black focus:text-black focus-visible:outline-none outline-none`}
-          style={{ WebkitTapHighlightColor: 'transparent' }}
-        >
-          Swipe
-        </NavLink>
-        <NavLink
-          to="/gallery"
-          className={({ isActive }) => `px-3 py-2 rounded-xl border text-sm no-underline ${isActive ? 'bg-black text-white' : 'bg-white text-black'} hover:text-black visited:text-black active:text-black focus:text-black focus-visible:outline-none outline-none`}
-          style={{ WebkitTapHighlightColor: 'transparent' }}
-        >
-          Gallery
-        </NavLink>
-        <NavLink
-          to="/search"
-          className={({ isActive }) => `px-3 py-2 rounded-xl border text-sm no-underline ${isActive ? 'bg-black text-white' : 'bg-white text-black'} hover:text-black visited:text-black active:text-black focus:text-black focus-visible:outline-none outline-none`}
-          style={{ WebkitTapHighlightColor: 'transparent' }}
-        >
-          Search
-        </NavLink>
+        <Button asChild variant={currentView === 'swipe' ? 'default' : 'secondary'} className="rounded-2xl">
+          <NavLink to="/" end className="no-underline">Swipe</NavLink>
+        </Button>
+        <Button asChild variant={currentView === 'gallery' ? 'default' : 'secondary'} className="rounded-2xl">
+          <NavLink to="/gallery" className="no-underline">Gallery</NavLink>
+        </Button>
+        <Button asChild variant={currentView === 'search' ? 'default' : 'secondary'} className="rounded-2xl">
+          <NavLink to="/search" className="no-underline">Search</NavLink>
+        </Button>
       </div>
 
       {/* Layout: grid only when search view (to avoid narrow column in other views) */}
