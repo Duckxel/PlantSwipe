@@ -178,7 +178,7 @@ export async function logWaterEvent(params: { gardenPlantId: string }): Promise<
 export async function getGardenMembers(gardenId: string): Promise<GardenMember[]> {
   const { data, error } = await supabase
     .from('garden_members')
-    .select('garden_id, user_id, role, joined_at, profiles:profiles(display_name, email)')
+    .select('garden_id, user_id, role, joined_at, profiles:profiles(display_name)')
     .eq('garden_id', gardenId)
   if (error) throw new Error(error.message)
   return (data || []).map((r: any) => ({
@@ -186,7 +186,7 @@ export async function getGardenMembers(gardenId: string): Promise<GardenMember[]
     userId: String(r.user_id),
     role: r.role,
     joinedAt: String(r.joined_at),
-    displayName: r.profiles?.display_name ?? r.profiles?.email ?? null,
+    displayName: r.profiles?.display_name ?? null,
   }))
 }
 

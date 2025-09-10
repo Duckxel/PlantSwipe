@@ -122,7 +122,7 @@ export const GardenDashboardPage: React.FC = () => {
   // invite by email only (implemented in submitInvite)
 
   return (
-    <div className="max-w-6xl mx-auto mt-6 grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-6">
+    <div className="max-w-6xl mx-auto mt-6 grid grid-cols-1 md:grid-cols-[220px_1fr] gap-6">
       {loading && <div className="p-6 text-sm opacity-60">Loading…</div>}
       {error && <div className="p-6 text-sm text-red-600">{error}</div>}
       {!loading && garden && (
