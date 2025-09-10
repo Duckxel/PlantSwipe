@@ -6,8 +6,9 @@ import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import type { Garden } from '@/types/garden'
 import type { Plant } from '@/types/plant'
-import { getGarden, getGardenPlants, addPlantToGarden, logWaterEvent, getGardenMembers, addMemberByEmail } from '@/lib/gardens'
+import { getGarden, getGardenPlants, getGardenMembers, addMemberByEmail, fetchScheduleForPlants, markGardenPlantWatered, updateGardenPlantFrequency, deleteGardenPlant, reseedSchedule, addPlantToGarden } from '@/lib/gardens'
 import { supabase } from '@/lib/supabaseClient'
+
 
 type TabKey = 'overview' | 'plants' | 'routine' | 'members'
 
@@ -41,6 +42,7 @@ export const GardenDashboardPage: React.FC = () => {
       setPlants(gps)
       const ms = await getGardenMembers(id)
       setMembers(ms.map(m => ({ userId: m.userId, displayName: m.displayName ?? null, role: m.role })))
+      await fetchScheduleForPlants(gps.map((gp: any) => gp.id), 30)
     } catch (e: any) {
       setError(e?.message || 'Failed to load garden')
     } finally {
@@ -100,6 +102,7 @@ export const GardenDashboardPage: React.FC = () => {
       setAddOpen(false)
       setSelectedPlant(null)
       setPlantQuery('')
+      await reseedSchedule(selectedPlant.id)
       await load()
       setTab('plants')
     } catch (e: any) {
@@ -111,7 +114,7 @@ export const GardenDashboardPage: React.FC = () => {
 
   const logWater = async (gardenPlantId: string) => {
     try {
-      await logWaterEvent({ gardenPlantId })
+      await markGardenPlantWatered(gardenPlantId)
       await load()
       setTab('routine')
     } catch (e: any) {
@@ -159,8 +162,11 @@ export const GardenDashboardPage: React.FC = () => {
                         <div className="col-span-2 p-3">
                           <div className="font-medium">{gp.plant?.name}{gp.nickname ? ` · ${gp.nickname}` : ''}</div>
                           <div className="text-xs opacity-60">Seeds planted: {gp.seedsPlanted || 0}</div>
-                          <div className="mt-2">
-                            <Button variant="secondary" className="rounded-2xl" onClick={() => logWater(gp.id)}>Log watered</Button>
+                          <div className="text-xs opacity-60">Frequency: {gp.overrideWaterFreqValue ? `${gp.overrideWaterFreqValue} / ${gp.overrideWaterFreqUnit}` : 'not set'}</div>
+                          <div className="mt-2 flex gap-2 flex-wrap">
+                            <Button variant="secondary" className="rounded-2xl" onClick={() => logWater(gp.id)}>Mark watered</Button>
+                            <Button variant="secondary" className="rounded-2xl" onClick={async () => { await updateGardenPlantFrequency({ gardenPlantId: gp.id, unit: 'week', value: 3 }); await reseedSchedule(gp.id); await load() }}>Set 3/week</Button>
+                            <Button variant="secondary" className="rounded-2xl" onClick={async () => { await deleteGardenPlant(gp.id); await load() }}>Delete</Button>
                           </div>
                         </div>
                       </div>
@@ -173,8 +179,6 @@ export const GardenDashboardPage: React.FC = () => {
             {tab === 'routine' && (
               <RoutineSection plants={plants} onLogWater={logWater} />
             )}
-
-            
 
             {tab === 'members' && (
               <div className="space-y-3">
@@ -244,8 +248,6 @@ export const GardenDashboardPage: React.FC = () => {
 }
 
 function RoutineSection({ plants, onLogWater }: { plants: any[]; onLogWater: (id: string) => Promise<void> }) {
-  // Placeholder: weekly mini bar chart and due list
-  // Count water events in last 7 days is not implemented server-side yet; show mock using seedsPlanted as proxy
   const bars = [0,1,2,3,4,5,6].map((i) => ({ day: i, value: Math.min(5, plants.reduce((s, p) => s + (p.seedsPlanted ? 1 : 0), 0)) }))
   return (
     <div className="space-y-4">
@@ -279,15 +281,13 @@ function RoutineSection({ plants, onLogWater }: { plants: any[]; onLogWater: (id
 }
 
 function OverviewSection({ plants, membersCount }: { plants: any[]; membersCount: number }) {
-  // Compute a simple daily goal: number of plants to water today equals count of plants
   const totalToWater = plants.length
-  const wateredToday = 0 // Placeholder until events are fetched; treat 0
+  const wateredToday = 0
   const progressPct = totalToWater === 0 ? 100 : Math.min(100, Math.round((wateredToday / totalToWater) * 100))
-  // Build a simple 20-day streak-like calendar: mark validated if totalToWater===0
-  const days = Array.from({ length: 20 }, (_, i) => ({
-    day: i,
-    validated: totalToWater === 0,
-  }))
+  const days = Array.from({ length: 30 }, (_, i) => {
+    const dayNum = i + 1
+    return { dayNum, validated: totalToWater === 0 }
+  })
   const streak = days.reduce((s, d) => (d.validated ? s + 1 : 0), 0)
   return (
     <div className="space-y-4">
@@ -315,10 +315,13 @@ function OverviewSection({ plants, membersCount }: { plants: any[]; membersCount
       </Card>
 
       <Card className="rounded-2xl p-4">
-        <div className="font-medium mb-3">Last 20 days</div>
-        <div className="grid grid-cols-10 gap-2">
+        <div className="font-medium mb-3">Last 30 days</div>
+        <div className="grid grid-cols-10 gap-3">
           {days.map((d, idx) => (
-            <div key={idx} className={`h-6 rounded ${d.validated ? 'bg-emerald-400' : 'bg-stone-300'}`} />
+            <div key={idx} className="relative w-7 h-7 rounded-md flex items-center justify-center bg-stone-200">
+              <div className="text-[11px]">{d.dayNum}</div>
+              {idx === days.length - 1 && <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-black rounded-full" />}
+            </div>
           ))}
         </div>
       </Card>

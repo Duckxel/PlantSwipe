@@ -1,5 +1,7 @@
 export type GardenRole = "owner" | "member"
 
+export type WaterFreqUnit = 'day' | 'week' | 'month' | 'year'
+
 export interface Garden {
   id: string
   name: string
@@ -24,6 +26,8 @@ export interface GardenPlant {
   seedsPlanted: number
   plantedAt: string | null
   expectedBloomDate: string | null
+  overrideWaterFreqUnit?: WaterFreqUnit | null
+  overrideWaterFreqValue?: number | null
 }
 
 export type GardenPlantEventType = "water" | "fertilize" | "prune" | "harvest" | "note"
@@ -35,6 +39,13 @@ export interface GardenPlantEvent {
   occurredAt: string
   notes: string | null
   nextDueAt: string | null
+}
+
+export interface GardenWateringScheduleRow {
+  id: string
+  gardenPlantId: string
+  dueDate: string
+  completedAt: string | null
 }
 
 export interface GardenInventoryItem {

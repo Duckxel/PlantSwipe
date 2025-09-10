@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabaseClient'
-import type { Garden, GardenMember, GardenPlant, GardenPlantEvent } from '@/types/garden'
+import type { Garden, GardenMember, GardenPlant, GardenPlantEvent, GardenWateringScheduleRow, WaterFreqUnit } from '@/types/garden'
 import type { Plant } from '@/types/plant'
 
 export async function getUserGardens(userId: string): Promise<Garden[]> {
@@ -68,7 +68,7 @@ export async function getGarden(gardenId: string): Promise<Garden | null> {
 export async function getGardenPlants(gardenId: string): Promise<Array<GardenPlant & { plant?: Plant | null }>> {
   const { data, error } = await supabase
     .from('garden_plants')
-    .select('id, garden_id, plant_id, nickname, seeds_planted, planted_at, expected_bloom_date')
+    .select('id, garden_id, plant_id, nickname, seeds_planted, planted_at, expected_bloom_date, override_water_freq_unit, override_water_freq_value')
     .eq('garden_id', gardenId)
   if (error) throw new Error(error.message)
   const rows = (data || []) as any[]
@@ -107,6 +107,8 @@ export async function getGardenPlants(gardenId: string): Promise<Array<GardenPla
     seedsPlanted: Number(r.seeds_planted ?? 0),
     plantedAt: r.planted_at,
     expectedBloomDate: r.expected_bloom_date,
+    overrideWaterFreqUnit: r.override_water_freq_unit || null,
+    overrideWaterFreqValue: r.override_water_freq_value ?? null,
     plant: idToPlant[String(r.plant_id)] || null,
   }))
 }
@@ -212,6 +214,66 @@ export async function addMemberByEmail(params: { gardenId: string; email: string
   } catch (e) {
     return { ok: false, reason: 'insert_failed' }
   }
+}
+
+export async function fetchScheduleForPlants(gardenPlantIds: string[], windowDays = 30): Promise<Record<string, GardenWateringScheduleRow[]>> {
+  if (gardenPlantIds.length === 0) return {}
+  const start = new Date()
+  start.setDate(start.getDate() - windowDays)
+  const startStr = start.toISOString().slice(0,10)
+  const end = new Date()
+  end.setDate(end.getDate() + windowDays)
+  const endStr = end.toISOString().slice(0,10)
+  const { data, error } = await supabase
+    .from('garden_watering_schedule')
+    .select('id, garden_plant_id, due_date, completed_at')
+    .gte('due_date', startStr)
+    .lte('due_date', endStr)
+    .in('garden_plant_id', gardenPlantIds)
+  if (error) throw new Error(error.message)
+  const acc: Record<string, GardenWateringScheduleRow[]> = {}
+  for (const r of data || []) {
+    const key = String((r as any).garden_plant_id)
+    if (!acc[key]) acc[key] = []
+    acc[key].push({
+      id: String((r as any).id),
+      gardenPlantId: key,
+      dueDate: String((r as any).due_date),
+      completedAt: (r as any).completed_at || null,
+    })
+  }
+  // Sort by dueDate
+  for (const k of Object.keys(acc)) {
+    acc[k].sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+  }
+  return acc
+}
+
+export async function reseedSchedule(gardenPlantId: string, daysAhead = 60): Promise<void> {
+  const { error } = await supabase.rpc('reseed_watering_schedule', { _garden_plant_id: gardenPlantId, _days_ahead: daysAhead })
+  if (error) throw new Error(error.message)
+}
+
+export async function markGardenPlantWatered(gardenPlantId: string): Promise<void> {
+  const { error } = await supabase.rpc('mark_garden_plant_watered', { _garden_plant_id: gardenPlantId })
+  if (error) throw new Error(error.message)
+}
+
+export async function updateGardenPlantFrequency(params: { gardenPlantId: string; unit: WaterFreqUnit; value: number }): Promise<void> {
+  const { gardenPlantId, unit, value } = params
+  const { error } = await supabase
+    .from('garden_plants')
+    .update({ override_water_freq_unit: unit, override_water_freq_value: value })
+    .eq('id', gardenPlantId)
+  if (error) throw new Error(error.message)
+}
+
+export async function deleteGardenPlant(gardenPlantId: string): Promise<void> {
+  const { error } = await supabase
+    .from('garden_plants')
+    .delete()
+    .eq('id', gardenPlantId)
+  if (error) throw new Error(error.message)
 }
 
 export async function getGardenInventory(gardenId: string): Promise<Array<{ plantId: string; seedsOnHand: number; plantsOnHand: number; plant?: Plant | null }>> {
