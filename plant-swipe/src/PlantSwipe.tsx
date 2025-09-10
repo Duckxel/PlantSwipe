@@ -222,13 +222,13 @@ export default function PlantSwipe() {
 
       {/* Mobile nav */}
       <div className="max-w-5xl mx-auto mt-4 md:hidden grid grid-cols-3 gap-2">
-        <Button asChild variant={currentView === 'swipe' ? 'default' : 'secondary'} className={currentView === 'swipe' ? "rounded-2xl bg-black text-white hover:bg-black/90" : "rounded-2xl bg-white text-black hover:bg-stone-100"}>
+        <Button asChild variant={'secondary'} className={currentView === 'swipe' ? "rounded-2xl bg-black text-white hover:bg-black/90 hover:text-white" : "rounded-2xl bg-white text-black hover:bg-stone-100 hover:text-black"}>
           <NavLink to="/" end className="no-underline">Swipe</NavLink>
         </Button>
-        <Button asChild variant={currentView === 'gallery' ? 'default' : 'secondary'} className={currentView === 'gallery' ? "rounded-2xl bg-black text-white hover:bg-black/90" : "rounded-2xl bg-white text-black hover:bg-stone-100"}>
+        <Button asChild variant={'secondary'} className={currentView === 'gallery' ? "rounded-2xl bg-black text-white hover:bg-black/90 hover:text-white" : "rounded-2xl bg-white text-black hover:bg-stone-100 hover:text-black"}>
           <NavLink to="/gallery" className="no-underline">Gallery</NavLink>
         </Button>
-        <Button asChild variant={currentView === 'search' ? 'default' : 'secondary'} className={currentView === 'search' ? "rounded-2xl bg-black text-white hover:bg-black/90" : "rounded-2xl bg-white text-black hover:bg-stone-100"}>
+        <Button asChild variant={'secondary'} className={currentView === 'search' ? "rounded-2xl bg-black text-white hover:bg-black/90 hover:text-white" : "rounded-2xl bg-white text-black hover:bg-stone-100 hover:text-black"}>
           <NavLink to="/search" className="no-underline">Search</NavLink>
         </Button>
       </div>

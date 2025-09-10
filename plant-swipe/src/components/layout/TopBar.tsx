@@ -86,8 +86,8 @@ function NavPill({ to, isActive, icon, label }: { to: string; isActive: boolean;
   return (
     <Button
       asChild
-      variant={isActive ? 'default' : 'secondary'}
-      className={isActive ? "rounded-2xl bg-black text-white hover:bg-black/90" : "rounded-2xl bg-white text-black hover:bg-stone-100"}
+      variant={'secondary'}
+      className={isActive ? "rounded-2xl bg-black text-white hover:bg-black/90 hover:text-white" : "rounded-2xl bg-white text-black hover:bg-stone-100 hover:text-black"}
     >
       <Link to={to} className="no-underline">
         <span className="flex items-center gap-2">
