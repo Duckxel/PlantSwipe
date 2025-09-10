@@ -89,7 +89,7 @@ export default function PlantSwipe() {
 
   React.useEffect(() => {
     loadPlants()
-  }, [loadPlants, location.pathname])
+  }, [loadPlants])
 
   const filtered = useMemo(() => {
     return plants.filter((p: Plant) => {
