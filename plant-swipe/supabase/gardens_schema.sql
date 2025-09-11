@@ -93,7 +93,7 @@ create policy gtasks_iud on public.garden_tasks for all to authenticated
   with check (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()));
 
 -- Helper to upsert/mark success based on schedule completion
-create or replace function public.touch_garden_task(_garden_id uuid, _day date, _plant_id uuid, _set_success boolean default null)
+create or replace function public.touch_garden_task(_garden_id uuid, _day date, _plant_id uuid default null, _set_success boolean default null)
 returns void
 language plpgsql
 security definer
@@ -109,14 +109,32 @@ begin
 
   if v_id is null then
     insert into public.garden_tasks (garden_id, day, task_type, garden_plant_ids, success)
-    values (_garden_id, _day, 'watering', array[_plant_id], coalesce(_set_success, false));
+    values (_garden_id, _day, 'watering', coalesce(array[_plant_id], '{}'::uuid[]), coalesce(_set_success, false));
   else
-    update public.garden_tasks
-      set garden_plant_ids = (case when not _plant_id = any(garden_plant_ids) then array_append(garden_plant_ids, _plant_id) else garden_plant_ids end),
-          success = coalesce(_set_success, success)
-    where id = v_id;
+    if _plant_id is not null then
+      update public.garden_tasks
+        set garden_plant_ids = (case when not _plant_id = any(garden_plant_ids) then array_append(garden_plant_ids, _plant_id) else garden_plant_ids end),
+            success = coalesce(_set_success, success)
+      where id = v_id;
+    else
+      update public.garden_tasks
+        set success = coalesce(_set_success, success)
+      where id = v_id;
+    end if;
   end if;
 end;
+$$;
+
+-- Ensure an empty task exists for all gardens for a given day
+create or replace function public.ensure_daily_tasks_for_gardens(_day date default now()::date)
+returns void
+language sql
+security definer
+as $$
+  insert into public.garden_tasks (garden_id, day, task_type, garden_plant_ids, success)
+  select g.id, _day, 'watering', '{}'::uuid[], false
+  from public.gardens g
+  on conflict (garden_id, day, task_type) do nothing;
 $$;
 
 -- RLS
