@@ -284,8 +284,8 @@ export async function fetchServerNowISO(): Promise<string> {
   return iso
 }
 
-export async function upsertGardenTask(params: { gardenId: string; day: string; gardenPlantId: string; success?: boolean }): Promise<void> {
-  const { gardenId, day, gardenPlantId, success } = params
+export async function upsertGardenTask(params: { gardenId: string; day: string; gardenPlantId?: string | null; success?: boolean }): Promise<void> {
+  const { gardenId, day, gardenPlantId = null, success } = params
   const { error } = await supabase.rpc('touch_garden_task', { _garden_id: gardenId, _day: day, _plant_id: gardenPlantId, _set_success: success ?? null })
   if (error) throw new Error(error.message)
 }
@@ -307,6 +307,11 @@ export async function getGardenTasks(gardenId: string, startDay: string, endDay:
     gardenPlantIds: Array.isArray(r.garden_plant_ids) ? r.garden_plant_ids : [],
     success: Boolean(r.success),
   }))
+}
+
+export async function ensureDailyTasksForGardens(dayIso: string): Promise<void> {
+  const { error } = await supabase.rpc('ensure_daily_tasks_for_gardens', { _day: dayIso })
+  if (error) throw new Error(error.message)
 }
 
 export async function getGardenInventory(gardenId: string): Promise<Array<{ plantId: string; seedsOnHand: number; plantsOnHand: number; plant?: Plant | null }>> {

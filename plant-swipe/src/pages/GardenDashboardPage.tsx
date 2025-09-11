@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import type { Garden } from '@/types/garden'
 import type { Plant } from '@/types/plant'
-import { getGarden, getGardenPlants, getGardenMembers, addMemberByEmail, fetchScheduleForPlants, markGardenPlantWatered, updateGardenPlantFrequency, deleteGardenPlant, reseedSchedule, addPlantToGarden, fetchServerNowISO } from '@/lib/gardens'
+import { getGarden, getGardenPlants, getGardenMembers, addMemberByEmail, fetchScheduleForPlants, markGardenPlantWatered, updateGardenPlantFrequency, deleteGardenPlant, reseedSchedule, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens } from '@/lib/gardens'
 import { supabase } from '@/lib/supabaseClient'
 
 
@@ -21,6 +21,9 @@ export const GardenDashboardPage: React.FC = () => {
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [serverToday, setServerToday] = React.useState<string | null>(null)
+  // no-op for now; reserved for due list logic
+  // const [dueToday, setDueToday] = React.useState<Set<string> | null>(null)
+  const [dailyStats, setDailyStats] = React.useState<Array<{ date: string; due: number; completed: number; success: boolean }>>([])
 
   const [addOpen, setAddOpen] = React.useState(false)
   const [plantQuery, setPlantQuery] = React.useState('')
@@ -45,7 +48,38 @@ export const GardenDashboardPage: React.FC = () => {
       setMembers(ms.map(m => ({ userId: m.userId, displayName: m.displayName ?? null, role: m.role })))
       await fetchScheduleForPlants(gps.map((gp: any) => gp.id), 45)
       const nowIso = await fetchServerNowISO()
-      setServerToday(nowIso.slice(0,10))
+      const today = nowIso.slice(0,10)
+      setServerToday(today)
+      await ensureDailyTasksForGardens(today)
+      const start = new Date(today)
+      start.setDate(start.getDate() - 29)
+      const startIso = start.toISOString().slice(0,10)
+      const taskRows = await getGardenTasks(id, startIso, today)
+
+      const sched = await fetchScheduleForPlants(gps.map((gp: any) => gp.id), 45)
+      const dset = new Set<string>()
+      const map: Record<string, { due: number; completed: number }> = {}
+      for (const gpId of Object.keys(sched)) {
+        for (const row of (sched as any)[gpId] as any[]) {
+          const d = row.dueDate
+          if (!map[d]) map[d] = { due: 0, completed: 0 }
+          map[d].due += 1
+          if (row.completedAt) map[d].completed += 1
+          if (d === today && !row.completedAt) dset.add(gpId)
+        }
+      }
+      const days: Array<{ date: string; due: number; completed: number; success: boolean }> = []
+      const anchor = new Date(today)
+      for (let i = 29; i >= 0; i--) {
+        const d = new Date(anchor)
+        d.setDate(d.getDate() - i)
+        const ds = d.toISOString().slice(0,10)
+        const entry = map[ds] || { due: 0, completed: 0 }
+        const trow = taskRows.find(tr => tr.day === ds && tr.taskType === 'watering')
+        days.push({ date: ds, due: entry.due, completed: entry.completed, success: Boolean(trow?.success) })
+      }
+      // setDueToday(dset)
+      setDailyStats(days)
     } catch (e: any) {
       setError(e?.message || 'Failed to load garden')
     } finally {
@@ -101,11 +135,12 @@ export const GardenDashboardPage: React.FC = () => {
     if (!id || !selectedPlant || adding) return
     setAdding(true)
     try {
-      await addPlantToGarden({ gardenId: id, plantId: selectedPlant.id, seedsPlanted: 0 })
+      const gp = await addPlantToGarden({ gardenId: id, plantId: selectedPlant.id, seedsPlanted: 0 })
       setAddOpen(false)
       setSelectedPlant(null)
       setPlantQuery('')
-      await reseedSchedule(selectedPlant.id)
+      if (serverToday) { await upsertGardenTask({ gardenId: id, day: serverToday, gardenPlantId: gp.id }) }
+      await reseedSchedule(gp.id)
       await load()
       setTab('plants')
     } catch (e: any) {
@@ -118,6 +153,9 @@ export const GardenDashboardPage: React.FC = () => {
   const logWater = async (gardenPlantId: string) => {
     try {
       await markGardenPlantWatered(gardenPlantId)
+      if (serverToday && garden?.id) {
+        await upsertGardenTask({ gardenId: garden.id, day: serverToday, gardenPlantId, success: true })
+      }
       await load()
       setTab('routine')
     } catch (e: any) {
@@ -148,7 +186,7 @@ export const GardenDashboardPage: React.FC = () => {
           </aside>
           <main className="min-h-[60vh]">
             {tab === 'overview' && (
-              <OverviewSection plants={plants} membersCount={members.length} serverToday={serverToday} />
+              <OverviewSection plants={plants} membersCount={members.length} serverToday={serverToday} dailyStats={dailyStats} />
             )}
 
             {tab === 'plants' && (
@@ -200,7 +238,7 @@ export const GardenDashboardPage: React.FC = () => {
                   </div>
                 </div>
                 <div className="pt-2">
-                  <Button variant="destructive" className="rounded-2xl" onClick={async () => { if (!id) return; if (!confirm('Delete this garden? This cannot be undone.')) return; try { const { supabase } = await import('@/lib/supabaseClient'); await supabase.from('gardens').delete().eq('id', id); window.location.href = '/gardens' } catch (e) { alert('Failed to delete garden') } }}>Delete garden</Button>
+                  <Button variant="destructive" className="rounded-2xl" onClick={async () => { if (!id) return; if (!confirm('Delete this garden? This cannot be undone.')) return; try { await supabase.from('gardens').delete().eq('id', id); window.location.href = '/gardens' } catch (e) { alert('Failed to delete garden') } }}>Delete garden</Button>
                 </div>
               </div>
             )}
@@ -288,18 +326,27 @@ function RoutineSection({ plants, onLogWater }: { plants: any[]; onLogWater: (id
   )
 }
 
-function OverviewSection({ plants, membersCount, serverToday }: { plants: any[]; membersCount: number; serverToday: string | null }) {
-  const totalToWater = plants.length
-  const wateredToday = 0
-  const progressPct = totalToWater === 0 ? 100 : Math.min(100, Math.round((wateredToday / totalToWater) * 100))
+function OverviewSection({ plants, membersCount, serverToday, dailyStats }: { plants: any[]; membersCount: number; serverToday: string | null; dailyStats: Array<{ date: string; due: number; completed: number; success: boolean }> }) {
+  const totalToWaterToday = dailyStats.find(d => d.date === (serverToday || ''))?.due ?? plants.length
+  const completedToday = dailyStats.find(d => d.date === (serverToday || ''))?.completed ?? 0
+  const progressPct = totalToWaterToday === 0 ? 100 : Math.min(100, Math.round((completedToday / totalToWaterToday) * 100))
   const anchor = serverToday ? new Date(serverToday) : new Date()
   const days = Array.from({ length: 30 }, (_, i) => {
     const d = new Date(anchor)
     d.setDate(d.getDate() - (29 - i))
+    const dateIso = d.toISOString().slice(0,10)
     const dayNum = d.getDate()
-    return { dayNum, validated: totalToWater === 0 }
+    const success = dailyStats.find(x => x.date === dateIso)?.success ?? false
+    return { dayNum, isToday: i === 29, success }
   })
-  const streak = days.reduce((s, d) => (d.validated ? s + 1 : 0), 0)
+  const streak = (() => {
+    let s = 0
+    for (let i = days.length - 1; i >= 0; i--) {
+      if (days[i].success || (i === days.length - 1 && totalToWaterToday === 0)) s++;
+      else break;
+    }
+    return s
+  })()
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -319,7 +366,7 @@ function OverviewSection({ plants, membersCount, serverToday }: { plants: any[];
 
       <Card className="rounded-2xl p-4">
         <div className="font-medium mb-2">Today's progress</div>
-        <div className="text-sm opacity-60 mb-2">{wateredToday} / {totalToWater || 0} watered</div>
+        <div className="text-sm opacity-60 mb-2">{completedToday} / {totalToWaterToday || 0} watered</div>
         <div className="h-3 bg-stone-200 rounded-full overflow-hidden">
           <div className="h-3 bg-emerald-500" style={{ width: `${progressPct}%` }} />
         </div>
@@ -329,9 +376,9 @@ function OverviewSection({ plants, membersCount, serverToday }: { plants: any[];
         <div className="font-medium mb-3">Last 30 days</div>
         <div className="grid grid-cols-10 gap-3">
           {days.map((d, idx) => (
-            <div key={idx} className="relative w-7 h-7 rounded-md flex items-center justify-center bg-stone-200">
+            <div key={idx} className={`relative w-7 h-7 rounded-md flex items-center justify-center ${d.success ? 'bg-emerald-400' : 'bg-stone-300'}`}>
               <div className="text-[11px]">{d.dayNum}</div>
-              {idx === days.length - 1 && <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-black rounded-full" />}
+              {d.isToday && <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-black rounded-full" />}
             </div>
           ))}
         </div>
