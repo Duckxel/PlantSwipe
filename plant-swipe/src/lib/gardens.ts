@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabaseClient'
 import type { Garden, GardenMember, GardenPlant, GardenPlantEvent, GardenWateringScheduleRow, WaterFreqUnit } from '@/types/garden'
+import type { GardenTaskRow } from '@/types/garden'
 import type { Plant } from '@/types/plant'
 
 export async function getUserGardens(userId: string): Promise<Garden[]> {
@@ -281,6 +282,31 @@ export async function fetchServerNowISO(): Promise<string> {
   if (error) throw new Error(error.message)
   const iso = new Date(String(data)).toISOString()
   return iso
+}
+
+export async function upsertGardenTask(params: { gardenId: string; day: string; gardenPlantId: string; success?: boolean }): Promise<void> {
+  const { gardenId, day, gardenPlantId, success } = params
+  const { error } = await supabase.rpc('touch_garden_task', { _garden_id: gardenId, _day: day, _plant_id: gardenPlantId, _set_success: success ?? null })
+  if (error) throw new Error(error.message)
+}
+
+export async function getGardenTasks(gardenId: string, startDay: string, endDay: string): Promise<GardenTaskRow[]> {
+  const { data, error } = await supabase
+    .from('garden_tasks')
+    .select('id, garden_id, day, task_type, garden_plant_ids, success')
+    .eq('garden_id', gardenId)
+    .gte('day', startDay)
+    .lte('day', endDay)
+    .order('day', { ascending: true })
+  if (error) throw new Error(error.message)
+  return (data || []).map((r: any) => ({
+    id: String(r.id),
+    gardenId: String(r.garden_id),
+    day: String(r.day),
+    taskType: 'watering',
+    gardenPlantIds: Array.isArray(r.garden_plant_ids) ? r.garden_plant_ids : [],
+    success: Boolean(r.success),
+  }))
 }
 
 export async function getGardenInventory(gardenId: string): Promise<Array<{ plantId: string; seedsOnHand: number; plantsOnHand: number; plant?: Plant | null }>> {

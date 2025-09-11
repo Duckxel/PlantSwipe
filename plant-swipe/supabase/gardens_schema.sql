@@ -70,6 +70,55 @@ create table if not exists public.garden_transactions (
   notes text
 );
 
+-- Daily garden tasks to drive overview (success per-day per-garden)
+create table if not exists public.garden_tasks (
+  id uuid primary key default gen_random_uuid(),
+  garden_id uuid not null references public.gardens(id) on delete cascade,
+  day date not null,
+  task_type text not null check (task_type in ('watering')),
+  garden_plant_ids uuid[] not null default '{}',
+  success boolean not null default false,
+  unique (garden_id, day, task_type)
+);
+
+alter table public.garden_tasks enable row level security;
+
+-- RLS for tasks
+drop policy if exists gtasks_select on public.garden_tasks;
+drop policy if exists gtasks_iud on public.garden_tasks;
+create policy gtasks_select on public.garden_tasks for select to authenticated
+  using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()));
+create policy gtasks_iud on public.garden_tasks for all to authenticated
+  using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()))
+  with check (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()));
+
+-- Helper to upsert/mark success based on schedule completion
+create or replace function public.touch_garden_task(_garden_id uuid, _day date, _plant_id uuid, _set_success boolean default null)
+returns void
+language plpgsql
+security definer
+as $$
+declare
+  v_id uuid;
+  v_ids uuid[];
+  v_succ boolean;
+begin
+  select id, garden_plant_ids, success into v_id, v_ids, v_succ
+  from public.garden_tasks
+  where garden_id = _garden_id and day = _day and task_type = 'watering';
+
+  if v_id is null then
+    insert into public.garden_tasks (garden_id, day, task_type, garden_plant_ids, success)
+    values (_garden_id, _day, 'watering', array[_plant_id], coalesce(_set_success, false));
+  else
+    update public.garden_tasks
+      set garden_plant_ids = (case when not _plant_id = any(garden_plant_ids) then array_append(garden_plant_ids, _plant_id) else garden_plant_ids end),
+          success = coalesce(_set_success, success)
+    where id = v_id;
+  end if;
+end;
+$$;
+
 -- RLS
 alter table public.gardens enable row level security;
 alter table public.garden_members enable row level security;

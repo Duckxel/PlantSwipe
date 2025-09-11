@@ -48,6 +48,15 @@ export interface GardenWateringScheduleRow {
   completedAt: string | null
 }
 
+export interface GardenTaskRow {
+  id: string
+  gardenId: string
+  day: string
+  taskType: 'watering'
+  gardenPlantIds: string[]
+  success: boolean
+}
+
 export interface GardenInventoryItem {
   id: string
   gardenId: string
