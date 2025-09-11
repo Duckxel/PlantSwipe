@@ -11,7 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { TopBar } from "@/components/layout/TopBar";
 import { BottomBar } from "@/components/layout/BottomBar";
 import { SwipePage } from "@/pages/SwipePage";
-import { GalleryPage } from "@/pages/GalleryPage";
+import { GardenListPage } from "@/pages/GardenListPage";
+import { GardenDashboardPage } from "@/pages/GardenDashboardPage";
 import { SearchPage } from "@/pages/SearchPage";
 import { CreatePlantPage } from "@/pages/CreatePlantPage";
 import type { Plant } from "@/types/plant";
@@ -33,9 +34,9 @@ export default function PlantSwipe() {
 
   const location = useLocation()
   const navigate = useNavigate()
-  const currentView: "swipe" | "gallery" | "search" | "profile" | "create" =
+  const currentView: "swipe" | "gardens" | "search" | "profile" | "create" =
     location.pathname === "/" ? "swipe" :
-    location.pathname.startsWith("/gallery") ? "gallery" :
+    location.pathname.startsWith("/gardens") || location.pathname.startsWith('/garden/') ? "gardens" :
     location.pathname.startsWith("/search") ? "search" :
     location.pathname.startsWith("/profile") ? "profile" :
     location.pathname.startsWith("/create") ? "create" : "swipe"
@@ -225,8 +226,8 @@ export default function PlantSwipe() {
         <Button asChild variant={'secondary'} className={currentView === 'swipe' ? "rounded-2xl bg-black text-white hover:bg-black/90 hover:text-white" : "rounded-2xl bg-white text-black hover:bg-stone-100 hover:text-black"}>
           <NavLink to="/" end className="no-underline">Swipe</NavLink>
         </Button>
-        <Button asChild variant={'secondary'} className={currentView === 'gallery' ? "rounded-2xl bg-black text-white hover:bg-black/90 hover:text-white" : "rounded-2xl bg-white text-black hover:bg-stone-100 hover:text-black"}>
-          <NavLink to="/gallery" className="no-underline">Gallery</NavLink>
+        <Button asChild variant={'secondary'} className={currentView === 'gardens' ? "rounded-2xl bg-black text-white hover:bg-black/90 hover:text-white" : "rounded-2xl bg-white text-black hover:bg-stone-100 hover:text-black"}>
+          <NavLink to="/gardens" className="no-underline">Garden</NavLink>
         </Button>
         <Button asChild variant={'secondary'} className={currentView === 'search' ? "rounded-2xl bg-black text-white hover:bg-black/90 hover:text-white" : "rounded-2xl bg-white text-black hover:bg-stone-100 hover:text-black"}>
           <NavLink to="/search" className="no-underline">Search</NavLink>
@@ -352,13 +353,14 @@ export default function PlantSwipe() {
                     <></>
                   )}
                 />
-                <Route path="/gallery" element={<GalleryPage plants={plants} onOpen={(p) => setOpenInfo(p)} />} />
+                <Route path="/gardens" element={<GardenListPage />} />
+                <Route path="/garden/:id" element={<GardenDashboardPage />} />
                 <Route path="/search" element={<SearchPage plants={filtered} openInfo={(p) => setOpenInfo(p)} />} />
                 <Route path="/profile" element={user ? <ProfilePage /> : <Navigate to="/" replace />} />
                 <Route path="/create" element={user ? (
                   <CreatePlantPage
                     onCancel={() => navigate('/')}
-                    onSaved={async () => { await loadPlants(); navigate('/gallery') }}
+                    onSaved={async () => { await loadPlants(); navigate('/gardens') }}
                   />
                 ) : (
                   <Navigate to="/" replace />
