@@ -10,7 +10,7 @@ import { getGarden, getGardenPlants, getGardenMembers, addMemberByEmail, fetchSc
 import { supabase } from '@/lib/supabaseClient'
 
 
-type TabKey = 'overview' | 'plants' | 'routine' | 'members'
+type TabKey = 'overview' | 'plants' | 'routine' | 'settings'
 
 export const GardenDashboardPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
@@ -140,7 +140,7 @@ export const GardenDashboardPage: React.FC = () => {
                 ['overview','Overview'],
                 ['plants','Plants'],
                 ['routine','Routine'],
-                ['members','Members'],
+                ['settings','Settings'],
               ] as Array<[TabKey, string]>).map(([k, label]) => (
                 <Button key={k} variant={tab === k ? 'default' : 'secondary'} className="rounded-2xl" onClick={() => setTab(k)}>{label}</Button>
               ))}
@@ -183,19 +183,24 @@ export const GardenDashboardPage: React.FC = () => {
               <RoutineSection plants={plants} onLogWater={logWater} />
             )}
 
-            {tab === 'members' && (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="text-lg font-medium">Members</div>
-                  <Button className="rounded-2xl" onClick={() => setInviteOpen(true)}>Add member</Button>
+            {tab === 'settings' && (
+              <div className="space-y-6">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-lg font-medium">Manage members</div>
+                    <Button className="rounded-2xl" onClick={() => setInviteOpen(true)}>Add member</Button>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {members.map(m => (
+                      <Card key={m.userId} className="rounded-2xl p-4">
+                        <div className="font-medium">{m.displayName || m.userId}</div>
+                        <div className="text-xs opacity-60">{m.role}</div>
+                      </Card>
+                    ))}
+                  </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {members.map(m => (
-                    <Card key={m.userId} className="rounded-2xl p-4">
-                      <div className="font-medium">{m.displayName || m.userId}</div>
-                      <div className="text-xs opacity-60">{m.role}</div>
-                    </Card>
-                  ))}
+                <div className="pt-2">
+                  <Button variant="destructive" className="rounded-2xl" onClick={async () => { if (!id) return; if (!confirm('Delete this garden? This cannot be undone.')) return; try { const { supabase } = await import('@/lib/supabaseClient'); await supabase.from('gardens').delete().eq('id', id); window.location.href = '/gardens' } catch (e) { alert('Failed to delete garden') } }}>Delete garden</Button>
                 </div>
               </div>
             )}
