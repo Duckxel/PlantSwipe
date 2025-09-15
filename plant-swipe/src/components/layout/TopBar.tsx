@@ -1,6 +1,6 @@
 import React from "react"
 import { useNavigate, Link, useLocation } from "react-router-dom"
-import { Leaf, Sprout, ScrollText, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Plus } from "lucide-react"
+import { Leaf, Sprout, Sparkles, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 interface TopBarProps {
@@ -40,7 +40,7 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
         PLANT SWIPE
       </Link>
       <nav className="ml-4 hidden md:flex gap-2">
-        <NavPill to="/" isActive={location.pathname === '/'} icon={<ScrollText className="h-4 w-4" />} label="Swipe" />
+        <NavPill to="/" isActive={location.pathname === '/'} icon={<Sparkles className="h-4 w-4" />} label="Discovery" />
         <NavPill to="/gardens" isActive={location.pathname.startsWith('/gardens') || location.pathname.startsWith('/garden/')} icon={<Sprout className="h-4 w-4" />} label="Garden" />
         <NavPill to="/search" isActive={location.pathname.startsWith('/search')} icon={<Search className="h-4 w-4" />} label="Search" />
       </nav>

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Routes, Route, NavLink, useLocation, useNavigate, Navigate } from "react-router-dom";
 import { useMotionValue } from "framer-motion";
-import { Search } from "lucide-react";
+import { Search, Sparkles } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -34,12 +34,12 @@ export default function PlantSwipe() {
 
   const location = useLocation()
   const navigate = useNavigate()
-  const currentView: "swipe" | "gardens" | "search" | "profile" | "create" =
-    location.pathname === "/" ? "swipe" :
+  const currentView: "discovery" | "gardens" | "search" | "profile" | "create" =
+    location.pathname === "/" ? "discovery" :
     location.pathname.startsWith("/gardens") || location.pathname.startsWith('/garden/') ? "gardens" :
     location.pathname.startsWith("/search") ? "search" :
     location.pathname.startsWith("/profile") ? "profile" :
-    location.pathname.startsWith("/create") ? "create" : "swipe"
+    location.pathname.startsWith("/create") ? "create" : "discovery"
   const [authOpen, setAuthOpen] = useState(false)
   const [authMode, setAuthMode] = useState<"login" | "signup">("login")
   const [authError, setAuthError] = useState<string | null>(null)
@@ -182,20 +182,7 @@ export default function PlantSwipe() {
         }
         console.log('[auth] login ok')
       }
-      try {
-        setAuthOpen(false)
-      } catch (e) {
-        console.warn('[auth] failed to close dialog', e)
-      }
-      setTimeout(() => {
-        try {
-          console.log('[auth] forcing reload via replace')
-          window.location.replace(window.location.href)
-        } catch (e) {
-          console.warn('[auth] replace failed, using reload', e)
-          try { window.location.reload() } catch (er) { console.error('[auth] reload failed', er) }
-        }
-      }, 0)
+      try { setAuthOpen(false) } catch {}
     } catch (e: any) {
       console.error('[auth] unexpected error', e)
       setAuthError(e?.message || 'Unexpected error')
@@ -223,8 +210,8 @@ export default function PlantSwipe() {
 
       {/* Mobile nav */}
       <div className="max-w-5xl mx-auto mt-4 md:hidden grid grid-cols-3 gap-2">
-        <Button asChild variant={'secondary'} className={currentView === 'swipe' ? "rounded-2xl bg-black text-white hover:bg-black/90 hover:text-white" : "rounded-2xl bg-white text-black hover:bg-stone-100 hover:text-black"}>
-          <NavLink to="/" end className="no-underline">Swipe</NavLink>
+        <Button asChild variant={'secondary'} className={currentView === 'discovery' ? "rounded-2xl bg-black text-white hover:bg-black/90 hover:text-white" : "rounded-2xl bg-white text-black hover:bg-stone-100 hover:text-black"}>
+          <NavLink to="/" end className="no-underline flex items-center gap-2"><Sparkles className="h-4 w-4" /> Discovery</NavLink>
         </Button>
         <Button asChild variant={'secondary'} className={currentView === 'gardens' ? "rounded-2xl bg-black text-white hover:bg-black/90 hover:text-white" : "rounded-2xl bg-white text-black hover:bg-stone-100 hover:text-black"}>
           <NavLink to="/gardens" className="no-underline">Garden</NavLink>

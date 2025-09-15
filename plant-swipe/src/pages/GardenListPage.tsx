@@ -12,6 +12,7 @@ export const GardenListPage: React.FC = () => {
   const { user } = useAuth()
   const navigate = useNavigate()
   const [gardens, setGardens] = React.useState<Garden[]>([])
+  const [dragIndex, setDragIndex] = React.useState<number | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [open, setOpen] = React.useState(false)
@@ -65,8 +66,15 @@ export const GardenListPage: React.FC = () => {
       {error && <div className="p-6 text-sm text-red-600">{error}</div>}
       {!loading && !error && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {gardens.map(g => (
-            <Card key={g.id} className="rounded-2xl overflow-hidden">
+          {gardens.map((g, idx) => (
+            <Card key={g.id} className={`rounded-2xl overflow-hidden ${dragIndex === idx ? 'ring-2 ring-black' : ''}`} draggable onDragStart={() => setDragIndex(idx)} onDragOver={(e) => e.preventDefault()} onDrop={() => {
+              if (dragIndex === null || dragIndex === idx) return;
+              const arr = gardens.slice()
+              const [moved] = arr.splice(dragIndex, 1)
+              arr.splice(idx, 0, moved)
+              setGardens(arr)
+              setDragIndex(null)
+            }}>
               <button onClick={() => navigate(`/garden/${g.id}`)} className="grid grid-cols-3 gap-0 w-full text-left">
                 <div className="col-span-1 h-36 bg-cover bg-center" style={{ backgroundImage: `url(${g.coverImageUrl || ''})` }} />
                 <div className="col-span-2 p-4">
