@@ -98,8 +98,8 @@ export const GardenDashboardPage: React.FC = () => {
         d.setDate(d.getDate() - i)
         const ds = d.toISOString().slice(0,10)
         const entry = map[ds] || { due: 0, completed: 0 }
-        const trow = taskRows.find(tr => tr.day === ds && tr.taskType === 'watering')
-        days.push({ date: ds, due: entry.due, completed: entry.completed, success: Boolean(trow?.success) })
+        const success = entry.due > 0 && entry.completed >= entry.due
+        days.push({ date: ds, due: entry.due, completed: entry.completed, success })
       }
       setDueToday(dset)
       setDailyStats(days)
@@ -221,17 +221,19 @@ export const GardenDashboardPage: React.FC = () => {
         yearlyDays: selection.yearlyDays || null,
       })
       if (serverToday) {
-        // Clear existing future schedule for this plant and reseed
+        // Clear upcoming due rows from today forward, then reseed fresh based on new schedule
         await supabase
           .from('garden_watering_schedule')
           .delete()
           .eq('garden_plant_id', pendingGardenPlantId)
           .gte('due_date', serverToday)
           .is('completed_at', null)
-        await ensureDailyTasksForGardens(serverToday)
-        await upsertGardenTask({ gardenId: id, day: serverToday, gardenPlantId: pendingGardenPlantId })
       }
       await reseedSchedule(pendingGardenPlantId)
+      if (serverToday) {
+        // Ensure tasks row exists; success will be derived from schedule completion elsewhere
+        await ensureDailyTasksForGardens(serverToday)
+      }
       await load()
       setTab('plants')
     } catch (e: any) {
@@ -447,7 +449,7 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
 }
 
 function OverviewSection({ plants, membersCount, serverToday, dailyStats }: { plants: any[]; membersCount: number; serverToday: string | null; dailyStats: Array<{ date: string; due: number; completed: number; success: boolean }> }) {
-  const totalToWaterToday = dailyStats.find(d => d.date === (serverToday || ''))?.due ?? plants.length
+  const totalToWaterToday = dailyStats.find(d => d.date === (serverToday || ''))?.due ?? 0
   const completedToday = dailyStats.find(d => d.date === (serverToday || ''))?.completed ?? 0
   const progressPct = totalToWaterToday === 0 ? 100 : Math.min(100, Math.round((completedToday / totalToWaterToday) * 100))
   const anchor = serverToday ? new Date(serverToday) : new Date()

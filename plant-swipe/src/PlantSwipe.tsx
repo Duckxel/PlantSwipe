@@ -182,20 +182,7 @@ export default function PlantSwipe() {
         }
         console.log('[auth] login ok')
       }
-      try {
-        setAuthOpen(false)
-      } catch (e) {
-        console.warn('[auth] failed to close dialog', e)
-      }
-      setTimeout(() => {
-        try {
-          console.log('[auth] forcing reload via replace')
-          window.location.replace(window.location.href)
-        } catch (e) {
-          console.warn('[auth] replace failed, using reload', e)
-          try { window.location.reload() } catch (er) { console.error('[auth] reload failed', er) }
-        }
-      }, 0)
+      try { setAuthOpen(false) } catch {}
     } catch (e: any) {
       console.error('[auth] unexpected error', e)
       setAuthError(e?.message || 'Unexpected error')
