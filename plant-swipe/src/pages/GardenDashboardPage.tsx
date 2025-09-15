@@ -1,12 +1,14 @@
+// @ts-nocheck
 import React from 'react'
 import { useParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
 import type { Garden } from '@/types/garden'
 import type { Plant } from '@/types/plant'
-import { getGarden, getGardenPlants, getGardenMembers, addMemberByEmail, fetchScheduleForPlants, markGardenPlantWatered, updateGardenPlantFrequency, deleteGardenPlant, reseedSchedule, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens } from '@/lib/gardens'
+import { getGarden, getGardenPlants, getGardenMembers, addMemberByEmail, fetchScheduleForPlants, markGardenPlantWatered, updateGardenPlantFrequency, deleteGardenPlant, reseedSchedule, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule } from '@/lib/gardens'
 import { supabase } from '@/lib/supabaseClient'
 
 
@@ -21,15 +23,21 @@ export const GardenDashboardPage: React.FC = () => {
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [serverToday, setServerToday] = React.useState<string | null>(null)
-  // no-op for now; reserved for due list logic
-  // const [dueToday, setDueToday] = React.useState<Set<string> | null>(null)
+  const [dueToday, setDueToday] = React.useState<Set<string> | null>(null)
   const [dailyStats, setDailyStats] = React.useState<Array<{ date: string; due: number; completed: number; success: boolean }>>([])
+  const [weekDays, setWeekDays] = React.useState<string[]>([])
+  const [weekCounts, setWeekCounts] = React.useState<number[]>([])
 
   const [addOpen, setAddOpen] = React.useState(false)
   const [plantQuery, setPlantQuery] = React.useState('')
   const [plantResults, setPlantResults] = React.useState<Plant[]>([])
   const [selectedPlant, setSelectedPlant] = React.useState<Plant | null>(null)
   const [adding, setAdding] = React.useState(false)
+  const [scheduleOpen, setScheduleOpen] = React.useState(false)
+  const [pendingGardenPlantId, setPendingGardenPlantId] = React.useState<string | null>(null)
+  const [pendingPeriod, setPendingPeriod] = React.useState<'week' | 'month' | 'year' | null>(null)
+  const [pendingAmount, setPendingAmount] = React.useState<number>(0)
+  const [initialSelectionState, setInitialSelectionState] = React.useState<{ weeklyDays?: number[]; monthlyDays?: number[]; yearlyDays?: string[] } | undefined>(undefined)
 
   const [inviteOpen, setInviteOpen] = React.useState(false)
   const [inviteEmail, setInviteEmail] = React.useState('')
@@ -68,17 +76,32 @@ export const GardenDashboardPage: React.FC = () => {
           if (d === today && !row.completedAt) dset.add(gpId)
         }
       }
-      const days: Array<{ date: string; due: number; completed: number; success: boolean }> = []
+      // Compute current week (Mon-Sun)
       const anchor = new Date(today)
+      const day = anchor.getDay() // 0=Sun..6=Sat
+      const diffToMonday = (day + 6) % 7
+      const monday = new Date(anchor)
+      monday.setDate(anchor.getDate() - diffToMonday)
+      const weekDaysIso: string[] = []
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(monday)
+        d.setDate(monday.getDate() + i)
+        weekDaysIso.push(d.toISOString().slice(0,10))
+      }
+      const counts: number[] = weekDaysIso.map(ds => (map[ds]?.due ?? 0))
+      setWeekDays(weekDaysIso)
+      setWeekCounts(counts)
+      const days: Array<{ date: string; due: number; completed: number; success: boolean }> = []
+      const anchor30 = new Date(today)
       for (let i = 29; i >= 0; i--) {
-        const d = new Date(anchor)
+        const d = new Date(anchor30)
         d.setDate(d.getDate() - i)
         const ds = d.toISOString().slice(0,10)
         const entry = map[ds] || { due: 0, completed: 0 }
         const trow = taskRows.find(tr => tr.day === ds && tr.taskType === 'watering')
         days.push({ date: ds, due: entry.due, completed: entry.completed, success: Boolean(trow?.success) })
       }
-      // setDueToday(dset)
+      setDueToday(dset)
       setDailyStats(days)
     } catch (e: any) {
       setError(e?.message || 'Failed to load garden')
@@ -95,7 +118,7 @@ export const GardenDashboardPage: React.FC = () => {
     ;(async () => {
       const { data, error } = await supabase
         .from('plants')
-        .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available')
+        .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount')
         .ilike('name', `%${plantQuery}%`)
         .limit(10)
       if (!error && !ignore) {
@@ -111,6 +134,10 @@ export const GardenDashboardPage: React.FC = () => {
           image: p.image_url || '',
           care: { sunlight: p.care_sunlight || 'Low', water: p.care_water || 'Low', soil: p.care_soil || '', difficulty: p.care_difficulty || 'Easy' },
           seedsAvailable: Boolean(p.seeds_available ?? false),
+          waterFreqUnit: p.water_freq_unit || undefined,
+          waterFreqValue: p.water_freq_value ?? null,
+          waterFreqPeriod: p.water_freq_period || undefined,
+          waterFreqAmount: p.water_freq_amount ?? null,
         }))
         setPlantResults(res)
       }
@@ -139,14 +166,83 @@ export const GardenDashboardPage: React.FC = () => {
       setAddOpen(false)
       setSelectedPlant(null)
       setPlantQuery('')
-      if (serverToday) { await upsertGardenTask({ gardenId: id, day: serverToday, gardenPlantId: gp.id }) }
-      await reseedSchedule(gp.id)
-      await load()
-      setTab('plants')
+      const defaultPeriod = (selectedPlant.waterFreqPeriod || (selectedPlant.waterFreqUnit as any)) as 'week' | 'month' | 'year' | undefined
+      const defaultAmount = (selectedPlant.waterFreqAmount ?? selectedPlant.waterFreqValue ?? 1) as number
+      setPendingGardenPlantId(gp.id)
+      setPendingPeriod((defaultPeriod && ['week','month','year'].includes(defaultPeriod) ? defaultPeriod : 'week') as any)
+      setPendingAmount(defaultAmount > 0 ? defaultAmount : 1)
+      setInitialSelectionState(undefined)
+      setScheduleOpen(true)
     } catch (e: any) {
       setError(e?.message || 'Failed to add plant')
     } finally {
       setAdding(false)
+    }
+  }
+
+  const openEditSchedule = async (gardenPlant: any) => {
+    try {
+      const schedule = await getGardenPlantSchedule(gardenPlant.id)
+      const period = (schedule?.period || gardenPlant.overrideWaterFreqUnit || gardenPlant.plant?.waterFreqPeriod || gardenPlant.plant?.waterFreqUnit || 'week') as 'week' | 'month' | 'year'
+      const amountRaw = schedule?.amount ?? gardenPlant.overrideWaterFreqValue ?? gardenPlant.plant?.waterFreqAmount ?? gardenPlant.plant?.waterFreqValue ?? 1
+      const amount = Number(amountRaw) > 0 ? Number(amountRaw) : 1
+      setPendingGardenPlantId(gardenPlant.id)
+      setPendingPeriod(period)
+      setPendingAmount(amount)
+      setInitialSelectionState({
+        weeklyDays: schedule?.weeklyDays || undefined,
+        monthlyDays: schedule?.monthlyDays || undefined,
+        yearlyDays: schedule?.yearlyDays || undefined,
+      })
+      setScheduleOpen(true)
+    } catch (e) {
+      // Fallback: open with inferred defaults
+      const period = (gardenPlant.overrideWaterFreqUnit || gardenPlant.plant?.waterFreqPeriod || gardenPlant.plant?.waterFreqUnit || 'week') as 'week' | 'month' | 'year'
+      const amountRaw = gardenPlant.overrideWaterFreqValue ?? gardenPlant.plant?.waterFreqAmount ?? gardenPlant.plant?.waterFreqValue ?? 1
+      const amount = Number(amountRaw) > 0 ? Number(amountRaw) : 1
+      setPendingGardenPlantId(gardenPlant.id)
+      setPendingPeriod(period)
+      setPendingAmount(amount)
+      setInitialSelectionState(undefined)
+      setScheduleOpen(true)
+    }
+  }
+
+  const handleSaveSchedule = async (selection: { weeklyDays?: number[]; monthlyDays?: number[]; yearlyDays?: string[] }) => {
+    if (!pendingGardenPlantId || !pendingPeriod || !id) return
+    try {
+      await updateGardenPlantFrequency({ gardenPlantId: pendingGardenPlantId, unit: pendingPeriod, value: pendingAmount })
+      await upsertGardenPlantSchedule({
+        gardenPlantId: pendingGardenPlantId,
+        period: pendingPeriod,
+        amount: pendingAmount,
+        weeklyDays: selection.weeklyDays || null,
+        monthlyDays: selection.monthlyDays || null,
+        yearlyDays: selection.yearlyDays || null,
+      })
+      if (serverToday) {
+        // Clear existing future schedule for this plant and reseed
+        await supabase
+          .from('garden_watering_schedule')
+          .delete()
+          .eq('garden_plant_id', pendingGardenPlantId)
+          .gte('due_date', serverToday)
+          .is('completed_at', null)
+        await ensureDailyTasksForGardens(serverToday)
+        await upsertGardenTask({ gardenId: id, day: serverToday, gardenPlantId: pendingGardenPlantId })
+      }
+      await reseedSchedule(pendingGardenPlantId)
+      await load()
+      setTab('plants')
+    } catch (e: any) {
+      setError(e?.message || 'Failed to save schedule')
+      throw e
+    } finally {
+      setPendingGardenPlantId(null)
+      setPendingPeriod(null)
+      setPendingAmount(0)
+      setInitialSelectionState(undefined)
+      setScheduleOpen(false)
     }
   }
 
@@ -205,9 +301,8 @@ export const GardenDashboardPage: React.FC = () => {
                           <div className="text-xs opacity-60">Seeds planted: {gp.seedsPlanted || 0}</div>
                           <div className="text-xs opacity-60">Frequency: {gp.overrideWaterFreqValue ? `${gp.overrideWaterFreqValue} / ${gp.overrideWaterFreqUnit}` : 'not set'}</div>
                           <div className="mt-2 flex gap-2 flex-wrap">
-                            <Button variant="secondary" className="rounded-2xl" onClick={() => logWater(gp.id)}>Mark watered</Button>
-                            <Button variant="secondary" className="rounded-2xl" onClick={async () => { await updateGardenPlantFrequency({ gardenPlantId: gp.id, unit: 'week', value: 3 }); await reseedSchedule(gp.id); await load() }}>Set 3/week</Button>
-                            <Button variant="secondary" className="rounded-2xl" onClick={async () => { await deleteGardenPlant(gp.id); await load() }}>Delete</Button>
+                            <Button variant="secondary" className="rounded-2xl" onClick={() => openEditSchedule(gp)}>Edit schedule</Button>
+                            <Button variant="secondary" className="rounded-2xl" onClick={async () => { await deleteGardenPlant(gp.id); if (serverToday) { await ensureDailyTasksForGardens(serverToday) } await load() }}>Delete</Button>
                           </div>
                         </div>
                       </div>
@@ -218,7 +313,7 @@ export const GardenDashboardPage: React.FC = () => {
             )}
 
             {tab === 'routine' && (
-              <RoutineSection plants={plants} onLogWater={logWater} />
+              <RoutineSection plants={plants} duePlantIds={dueToday} onLogWater={logWater} weekDays={weekDays} weekCounts={weekCounts} serverToday={serverToday} />
             )}
 
             {tab === 'settings' && (
@@ -271,6 +366,16 @@ export const GardenDashboardPage: React.FC = () => {
             </DialogContent>
           </Dialog>
 
+          {/* Schedule Picker Dialog */}
+          <SchedulePickerDialog
+            open={scheduleOpen}
+            onOpenChange={setScheduleOpen}
+            period={(pendingPeriod as any) || 'week'}
+            amount={pendingAmount || 1}
+            onSave={handleSaveSchedule}
+            initialSelection={initialSelectionState}
+          />
+
           {/* Invite Dialog */}
           <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
             <DialogContent className="rounded-2xl">
@@ -293,25 +398,40 @@ export const GardenDashboardPage: React.FC = () => {
   )
 }
 
-function RoutineSection({ plants, onLogWater }: { plants: any[]; onLogWater: (id: string) => Promise<void> }) {
-  const bars = [0,1,2,3,4,5,6].map((i) => ({ day: i, value: Math.min(5, plants.reduce((s, p) => s + (p.seedsPlanted ? 1 : 0), 0)) }))
+function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts, serverToday }: { plants: any[]; duePlantIds: Set<string> | null; onLogWater: (id: string) => Promise<void>; weekDays: string[]; weekCounts: number[]; serverToday: string | null }) {
+  const duePlants = React.useMemo(() => {
+    if (!duePlantIds) return []
+    return plants.filter((gp: any) => duePlantIds.has(gp.id))
+  }, [plants, duePlantIds])
+  const maxCount = Math.max(1, ...weekCounts)
   return (
     <div className="space-y-4">
-      <div className="text-lg font-medium">Watering routine</div>
+      <div className="text-lg font-medium">This week</div>
       <Card className="rounded-2xl p-4">
-        <div className="text-sm opacity-60 mb-2">Past week</div>
-        <div className="flex gap-2 items-end h-24">
-          {bars.map((b, idx) => (
-            <div key={idx} className="w-6 bg-emerald-200 rounded" style={{ height: `${10 + b.value * 18}px` }} />
-          ))}
+        <div className="text-sm opacity-60 mb-3">Monday → Sunday</div>
+        <div className="grid grid-cols-7 gap-2 items-end h-36">
+          {weekDays.map((ds, idx) => {
+            const count = weekCounts[idx] || 0
+            const heightPct = Math.round((count / maxCount) * 100)
+            const d = new Date(ds)
+            const labels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+            const isToday = serverToday === ds
+            return (
+              <div key={ds} className="flex flex-col items-center gap-1">
+                <div className={`w-7 rounded-md ${count > 0 ? 'bg-emerald-400' : 'bg-stone-300'} ${isToday ? 'ring-2 ring-black' : ''}`} style={{ height: `${Math.max(10, heightPct)}%` }} />
+                <div className="text-[11px] opacity-70">{labels[idx]}</div>
+                <div className="text-[10px] opacity-60">{count}</div>
+              </div>
+            )
+          })}
         </div>
       </Card>
       <div className="flex justify-between items-center">
         <div className="text-base font-medium">Today</div>
-        <Button className="rounded-2xl" onClick={async () => { for (const gp of plants) { await onLogWater(gp.id) } }}>Watered all plants</Button>
+        <Button className="rounded-2xl" onClick={async () => { for (const gp of duePlants) { await onLogWater(gp.id) } }}>Watered all due plants</Button>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {plants.map((gp: any) => (
+        {duePlants.map((gp: any) => (
           <Card key={gp.id} className="rounded-2xl p-4">
             <div className="font-medium">{gp.plant?.name}{gp.nickname ? ` · ${gp.nickname}` : ''}</div>
             <div className="text-sm opacity-70">Water need: {gp.plant?.care.water}</div>

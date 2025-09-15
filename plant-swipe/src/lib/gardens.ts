@@ -77,7 +77,7 @@ export async function getGardenPlants(gardenId: string): Promise<Array<GardenPla
   const plantIds = Array.from(new Set(rows.map(r => r.plant_id)))
   const { data: plantRows } = await supabase
     .from('plants')
-    .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available')
+    .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount')
     .in('id', plantIds)
   const idToPlant: Record<string, Plant> = {}
   for (const p of plantRows || []) {
@@ -98,6 +98,10 @@ export async function getGardenPlants(gardenId: string): Promise<Array<GardenPla
         difficulty: p.care_difficulty || 'Easy',
       },
       seedsAvailable: Boolean(p.seeds_available ?? false),
+      waterFreqUnit: p.water_freq_unit || undefined,
+      waterFreqValue: p.water_freq_value ?? null,
+      waterFreqPeriod: p.water_freq_period || undefined,
+      waterFreqAmount: p.water_freq_amount ?? null,
     }
   }
   return rows.map(r => ({
@@ -383,5 +387,37 @@ export async function adjustInventoryAndLogTransaction(params: { gardenId: strin
     .from('garden_transactions')
     .insert({ garden_id: gardenId, plant_id: plantId, type: transactionType, quantity: qty, occurred_at: new Date().toISOString(), notes })
   if (tErr) throw new Error(tErr.message)
+}
+
+export async function upsertGardenPlantSchedule(params: { gardenPlantId: string; period: 'week' | 'month' | 'year'; amount: number; weeklyDays?: number[] | null; monthlyDays?: number[] | null; yearlyDays?: string[] | null }): Promise<void> {
+  const { gardenPlantId, period, amount, weeklyDays = null, monthlyDays = null, yearlyDays = null } = params
+  const { error } = await supabase
+    .from('garden_plant_schedule')
+    .upsert({
+      garden_plant_id: gardenPlantId,
+      period,
+      amount,
+      weekly_days: weeklyDays,
+      monthly_days: monthlyDays,
+      yearly_days: yearlyDays,
+    }, { onConflict: 'garden_plant_id' })
+  if (error) throw new Error(error.message)
+}
+
+export async function getGardenPlantSchedule(gardenPlantId: string): Promise<{ period: 'week' | 'month' | 'year'; amount: number; weeklyDays?: number[] | null; monthlyDays?: number[] | null; yearlyDays?: string[] | null } | null> {
+  const { data, error } = await supabase
+    .from('garden_plant_schedule')
+    .select('period, amount, weekly_days, monthly_days, yearly_days')
+    .eq('garden_plant_id', gardenPlantId)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  if (!data) return null
+  return {
+    period: (data as any).period,
+    amount: Number((data as any).amount ?? 0),
+    weeklyDays: (data as any).weekly_days || null,
+    monthlyDays: (data as any).monthly_days || null,
+    yearlyDays: (data as any).yearly_days || null,
+  }
 }
 
