@@ -19,12 +19,11 @@ export function SchedulePickerDialog(props: {
   amount: number
   onSave: (selection: ScheduleSelection) => Promise<void>
   initialSelection?: ScheduleSelection
-  onChangePeriod?: (p: Period) => void
   onChangeAmount?: (n: number) => void
   lockToYear?: boolean
   allowedPeriods?: Period[]
 }) {
-  const { open, onOpenChange, period, amount, onSave, initialSelection, onChangePeriod, onChangeAmount, lockToYear, allowedPeriods } = props
+  const { open, onOpenChange, period, amount, onSave, initialSelection, onChangeAmount, lockToYear, allowedPeriods } = props
 
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -57,17 +56,7 @@ export function SchedulePickerDialog(props: {
   const disabledMore = remaining === 0
 
   const maxForPeriod = (p: Period) => p === 'week' ? 7 : p === 'month' ? 4 : 12
-  const handlePeriodChange = (p: Period) => {
-    if (onChangePeriod) onChangePeriod(p)
-    // Reset selections when period changes
-    setWeeklyDays([])
-    setMonthlyDays([])
-    setYearlyDays([])
-    if (onChangeAmount) {
-      const max = maxForPeriod(p)
-      if (amount > max) onChangeAmount(max)
-    }
-  }
+  // Period is enforced externally; no dropdown UI
   const handleAmountChange = (n: number) => {
     const max = maxForPeriod(period)
     const next = Math.max(1, Math.min(n, max))
@@ -180,21 +169,12 @@ export function SchedulePickerDialog(props: {
           <div className="text-sm opacity-70">Selected: {countSelected} / {amount}</div>
 
           <div className="grid grid-cols-2 gap-2">
-            {!lockToYear ? (
-              <select
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
-                value={period}
-                onChange={(e) => handlePeriodChange(e.target.value as Period)}
-              >
-                {(allowedPeriods && allowedPeriods.length > 0 ? allowedPeriods : (['week','month','year'] as const)).map((p) => (
-                  <option key={p} value={p}>{p}</option>
-                ))}
-              </select>
-            ) : (
-              <select className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm md:text-sm" value={'year'} disabled>
-                <option value={'year'}>year</option>
-              </select>
-            )}
+            <div
+              className="flex h-9 w-full items-center rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm md:text-sm capitalize"
+              aria-readonly
+            >
+              {period}
+            </div>
             <input
               type="number"
               className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring md:text-sm"

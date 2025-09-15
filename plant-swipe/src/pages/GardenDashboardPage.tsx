@@ -317,7 +317,7 @@ export const GardenDashboardPage: React.FC = () => {
         monthlyNthWeekdays: schedule?.monthlyNthWeekdays || undefined,
       })
       setScheduleLockYear(false)
-      setScheduleAllowedPeriods(undefined)
+      setScheduleAllowedPeriods([period])
       setScheduleOpen(true)
     } catch (e) {
       // Fallback: open with inferred defaults
@@ -329,7 +329,7 @@ export const GardenDashboardPage: React.FC = () => {
       setPendingAmount(amount)
       setInitialSelectionState(undefined)
       setScheduleLockYear(false)
-      setScheduleAllowedPeriods(undefined)
+      setScheduleAllowedPeriods([period])
       setScheduleOpen(true)
     }
   }
