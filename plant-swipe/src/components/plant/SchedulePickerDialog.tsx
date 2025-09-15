@@ -9,6 +9,7 @@ export interface ScheduleSelection {
   weeklyDays?: number[]
   monthlyDays?: number[]
   yearlyDays?: string[]
+  monthlyNthWeekdays?: string[]
 }
 
 export function SchedulePickerDialog(props: {
@@ -27,6 +28,8 @@ export function SchedulePickerDialog(props: {
   const [weeklyDays, setWeeklyDays] = React.useState<number[]>([])
   const [monthlyDays, setMonthlyDays] = React.useState<number[]>([])
   const [yearlyDays, setYearlyDays] = React.useState<string[]>([])
+  const [monthlyNthWeekdays, setMonthlyNthWeekdays] = React.useState<string[]>([])
+  const [monthMode, setMonthMode] = React.useState<'date' | 'weekday'>('weekday')
 
   React.useEffect(() => {
     // Reset selection on open
@@ -34,11 +37,19 @@ export function SchedulePickerDialog(props: {
       setWeeklyDays(initialSelection?.weeklyDays ? [...initialSelection.weeklyDays] : [])
       setMonthlyDays(initialSelection?.monthlyDays ? [...initialSelection.monthlyDays] : [])
       setYearlyDays(initialSelection?.yearlyDays ? [...initialSelection.yearlyDays] : [])
+      setMonthlyNthWeekdays(initialSelection?.monthlyNthWeekdays ? [...initialSelection.monthlyNthWeekdays] : [])
+      setMonthMode(initialSelection?.monthlyNthWeekdays && (initialSelection.monthlyNthWeekdays.length > 0) ? 'weekday' : 'date')
       setError(null)
     }
   }, [open, initialSelection])
 
-  const countSelected = period === 'week' ? weeklyDays.length : period === 'month' ? monthlyDays.length : yearlyDays.length
+  const countSelected = (
+    period === 'week'
+      ? weeklyDays.length
+      : period === 'month'
+        ? (monthMode === 'weekday' ? monthlyNthWeekdays.length : monthlyDays.length)
+        : yearlyDays.length
+  )
 
   const remaining = Math.max(0, amount - countSelected)
   const disabledMore = remaining === 0
@@ -72,6 +83,18 @@ export function SchedulePickerDialog(props: {
     })
   }
 
+  const toggleMonthlyNthWeekday = (weekIndex: number, uiIndex: number) => {
+    const mondayFirstMap = [1,2,3,4,5,6,0]
+    const weekday = mondayFirstMap[uiIndex]
+    const key = `${weekIndex}-${weekday}`
+    setMonthlyNthWeekdays((cur) => {
+      const has = cur.includes(key)
+      if (has) return cur.filter((x) => x !== key)
+      if (disabledMore) return cur
+      return [...cur, key]
+    })
+  }
+
   const save = async () => {
     setError(null)
     if (countSelected !== amount) {
@@ -82,7 +105,15 @@ export function SchedulePickerDialog(props: {
     try {
       const selection: ScheduleSelection = {}
       if (period === 'week') selection.weeklyDays = weeklyDays.sort((a, b) => a - b)
-      if (period === 'month') selection.monthlyDays = monthlyDays.sort((a, b) => a - b)
+      if (period === 'month') {
+        if (monthMode === 'weekday') {
+          selection.monthlyNthWeekdays = [...monthlyNthWeekdays].sort()
+          selection.monthlyDays = []
+        } else {
+          selection.monthlyDays = monthlyDays.sort((a, b) => a - b)
+          selection.monthlyNthWeekdays = []
+        }
+      }
       if (period === 'year') selection.yearlyDays = [...yearlyDays].sort()
       await onSave(selection)
       onOpenChange(false)
@@ -113,7 +144,20 @@ export function SchedulePickerDialog(props: {
           )}
 
           {period === 'month' && (
-            <MonthPicker selected={monthlyDays} onToggle={toggleMonthDay} disabledMore={disabledMore} />
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="text-sm opacity-70">Pick by</span>
+                <div className="inline-flex rounded-xl border overflow-hidden">
+                  <button type="button" className={`px-3 py-1 text-sm ${monthMode === 'weekday' ? 'bg-black text-white' : 'bg-white hover:bg-stone-50'}`} onClick={() => setMonthMode('weekday')}>Weekday</button>
+                  <button type="button" className={`px-3 py-1 text-sm ${monthMode === 'date' ? 'bg-black text-white' : 'bg-white hover:bg-stone-50'}`} onClick={() => setMonthMode('date')}>Date</button>
+                </div>
+              </div>
+              {monthMode === 'weekday' ? (
+                <MonthNthWeekdayPicker selected={monthlyNthWeekdays} onToggle={toggleMonthlyNthWeekday} disabledMore={disabledMore} />
+              ) : (
+                <MonthPicker selected={monthlyDays} onToggle={toggleMonthDay} disabledMore={disabledMore} />
+              )}
+            </div>
           )}
 
           {period === 'year' && (
@@ -183,6 +227,42 @@ function MonthPicker({ selected, onToggle, disabledMore }: { selected: number[];
           </button>
         )
       })}
+    </div>
+  )
+}
+
+function MonthNthWeekdayPicker({ selected, onToggle, disabledMore }: { selected: string[]; onToggle: (weekIndex: number, uiIndex: number) => void; disabledMore: boolean }) {
+  const labels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+  const weekNames = ['1st','2nd','3rd','4th']
+  const mondayFirstMap = [1,2,3,4,5,6,0]
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-7 gap-2">
+        {labels.map((l) => (
+          <div key={l} className="text-xs opacity-70 text-center">{l}</div>
+        ))}
+      </div>
+      {weekNames.map((wn, rowIdx) => (
+        <div key={wn} className="grid grid-cols-7 gap-2 items-center">
+          {labels.map((_, uiIndex) => {
+            const weekday = mondayFirstMap[uiIndex]
+            const key = `${rowIdx + 1}-${weekday}`
+            const isOn = selected.includes(key)
+            return (
+              <button
+                key={uiIndex}
+                type="button"
+                onClick={() => onToggle(rowIdx + 1, uiIndex)}
+                className={`h-10 rounded-xl border text-sm ${isOn ? 'bg-black text-white' : 'bg-white hover:bg-stone-50'} ${!isOn && disabledMore ? 'opacity-60 cursor-not-allowed' : ''}`}
+                disabled={!isOn && disabledMore}
+                aria-label={`${wn} ${labels[uiIndex]}`}
+              >
+                {wn[0]}
+              </button>
+            )
+          })}
+        </div>
+      ))}
     </div>
   )
 }
