@@ -25,6 +25,8 @@ export const GardenDashboardPage: React.FC = () => {
   const [serverToday, setServerToday] = React.useState<string | null>(null)
   const [dueToday, setDueToday] = React.useState<Set<string> | null>(null)
   const [dailyStats, setDailyStats] = React.useState<Array<{ date: string; due: number; completed: number; success: boolean }>>([])
+  const [weekDays, setWeekDays] = React.useState<string[]>([])
+  const [weekCounts, setWeekCounts] = React.useState<number[]>([])
 
   const [addOpen, setAddOpen] = React.useState(false)
   const [plantQuery, setPlantQuery] = React.useState('')
@@ -74,10 +76,25 @@ export const GardenDashboardPage: React.FC = () => {
           if (d === today && !row.completedAt) dset.add(gpId)
         }
       }
-      const days: Array<{ date: string; due: number; completed: number; success: boolean }> = []
+      // Compute current week (Mon-Sun)
       const anchor = new Date(today)
+      const day = anchor.getDay() // 0=Sun..6=Sat
+      const diffToMonday = (day + 6) % 7
+      const monday = new Date(anchor)
+      monday.setDate(anchor.getDate() - diffToMonday)
+      const weekDaysIso: string[] = []
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(monday)
+        d.setDate(monday.getDate() + i)
+        weekDaysIso.push(d.toISOString().slice(0,10))
+      }
+      const counts: number[] = weekDaysIso.map(ds => (map[ds]?.due ?? 0))
+      setWeekDays(weekDaysIso)
+      setWeekCounts(counts)
+      const days: Array<{ date: string; due: number; completed: number; success: boolean }> = []
+      const anchor30 = new Date(today)
       for (let i = 29; i >= 0; i--) {
-        const d = new Date(anchor)
+        const d = new Date(anchor30)
         d.setDate(d.getDate() - i)
         const ds = d.toISOString().slice(0,10)
         const entry = map[ds] || { due: 0, completed: 0 }
@@ -204,6 +221,13 @@ export const GardenDashboardPage: React.FC = () => {
         yearlyDays: selection.yearlyDays || null,
       })
       if (serverToday) {
+        // Clear existing future schedule for this plant and reseed
+        await supabase
+          .from('garden_watering_schedule')
+          .delete()
+          .eq('garden_plant_id', pendingGardenPlantId)
+          .gte('due_date', serverToday)
+          .is('completed_at', null)
         await ensureDailyTasksForGardens(serverToday)
         await upsertGardenTask({ gardenId: id, day: serverToday, gardenPlantId: pendingGardenPlantId })
       }
@@ -289,7 +313,7 @@ export const GardenDashboardPage: React.FC = () => {
             )}
 
             {tab === 'routine' && (
-              <RoutineSection plants={plants} duePlantIds={dueToday} onLogWater={logWater} />
+              <RoutineSection plants={plants} duePlantIds={dueToday} onLogWater={logWater} weekDays={weekDays} weekCounts={weekCounts} serverToday={serverToday} />
             )}
 
             {tab === 'settings' && (
@@ -374,21 +398,32 @@ export const GardenDashboardPage: React.FC = () => {
   )
 }
 
-function RoutineSection({ plants, duePlantIds, onLogWater }: { plants: any[]; duePlantIds: Set<string> | null; onLogWater: (id: string) => Promise<void> }) {
+function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts, serverToday }: { plants: any[]; duePlantIds: Set<string> | null; onLogWater: (id: string) => Promise<void>; weekDays: string[]; weekCounts: number[]; serverToday: string | null }) {
   const duePlants = React.useMemo(() => {
     if (!duePlantIds) return []
     return plants.filter((gp: any) => duePlantIds.has(gp.id))
   }, [plants, duePlantIds])
-  const bars = [0,1,2,3,4,5,6].map((i) => ({ day: i, value: Math.min(5, duePlants.reduce((s, p) => s + (p.seedsPlanted ? 1 : 0), 0)) }))
+  const maxCount = Math.max(1, ...weekCounts)
   return (
     <div className="space-y-4">
-      <div className="text-lg font-medium">Watering routine</div>
+      <div className="text-lg font-medium">This week</div>
       <Card className="rounded-2xl p-4">
-        <div className="text-sm opacity-60 mb-2">Past week</div>
-        <div className="flex gap-2 items-end h-24">
-          {bars.map((b, idx) => (
-            <div key={idx} className="w-6 bg-emerald-200 rounded" style={{ height: `${10 + b.value * 18}px` }} />
-          ))}
+        <div className="text-sm opacity-60 mb-3">Monday → Sunday</div>
+        <div className="grid grid-cols-7 gap-2 items-end h-36">
+          {weekDays.map((ds, idx) => {
+            const count = weekCounts[idx] || 0
+            const heightPct = Math.round((count / maxCount) * 100)
+            const d = new Date(ds)
+            const labels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+            const isToday = serverToday === ds
+            return (
+              <div key={ds} className="flex flex-col items-center gap-1">
+                <div className={`w-7 rounded-md ${count > 0 ? 'bg-emerald-400' : 'bg-stone-300'} ${isToday ? 'ring-2 ring-black' : ''}`} style={{ height: `${Math.max(10, heightPct)}%` }} />
+                <div className="text-[11px] opacity-70">{labels[idx]}</div>
+                <div className="text-[10px] opacity-60">{count}</div>
+              </div>
+            )
+          })}
         </div>
       </Card>
       <div className="flex justify-between items-center">
