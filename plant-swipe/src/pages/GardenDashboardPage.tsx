@@ -29,6 +29,8 @@ export const GardenDashboardPage: React.FC = () => {
   const [weekCounts, setWeekCounts] = React.useState<number[]>([])
   const [dueThisWeekByPlant, setDueThisWeekByPlant] = React.useState<Record<string, number[]>>({})
   const [inventoryCounts, setInventoryCounts] = React.useState<Record<string, number>>({})
+  const [totalOnHand, setTotalOnHand] = React.useState(0)
+  const [speciesOnHand, setSpeciesOnHand] = React.useState(0)
 
   const [addOpen, setAddOpen] = React.useState(false)
   const [plantQuery, setPlantQuery] = React.useState('')
@@ -40,6 +42,9 @@ export const GardenDashboardPage: React.FC = () => {
   const [pendingPeriod, setPendingPeriod] = React.useState<'week' | 'month' | 'year' | null>(null)
   const [pendingAmount, setPendingAmount] = React.useState<number>(0)
   const [initialSelectionState, setInitialSelectionState] = React.useState<{ weeklyDays?: number[]; monthlyDays?: number[]; yearlyDays?: string[] } | undefined>(undefined)
+  const [addDetailsOpen, setAddDetailsOpen] = React.useState(false)
+  const [addNickname, setAddNickname] = React.useState('')
+  const [addCount, setAddCount] = React.useState<number>(1)
 
   const [inviteOpen, setInviteOpen] = React.useState(false)
   const [inviteEmail, setInviteEmail] = React.useState('')
@@ -77,16 +82,17 @@ export const GardenDashboardPage: React.FC = () => {
           if (d === today && !row.completedAt) dset.add(gpId)
         }
       }
-      // Compute current week (Mon-Sun)
-      const anchor = new Date(today)
-      const day = anchor.getDay() // 0=Sun..6=Sat
-      const diffToMonday = (day + 6) % 7
-      const monday = new Date(anchor)
-      monday.setDate(anchor.getDate() - diffToMonday)
+      // Compute current week (Mon-Sun) in UTC based on server 'today'
+      const parseUTC = (iso: string) => new Date(`${iso}T00:00:00Z`)
+      const anchorUTC = parseUTC(today)
+      const dayUTC = anchorUTC.getUTCDay() // 0=Sun..6=Sat
+      const diffToMonday = (dayUTC + 6) % 7
+      const mondayUTC = new Date(anchorUTC)
+      mondayUTC.setUTCDate(anchorUTC.getUTCDate() - diffToMonday)
       const weekDaysIso: string[] = []
       for (let i = 0; i < 7; i++) {
-        const d = new Date(monday)
-        d.setDate(monday.getDate() + i)
+        const d = new Date(mondayUTC)
+        d.setUTCDate(mondayUTC.getUTCDate() + i)
         weekDaysIso.push(d.toISOString().slice(0,10))
       }
       setWeekDays(weekDaysIso)
@@ -114,9 +120,9 @@ export const GardenDashboardPage: React.FC = () => {
         if (def) {
           for (let i = 0; i < 7; i++) {
             const ds = weekDaysIso[i]
-            const dt = new Date(ds)
-            const mm = String(dt.getMonth() + 1).padStart(2, '0')
-            const dd = String(dt.getDate()).padStart(2, '0')
+            const dt = new Date(`${ds}T00:00:00Z`)
+            const mm = String(dt.getUTCMonth() + 1).padStart(2, '0')
+            const dd = String(dt.getUTCDate()).padStart(2, '0')
             const ymd = `${mm}-${dd}`
             const weekdayNum = weeklyDayNumberForIdx[i]
             const p = (def as any).period
@@ -125,7 +131,7 @@ export const GardenDashboardPage: React.FC = () => {
               if (arr.includes(weekdayNum)) idxs.add(i)
             } else if (p === 'month') {
               const arr: number[] = ((def as any).monthly_days || []) as number[]
-              if (arr.includes(dt.getDate())) idxs.add(i)
+              if (arr.includes(dt.getUTCDate())) idxs.add(i)
             } else if (p === 'year') {
               const arr: string[] = ((def as any).yearly_days || []) as string[]
               if (arr.includes(ymd)) idxs.add(i)
@@ -142,7 +148,7 @@ export const GardenDashboardPage: React.FC = () => {
       setDueThisWeekByPlant(perPlant)
 
       // Determine due-today plants from schedule definitions, excluding those already completed today
-      const idxToday = ((new Date(today).getDay() + 6) % 7) // 0=Mon..6=Sun
+      const idxToday = weekDaysIso.indexOf(today)
       const completedToday = new Set<string>()
       for (const gpId of Object.keys(sched)) {
         for (const row of (sched as any)[gpId] as any[]) {
@@ -151,7 +157,7 @@ export const GardenDashboardPage: React.FC = () => {
       }
       const dset2 = new Set<string>()
       for (const [gpId, idxs] of Object.entries(perPlant)) {
-        if ((idxs as number[]).includes(idxToday) && !completedToday.has(gpId)) dset2.add(gpId)
+        if (idxToday >= 0 && (idxs as number[]).includes(idxToday) && !completedToday.has(gpId)) dset2.add(gpId)
       }
       setDueToday(dset2)
 
@@ -162,6 +168,8 @@ export const GardenDashboardPage: React.FC = () => {
         countsMap[String(it.plantId)] = Number(it.plantsOnHand || 0)
       }
       setInventoryCounts(countsMap)
+      setTotalOnHand(Object.values(countsMap).reduce((a, b) => a + (Number(b) || 0), 0))
+      setSpeciesOnHand(Object.values(countsMap).filter(v => (Number(v) || 0) > 0).length)
       const days: Array<{ date: string; due: number; completed: number; success: boolean }> = []
       const anchor30 = new Date(today)
       for (let i = 29; i >= 0; i--) {
@@ -172,13 +180,13 @@ export const GardenDashboardPage: React.FC = () => {
         const trow = taskRows.find(tr => tr.day === ds && tr.taskType === 'watering')
         // If computing for 'today', prefer derived counts from schedule definitions
         const isToday = ds === today
-        const idxToday = isToday ? (((new Date(today).getDay() + 6) % 7)) : -1 // 0=Mon..6=Sun
-        const dueOverride = isToday ? (Object.values(perPlant).reduce((acc: number, arr: any) => acc + ((arr as number[]).includes(idxToday) ? 1 : 0), 0)) : undefined
+        const idxTodayForStats = isToday ? weekDaysIso.indexOf(today) : -1
+        const dueOverride = isToday && idxTodayForStats >= 0 ? (Object.values(perPlant).reduce((acc: number, arr: any) => acc + ((arr as number[]).includes(idxTodayForStats) ? 1 : 0), 0)) : undefined
         const dueVal = dueOverride !== undefined ? dueOverride : entry.due
         const success = dueVal > 0 ? (entry.completed >= dueVal) : Boolean(trow?.success)
         days.push({ date: ds, due: dueVal, completed: entry.completed, success })
       }
-      setDueToday(dset)
+      // Keep dueToday from schedule definitions (already set)
       setDailyStats(days)
     } catch (e: any) {
       setError(e?.message || 'Failed to load garden')
@@ -239,18 +247,28 @@ export const GardenDashboardPage: React.FC = () => {
     if (!id || !selectedPlant || adding) return
     setAdding(true)
     try {
-      // Prompt for quantity and nickname
-      const qtyStr = prompt('How many of this plant do you have?', '1')
-      if (qtyStr === null) { setAdding(false); return }
-      const qty = Math.max(0, Number(qtyStr))
-      const nicknameInput = prompt('Optional custom name (Leave blank to skip)', '')
-      const nicknameVal = nicknameInput && nicknameInput.trim().length > 0 ? nicknameInput.trim() : null
+      // Open details modal to capture count and nickname
+      setAddDetailsOpen(true)
+      return
+    } catch (e: any) {
+      setError(e?.message || 'Failed to add plant')
+    } finally {
+      setAdding(false)
+    }
+  }
 
+  const confirmAddSelectedPlant = async () => {
+    if (!id || !selectedPlant) return
+    try {
+      const nicknameVal = addNickname.trim().length > 0 ? addNickname.trim() : null
+      const qty = Math.max(0, Number(addCount || 0))
       const gp = await addPlantToGarden({ gardenId: id, plantId: selectedPlant.id, seedsPlanted: 0, nickname: nicknameVal || undefined })
-      // Update inventory count immediately
       if (qty > 0) {
         await adjustInventoryAndLogTransaction({ gardenId: id, plantId: selectedPlant.id, plantsDelta: qty, transactionType: 'buy_plants' })
       }
+      setAddDetailsOpen(false)
+      setAddNickname('')
+      setAddCount(1)
       setAddOpen(false)
       setSelectedPlant(null)
       setPlantQuery('')
@@ -263,8 +281,6 @@ export const GardenDashboardPage: React.FC = () => {
       setScheduleOpen(true)
     } catch (e: any) {
       setError(e?.message || 'Failed to add plant')
-    } finally {
-      setAdding(false)
     }
   }
 
@@ -410,6 +426,12 @@ export const GardenDashboardPage: React.FC = () => {
             {tab === 'settings' && (
               <div className="space-y-6">
                 <div className="space-y-3">
+                  <div className="text-lg font-medium">Garden details</div>
+                  <Card className="rounded-2xl p-4">
+                    <GardenDetailsEditor garden={garden} onSaved={load} />
+                  </Card>
+                </div>
+                <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="text-lg font-medium">Manage members</div>
                     <Button className="rounded-2xl" onClick={() => setInviteOpen(true)}>Add member</Button>
@@ -451,7 +473,30 @@ export const GardenDashboardPage: React.FC = () => {
                 </div>
                 <div className="flex justify-end gap-2 pt-2">
                   <Button variant="secondary" className="rounded-2xl" onClick={() => setAddOpen(false)}>Cancel</Button>
-                  <Button className="rounded-2xl" disabled={!selectedPlant || adding} onClick={addSelectedPlant}>{adding ? 'Adding…' : 'Add'}</Button>
+                  <Button className="rounded-2xl" disabled={!selectedPlant || adding} onClick={addSelectedPlant}>{adding ? 'Adding…' : 'Next'}</Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Add Plant Details Dialog */}
+          <Dialog open={addDetailsOpen} onOpenChange={setAddDetailsOpen}>
+            <DialogContent className="rounded-2xl">
+              <DialogHeader>
+                <DialogTitle>Add details</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-sm font-medium">Custom name</label>
+                  <Input value={addNickname} onChange={(e: any) => setAddNickname(e.target.value)} placeholder="Optional nickname" />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Number of plants</label>
+                  <Input type="number" min={0} value={String(addCount)} onChange={(e: any) => setAddCount(Number(e.target.value))} />
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button variant="secondary" className="rounded-2xl" onClick={() => setAddDetailsOpen(false)}>Back</Button>
+                  <Button className="rounded-2xl" onClick={confirmAddSelectedPlant} disabled={!selectedPlant}>Add</Button>
                 </div>
               </div>
             </DialogContent>
@@ -585,7 +630,8 @@ function OverviewSection({ plants, membersCount, serverToday, dailyStats }: { pl
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="rounded-2xl p-4">
           <div className="text-xs opacity-60">Plants</div>
-          <div className="text-2xl font-semibold">{plants.length}</div>
+          <div className="text-2xl font-semibold">{totalOnHand}</div>
+          <div className="text-[11px] opacity-60">Species: {speciesOnHand}</div>
         </Card>
         <Card className="rounded-2xl p-4">
           <div className="text-xs opacity-60">Members</div>
@@ -607,11 +653,13 @@ function OverviewSection({ plants, membersCount, serverToday, dailyStats }: { pl
 
       <Card className="rounded-2xl p-4">
         <div className="font-medium mb-3">Last 30 days</div>
-        <div className="grid grid-cols-10 gap-3">
+        <div className="grid grid-cols-7 gap-2 sm:gap-3">
           {days.map((d, idx) => (
-            <div key={idx} className={`relative w-7 h-7 rounded-md flex items-center justify-center ${d.success ? 'bg-emerald-400' : 'bg-stone-300'}`}>
-              <div className="text-[11px]">{d.dayNum}</div>
-              {d.isToday && <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-black rounded-full" />}
+            <div key={idx} className="flex flex-col items-center">
+              <div className={`w-7 h-7 rounded-md flex items-center justify-center ${d.success ? 'bg-emerald-400' : 'bg-stone-300'}`}>
+                <div className="text-[11px]">{d.dayNum}</div>
+              </div>
+              {d.isToday && <div className="mt-1 h-0.5 w-5 bg-black rounded-full" />}
             </div>
           ))}
         </div>
@@ -695,6 +743,37 @@ function EditPlantButton({ gp, gardenId, onChanged, serverToday }: { gp: any; ga
         </DialogContent>
       </Dialog>
     </>
+  )
+}
+
+function GardenDetailsEditor({ garden, onSaved }: { garden: Garden; onSaved: () => Promise<void> }) {
+  const [name, setName] = React.useState(garden.name)
+  const [imageUrl, setImageUrl] = React.useState(garden.coverImageUrl || '')
+  const [submitting, setSubmitting] = React.useState(false)
+  const save = async () => {
+    if (submitting) return
+    setSubmitting(true)
+    try {
+      await supabase.from('gardens').update({ name: name.trim() || garden.name, cover_image_url: imageUrl.trim() || null }).eq('id', garden.id)
+      await onSaved()
+    } finally {
+      setSubmitting(false)
+    }
+  }
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="text-sm font-medium">Garden name</label>
+        <Input value={name} onChange={(e: any) => setName(e.target.value)} />
+      </div>
+      <div>
+        <label className="text-sm font-medium">Cover image URL</label>
+        <Input value={imageUrl} onChange={(e: any) => setImageUrl(e.target.value)} placeholder="https://…" />
+      </div>
+      <div className="flex justify-end gap-2 pt-2">
+        <Button className="rounded-2xl" onClick={save} disabled={submitting}>{submitting ? 'Saving…' : 'Save changes'}</Button>
+      </div>
+    </div>
   )
 }
 
