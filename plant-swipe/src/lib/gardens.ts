@@ -416,13 +416,11 @@ export async function upsertGardenPlantSchedule(params: { gardenPlantId: string;
 export async function getGardenPlantSchedule(gardenPlantId: string): Promise<{ period: 'week' | 'month' | 'year'; amount: number; weeklyDays?: number[] | null; monthlyDays?: number[] | null; yearlyDays?: string[] | null; monthlyNthWeekdays?: string[] | null } | null> {
   // Try selecting with monthly_nth_weekdays; fallback if column missing
   const selectWithNth = 'period, amount, weekly_days, monthly_days, yearly_days, monthly_nth_weekdays'
-  const base = supabase
-    .from('garden_plant_schedule')
-    .eq('garden_plant_id', gardenPlantId)
-  let q = base.select(selectWithNth).maybeSingle()
+  const base = supabase.from('garden_plant_schedule')
+  let q = base.select(selectWithNth).eq('garden_plant_id', gardenPlantId).maybeSingle()
   let { data, error } = await q
   if (error && /column .*monthly_nth_weekdays.* does not exist/i.test(error.message)) {
-    const res2 = await base.select('period, amount, weekly_days, monthly_days, yearly_days').maybeSingle()
+    const res2 = await base.select('period, amount, weekly_days, monthly_days, yearly_days').eq('garden_plant_id', gardenPlantId).maybeSingle()
     data = res2.data as any
     error = res2.error as any
   }
