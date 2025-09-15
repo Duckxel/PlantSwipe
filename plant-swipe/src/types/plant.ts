@@ -15,4 +15,9 @@ export interface Plant {
     difficulty: "Easy" | "Moderate" | "Hard"
   }
   seedsAvailable: boolean
+  // Optional frequency hints from plants table
+  waterFreqUnit?: 'day' | 'week' | 'month' | 'year'
+  waterFreqValue?: number | null
+  waterFreqPeriod?: 'week' | 'month' | 'year'
+  waterFreqAmount?: number | null
 }
