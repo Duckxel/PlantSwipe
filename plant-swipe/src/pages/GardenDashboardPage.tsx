@@ -4,9 +4,10 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { SchedulePicker, type ScheduleValue } from '@/components/ui/schedule-picker'
 import type { Garden } from '@/types/garden'
 import type { Plant } from '@/types/plant'
-import { getGarden, getGardenPlants, getGardenMembers, addMemberByEmail, fetchScheduleForPlants, markGardenPlantWatered, updateGardenPlantFrequency, deleteGardenPlant, reseedSchedule, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens } from '@/lib/gardens'
+import { getGarden, getGardenPlants, getGardenMembers, addMemberByEmail, fetchScheduleForPlants, markGardenPlantWatered, updateGardenPlantFrequency, deleteGardenPlant, reseedSchedule, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule } from '@/lib/gardens'
 import { supabase } from '@/lib/supabaseClient'
 
 
@@ -30,6 +31,8 @@ export const GardenDashboardPage: React.FC = () => {
   const [plantResults, setPlantResults] = React.useState<Plant[]>([])
   const [selectedPlant, setSelectedPlant] = React.useState<Plant | null>(null)
   const [adding, setAdding] = React.useState(false)
+  const [scheduleOpen, setScheduleOpen] = React.useState(false)
+  const [scheduleValue, setScheduleValue] = React.useState<ScheduleValue | null>(null)
 
   const [inviteOpen, setInviteOpen] = React.useState(false)
   const [inviteEmail, setInviteEmail] = React.useState('')
@@ -95,7 +98,7 @@ export const GardenDashboardPage: React.FC = () => {
     ;(async () => {
       const { data, error } = await supabase
         .from('plants')
-        .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available')
+        .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_period, water_freq_amount')
         .ilike('name', `%${plantQuery}%`)
         .limit(10)
       if (!error && !ignore) {
@@ -111,6 +114,8 @@ export const GardenDashboardPage: React.FC = () => {
           image: p.image_url || '',
           care: { sunlight: p.care_sunlight || 'Low', water: p.care_water || 'Low', soil: p.care_soil || '', difficulty: p.care_difficulty || 'Easy' },
           seedsAvailable: Boolean(p.seeds_available ?? false),
+          waterFreqPeriod: p.water_freq_period || undefined,
+          waterFreqAmount: typeof p.water_freq_amount === 'number' ? p.water_freq_amount : undefined,
         }))
         setPlantResults(res)
       }
@@ -133,10 +138,28 @@ export const GardenDashboardPage: React.FC = () => {
 
   const addSelectedPlant = async () => {
     if (!id || !selectedPlant || adding) return
+    // Open schedule modal first to allow picking schedule
+    const defaultPeriod = (selectedPlant.waterFreqPeriod || 'week') as any
+    const defaultAmount = Number(selectedPlant.waterFreqAmount || 1)
+    setScheduleValue({ period: defaultPeriod, amount: defaultAmount })
+    setScheduleOpen(true)
+  }
+
+  const confirmAddWithSchedule = async () => {
+    if (!id || !selectedPlant || !scheduleValue) return
     setAdding(true)
     try {
       const gp = await addPlantToGarden({ gardenId: id, plantId: selectedPlant.id, seedsPlanted: 0 })
+      await upsertGardenPlantSchedule({
+        gardenPlantId: gp.id,
+        period: scheduleValue.period,
+        amount: scheduleValue.amount,
+        weeklyDays: scheduleValue.weeklyDays,
+        monthlyDays: scheduleValue.monthlyDays,
+        yearlyDays: scheduleValue.yearlyDays,
+      })
       setAddOpen(false)
+      setScheduleOpen(false)
       setSelectedPlant(null)
       setPlantQuery('')
       if (serverToday) { await upsertGardenTask({ gardenId: id, day: serverToday, gardenPlantId: gp.id }) }
@@ -265,7 +288,25 @@ export const GardenDashboardPage: React.FC = () => {
                 </div>
                 <div className="flex justify-end gap-2 pt-2">
                   <Button variant="secondary" className="rounded-2xl" onClick={() => setAddOpen(false)}>Cancel</Button>
-                  <Button className="rounded-2xl" disabled={!selectedPlant || adding} onClick={addSelectedPlant}>{adding ? 'Adding…' : 'Add'}</Button>
+                  <Button className="rounded-2xl" disabled={!selectedPlant || adding} onClick={addSelectedPlant}>{adding ? 'Adding…' : 'Next'}</Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Schedule Dialog */}
+          <Dialog open={scheduleOpen} onOpenChange={setScheduleOpen}>
+            <DialogContent className="rounded-2xl">
+              <DialogHeader>
+                <DialogTitle>Pick schedule</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3">
+                {scheduleValue && (
+                  <SchedulePicker initial={scheduleValue} onChange={setScheduleValue} />
+                )}
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button variant="secondary" className="rounded-2xl" onClick={() => setScheduleOpen(false)}>Cancel</Button>
+                  <Button className="rounded-2xl" onClick={confirmAddWithSchedule} disabled={adding}>Confirm</Button>
                 </div>
               </div>
             </DialogContent>

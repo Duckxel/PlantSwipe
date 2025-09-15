@@ -15,4 +15,7 @@ export interface Plant {
     difficulty: "Easy" | "Moderate" | "Hard"
   }
   seedsAvailable: boolean
+  // Optional frequency metadata stored on the plant record to guide schedule UI
+  waterFreqPeriod?: 'week' | 'month' | 'year'
+  waterFreqAmount?: number
 }

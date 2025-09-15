@@ -50,6 +50,8 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [ok, setOk] = React.useState<string | null>(null)
+  const [waterFreqPeriod, setWaterFreqPeriod] = React.useState<'week' | 'month' | 'year'>('week')
+  const [waterFreqAmount, setWaterFreqAmount] = React.useState<number>(1)
 
   const toggleSeason = (s: Plant["seasons"][number]) => {
     setSeasons((cur: string[]) => (cur.includes(s) ? cur.filter((x: string) => x !== s) : [...cur, s]))
@@ -93,6 +95,8 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
         care_soil: careSoil,
         care_difficulty: careDifficulty,
         seeds_available: seedsAvailable,
+        water_freq_period: waterFreqPeriod,
+        water_freq_amount: waterFreqAmount,
       })
       if (insErr) { setError(insErr.message); return }
       setOk('Saved')
@@ -109,6 +113,18 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
           <div className="grid gap-2">
             <Label htmlFor="plant-name">Name</Label>
             <Input id="plant-name" value={name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="plant-wf-period">Default watering frequency</Label>
+            <div className="flex gap-2">
+              <select id="plant-wf-period" className="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm" value={waterFreqPeriod} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setWaterFreqPeriod(e.target.value as any)}>
+                {(['week','month','year'] as const).map(p => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+              <Input type="number" min={1} value={waterFreqAmount} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setWaterFreqAmount(Math.max(1, Number(e.target.value || 1)))} className="w-24" />
+              <div className="self-center text-sm opacity-60">times per {waterFreqPeriod}</div>
+            </div>
           </div>
           <div className="grid gap-2">
             <Label htmlFor="plant-scientific">Scientific name</Label>

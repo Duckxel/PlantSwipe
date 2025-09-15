@@ -77,7 +77,7 @@ export async function getGardenPlants(gardenId: string): Promise<Array<GardenPla
   const plantIds = Array.from(new Set(rows.map(r => r.plant_id)))
   const { data: plantRows } = await supabase
     .from('plants')
-    .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available')
+    .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_period, water_freq_amount')
     .in('id', plantIds)
   const idToPlant: Record<string, Plant> = {}
   for (const p of plantRows || []) {
@@ -98,6 +98,8 @@ export async function getGardenPlants(gardenId: string): Promise<Array<GardenPla
         difficulty: p.care_difficulty || 'Easy',
       },
       seedsAvailable: Boolean(p.seeds_available ?? false),
+      waterFreqPeriod: p.water_freq_period || undefined,
+      waterFreqAmount: typeof p.water_freq_amount === 'number' ? p.water_freq_amount : undefined,
     }
   }
   return rows.map(r => ({
@@ -269,6 +271,31 @@ export async function updateGardenPlantFrequency(params: { gardenPlantId: string
   if (error) throw new Error(error.message)
 }
 
+export type SchedulePeriod = 'week' | 'month' | 'year'
+
+export async function upsertGardenPlantSchedule(params: {
+  gardenPlantId: string
+  period: SchedulePeriod
+  amount: number
+  weeklyDays?: number[] | null
+  monthlyDays?: number[] | null
+  yearlyDays?: string[] | null
+}): Promise<void> {
+  const { gardenPlantId, period, amount, weeklyDays = null, monthlyDays = null, yearlyDays = null } = params
+  // Try update first; if no row, insert
+  const { error: upErr } = await supabase
+    .from('garden_plant_schedule')
+    .upsert({
+      garden_plant_id: gardenPlantId,
+      period,
+      amount,
+      weekly_days: weeklyDays,
+      monthly_days: monthlyDays,
+      yearly_days: yearlyDays,
+    }, { onConflict: 'garden_plant_id' as any })
+  if (upErr) throw new Error(upErr.message)
+}
+
 export async function deleteGardenPlant(gardenPlantId: string): Promise<void> {
   const { error } = await supabase
     .from('garden_plants')
@@ -325,7 +352,7 @@ export async function getGardenInventory(gardenId: string): Promise<Array<{ plan
   const plantIds = rows.map(r => String(r.plant_id))
   const { data: plantRows } = await supabase
     .from('plants')
-    .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available')
+    .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_period, water_freq_amount')
     .in('id', plantIds)
   const idToPlant: Record<string, Plant> = {}
   for (const p of plantRows || []) {
@@ -341,6 +368,8 @@ export async function getGardenInventory(gardenId: string): Promise<Array<{ plan
       image: p.image_url || '',
       care: { sunlight: p.care_sunlight || 'Low', water: p.care_water || 'Low', soil: p.care_soil || '', difficulty: p.care_difficulty || 'Easy' },
       seedsAvailable: Boolean(p.seeds_available ?? false),
+      waterFreqPeriod: p.water_freq_period || undefined,
+      waterFreqAmount: typeof p.water_freq_amount === 'number' ? p.water_freq_amount : undefined,
     }
   }
   return rows.map(r => ({
