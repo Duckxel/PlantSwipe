@@ -45,6 +45,8 @@ export const GardenDashboardPage: React.FC = () => {
   const [addDetailsOpen, setAddDetailsOpen] = React.useState(false)
   const [addNickname, setAddNickname] = React.useState('')
   const [addCount, setAddCount] = React.useState<number>(1)
+  const [scheduleLockYear, setScheduleLockYear] = React.useState<boolean>(false)
+  const [scheduleAllowedPeriods, setScheduleAllowedPeriods] = React.useState<Array<'week'|'month'|'year'> | undefined>(undefined)
 
   const [inviteOpen, setInviteOpen] = React.useState(false)
   const [inviteEmail, setInviteEmail] = React.useState('')
@@ -283,12 +285,17 @@ export const GardenDashboardPage: React.FC = () => {
       setAddOpen(false)
       setSelectedPlant(null)
       setPlantQuery('')
-      const defaultPeriod = (selectedPlant.waterFreqPeriod || (selectedPlant.waterFreqUnit as any)) as 'week' | 'month' | 'year' | undefined
-      const defaultAmount = (selectedPlant.waterFreqAmount ?? selectedPlant.waterFreqValue ?? 1) as number
+      // Enforce allowed schedule to week/month, keep amount editable
+      const recommended = (selectedPlant.waterFreqPeriod || (selectedPlant.waterFreqUnit as any)) as 'week'|'month'|'year' | undefined
+      const mapped = recommended === 'year' ? 'week' : (recommended as any)
+      const defaultPeriod = (mapped && ['week','month'].includes(mapped)) ? mapped : 'week'
+      const defaultAmount = Number(selectedPlant.waterFreqAmount ?? selectedPlant.waterFreqValue ?? 1) || 1
       setPendingGardenPlantId(gp.id)
-      setPendingPeriod((defaultPeriod && ['week','month','year'].includes(defaultPeriod) ? defaultPeriod : 'week') as any)
+      setPendingPeriod(defaultPeriod as any)
       setPendingAmount(defaultAmount > 0 ? defaultAmount : 1)
       setInitialSelectionState(undefined)
+      setScheduleLockYear(false)
+      setScheduleAllowedPeriods(['week','month'])
       setScheduleOpen(true)
     } catch (e: any) {
       setError(e?.message || 'Failed to add plant')
@@ -310,6 +317,8 @@ export const GardenDashboardPage: React.FC = () => {
         yearlyDays: schedule?.yearlyDays || undefined,
         monthlyNthWeekdays: schedule?.monthlyNthWeekdays || undefined,
       })
+      setScheduleLockYear(false)
+      setScheduleAllowedPeriods(undefined)
       setScheduleOpen(true)
     } catch (e) {
       // Fallback: open with inferred defaults
@@ -320,6 +329,8 @@ export const GardenDashboardPage: React.FC = () => {
       setPendingPeriod(period)
       setPendingAmount(amount)
       setInitialSelectionState(undefined)
+      setScheduleLockYear(false)
+      setScheduleAllowedPeriods(undefined)
       setScheduleOpen(true)
     }
   }
@@ -416,7 +427,8 @@ export const GardenDashboardPage: React.FC = () => {
                       <div className="grid grid-cols-3 gap-0">
                         <div className="col-span-1 h-36 bg-cover bg-center" style={{ backgroundImage: `url(${gp.plant?.image || ''})` }} />
                         <div className="col-span-2 p-3">
-                          <div className="font-medium">{gp.plant?.name}{gp.nickname ? ` · ${gp.nickname}` : ''}</div>
+                          <div className="font-medium">{gp.nickname || gp.plant?.name}</div>
+                          {gp.nickname && <div className="text-xs opacity-60">{gp.plant?.name}</div>}
                           <div className="text-xs opacity-60">On hand: {inventoryCounts[gp.plantId] ?? 0}</div>
                           <div className="text-xs opacity-60">Frequency: {gp.overrideWaterFreqValue ? `${gp.overrideWaterFreqValue} / ${gp.overrideWaterFreqUnit}` : 'not set'}</div>
                           <div className="mt-2 flex gap-2 flex-wrap">
@@ -501,7 +513,7 @@ export const GardenDashboardPage: React.FC = () => {
               <div className="space-y-3">
                 <div>
                   <label className="text-sm font-medium">Custom name</label>
-                  <Input value={addNickname} onChange={(e: any) => setAddNickname(e.target.value)} placeholder="Optional nickname" />
+                  <Input value={addNickname} maxLength={30} onChange={(e: any) => setAddNickname(e.target.value)} placeholder="Optional nickname" />
                 </div>
                 <div>
                   <label className="text-sm font-medium">Number of plants</label>
@@ -523,6 +535,10 @@ export const GardenDashboardPage: React.FC = () => {
             amount={pendingAmount || 1}
             onSave={handleSaveSchedule}
             initialSelection={initialSelectionState}
+            onChangePeriod={(p) => setPendingPeriod(p)}
+            onChangeAmount={(n) => setPendingAmount(n)}
+            lockToYear={scheduleLockYear}
+            allowedPeriods={scheduleAllowedPeriods as any}
           />
 
           {/* Invite Dialog */}
@@ -588,7 +604,8 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {duePlants.map((gp: any) => (
             <Card key={gp.id} className="rounded-2xl p-4">
-              <div className="font-medium">{gp.plant?.name}{gp.nickname ? ` · ${gp.nickname}` : ''}</div>
+              <div className="font-medium">{gp.nickname || gp.plant?.name}</div>
+              {gp.nickname && <div className="text-xs opacity-60">{gp.plant?.name}</div>}
               <div className="text-sm opacity-70">Water need: {gp.plant?.care.water}</div>
               <div className="text-xs opacity-70">Due this week: {dueThisWeekByPlant[gp.id]?.map((i) => ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][i]).join(', ') || '—'}</div>
               <div className="mt-2 flex items-center gap-2">
@@ -604,7 +621,8 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {plants.filter((gp: any) => (dueThisWeekByPlant[gp.id]?.length || 0) > 0 && !(duePlantIds?.has(gp.id))).map((gp: any) => (
           <Card key={gp.id} className="rounded-2xl p-4">
-            <div className="font-medium">{gp.plant?.name}{gp.nickname ? ` · ${gp.nickname}` : ''}</div>
+            <div className="font-medium">{gp.nickname || gp.plant?.name}</div>
+            {gp.nickname && <div className="text-xs opacity-60">{gp.plant?.name}</div>}
             <div className="text-sm opacity-70">Water need: {gp.plant?.care.water}</div>
             <div className="text-xs opacity-70">Due this week: {dueThisWeekByPlant[gp.id]?.map((i) => ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][i]).join(', ') || '—'}</div>
             <div className="mt-2 flex items-center gap-2">
@@ -693,9 +711,16 @@ function EditPlantButton({ gp, gardenId, onChanged, serverToday }: { gp: any; ga
 
   const loadInitialCount = React.useCallback(async () => {
     try {
-      // Lightweight fetch by plantId intersection from inventory already loaded in page state is not stored per-plant here; keep 0 default and let user set
+      const { data } = await supabase
+        .from('garden_inventory')
+        .select('plants_on_hand')
+        .eq('garden_id', gardenId)
+        .eq('plant_id', gp.plantId)
+        .maybeSingle()
+      const current = Number(data?.plants_on_hand ?? 0)
+      setCount(current)
     } catch {}
-  }, [])
+  }, [gardenId, gp.plantId])
   React.useEffect(() => { loadInitialCount() }, [loadInitialCount])
 
   const save = async () => {
@@ -742,7 +767,7 @@ function EditPlantButton({ gp, gardenId, onChanged, serverToday }: { gp: any; ga
           <div className="space-y-3">
             <div>
               <label className="text-sm font-medium">Custom name</label>
-              <Input value={nickname} onChange={(e: any) => setNickname(e.target.value)} placeholder="Optional nickname" />
+              <Input value={nickname} maxLength={30} onChange={(e: any) => setNickname(e.target.value)} placeholder="Optional nickname" />
             </div>
             <div>
               <label className="text-sm font-medium">Number of plants</label>

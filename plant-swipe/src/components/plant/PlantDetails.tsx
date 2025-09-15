@@ -1,4 +1,5 @@
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import { motion, useMotionValue } from "framer-motion";
 import { SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +10,7 @@ import type { Plant } from "@/types/plant";
 import { rarityTone, seasonBadge } from "@/constants/badges";
 
 export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void }> = ({ plant, onClose }) => {
+  const navigate = useNavigate()
   const y = useMotionValue(0)
   const threshold = 120
   const onDragEnd = (_: any, info: { offset: { y: number }; velocity: { y: number } }) => {
@@ -70,7 +72,8 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void }> = ({ 
         </CardContent>
       </Card>
 
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <Button variant="secondary" className="rounded-2xl" onClick={() => { navigate(`/plants/${plant.id}/edit`); onClose() }}>Edit</Button>
         <Button className="rounded-2xl" onClick={onClose}>Close</Button>
       </div>
     </motion.div>

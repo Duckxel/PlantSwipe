@@ -19,8 +19,12 @@ export function SchedulePickerDialog(props: {
   amount: number
   onSave: (selection: ScheduleSelection) => Promise<void>
   initialSelection?: ScheduleSelection
+  onChangePeriod?: (p: Period) => void
+  onChangeAmount?: (n: number) => void
+  lockToYear?: boolean
+  allowedPeriods?: Period[]
 }) {
-  const { open, onOpenChange, period, amount, onSave, initialSelection } = props
+  const { open, onOpenChange, period, amount, onSave, initialSelection, onChangePeriod, onChangeAmount, lockToYear, allowedPeriods } = props
 
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -51,6 +55,28 @@ export function SchedulePickerDialog(props: {
 
   const remaining = Math.max(0, amount - countSelected)
   const disabledMore = remaining === 0
+
+  const maxForPeriod = (p: Period) => p === 'week' ? 7 : p === 'month' ? 4 : 12
+  const handlePeriodChange = (p: Period) => {
+    if (onChangePeriod) onChangePeriod(p)
+    // Reset selections when period changes
+    setWeeklyDays([])
+    setMonthlyDays([])
+    setYearlyDays([])
+    if (onChangeAmount) {
+      const max = maxForPeriod(p)
+      if (amount > max) onChangeAmount(max)
+    }
+  }
+  const handleAmountChange = (n: number) => {
+    const max = maxForPeriod(period)
+    const next = Math.max(1, Math.min(n, max))
+    if (onChangeAmount) onChangeAmount(next)
+    // Also trim selection if currently exceeding
+    if (period === 'week') setWeeklyDays((cur) => cur.slice(0, next))
+    if (period === 'month') setMonthlyDays((cur) => cur.slice(0, next))
+    if (period === 'year') setYearlyDays((cur) => cur.slice(0, next))
+  }
 
   // Monday-first UI: order [Mon,Tue,Wed,Thu,Fri,Sat,Sun]; underlying values use 0=Sunday mapping
   // UI index to underlying day number map
@@ -153,15 +179,46 @@ export function SchedulePickerDialog(props: {
         <div className="space-y-4">
           <div className="text-sm opacity-70">Selected: {countSelected} / {amount}</div>
 
-          {period === 'week' && (
+          <div className="grid grid-cols-2 gap-2">
+            {!lockToYear ? (
+              <select
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+                value={period}
+                onChange={(e) => handlePeriodChange(e.target.value as Period)}
+              >
+                {(allowedPeriods && allowedPeriods.length > 0 ? allowedPeriods : (['week','month','year'] as const)).map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+            ) : (
+              <select className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm md:text-sm" value={'year'} disabled>
+                <option value={'year'}>year</option>
+              </select>
+            )}
+            <input
+              type="number"
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring md:text-sm"
+              min={1}
+              max={maxForPeriod(lockToYear ? 'year' : period)}
+              value={String(amount)}
+              onChange={(e) => handleAmountChange(Number(e.target.value || '1'))}
+              disabled={!!lockToYear}
+            />
+          </div>
+          <div className="text-xs opacity-60">
+            {(!lockToYear && period === 'week') && 'Max 7 per week.'}
+            {(!lockToYear && period === 'month') && 'Max 4 per month (otherwise use week).'}
+            {(lockToYear || period === 'year') && 'Max 12 per year (otherwise use month).'}
+          </div>
+
+          {(!lockToYear && period === 'week') && (
             <WeekPicker selectedNumbers={weeklyDays} onToggleNumber={toggleWeekdayUIIndex} disabledMore={disabledMore} />
           )}
-
           {period === 'month' && (
             <MonthNthWeekdayPicker selected={monthlyNthWeekdays} onToggle={toggleMonthlyNthWeekday} onToggleHeader={toggleMonthlyNthWeekdayColumn} disabledMore={disabledMore} />
           )}
 
-          {period === 'year' && (
+          {(lockToYear || period === 'year') && (
             <YearPicker selected={yearlyDays} onToggle={toggleYearDay} disabledMore={disabledMore} />
           )}
 
