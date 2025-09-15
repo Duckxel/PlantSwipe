@@ -23,8 +23,7 @@ export const GardenDashboardPage: React.FC = () => {
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [serverToday, setServerToday] = React.useState<string | null>(null)
-  // no-op for now; reserved for due list logic
-  // const [dueToday, setDueToday] = React.useState<Set<string> | null>(null)
+  const [dueToday, setDueToday] = React.useState<Set<string> | null>(null)
   const [dailyStats, setDailyStats] = React.useState<Array<{ date: string; due: number; completed: number; success: boolean }>>([])
 
   const [addOpen, setAddOpen] = React.useState(false)
@@ -36,6 +35,7 @@ export const GardenDashboardPage: React.FC = () => {
   const [pendingGardenPlantId, setPendingGardenPlantId] = React.useState<string | null>(null)
   const [pendingPeriod, setPendingPeriod] = React.useState<'week' | 'month' | 'year' | null>(null)
   const [pendingAmount, setPendingAmount] = React.useState<number>(0)
+  const [initialSelectionState, setInitialSelectionState] = React.useState<{ weeklyDays?: number[]; monthlyDays?: number[]; yearlyDays?: string[] } | undefined>(undefined)
 
   const [inviteOpen, setInviteOpen] = React.useState(false)
   const [inviteEmail, setInviteEmail] = React.useState('')
@@ -150,18 +150,12 @@ export const GardenDashboardPage: React.FC = () => {
       setSelectedPlant(null)
       setPlantQuery('')
       const defaultPeriod = (selectedPlant.waterFreqPeriod || (selectedPlant.waterFreqUnit as any)) as 'week' | 'month' | 'year' | undefined
-      const defaultAmount = (selectedPlant.waterFreqAmount ?? selectedPlant.waterFreqValue ?? 0) as number
-      if (defaultPeriod && ['week','month','year'].includes(defaultPeriod) && defaultAmount > 0) {
-        setPendingGardenPlantId(gp.id)
-        setPendingPeriod(defaultPeriod as any)
-        setPendingAmount(defaultAmount)
-        setScheduleOpen(true)
-      } else {
-        if (serverToday) { await upsertGardenTask({ gardenId: id, day: serverToday, gardenPlantId: gp.id }) }
-        await reseedSchedule(gp.id)
-        await load()
-        setTab('plants')
-      }
+      const defaultAmount = (selectedPlant.waterFreqAmount ?? selectedPlant.waterFreqValue ?? 1) as number
+      setPendingGardenPlantId(gp.id)
+      setPendingPeriod((defaultPeriod && ['week','month','year'].includes(defaultPeriod) ? defaultPeriod : 'week') as any)
+      setPendingAmount(defaultAmount > 0 ? defaultAmount : 1)
+      setInitialSelectionState(undefined)
+      setScheduleOpen(true)
     } catch (e: any) {
       setError(e?.message || 'Failed to add plant')
     } finally {
@@ -181,7 +175,10 @@ export const GardenDashboardPage: React.FC = () => {
         monthlyDays: selection.monthlyDays || null,
         yearlyDays: selection.yearlyDays || null,
       })
-      if (serverToday) { await upsertGardenTask({ gardenId: id, day: serverToday, gardenPlantId: pendingGardenPlantId }) }
+      if (serverToday) {
+        await ensureDailyTasksForGardens(serverToday)
+        await upsertGardenTask({ gardenId: id, day: serverToday, gardenPlantId: pendingGardenPlantId })
+      }
       await reseedSchedule(pendingGardenPlantId)
       await load()
       setTab('plants')
@@ -192,6 +189,7 @@ export const GardenDashboardPage: React.FC = () => {
       setPendingGardenPlantId(null)
       setPendingPeriod(null)
       setPendingAmount(0)
+      setInitialSelectionState(undefined)
       setScheduleOpen(false)
     }
   }
