@@ -163,6 +163,34 @@ export const GardenDashboardPage: React.FC = () => {
     }
   }
 
+  const openEditSchedule = async (gardenPlant: any) => {
+    try {
+      const schedule = await getGardenPlantSchedule(gardenPlant.id)
+      const period = (schedule?.period || gardenPlant.overrideWaterFreqUnit || gardenPlant.plant?.waterFreqPeriod || gardenPlant.plant?.waterFreqUnit || 'week') as 'week' | 'month' | 'year'
+      const amountRaw = schedule?.amount ?? gardenPlant.overrideWaterFreqValue ?? gardenPlant.plant?.waterFreqAmount ?? gardenPlant.plant?.waterFreqValue ?? 1
+      const amount = Number(amountRaw) > 0 ? Number(amountRaw) : 1
+      setPendingGardenPlantId(gardenPlant.id)
+      setPendingPeriod(period)
+      setPendingAmount(amount)
+      setInitialSelectionState({
+        weeklyDays: schedule?.weeklyDays || undefined,
+        monthlyDays: schedule?.monthlyDays || undefined,
+        yearlyDays: schedule?.yearlyDays || undefined,
+      })
+      setScheduleOpen(true)
+    } catch (e) {
+      // Fallback: open with inferred defaults
+      const period = (gardenPlant.overrideWaterFreqUnit || gardenPlant.plant?.waterFreqPeriod || gardenPlant.plant?.waterFreqUnit || 'week') as 'week' | 'month' | 'year'
+      const amountRaw = gardenPlant.overrideWaterFreqValue ?? gardenPlant.plant?.waterFreqAmount ?? gardenPlant.plant?.waterFreqValue ?? 1
+      const amount = Number(amountRaw) > 0 ? Number(amountRaw) : 1
+      setPendingGardenPlantId(gardenPlant.id)
+      setPendingPeriod(period)
+      setPendingAmount(amount)
+      setInitialSelectionState(undefined)
+      setScheduleOpen(true)
+    }
+  }
+
   const handleSaveSchedule = async (selection: { weeklyDays?: number[]; monthlyDays?: number[]; yearlyDays?: string[] }) => {
     if (!pendingGardenPlantId || !pendingPeriod || !id) return
     try {
