@@ -139,6 +139,20 @@ export const GardenDashboardPage: React.FC = () => {
       const hasAnyDefs = Object.keys(perPlant).length > 0 && Object.values(perPlant).some(arr => (arr as number[]).length > 0)
       setWeekCounts(hasAnyDefs ? derivedCounts : weekDaysIso.map(ds => (map[ds]?.due ?? 0)))
       setDueThisWeekByPlant(perPlant)
+
+      // Determine due-today plants from schedule definitions, excluding those already completed today
+      const idxToday = ((new Date(today).getDay() + 6) % 7) // 0=Mon..6=Sun
+      const completedToday = new Set<string>()
+      for (const gpId of Object.keys(sched)) {
+        for (const row of (sched as any)[gpId] as any[]) {
+          if (row.dueDate === today && row.completedAt) completedToday.add(gpId)
+        }
+      }
+      const dset2 = new Set<string>()
+      for (const [gpId, idxs] of Object.entries(perPlant)) {
+        if ((idxs as number[]).includes(idxToday) && !completedToday.has(gpId)) dset2.add(gpId)
+      }
+      setDueToday(dset2)
       const days: Array<{ date: string; due: number; completed: number; success: boolean }> = []
       const anchor30 = new Date(today)
       for (let i = 29; i >= 0; i--) {
@@ -465,7 +479,7 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
       <div className="text-lg font-medium">This week</div>
       <Card className="rounded-2xl p-4">
         <div className="text-sm opacity-60 mb-3">Monday → Sunday</div>
-        <div className="grid grid-cols-7 gap-2 items-end h-36">
+        <div className="grid grid-cols-7 gap-2">
           {weekDays.map((ds, idx) => {
             const count = weekCounts[idx] || 0
             const heightPct = count === 0 ? 0 : Math.round((count / maxCount) * 100)
@@ -473,7 +487,7 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
             const labels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
             const isToday = serverToday === ds
             return (
-              <div key={ds} className="flex flex-col items-center gap-1">
+              <div key={ds} className="flex flex-col items-center justify-end gap-1 h-36">
                 <div className={`w-7 rounded-md ${count > 0 ? 'bg-emerald-400' : 'bg-stone-300'} ${isToday ? 'ring-2 ring-black' : ''}`} style={{ height: `${heightPct}%` }} />
                 <div className="text-[11px] opacity-70">{labels[idx]}</div>
                 <div className="text-[10px] opacity-60">{count}</div>
@@ -484,17 +498,38 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
       </Card>
       <div className="flex justify-between items-center">
         <div className="text-base font-medium">Today</div>
-        <Button className="rounded-2xl" onClick={async () => { for (const gp of duePlants) { await onLogWater(gp.id) } }}>Watered all due plants</Button>
+        {duePlants.length > 0 && (
+          <Button className="rounded-2xl" onClick={async () => { for (const gp of duePlants) { await onLogWater(gp.id) } }}>Watered all due plants</Button>
+        )}
+      </div>
+      {duePlants.length === 0 && (
+        <div className="text-sm opacity-70">No plants to water today</div>
+      )}
+      {duePlants.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {duePlants.map((gp: any) => (
+            <Card key={gp.id} className="rounded-2xl p-4">
+              <div className="font-medium">{gp.plant?.name}{gp.nickname ? ` · ${gp.nickname}` : ''}</div>
+              <div className="text-sm opacity-70">Water need: {gp.plant?.care.water}</div>
+              <div className="text-xs opacity-70">Due this week: {dueThisWeekByPlant[gp.id]?.map((i) => ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][i]).join(', ') || '—'}</div>
+              <div className="mt-2 flex items-center gap-2">
+                <Button className="rounded-2xl" onClick={() => onLogWater(gp.id)}>Mark watered</Button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+      <div className="pt-2">
+        <div className="text-base font-medium">Due this week</div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {duePlants.map((gp: any) => (
+        {plants.filter((gp: any) => (dueThisWeekByPlant[gp.id]?.length || 0) > 0 && !(duePlantIds?.has(gp.id))).map((gp: any) => (
           <Card key={gp.id} className="rounded-2xl p-4">
             <div className="font-medium">{gp.plant?.name}{gp.nickname ? ` · ${gp.nickname}` : ''}</div>
             <div className="text-sm opacity-70">Water need: {gp.plant?.care.water}</div>
             <div className="text-xs opacity-70">Due this week: {dueThisWeekByPlant[gp.id]?.map((i) => ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][i]).join(', ') || '—'}</div>
             <div className="mt-2 flex items-center gap-2">
-              <Button className="rounded-2xl" onClick={() => onLogWater(gp.id)}>Mark watered</Button>
-              <Button variant="secondary" className="rounded-2xl opacity-60" disabled>Upcoming</Button>
+              <Button className="rounded-2xl opacity-60" variant="secondary" disabled>Upcoming</Button>
             </div>
           </Card>
         ))}
