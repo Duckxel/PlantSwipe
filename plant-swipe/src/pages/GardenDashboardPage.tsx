@@ -407,7 +407,7 @@ export const GardenDashboardPage: React.FC = () => {
                           <div className="text-xs opacity-60">On hand: {inventoryCounts[gp.plantId] ?? 0}</div>
                           <div className="text-xs opacity-60">Frequency: {gp.overrideWaterFreqValue ? `${gp.overrideWaterFreqValue} / ${gp.overrideWaterFreqUnit}` : 'not set'}</div>
                           <div className="mt-2 flex gap-2 flex-wrap">
-                            <Button variant="secondary" className="rounded-2xl" onClick={() => openEditSchedule(gp)}>Edit schedule</Button>
+                            <Button variant="secondary" className="rounded-2xl" onClick={() => openEditSchedule(gp)}>Schedule</Button>
                             <EditPlantButton gp={gp} gardenId={id!} onChanged={load} serverToday={serverToday} />
                             <Button variant="secondary" className="rounded-2xl" onClick={async () => { await deleteGardenPlant(gp.id); if (serverToday) { await ensureDailyTasksForGardens(serverToday) } await load() }}>Delete</Button>
                           </div>
@@ -653,7 +653,7 @@ function OverviewSection({ plants, membersCount, serverToday, dailyStats, totalO
 
       <Card className="rounded-2xl p-4">
         <div className="font-medium mb-3">Last 30 days</div>
-        <div className="grid grid-cols-7 gap-2 sm:gap-3">
+        <div className="grid grid-cols-7 gap-x-3 gap-y-3 place-items-center">
           {days.map((d, idx) => (
             <div key={idx} className="flex flex-col items-center">
               <div className={`w-7 h-7 rounded-md flex items-center justify-center ${d.success ? 'bg-emerald-400' : 'bg-stone-300'}`}>
