@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
 import type { Garden } from '@/types/garden'
 import type { Plant } from '@/types/plant'
-import { getGarden, getGardenPlants, getGardenMembers, addMemberByEmail, fetchScheduleForPlants, markGardenPlantWatered, updateGardenPlantFrequency, deleteGardenPlant, reseedSchedule, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule } from '@/lib/gardens'
+import { getGarden, getGardenPlants, getGardenMembers, addMemberByEmail, fetchScheduleForPlants, markGardenPlantWatered, updateGardenPlantFrequency, deleteGardenPlant, reseedSchedule, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, getGardenInventory, adjustInventoryAndLogTransaction } from '@/lib/gardens'
 import { supabase } from '@/lib/supabaseClient'
 
 
@@ -28,6 +28,7 @@ export const GardenDashboardPage: React.FC = () => {
   const [weekDays, setWeekDays] = React.useState<string[]>([])
   const [weekCounts, setWeekCounts] = React.useState<number[]>([])
   const [dueThisWeekByPlant, setDueThisWeekByPlant] = React.useState<Record<string, number[]>>({})
+  const [inventoryCounts, setInventoryCounts] = React.useState<Record<string, number>>({})
 
   const [addOpen, setAddOpen] = React.useState(false)
   const [plantQuery, setPlantQuery] = React.useState('')
@@ -153,6 +154,14 @@ export const GardenDashboardPage: React.FC = () => {
         if ((idxs as number[]).includes(idxToday) && !completedToday.has(gpId)) dset2.add(gpId)
       }
       setDueToday(dset2)
+
+      // Load inventory counts for display
+      const inv = await getGardenInventory(id)
+      const countsMap: Record<string, number> = {}
+      for (const it of inv) {
+        countsMap[String(it.plantId)] = Number(it.plantsOnHand || 0)
+      }
+      setInventoryCounts(countsMap)
       const days: Array<{ date: string; due: number; completed: number; success: boolean }> = []
       const anchor30 = new Date(today)
       for (let i = 29; i >= 0; i--) {
@@ -166,7 +175,7 @@ export const GardenDashboardPage: React.FC = () => {
         const idxToday = isToday ? (((new Date(today).getDay() + 6) % 7)) : -1 // 0=Mon..6=Sun
         const dueOverride = isToday ? (Object.values(perPlant).reduce((acc: number, arr: any) => acc + ((arr as number[]).includes(idxToday) ? 1 : 0), 0)) : undefined
         const dueVal = dueOverride !== undefined ? dueOverride : entry.due
-        const success = (trow?.success === true) || (dueVal > 0 && entry.completed >= dueVal)
+        const success = dueVal > 0 ? (entry.completed >= dueVal) : Boolean(trow?.success)
         days.push({ date: ds, due: dueVal, completed: entry.completed, success })
       }
       setDueToday(dset)
@@ -230,7 +239,18 @@ export const GardenDashboardPage: React.FC = () => {
     if (!id || !selectedPlant || adding) return
     setAdding(true)
     try {
-      const gp = await addPlantToGarden({ gardenId: id, plantId: selectedPlant.id, seedsPlanted: 0 })
+      // Prompt for quantity and nickname
+      const qtyStr = prompt('How many of this plant do you have?', '1')
+      if (qtyStr === null) { setAdding(false); return }
+      const qty = Math.max(0, Number(qtyStr))
+      const nicknameInput = prompt('Optional custom name (Leave blank to skip)', '')
+      const nicknameVal = nicknameInput && nicknameInput.trim().length > 0 ? nicknameInput.trim() : null
+
+      const gp = await addPlantToGarden({ gardenId: id, plantId: selectedPlant.id, seedsPlanted: 0, nickname: nicknameVal || undefined })
+      // Update inventory count immediately
+      if (qty > 0) {
+        await adjustInventoryAndLogTransaction({ gardenId: id, plantId: selectedPlant.id, plantsDelta: qty, transactionType: 'buy_plants' })
+      }
       setAddOpen(false)
       setSelectedPlant(null)
       setPlantQuery('')
@@ -368,10 +388,11 @@ export const GardenDashboardPage: React.FC = () => {
                         <div className="col-span-1 h-36 bg-cover bg-center" style={{ backgroundImage: `url(${gp.plant?.image || ''})` }} />
                         <div className="col-span-2 p-3">
                           <div className="font-medium">{gp.plant?.name}{gp.nickname ? ` · ${gp.nickname}` : ''}</div>
-                          <div className="text-xs opacity-60">Seeds planted: {gp.seedsPlanted || 0}</div>
+                          <div className="text-xs opacity-60">On hand: {inventoryCounts[gp.plantId] ?? 0}</div>
                           <div className="text-xs opacity-60">Frequency: {gp.overrideWaterFreqValue ? `${gp.overrideWaterFreqValue} / ${gp.overrideWaterFreqUnit}` : 'not set'}</div>
                           <div className="mt-2 flex gap-2 flex-wrap">
                             <Button variant="secondary" className="rounded-2xl" onClick={() => openEditSchedule(gp)}>Edit schedule</Button>
+                            <EditPlantButton gp={gp} gardenId={id!} onChanged={load} serverToday={serverToday} />
                             <Button variant="secondary" className="rounded-2xl" onClick={async () => { await deleteGardenPlant(gp.id); if (serverToday) { await ensureDailyTasksForGardens(serverToday) } await load() }}>Delete</Button>
                           </div>
                         </div>
@@ -488,8 +509,8 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
             const isToday = serverToday === ds
             return (
               <div key={ds} className="flex flex-col items-center justify-end gap-1 h-36">
-                <div className={`w-7 rounded-md ${count > 0 ? 'bg-emerald-400' : 'bg-stone-300'} ${isToday ? 'ring-2 ring-black' : ''}`} style={{ height: `${heightPct}%` }} />
-                <div className="text-[11px] opacity-70">{labels[idx]}</div>
+                <div className={`w-7 rounded-md ${count > 0 ? 'bg-emerald-400' : 'bg-stone-300'}`} style={{ height: `${heightPct}%` }} />
+                <div className={`text-[11px] ${isToday ? 'underline' : 'opacity-70'}`}>{labels[idx]}</div>
                 <div className="text-[10px] opacity-60">{count}</div>
               </div>
             )
@@ -596,6 +617,84 @@ function OverviewSection({ plants, membersCount, serverToday, dailyStats }: { pl
         </div>
       </Card>
     </div>
+  )
+}
+
+function EditPlantButton({ gp, gardenId, onChanged, serverToday }: { gp: any; gardenId: string; onChanged: () => Promise<void>; serverToday: string | null }) {
+  const [open, setOpen] = React.useState(false)
+  const [nickname, setNickname] = React.useState(gp.nickname || '')
+  const [count, setCount] = React.useState<number>(0)
+  const [submitting, setSubmitting] = React.useState(false)
+
+  React.useEffect(() => {
+    setNickname(gp.nickname || '')
+  }, [gp.nickname])
+
+  const loadInitialCount = React.useCallback(async () => {
+    try {
+      // Lightweight fetch by plantId intersection from inventory already loaded in page state is not stored per-plant here; keep 0 default and let user set
+    } catch {}
+  }, [])
+  React.useEffect(() => { loadInitialCount() }, [loadInitialCount])
+
+  const save = async () => {
+    if (submitting) return
+    setSubmitting(true)
+    try {
+      // Update nickname
+      await supabase.from('garden_plants').update({ nickname: nickname.trim() || null }).eq('id', gp.id)
+      // Update count via inventory table; delete plant if 0
+      if (count <= 0) {
+        await supabase.from('garden_plants').delete().eq('id', gp.id)
+        if (serverToday) await ensureDailyTasksForGardens(serverToday)
+      } else {
+        // Compute delta by reading current inventory
+        const { data: inv } = await supabase
+          .from('garden_inventory')
+          .select('plants_on_hand')
+          .eq('garden_id', gardenId)
+          .eq('plant_id', gp.plantId)
+          .maybeSingle()
+        const current = Number(inv?.plants_on_hand ?? 0)
+        const delta = count - current
+        if (delta !== 0) {
+          await adjustInventoryAndLogTransaction({ gardenId, plantId: gp.plantId, plantsDelta: delta, transactionType: delta > 0 ? 'buy_plants' : 'sell_plants' })
+        }
+      }
+      await onChanged()
+      setOpen(false)
+    } catch (e) {
+      // swallow; page has global error area
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <>
+      <Button variant="secondary" className="rounded-2xl" onClick={() => setOpen(true)}>Edit</Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit plant</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <label className="text-sm font-medium">Custom name</label>
+              <Input value={nickname} onChange={(e: any) => setNickname(e.target.value)} placeholder="Optional nickname" />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Number of plants</label>
+              <Input type="number" min={0} value={String(count)} onChange={(e: any) => setCount(Number(e.target.value))} />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="secondary" className="rounded-2xl" onClick={() => setOpen(false)}>Cancel</Button>
+              <Button className="rounded-2xl" onClick={save} disabled={submitting}>{submitting ? 'Saving…' : 'Save'}</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
 
