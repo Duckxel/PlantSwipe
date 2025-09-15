@@ -17,6 +17,12 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void }> = ({ 
     const dy = info.offset.y + info.velocity.y * 0.2
     if (dy > threshold) onClose()
   }
+  const freqAmountRaw = plant.waterFreqAmount ?? plant.waterFreqValue
+  const freqAmount = typeof freqAmountRaw === 'number' ? freqAmountRaw : Number(freqAmountRaw || 0)
+  const freqPeriod = (plant.waterFreqPeriod || plant.waterFreqUnit) as 'day' | 'week' | 'month' | 'year' | undefined
+  const freqLabel = freqPeriod
+    ? `${freqAmount > 0 ? `${freqAmount} ${freqAmount === 1 ? 'time' : 'times'} ` : ''}per ${freqPeriod}`
+    : null
   return (
     <motion.div className="space-y-4 select-none" drag="y" style={{ y }} dragConstraints={{ top: 0, bottom: 0 }} onDragEnd={onDragEnd}>
       <SheetHeader>
@@ -66,6 +72,12 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void }> = ({ 
         <CardContent className="space-y-2 text-sm">
           <div><span className="font-medium">Sunlight:</span> {plant.care.sunlight}</div>
             <div><span className="font-medium">Water:</span> {plant.care.water}</div>
+            {freqLabel && (
+              <div>
+                <span className="font-medium">Water frequency:</span>
+                <span className="ml-1 inline-flex items-center gap-1">💧 {freqLabel}</span>
+              </div>
+            )}
             <div><span className="font-medium">Soil:</span> {plant.care.soil}</div>
             <div><span className="font-medium">Difficulty:</span> {plant.care.difficulty}</div>
             <div><span className="font-medium">Seeds available:</span> {plant.seedsAvailable ? "Yes" : "No"}</div>

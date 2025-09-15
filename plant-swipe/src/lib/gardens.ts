@@ -260,7 +260,8 @@ export async function reseedSchedule(gardenPlantId: string, daysAhead = 60): Pro
 }
 
 export async function markGardenPlantWatered(gardenPlantId: string): Promise<void> {
-  const { error } = await supabase.rpc('mark_garden_plant_watered', { _garden_plant_id: gardenPlantId })
+  const nowIso = new Date().toISOString()
+  const { error } = await supabase.rpc('mark_garden_plant_watered', { _garden_plant_id: gardenPlantId, _at: nowIso })
   if (error) throw new Error(error.message)
 }
 

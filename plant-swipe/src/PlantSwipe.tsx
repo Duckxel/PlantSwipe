@@ -60,7 +60,7 @@ export default function PlantSwipe() {
     try {
       const { data, error } = await supabase
         .from('plants')
-        .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available')
+        .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount')
         .order('name', { ascending: true })
       if (error) throw error
       const parsed: Plant[] = (Array.isArray(data) ? data : []).map((p: any) => ({
@@ -79,7 +79,11 @@ export default function PlantSwipe() {
           soil: String(p.care_soil || ''),
           difficulty: (p.care_difficulty || 'Easy') as Plant['care']['difficulty']
         },
-        seedsAvailable: Boolean(p.seeds_available ?? false)
+        seedsAvailable: Boolean(p.seeds_available ?? false),
+        waterFreqUnit: p.water_freq_unit || undefined,
+        waterFreqValue: p.water_freq_value ?? null,
+        waterFreqPeriod: p.water_freq_period || undefined,
+        waterFreqAmount: p.water_freq_amount ?? null
       }))
       setPlants(parsed)
     } catch (e: any) {
