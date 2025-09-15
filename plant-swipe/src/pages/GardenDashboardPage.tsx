@@ -27,6 +27,7 @@ export const GardenDashboardPage: React.FC = () => {
   const [dailyStats, setDailyStats] = React.useState<Array<{ date: string; due: number; completed: number; success: boolean }>>([])
   const [weekDays, setWeekDays] = React.useState<string[]>([])
   const [weekCounts, setWeekCounts] = React.useState<number[]>([])
+  const [dueThisWeekByPlant, setDueThisWeekByPlant] = React.useState<Record<string, number[]>>({})
 
   const [addOpen, setAddOpen] = React.useState(false)
   const [plantQuery, setPlantQuery] = React.useState('')
@@ -54,7 +55,6 @@ export const GardenDashboardPage: React.FC = () => {
       setPlants(gps)
       const ms = await getGardenMembers(id)
       setMembers(ms.map(m => ({ userId: m.userId, displayName: m.displayName ?? null, role: m.role })))
-      await fetchScheduleForPlants(gps.map((gp: any) => gp.id), 45)
       const nowIso = await fetchServerNowISO()
       const today = nowIso.slice(0,10)
       setServerToday(today)
@@ -88,9 +88,57 @@ export const GardenDashboardPage: React.FC = () => {
         d.setDate(monday.getDate() + i)
         weekDaysIso.push(d.toISOString().slice(0,10))
       }
-      const counts: number[] = weekDaysIso.map(ds => (map[ds]?.due ?? 0))
       setWeekDays(weekDaysIso)
-      setWeekCounts(counts)
+
+      // Prefer deriving week due from explicit plant schedule definitions to avoid stale pre-seeded rows
+      const gpIds = gps.map((gp: any) => gp.id)
+      const { data: sdefs } = await supabase
+        .from('garden_plant_schedule')
+        .select('garden_plant_id, period, amount, weekly_days, monthly_days, yearly_days')
+        .in('garden_plant_id', gpIds)
+
+      const defByPlant: Record<string, any> = {}
+      for (const row of (sdefs || [])) {
+        defByPlant[String((row as any).garden_plant_id)] = row
+      }
+
+      const perPlant: Record<string, number[]> = {}
+      const weeklyDayNumberForIdx = [1,2,3,4,5,6,0] // Mon..Sun -> 1..6,0
+      const derivedCounts = Array(7).fill(0)
+
+      for (const gp of gps as any[]) {
+        const gpId = String(gp.id)
+        const def = defByPlant[gpId]
+        const idxs = new Set<number>()
+        if (def) {
+          for (let i = 0; i < 7; i++) {
+            const ds = weekDaysIso[i]
+            const dt = new Date(ds)
+            const mm = String(dt.getMonth() + 1).padStart(2, '0')
+            const dd = String(dt.getDate()).padStart(2, '0')
+            const ymd = `${mm}-${dd}`
+            const weekdayNum = weeklyDayNumberForIdx[i]
+            const p = (def as any).period
+            if (p === 'week') {
+              const arr: number[] = ((def as any).weekly_days || []) as number[]
+              if (arr.includes(weekdayNum)) idxs.add(i)
+            } else if (p === 'month') {
+              const arr: number[] = ((def as any).monthly_days || []) as number[]
+              if (arr.includes(dt.getDate())) idxs.add(i)
+            } else if (p === 'year') {
+              const arr: string[] = ((def as any).yearly_days || []) as string[]
+              if (arr.includes(ymd)) idxs.add(i)
+            }
+          }
+        }
+        const list = Array.from(idxs).sort((a, b) => a - b)
+        perPlant[gpId] = list
+        for (const i of list) derivedCounts[i] += 1
+      }
+      // Fallback to existing schedule-based counts if definitions missing entirely
+      const hasAnyDefs = Object.keys(perPlant).length > 0 && Object.values(perPlant).some(arr => (arr as number[]).length > 0)
+      setWeekCounts(hasAnyDefs ? derivedCounts : weekDaysIso.map(ds => (map[ds]?.due ?? 0)))
+      setDueThisWeekByPlant(perPlant)
       const days: Array<{ date: string; due: number; completed: number; success: boolean }> = []
       const anchor30 = new Date(today)
       for (let i = 29; i >= 0; i--) {
@@ -98,8 +146,14 @@ export const GardenDashboardPage: React.FC = () => {
         d.setDate(d.getDate() - i)
         const ds = d.toISOString().slice(0,10)
         const entry = map[ds] || { due: 0, completed: 0 }
-        const success = entry.due > 0 && entry.completed >= entry.due
-        days.push({ date: ds, due: entry.due, completed: entry.completed, success })
+        const trow = taskRows.find(tr => tr.day === ds && tr.taskType === 'watering')
+        // If computing for 'today', prefer derived counts from schedule definitions
+        const isToday = ds === today
+        const idxToday = isToday ? (((new Date(today).getDay() + 6) % 7)) : -1 // 0=Mon..6=Sun
+        const dueOverride = isToday ? (Object.values(perPlant).reduce((acc: number, arr: any) => acc + ((arr as number[]).includes(idxToday) ? 1 : 0), 0)) : undefined
+        const dueVal = dueOverride !== undefined ? dueOverride : entry.due
+        const success = (trow?.success === true) || (dueVal > 0 && entry.completed >= dueVal)
+        days.push({ date: ds, due: dueVal, completed: entry.completed, success })
       }
       setDueToday(dset)
       setDailyStats(days)
@@ -315,7 +369,7 @@ export const GardenDashboardPage: React.FC = () => {
             )}
 
             {tab === 'routine' && (
-              <RoutineSection plants={plants} duePlantIds={dueToday} onLogWater={logWater} weekDays={weekDays} weekCounts={weekCounts} serverToday={serverToday} />
+              <RoutineSection plants={plants} duePlantIds={dueToday} onLogWater={logWater} weekDays={weekDays} weekCounts={weekCounts} serverToday={serverToday} dueThisWeekByPlant={dueThisWeekByPlant} />
             )}
 
             {tab === 'settings' && (
@@ -400,7 +454,7 @@ export const GardenDashboardPage: React.FC = () => {
   )
 }
 
-function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts, serverToday }: { plants: any[]; duePlantIds: Set<string> | null; onLogWater: (id: string) => Promise<void>; weekDays: string[]; weekCounts: number[]; serverToday: string | null }) {
+function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts, serverToday, dueThisWeekByPlant }: { plants: any[]; duePlantIds: Set<string> | null; onLogWater: (id: string) => Promise<void>; weekDays: string[]; weekCounts: number[]; serverToday: string | null; dueThisWeekByPlant: Record<string, number[]> }) {
   const duePlants = React.useMemo(() => {
     if (!duePlantIds) return []
     return plants.filter((gp: any) => duePlantIds.has(gp.id))
@@ -414,13 +468,13 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
         <div className="grid grid-cols-7 gap-2 items-end h-36">
           {weekDays.map((ds, idx) => {
             const count = weekCounts[idx] || 0
-            const heightPct = Math.round((count / maxCount) * 100)
+            const heightPct = count === 0 ? 0 : Math.round((count / maxCount) * 100)
             const d = new Date(ds)
             const labels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
             const isToday = serverToday === ds
             return (
               <div key={ds} className="flex flex-col items-center gap-1">
-                <div className={`w-7 rounded-md ${count > 0 ? 'bg-emerald-400' : 'bg-stone-300'} ${isToday ? 'ring-2 ring-black' : ''}`} style={{ height: `${Math.max(10, heightPct)}%` }} />
+                <div className={`w-7 rounded-md ${count > 0 ? 'bg-emerald-400' : 'bg-stone-300'} ${isToday ? 'ring-2 ring-black' : ''}`} style={{ height: `${heightPct}%` }} />
                 <div className="text-[11px] opacity-70">{labels[idx]}</div>
                 <div className="text-[10px] opacity-60">{count}</div>
               </div>
@@ -437,6 +491,7 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
           <Card key={gp.id} className="rounded-2xl p-4">
             <div className="font-medium">{gp.plant?.name}{gp.nickname ? ` · ${gp.nickname}` : ''}</div>
             <div className="text-sm opacity-70">Water need: {gp.plant?.care.water}</div>
+            <div className="text-xs opacity-70">Due this week: {dueThisWeekByPlant[gp.id]?.map((i) => ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][i]).join(', ') || '—'}</div>
             <div className="mt-2 flex items-center gap-2">
               <Button className="rounded-2xl" onClick={() => onLogWater(gp.id)}>Mark watered</Button>
               <Button variant="secondary" className="rounded-2xl opacity-60" disabled>Upcoming</Button>
