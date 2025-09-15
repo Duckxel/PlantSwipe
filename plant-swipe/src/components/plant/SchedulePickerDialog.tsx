@@ -210,12 +210,18 @@ export function SchedulePickerDialog(props: {
             {(!lockToYear && period === 'month') && 'Max 4 per month (otherwise use week).'}
             {(lockToYear || period === 'year') && 'Max 12 per year (otherwise use month).'}
           </div>
+          {allowedPeriods && allowedPeriods.length === 1 && (
+            <div className="text-[11px] opacity-60">Frequency period is enforced by the plant. You can change the amount.</div>
+          )}
 
           {(!lockToYear && period === 'week') && (
             <WeekPicker selectedNumbers={weeklyDays} onToggleNumber={toggleWeekdayUIIndex} disabledMore={disabledMore} />
           )}
           {period === 'month' && (
-            <MonthNthWeekdayPicker selected={monthlyNthWeekdays} onToggle={toggleMonthlyNthWeekday} onToggleHeader={toggleMonthlyNthWeekdayColumn} disabledMore={disabledMore} />
+            <>
+              <div className="text-xs opacity-70">Pick weeks (1–4) and weekdays. Example: 1st Mon.</div>
+              <MonthNthWeekdayPicker selected={monthlyNthWeekdays} onToggle={toggleMonthlyNthWeekday} onToggleHeader={toggleMonthlyNthWeekdayColumn} disabledMore={disabledMore} />
+            </>
           )}
 
           {(lockToYear || period === 'year') && (

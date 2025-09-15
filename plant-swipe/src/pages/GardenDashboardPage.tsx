@@ -285,17 +285,16 @@ export const GardenDashboardPage: React.FC = () => {
       setAddOpen(false)
       setSelectedPlant(null)
       setPlantQuery('')
-      // Enforce allowed schedule to week/month, keep amount editable
+      // Enforce DB frequency period exactly (week, month, or year) while allowing amount changes
       const recommended = (selectedPlant.waterFreqPeriod || (selectedPlant.waterFreqUnit as any)) as 'week'|'month'|'year' | undefined
-      const mapped = recommended === 'year' ? 'week' : (recommended as any)
-      const defaultPeriod = (mapped && ['week','month'].includes(mapped)) ? mapped : 'week'
+      const defaultPeriod = (recommended && ['week','month','year'].includes(recommended)) ? recommended : 'week'
       const defaultAmount = Number(selectedPlant.waterFreqAmount ?? selectedPlant.waterFreqValue ?? 1) || 1
       setPendingGardenPlantId(gp.id)
       setPendingPeriod(defaultPeriod as any)
       setPendingAmount(defaultAmount > 0 ? defaultAmount : 1)
       setInitialSelectionState(undefined)
       setScheduleLockYear(false)
-      setScheduleAllowedPeriods(['week','month'])
+      setScheduleAllowedPeriods([defaultPeriod as any])
       setScheduleOpen(true)
     } catch (e: any) {
       setError(e?.message || 'Failed to add plant')
