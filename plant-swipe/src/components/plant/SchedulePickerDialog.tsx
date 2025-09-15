@@ -21,8 +21,9 @@ export function SchedulePickerDialog(props: {
   onChangePeriod?: (p: Period) => void
   onChangeAmount?: (n: number) => void
   lockToYear?: boolean
+  allowedPeriods?: Period[]
 }) {
-  const { open, onOpenChange, period, amount, onSave, initialSelection, onChangePeriod, onChangeAmount, lockToYear } = props
+  const { open, onOpenChange, period, amount, onSave, initialSelection, onChangePeriod, onChangeAmount, lockToYear, allowedPeriods } = props
 
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -140,7 +141,7 @@ export function SchedulePickerDialog(props: {
                 value={period}
                 onChange={(e) => handlePeriodChange(e.target.value as Period)}
               >
-                {(['week','month','year'] as const).map((p) => (
+                {(allowedPeriods && allowedPeriods.length > 0 ? allowedPeriods : (['week','month','year'] as const)).map((p) => (
                   <option key={p} value={p}>{p}</option>
                 ))}
               </select>

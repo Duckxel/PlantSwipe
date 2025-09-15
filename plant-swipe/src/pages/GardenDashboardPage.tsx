@@ -46,6 +46,7 @@ export const GardenDashboardPage: React.FC = () => {
   const [addNickname, setAddNickname] = React.useState('')
   const [addCount, setAddCount] = React.useState<number>(1)
   const [scheduleLockYear, setScheduleLockYear] = React.useState<boolean>(false)
+  const [scheduleAllowedPeriods, setScheduleAllowedPeriods] = React.useState<Array<'week'|'month'|'year'> | undefined>(undefined)
 
   const [inviteOpen, setInviteOpen] = React.useState(false)
   const [inviteEmail, setInviteEmail] = React.useState('')
@@ -273,14 +274,17 @@ export const GardenDashboardPage: React.FC = () => {
       setAddOpen(false)
       setSelectedPlant(null)
       setPlantQuery('')
-      // Force year-only selection when adding
-      const defaultPeriod = 'year' as const
-      const defaultAmount = Number((selectedPlant as any).waterFreqAmount ?? (selectedPlant as any).waterFreqValue ?? 1) || 1
+      // Enforce allowed schedule to week/month, keep amount editable
+      const recommended = (selectedPlant.waterFreqPeriod || (selectedPlant.waterFreqUnit as any)) as 'week'|'month'|'year' | undefined
+      const mapped = recommended === 'year' ? 'week' : (recommended as any)
+      const defaultPeriod = (mapped && ['week','month'].includes(mapped)) ? mapped : 'week'
+      const defaultAmount = Number(selectedPlant.waterFreqAmount ?? selectedPlant.waterFreqValue ?? 1) || 1
       setPendingGardenPlantId(gp.id)
-      setPendingPeriod(defaultPeriod)
+      setPendingPeriod(defaultPeriod as any)
       setPendingAmount(defaultAmount > 0 ? defaultAmount : 1)
       setInitialSelectionState(undefined)
-      setScheduleLockYear(true)
+      setScheduleLockYear(false)
+      setScheduleAllowedPeriods(['week','month'])
       setScheduleOpen(true)
     } catch (e: any) {
       setError(e?.message || 'Failed to add plant')
@@ -302,6 +306,7 @@ export const GardenDashboardPage: React.FC = () => {
         yearlyDays: schedule?.yearlyDays || undefined,
       })
       setScheduleLockYear(false)
+      setScheduleAllowedPeriods(undefined)
       setScheduleOpen(true)
     } catch (e) {
       // Fallback: open with inferred defaults
@@ -313,6 +318,7 @@ export const GardenDashboardPage: React.FC = () => {
       setPendingAmount(amount)
       setInitialSelectionState(undefined)
       setScheduleLockYear(false)
+      setScheduleAllowedPeriods(undefined)
       setScheduleOpen(true)
     }
   }
@@ -519,6 +525,7 @@ export const GardenDashboardPage: React.FC = () => {
             onChangePeriod={(p) => setPendingPeriod(p)}
             onChangeAmount={(n) => setPendingAmount(n)}
             lockToYear={scheduleLockYear}
+            allowedPeriods={scheduleAllowedPeriods as any}
           />
 
           {/* Invite Dialog */}
