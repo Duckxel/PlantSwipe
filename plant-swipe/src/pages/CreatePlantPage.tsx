@@ -126,23 +126,6 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
             <Label htmlFor="plant-name">Name</Label>
             <Input id="plant-name" value={name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} />
           </div>
-          {/* Default watering frequency */}
-          <div className="grid gap-2">
-            <Label>Default watering frequency</Label>
-            <div className="grid grid-cols-2 gap-2">
-              <select className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm" value={waterFreqPeriod} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setWaterFreqPeriod(e.target.value as any)}>
-                {(["week","month","year"] as const).map((p) => (
-                  <option key={p} value={p}>{p}</option>
-                ))}
-              </select>
-              <Input type="number" min={1} max={waterFreqPeriod === 'week' ? 7 : waterFreqPeriod === 'month' ? 4 : 12} value={String(waterFreqAmount)} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setWaterFreqAmount(Math.max(1, Number(e.target.value || '1')))} />
-            </div>
-            <div className="text-xs opacity-60">
-              {waterFreqPeriod === 'week' && 'Max 7 per week.'}
-              {waterFreqPeriod === 'month' && 'Max 4 per month (otherwise use week).'}
-              {waterFreqPeriod === 'year' && 'Max 12 per year (otherwise use month).'}
-            </div>
-          </div>
           <div className="grid gap-2">
             <Label htmlFor="plant-scientific">Scientific name</Label>
             <Input id="plant-scientific" value={scientificName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setScientificName(e.target.value)} />
@@ -212,6 +195,23 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
           <div className="flex items-center gap-2">
             <input id="plant-seeds" type="checkbox" checked={seedsAvailable} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSeedsAvailable(e.target.checked)} />
             <Label htmlFor="plant-seeds">Seeds available</Label>
+          </div>
+          {/* Default watering frequency (moved to bottom) */}
+          <div className="grid gap-2">
+            <Label>Default watering frequency</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <select className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm" value={waterFreqPeriod} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setWaterFreqPeriod(e.target.value as any)}>
+                {(["week","month","year"] as const).map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+              <Input type="number" min={1} max={waterFreqPeriod === 'week' ? 7 : waterFreqPeriod === 'month' ? 4 : 12} value={String(waterFreqAmount)} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setWaterFreqAmount(Math.max(1, Number(e.target.value || '1')))} />
+            </div>
+            <div className="text-xs opacity-60">
+              {waterFreqPeriod === 'week' && 'Max 7 per week.'}
+              {waterFreqPeriod === 'month' && 'Max 4 per month (otherwise use week).'}
+              {waterFreqPeriod === 'year' && 'Max 12 per year (otherwise use month).'}
+            </div>
           </div>
           {error && <div className="text-sm text-red-600">{error}</div>}
           {ok && <div className="text-sm text-green-600">{ok}</div>}

@@ -20,8 +20,9 @@ export function SchedulePickerDialog(props: {
   initialSelection?: ScheduleSelection
   onChangePeriod?: (p: Period) => void
   onChangeAmount?: (n: number) => void
+  lockToYear?: boolean
 }) {
-  const { open, onOpenChange, period, amount, onSave, initialSelection, onChangePeriod, onChangeAmount } = props
+  const { open, onOpenChange, period, amount, onSave, initialSelection, onChangePeriod, onChangeAmount, lockToYear } = props
 
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -133,39 +134,46 @@ export function SchedulePickerDialog(props: {
           <div className="text-sm opacity-70">Selected: {countSelected} / {amount}</div>
 
           <div className="grid grid-cols-2 gap-2">
-            <select
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
-              value={period}
-              onChange={(e) => handlePeriodChange(e.target.value as Period)}
-            >
-              {(['week','month','year'] as const).map((p) => (
-                <option key={p} value={p}>{p}</option>
-              ))}
-            </select>
+            {!lockToYear ? (
+              <select
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+                value={period}
+                onChange={(e) => handlePeriodChange(e.target.value as Period)}
+              >
+                {(['week','month','year'] as const).map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+            ) : (
+              <select className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm md:text-sm" value={'year'} disabled>
+                <option value={'year'}>year</option>
+              </select>
+            )}
             <input
               type="number"
               className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring md:text-sm"
               min={1}
-              max={maxForPeriod(period)}
+              max={maxForPeriod(lockToYear ? 'year' : period)}
               value={String(amount)}
               onChange={(e) => handleAmountChange(Number(e.target.value || '1'))}
+              disabled={!!lockToYear}
             />
           </div>
           <div className="text-xs opacity-60">
-            {period === 'week' && 'Max 7 per week.'}
-            {period === 'month' && 'Max 4 per month (otherwise use week).'}
-            {period === 'year' && 'Max 12 per year (otherwise use month).'}
+            {(!lockToYear && period === 'week') && 'Max 7 per week.'}
+            {(!lockToYear && period === 'month') && 'Max 4 per month (otherwise use week).'}
+            {(lockToYear || period === 'year') && 'Max 12 per year (otherwise use month).'}
           </div>
 
-          {period === 'week' && (
+          {(!lockToYear && period === 'week') && (
             <WeekPicker selectedNumbers={weeklyDays} onToggleNumber={toggleWeekdayUIIndex} disabledMore={disabledMore} />
           )}
 
-          {period === 'month' && (
+          {(!lockToYear && period === 'month') && (
             <MonthPicker selected={monthlyDays} onToggle={toggleMonthDay} disabledMore={disabledMore} />
           )}
 
-          {period === 'year' && (
+          {(lockToYear || period === 'year') && (
             <YearPicker selected={yearlyDays} onToggle={toggleYearDay} disabledMore={disabledMore} />
           )}
 
