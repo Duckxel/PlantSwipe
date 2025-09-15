@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
 import type { Garden } from '@/types/garden'
 import type { Plant } from '@/types/plant'
-import { getGarden, getGardenPlants, getGardenMembers, addMemberByEmail, fetchScheduleForPlants, markGardenPlantWatered, updateGardenPlantFrequency, deleteGardenPlant, reseedSchedule, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule } from '@/lib/gardens'
+import { getGarden, getGardenPlants, getGardenMembers, addMemberByEmail, fetchScheduleForPlants, markGardenPlantWatered, updateGardenPlantFrequency, deleteGardenPlant, reseedSchedule, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule } from '@/lib/gardens'
 import { supabase } from '@/lib/supabaseClient'
 
 
@@ -84,7 +84,7 @@ export const GardenDashboardPage: React.FC = () => {
         const trow = taskRows.find(tr => tr.day === ds && tr.taskType === 'watering')
         days.push({ date: ds, due: entry.due, completed: entry.completed, success: Boolean(trow?.success) })
       }
-      // setDueToday(dset)
+      setDueToday(dset)
       setDailyStats(days)
     } catch (e: any) {
       setError(e?.message || 'Failed to load garden')
@@ -251,9 +251,8 @@ export const GardenDashboardPage: React.FC = () => {
                           <div className="text-xs opacity-60">Seeds planted: {gp.seedsPlanted || 0}</div>
                           <div className="text-xs opacity-60">Frequency: {gp.overrideWaterFreqValue ? `${gp.overrideWaterFreqValue} / ${gp.overrideWaterFreqUnit}` : 'not set'}</div>
                           <div className="mt-2 flex gap-2 flex-wrap">
-                            <Button variant="secondary" className="rounded-2xl" onClick={() => logWater(gp.id)}>Mark watered</Button>
-                            <Button variant="secondary" className="rounded-2xl" onClick={async () => { await updateGardenPlantFrequency({ gardenPlantId: gp.id, unit: 'week', value: 3 }); await reseedSchedule(gp.id); await load() }}>Set 3/week</Button>
-                            <Button variant="secondary" className="rounded-2xl" onClick={async () => { await deleteGardenPlant(gp.id); await load() }}>Delete</Button>
+                            <Button variant="secondary" className="rounded-2xl" onClick={() => openEditSchedule(gp)}>Edit schedule</Button>
+                            <Button variant="secondary" className="rounded-2xl" onClick={async () => { await deleteGardenPlant(gp.id); if (serverToday) { await ensureDailyTasksForGardens(serverToday) } await load() }}>Delete</Button>
                           </div>
                         </div>
                       </div>
@@ -264,7 +263,7 @@ export const GardenDashboardPage: React.FC = () => {
             )}
 
             {tab === 'routine' && (
-              <RoutineSection plants={plants} onLogWater={logWater} />
+              <RoutineSection plants={plants} duePlantIds={dueToday} onLogWater={logWater} />
             )}
 
             {tab === 'settings' && (
@@ -324,6 +323,7 @@ export const GardenDashboardPage: React.FC = () => {
             period={(pendingPeriod as any) || 'week'}
             amount={pendingAmount || 1}
             onSave={handleSaveSchedule}
+            initialSelection={initialSelectionState}
           />
 
           {/* Invite Dialog */}
@@ -348,8 +348,12 @@ export const GardenDashboardPage: React.FC = () => {
   )
 }
 
-function RoutineSection({ plants, onLogWater }: { plants: any[]; onLogWater: (id: string) => Promise<void> }) {
-  const bars = [0,1,2,3,4,5,6].map((i) => ({ day: i, value: Math.min(5, plants.reduce((s, p) => s + (p.seedsPlanted ? 1 : 0), 0)) }))
+function RoutineSection({ plants, duePlantIds, onLogWater }: { plants: any[]; duePlantIds: Set<string> | null; onLogWater: (id: string) => Promise<void> }) {
+  const duePlants = React.useMemo(() => {
+    if (!duePlantIds) return []
+    return plants.filter((gp: any) => duePlantIds.has(gp.id))
+  }, [plants, duePlantIds])
+  const bars = [0,1,2,3,4,5,6].map((i) => ({ day: i, value: Math.min(5, duePlants.reduce((s, p) => s + (p.seedsPlanted ? 1 : 0), 0)) }))
   return (
     <div className="space-y-4">
       <div className="text-lg font-medium">Watering routine</div>
@@ -363,10 +367,10 @@ function RoutineSection({ plants, onLogWater }: { plants: any[]; onLogWater: (id
       </Card>
       <div className="flex justify-between items-center">
         <div className="text-base font-medium">Today</div>
-        <Button className="rounded-2xl" onClick={async () => { for (const gp of plants) { await onLogWater(gp.id) } }}>Watered all plants</Button>
+        <Button className="rounded-2xl" onClick={async () => { for (const gp of duePlants) { await onLogWater(gp.id) } }}>Watered all due plants</Button>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {plants.map((gp: any) => (
+        {duePlants.map((gp: any) => (
           <Card key={gp.id} className="rounded-2xl p-4">
             <div className="font-medium">{gp.plant?.name}{gp.nickname ? ` · ${gp.nickname}` : ''}</div>
             <div className="text-sm opacity-70">Water need: {gp.plant?.care.water}</div>

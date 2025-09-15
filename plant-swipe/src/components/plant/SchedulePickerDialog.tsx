@@ -17,8 +17,9 @@ export function SchedulePickerDialog(props: {
   period: Period
   amount: number
   onSave: (selection: ScheduleSelection) => Promise<void>
+  initialSelection?: ScheduleSelection
 }) {
-  const { open, onOpenChange, period, amount, onSave } = props
+  const { open, onOpenChange, period, amount, onSave, initialSelection } = props
 
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -30,23 +31,28 @@ export function SchedulePickerDialog(props: {
   React.useEffect(() => {
     // Reset selection on open
     if (open) {
-      setWeeklyDays([])
-      setMonthlyDays([])
-      setYearlyDays([])
+      setWeeklyDays(initialSelection?.weeklyDays ? [...initialSelection.weeklyDays] : [])
+      setMonthlyDays(initialSelection?.monthlyDays ? [...initialSelection.monthlyDays] : [])
+      setYearlyDays(initialSelection?.yearlyDays ? [...initialSelection.yearlyDays] : [])
       setError(null)
     }
-  }, [open])
+  }, [open, initialSelection])
 
   const countSelected = period === 'week' ? weeklyDays.length : period === 'month' ? monthlyDays.length : yearlyDays.length
 
   const remaining = Math.max(0, amount - countSelected)
   const disabledMore = remaining === 0
 
-  const toggleWeekday = (d: number) => {
-    setWeeklyDays((cur) => {
-      if (cur.includes(d)) return cur.filter((x) => x !== d)
-      if (disabledMore) return cur
-      return [...cur, d]
+  // Monday-first UI: order [Mon,Tue,Wed,Thu,Fri,Sat,Sun]; underlying values use 0=Sunday mapping
+  // UI index to underlying day number map
+  const mondayFirstMap = [1,2,3,4,5,6,0]
+  const toggleWeekdayUIIndex = (uiIndex: number) => {
+    const dayNumber = mondayFirstMap[uiIndex]
+    setWeeklyDays((current) => {
+      const has = current.includes(dayNumber)
+      if (has) return current.filter((x) => x !== dayNumber)
+      if (disabledMore) return current
+      return [...current, dayNumber]
     })
   }
 
@@ -103,7 +109,7 @@ export function SchedulePickerDialog(props: {
           <div className="text-sm opacity-70">Selected: {countSelected} / {amount}</div>
 
           {period === 'week' && (
-            <WeekPicker selected={weeklyDays} onToggle={toggleWeekday} disabledMore={disabledMore} />
+            <WeekPicker selectedNumbers={weeklyDays} onToggleNumber={toggleWeekdayUIIndex} disabledMore={disabledMore} />
           )}
 
           {period === 'month' && (
@@ -126,17 +132,28 @@ export function SchedulePickerDialog(props: {
   )
 }
 
-function WeekPicker({ selected, onToggle, disabledMore }: { selected: number[]; onToggle: (d: number) => void; disabledMore: boolean }) {
-  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
+function WeekPicker({ selectedNumbers, onToggleNumber, disabledMore }: { selectedNumbers: number[]; onToggleNumber: (uiIndex: number) => void; disabledMore: boolean }) {
+  // Monday-first display; mapping handled in parent
+  const display = [
+    { label: 'Mon', uiIndex: 0 },
+    { label: 'Tue', uiIndex: 1 },
+    { label: 'Wed', uiIndex: 2 },
+    { label: 'Thu', uiIndex: 3 },
+    { label: 'Fri', uiIndex: 4 },
+    { label: 'Sat', uiIndex: 5 },
+    { label: 'Sun', uiIndex: 6 },
+  ]
+  const mondayFirstMap = [1,2,3,4,5,6,0]
   return (
     <div className="grid grid-cols-7 gap-2">
-      {days.map((label, idx) => {
-        const isOn = selected.includes(idx)
+      {display.map(({ label, uiIndex }) => {
+        const dayNumber = mondayFirstMap[uiIndex]
+        const isOn = selectedNumbers.includes(dayNumber)
         return (
           <button
-            key={idx}
+            key={uiIndex}
             type="button"
-            onClick={() => onToggle(idx)}
+            onClick={() => onToggleNumber(uiIndex)}
             className={`h-12 rounded-xl border text-sm ${isOn ? 'bg-black text-white' : 'bg-white hover:bg-stone-50'} ${!isOn && disabledMore ? 'opacity-60 cursor-not-allowed' : ''}`}
             disabled={!isOn && disabledMore}
           >

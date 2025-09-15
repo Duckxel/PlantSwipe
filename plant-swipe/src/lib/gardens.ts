@@ -404,3 +404,20 @@ export async function upsertGardenPlantSchedule(params: { gardenPlantId: string;
   if (error) throw new Error(error.message)
 }
 
+export async function getGardenPlantSchedule(gardenPlantId: string): Promise<{ period: 'week' | 'month' | 'year'; amount: number; weeklyDays?: number[] | null; monthlyDays?: number[] | null; yearlyDays?: string[] | null } | null> {
+  const { data, error } = await supabase
+    .from('garden_plant_schedule')
+    .select('period, amount, weekly_days, monthly_days, yearly_days')
+    .eq('garden_plant_id', gardenPlantId)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  if (!data) return null
+  return {
+    period: (data as any).period,
+    amount: Number((data as any).amount ?? 0),
+    weeklyDays: (data as any).weekly_days || null,
+    monthlyDays: (data as any).monthly_days || null,
+    yearlyDays: (data as any).yearly_days || null,
+  }
+}
+
