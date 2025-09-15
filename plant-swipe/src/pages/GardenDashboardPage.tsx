@@ -41,7 +41,7 @@ export const GardenDashboardPage: React.FC = () => {
   const [pendingGardenPlantId, setPendingGardenPlantId] = React.useState<string | null>(null)
   const [pendingPeriod, setPendingPeriod] = React.useState<'week' | 'month' | 'year' | null>(null)
   const [pendingAmount, setPendingAmount] = React.useState<number>(0)
-  const [initialSelectionState, setInitialSelectionState] = React.useState<{ weeklyDays?: number[]; monthlyDays?: number[]; yearlyDays?: string[] } | undefined>(undefined)
+  const [initialSelectionState, setInitialSelectionState] = React.useState<{ weeklyDays?: number[]; monthlyDays?: number[]; yearlyDays?: string[]; monthlyNthWeekdays?: string[] } | undefined>(undefined)
   const [addDetailsOpen, setAddDetailsOpen] = React.useState(false)
   const [addNickname, setAddNickname] = React.useState('')
   const [addCount, setAddCount] = React.useState<number>(1)
@@ -101,7 +101,7 @@ export const GardenDashboardPage: React.FC = () => {
       const gpIds = gps.map((gp: any) => gp.id)
       const { data: sdefs } = await supabase
         .from('garden_plant_schedule')
-        .select('garden_plant_id, period, amount, weekly_days, monthly_days, yearly_days')
+        .select('garden_plant_id, period, amount, weekly_days, monthly_days, yearly_days, monthly_nth_weekdays')
         .in('garden_plant_id', gpIds)
 
       const defByPlant: Record<string, any> = {}
@@ -131,7 +131,18 @@ export const GardenDashboardPage: React.FC = () => {
               if (arr.includes(weekdayNum)) idxs.add(i)
             } else if (p === 'month') {
               const arr: number[] = ((def as any).monthly_days || []) as number[]
-              if (arr.includes(dt.getUTCDate())) idxs.add(i)
+              const nth: string[] = ((def as any).monthly_nth_weekdays || []) as string[]
+              const date = dt.getUTCDate()
+              if (arr.includes(date)) idxs.add(i)
+              if (nth.length > 0) {
+                // Compute week-of-month (1-4) and weekday (0=Sun..6=Sat) for current date
+                const weekday = dt.getUTCDay()
+                const weekIndex = Math.floor((date - 1) / 7) + 1 // 1..4 (ignore 5th occurrences)
+                if (weekIndex >= 1 && weekIndex <= 4) {
+                  const key = `${weekIndex}-${weekday}`
+                  if (nth.includes(key)) idxs.add(i)
+                }
+              }
             } else if (p === 'year') {
               const arr: string[] = ((def as any).yearly_days || []) as string[]
               if (arr.includes(ymd)) idxs.add(i)
@@ -297,6 +308,7 @@ export const GardenDashboardPage: React.FC = () => {
         weeklyDays: schedule?.weeklyDays || undefined,
         monthlyDays: schedule?.monthlyDays || undefined,
         yearlyDays: schedule?.yearlyDays || undefined,
+        monthlyNthWeekdays: schedule?.monthlyNthWeekdays || undefined,
       })
       setScheduleOpen(true)
     } catch (e) {
@@ -312,7 +324,7 @@ export const GardenDashboardPage: React.FC = () => {
     }
   }
 
-  const handleSaveSchedule = async (selection: { weeklyDays?: number[]; monthlyDays?: number[]; yearlyDays?: string[] }) => {
+  const handleSaveSchedule = async (selection: { weeklyDays?: number[]; monthlyDays?: number[]; yearlyDays?: string[]; monthlyNthWeekdays?: string[] }) => {
     if (!pendingGardenPlantId || !pendingPeriod || !id) return
     try {
       await updateGardenPlantFrequency({ gardenPlantId: pendingGardenPlantId, unit: pendingPeriod, value: pendingAmount })
@@ -323,6 +335,7 @@ export const GardenDashboardPage: React.FC = () => {
         weeklyDays: selection.weeklyDays || null,
         monthlyDays: selection.monthlyDays || null,
         yearlyDays: selection.yearlyDays || null,
+        monthlyNthWeekdays: selection.monthlyNthWeekdays || null,
       })
       if (serverToday) {
         // Clear upcoming due rows from today forward, then reseed fresh based on new schedule
