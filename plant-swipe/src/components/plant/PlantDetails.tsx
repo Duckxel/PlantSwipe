@@ -66,6 +66,11 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void }> = ({ 
         <CardContent className="space-y-2 text-sm">
           <div><span className="font-medium">Sunlight:</span> {plant.care.sunlight}</div>
             <div><span className="font-medium">Water:</span> {plant.care.water}</div>
+            {(plant.waterFreqPeriod || plant.waterFreqUnit) && (
+              <div>
+                <span className="font-medium">Water frequency:</span> {String(plant.waterFreqAmount ?? plant.waterFreqValue ?? '')}{(plant.waterFreqAmount ?? plant.waterFreqValue) ? ' / ' : ''}{String(plant.waterFreqPeriod ?? plant.waterFreqUnit ?? '')}
+              </div>
+            )}
             <div><span className="font-medium">Soil:</span> {plant.care.soil}</div>
             <div><span className="font-medium">Difficulty:</span> {plant.care.difficulty}</div>
             <div><span className="font-medium">Seeds available:</span> {plant.seedsAvailable ? "Yes" : "No"}</div>
