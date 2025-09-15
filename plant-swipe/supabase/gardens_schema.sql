@@ -190,7 +190,10 @@ do $$ begin
   end if;
   create policy gm_insert on public.garden_members for insert to authenticated
     with check (
-      exists (select 1 from public.gardens g where g.id = garden_id and g.created_by = auth.uid()) and user_id is not null
+      exists (
+        select 1 from public.garden_members gm
+        where gm.garden_id = garden_id and gm.user_id = auth.uid() and gm.role = 'owner'
+      ) and user_id is not null
     );
 end $$;
 do $$ begin
@@ -199,7 +202,10 @@ do $$ begin
   end if;
   create policy gm_delete on public.garden_members for delete to authenticated
     using (
-      user_id = auth.uid() or exists (select 1 from public.gardens g where g.id = garden_id and g.created_by = auth.uid())
+      user_id = auth.uid() or exists (
+        select 1 from public.garden_members gm
+        where gm.garden_id = garden_id and gm.user_id = auth.uid() and gm.role = 'owner'
+      )
     );
 end $$;
 
@@ -217,6 +223,17 @@ do $$ begin
       with check (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()));
   end if;
 end $$;
+
+-- Helper RPCs
+-- Resolve an auth user id by email (case-insensitive)
+create or replace function public.get_user_id_by_email(_email text)
+returns uuid
+language sql
+security definer
+set search_path = public
+as $$
+  select id from auth.users where email ilike _email limit 1;
+$$;
 
 -- Events: members can select/insert
 do $$ begin

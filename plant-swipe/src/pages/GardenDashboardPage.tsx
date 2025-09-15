@@ -4,6 +4,7 @@ import { useParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
 import type { Garden } from '@/types/garden'
@@ -51,6 +52,7 @@ export const GardenDashboardPage: React.FC = () => {
   const [inviteOpen, setInviteOpen] = React.useState(false)
   const [inviteEmail, setInviteEmail] = React.useState('')
   const [inviteError, setInviteError] = React.useState<string | null>(null)
+  const [inviteAdmin, setInviteAdmin] = React.useState(false)
 
   const load = React.useCallback(async () => {
     if (!id) return
@@ -246,13 +248,14 @@ export const GardenDashboardPage: React.FC = () => {
   const submitInvite = async () => {
     if (!id || !inviteEmail.trim()) return
     setInviteError(null)
-    const res = await addMemberByEmail({ gardenId: id, email: inviteEmail.trim() })
+    const res = await addMemberByEmail({ gardenId: id, email: inviteEmail.trim(), role: inviteAdmin ? 'owner' : 'member' })
     if (!res.ok) {
       setInviteError(res.reason === 'no_account' ? 'No account with this email' : 'Failed to add member')
       return
     }
     setInviteOpen(false)
     setInviteEmail('')
+    setInviteAdmin(false)
     await load()
   }
 
@@ -548,6 +551,10 @@ export const GardenDashboardPage: React.FC = () => {
               </DialogHeader>
               <div className="space-y-3">
                 <Input placeholder="member@email.com" type="email" value={inviteEmail} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInviteEmail(e.target.value)} />
+                <div className="flex items-center gap-2">
+                  <input id="invite-admin" type="checkbox" checked={inviteAdmin} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInviteAdmin(e.target.checked)} />
+                  <Label htmlFor="invite-admin">Make admin</Label>
+                </div>
                 {inviteError && <div className="text-sm text-red-600">{inviteError}</div>}
                 <div className="flex justify-end gap-2">
                   <Button variant="secondary" className="rounded-2xl" onClick={() => setInviteOpen(false)}>Cancel</Button>

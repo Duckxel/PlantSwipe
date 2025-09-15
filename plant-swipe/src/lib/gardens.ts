@@ -205,16 +205,14 @@ export async function addGardenMember(params: { gardenId: string; userId: string
   if (error) throw new Error(error.message)
 }
 
-export async function addMemberByEmail(params: { gardenId: string; email: string }): Promise<{ ok: boolean; reason?: string }> {
-  const { gardenId, email } = params
-  const { data: userRow } = await supabase
-    .from('profiles')
-    .select('id')
-    .ilike('email', email)
-    .maybeSingle()
-  if (!userRow?.id) return { ok: false, reason: 'no_account' }
+export async function addMemberByEmail(params: { gardenId: string; email: string; role?: 'member' | 'owner' }): Promise<{ ok: boolean; reason?: string }> {
+  const { gardenId, email, role = 'member' } = params
+  const { data, error } = await supabase.rpc('get_user_id_by_email', { _email: email })
+  if (error) return { ok: false, reason: 'lookup_failed' }
+  const userId = data as unknown as string | null
+  if (!userId) return { ok: false, reason: 'no_account' }
   try {
-    await addGardenMember({ gardenId, userId: userRow.id, role: 'member' })
+    await addGardenMember({ gardenId, userId, role })
     return { ok: true }
   } catch (e) {
     return { ok: false, reason: 'insert_failed' }
