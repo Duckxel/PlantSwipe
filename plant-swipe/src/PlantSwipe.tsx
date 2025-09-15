@@ -15,6 +15,7 @@ import { GardenListPage } from "@/pages/GardenListPage";
 import { GardenDashboardPage } from "@/pages/GardenDashboardPage";
 import { SearchPage } from "@/pages/SearchPage";
 import { CreatePlantPage } from "@/pages/CreatePlantPage";
+import { EditPlantPage } from "@/pages/EditPlantPage";
 import type { Plant } from "@/types/plant";
 import { PlantDetails } from "@/components/plant/PlantDetails";
 import { useAuth } from "@/context/AuthContext";
@@ -348,6 +349,14 @@ export default function PlantSwipe() {
                   <CreatePlantPage
                     onCancel={() => navigate('/')}
                     onSaved={async () => { await loadPlants(); navigate('/gardens') }}
+                  />
+                ) : (
+                  <Navigate to="/" replace />
+                )} />
+                <Route path="/plants/:id/edit" element={user ? (
+                  <EditPlantPage
+                    onCancel={() => navigate('/search')}
+                    onSaved={async () => { await loadPlants(); navigate('/search') }}
                   />
                 ) : (
                   <Navigate to="/" replace />

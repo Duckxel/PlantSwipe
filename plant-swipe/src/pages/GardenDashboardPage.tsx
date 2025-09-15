@@ -403,7 +403,8 @@ export const GardenDashboardPage: React.FC = () => {
                       <div className="grid grid-cols-3 gap-0">
                         <div className="col-span-1 h-36 bg-cover bg-center" style={{ backgroundImage: `url(${gp.plant?.image || ''})` }} />
                         <div className="col-span-2 p-3">
-                          <div className="font-medium">{gp.plant?.name}{gp.nickname ? ` · ${gp.nickname}` : ''}</div>
+                          <div className="font-medium">{gp.nickname || gp.plant?.name}</div>
+                          {gp.nickname && <div className="text-xs opacity-60">{gp.plant?.name}</div>}
                           <div className="text-xs opacity-60">On hand: {inventoryCounts[gp.plantId] ?? 0}</div>
                           <div className="text-xs opacity-60">Frequency: {gp.overrideWaterFreqValue ? `${gp.overrideWaterFreqValue} / ${gp.overrideWaterFreqUnit}` : 'not set'}</div>
                           <div className="mt-2 flex gap-2 flex-wrap">
@@ -488,7 +489,7 @@ export const GardenDashboardPage: React.FC = () => {
               <div className="space-y-3">
                 <div>
                   <label className="text-sm font-medium">Custom name</label>
-                  <Input value={addNickname} onChange={(e: any) => setAddNickname(e.target.value)} placeholder="Optional nickname" />
+                  <Input value={addNickname} maxLength={30} onChange={(e: any) => setAddNickname(e.target.value)} placeholder="Optional nickname" />
                 </div>
                 <div>
                   <label className="text-sm font-medium">Number of plants</label>
@@ -510,6 +511,8 @@ export const GardenDashboardPage: React.FC = () => {
             amount={pendingAmount || 1}
             onSave={handleSaveSchedule}
             initialSelection={initialSelectionState}
+            onChangePeriod={(p) => setPendingPeriod(p)}
+            onChangeAmount={(n) => setPendingAmount(n)}
           />
 
           {/* Invite Dialog */}
@@ -575,7 +578,8 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {duePlants.map((gp: any) => (
             <Card key={gp.id} className="rounded-2xl p-4">
-              <div className="font-medium">{gp.plant?.name}{gp.nickname ? ` · ${gp.nickname}` : ''}</div>
+              <div className="font-medium">{gp.nickname || gp.plant?.name}</div>
+              {gp.nickname && <div className="text-xs opacity-60">{gp.plant?.name}</div>}
               <div className="text-sm opacity-70">Water need: {gp.plant?.care.water}</div>
               <div className="text-xs opacity-70">Due this week: {dueThisWeekByPlant[gp.id]?.map((i) => ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][i]).join(', ') || '—'}</div>
               <div className="mt-2 flex items-center gap-2">
@@ -591,7 +595,8 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {plants.filter((gp: any) => (dueThisWeekByPlant[gp.id]?.length || 0) > 0 && !(duePlantIds?.has(gp.id))).map((gp: any) => (
           <Card key={gp.id} className="rounded-2xl p-4">
-            <div className="font-medium">{gp.plant?.name}{gp.nickname ? ` · ${gp.nickname}` : ''}</div>
+            <div className="font-medium">{gp.nickname || gp.plant?.name}</div>
+            {gp.nickname && <div className="text-xs opacity-60">{gp.plant?.name}</div>}
             <div className="text-sm opacity-70">Water need: {gp.plant?.care.water}</div>
             <div className="text-xs opacity-70">Due this week: {dueThisWeekByPlant[gp.id]?.map((i) => ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][i]).join(', ') || '—'}</div>
             <div className="mt-2 flex items-center gap-2">
@@ -680,9 +685,16 @@ function EditPlantButton({ gp, gardenId, onChanged, serverToday }: { gp: any; ga
 
   const loadInitialCount = React.useCallback(async () => {
     try {
-      // Lightweight fetch by plantId intersection from inventory already loaded in page state is not stored per-plant here; keep 0 default and let user set
+      const { data } = await supabase
+        .from('garden_inventory')
+        .select('plants_on_hand')
+        .eq('garden_id', gardenId)
+        .eq('plant_id', gp.plantId)
+        .maybeSingle()
+      const current = Number(data?.plants_on_hand ?? 0)
+      setCount(current)
     } catch {}
-  }, [])
+  }, [gardenId, gp.plantId])
   React.useEffect(() => { loadInitialCount() }, [loadInitialCount])
 
   const save = async () => {
@@ -729,7 +741,7 @@ function EditPlantButton({ gp, gardenId, onChanged, serverToday }: { gp: any; ga
           <div className="space-y-3">
             <div>
               <label className="text-sm font-medium">Custom name</label>
-              <Input value={nickname} onChange={(e: any) => setNickname(e.target.value)} placeholder="Optional nickname" />
+              <Input value={nickname} maxLength={30} onChange={(e: any) => setNickname(e.target.value)} placeholder="Optional nickname" />
             </div>
             <div>
               <label className="text-sm font-medium">Number of plants</label>

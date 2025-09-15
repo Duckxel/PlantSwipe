@@ -47,6 +47,8 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
   const [careSoil, setCareSoil] = React.useState("")
   const [careDifficulty, setCareDifficulty] = React.useState<Plant["care"]["difficulty"]>("Easy")
   const [seedsAvailable, setSeedsAvailable] = React.useState(false)
+  const [waterFreqPeriod, setWaterFreqPeriod] = React.useState<'week' | 'month' | 'year'>('week')
+  const [waterFreqAmount, setWaterFreqAmount] = React.useState<number>(1)
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [ok, setOk] = React.useState<string | null>(null)
@@ -61,6 +63,14 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
     if (!name.trim()) { setError("Name is required"); return }
     if (!scientificName.trim()) { setError("Scientific name is required"); return }
     if (!careSoil.trim()) { setError("Soil is required"); return }
+    // Validate frequency constraints
+    const periodMax: Record<'week'|'month'|'year', number> = { week: 7, month: 4, year: 12 }
+    const maxAllowed = periodMax[waterFreqPeriod]
+    let normalizedAmount = Math.max(1, Math.min(Number(waterFreqAmount || 1), maxAllowed))
+    if (Number(waterFreqAmount || 1) > maxAllowed) {
+      // Provide gentle guidance rather than blocking
+      setOk(`Capped to ${maxAllowed} per ${waterFreqPeriod}. For more, use a shorter period.`)
+    }
     setSaving(true)
     try {
       const id = generateUUIDv4()
@@ -93,6 +103,12 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
         care_soil: careSoil,
         care_difficulty: careDifficulty,
         seeds_available: seedsAvailable,
+        // Default watering frequency fields
+        water_freq_period: waterFreqPeriod,
+        water_freq_amount: normalizedAmount,
+        // Legacy/alternative field names for compatibility
+        water_freq_unit: waterFreqPeriod,
+        water_freq_value: normalizedAmount,
       })
       if (insErr) { setError(insErr.message); return }
       setOk('Saved')
@@ -109,6 +125,23 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
           <div className="grid gap-2">
             <Label htmlFor="plant-name">Name</Label>
             <Input id="plant-name" value={name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} />
+          </div>
+          {/* Default watering frequency */}
+          <div className="grid gap-2">
+            <Label>Default watering frequency</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <select className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm" value={waterFreqPeriod} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setWaterFreqPeriod(e.target.value as any)}>
+                {(["week","month","year"] as const).map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+              <Input type="number" min={1} max={waterFreqPeriod === 'week' ? 7 : waterFreqPeriod === 'month' ? 4 : 12} value={String(waterFreqAmount)} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setWaterFreqAmount(Math.max(1, Number(e.target.value || '1')))} />
+            </div>
+            <div className="text-xs opacity-60">
+              {waterFreqPeriod === 'week' && 'Max 7 per week.'}
+              {waterFreqPeriod === 'month' && 'Max 4 per month (otherwise use week).'}
+              {waterFreqPeriod === 'year' && 'Max 12 per year (otherwise use month).'}
+            </div>
           </div>
           <div className="grid gap-2">
             <Label htmlFor="plant-scientific">Scientific name</Label>
