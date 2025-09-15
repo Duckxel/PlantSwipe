@@ -388,7 +388,7 @@ export const GardenDashboardPage: React.FC = () => {
           </aside>
           <main className="min-h-[60vh]">
             {tab === 'overview' && (
-              <OverviewSection plants={plants} membersCount={members.length} serverToday={serverToday} dailyStats={dailyStats} />
+              <OverviewSection plants={plants} membersCount={members.length} serverToday={serverToday} dailyStats={dailyStats} totalOnHand={totalOnHand} speciesOnHand={speciesOnHand} />
             )}
 
             {tab === 'plants' && (
@@ -604,7 +604,7 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
   )
 }
 
-function OverviewSection({ plants, membersCount, serverToday, dailyStats }: { plants: any[]; membersCount: number; serverToday: string | null; dailyStats: Array<{ date: string; due: number; completed: number; success: boolean }> }) {
+function OverviewSection({ plants, membersCount, serverToday, dailyStats, totalOnHand, speciesOnHand }: { plants: any[]; membersCount: number; serverToday: string | null; dailyStats: Array<{ date: string; due: number; completed: number; success: boolean }>; totalOnHand: number; speciesOnHand: number }) {
   const totalToWaterToday = dailyStats.find(d => d.date === (serverToday || ''))?.due ?? 0
   const completedToday = dailyStats.find(d => d.date === (serverToday || ''))?.completed ?? 0
   const progressPct = totalToWaterToday === 0 ? 100 : Math.min(100, Math.round((completedToday / totalToWaterToday) * 100))
