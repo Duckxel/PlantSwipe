@@ -389,27 +389,41 @@ export async function adjustInventoryAndLogTransaction(params: { gardenId: strin
   if (tErr) throw new Error(tErr.message)
 }
 
-export async function upsertGardenPlantSchedule(params: { gardenPlantId: string; period: 'week' | 'month' | 'year'; amount: number; weeklyDays?: number[] | null; monthlyDays?: number[] | null; yearlyDays?: string[] | null }): Promise<void> {
-  const { gardenPlantId, period, amount, weeklyDays = null, monthlyDays = null, yearlyDays = null } = params
-  const { error } = await supabase
-    .from('garden_plant_schedule')
-    .upsert({
+export async function upsertGardenPlantSchedule(params: { gardenPlantId: string; period: 'week' | 'month' | 'year'; amount: number; weeklyDays?: number[] | null; monthlyDays?: number[] | null; yearlyDays?: string[] | null; monthlyNthWeekdays?: string[] | null }): Promise<void> {
+  const { gardenPlantId, period, amount, weeklyDays = null, monthlyDays = null, yearlyDays = null, monthlyNthWeekdays = null } = params
+  // Try with monthly_nth_weekdays column first; if the column doesn't exist, fallback to upsert without it
+  const attempt = async (includeNth: boolean) => {
+    const payload: any = {
       garden_plant_id: gardenPlantId,
       period,
       amount,
       weekly_days: weeklyDays,
       monthly_days: monthlyDays,
       yearly_days: yearlyDays,
-    }, { onConflict: 'garden_plant_id' })
-  if (error) throw new Error(error.message)
+    }
+    if (includeNth) payload.monthly_nth_weekdays = monthlyNthWeekdays
+    return await supabase
+      .from('garden_plant_schedule')
+      .upsert(payload, { onConflict: 'garden_plant_id' })
+  }
+  let res = await attempt(true)
+  if (res.error && /column .*monthly_nth_weekdays.* does not exist/i.test(res.error.message)) {
+    res = await attempt(false)
+  }
+  if (res.error) throw new Error(res.error.message)
 }
 
-export async function getGardenPlantSchedule(gardenPlantId: string): Promise<{ period: 'week' | 'month' | 'year'; amount: number; weeklyDays?: number[] | null; monthlyDays?: number[] | null; yearlyDays?: string[] | null } | null> {
-  const { data, error } = await supabase
-    .from('garden_plant_schedule')
-    .select('period, amount, weekly_days, monthly_days, yearly_days')
-    .eq('garden_plant_id', gardenPlantId)
-    .maybeSingle()
+export async function getGardenPlantSchedule(gardenPlantId: string): Promise<{ period: 'week' | 'month' | 'year'; amount: number; weeklyDays?: number[] | null; monthlyDays?: number[] | null; yearlyDays?: string[] | null; monthlyNthWeekdays?: string[] | null } | null> {
+  // Try selecting with monthly_nth_weekdays; fallback if column missing
+  const selectWithNth = 'period, amount, weekly_days, monthly_days, yearly_days, monthly_nth_weekdays'
+  const base = supabase.from('garden_plant_schedule')
+  let q = base.select(selectWithNth).eq('garden_plant_id', gardenPlantId).maybeSingle()
+  let { data, error } = await q
+  if (error && /column .*monthly_nth_weekdays.* does not exist/i.test(error.message)) {
+    const res2 = await base.select('period, amount, weekly_days, monthly_days, yearly_days').eq('garden_plant_id', gardenPlantId).maybeSingle()
+    data = res2.data as any
+    error = res2.error as any
+  }
   if (error) throw new Error(error.message)
   if (!data) return null
   return {
@@ -418,6 +432,7 @@ export async function getGardenPlantSchedule(gardenPlantId: string): Promise<{ p
     weeklyDays: (data as any).weekly_days || null,
     monthlyDays: (data as any).monthly_days || null,
     yearlyDays: (data as any).yearly_days || null,
+    monthlyNthWeekdays: (data as any).monthly_nth_weekdays || null,
   }
 }
 

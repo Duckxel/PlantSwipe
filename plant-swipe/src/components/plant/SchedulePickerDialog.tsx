@@ -9,6 +9,7 @@ export interface ScheduleSelection {
   weeklyDays?: number[]
   monthlyDays?: number[]
   yearlyDays?: string[]
+  monthlyNthWeekdays?: string[]
 }
 
 export function SchedulePickerDialog(props: {
@@ -31,6 +32,7 @@ export function SchedulePickerDialog(props: {
   const [weeklyDays, setWeeklyDays] = React.useState<number[]>([])
   const [monthlyDays, setMonthlyDays] = React.useState<number[]>([])
   const [yearlyDays, setYearlyDays] = React.useState<string[]>([])
+  const [monthlyNthWeekdays, setMonthlyNthWeekdays] = React.useState<string[]>([])
 
   React.useEffect(() => {
     // Reset selection on open
@@ -38,11 +40,18 @@ export function SchedulePickerDialog(props: {
       setWeeklyDays(initialSelection?.weeklyDays ? [...initialSelection.weeklyDays] : [])
       setMonthlyDays(initialSelection?.monthlyDays ? [...initialSelection.monthlyDays] : [])
       setYearlyDays(initialSelection?.yearlyDays ? [...initialSelection.yearlyDays] : [])
+      setMonthlyNthWeekdays(initialSelection?.monthlyNthWeekdays ? [...initialSelection.monthlyNthWeekdays] : [])
       setError(null)
     }
   }, [open, initialSelection])
 
-  const countSelected = period === 'week' ? weeklyDays.length : period === 'month' ? monthlyDays.length : yearlyDays.length
+  const countSelected = (
+    period === 'week'
+      ? weeklyDays.length
+      : period === 'month'
+        ? monthlyNthWeekdays.length
+        : yearlyDays.length
+  )
 
   const remaining = Math.max(0, amount - countSelected)
   const disabledMore = remaining === 0
@@ -98,6 +107,39 @@ export function SchedulePickerDialog(props: {
     })
   }
 
+  const toggleMonthlyNthWeekday = (weekIndex: number, uiIndex: number) => {
+    const mondayFirstMap = [1,2,3,4,5,6,0]
+    const weekday = mondayFirstMap[uiIndex]
+    const key = `${weekIndex}-${weekday}`
+    setMonthlyNthWeekdays((cur) => {
+      const has = cur.includes(key)
+      if (has) return cur.filter((x) => x !== key)
+      if (disabledMore) return cur
+      return [...cur, key]
+    })
+  }
+
+  const toggleMonthlyNthWeekdayColumn = (uiIndex: number) => {
+    const mondayFirstMap = [1,2,3,4,5,6,0]
+    const weekday = mondayFirstMap[uiIndex]
+    const keys = [1,2,3,4].map(w => `${w}-${weekday}`)
+    setMonthlyNthWeekdays((cur) => {
+      const allSelected = keys.every(k => cur.includes(k))
+      if (allSelected) {
+        return cur.filter(k => !keys.includes(k))
+      }
+      // Add keys until we hit the limit
+      const result = [...cur]
+      for (const k of keys) {
+        if (result.includes(k)) continue
+        if (disabledMore) break
+        if (result.length >= amount) break
+        result.push(k)
+      }
+      return result
+    })
+  }
+
   const save = async () => {
     setError(null)
     if (countSelected !== amount) {
@@ -108,7 +150,10 @@ export function SchedulePickerDialog(props: {
     try {
       const selection: ScheduleSelection = {}
       if (period === 'week') selection.weeklyDays = weeklyDays.sort((a, b) => a - b)
-      if (period === 'month') selection.monthlyDays = monthlyDays.sort((a, b) => a - b)
+      if (period === 'month') {
+        selection.monthlyNthWeekdays = [...monthlyNthWeekdays].sort()
+        selection.monthlyDays = []
+      }
       if (period === 'year') selection.yearlyDays = [...yearlyDays].sort()
       await onSave(selection)
       onOpenChange(false)
@@ -169,9 +214,8 @@ export function SchedulePickerDialog(props: {
           {(!lockToYear && period === 'week') && (
             <WeekPicker selectedNumbers={weeklyDays} onToggleNumber={toggleWeekdayUIIndex} disabledMore={disabledMore} />
           )}
-
-          {(!lockToYear && period === 'month') && (
-            <MonthPicker selected={monthlyDays} onToggle={toggleMonthDay} disabledMore={disabledMore} />
+          {period === 'month' && (
+            <MonthNthWeekdayPicker selected={monthlyNthWeekdays} onToggle={toggleMonthlyNthWeekday} onToggleHeader={toggleMonthlyNthWeekdayColumn} disabledMore={disabledMore} />
           )}
 
           {(lockToYear || period === 'year') && (
@@ -241,6 +285,49 @@ function MonthPicker({ selected, onToggle, disabledMore }: { selected: number[];
           </button>
         )
       })}
+    </div>
+  )
+}
+
+function MonthNthWeekdayPicker({ selected, onToggle, onToggleHeader, disabledMore }: { selected: string[]; onToggle: (weekIndex: number, uiIndex: number) => void; onToggleHeader: (uiIndex: number) => void; disabledMore: boolean }) {
+  const labels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+  const weekNames = ['1st','2nd','3rd','4th']
+  const mondayFirstMap = [1,2,3,4,5,6,0]
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-[60px_repeat(7,minmax(0,1fr))] gap-2 items-center">
+        <div className="text-xs opacity-70 text-center">WEEK</div>
+        {labels.map((l, uiIndex) => (
+          <button
+            key={l}
+            type="button"
+            onClick={() => onToggleHeader(uiIndex)}
+            className={`h-8 rounded-lg border text-[11px] ${'bg-white hover:bg-stone-50'}`}
+          >
+            {l}
+          </button>
+        ))}
+      </div>
+      {weekNames.map((wn, rowIdx) => (
+        <div key={wn} className="grid grid-cols-[60px_repeat(7,minmax(0,1fr))] gap-2 items-center">
+          <div className="text-xs opacity-70 text-center">{rowIdx + 1}</div>
+          {labels.map((_, uiIndex) => {
+            const weekday = mondayFirstMap[uiIndex]
+            const key = `${rowIdx + 1}-${weekday}`
+            const isOn = selected.includes(key)
+            return (
+              <button
+                key={uiIndex}
+                type="button"
+                onClick={() => onToggle(rowIdx + 1, uiIndex)}
+                className={`h-10 rounded-xl border text-sm ${isOn ? 'bg-black text-white' : 'bg-white hover:bg-stone-50'} ${!isOn && disabledMore ? 'opacity-60 cursor-not-allowed' : ''}`}
+                disabled={!isOn && disabledMore}
+                aria-label={`${wn} ${labels[uiIndex]}`}
+              />
+            )
+          })}
+        </div>
+      ))}
     </div>
   )
 }
