@@ -346,6 +346,12 @@ export async function ensureDailyTasksForGardens(dayIso: string): Promise<void> 
   if (error) throw new Error(error.message)
 }
 
+export async function computeGardenTaskForDay(params: { gardenId: string; dayIso: string }): Promise<void> {
+  const { gardenId, dayIso } = params
+  const { error } = await supabase.rpc('compute_garden_task_for_day', { _garden_id: gardenId, _day: dayIso })
+  if (error) throw new Error(error.message)
+}
+
 export async function getGardenTodayProgress(gardenId: string, dayIso: string): Promise<{ due: number; completed: number }> {
   // Fetch garden plant ids
   const { data: plantRows, error: plantErr } = await supabase

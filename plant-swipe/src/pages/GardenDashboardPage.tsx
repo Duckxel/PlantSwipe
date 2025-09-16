@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
 import type { Garden } from '@/types/garden'
 import type { Plant } from '@/types/plant'
-import { getGarden, getGardenPlants, getGardenMembers, addMemberByEmail, fetchScheduleForPlants, markGardenPlantWatered, updateGardenPlantFrequency, deleteGardenPlant, reseedSchedule, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, getGardenInventory, adjustInventoryAndLogTransaction, updateGardenMemberRole, removeGardenMember } from '@/lib/gardens'
+import { getGarden, getGardenPlants, getGardenMembers, addMemberByEmail, fetchScheduleForPlants, markGardenPlantWatered, updateGardenPlantFrequency, deleteGardenPlant, reseedSchedule, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, getGardenInventory, adjustInventoryAndLogTransaction, updateGardenMemberRole, removeGardenMember, computeGardenTaskForDay } from '@/lib/gardens'
 import { supabase } from '@/lib/supabaseClient'
 import { useAuth } from '@/context/AuthContext'
 
@@ -78,7 +78,8 @@ export const GardenDashboardPage: React.FC = () => {
       const nowIso = await fetchServerNowISO()
       const today = nowIso.slice(0,10)
       setServerToday(today)
-      await ensureDailyTasksForGardens(today)
+      // Ensure today's task row reflects current due plants for this garden
+      await computeGardenTaskForDay({ gardenId: id, dayIso: today })
       const start = new Date(today)
       start.setDate(start.getDate() - 29)
       const startIso = start.toISOString().slice(0,10)
@@ -375,9 +376,9 @@ export const GardenDashboardPage: React.FC = () => {
           .is('completed_at', null)
       }
       await reseedSchedule(pendingGardenPlantId)
-      if (serverToday) {
-        // Ensure tasks row exists; success will be derived from schedule completion elsewhere
-        await ensureDailyTasksForGardens(serverToday)
+      if (serverToday && garden?.id) {
+        // Recompute today's task for this garden to reflect new schedule
+        await computeGardenTaskForDay({ gardenId: garden.id, dayIso: serverToday })
       }
       await load()
       if (id) navigate(`/garden/${id}/plants`)
@@ -451,7 +452,7 @@ export const GardenDashboardPage: React.FC = () => {
                             <div className="mt-2 flex gap-2 flex-wrap">
                               <Button variant="secondary" className="rounded-2xl" onClick={() => openEditSchedule(gp)}>Schedule</Button>
                               <EditPlantButton gp={gp} gardenId={id!} onChanged={load} serverToday={serverToday} />
-                              <Button variant="secondary" className="rounded-2xl" onClick={async () => { await deleteGardenPlant(gp.id); if (serverToday) { await ensureDailyTasksForGardens(serverToday) } await load() }}>Delete</Button>
+                              <Button variant="secondary" className="rounded-2xl" onClick={async () => { await deleteGardenPlant(gp.id); if (serverToday && id) { await computeGardenTaskForDay({ gardenId: id, dayIso: serverToday }) } await load() }}>Delete</Button>
                             </div>
                           </div>
                         </div>
@@ -754,7 +755,7 @@ function EditPlantButton({ gp, gardenId, onChanged, serverToday }: { gp: any; ga
       // Update count via inventory table; delete plant if 0
       if (count <= 0) {
         await supabase.from('garden_plants').delete().eq('id', gp.id)
-        if (serverToday) await ensureDailyTasksForGardens(serverToday)
+        if (serverToday) await computeGardenTaskForDay({ gardenId, dayIso: serverToday })
       } else {
         // Compute delta by reading current inventory
         const { data: inv } = await supabase
