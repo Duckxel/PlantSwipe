@@ -462,7 +462,6 @@ export default function PlantSwipe() {
                       plants={filtered}
                       openInfo={(p) => setOpenInfo(p)}
                       likedIds={likedIds}
-                      onToggleLike={(id) => toggleLiked(id)}
                     />
                   }
                 />

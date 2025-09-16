@@ -3,11 +3,11 @@ import type { Plant } from "@/types/plant"
 import { rarityTone, seasonBadge } from "@/constants/badges"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Heart, ListFilter } from "lucide-react"
+import { ListFilter } from "lucide-react"
 
-interface SearchPageProps { plants: Plant[]; openInfo: (p: Plant) => void; likedIds?: string[]; onToggleLike?: (id: string) => void }
+interface SearchPageProps { plants: Plant[]; openInfo: (p: Plant) => void; likedIds?: string[] }
 
-export const SearchPage: React.FC<SearchPageProps> = ({ plants, openInfo, likedIds = [], onToggleLike }) => (
+export const SearchPage: React.FC<SearchPageProps> = ({ plants, openInfo, likedIds = [] }) => (
   <div className="max-w-6xl mx-auto mt-8 px-4 md:px-0">
     <div className="flex items-center gap-2 text-sm mb-3">
       <ListFilter className="h-4 w-4" />
@@ -23,16 +23,6 @@ export const SearchPage: React.FC<SearchPageProps> = ({ plants, openInfo, likedI
           tabIndex={0}
           onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => { if (e.key === 'Enter') openInfo(p) }}
         >
-          <div className="absolute bottom-2 right-2 z-10">
-            <button
-              onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); onToggleLike && onToggleLike(p.id) }}
-              aria-pressed={likedIds.includes(p.id)}
-              aria-label={likedIds.includes(p.id) ? 'Unlike' : 'Like'}
-              className={`h-8 w-8 rounded-full flex items-center justify-center shadow border transition ${likedIds.includes(p.id) ? 'bg-rose-600 text-white' : 'bg-white/90 text-black hover:bg-white'}`}
-            >
-              <Heart className={likedIds.includes(p.id) ? 'fill-current' : ''} />
-            </button>
-          </div>
           <div className="grid grid-cols-3 gap-0">
             <div className="col-span-1 h-36 bg-cover bg-center" style={{ backgroundImage: `url(${p.image})` }} />
             <div className="col-span-2 p-3">
@@ -41,6 +31,9 @@ export const SearchPage: React.FC<SearchPageProps> = ({ plants, openInfo, likedI
                 {p.seasons.map((s) => (
                   <span key={s} className={`text-[10px] px-2 py-0.5 rounded-full ${seasonBadge[s]}`}>{s}</span>
                 ))}
+                {likedIds.includes(p.id) && (
+                  <Badge className="rounded-xl bg-rose-600 text-white">Liked</Badge>
+                )}
               </div>
               <div className="font-medium">{p.name}</div>
               <div className="text-xs italic opacity-60">{p.scientificName}</div>
