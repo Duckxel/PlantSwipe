@@ -20,3 +20,19 @@ export function getEnvAny(names: string[], fallback?: string): string {
   if (fallback !== undefined) return fallback
   throw new Error(`Missing environment variable. Tried: ${names.join(', ')}`)
 }
+
+export function deriveWaterLevelFromFrequency(
+  period?: 'day' | 'week' | 'month' | 'year',
+  amountRaw?: number | null
+): 'Low' | 'Medium' | 'High' | null {
+  if (!period) return null
+  const amount = Number(amountRaw || 0)
+  if (period === 'day') return 'High'
+  if (period === 'week') {
+    if (amount >= 3) return 'High'
+    if (amount === 2) return 'Medium'
+    if (amount <= 1) return 'Low'
+  }
+  if (period === 'month' || period === 'year') return 'Low'
+  return null
+}

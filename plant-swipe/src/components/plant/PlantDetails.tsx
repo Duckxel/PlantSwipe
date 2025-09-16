@@ -8,6 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SunMedium, Droplets, Leaf } from "lucide-react";
 import type { Plant } from "@/types/plant";
 import { rarityTone, seasonBadge } from "@/constants/badges";
+import { deriveWaterLevelFromFrequency } from "@/lib/utils";
+import { supabase } from "@/lib/supabaseClient";
 
 export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void }> = ({ plant, onClose }) => {
   const navigate = useNavigate()
@@ -20,6 +22,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void }> = ({ 
   const freqAmountRaw = plant.waterFreqAmount ?? plant.waterFreqValue
   const freqAmount = typeof freqAmountRaw === 'number' ? freqAmountRaw : Number(freqAmountRaw || 0)
   const freqPeriod = (plant.waterFreqPeriod || plant.waterFreqUnit) as 'day' | 'week' | 'month' | 'year' | undefined
+  const derivedWater = deriveWaterLevelFromFrequency(freqPeriod, freqAmount) || (plant.care.water as any) || 'Low'
   const freqLabel = freqPeriod
     ? `${freqAmount > 0 ? `${freqAmount} ${freqAmount === 1 ? 'time' : 'times'} ` : ''}per ${freqPeriod}`
     : null
@@ -35,8 +38,8 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void }> = ({ 
       </div>
 
       <div className="grid md:grid-cols-3 gap-3">
-        <Fact icon={<SunMedium className="h-4 w-4" />} label="Sunlight" value={plant.care.sunlight} />
-        <Fact icon={<Droplets className="h-4 w-4" />} label="Water" value={plant.care.water} />
+        <Fact icon={<SunMedium className="h-4 w-4" />} label="Sunlight" value={plant.care.sunlight} sub={plant.care.soil ? String(plant.care.soil) : undefined} />
+        <Fact icon={<Droplets className="h-4 w-4" />} label="Water" value={derivedWater} sub={freqLabel || undefined} />
         <Fact icon={<Leaf className="h-4 w-4" />} label="Difficulty" value={plant.care.difficulty} />
       </div>
 
@@ -71,7 +74,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void }> = ({ 
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
           <div><span className="font-medium">Sunlight:</span> {plant.care.sunlight}</div>
-            <div><span className="font-medium">Water:</span> {plant.care.water}</div>
+            <div><span className="font-medium">Water:</span> {derivedWater}</div>
             {freqLabel && (
               <div>
                 <span className="font-medium">Water frequency:</span>
@@ -84,20 +87,31 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void }> = ({ 
         </CardContent>
       </Card>
 
-      <div className="flex justify-end gap-2">
-        <Button variant="secondary" className="rounded-2xl" onClick={() => { navigate(`/plants/${plant.id}/edit`); onClose() }}>Edit</Button>
-        <Button className="rounded-2xl" onClick={onClose}>Close</Button>
+      <div className="flex justify-between gap-2">
+        <Button variant="destructive" className="rounded-2xl" onClick={async () => {
+          const yes = window.confirm('Delete this plant? This will fail if it is used in any garden.')
+          if (!yes) return
+          const { error } = await supabase.from('plants').delete().eq('id', plant.id)
+          if (error) { alert(error.message); return }
+          onClose()
+          window.location.reload()
+        }}>Delete</Button>
+        <div className="flex gap-2">
+          <Button variant="secondary" className="rounded-2xl" onClick={() => { navigate(`/plants/${plant.id}/edit`); onClose() }}>Edit</Button>
+          <Button className="rounded-2xl" onClick={onClose}>Close</Button>
+        </div>
       </div>
     </motion.div>
   );
 };
 
-const Fact = ({ icon, label, value }: { icon: React.ReactNode; label: string; value: React.ReactNode }) => (
+const Fact = ({ icon, label, value, sub }: { icon: React.ReactNode; label: string; value: React.ReactNode; sub?: React.ReactNode }) => (
   <div className="flex items-center gap-3 rounded-2xl border bg-white p-3 shadow-sm">
     <div className="h-9 w-9 rounded-xl bg-stone-100 flex items-center justify-center">{icon}</div>
     <div>
       <div className="text-xs opacity-60">{label}</div>
       <div className="text-sm font-medium">{value}</div>
+      {sub ? <div className="text-xs opacity-70 mt-0.5">{sub}</div> : null}
     </div>
   </div>
 );
