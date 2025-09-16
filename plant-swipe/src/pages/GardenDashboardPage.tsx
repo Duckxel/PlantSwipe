@@ -206,7 +206,7 @@ export const GardenDashboardPage: React.FC = () => {
         const idxTodayForStats = isToday ? weekDaysIso.indexOf(today) : -1
         const dueOverride = isToday && idxTodayForStats >= 0 ? (Object.values(perPlant).reduce((acc: number, arr: any) => acc + ((arr as number[]).includes(idxTodayForStats) ? 1 : 0), 0)) : undefined
         const dueVal = dueOverride !== undefined ? dueOverride : entry.due
-        const success = dueVal > 0 ? (entry.completed >= dueVal) : Boolean(trow?.success)
+        const success = dueVal > 0 ? (entry.completed >= dueVal) : true
         days.push({ date: ds, due: dueVal, completed: entry.completed, success })
       }
       // Keep dueToday from schedule definitions (already set)
