@@ -32,12 +32,12 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
 
       <div className="rounded-2xl overflow-hidden shadow relative">
         <div className="h-56 bg-cover bg-center select-none" style={{ backgroundImage: `url(${plant.image})`, userSelect: 'none' as any }} />
-        <div className="absolute top-3 right-3">
+        <div className="absolute bottom-3 right-3">
           <button
             onClick={() => onToggleLike && onToggleLike()}
             aria-pressed={liked}
             aria-label={liked ? 'Unlike' : 'Like'}
-            className={`h-10 w-10 rounded-full flex items-center justify-center shadow border transition ${liked ? 'bg-rose-600 text-white' : 'bg-white/90 text-black hover:bg-white'}`}
+            className={`h-8 w-8 rounded-full flex items-center justify-center shadow border transition ${liked ? 'bg-rose-600 text-white' : 'bg-white/90 text-black hover:bg-white'}`}
           >
             <Heart className={liked ? 'fill-current' : ''} />
           </button>

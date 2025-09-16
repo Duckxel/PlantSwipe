@@ -41,12 +41,12 @@ export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, 
                 <div className="h-2/3 relative">
                   <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${current.image})` }} />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
-                  <div className="absolute top-3 right-3 z-10">
+                  <div className="absolute top-2 right-2 z-10">
                     <button
                       onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); onToggleLike && onToggleLike() }}
                       aria-pressed={liked}
                       aria-label={liked ? 'Unlike' : 'Like'}
-                      className={`h-10 w-10 rounded-full flex items-center justify-center shadow border transition ${liked ? 'bg-rose-600 text-white' : 'bg-white/90 text-black hover:bg-white'}`}
+                      className={`h-8 w-8 rounded-full flex items-center justify-center shadow border transition ${liked ? 'bg-rose-600 text-white' : 'bg-white/90 text-black hover:bg-white'}`}
                     >
                       <Heart className={liked ? 'fill-current' : ''} />
                     </button>

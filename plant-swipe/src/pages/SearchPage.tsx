@@ -17,25 +17,24 @@ export const SearchPage: React.FC<SearchPageProps> = ({ plants, openInfo, likedI
       {plants.map((p) => (
         <Card
           key={p.id}
-          className="rounded-2xl overflow-hidden cursor-pointer"
+          className="relative rounded-2xl overflow-hidden cursor-pointer"
           onClick={() => openInfo(p)}
           role="button"
           tabIndex={0}
           onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => { if (e.key === 'Enter') openInfo(p) }}
         >
+          <div className="absolute top-2 right-2 z-10">
+            <button
+              onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); onToggleLike && onToggleLike(p.id) }}
+              aria-pressed={likedIds.includes(p.id)}
+              aria-label={likedIds.includes(p.id) ? 'Unlike' : 'Like'}
+              className={`h-8 w-8 rounded-full flex items-center justify-center shadow border transition ${likedIds.includes(p.id) ? 'bg-rose-600 text-white' : 'bg-white/90 text-black hover:bg-white'}`}
+            >
+              <Heart className={likedIds.includes(p.id) ? 'fill-current' : ''} />
+            </button>
+          </div>
           <div className="grid grid-cols-3 gap-0">
-            <div className="col-span-1 h-36 bg-cover bg-center relative" style={{ backgroundImage: `url(${p.image})` }}>
-              <div className="absolute top-2 right-2">
-                <button
-                  onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); onToggleLike && onToggleLike(p.id) }}
-                  aria-pressed={likedIds.includes(p.id)}
-                  aria-label={likedIds.includes(p.id) ? 'Unlike' : 'Like'}
-                  className={`h-8 w-8 rounded-full flex items-center justify-center shadow border transition ${likedIds.includes(p.id) ? 'bg-rose-600 text-white' : 'bg-white/90 text-black hover:bg-white'}`}
-                >
-                  <Heart className={likedIds.includes(p.id) ? 'fill-current' : ''} />
-                </button>
-              </div>
-            </div>
+            <div className="col-span-1 h-36 bg-cover bg-center" style={{ backgroundImage: `url(${p.image})` }} />
             <div className="col-span-2 p-3">
               <div className="flex items-center gap-2 mb-1">
                 <Badge className={`${rarityTone[p.rarity]} rounded-xl`}>{p.rarity}</Badge>
