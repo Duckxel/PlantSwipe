@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, NavLink, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -17,8 +17,17 @@ type TabKey = 'overview' | 'plants' | 'routine' | 'settings'
 
 export const GardenDashboardPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
+  const location = useLocation()
   const [garden, setGarden] = React.useState<Garden | null>(null)
   const [tab, setTab] = React.useState<TabKey>('overview')
+  // derive tab from URL path segment after /garden/:id
+  React.useEffect(() => {
+    const base = `/garden/${id || ''}`
+    const rest = location.pathname.startsWith(base) ? location.pathname.slice(base.length) : ''
+    const seg = rest.replace(/^\//, '').split('/')[0] as TabKey
+    setTab((seg as TabKey) || 'overview')
+  }, [location.pathname, id])
   const [plants, setPlants] = React.useState<Array<any>>([])
   const [members, setMembers] = React.useState<Array<{ userId: string; displayName?: string | null; role: 'owner' | 'member' }>>([])
   const [loading, setLoading] = React.useState(true)
@@ -363,7 +372,7 @@ export const GardenDashboardPage: React.FC = () => {
         await ensureDailyTasksForGardens(serverToday)
       }
       await load()
-      setTab('plants')
+      if (id) navigate(`/garden/${id}/plants`)
     } catch (e: any) {
       setError(e?.message || 'Failed to save schedule')
       throw e
@@ -383,7 +392,7 @@ export const GardenDashboardPage: React.FC = () => {
         await upsertGardenTask({ gardenId: garden.id, day: serverToday, gardenPlantId, success: true })
       }
       await load()
-      setTab('routine')
+      if (id) navigate(`/garden/${id}/routine`)
     } catch (e: any) {
       setError(e?.message || 'Failed to log watering')
     }
@@ -400,78 +409,77 @@ export const GardenDashboardPage: React.FC = () => {
           <aside className="space-y-2 lg:sticky lg:top-4 self-start">
             <div className="text-xl font-semibold">{garden.name}</div>
             <nav className="flex lg:flex-col gap-2">
-              {([ 
+              {([
                 ['overview','Overview'],
                 ['plants','Plants'],
                 ['routine','Routine'],
                 ['settings','Settings'],
               ] as Array<[TabKey, string]>).map(([k, label]) => (
-                <Button key={k} variant={tab === k ? 'default' : 'secondary'} className="rounded-2xl" onClick={() => setTab(k)}>{label}</Button>
+                <Button key={k} asChild variant={tab === k ? 'default' : 'secondary'} className="rounded-2xl">
+                  <NavLink to={`/garden/${id}/${k}`} className="no-underline">{label}</NavLink>
+                </Button>
               ))}
             </nav>
           </aside>
           <main className="min-h-[60vh]">
-            {tab === 'overview' && (
-              <OverviewSection plants={plants} membersCount={members.length} serverToday={serverToday} dailyStats={dailyStats} totalOnHand={totalOnHand} speciesOnHand={speciesOnHand} />
-            )}
-
-            {tab === 'plants' && (
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <div className="text-lg font-medium">Plants in this garden</div>
-                  <Button className="rounded-2xl" onClick={() => setAddOpen(true)}>Add Plant</Button>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {plants.map((gp: any) => (
-                    <Card key={gp.id} className="rounded-2xl overflow-hidden">
-                      <div className="grid grid-cols-3 gap-0">
-                        <div className="col-span-1 h-36 bg-cover bg-center" style={{ backgroundImage: `url(${gp.plant?.image || ''})` }} />
-                        <div className="col-span-2 p-3">
-                          <div className="font-medium">{gp.nickname || gp.plant?.name}</div>
-                          {gp.nickname && <div className="text-xs opacity-60">{gp.plant?.name}</div>}
-                          <div className="text-xs opacity-60">On hand: {inventoryCounts[gp.plantId] ?? 0}</div>
-                          <div className="text-xs opacity-60">Frequency: {gp.overrideWaterFreqValue ? `${gp.overrideWaterFreqValue} / ${gp.overrideWaterFreqUnit}` : 'not set'}</div>
-                          <div className="mt-2 flex gap-2 flex-wrap">
-                            <Button variant="secondary" className="rounded-2xl" onClick={() => openEditSchedule(gp)}>Schedule</Button>
-                            <EditPlantButton gp={gp} gardenId={id!} onChanged={load} serverToday={serverToday} />
-                            <Button variant="secondary" className="rounded-2xl" onClick={async () => { await deleteGardenPlant(gp.id); if (serverToday) { await ensureDailyTasksForGardens(serverToday) } await load() }}>Delete</Button>
+            <Routes>
+              <Route path="overview" element={<OverviewSection plants={plants} membersCount={members.length} serverToday={serverToday} dailyStats={dailyStats} totalOnHand={totalOnHand} speciesOnHand={speciesOnHand} />} />
+              <Route path="plants" element={(
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <div className="text-lg font-medium">Plants in this garden</div>
+                    <Button className="rounded-2xl" onClick={() => setAddOpen(true)}>Add Plant</Button>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {plants.map((gp: any) => (
+                      <Card key={gp.id} className="rounded-2xl overflow-hidden">
+                        <div className="grid grid-cols-3 gap-0">
+                          <div className="col-span-1 h-36 bg-cover bg-center" style={{ backgroundImage: `url(${gp.plant?.image || ''})` }} />
+                          <div className="col-span-2 p-3">
+                            <div className="font-medium">{gp.nickname || gp.plant?.name}</div>
+                            {gp.nickname && <div className="text-xs opacity-60">{gp.plant?.name}</div>}
+                            <div className="text-xs opacity-60">On hand: {inventoryCounts[gp.plantId] ?? 0}</div>
+                            <div className="text-xs opacity-60">Frequency: {gp.overrideWaterFreqValue ? `${gp.overrideWaterFreqValue} / ${gp.overrideWaterFreqUnit}` : 'not set'}</div>
+                            <div className="mt-2 flex gap-2 flex-wrap">
+                              <Button variant="secondary" className="rounded-2xl" onClick={() => openEditSchedule(gp)}>Schedule</Button>
+                              <EditPlantButton gp={gp} gardenId={id!} onChanged={load} serverToday={serverToday} />
+                              <Button variant="secondary" className="rounded-2xl" onClick={async () => { await deleteGardenPlant(gp.id); if (serverToday) { await ensureDailyTasksForGardens(serverToday) } await load() }}>Delete</Button>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </Card>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {tab === 'routine' && (
-              <RoutineSection plants={plants} duePlantIds={dueToday} onLogWater={logWater} weekDays={weekDays} weekCounts={weekCounts} serverToday={serverToday} dueThisWeekByPlant={dueThisWeekByPlant} />
-            )}
-
-            {tab === 'settings' && (
-              <div className="space-y-6">
-                <div className="space-y-3">
-                  <div className="text-lg font-medium">Garden details</div>
-                  <Card className="rounded-2xl p-4">
-                    <GardenDetailsEditor garden={garden} onSaved={load} />
-                  </Card>
-                </div>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="text-lg font-medium">Manage members</div>
-                    <Button className="rounded-2xl" onClick={() => setInviteOpen(true)}>Add member</Button>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {members.map(m => (
-                      <MemberCard key={m.userId} member={m} gardenId={id!} onChanged={load} />
+                      </Card>
                     ))}
                   </div>
                 </div>
-                <div className="pt-2">
-                  <Button variant="destructive" className="rounded-2xl" onClick={async () => { if (!id) return; if (!confirm('Delete this garden? This cannot be undone.')) return; try { await supabase.from('gardens').delete().eq('id', id); window.location.href = '/gardens' } catch (e) { alert('Failed to delete garden') } }}>Delete garden</Button>
+              )} />
+              <Route path="routine" element={<RoutineSection plants={plants} duePlantIds={dueToday} onLogWater={logWater} weekDays={weekDays} weekCounts={weekCounts} serverToday={serverToday} dueThisWeekByPlant={dueThisWeekByPlant} />} />
+              <Route path="settings" element={(
+                <div className="space-y-6">
+                  <div className="space-y-3">
+                    <div className="text-lg font-medium">Garden details</div>
+                    <Card className="rounded-2xl p-4">
+                      <GardenDetailsEditor garden={garden} onSaved={load} />
+                    </Card>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="text-lg font-medium">Manage members</div>
+                      <Button className="rounded-2xl" onClick={() => setInviteOpen(true)}>Add member</Button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {members.map(m => (
+                        <MemberCard key={m.userId} member={m} gardenId={id!} onChanged={load} />
+                      ))}
+                    </div>
+                  </div>
+                  <div className="pt-2">
+                    <Button variant="destructive" className="rounded-2xl" onClick={async () => { if (!id) return; if (!confirm('Delete this garden? This cannot be undone.')) return; try { await supabase.from('gardens').delete().eq('id', id); window.location.href = '/gardens' } catch (e) { alert('Failed to delete garden') } }}>Delete garden</Button>
+                  </div>
                 </div>
-              </div>
-            )}
+              )} />
+              <Route path="" element={<Navigate to={`overview`} replace />} />
+              <Route path="*" element={<Navigate to={`overview`} replace />} />
+            </Routes>
           </main>
 
           {/* Add Plant Dialog */}

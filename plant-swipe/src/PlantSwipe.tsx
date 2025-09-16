@@ -454,7 +454,7 @@ export default function PlantSwipe() {
                   )}
                 />
                 <Route path="/gardens" element={<GardenListPage />} />
-                <Route path="/garden/:id" element={<GardenDashboardPage />} />
+                <Route path="/garden/:id/*" element={<GardenDashboardPage />} />
                 <Route
                   path="/search"
                   element={
