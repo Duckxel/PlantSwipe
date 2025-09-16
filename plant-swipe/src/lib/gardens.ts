@@ -205,6 +205,26 @@ export async function addGardenMember(params: { gardenId: string; userId: string
   if (error) throw new Error(error.message)
 }
 
+export async function updateGardenMemberRole(params: { gardenId: string; userId: string; role: 'member' | 'owner' }): Promise<void> {
+  const { gardenId, userId, role } = params
+  const { error } = await supabase
+    .from('garden_members')
+    .update({ role })
+    .eq('garden_id', gardenId)
+    .eq('user_id', userId)
+  if (error) throw new Error(error.message)
+}
+
+export async function removeGardenMember(params: { gardenId: string; userId: string }): Promise<void> {
+  const { gardenId, userId } = params
+  const { error } = await supabase
+    .from('garden_members')
+    .delete()
+    .eq('garden_id', gardenId)
+    .eq('user_id', userId)
+  if (error) throw new Error(error.message)
+}
+
 export async function addMemberByEmail(params: { gardenId: string; email: string; role?: 'member' | 'owner' }): Promise<{ ok: boolean; reason?: string }> {
   const { gardenId, email, role = 'member' } = params
   const { data, error } = await supabase.rpc('get_user_id_by_email', { _email: email })

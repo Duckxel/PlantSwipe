@@ -209,6 +209,26 @@ do $$ begin
     );
 end $$;
 
+-- Allow owners to update members (e.g., promote to owner)
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_members' and policyname = 'gm_update') then
+    drop policy gm_update on public.garden_members;
+  end if;
+  create policy gm_update on public.garden_members for update to authenticated
+    using (
+      exists (
+        select 1 from public.garden_members gm
+        where gm.garden_id = garden_id and gm.user_id = auth.uid() and gm.role = 'owner'
+      )
+    )
+    with check (
+      exists (
+        select 1 from public.garden_members gm
+        where gm.garden_id = garden_id and gm.user_id = auth.uid() and gm.role = 'owner'
+      )
+    );
+end $$;
+
 -- Garden plants: members can select; members can insert/update/delete
 do $$ begin
   if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_plants' and policyname = 'gp_select') then
