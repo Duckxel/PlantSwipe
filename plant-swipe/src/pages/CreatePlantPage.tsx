@@ -43,7 +43,6 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
   const [description, setDescription] = React.useState("")
   const [imageUrl, setImageUrl] = React.useState("")
   const [careSunlight, setCareSunlight] = React.useState<Plant["care"]["sunlight"]>("Low")
-  const [careWater, setCareWater] = React.useState<Plant["care"]["water"]>("Low")
   const [careSoil, setCareSoil] = React.useState("")
   const [careDifficulty, setCareDifficulty] = React.useState<Plant["care"]["difficulty"]>("Easy")
   const [seedsAvailable, setSeedsAvailable] = React.useState(false)
@@ -99,7 +98,6 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
         description: description || null,
         image_url: imageUrl || null,
         care_sunlight: careSunlight,
-        care_water: careWater,
         care_soil: careSoil,
         care_difficulty: careDifficulty,
         seeds_available: seedsAvailable,
@@ -172,14 +170,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
               ))}
             </select>
           </div>
-          <div className="grid gap-2">
-            <Label htmlFor="plant-water">Care: Water</Label>
-            <select id="plant-water" className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm" value={careWater} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setCareWater(e.target.value as Plant["care"]["water"]) }>
-              {(["Low", "Medium", "High"] as const).map((v) => (
-                <option key={v} value={v}>{v}</option>
-              ))}
-            </select>
-          </div>
+          {/* Water care is derived from frequency; no manual input */}
           <div className="grid gap-2">
             <Label htmlFor="plant-soil">Care: Soil</Label>
             <Input id="plant-soil" value={careSoil} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCareSoil(e.target.value)} />

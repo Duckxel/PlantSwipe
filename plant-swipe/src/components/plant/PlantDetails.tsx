@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SunMedium, Droplets, Leaf } from "lucide-react";
 import type { Plant } from "@/types/plant";
 import { rarityTone, seasonBadge } from "@/constants/badges";
+import { deriveWaterLevelFromFrequency } from "@/lib/utils";
 
 export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void }> = ({ plant, onClose }) => {
   const navigate = useNavigate()
@@ -20,6 +21,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void }> = ({ 
   const freqAmountRaw = plant.waterFreqAmount ?? plant.waterFreqValue
   const freqAmount = typeof freqAmountRaw === 'number' ? freqAmountRaw : Number(freqAmountRaw || 0)
   const freqPeriod = (plant.waterFreqPeriod || plant.waterFreqUnit) as 'day' | 'week' | 'month' | 'year' | undefined
+  const derivedWater = deriveWaterLevelFromFrequency(freqPeriod, freqAmount) || (plant.care.water as any) || 'Low'
   const freqLabel = freqPeriod
     ? `${freqAmount > 0 ? `${freqAmount} ${freqAmount === 1 ? 'time' : 'times'} ` : ''}per ${freqPeriod}`
     : null
@@ -36,7 +38,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void }> = ({ 
 
       <div className="grid md:grid-cols-3 gap-3">
         <Fact icon={<SunMedium className="h-4 w-4" />} label="Sunlight" value={plant.care.sunlight} />
-        <Fact icon={<Droplets className="h-4 w-4" />} label="Water" value={plant.care.water} />
+        <Fact icon={<Droplets className="h-4 w-4" />} label="Water" value={derivedWater} />
         <Fact icon={<Leaf className="h-4 w-4" />} label="Difficulty" value={plant.care.difficulty} />
       </div>
 
@@ -71,7 +73,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void }> = ({ 
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
           <div><span className="font-medium">Sunlight:</span> {plant.care.sunlight}</div>
-            <div><span className="font-medium">Water:</span> {plant.care.water}</div>
+            <div><span className="font-medium">Water:</span> {derivedWater}</div>
             {freqLabel && (
               <div>
                 <span className="font-medium">Water frequency:</span>

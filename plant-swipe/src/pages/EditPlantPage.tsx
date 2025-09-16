@@ -28,7 +28,6 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
   const [description, setDescription] = React.useState("")
   const [imageUrl, setImageUrl] = React.useState("")
   const [careSunlight, setCareSunlight] = React.useState<Plant["care"]["sunlight"]>("Low")
-  const [careWater, setCareWater] = React.useState<Plant["care"]["water"]>("Low")
   const [careSoil, setCareSoil] = React.useState("")
   const [careDifficulty, setCareDifficulty] = React.useState<Plant["care"]["difficulty"]>("Easy")
   const [seedsAvailable, setSeedsAvailable] = React.useState(false)
@@ -49,7 +48,7 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
       try {
         const { data, error: qerr } = await supabase
           .from('plants')
-          .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_period, water_freq_amount, water_freq_unit, water_freq_value')
+          .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_soil, care_difficulty, seeds_available, water_freq_period, water_freq_amount, water_freq_unit, water_freq_value')
           .eq('id', id)
           .maybeSingle()
         if (qerr) throw new Error(qerr.message)
@@ -64,7 +63,6 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
         setDescription(String(data.description || ''))
         setImageUrl(String(data.image_url || ''))
         setCareSunlight((data.care_sunlight || 'Low') as Plant['care']['sunlight'])
-        setCareWater((data.care_water || 'Low') as Plant['care']['water'])
         setCareSoil(String(data.care_soil || ''))
         setCareDifficulty((data.care_difficulty || 'Easy') as Plant['care']['difficulty'])
         setSeedsAvailable(Boolean(data.seeds_available ?? false))
@@ -107,7 +105,6 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
           description: description || null,
           image_url: imageUrl || null,
           care_sunlight: careSunlight,
-          care_water: careWater,
           care_soil: careSoil,
           care_difficulty: careDifficulty,
           seeds_available: seedsAvailable,
@@ -183,14 +180,7 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
                   ))}
                 </select>
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="plant-water">Care: Water</Label>
-                <select id="plant-water" className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm" value={careWater} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setCareWater(e.target.value as Plant["care"]["water"]) }>
-                  {(["Low", "Medium", "High"] as const).map((v) => (
-                    <option key={v} value={v}>{v}</option>
-                  ))}
-                </select>
-              </div>
+              {/* Water care is derived from frequency; no manual input */}
               <div className="grid gap-2">
                 <Label htmlFor="plant-soil">Care: Soil</Label>
                 <Input id="plant-soil" value={careSoil} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCareSoil(e.target.value)} />
