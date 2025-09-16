@@ -352,7 +352,7 @@ export default function PlantSwipe() {
                 <Route path="/create" element={user ? (
                   <CreatePlantPage
                     onCancel={() => navigate('/')}
-                    onSaved={async () => { await loadPlants(); navigate('/gardens') }}
+                    onSaved={async () => { await loadPlants(); navigate('/search') }}
                   />
                 ) : (
                   <Navigate to="/" replace />
