@@ -185,15 +185,27 @@ export async function logWaterEvent(params: { gardenPlantId: string }): Promise<
 export async function getGardenMembers(gardenId: string): Promise<GardenMember[]> {
   const { data, error } = await supabase
     .from('garden_members')
-    .select('garden_id, user_id, role, joined_at, profiles:profiles(display_name)')
+    .select('garden_id, user_id, role, joined_at')
     .eq('garden_id', gardenId)
   if (error) throw new Error(error.message)
-  return (data || []).map((r: any) => ({
+  const rows = (data || []) as any[]
+  const userIds = Array.from(new Set(rows.map(r => String(r.user_id))))
+  let idToName: Record<string, string | null> = {}
+  if (userIds.length > 0) {
+    const { data: profs } = await supabase
+      .from('profiles')
+      .select('id, display_name')
+      .in('id', userIds)
+    for (const p of profs || []) {
+      idToName[String((p as any).id)] = (p as any).display_name || null
+    }
+  }
+  return rows.map((r: any) => ({
     gardenId: String(r.garden_id),
     userId: String(r.user_id),
     role: r.role,
     joinedAt: String(r.joined_at),
-    displayName: r.profiles?.display_name ?? null,
+    displayName: idToName[String(r.user_id)] ?? null,
   }))
 }
 
