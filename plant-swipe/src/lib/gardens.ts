@@ -330,10 +330,14 @@ export async function deleteGardenPlant(gardenPlantId: string): Promise<void> {
 }
 
 export async function fetchServerNowISO(): Promise<string> {
-  const { data, error } = await supabase.rpc('get_server_now')
-  if (error) throw new Error(error.message)
-  const iso = new Date(String(data)).toISOString()
-  return iso
+  try {
+    const { data, error } = await supabase.rpc('get_server_now')
+    if (!error && data) {
+      return new Date(String(data)).toISOString()
+    }
+  } catch {}
+  // Fallback to client time if RPC unavailable (CORS/network outage)
+  return new Date().toISOString()
 }
 
 export async function upsertGardenTask(params: { gardenId: string; day: string; gardenPlantId?: string | null; success?: boolean }): Promise<void> {
