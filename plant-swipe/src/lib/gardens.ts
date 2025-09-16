@@ -344,6 +344,27 @@ export async function ensureDailyTasksForGardens(dayIso: string): Promise<void> 
   if (error) throw new Error(error.message)
 }
 
+export async function getGardenTodayProgress(gardenId: string, dayIso: string): Promise<{ due: number; completed: number }> {
+  // Fetch garden plant ids
+  const { data: plantRows, error: plantErr } = await supabase
+    .from('garden_plants')
+    .select('id')
+    .eq('garden_id', gardenId)
+  if (plantErr) throw new Error(plantErr.message)
+  const gardenPlantIds = (plantRows || []).map((r: any) => String(r.id))
+  if (gardenPlantIds.length === 0) return { due: 0, completed: 0 }
+  // Count today's due and completed from schedule
+  const { data: schedRows, error: schedErr } = await supabase
+    .from('garden_watering_schedule')
+    .select('id, completed_at, garden_plant_id, due_date')
+    .in('garden_plant_id', gardenPlantIds)
+    .eq('due_date', dayIso)
+  if (schedErr) throw new Error(schedErr.message)
+  const due = (schedRows || []).length
+  const completed = (schedRows || []).filter((r: any) => Boolean(r.completed_at)).length
+  return { due, completed }
+}
+
 export async function getGardenInventory(gardenId: string): Promise<Array<{ plantId: string; seedsOnHand: number; plantsOnHand: number; plant?: Plant | null }>> {
   const { data, error } = await supabase
     .from('garden_inventory')
