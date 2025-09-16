@@ -11,6 +11,7 @@ import type { Garden } from '@/types/garden'
 import type { Plant } from '@/types/plant'
 import { getGarden, getGardenPlants, getGardenMembers, addMemberByEmail, fetchScheduleForPlants, markGardenPlantWatered, updateGardenPlantFrequency, deleteGardenPlant, reseedSchedule, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, getGardenInventory, adjustInventoryAndLogTransaction, updateGardenMemberRole, removeGardenMember } from '@/lib/gardens'
 import { supabase } from '@/lib/supabaseClient'
+import { useAuth } from '@/context/AuthContext'
 
 
 type TabKey = 'overview' | 'plants' | 'routine' | 'settings'
@@ -19,6 +20,7 @@ export const GardenDashboardPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const location = useLocation()
+  const { user } = useAuth()
   const [garden, setGarden] = React.useState<Garden | null>(null)
   const [tab, setTab] = React.useState<TabKey>('overview')
   // derive tab from URL path segment after /garden/:id
@@ -219,6 +221,11 @@ export const GardenDashboardPage: React.FC = () => {
   }, [id])
 
   React.useEffect(() => { load() }, [load])
+
+  const viewerIsOwner = React.useMemo(() => {
+    if (!user?.id) return false
+    return members.some(m => m.userId === user.id && m.role === 'owner')
+  }, [members, user?.id])
 
   React.useEffect(() => {
     let ignore = false
@@ -468,13 +475,15 @@ export const GardenDashboardPage: React.FC = () => {
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {members.map(m => (
-                        <MemberCard key={m.userId} member={m} gardenId={id!} onChanged={load} />
+                        <MemberCard key={m.userId} member={m} gardenId={id!} onChanged={load} viewerIsOwner={viewerIsOwner} />
                       ))}
                     </div>
                   </div>
-                  <div className="pt-2">
-                    <Button variant="destructive" className="rounded-2xl" onClick={async () => { if (!id) return; if (!confirm('Delete this garden? This cannot be undone.')) return; try { await supabase.from('gardens').delete().eq('id', id); window.location.href = '/gardens' } catch (e) { alert('Failed to delete garden') } }}>Delete garden</Button>
-                  </div>
+                  {viewerIsOwner && (
+                    <div className="pt-2">
+                      <Button variant="destructive" className="rounded-2xl" onClick={async () => { if (!id) return; if (!confirm('Delete this garden? This cannot be undone.')) return; try { await supabase.from('gardens').delete().eq('id', id); window.location.href = '/gardens' } catch (e) { alert('Failed to delete garden') } }}>Delete garden</Button>
+                    </div>
+                  )}
                 </div>
               )} />
               <Route path="" element={<Navigate to={`overview`} replace />} />
@@ -789,11 +798,11 @@ function EditPlantButton({ gp, gardenId, onChanged, serverToday }: { gp: any; ga
   )
 }
 
-function MemberCard({ member, gardenId, onChanged }: { member: { userId: string; displayName?: string | null; role: 'owner' | 'member' }; gardenId: string; onChanged: () => Promise<void> }) {
+function MemberCard({ member, gardenId, onChanged, viewerIsOwner }: { member: { userId: string; displayName?: string | null; role: 'owner' | 'member' }; gardenId: string; onChanged: () => Promise<void>; viewerIsOwner: boolean }) {
   const [open, setOpen] = React.useState(false)
   const [busy, setBusy] = React.useState(false)
-  const canPromote = member.role !== 'owner'
-  const canRemove = member.role !== 'owner'
+  const canPromote = viewerIsOwner && member.role !== 'owner'
+  const canRemove = viewerIsOwner && member.role !== 'owner'
   const doPromote = async () => {
     if (!canPromote || busy) return
     setBusy(true)
@@ -825,7 +834,7 @@ function MemberCard({ member, gardenId, onChanged }: { member: { userId: string;
           <div className="text-xs opacity-60">{member.role}</div>
         </div>
         <div className="relative">
-          {member.role !== 'owner' && (
+          {viewerIsOwner && member.role !== 'owner' && (
             <Button variant="secondary" className="rounded-xl px-2" onClick={(e: any) => { e.stopPropagation(); setOpen((o) => !o) }}>⋯</Button>
           )}
           {open && (
