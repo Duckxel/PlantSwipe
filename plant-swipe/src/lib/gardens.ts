@@ -185,15 +185,22 @@ export async function logWaterEvent(params: { gardenPlantId: string }): Promise<
 export async function getGardenMembers(gardenId: string): Promise<GardenMember[]> {
   const { data, error } = await supabase
     .from('garden_members')
-    .select('garden_id, user_id, role, joined_at, profiles:profiles(display_name)')
+    .select('garden_id, user_id, role, joined_at')
     .eq('garden_id', gardenId)
   if (error) throw new Error(error.message)
-  return (data || []).map((r: any) => ({
+  const rows = (data || []) as any[]
+  const { data: profilesData, error: pErr } = await supabase.rpc('get_profiles_for_garden', { _garden_id: gardenId })
+  if (pErr) throw new Error(pErr.message)
+  const idToName: Record<string, string | null> = {}
+  for (const r of (profilesData as any[]) || []) {
+    idToName[String((r as any).user_id)] = (r as any).display_name || null
+  }
+  return rows.map((r: any) => ({
     gardenId: String(r.garden_id),
     userId: String(r.user_id),
     role: r.role,
     joinedAt: String(r.joined_at),
-    displayName: r.profiles?.display_name ?? null,
+    displayName: idToName[String(r.user_id)] ?? null,
   }))
 }
 
@@ -205,16 +212,34 @@ export async function addGardenMember(params: { gardenId: string; userId: string
   if (error) throw new Error(error.message)
 }
 
-export async function addMemberByEmail(params: { gardenId: string; email: string }): Promise<{ ok: boolean; reason?: string }> {
-  const { gardenId, email } = params
-  const { data: userRow } = await supabase
-    .from('profiles')
-    .select('id')
-    .ilike('email', email)
-    .maybeSingle()
-  if (!userRow?.id) return { ok: false, reason: 'no_account' }
+export async function updateGardenMemberRole(params: { gardenId: string; userId: string; role: 'member' | 'owner' }): Promise<void> {
+  const { gardenId, userId, role } = params
+  const { error } = await supabase
+    .from('garden_members')
+    .update({ role })
+    .eq('garden_id', gardenId)
+    .eq('user_id', userId)
+  if (error) throw new Error(error.message)
+}
+
+export async function removeGardenMember(params: { gardenId: string; userId: string }): Promise<void> {
+  const { gardenId, userId } = params
+  const { error } = await supabase
+    .from('garden_members')
+    .delete()
+    .eq('garden_id', gardenId)
+    .eq('user_id', userId)
+  if (error) throw new Error(error.message)
+}
+
+export async function addMemberByEmail(params: { gardenId: string; email: string; role?: 'member' | 'owner' }): Promise<{ ok: boolean; reason?: string }> {
+  const { gardenId, email, role = 'member' } = params
+  const { data, error } = await supabase.rpc('get_user_id_by_email', { _email: email })
+  if (error) return { ok: false, reason: 'lookup_failed' }
+  const userId = data as unknown as string | null
+  if (!userId) return { ok: false, reason: 'no_account' }
   try {
-    await addGardenMember({ gardenId, userId: userRow.id, role: 'member' })
+    await addGardenMember({ gardenId, userId, role })
     return { ok: true }
   } catch (e) {
     return { ok: false, reason: 'insert_failed' }

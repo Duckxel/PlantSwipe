@@ -4,11 +4,12 @@ import { useParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
 import type { Garden } from '@/types/garden'
 import type { Plant } from '@/types/plant'
-import { getGarden, getGardenPlants, getGardenMembers, addMemberByEmail, fetchScheduleForPlants, markGardenPlantWatered, updateGardenPlantFrequency, deleteGardenPlant, reseedSchedule, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, getGardenInventory, adjustInventoryAndLogTransaction } from '@/lib/gardens'
+import { getGarden, getGardenPlants, getGardenMembers, addMemberByEmail, fetchScheduleForPlants, markGardenPlantWatered, updateGardenPlantFrequency, deleteGardenPlant, reseedSchedule, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, getGardenInventory, adjustInventoryAndLogTransaction, updateGardenMemberRole, removeGardenMember } from '@/lib/gardens'
 import { supabase } from '@/lib/supabaseClient'
 
 
@@ -246,7 +247,7 @@ export const GardenDashboardPage: React.FC = () => {
   const submitInvite = async () => {
     if (!id || !inviteEmail.trim()) return
     setInviteError(null)
-    const res = await addMemberByEmail({ gardenId: id, email: inviteEmail.trim() })
+    const res = await addMemberByEmail({ gardenId: id, email: inviteEmail.trim(), role: 'member' })
     if (!res.ok) {
       setInviteError(res.reason === 'no_account' ? 'No account with this email' : 'Failed to add member')
       return
@@ -462,10 +463,7 @@ export const GardenDashboardPage: React.FC = () => {
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {members.map(m => (
-                      <Card key={m.userId} className="rounded-2xl p-4">
-                        <div className="font-medium">{m.displayName || m.userId}</div>
-                        <div className="text-xs opacity-60">{m.role}</div>
-                      </Card>
+                      <MemberCard key={m.userId} member={m} gardenId={id!} onChanged={load} />
                     ))}
                   </div>
                 </div>
@@ -780,6 +778,57 @@ function EditPlantButton({ gp, gardenId, onChanged, serverToday }: { gp: any; ga
         </DialogContent>
       </Dialog>
     </>
+  )
+}
+
+function MemberCard({ member, gardenId, onChanged }: { member: { userId: string; displayName?: string | null; role: 'owner' | 'member' }; gardenId: string; onChanged: () => Promise<void> }) {
+  const [open, setOpen] = React.useState(false)
+  const [busy, setBusy] = React.useState(false)
+  const canPromote = member.role !== 'owner'
+  const canRemove = member.role !== 'owner'
+  const doPromote = async () => {
+    if (!canPromote || busy) return
+    setBusy(true)
+    try {
+      await updateGardenMemberRole({ gardenId, userId: member.userId, role: 'owner' })
+      await onChanged()
+    } finally {
+      setBusy(false)
+      setOpen(false)
+    }
+  }
+  const doRemove = async () => {
+    if (busy) return
+    if (!confirm('Remove this member from the garden?')) return
+    setBusy(true)
+    try {
+      await removeGardenMember({ gardenId, userId: member.userId })
+      await onChanged()
+    } finally {
+      setBusy(false)
+      setOpen(false)
+    }
+  }
+  return (
+    <Card className="rounded-2xl p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="font-medium">{member.displayName || member.userId}</div>
+          <div className="text-xs opacity-60">{member.role}</div>
+        </div>
+        <div className="relative">
+          {member.role !== 'owner' && (
+            <Button variant="secondary" className="rounded-xl px-2" onClick={(e: any) => { e.stopPropagation(); setOpen((o) => !o) }}>⋯</Button>
+          )}
+          {open && (
+            <div className="absolute right-0 mt-2 w-44 bg-white border rounded-xl shadow-lg z-10">
+              <button disabled={!canPromote || busy} onClick={(e) => { e.stopPropagation(); doPromote() }} className={`w-full text-left px-3 py-2 rounded-t-xl hover:bg-stone-50 ${!canPromote ? 'opacity-60 cursor-not-allowed' : ''}`}>Promote to owner</button>
+              <button disabled={!canRemove || busy} onClick={(e) => { e.stopPropagation(); doRemove() }} className="w-full text-left px-3 py-2 rounded-b-xl hover:bg-stone-50 text-red-600">Remove member</button>
+            </div>
+          )}
+        </div>
+      </div>
+    </Card>
   )
 }
 

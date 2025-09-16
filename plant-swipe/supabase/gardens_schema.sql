@@ -179,8 +179,9 @@ do $$ begin
   end if;
   create policy gm_select on public.garden_members for select to authenticated
     using (
-      user_id = auth.uid() or exists (
-        select 1 from public.gardens g where g.id = garden_id and g.created_by = auth.uid()
+      exists (
+        select 1 from public.garden_members gm2
+        where gm2.garden_id = garden_id and gm2.user_id = auth.uid()
       )
     );
 end $$;
@@ -190,7 +191,10 @@ do $$ begin
   end if;
   create policy gm_insert on public.garden_members for insert to authenticated
     with check (
-      exists (select 1 from public.gardens g where g.id = garden_id and g.created_by = auth.uid()) and user_id is not null
+      exists (
+        select 1 from public.garden_members gm
+        where gm.garden_id = garden_id and gm.user_id = auth.uid() and gm.role = 'owner'
+      ) and user_id is not null
     );
 end $$;
 do $$ begin
@@ -199,7 +203,32 @@ do $$ begin
   end if;
   create policy gm_delete on public.garden_members for delete to authenticated
     using (
-      user_id = auth.uid() or exists (select 1 from public.gardens g where g.id = garden_id and g.created_by = auth.uid())
+      role <> 'owner' and (
+        user_id = auth.uid() or exists (
+          select 1 from public.garden_members gm
+          where gm.garden_id = garden_id and gm.user_id = auth.uid() and gm.role = 'owner'
+        )
+      )
+    );
+end $$;
+
+-- Allow owners to update members (e.g., promote to owner)
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_members' and policyname = 'gm_update') then
+    drop policy gm_update on public.garden_members;
+  end if;
+  create policy gm_update on public.garden_members for update to authenticated
+    using (
+      exists (
+        select 1 from public.garden_members gm
+        where gm.garden_id = garden_id and gm.user_id = auth.uid() and gm.role = 'owner'
+      )
+    )
+    with check (
+      exists (
+        select 1 from public.garden_members gm
+        where gm.garden_id = garden_id and gm.user_id = auth.uid() and gm.role = 'owner'
+      )
     );
 end $$;
 
@@ -217,6 +246,30 @@ do $$ begin
       with check (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()));
   end if;
 end $$;
+
+-- Helper RPCs
+-- Resolve an auth user id by email (case-insensitive)
+create or replace function public.get_user_id_by_email(_email text)
+returns uuid
+language sql
+security definer
+set search_path = public
+as $$
+  select id from auth.users where email ilike _email limit 1;
+$$;
+
+-- Return profiles (id, display_name) for all members of a garden
+create or replace function public.get_profiles_for_garden(_garden_id uuid)
+returns table(user_id uuid, display_name text)
+language sql
+security definer
+set search_path = public
+as $$
+  select p.id as user_id, p.display_name
+  from public.garden_members gm
+  join public.profiles p on p.id = gm.user_id
+  where gm.garden_id = _garden_id;
+$$;
 
 -- Events: members can select/insert
 do $$ begin
