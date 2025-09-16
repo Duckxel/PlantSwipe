@@ -410,7 +410,7 @@ export const GardenDashboardPage: React.FC = () => {
               }
             }
           }
-          const success = due > 0 ? (completed >= due) : false
+          const success = completed >= due
           await upsertGardenTask({ gardenId: garden.id, day: serverToday, gardenPlantId: null, success })
         } catch {}
       }
@@ -466,7 +466,27 @@ export const GardenDashboardPage: React.FC = () => {
                             <div className="mt-2 flex gap-2 flex-wrap">
                               <Button variant="secondary" className="rounded-2xl" onClick={() => openEditSchedule(gp)}>Schedule</Button>
                               <EditPlantButton gp={gp} gardenId={id!} onChanged={load} serverToday={serverToday} />
-                              <Button variant="secondary" className="rounded-2xl" onClick={async () => { await deleteGardenPlant(gp.id); if (serverToday && id) { await computeGardenTaskForDay({ gardenId: id, dayIso: serverToday }) } await load() }}>Delete</Button>
+                              <Button variant="secondary" className="rounded-2xl" onClick={async () => {
+                                await deleteGardenPlant(gp.id)
+                                if (serverToday && id) {
+                                  try {
+                                    const remainingIds = plants.filter((p: any) => p.id !== gp.id).map((p: any) => p.id)
+                                    const schedMap = await fetchScheduleForPlants(remainingIds, 1)
+                                    let due = 0, completed = 0
+                                    for (const pid of Object.keys(schedMap)) {
+                                      for (const row of (schedMap as any)[pid] as any[]) {
+                                        if (row.dueDate === serverToday) {
+                                          due += 1
+                                          if (row.completedAt) completed += 1
+                                        }
+                                      }
+                                    }
+                                    const success = completed >= due
+                                    await upsertGardenTask({ gardenId: id, day: serverToday, gardenPlantId: null, success })
+                                  } catch {}
+                                }
+                                await load()
+                              }}>Delete</Button>
                             </div>
                           </div>
                         </div>
