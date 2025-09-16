@@ -5,17 +5,17 @@ import { SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { SunMedium, Droplets, Leaf } from "lucide-react";
+import { SunMedium, Droplets, Leaf, Heart } from "lucide-react";
 import type { Plant } from "@/types/plant";
 import { rarityTone, seasonBadge } from "@/constants/badges";
 import { deriveWaterLevelFromFrequency } from "@/lib/utils";
 import { supabase } from "@/lib/supabaseClient";
 
-export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void }> = ({ plant, onClose }) => {
+export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?: boolean; onToggleLike?: () => void }> = ({ plant, onClose, liked = false, onToggleLike }) => {
   const navigate = useNavigate()
   const y = useMotionValue(0)
   const threshold = 120
-  const onDragEnd = (_: any, info: { offset: { y: number }; velocity: { y: number } }) => {
+  const onDragEnd = (_: unknown, info: { offset: { y: number }; velocity: { y: number } }) => {
     const dy = info.offset.y + info.velocity.y * 0.2
     if (dy > threshold) onClose()
   }
@@ -33,8 +33,18 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void }> = ({ 
         <SheetDescription className="italic">{plant.scientificName}</SheetDescription>
       </SheetHeader>
 
-      <div className="rounded-2xl overflow-hidden shadow">
+      <div className="rounded-2xl overflow-hidden shadow relative">
         <div className="h-56 bg-cover bg-center select-none" style={{ backgroundImage: `url(${plant.image})`, userSelect: 'none' as any }} />
+        <div className="absolute bottom-3 right-3">
+          <button
+            onClick={() => onToggleLike && onToggleLike()}
+            aria-pressed={liked}
+            aria-label={liked ? 'Unlike' : 'Like'}
+            className={`h-8 w-8 rounded-full flex items-center justify-center shadow border transition ${liked ? 'bg-rose-600 text-white' : 'bg-white/90 text-black hover:bg-white'}`}
+          >
+            <Heart className={liked ? 'fill-current' : ''} />
+          </button>
+        </div>
       </div>
 
       <div className="grid md:grid-cols-3 gap-3">

@@ -5,9 +5,9 @@ import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { ListFilter } from "lucide-react"
 
-interface SearchPageProps { plants: Plant[]; openInfo: (p: Plant) => void }
+interface SearchPageProps { plants: Plant[]; openInfo: (p: Plant) => void; likedIds?: string[] }
 
-export const SearchPage: React.FC<SearchPageProps> = ({ plants, openInfo }) => (
+export const SearchPage: React.FC<SearchPageProps> = ({ plants, openInfo, likedIds = [] }) => (
   <div className="max-w-6xl mx-auto mt-8 px-4 md:px-0">
     <div className="flex items-center gap-2 text-sm mb-3">
       <ListFilter className="h-4 w-4" />
@@ -17,11 +17,11 @@ export const SearchPage: React.FC<SearchPageProps> = ({ plants, openInfo }) => (
       {plants.map((p) => (
         <Card
           key={p.id}
-          className="rounded-2xl overflow-hidden cursor-pointer"
+          className="relative rounded-2xl overflow-hidden cursor-pointer"
           onClick={() => openInfo(p)}
           role="button"
           tabIndex={0}
-          onKeyDown={(e) => { if ((e as any).key === 'Enter') openInfo(p) }}
+          onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => { if (e.key === 'Enter') openInfo(p) }}
         >
           <div className="grid grid-cols-3 gap-0">
             <div className="col-span-1 h-36 bg-cover bg-center" style={{ backgroundImage: `url(${p.image})` }} />
@@ -31,6 +31,9 @@ export const SearchPage: React.FC<SearchPageProps> = ({ plants, openInfo }) => (
                 {p.seasons.map((s) => (
                   <span key={s} className={`text-[10px] px-2 py-0.5 rounded-full ${seasonBadge[s]}`}>{s}</span>
                 ))}
+                {likedIds.includes(p.id) && (
+                  <Badge className="rounded-xl bg-rose-600 text-white">Liked</Badge>
+                )}
               </div>
               <div className="font-medium">{p.name}</div>
               <div className="text-xs italic opacity-60">{p.scientificName}</div>
