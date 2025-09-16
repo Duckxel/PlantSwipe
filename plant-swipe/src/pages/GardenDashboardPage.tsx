@@ -399,6 +399,8 @@ export const GardenDashboardPage: React.FC = () => {
       await markGardenPlantWatered(gardenPlantId)
       if (serverToday && garden?.id) {
         await upsertGardenTask({ gardenId: garden.id, day: serverToday, gardenPlantId, success: true })
+        // Ensure the per-garden task success reflects completion state immediately
+        await computeGardenTaskForDay({ gardenId: garden.id, dayIso: serverToday })
       }
       await load()
       if (id) navigate(`/garden/${id}/routine`)
@@ -670,11 +672,7 @@ function OverviewSection({ plants, membersCount, serverToday, dailyStats, totalO
   const streak = (() => {
     let s = baseStreak
     if (serverToday) {
-      const todayStat = dailyStats.find(d => d.date === serverToday)
-      const todayDue = todayStat?.due ?? 0
-      const todayCompleted = todayStat?.completed ?? 0
-      const todaySuccess = todayDue > 0 ? (todayCompleted >= todayDue) : false
-      // If DB streak reflects up to yesterday, show +1 if today is successful already
+      const todaySuccess = dailyStats.find(d => d.date === serverToday)?.success ?? false
       if (todaySuccess) s = baseStreak + 1
     }
     return s
