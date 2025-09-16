@@ -179,8 +179,9 @@ do $$ begin
   end if;
   create policy gm_select on public.garden_members for select to authenticated
     using (
-      user_id = auth.uid() or exists (
-        select 1 from public.gardens g where g.id = garden_id and g.created_by = auth.uid()
+      exists (
+        select 1 from public.garden_members gm2
+        where gm2.garden_id = garden_id and gm2.user_id = auth.uid()
       )
     );
 end $$;
@@ -202,9 +203,11 @@ do $$ begin
   end if;
   create policy gm_delete on public.garden_members for delete to authenticated
     using (
-      user_id = auth.uid() or exists (
-        select 1 from public.garden_members gm
-        where gm.garden_id = garden_id and gm.user_id = auth.uid() and gm.role = 'owner'
+      role <> 'owner' and (
+        user_id = auth.uid() or exists (
+          select 1 from public.garden_members gm
+          where gm.garden_id = garden_id and gm.user_id = auth.uid() and gm.role = 'owner'
+        )
       )
     );
 end $$;

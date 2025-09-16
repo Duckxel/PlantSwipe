@@ -785,7 +785,7 @@ function MemberCard({ member, gardenId, onChanged }: { member: { userId: string;
   const [open, setOpen] = React.useState(false)
   const [busy, setBusy] = React.useState(false)
   const canPromote = member.role !== 'owner'
-  const canRemove = true
+  const canRemove = member.role !== 'owner'
   const doPromote = async () => {
     if (!canPromote || busy) return
     setBusy(true)
@@ -817,7 +817,9 @@ function MemberCard({ member, gardenId, onChanged }: { member: { userId: string;
           <div className="text-xs opacity-60">{member.role}</div>
         </div>
         <div className="relative">
-          <Button variant="secondary" className="rounded-xl px-2" onClick={(e: any) => { e.stopPropagation(); setOpen((o) => !o) }}>⋯</Button>
+          {member.role !== 'owner' && (
+            <Button variant="secondary" className="rounded-xl px-2" onClick={(e: any) => { e.stopPropagation(); setOpen((o) => !o) }}>⋯</Button>
+          )}
           {open && (
             <div className="absolute right-0 mt-2 w-44 bg-white border rounded-xl shadow-lg z-10">
               <button disabled={!canPromote || busy} onClick={(e) => { e.stopPropagation(); doPromote() }} className={`w-full text-left px-3 py-2 rounded-t-xl hover:bg-stone-50 ${!canPromote ? 'opacity-60 cursor-not-allowed' : ''}`}>Promote to owner</button>
