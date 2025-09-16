@@ -120,7 +120,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
     <div className="max-w-3xl mx-auto mt-8 px-4 md:px-0">
       <Card className="rounded-3xl">
         <CardContent className="p-6 md:p-8 space-y-4">
-          <form autoComplete="off">
+          <form autoComplete="off" className="space-y-4">
             <div className="grid gap-2">
               <Label htmlFor="plant-name">Name</Label>
               <Input id="plant-name" autoComplete="off" value={name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} />

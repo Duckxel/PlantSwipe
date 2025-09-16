@@ -126,7 +126,7 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
     <div className="max-w-3xl mx-auto mt-8 px-4 md:px-0">
       <Card className="rounded-3xl">
         <CardContent className="p-6 md:p-8 space-y-4">
-          <form autoComplete="off">
+          <form autoComplete="off" className="space-y-4">
             {loading && <div className="text-sm opacity-60">Loading…</div>}
             {error && <div className="text-sm text-red-600">{error}</div>}
             {!loading && !error && (
