@@ -1,5 +1,5 @@
 import React from "react"
-import { motion, AnimatePresence } from "framer-motion"
+import { motion, AnimatePresence, type MotionValue } from "framer-motion"
 import { ChevronLeft, ChevronRight, Heart, Info, Sparkles, X } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -11,7 +11,7 @@ interface SwipePageProps {
   current: Plant | undefined
   index: number
   setIndex: (i: number) => void
-  x: unknown
+  x: MotionValue<number>
   onDragEnd: (_: unknown, info: { offset: { x: number }; velocity: { x: number } }) => void
   handleInfo: () => void
   handlePass: () => void
