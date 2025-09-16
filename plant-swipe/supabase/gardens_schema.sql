@@ -60,6 +60,16 @@ create table if not exists public.garden_inventory (
   unique (garden_id, plant_id)
 );
 
+-- Per-instance inventory to track counts per garden_plant (not per species)
+create table if not exists public.garden_instance_inventory (
+  id uuid primary key default gen_random_uuid(),
+  garden_id uuid not null references public.gardens(id) on delete cascade,
+  garden_plant_id uuid not null references public.garden_plants(id) on delete cascade,
+  seeds_on_hand integer not null default 0,
+  plants_on_hand integer not null default 0,
+  unique (garden_plant_id)
+);
+
 create table if not exists public.garden_transactions (
   id uuid primary key default gen_random_uuid(),
   garden_id uuid not null references public.gardens(id) on delete cascade,
@@ -294,6 +304,21 @@ do $$ begin
   if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_inventory' and policyname = 'gi_select') then
     create policy gi_select on public.garden_inventory for select
       using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()));
+  end if;
+end $$;
+
+-- Instance inventory policies
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_instance_inventory' and policyname = 'gii_select') then
+    create policy gii_select on public.garden_instance_inventory for select
+      using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()));
+  end if;
+end $$;
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_instance_inventory' and policyname = 'gii_iud') then
+    create policy gii_iud on public.garden_instance_inventory for all to authenticated
+      using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()))
+      with check (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()));
   end if;
 end $$;
 do $$ begin

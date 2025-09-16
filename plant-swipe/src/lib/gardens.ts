@@ -444,6 +444,59 @@ export async function adjustInventoryAndLogTransaction(params: { gardenId: strin
   if (tErr) throw new Error(tErr.message)
 }
 
+export async function getGardenInstanceInventory(gardenId: string): Promise<Array<{ gardenPlantId: string; seedsOnHand: number; plantsOnHand: number }>> {
+  const { data, error } = await supabase
+    .from('garden_instance_inventory')
+    .select('garden_plant_id, seeds_on_hand, plants_on_hand')
+    .eq('garden_id', gardenId)
+  if (error) throw new Error(error.message)
+  return (data || []).map((r: any) => ({
+    gardenPlantId: String(r.garden_plant_id),
+    seedsOnHand: Number(r.seeds_on_hand ?? 0),
+    plantsOnHand: Number(r.plants_on_hand ?? 0),
+  }))
+}
+
+export async function adjustInstanceInventoryAndLogTransaction(params: { gardenId: string; gardenPlantId: string; seedsDelta?: number; plantsDelta?: number; transactionType: 'buy_seeds' | 'sell_seeds' | 'buy_plants' | 'sell_plants'; notes?: string | null }): Promise<void> {
+  const { gardenId, gardenPlantId, seedsDelta = 0, plantsDelta = 0, transactionType, notes = null } = params
+  // Resolve plant_id for transaction log
+  const { data: gpRow, error: gpErr } = await supabase
+    .from('garden_plants')
+    .select('plant_id')
+    .eq('id', gardenPlantId)
+    .maybeSingle()
+  if (gpErr) throw new Error(gpErr.message)
+  const plantId = String(gpRow?.plant_id || '')
+  // Ensure instance inventory row exists and update
+  const { data: invRow } = await supabase
+    .from('garden_instance_inventory')
+    .select('seeds_on_hand, plants_on_hand')
+    .eq('garden_plant_id', gardenPlantId)
+    .maybeSingle()
+  const currentSeeds = Number(invRow?.seeds_on_hand ?? 0)
+  const currentPlants = Number(invRow?.plants_on_hand ?? 0)
+  const nextSeeds = Math.max(0, currentSeeds + seedsDelta)
+  const nextPlants = Math.max(0, currentPlants + plantsDelta)
+  if (!invRow) {
+    const { error: iErr } = await supabase
+      .from('garden_instance_inventory')
+      .insert({ garden_id: gardenId, garden_plant_id: gardenPlantId, seeds_on_hand: nextSeeds, plants_on_hand: nextPlants })
+    if (iErr) throw new Error(iErr.message)
+  } else {
+    const { error: uErr } = await supabase
+      .from('garden_instance_inventory')
+      .update({ seeds_on_hand: nextSeeds, plants_on_hand: nextPlants })
+      .eq('garden_plant_id', gardenPlantId)
+    if (uErr) throw new Error(uErr.message)
+  }
+  // Log transaction using species plant_id
+  const qty = Math.abs(seedsDelta !== 0 ? seedsDelta : plantsDelta)
+  const { error: tErr } = await supabase
+    .from('garden_transactions')
+    .insert({ garden_id: gardenId, plant_id: plantId, type: transactionType, quantity: qty, occurred_at: new Date().toISOString(), notes })
+  if (tErr) throw new Error(tErr.message)
+}
+
 export async function upsertGardenPlantSchedule(params: { gardenPlantId: string; period: 'week' | 'month' | 'year'; amount: number; weeklyDays?: number[] | null; monthlyDays?: number[] | null; yearlyDays?: string[] | null; monthlyNthWeekdays?: string[] | null }): Promise<void> {
   const { gardenPlantId, period, amount, weeklyDays = null, monthlyDays = null, yearlyDays = null, monthlyNthWeekdays = null } = params
   // Try with monthly_nth_weekdays column first; if the column doesn't exist, fallback to upsert without it
