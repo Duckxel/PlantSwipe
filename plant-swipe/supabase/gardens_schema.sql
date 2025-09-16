@@ -109,7 +109,7 @@ begin
 
   if v_id is null then
     insert into public.garden_tasks (garden_id, day, task_type, garden_plant_ids, success)
-    values (_garden_id, _day, 'watering', coalesce(array[_plant_id], '{}'::uuid[]), coalesce(_set_success, false));
+    values (_garden_id, _day, 'watering', coalesce(array[_plant_id], '{}'::uuid[]), coalesce(_set_success, _plant_id is null));
   else
     if _plant_id is not null then
       update public.garden_tasks
@@ -132,9 +132,13 @@ language sql
 security definer
 as $$
   insert into public.garden_tasks (garden_id, day, task_type, garden_plant_ids, success)
-  select g.id, _day, 'watering', '{}'::uuid[], false
+  select g.id, _day, 'watering', '{}'::uuid[], true
   from public.gardens g
   on conflict (garden_id, day, task_type) do nothing;
+  -- For any existing empty tasks on that day, ensure they are marked successful
+  update public.garden_tasks
+    set success = true
+  where day = _day and task_type = 'watering' and coalesce(array_length(garden_plant_ids, 1), 0) = 0;
 $$;
 
 -- RLS
