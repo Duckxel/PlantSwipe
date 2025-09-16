@@ -285,6 +285,22 @@ as $$
   where gm.garden_id = _garden_id;
 $$;
 
+-- Ensure per-instance inventory rows exist for all garden_plants in a garden
+create or replace function public.ensure_instance_inventory_for_garden(_garden_id uuid)
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  insert into public.garden_instance_inventory (garden_id, garden_plant_id, seeds_on_hand, plants_on_hand)
+  select gp.garden_id, gp.id, 0, 0
+  from public.garden_plants gp
+  where gp.garden_id = _garden_id
+    and not exists (
+      select 1 from public.garden_instance_inventory gii where gii.garden_plant_id = gp.id
+    );
+$$;
+
 -- Events: members can select/insert
 do $$ begin
   if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_plant_events' and policyname = 'gpe_select') then

@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
 import type { Garden } from '@/types/garden'
 import type { Plant } from '@/types/plant'
-import { getGarden, getGardenPlants, getGardenMembers, addMemberByEmail, fetchScheduleForPlants, markGardenPlantWatered, updateGardenPlantFrequency, deleteGardenPlant, reseedSchedule, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, getGardenInventory, adjustInventoryAndLogTransaction, updateGardenMemberRole, removeGardenMember, computeGardenTaskForDay } from '@/lib/gardens'
+import { getGarden, getGardenPlants, getGardenMembers, addMemberByEmail, fetchScheduleForPlants, markGardenPlantWatered, updateGardenPlantFrequency, deleteGardenPlant, reseedSchedule, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, getGardenInstanceInventory, adjustInstanceInventoryAndLogTransaction, updateGardenMemberRole, removeGardenMember, computeGardenTaskForDay } from '@/lib/gardens'
 import { supabase } from '@/lib/supabaseClient'
 import { useAuth } from '@/context/AuthContext'
 
@@ -40,7 +40,7 @@ export const GardenDashboardPage: React.FC = () => {
   const [weekDays, setWeekDays] = React.useState<string[]>([])
   const [weekCounts, setWeekCounts] = React.useState<number[]>([])
   const [dueThisWeekByPlant, setDueThisWeekByPlant] = React.useState<Record<string, number[]>>({})
-  const [inventoryCounts, setInventoryCounts] = React.useState<Record<string, number>>({})
+  const [instanceCounts, setInstanceCounts] = React.useState<Record<string, number>>({})
   const [totalOnHand, setTotalOnHand] = React.useState(0)
   const [speciesOnHand, setSpeciesOnHand] = React.useState(0)
 
@@ -186,15 +186,28 @@ export const GardenDashboardPage: React.FC = () => {
       }
       setDueToday(dset2)
 
-      // Load inventory counts for display
-      const inv = await getGardenInventory(id)
-      const countsMap: Record<string, number> = {}
-      for (const it of inv) {
-        countsMap[String(it.plantId)] = Number(it.plantsOnHand || 0)
+      // Load per-instance inventory counts for display and totals
+      // Ensure instance rows exist for any garden_plant without a row
+      try {
+        await supabase.rpc('ensure_instance_inventory_for_garden', { _garden_id: id })
+      } catch {}
+      const invInst = await getGardenInstanceInventory(id)
+      const byInstance: Record<string, number> = {}
+      for (const it of invInst) {
+        byInstance[String(it.gardenPlantId)] = Number(it.plantsOnHand || 0)
       }
-      setInventoryCounts(countsMap)
-      setTotalOnHand(Object.values(countsMap).reduce((a, b) => a + (Number(b) || 0), 0))
-      setSpeciesOnHand(Object.values(countsMap).filter(v => (Number(v) || 0) > 0).length)
+      setInstanceCounts(byInstance)
+      // Totals from instance counts
+      const total = Object.values(byInstance).reduce((a, b) => a + (Number(b) || 0), 0)
+      setTotalOnHand(total)
+      // Species on hand: number of species with aggregated count > 0
+      const speciesSum: Record<string, number> = {}
+      for (const gp of gps as any[]) {
+        const cnt = Number(byInstance[String(gp.id)] || 0)
+        const pid = String(gp.plantId)
+        speciesSum[pid] = (speciesSum[pid] || 0) + cnt
+      }
+      setSpeciesOnHand(Object.values(speciesSum).filter(v => (Number(v) || 0) > 0).length)
       const days: Array<{ date: string; due: number; completed: number; success: boolean }> = []
       const anchor30 = new Date(today)
       for (let i = 29; i >= 0; i--) {
@@ -461,7 +474,7 @@ export const GardenDashboardPage: React.FC = () => {
                           <div className="col-span-2 p-3">
                             <div className="font-medium">{gp.nickname || gp.plant?.name}</div>
                             {gp.nickname && <div className="text-xs opacity-60">{gp.plant?.name}</div>}
-                            <div className="text-xs opacity-60">On hand: {inventoryCounts[gp.plantId] ?? 0}</div>
+                            <div className="text-xs opacity-60">On hand: {instanceCounts[gp.id] ?? 0}</div>
                             <div className="text-xs opacity-60">Frequency: {gp.overrideWaterFreqValue ? `${gp.overrideWaterFreqValue} / ${gp.overrideWaterFreqUnit}` : 'not set'}</div>
                             <div className="mt-2 flex gap-2 flex-wrap">
                               <Button variant="secondary" className="rounded-2xl" onClick={() => openEditSchedule(gp)}>Schedule</Button>
@@ -782,22 +795,21 @@ function EditPlantButton({ gp, gardenId, onChanged, serverToday }: { gp: any; ga
     try {
       // Update nickname
       await supabase.from('garden_plants').update({ nickname: nickname.trim() || null }).eq('id', gp.id)
-      // Update count via inventory table; delete plant if 0
+      // Update count via instance inventory table; delete plant if 0
       if (count <= 0) {
         await supabase.from('garden_plants').delete().eq('id', gp.id)
         if (serverToday) await computeGardenTaskForDay({ gardenId, dayIso: serverToday })
       } else {
         // Compute delta by reading current inventory
         const { data: inv } = await supabase
-          .from('garden_inventory')
+          .from('garden_instance_inventory')
           .select('plants_on_hand')
-          .eq('garden_id', gardenId)
-          .eq('plant_id', gp.plantId)
+          .eq('garden_plant_id', gp.id)
           .maybeSingle()
         const current = Number(inv?.plants_on_hand ?? 0)
         const delta = count - current
         if (delta !== 0) {
-          await adjustInventoryAndLogTransaction({ gardenId, plantId: gp.plantId, plantsDelta: delta, transactionType: delta > 0 ? 'buy_plants' : 'sell_plants' })
+          await adjustInstanceInventoryAndLogTransaction({ gardenId, gardenPlantId: gp.id, plantsDelta: delta, transactionType: delta > 0 ? 'buy_plants' : 'sell_plants' })
         }
       }
       await onChanged()
