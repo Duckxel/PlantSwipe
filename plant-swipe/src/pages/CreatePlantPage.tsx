@@ -137,7 +137,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
               <Label>Seasons</Label>
               <div className="flex flex-wrap gap-2">
                 {(["Spring", "Summer", "Autumn", "Winter"] as const).map((s) => (
-                  <button key={s} onClick={() => toggleSeason(s)} className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${seasons.includes(s) ? "bg-black text-white" : "bg-white hover:bg-stone-50"}`} aria-pressed={seasons.includes(s)}>
+                  <button type="button" key={s} onClick={() => toggleSeason(s)} className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${seasons.includes(s) ? "bg-black text-white" : "bg-white hover:bg-stone-50"}`} aria-pressed={seasons.includes(s)}>
                     {s}
                   </button>
                 ))}
@@ -208,8 +208,8 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
             {error && <div className="text-sm text-red-600">{error}</div>}
             {ok && <div className="text-sm text-green-600">{ok}</div>}
             <div className="flex gap-2 pt-2">
-              <Button variant="secondary" className="rounded-2xl" onClick={onCancel}>Cancel</Button>
-              <Button className="rounded-2xl" onClick={save} disabled={saving}>Save</Button>
+              <Button type="button" variant="secondary" className="rounded-2xl" onClick={onCancel}>Cancel</Button>
+              <Button type="button" className="rounded-2xl" onClick={save} disabled={saving}>Save</Button>
             </div>
           </form>
         </CardContent>
