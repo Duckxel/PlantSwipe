@@ -14,7 +14,7 @@ export async function getUserGardens(userId: string): Promise<Garden[]> {
   if (gardenIds.length === 0) return []
   const { data: gardens, error: gerr } = await supabase
     .from('gardens')
-    .select('id, name, cover_image_url, created_by, created_at')
+    .select('id, name, cover_image_url, created_by, created_at, streak')
     .in('id', gardenIds)
   if (gerr) throw new Error(gerr.message)
   return (gardens || []).map((g: { id: string; name: string; cover_image_url: string | null; created_by: string; created_at: string }) => ({
@@ -23,6 +23,7 @@ export async function getUserGardens(userId: string): Promise<Garden[]> {
     coverImageUrl: g.cover_image_url || null,
     createdBy: String(g.created_by),
     createdAt: String(g.created_at),
+    streak: Number((g as any).streak ?? 0),
   }))
 }
 
@@ -52,7 +53,7 @@ export async function createGarden(params: { name: string; coverImageUrl?: strin
 export async function getGarden(gardenId: string): Promise<Garden | null> {
   const { data, error } = await supabase
     .from('gardens')
-    .select('id, name, cover_image_url, created_by, created_at')
+    .select('id, name, cover_image_url, created_by, created_at, streak')
     .eq('id', gardenId)
     .maybeSingle()
   if (error) throw new Error(error.message)
@@ -63,6 +64,7 @@ export async function getGarden(gardenId: string): Promise<Garden | null> {
     coverImageUrl: data.cover_image_url || null,
     createdBy: String(data.created_by),
     createdAt: String(data.created_at),
+    streak: Number((data as any).streak ?? 0),
   }
 }
 

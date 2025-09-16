@@ -208,7 +208,8 @@ export const GardenDashboardPage: React.FC = () => {
         const idxTodayForStats = isToday ? weekDaysIso.indexOf(today) : -1
         const dueOverride = isToday && idxTodayForStats >= 0 ? (Object.values(perPlant).reduce((acc: number, arr: any) => acc + ((arr as number[]).includes(idxTodayForStats) ? 1 : 0), 0)) : undefined
         const dueVal = dueOverride !== undefined ? dueOverride : entry.due
-        const success = dueVal > 0 ? (entry.completed >= dueVal) : true
+        // Treat missing garden_tasks row as failure; otherwise use stored success
+        const success = trow ? Boolean(trow.success) : false
         days.push({ date: ds, due: dueVal, completed: entry.completed, success })
       }
       // Keep dueToday from schedule definitions (already set)
@@ -430,7 +431,7 @@ export const GardenDashboardPage: React.FC = () => {
           </aside>
           <main className="min-h-[60vh]">
             <Routes>
-              <Route path="overview" element={<OverviewSection plants={plants} membersCount={members.length} serverToday={serverToday} dailyStats={dailyStats} totalOnHand={totalOnHand} speciesOnHand={speciesOnHand} />} />
+              <Route path="overview" element={<OverviewSection plants={plants} membersCount={members.length} serverToday={serverToday} dailyStats={dailyStats} totalOnHand={totalOnHand} speciesOnHand={speciesOnHand} baseStreak={garden.streak || 0} />} />
               <Route path="plants" element={(
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
@@ -649,7 +650,7 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
   )
 }
 
-function OverviewSection({ plants, membersCount, serverToday, dailyStats, totalOnHand, speciesOnHand }: { plants: any[]; membersCount: number; serverToday: string | null; dailyStats: Array<{ date: string; due: number; completed: number; success: boolean }>; totalOnHand: number; speciesOnHand: number }) {
+function OverviewSection({ plants, membersCount, serverToday, dailyStats, totalOnHand, speciesOnHand, baseStreak }: { plants: any[]; membersCount: number; serverToday: string | null; dailyStats: Array<{ date: string; due: number; completed: number; success: boolean }>; totalOnHand: number; speciesOnHand: number; baseStreak: number }) {
   const totalToWaterToday = dailyStats.find(d => d.date === (serverToday || ''))?.due ?? 0
   const completedToday = dailyStats.find(d => d.date === (serverToday || ''))?.completed ?? 0
   const progressPct = totalToWaterToday === 0 ? 100 : Math.min(100, Math.round((completedToday / totalToWaterToday) * 100))
@@ -659,14 +660,21 @@ function OverviewSection({ plants, membersCount, serverToday, dailyStats, totalO
     d.setDate(d.getDate() - (29 - i))
     const dateIso = d.toISOString().slice(0,10)
     const dayNum = d.getDate()
-    const success = dailyStats.find(x => x.date === dateIso)?.success ?? false
+    // Treat missing task row as failed per requirement
+    const found = dailyStats.find(x => x.date === dateIso)
+    const success = found ? found.success : false
     return { dayNum, isToday: i === 29, success }
   })
+  // Use DB-backed streak as base, but if today is in progress we can show live preview
   const streak = (() => {
-    let s = 0
-    for (let i = days.length - 1; i >= 0; i--) {
-      if (days[i].success || (i === days.length - 1 && totalToWaterToday === 0)) s++;
-      else break;
+    let s = baseStreak
+    if (serverToday) {
+      const todayStat = dailyStats.find(d => d.date === serverToday)
+      const todayDue = todayStat?.due ?? 0
+      const todayCompleted = todayStat?.completed ?? 0
+      const todaySuccess = todayDue > 0 ? (todayCompleted >= todayDue) : false
+      // If DB streak reflects up to yesterday, show +1 if today is successful already
+      if (todaySuccess) s = baseStreak + 1
     }
     return s
   })()
