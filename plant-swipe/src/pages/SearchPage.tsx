@@ -23,7 +23,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ plants, openInfo, likedI
           tabIndex={0}
           onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => { if (e.key === 'Enter') openInfo(p) }}
         >
-          <div className="absolute top-2 right-2 z-10">
+          <div className="absolute bottom-2 right-2 z-10">
             <button
               onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); onToggleLike && onToggleLike(p.id) }}
               aria-pressed={likedIds.includes(p.id)}
