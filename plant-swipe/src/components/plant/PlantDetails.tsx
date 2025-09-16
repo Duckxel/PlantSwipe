@@ -94,6 +94,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void }> = ({ 
           const { error } = await supabase.from('plants').delete().eq('id', plant.id)
           if (error) { alert(error.message); return }
           onClose()
+          window.location.reload()
         }}>Delete</Button>
         <div className="flex gap-2">
           <Button variant="secondary" className="rounded-2xl" onClick={() => { navigate(`/plants/${plant.id}/edit`); onClose() }}>Edit</Button>
