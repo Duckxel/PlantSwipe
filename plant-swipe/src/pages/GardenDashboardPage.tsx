@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
 import type { Garden } from '@/types/garden'
 import type { Plant } from '@/types/plant'
-import { getGarden, getGardenPlants, getGardenMembers, addMemberByEmail, fetchScheduleForPlants, markGardenPlantWatered, updateGardenPlantFrequency, deleteGardenPlant, reseedSchedule, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, getGardenInstanceInventory, adjustInstanceInventoryAndLogTransaction, updateGardenMemberRole, removeGardenMember, computeGardenTaskForDay } from '@/lib/gardens'
+import { getGarden, getGardenPlants, getGardenMembers, addMemberByEmail, fetchScheduleForPlants, markGardenPlantWatered, updateGardenPlantFrequency, deleteGardenPlant, reseedSchedule, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, getGardenInstanceInventory, adjustInstanceInventoryAndLogTransaction, updateGardenMemberRole, removeGardenMember, computeGardenTaskForDay, getGardenInventory } from '@/lib/gardens'
 import { supabase } from '@/lib/supabaseClient'
 import { useAuth } from '@/context/AuthContext'
 
@@ -196,6 +196,26 @@ export const GardenDashboardPage: React.FC = () => {
       for (const it of invInst) {
         byInstance[String(it.gardenPlantId)] = Number(it.plantsOnHand || 0)
       }
+      // Fallback: if a species has only one instance, mirror species-level inventory into that instance for display
+      try {
+        const speciesInv = await getGardenInventory(id)
+        const speciesCountMap: Record<string, number> = {}
+        for (const row of speciesInv) speciesCountMap[String(row.plantId)] = Number(row.plantsOnHand || 0)
+        const instancesPerSpecies: Record<string, number> = {}
+        for (const gp of gps as any[]) {
+          const pid = String(gp.plantId)
+          instancesPerSpecies[pid] = (instancesPerSpecies[pid] || 0) + 1
+        }
+        for (const gp of gps as any[]) {
+          const key = String(gp.id)
+          const pid = String(gp.plantId)
+          if (!byInstance[key] || byInstance[key] === 0) {
+            if ((instancesPerSpecies[pid] || 0) === 1) {
+              byInstance[key] = Number(speciesCountMap[pid] || 0)
+            }
+          }
+        }
+      } catch {}
       setInstanceCounts(byInstance)
       // Totals from instance counts
       const total = Object.values(byInstance).reduce((a, b) => a + (Number(b) || 0), 0)
