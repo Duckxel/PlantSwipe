@@ -189,16 +189,11 @@ export async function getGardenMembers(gardenId: string): Promise<GardenMember[]
     .eq('garden_id', gardenId)
   if (error) throw new Error(error.message)
   const rows = (data || []) as any[]
-  const userIds = Array.from(new Set(rows.map(r => String(r.user_id))))
-  let idToName: Record<string, string | null> = {}
-  if (userIds.length > 0) {
-    const { data: profs } = await supabase
-      .from('profiles')
-      .select('id, display_name')
-      .in('id', userIds)
-    for (const p of profs || []) {
-      idToName[String((p as any).id)] = (p as any).display_name || null
-    }
+  const { data: profilesData, error: pErr } = await supabase.rpc('get_profiles_for_garden', { _garden_id: gardenId })
+  if (pErr) throw new Error(pErr.message)
+  const idToName: Record<string, string | null> = {}
+  for (const r of (profilesData as any[]) || []) {
+    idToName[String((r as any).user_id)] = (r as any).display_name || null
   }
   return rows.map((r: any) => ({
     gardenId: String(r.garden_id),
