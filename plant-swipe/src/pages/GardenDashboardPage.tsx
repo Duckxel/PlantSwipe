@@ -1,5 +1,6 @@
 // @ts-nocheck
 import React from 'react'
+import { useAuth } from '@/context/AuthContext'
 import { useParams, NavLink, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -61,6 +62,14 @@ export const GardenDashboardPage: React.FC = () => {
   const [inviteOpen, setInviteOpen] = React.useState(false)
   const [inviteEmail, setInviteEmail] = React.useState('')
   const [inviteError, setInviteError] = React.useState<string | null>(null)
+
+  const { user } = useAuth()
+  const currentUserId = user?.id || null
+  const isOwner = React.useMemo(() => {
+    if (!currentUserId) return false
+    const self = members.find(m => m.userId === currentUserId)
+    return self?.role === 'owner'
+  }, [members, currentUserId])
 
   const load = React.useCallback(async () => {
     if (!id) return
@@ -473,7 +482,11 @@ export const GardenDashboardPage: React.FC = () => {
                     </div>
                   </div>
                   <div className="pt-2">
-                    <Button variant="destructive" className="rounded-2xl" onClick={async () => { if (!id) return; if (!confirm('Delete this garden? This cannot be undone.')) return; try { await supabase.from('gardens').delete().eq('id', id); window.location.href = '/gardens' } catch (e) { alert('Failed to delete garden') } }}>Delete garden</Button>
+                    {isOwner ? (
+                      <Button variant="destructive" className="rounded-2xl" onClick={async () => { if (!id) return; if (!confirm('Delete this garden? This cannot be undone.')) return; try { await supabase.from('gardens').delete().eq('id', id); window.location.href = '/gardens' } catch (e) { alert('Failed to delete garden') } }}>Delete garden</Button>
+                    ) : (
+                      <Button variant="destructive" className="rounded-2xl" onClick={async () => { if (!id || !currentUserId) return; if (!confirm('Quit this garden? You will be removed as a member.')) return; try { await removeGardenMember({ gardenId: id, userId: currentUserId }); window.location.href = '/gardens' } catch (e) { alert('Failed to quit garden') } }}>Quit garden</Button>
+                    )}
                   </div>
                 </div>
               )} />
