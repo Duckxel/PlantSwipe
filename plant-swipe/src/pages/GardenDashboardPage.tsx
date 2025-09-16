@@ -328,7 +328,7 @@ export const GardenDashboardPage: React.FC = () => {
       const qty = Math.max(0, Number(addCount || 0))
       const gp = await addPlantToGarden({ gardenId: id, plantId: selectedPlant.id, seedsPlanted: 0, nickname: nicknameVal || undefined })
       if (qty > 0) {
-        await adjustInventoryAndLogTransaction({ gardenId: id, plantId: selectedPlant.id, plantsDelta: qty, transactionType: 'buy_plants' })
+        await adjustInstanceInventoryAndLogTransaction({ gardenId: id, gardenPlantId: gp.id, plantsDelta: qty, transactionType: 'buy_plants' })
       }
       setAddDetailsOpen(false)
       setAddNickname('')
