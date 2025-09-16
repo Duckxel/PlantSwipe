@@ -37,8 +37,8 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void }> = ({ 
       </div>
 
       <div className="grid md:grid-cols-3 gap-3">
-        <Fact icon={<SunMedium className="h-4 w-4" />} label="Sunlight" value={plant.care.sunlight} />
-        <Fact icon={<Droplets className="h-4 w-4" />} label="Water" value={derivedWater} />
+        <Fact icon={<SunMedium className="h-4 w-4" />} label="Sunlight" value={plant.care.sunlight} sub={plant.care.soil ? String(plant.care.soil) : undefined} />
+        <Fact icon={<Droplets className="h-4 w-4" />} label="Water" value={derivedWater} sub={freqLabel || undefined} />
         <Fact icon={<Leaf className="h-4 w-4" />} label="Difficulty" value={plant.care.difficulty} />
       </div>
 
@@ -94,12 +94,13 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void }> = ({ 
   );
 };
 
-const Fact = ({ icon, label, value }: { icon: React.ReactNode; label: string; value: React.ReactNode }) => (
+const Fact = ({ icon, label, value, sub }: { icon: React.ReactNode; label: string; value: React.ReactNode; sub?: React.ReactNode }) => (
   <div className="flex items-center gap-3 rounded-2xl border bg-white p-3 shadow-sm">
     <div className="h-9 w-9 rounded-xl bg-stone-100 flex items-center justify-center">{icon}</div>
     <div>
       <div className="text-xs opacity-60">{label}</div>
       <div className="text-sm font-medium">{value}</div>
+      {sub ? <div className="text-xs opacity-70 mt-0.5">{sub}</div> : null}
     </div>
   </div>
 );
