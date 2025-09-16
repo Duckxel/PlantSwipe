@@ -78,8 +78,7 @@ export const GardenDashboardPage: React.FC = () => {
       const nowIso = await fetchServerNowISO()
       const today = nowIso.slice(0,10)
       setServerToday(today)
-      // Ensure today's task row reflects current due plants for this garden
-      await computeGardenTaskForDay({ gardenId: id, dayIso: today })
+      // Do not recompute today's task here to avoid overriding recent actions; rely on action-specific updates
       const start = new Date(today)
       start.setDate(start.getDate() - 29)
       const startIso = start.toISOString().slice(0,10)
@@ -209,7 +208,7 @@ export const GardenDashboardPage: React.FC = () => {
         const idxTodayForStats = isToday ? weekDaysIso.indexOf(today) : -1
         const dueOverride = isToday && idxTodayForStats >= 0 ? (Object.values(perPlant).reduce((acc: number, arr: any) => acc + ((arr as number[]).includes(idxTodayForStats) ? 1 : 0), 0)) : undefined
         const dueVal = dueOverride !== undefined ? dueOverride : entry.due
-        // Treat missing garden_tasks row as failure; otherwise use stored success
+        // Use garden_tasks DB state for success; missing row = failed
         const success = trow ? Boolean(trow.success) : false
         days.push({ date: ds, due: dueVal, completed: entry.completed, success })
       }
@@ -685,8 +684,8 @@ function OverviewSection({ plants, membersCount, serverToday, dailyStats, totalO
   const streak = (() => {
     let s = baseStreak
     if (serverToday) {
-      const todaySuccess = dailyStats.find(d => d.date === serverToday)?.success ?? false
-      if (todaySuccess) s = baseStreak + 1
+      const today = dailyStats.find(d => d.date === serverToday)
+      if (today && today.success) s = baseStreak + 1
     }
     return s
   })()

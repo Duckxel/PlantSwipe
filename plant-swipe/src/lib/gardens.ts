@@ -334,7 +334,7 @@ export async function getGardenTasks(gardenId: string, startDay: string, endDay:
   return (data || []).map((r: any) => ({
     id: String(r.id),
     gardenId: String(r.garden_id),
-    day: String(r.day),
+    day: (r.day instanceof Date ? (r.day as Date).toISOString().slice(0,10) : String(r.day).slice(0,10)),
     taskType: 'watering',
     gardenPlantIds: Array.isArray(r.garden_plant_ids) ? r.garden_plant_ids : [],
     success: Boolean(r.success),
