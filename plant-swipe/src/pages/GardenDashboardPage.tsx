@@ -398,9 +398,22 @@ export const GardenDashboardPage: React.FC = () => {
     try {
       await markGardenPlantWatered(gardenPlantId)
       if (serverToday && garden?.id) {
-        await upsertGardenTask({ gardenId: garden.id, day: serverToday, gardenPlantId, success: true })
-        // Ensure the per-garden task success reflects completion state immediately
-        await computeGardenTaskForDay({ gardenId: garden.id, dayIso: serverToday })
+        try {
+          // Compute today's due/completed from schedule and set garden_tasks.success accordingly
+          const schedMap = await fetchScheduleForPlants(plants.map((gp: any) => gp.id), 1)
+          let due = 0
+          let completed = 0
+          for (const gpId of Object.keys(schedMap)) {
+            for (const row of (schedMap as any)[gpId] as any[]) {
+              if (row.dueDate === serverToday) {
+                due += 1
+                if (row.completedAt) completed += 1
+              }
+            }
+          }
+          const success = due > 0 ? (completed >= due) : false
+          await upsertGardenTask({ gardenId: garden.id, day: serverToday, gardenPlantId: null, success })
+        } catch {}
       }
       await load()
       if (id) navigate(`/garden/${id}/routine`)
