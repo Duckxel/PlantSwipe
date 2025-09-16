@@ -24,14 +24,17 @@ import { supabase } from "@/lib/supabaseClient";
 
 // --- Main Component ---
 export default function PlantSwipe() {
-  const { user, signIn, signUp, signOut, profile } = useAuth()
+  const { user, signIn, signUp, signOut, profile, refreshProfile } = useAuth()
   const [query, setQuery] = useState("")
   const [seasonFilter, setSeasonFilter] = useState<string | null>(null)
   const [colorFilter, setColorFilter] = useState<string | null>(null)
   const [onlySeeds, setOnlySeeds] = useState(false)
+  const [onlyFavorites, setOnlyFavorites] = useState(false)
+  const [favoritesFirst, setFavoritesFirst] = useState(false)
 
   const [index, setIndex] = useState(0)
   const [openInfo, setOpenInfo] = useState<Plant | null>(null)
+  const [likedIds, setLikedIds] = useState<string[]>([])
 
   const location = useLocation()
   const navigate = useNavigate()
@@ -54,6 +57,12 @@ export default function PlantSwipe() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
 
+  // Hydrate liked ids from profile when available
+  React.useEffect(() => {
+    const arr = Array.isArray(profile?.liked_plant_ids) ? profile!.liked_plant_ids!.map(String) : []
+    setLikedIds(arr)
+  }, [profile?.liked_plant_ids])
+
   const loadPlants = React.useCallback(async () => {
     setLoading(true)
     setLoadError(null)
@@ -63,12 +72,32 @@ export default function PlantSwipe() {
         .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount')
         .order('name', { ascending: true })
       if (error) throw error
-      const parsed: Plant[] = (Array.isArray(data) ? data : []).map((p: any) => ({
+      type PlantRow = {
+        id: string | number
+        name: string
+        scientific_name?: string | null
+        colors?: unknown
+        seasons?: unknown
+        rarity: Plant['rarity']
+        meaning?: string | null
+        description?: string | null
+        image_url?: string | null
+        care_sunlight?: Plant['care']['sunlight'] | null
+        care_water?: Plant['care']['water'] | null
+        care_soil?: string | null
+        care_difficulty?: Plant['care']['difficulty'] | null
+        seeds_available?: boolean | null
+        water_freq_unit?: Plant['waterFreqUnit'] | null
+        water_freq_value?: number | null
+        water_freq_period?: Plant['waterFreqPeriod'] | null
+        water_freq_amount?: number | null
+      }
+      const parsed: Plant[] = (Array.isArray(data) ? data : []).map((p: PlantRow) => ({
         id: String(p.id),
         name: String(p.name),
         scientificName: String(p.scientific_name || ''),
-        colors: Array.isArray(p.colors) ? p.colors.map(String) : [],
-        seasons: Array.isArray(p.seasons) ? p.seasons.map(String) : [],
+        colors: Array.isArray(p.colors as string[] | unknown[]) ? (p.colors as unknown[]).map((c) => String(c)) : [],
+        seasons: Array.isArray(p.seasons as string[] | unknown[]) ? (p.seasons as unknown[]).map((s) => String(s)) as Plant['seasons'] : [],
         rarity: p.rarity as Plant['rarity'],
         meaning: p.meaning ? String(p.meaning) : '',
         description: p.description ? String(p.description) : '',
@@ -86,8 +115,9 @@ export default function PlantSwipe() {
         waterFreqAmount: p.water_freq_amount ?? null
       }))
       setPlants(parsed)
-    } catch (e: any) {
-      setLoadError(e?.message || 'Failed to load plants')
+    } catch (e: unknown) {
+      const msg = e && typeof e === 'object' && 'message' in e ? String((e as { message?: unknown }).message || '') : ''
+      setLoadError(msg || 'Failed to load plants')
     } finally {
       setLoading(false)
     }
@@ -98,16 +128,28 @@ export default function PlantSwipe() {
   }, [loadPlants])
 
   const filtered = useMemo(() => {
-    return plants.filter((p: Plant) => {
+    const likedSet = new Set(likedIds)
+    const base = plants.filter((p: Plant) => {
       const matchesQ = `${p.name} ${p.scientificName} ${p.meaning} ${p.colors.join(" ")}`
         .toLowerCase()
         .includes(query.toLowerCase())
-      const matchesSeason = seasonFilter ? p.seasons.includes(seasonFilter as any) : true
+      const matchesSeason = seasonFilter ? p.seasons.includes(seasonFilter as Plant['seasons'][number]) : true
       const matchesColor = colorFilter ? p.colors.map((c: string) => c.toLowerCase()).includes(colorFilter.toLowerCase()) : true
       const matchesSeeds = onlySeeds ? p.seedsAvailable : true
-      return matchesQ && matchesSeason && matchesColor && matchesSeeds
+      const matchesFav = onlyFavorites ? likedSet.has(p.id) : true
+      return matchesQ && matchesSeason && matchesColor && matchesSeeds && matchesFav
     })
-  }, [plants, query, seasonFilter, colorFilter, onlySeeds])
+    if (favoritesFirst) {
+      return base.slice().sort((a, b) => {
+        const la = likedSet.has(a.id) ? 1 : 0
+        const lb = likedSet.has(b.id) ? 1 : 0
+        if (la !== lb) return lb - la
+        // fallback: by name asc to keep deterministic
+        return a.name.localeCompare(b.name)
+      })
+    }
+    return base
+  }, [plants, query, seasonFilter, colorFilter, onlySeeds, onlyFavorites, favoritesFirst, likedIds])
 
   // Swiping-only randomized order with continuous wrap-around
   const [shuffleEpoch, setShuffleEpoch] = useState(0)
@@ -144,13 +186,50 @@ export default function PlantSwipe() {
   // Swipe logic
   const x = useMotionValue(0)
   const threshold = 120
-  const onDragEnd = (_: any, info: { offset: { x: number }; velocity: { x: number } }) => {
+  const onDragEnd = (_: unknown, info: { offset: { x: number }; velocity: { x: number } }) => {
     const dx = info.offset.x + info.velocity.x * 0.2
     if (dx <= -threshold) {
       handlePass()
     } else if (dx >= threshold) {
       handleInfo()
     }
+  }
+
+  // Favorites handling
+  const ensureLoggedIn = () => {
+    if (!user) {
+      setAuthMode('login')
+      setAuthOpen(true)
+      return false
+    }
+    return true
+  }
+
+  const toggleLiked = async (plantId: string) => {
+    if (!ensureLoggedIn()) return
+    setLikedIds((prev) => {
+      const has = prev.includes(plantId)
+      const next = has ? prev.filter((id) => id !== plantId) : [...prev, plantId]
+      // fire-and-forget sync to Supabase
+      ;(async () => {
+        try {
+          const { error } = await supabase
+            .from('profiles')
+            .update({ liked_plant_ids: next })
+            .eq('id', user!.id)
+          if (error) {
+            // revert on error
+            setLikedIds(prev)
+          } else {
+            // keep server in sync in context eventually
+            refreshProfile().catch(() => {})
+          }
+        } catch {
+          setLikedIds(prev)
+        }
+      })()
+      return next
+    })
   }
 
   const openLogin = () => { setAuthMode("login"); setAuthOpen(true) }
@@ -187,10 +266,11 @@ export default function PlantSwipe() {
         }
         console.log('[auth] login ok')
       }
-      try { setAuthOpen(false) } catch {}
-    } catch (e: any) {
+      setAuthOpen(false)
+    } catch (e: unknown) {
       console.error('[auth] unexpected error', e)
-      setAuthError(e?.message || 'Unexpected error')
+      const msg = e && typeof e === 'object' && 'message' in e ? String((e as { message?: unknown }).message || '') : ''
+      setAuthError(msg || 'Unexpected error')
       setAuthSubmitting(false)
     }
   }
@@ -294,6 +374,26 @@ export default function PlantSwipe() {
               >
                 <span className="inline-block h-2 w-2 rounded-full bg-current" /> Seeds only
               </button>
+              <div className="h-2" />
+              <button
+                onClick={() => setOnlyFavorites((v) => !v)}
+                className={`w-full justify-center px-3 py-2 rounded-2xl text-sm shadow-sm border flex items-center gap-2 transition ${
+                  onlyFavorites ? "bg-rose-600 text-white" : "bg-white hover:bg-stone-50"
+                }`}
+                aria-pressed={onlyFavorites}
+              >
+                <span className="inline-block h-2 w-2 rounded-full bg-current" /> Favorites only
+              </button>
+              <div className="h-2" />
+              <button
+                onClick={() => setFavoritesFirst((v) => !v)}
+                className={`w-full justify-center px-3 py-2 rounded-2xl text-sm shadow-sm border flex items-center gap-2 transition ${
+                  favoritesFirst ? "bg-rose-100 text-rose-900 border-rose-300" : "bg-white hover:bg-stone-50"
+                }`}
+                aria-pressed={favoritesFirst}
+              >
+                Favorites first
+              </button>
             </div>
 
             {/* Active filters summary */}
@@ -308,6 +408,12 @@ export default function PlantSwipe() {
                 )}
                 {onlySeeds && (
                   <Badge variant="secondary" className="rounded-xl">Seeds</Badge>
+                )}
+                {onlyFavorites && (
+                  <Badge variant="secondary" className="rounded-xl">Favorites</Badge>
+                )}
+                {favoritesFirst && (
+                  <Badge variant="secondary" className="rounded-xl">Favs first</Badge>
                 )}
                 {!seasonFilter && !colorFilter && !onlySeeds && (
                   <span className="opacity-50">None</span>
@@ -340,6 +446,8 @@ export default function PlantSwipe() {
                       onDragEnd={onDragEnd}
                       handleInfo={handleInfo}
                       handlePass={handlePass}
+                      liked={current ? likedIds.includes(current.id) : false}
+                      onToggleLike={() => { if (current) toggleLiked(current.id) }}
                     />
                   ) : (
                     <></>
@@ -347,7 +455,17 @@ export default function PlantSwipe() {
                 />
                 <Route path="/gardens" element={<GardenListPage />} />
                 <Route path="/garden/:id" element={<GardenDashboardPage />} />
-                <Route path="/search" element={<SearchPage plants={filtered} openInfo={(p) => setOpenInfo(p)} />} />
+                <Route
+                  path="/search"
+                  element={
+                    <SearchPage
+                      plants={filtered}
+                      openInfo={(p) => setOpenInfo(p)}
+                      likedIds={likedIds}
+                      onToggleLike={(id) => toggleLiked(id)}
+                    />
+                  }
+                />
                 <Route path="/profile" element={user ? <ProfilePage /> : <Navigate to="/" replace />} />
                 <Route path="/create" element={user ? (
                   <CreatePlantPage
@@ -375,7 +493,14 @@ export default function PlantSwipe() {
       {/* Info Sheet */}
       <Sheet open={!!openInfo} onOpenChange={(o: boolean) => !o && setOpenInfo(null)}>
         <SheetContent side="bottom" className="max-h-[90vh] overflow-y-auto rounded-t-3xl">
-          {openInfo && <PlantDetails plant={openInfo} onClose={() => setOpenInfo(null)} />}
+          {openInfo && (
+            <PlantDetails
+              plant={openInfo}
+              onClose={() => setOpenInfo(null)}
+              liked={likedIds.includes(openInfo.id)}
+              onToggleLike={() => toggleLiked(openInfo.id)}
+            />
+          )}
         </SheetContent>
       </Sheet>
 
