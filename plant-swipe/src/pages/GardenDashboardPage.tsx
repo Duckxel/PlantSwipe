@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
 import type { Garden } from '@/types/garden'
 import type { Plant } from '@/types/plant'
-import { getGarden, getGardenPlants, getGardenMembers, addMemberByEmail, fetchScheduleForPlants, markGardenPlantWatered, updateGardenPlantFrequency, deleteGardenPlant, reseedSchedule, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, getGardenInstanceInventory, adjustInstanceInventoryAndLogTransaction, updateGardenMemberRole, removeGardenMember, computeGardenTaskForDay, getGardenInventory } from '@/lib/gardens'
+import { getGarden, getGardenPlants, getGardenMembers, addMemberByEmail, fetchScheduleForPlants, markGardenPlantWatered, updateGardenPlantFrequency, deleteGardenPlant, reseedSchedule, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, getGardenInstanceInventory, adjustInstanceInventoryAndLogTransaction, updateGardenMemberRole, removeGardenMember, computeGardenTaskForDay, getGardenInventory, updateGardenPlantsOrder } from '@/lib/gardens'
 import { supabase } from '@/lib/supabaseClient'
 import { useAuth } from '@/context/AuthContext'
 
@@ -59,6 +59,7 @@ export const GardenDashboardPage: React.FC = () => {
   const [addCount, setAddCount] = React.useState<number>(1)
   const [scheduleLockYear, setScheduleLockYear] = React.useState<boolean>(false)
   const [scheduleAllowedPeriods, setScheduleAllowedPeriods] = React.useState<Array<'week'|'month'|'year'> | undefined>(undefined)
+  const [dragIdx, setDragIdx] = React.useState<number | null>(null)
 
   const [inviteOpen, setInviteOpen] = React.useState(false)
   const [inviteEmail, setInviteEmail] = React.useState('')
@@ -516,8 +517,23 @@ export const GardenDashboardPage: React.FC = () => {
                     <Button className="rounded-2xl" onClick={() => setAddOpen(true)}>Add Plant</Button>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {plants.map((gp: any) => (
-                      <Card key={gp.id} className="rounded-2xl overflow-hidden">
+                    {plants.map((gp: any, idx: number) => (
+                      <Card key={gp.id} className={`rounded-2xl overflow-hidden ${dragIdx === idx ? 'ring-2 ring-black' : ''}`}
+                        draggable
+                        onDragStart={() => setDragIdx(idx)}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={async () => {
+                          if (dragIdx === null || dragIdx === idx) return
+                          const next = plants.slice()
+                          const [moved] = next.splice(dragIdx, 1)
+                          next.splice(idx, 0, moved)
+                          setPlants(next)
+                          setDragIdx(null)
+                          try {
+                            await updateGardenPlantsOrder({ gardenId: id!, orderedIds: next.map((p: any) => p.id) })
+                          } catch {}
+                        }}
+                      >
                         <div className="grid grid-cols-3 gap-0">
                           <div className="col-span-1 h-36 bg-cover bg-center" style={{ backgroundImage: `url(${gp.plant?.image || ''})` }} />
                           <div className="col-span-2 p-3">

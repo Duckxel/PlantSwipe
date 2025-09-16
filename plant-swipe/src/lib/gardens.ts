@@ -68,11 +68,12 @@ export async function getGarden(gardenId: string): Promise<Garden | null> {
   }
 }
 
-export async function getGardenPlants(gardenId: string): Promise<Array<GardenPlant & { plant?: Plant | null }>> {
+export async function getGardenPlants(gardenId: string): Promise<Array<GardenPlant & { plant?: Plant | null; sortIndex?: number | null }>> {
   const { data, error } = await supabase
     .from('garden_plants')
-    .select('id, garden_id, plant_id, nickname, seeds_planted, planted_at, expected_bloom_date, override_water_freq_unit, override_water_freq_value')
+    .select('id, garden_id, plant_id, nickname, seeds_planted, planted_at, expected_bloom_date, override_water_freq_unit, override_water_freq_value, sort_index')
     .eq('garden_id', gardenId)
+    .order('sort_index', { ascending: true, nullsFirst: false })
   if (error) throw new Error(error.message)
   const rows = (data || []) as any[]
   if (rows.length === 0) return []
@@ -117,15 +118,25 @@ export async function getGardenPlants(gardenId: string): Promise<Array<GardenPla
     overrideWaterFreqUnit: r.override_water_freq_unit || null,
     overrideWaterFreqValue: r.override_water_freq_value ?? null,
     plant: idToPlant[String(r.plant_id)] || null,
+    sortIndex: (r as any).sort_index ?? null,
   }))
 }
 
 export async function addPlantToGarden(params: { gardenId: string; plantId: string; nickname?: string | null; seedsPlanted?: number; plantedAt?: string | null; expectedBloomDate?: string | null }): Promise<GardenPlant> {
   const { gardenId, plantId, nickname = null, seedsPlanted = 0, plantedAt = null, expectedBloomDate = null } = params
+  // Determine next sort_index to append to bottom
+  const { data: maxRow } = await supabase
+    .from('garden_plants')
+    .select('sort_index')
+    .eq('garden_id', gardenId)
+    .order('sort_index', { ascending: false, nullsFirst: false })
+    .limit(1)
+    .maybeSingle()
+  const nextIndex = Number((maxRow as any)?.sort_index ?? -1) + 1
   const { data, error } = await supabase
     .from('garden_plants')
-    .insert({ garden_id: gardenId, plant_id: plantId, nickname, seeds_planted: seedsPlanted, planted_at: plantedAt, expected_bloom_date: expectedBloomDate })
-    .select('id, garden_id, plant_id, nickname, seeds_planted, planted_at, expected_bloom_date')
+    .insert({ garden_id: gardenId, plant_id: plantId, nickname, seeds_planted: seedsPlanted, planted_at: plantedAt, expected_bloom_date: expectedBloomDate, sort_index: nextIndex })
+    .select('id, garden_id, plant_id, nickname, seeds_planted, planted_at, expected_bloom_date, sort_index')
     .single()
   if (error) throw new Error(error.message)
   return {
@@ -136,6 +147,15 @@ export async function addPlantToGarden(params: { gardenId: string; plantId: stri
     seedsPlanted: Number(data.seeds_planted ?? 0),
     plantedAt: data.planted_at,
     expectedBloomDate: data.expected_bloom_date,
+  }
+}
+
+export async function updateGardenPlantsOrder(params: { gardenId: string; orderedIds: string[] }): Promise<void> {
+  const { gardenId, orderedIds } = params
+  // Batch update sort_index; keep it simple with sequential updates
+  for (let i = 0; i < orderedIds.length; i++) {
+    const id = orderedIds[i]
+    await supabase.from('garden_plants').update({ sort_index: i }).eq('id', id).eq('garden_id', gardenId)
   }
 }
 

@@ -39,7 +39,8 @@ create table if not exists public.garden_plants (
   nickname text,
   seeds_planted integer not null default 0,
   planted_at timestamptz,
-  expected_bloom_date timestamptz
+  expected_bloom_date timestamptz,
+  sort_index integer
 );
 
 create table if not exists public.garden_plant_events (
