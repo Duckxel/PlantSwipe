@@ -324,6 +324,35 @@ export const GardenDashboardPage: React.FC = () => {
   const confirmAddSelectedPlant = async () => {
     if (!id || !selectedPlant) return
     try {
+      // If there is exactly one existing instance of this species in the garden,
+      // and it has no per-instance count yet, backfill it from species-level inventory
+      const { data: existingRows } = await supabase
+        .from('garden_plants')
+        .select('id')
+        .eq('garden_id', id)
+        .eq('plant_id', selectedPlant.id)
+      const existingIds = (existingRows || []).map((r: any) => String(r.id))
+      if (existingIds.length === 1) {
+        const existingId = existingIds[0]
+        const { data: speciesInv } = await supabase
+          .from('garden_inventory')
+          .select('plants_on_hand')
+          .eq('garden_id', id)
+          .eq('plant_id', selectedPlant.id)
+          .maybeSingle()
+        const { data: instInv } = await supabase
+          .from('garden_instance_inventory')
+          .select('plants_on_hand')
+          .eq('garden_plant_id', existingId)
+          .maybeSingle()
+        const speciesCount = Number(speciesInv?.plants_on_hand ?? 0)
+        const instCount = Number(instInv?.plants_on_hand ?? 0)
+        if (speciesCount > 0 && instCount === 0) {
+          await supabase
+            .from('garden_instance_inventory')
+            .upsert({ garden_id: id, garden_plant_id: existingId, plants_on_hand: speciesCount, seeds_on_hand: 0 }, { onConflict: 'garden_plant_id' })
+        }
+      }
       const nicknameVal = addNickname.trim().length > 0 ? addNickname.trim() : null
       const qty = Math.max(0, Number(addCount || 0))
       const gp = await addPlantToGarden({ gardenId: id, plantId: selectedPlant.id, seedsPlanted: 0, nickname: nicknameVal || undefined })
