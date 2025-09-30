@@ -61,6 +61,19 @@ The application will be available at:
 
 ---
 
+## 🚢 Production deployment
+
+See `plant-swipe/deploy/README_DEPLOY.md` for nginx config, PM2 process file, and a `deploy.sh` script that builds and syncs to a remote server over SSH. Provide your environment in `.env` (see `.env.example`).
+
+Quick deploy from local machine:
+```bash
+export REMOTE_HOST=your.server.ip
+export REMOTE_USER=root # or deploy user
+bash plant-swipe/deploy/deploy.sh
+```
+
+Node-backed mode exposes the API at `/api/*` via `server.js` and serves the built SPA.
+
 ## 📂 Tech Stack
 
 * **Frontend**: Vite + React
