@@ -77,3 +77,36 @@ export interface GardenTransaction {
   notes?: string | null
 }
 
+// ===== Tasks v2 (generic per-plant tasks) =====
+
+export type TaskType = 'water' | 'fertilize' | 'harvest' | 'custom'
+export type TaskScheduleKind = 'one_time_date' | 'one_time_duration' | 'repeat_duration'
+export type TaskUnit = 'hour' | 'day' | 'week' | 'month' | 'year'
+
+export interface GardenPlantTask {
+  id: string
+  gardenId: string
+  gardenPlantId: string
+  type: TaskType
+  customName?: string | null
+  scheduleKind: TaskScheduleKind
+  // When scheduleKind === 'one_time_date'
+  dueAt?: string | null
+  // When scheduleKind in one_time_duration | repeat_duration
+  intervalAmount?: number | null
+  intervalUnit?: TaskUnit | null
+  // How many times must the task be done per occurrence/period
+  requiredCount: number
+  createdAt: string
+}
+
+export interface GardenPlantTaskOccurrence {
+  id: string
+  taskId: string
+  gardenPlantId: string
+  dueAt: string
+  requiredCount: number
+  completedCount: number
+  completedAt?: string | null
+}
+
