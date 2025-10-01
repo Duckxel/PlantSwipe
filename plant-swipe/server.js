@@ -144,7 +144,7 @@ app.get('/api/health', (_req, res) => {
 })
 
 // Admin: restart server (detached self-reexec)
-app.post('/api/admin/restart-server', async (req, res) => {
+async function handleRestartServer(req, res) {
   try {
     const uid = await ensureAdmin(req, res)
     if (!uid) return
@@ -163,6 +163,14 @@ app.post('/api/admin/restart-server', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to restart server' })
   }
+}
+
+app.post('/api/admin/restart-server', handleRestartServer)
+app.get('/api/admin/restart-server', handleRestartServer)
+app.options('/api/admin/restart-server', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  res.status(204).end()
 })
 
 // Support both POST and GET (some environments may block POST from admin UI)
