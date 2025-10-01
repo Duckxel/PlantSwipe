@@ -32,6 +32,223 @@ begin
   end if;
 end $$;
 
+-- ===== Watering schedule definitions used by the app =====
+
+-- Per-plant pattern configuration
+create table if not exists public.garden_plant_schedule (
+  garden_plant_id uuid primary key references public.garden_plants(id) on delete cascade,
+  period text not null check (period in ('week','month','year')),
+  amount integer not null default 1 check (amount > 0),
+  weekly_days integer[],
+  monthly_days integer[],
+  yearly_days text[],
+  monthly_nth_weekdays text[]
+);
+
+alter table public.garden_plant_schedule enable row level security;
+
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_plant_schedule' and policyname = 'gps_select') then
+    create policy gps_select on public.garden_plant_schedule for select to authenticated
+      using (
+        exists (
+          select 1 from public.garden_plants gp
+          join public.garden_members gm on gm.garden_id = gp.garden_id
+          where gp.id = garden_plant_id and gm.user_id = auth.uid()
+        )
+      );
+  end if;
+end $$;
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_plant_schedule' and policyname = 'gps_iud') then
+    create policy gps_iud on public.garden_plant_schedule for all to authenticated
+      using (
+        exists (
+          select 1 from public.garden_plants gp
+          join public.garden_members gm on gm.garden_id = gp.garden_id
+          where gp.id = garden_plant_id and gm.user_id = auth.uid()
+        )
+      )
+      with check (
+        exists (
+          select 1 from public.garden_plants gp
+          join public.garden_members gm on gm.garden_id = gp.garden_id
+          where gp.id = garden_plant_id and gm.user_id = auth.uid()
+        )
+      );
+  end if;
+end $$;
+
+-- Per-day materialized schedule
+create table if not exists public.garden_watering_schedule (
+  id uuid primary key default gen_random_uuid(),
+  garden_plant_id uuid not null references public.garden_plants(id) on delete cascade,
+  due_date date not null,
+  completed_at timestamptz
+);
+
+create index if not exists gws_plant_due_idx on public.garden_watering_schedule (garden_plant_id, due_date);
+alter table public.garden_watering_schedule enable row level security;
+
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_watering_schedule' and policyname = 'gws_select') then
+    create policy gws_select on public.garden_watering_schedule for select to authenticated
+      using (
+        exists (
+          select 1 from public.garden_plants gp
+          join public.garden_members gm on gm.garden_id = gp.garden_id
+          where gp.id = garden_plant_id and gm.user_id = auth.uid()
+        )
+      );
+  end if;
+end $$;
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_watering_schedule' and policyname = 'gws_iud') then
+    create policy gws_iud on public.garden_watering_schedule for all to authenticated
+      using (
+        exists (
+          select 1 from public.garden_plants gp
+          join public.garden_members gm on gm.garden_id = gp.garden_id
+          where gp.id = garden_plant_id and gm.user_id = auth.uid()
+        )
+      )
+      with check (
+        exists (
+          select 1 from public.garden_plants gp
+          join public.garden_members gm on gm.garden_id = gp.garden_id
+          where gp.id = garden_plant_id and gm.user_id = auth.uid()
+        )
+      );
+  end if;
+end $$;
+
+-- Simple server time helper
+create or replace function public.get_server_now()
+returns timestamptz
+language sql
+stable
+as $$
+  select now();
+$$;
+
+-- Reseed future schedule entries for a plant
+create or replace function public.reseed_watering_schedule(_garden_plant_id uuid, _days_ahead integer default 60)
+returns void
+language plpgsql
+security definer
+as $$
+declare
+  v_gp record;
+  v_def record;
+  d date := (now() at time zone 'utc')::date;
+  end_day date := ((now() at time zone 'utc')::date + make_interval(days => greatest(1, coalesce(_days_ahead, 60))))::date;
+  weekday int;
+  ymd text;
+  week_index int;
+begin
+  delete from public.garden_watering_schedule where garden_plant_id = _garden_plant_id and due_date >= d;
+
+  select gp.id, gp.override_water_freq_unit, gp.override_water_freq_value into v_gp
+  from public.garden_plants gp where gp.id = _garden_plant_id;
+
+  select gps.period, gps.amount, gps.weekly_days, gps.monthly_days, gps.yearly_days, gps.monthly_nth_weekdays
+  into v_def
+  from public.garden_plant_schedule gps where gps.garden_plant_id = _garden_plant_id;
+
+  while d <= end_day loop
+    weekday := extract(dow from d);
+    ymd := to_char(d, 'MM-DD');
+    week_index := floor((extract(day from d) - 1) / 7) + 1;
+
+    if v_def is not null then
+      if v_def.period = 'week' then
+        if v_def.weekly_days is not null and weekday = any(v_def.weekly_days) then
+          insert into public.garden_watering_schedule (garden_plant_id, due_date) values (_garden_plant_id, d);
+        end if;
+      elsif v_def.period = 'month' then
+        if v_def.monthly_days is not null and (extract(day from d))::int = any(v_def.monthly_days) then
+          insert into public.garden_watering_schedule (garden_plant_id, due_date) values (_garden_plant_id, d);
+        elsif v_def.monthly_nth_weekdays is not null then
+          if (week_index >= 1 and week_index <= 4) then
+            if (week_index::text || '-' || weekday::text) = any(v_def.monthly_nth_weekdays) then
+              insert into public.garden_watering_schedule (garden_plant_id, due_date) values (_garden_plant_id, d);
+            end if;
+          end if;
+        end if;
+      elsif v_def.period = 'year' then
+        if v_def.yearly_days is not null and ymd = any(v_def.yearly_days) then
+          insert into public.garden_watering_schedule (garden_plant_id, due_date) values (_garden_plant_id, d);
+        end if;
+      end if;
+    elsif v_gp.override_water_freq_unit is not null and v_gp.override_water_freq_value is not null then
+      if v_gp.override_water_freq_unit = 'day' then
+        if ((d - (now() at time zone 'utc')::date) % greatest(1, v_gp.override_water_freq_value)) = 0 then
+          insert into public.garden_watering_schedule (garden_plant_id, due_date) values (_garden_plant_id, d);
+        end if;
+      elsif v_gp.override_water_freq_unit = 'week' then
+        if weekday = extract(dow from (now() at time zone 'utc')::date) then
+          if (floor(extract(epoch from (d - (now() at time zone 'utc')::date)) / (7*24*3600)))::int % greatest(1, v_gp.override_water_freq_value) = 0 then
+            insert into public.garden_watering_schedule (garden_plant_id, due_date) values (_garden_plant_id, d);
+          end if;
+        end if;
+      elsif v_gp.override_water_freq_unit = 'month' then
+        if extract(day from d) = extract(day from (now() at time zone 'utc')::date) then
+          insert into public.garden_watering_schedule (garden_plant_id, due_date) values (_garden_plant_id, d);
+        end if;
+      elsif v_gp.override_water_freq_unit = 'year' then
+        if to_char(d, 'MM-DD') = to_char((now() at time zone 'utc')::date, 'MM-DD') then
+          insert into public.garden_watering_schedule (garden_plant_id, due_date) values (_garden_plant_id, d);
+        end if;
+      end if;
+    end if;
+
+    d := d + 1;
+  end loop;
+end;
+$$;
+
+-- Mark today's schedule complete for a plant
+create or replace function public.mark_garden_plant_watered(_garden_plant_id uuid, _at timestamptz default now())
+returns void
+language plpgsql
+security definer
+as $$
+declare
+  v_day date := (_at at time zone 'utc')::date;
+  v_id uuid;
+begin
+  select id into v_id from public.garden_watering_schedule where garden_plant_id = _garden_plant_id and due_date = v_day limit 1;
+  if v_id is null then
+    insert into public.garden_watering_schedule (garden_plant_id, due_date, completed_at)
+    values (_garden_plant_id, v_day, _at);
+  else
+    update public.garden_watering_schedule set completed_at = _at where id = v_id;
+  end if;
+end;
+$$;
+
+-- Compute per-garden success for a specific day
+create or replace function public.compute_garden_task_for_day(_garden_id uuid, _day date)
+returns void
+language plpgsql
+security definer
+as $$
+declare
+  plant_ids uuid[];
+  due_count int;
+  done_count int;
+begin
+  select array_agg(gp.id) into plant_ids from public.garden_plants gp where gp.garden_id = _garden_id;
+  if plant_ids is null or array_length(plant_ids,1) is null then
+    perform public.touch_garden_task(_garden_id, _day, null, true);
+    return;
+  end if;
+  select count(*) into due_count from public.garden_watering_schedule where garden_plant_id = any(plant_ids) and due_date = _day;
+  select count(*) into done_count from public.garden_watering_schedule where garden_plant_id = any(plant_ids) and due_date = _day and completed_at is not null;
+  perform public.touch_garden_task(_garden_id, _day, null, (done_count >= due_count));
+end;
+$$;
+
 create table if not exists public.garden_plants (
   id uuid primary key default gen_random_uuid(),
   garden_id uuid not null references public.gardens(id) on delete cascade,
@@ -139,6 +356,13 @@ $$;
 -- Backfill: ensure plants_on_hand exists for existing deployments
 alter table if exists public.garden_plants
   add column if not exists plants_on_hand integer not null default 0;
+-- Additional columns used by the app
+alter table if exists public.garden_plants
+  add column if not exists override_water_freq_unit text check (override_water_freq_unit in ('day','week','month','year'));
+alter table if exists public.garden_plants
+  add column if not exists override_water_freq_value integer;
+alter table if exists public.garden_plants
+  add column if not exists sort_index integer;
 
 -- Ensure an empty task exists for all gardens for a given day
 create or replace function public.ensure_daily_tasks_for_gardens(_day date default now()::date)
