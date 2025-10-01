@@ -136,7 +136,8 @@ export default function PlantSwipe() {
       try {
         const session = (await supabase.auth.getSession()).data.session
         const token = session?.access_token
-        const authHeader = token ? { Authorization: `Bearer ${token}` } : {}
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+        if (token) headers.Authorization = `Bearer ${token}`
         const ref = document.referrer || ''
         const extra = {
           viewport: { w: window.innerWidth, h: window.innerHeight, dpr: window.devicePixelRatio || 1 },
@@ -150,7 +151,7 @@ export default function PlantSwipe() {
         }
         await fetch('/api/track-visit', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...authHeader },
+          headers,
           body: JSON.stringify({
             pagePath: path,
             referrer: ref,
