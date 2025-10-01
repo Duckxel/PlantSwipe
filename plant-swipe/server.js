@@ -310,7 +310,7 @@ app.post('/api/admin/backup-db', async (req, res) => {
 
     // Spawn pg_dump and gzip the output to a file
     let stderrBuf = ''
-    const dump = spawn('pg_dump', ['--dbname', connectionString, '--no-owner', '--no-acl'], {
+    const dump = spawnChild('pg_dump', ['--dbname', connectionString, '--no-owner', '--no-acl'], {
       env: { ...process.env },
       stdio: ['ignore', 'pipe', 'pipe'],
     })
@@ -410,8 +410,8 @@ app.get('/api/admin/download-backup', async (req, res) => {
   res.on('close', cleanup)
 })
 
-// Admin: pull latest code from git repository
-app.post('/api/admin/pull-code', async (req, res) => {
+// Admin: pull latest code from git repository and rebuild the frontend
+async function handlePullCode(req, res) {
   try {
     const uid = await ensureAdmin(req, res)
     if (!uid) return
@@ -419,10 +419,6 @@ app.post('/api/admin/pull-code', async (req, res) => {
     const branch = (req.query.branch || '').toString().trim()
     const repoDir = path.resolve(__dirname)
     // Fetch all, prune stale remotes, delete local branches that have no remote (excluding current), checkout selected, and fast-forward pull
-    // Notes:
-    // - Deleting local branches that do not exist on origin anymore
-    // - Skips deleting the currently checked-out branch
-    // - Using --ff-only to avoid merges
     const deleteStaleLocalsPre = `current=$(git -C "${repoDir}" rev-parse --abbrev-ref HEAD); git -C "${repoDir}" for-each-ref --format='%(refname:short)' refs/heads | while read b; do if [ "$b" = "$current" ]; then continue; fi; git -C "${repoDir}" show-ref --verify --quiet refs/remotes/origin/$b || git -C "${repoDir}" branch -D "$b"; done`
     const checkoutCmd = branch ? `git -C "${repoDir}" checkout "${branch}"` : ''
     const deleteStaleLocalsPost = `git -C "${repoDir}" for-each-ref --format='%(refname:short)' refs/heads | while read b; do git -C "${repoDir}" show-ref --verify --quiet refs/remotes/origin/$b || git -C "${repoDir}" branch -D "$b"; done`
@@ -435,12 +431,26 @@ app.post('/api/admin/pull-code', async (req, res) => {
       deleteStaleLocalsPost,
       `git -C "${repoDir}" pull --ff-only`,
     ].filter(Boolean)
-    const fullCmd = parts.join(' && ')
-    const { stdout, stderr } = await exec(fullCmd, { timeout: 240000, shell: '/bin/bash' })
-    res.json({ ok: true, stdout, stderr, branch: branch || undefined })
+    const pullCmd = parts.join(' && ')
+
+    const { stdout: pullStdout, stderr: pullStderr } = await exec(pullCmd, { timeout: 300000, shell: '/bin/bash' })
+
+    // Rebuild the frontend to reflect the latest changes
+    const buildEnv = { ...process.env, CI: process.env.CI || 'true' }
+    const { stdout: buildStdout, stderr: buildStderr } = await exec('npm run build', { cwd: repoDir, timeout: 900000, shell: '/bin/bash', env: buildEnv })
+
+    res.json({ ok: true, branch: branch || undefined, pullStdout, pullStderr, buildStdout, buildStderr })
   } catch (e) {
-    res.status(500).json({ ok: false, error: e?.message || 'git pull failed' })
+    res.status(500).json({ ok: false, error: e?.message || 'git pull/build failed' })
   }
+}
+
+app.post('/api/admin/pull-code', handlePullCode)
+app.get('/api/admin/pull-code', handlePullCode)
+app.options('/api/admin/pull-code', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  res.status(204).end()
 })
 
 // Admin: list remote branches and current branch
@@ -479,6 +489,12 @@ app.get('/api/admin/branches', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to list branches' })
   }
+})
+
+app.options('/api/admin/branches', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  res.status(204).end()
 })
 
 // Static assets
