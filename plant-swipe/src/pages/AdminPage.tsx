@@ -3,7 +3,6 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { RefreshCw, Server, Database, Github, ExternalLink, Check } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
-import { useAuth } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabaseClient'
 
 export const AdminPage: React.FC = () => {
@@ -23,7 +22,6 @@ export const AdminPage: React.FC = () => {
   const [pulling, setPulling] = React.useState(false)
   const [pullDone, setPullDone] = React.useState(false)
   const [apiError, setApiError] = React.useState<string | null>(null)
-  const { profile } = useAuth()
 
   const openBranchDialog = async () => {
     setBranchesOpen(true)
@@ -134,7 +132,7 @@ export const AdminPage: React.FC = () => {
               <RefreshCw className="h-4 w-4" />
               <span>Restart Server</span>
             </Button>
-            <Button className="rounded-2xl w-full" variant="secondary" onClick={openBranchDialog} disabled={!profile?.is_admin}>
+            <Button className="rounded-2xl w-full" variant="secondary" onClick={openBranchDialog}>
               <Github className="h-4 w-4" />
               <RefreshCw className="h-4 w-4" />
               <span>Pull Code</span>
