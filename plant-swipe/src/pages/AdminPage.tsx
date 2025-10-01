@@ -9,6 +9,37 @@ export const AdminPage: React.FC = () => {
     alert(`${msg} – UI only for now`)
   }
 
+  const [syncing, setSyncing] = React.useState(false)
+
+  const runSyncSchema = async () => {
+    if (syncing) return
+    setSyncing(true)
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      if (!token) {
+        alert('You must be signed in to run schema sync')
+        return
+      }
+      const resp = await fetch('/api/admin/sync-schema', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      })
+      const body = await resp.json().catch(() => ({}))
+      if (!resp.ok) {
+        throw new Error(body?.error || `Request failed (${resp.status})`)
+      }
+      alert('Schema synchronized successfully')
+    } catch (e: any) {
+      alert(`Failed to sync schema: ${e?.message || e}`)
+    } finally {
+      setSyncing(false)
+    }
+  }
+
   const [onlineCount, setOnlineCount] = React.useState<number>(0)
   const [registeredCount, setRegisteredCount] = React.useState<number | null>(null)
 
@@ -53,7 +84,7 @@ export const AdminPage: React.FC = () => {
         <CardContent className="p-6 md:p-8 space-y-6">
           <div>
             <div className="text-2xl font-semibold tracking-tight">Admin Controls</div>
-            <div className="text-sm opacity-60 mt-1">UI only. No actions are executed yet.</div>
+            <div className="text-sm opacity-60 mt-1">Admin actions: monitor and manage infrastructure.</div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -66,9 +97,9 @@ export const AdminPage: React.FC = () => {
               <RefreshCw className="h-4 w-4" />
               <span>Restart NGINX</span>
             </Button>
-            <Button className="rounded-2xl w-full" variant="destructive" onClick={notImplemented('Reformat database')}>
+            <Button className="rounded-2xl w-full" variant="destructive" onClick={runSyncSchema} disabled={syncing}>
               <Database className="h-4 w-4" />
-              <span>Reformat Database</span>
+              <span>{syncing ? 'Syncing Schema…' : 'Sync DB Schema'}</span>
             </Button>
           </div>
 
