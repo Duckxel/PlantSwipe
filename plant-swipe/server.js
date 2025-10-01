@@ -293,14 +293,48 @@ function getGeoFromHeaders(req) {
   }
 }
 
-async function insertWebVisit({ sessionId, userId, pagePath, referrer, userAgent, ipAddress, geo, extra }) {
+function parseUtmFromUrl(urlOrPath) {
+  try {
+    const u = new URL(urlOrPath, 'http://local')
+    return {
+      utm_source: u.searchParams.get('utm_source'),
+      utm_medium: u.searchParams.get('utm_medium'),
+      utm_campaign: u.searchParams.get('utm_campaign'),
+      utm_term: u.searchParams.get('utm_term'),
+      utm_content: u.searchParams.get('utm_content'),
+    }
+  } catch {
+    return { utm_source: null, utm_medium: null, utm_campaign: null, utm_term: null, utm_content: null }
+  }
+}
+
+async function computeNextVisitNum(sessionId) {
+  if (!sql || !sessionId) return null
+  try {
+    const rows = await sql`select count(*)::int as c from public.web_visits where session_id = ${sessionId}`
+    const c = Array.isArray(rows) && rows[0] ? Number(rows[0].c) : 0
+    return c + 1
+  } catch {
+    return null
+  }
+}
+
+async function insertWebVisit({ sessionId, userId, pagePath, referrer, userAgent, ipAddress, geo, extra, pageTitle, language, utm, visitNum }) {
   if (!sql) return
   try {
+    const computedVisitNum = Number.isFinite(visitNum) ? visitNum : await computeNextVisitNum(sessionId)
+    const parsedUtm = utm || parseUtmFromUrl(pagePath || '/')
+    const utm_source = parsedUtm?.utm_source || parsedUtm?.source || null
+    const utm_medium = parsedUtm?.utm_medium || parsedUtm?.medium || null
+    const utm_campaign = parsedUtm?.utm_campaign || parsedUtm?.campaign || null
+    const utm_term = parsedUtm?.utm_term || parsedUtm?.term || null
+    const utm_content = parsedUtm?.utm_content || parsedUtm?.content || null
+    const lang = language || null
     await sql`
       insert into public.web_visits
-        (session_id, user_id, page_path, referrer, user_agent, ip_address, geo_country, geo_region, geo_city, latitude, longitude, extra)
+        (session_id, user_id, page_path, referrer, user_agent, ip_address, geo_country, geo_region, geo_city, latitude, longitude, extra, visit_num, page_title, language, utm_source, utm_medium, utm_campaign, utm_term, utm_content)
       values
-        (${sessionId}, ${userId || null}, ${pagePath}, ${referrer || null}, ${userAgent || null}, ${ipAddress || null}, ${geo?.geo_country || null}, ${geo?.geo_region || null}, ${geo?.geo_city || null}, ${geo?.latitude || null}, ${geo?.longitude || null}, ${extra ? sql.json(extra) : sql.json({})})
+        (${sessionId}, ${userId || null}, ${pagePath}, ${referrer || null}, ${userAgent || null}, ${ipAddress || null}, ${geo?.geo_country || null}, ${geo?.geo_region || null}, ${geo?.geo_city || null}, ${geo?.latitude || null}, ${geo?.longitude || null}, ${extra ? sql.json(extra) : sql.json({})}, ${computedVisitNum}, ${pageTitle || null}, ${lang}, ${utm_source}, ${utm_medium}, ${utm_campaign}, ${utm_term}, ${utm_content})
     `
   } catch (e) {
     // Swallow logging errors
@@ -673,15 +707,19 @@ app.options('/api/admin/branches', (_req, res) => {
 app.post('/api/track-visit', async (req, res) => {
   try {
     const sessionId = getOrSetSessionId(req, res)
-    const { pagePath, referrer, userId, extra } = req.body || {}
+    const { pagePath, referrer, userId, extra, pageTitle, language, utm } = req.body || {}
     const ipAddress = getClientIp(req)
     const geo = getGeoFromHeaders(req)
     const userAgent = req.get('user-agent') || ''
+    const tokenUserId = await getUserIdFromRequest(req)
+    const effectiveUserId = tokenUserId || (typeof userId === 'string' ? userId : null)
     if (typeof pagePath !== 'string' || pagePath.length === 0) {
       res.status(400).json({ error: 'Missing pagePath' })
       return
     }
-    await insertWebVisit({ sessionId, userId, pagePath, referrer, userAgent, ipAddress, geo, extra })
+    const acceptLanguage = (req.get('accept-language') || '').split(',')[0] || null
+    const lang = language || acceptLanguage
+    await insertWebVisit({ sessionId, userId: effectiveUserId, pagePath, referrer, userAgent, ipAddress, geo, extra, pageTitle, language: lang, utm })
     res.status(204).end()
   } catch (e) {
     res.status(500).json({ error: 'Failed to record visit' })
@@ -724,12 +762,15 @@ app.get('*', (req, res) => {
   // Record initial page load visit for SPA routes
   try {
     const sessionId = getOrSetSessionId(req, res)
-    const pagePath = req.path || '/'
+    const pagePath = req.originalUrl || req.path || '/'
     const referrer = req.get('referer') || req.get('referrer') || ''
     const ipAddress = getClientIp(req)
     const geo = getGeoFromHeaders(req)
     const userAgent = req.get('user-agent') || ''
-    insertWebVisit({ sessionId, userId: null, pagePath, referrer, userAgent, ipAddress, geo, extra: { source: 'initial_load' } }).catch(() => {})
+    const acceptLanguage = (req.get('accept-language') || '').split(',')[0] || null
+    getUserIdFromRequest(req)
+      .then((uid) => insertWebVisit({ sessionId, userId: uid || null, pagePath, referrer, userAgent, ipAddress, geo, extra: { source: 'initial_load' }, language: acceptLanguage }))
+      .catch(() => {})
   } catch {}
   res.sendFile(path.join(distDir, 'index.html'))
 })

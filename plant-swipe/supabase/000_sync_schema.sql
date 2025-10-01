@@ -973,6 +973,16 @@ create table if not exists public.web_visits (
   extra jsonb not null default '{}'::jsonb
 );
 
+-- New structured fields for counters and common marketing metadata
+alter table if exists public.web_visits add column if not exists visit_num integer;
+alter table if exists public.web_visits add column if not exists page_title text;
+alter table if exists public.web_visits add column if not exists language text;
+alter table if exists public.web_visits add column if not exists utm_source text;
+alter table if exists public.web_visits add column if not exists utm_medium text;
+alter table if exists public.web_visits add column if not exists utm_campaign text;
+alter table if exists public.web_visits add column if not exists utm_term text;
+alter table if exists public.web_visits add column if not exists utm_content text;
+
 -- Helpful indexes
 create index if not exists web_visits_occurred_at_idx on public.web_visits (occurred_at desc);
 create index if not exists web_visits_session_idx on public.web_visits (session_id);
