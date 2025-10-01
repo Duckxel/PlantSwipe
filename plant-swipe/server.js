@@ -63,17 +63,71 @@ async function isAdminUserId(userId) {
 }
 
 async function ensureAdmin(req, res) {
-  const uid = await getUserIdFromRequest(req)
-  if (!uid) {
-    res.status(401).json({ error: 'Unauthorized' })
+  try {
+    const header = req.get('authorization') || req.get('Authorization') || ''
+    const token = header && header.startsWith('Bearer ') ? header.slice(7).trim() : null
+    if (!token) {
+      res.status(401).json({ error: 'Unauthorized' })
+      return null
+    }
+
+    // Resolve user via service key (preferred) or anon key as fallback
+    let user = null
+    if (supabaseAdmin) {
+      try {
+        const { data, error } = await supabaseAdmin.auth.getUser(token)
+        if (!error && data?.user) user = data.user
+      } catch {}
+    }
+    if (!user && supabaseServer) {
+      try {
+        const { data, error } = await supabaseServer.auth.getUser(token)
+        if (!error && data?.user) user = data.user
+      } catch {}
+    }
+    if (!user?.id) {
+      res.status(401).json({ error: 'Invalid or expired token' })
+      return null
+    }
+
+    const userId = user.id
+
+    // Determine admin status: DB flag first, then environment fallbacks
+    let isAdmin = false
+    if (sql) {
+      try {
+        const exists = await sql`select 1 from information_schema.tables where table_schema = 'public' and table_name = 'profiles'`
+        if (exists?.length) {
+          const rows = await sql`select is_admin from public.profiles where id = ${userId} limit 1`
+          isAdmin = !!(rows?.[0]?.is_admin)
+        }
+      } catch {}
+    }
+    if (!isAdmin) {
+      const allowedEmails = (process.env.ADMIN_EMAILS || '')
+        .split(',')
+        .map(s => s.trim().toLowerCase())
+        .filter(Boolean)
+      const allowedUserIds = (process.env.ADMIN_USER_IDS || '')
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean)
+      const email = (user.email || '').toLowerCase()
+      if ((email && allowedEmails.includes(email)) || allowedUserIds.includes(userId)) {
+        isAdmin = true
+      }
+    }
+
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Admin privileges required' })
+      return null
+    }
+
+    return userId
+  } catch {
+    res.status(500).json({ error: 'Failed to authorize request' })
     return null
   }
-  const ok = await isAdminUserId(uid)
-  if (!ok) {
-    res.status(403).json({ error: 'Forbidden' })
-    return null
-  }
-  return uid
 }
 
 function buildConnectionString() {
