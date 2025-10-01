@@ -90,21 +90,21 @@ export const AdminPage: React.FC = () => {
             <div className="text-xs font-medium uppercase tracking-wide opacity-60 mb-2">Quick Links</div>
             <div className="flex flex-wrap gap-2">
               <Button asChild variant="outline" className="rounded-2xl">
-                <a href="https://github.com" target="_blank" rel="noreferrer">
+                <a href="https://github.com/Duckxel/PlantSwipe" target="_blank" rel="noreferrer">
                   <Github className="h-4 w-4" />
                   <span>GitHub</span>
                   <ExternalLink className="h-3 w-3 opacity-70" />
                 </a>
               </Button>
               <Button asChild variant="outline" className="rounded-2xl">
-                <a href="https://supabase.com" target="_blank" rel="noreferrer">
+                <a href="https://supabase.com/dashboard/project/lxnkcguwewrskqnyzjwi" target="_blank" rel="noreferrer">
                   <span className="inline-block h-3 w-3 rounded-sm bg-emerald-500" />
                   <span>Supabase</span>
                   <ExternalLink className="h-3 w-3 opacity-70" />
                 </a>
               </Button>
               <Button asChild variant="outline" className="rounded-2xl">
-                <a href="https://cloud.linode.com" target="_blank" rel="noreferrer">
+                <a href="https://cloud.linode.com/linodes/84813440/metrics" target="_blank" rel="noreferrer">
                   <span className="inline-block h-3 w-3 rounded-sm bg-blue-600" />
                   <span>Linode</span>
                   <ExternalLink className="h-3 w-3 opacity-70" />
