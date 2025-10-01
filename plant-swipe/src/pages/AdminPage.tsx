@@ -8,6 +8,9 @@ import { supabase } from '@/lib/supabaseClient'
 export const AdminPage: React.FC = () => {
 
   const [syncing, setSyncing] = React.useState(false)
+  
+  const [backingUp, setBackingUp] = React.useState(false)
+
   const [restarting, setRestarting] = React.useState(false)
 
   const runSyncSchema = async () => {
@@ -32,8 +35,9 @@ export const AdminPage: React.FC = () => {
         throw new Error(body?.error || `Request failed (${resp.status})`)
       }
       alert('Schema synchronized successfully')
-    } catch (e: any) {
-      alert(`Failed to sync schema: ${e?.message || e}`)
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e)
+      alert(`Failed to sync schema: ${message}`)
     } finally {
       setSyncing(false)
     }
@@ -64,8 +68,10 @@ export const AdminPage: React.FC = () => {
       setTimeout(() => {
         window.location.reload()
       }, 1000)
-    } catch (e: any) {
-      alert(`Failed to restart server: ${e?.message || e}`)
+
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e)
+      alert(`Failed to restart server: ${message}`)
     } finally {
       setRestarting(false)
     }
@@ -107,8 +113,9 @@ export const AdminPage: React.FC = () => {
       setBranches(list)
       setCurrentBranch(cur)
       setSelectedBranch(cur && list.includes(cur) ? cur : (list[0] || ""))
-    } catch (e: any) {
-      setApiError(e?.message || 'Failed to load branches')
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e)
+      setApiError(message || 'Failed to load branches')
     } finally {
       setLoadingBranches(false)
     }
@@ -136,10 +143,62 @@ export const AdminPage: React.FC = () => {
       setTimeout(() => {
         window.location.reload()
       }, 800)
-    } catch (e: any) {
-      setApiError(e?.message || 'Pull failed')
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e)
+      setApiError(message || 'Pull failed')
     } finally {
       setPulling(false)
+    }
+  }
+
+  const runBackup = async () => {
+    if (backingUp) return
+    setBackingUp(true)
+    try {
+      const token = (await supabase.auth.getSession()).data.session?.access_token
+      if (!token) {
+        alert('You must be signed in to back up the database')
+        return
+      }
+
+      const start = await fetch('/api/admin/backup-db', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      })
+      const startBody: { token?: string; filename?: string; error?: string } = await start.json().catch(() => ({} as { token?: string; filename?: string; error?: string }))
+      if (!start.ok) {
+        throw new Error(startBody?.error || `Backup failed (${start.status})`)
+      }
+      const dlToken: string = startBody?.token
+      const filename: string = startBody?.filename || 'backup.sql.gz'
+      if (!dlToken) throw new Error('Missing download token from server')
+
+      const downloadUrl = `/api/admin/download-backup?token=${encodeURIComponent(dlToken)}`
+      const resp = await fetch(downloadUrl, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${token}` },
+      })
+      if (!resp.ok) {
+        const errBody: { error?: string } = await resp.json().catch(() => ({} as { error?: string }))
+        throw new Error(errBody?.error || `Download failed (${resp.status})`)
+      }
+      const blob = await resp.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 2000)
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e)
+      alert(`Backup failed: ${message}`)
+    } finally {
+      setBackingUp(false)
     }
   }
 
@@ -149,12 +208,10 @@ export const AdminPage: React.FC = () => {
     const compute = () => {
       const state = channel.presenceState() as Record<string, Array<Record<string, unknown>>>
       const uniqueIds = new Set<string>()
-      for (const [key, metas] of Object.entries(state)) {
+      for (const [key] of Object.entries(state)) {
         // presence key may be anon_* or a user id
         uniqueIds.add(key)
-        for (const _meta of metas) {
-          // no-op; counting by key is enough for unique connections per user
-        }
+        // no-op; counting by key is enough for unique connections per user
       }
       setOnlineCount(uniqueIds.size)
     }
@@ -201,6 +258,10 @@ export const AdminPage: React.FC = () => {
             <Button className="rounded-2xl w-full" variant="destructive" onClick={runSyncSchema} disabled={syncing}>
               <Database className="h-4 w-4" />
               <span>{syncing ? 'Syncing Schema…' : 'Sync DB Schema'}</span>
+            </Button>
+            <Button className="rounded-2xl w-full" onClick={runBackup} disabled={backingUp}>
+              <Database className="h-4 w-4" />
+              <span>{backingUp ? 'Creating Backup…' : 'Backup DB'}</span>
             </Button>
           </div>
 

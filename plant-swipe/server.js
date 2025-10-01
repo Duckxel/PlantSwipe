@@ -4,13 +4,17 @@ import postgres from 'postgres'
 import dotenv from 'dotenv'
 import path from 'path'
 import fs from 'fs/promises'
-// duplicate import removed
-import { fileURLToPath } from 'url'
-import { exec as execCb } from 'child_process'
-import { promisify } from 'util'
-// duplicate import removed
-import { spawn } from 'child_process'
+import fsSync from 'fs'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import { fileURLToPath } from 'url'
+import { exec as execCb, spawn } from 'child_process'
+import { promisify } from 'util'
+
+import zlib from 'zlib'
+import crypto from 'crypto'
+import { pipeline as streamPipeline } from 'stream'
+import { spawn } from 'child_process'
+
 
 dotenv.config()
 // Optionally load server-only secrets from .env.server (ignored if missing)
@@ -24,10 +28,10 @@ const __dirname = path.dirname(__filename)
 const exec = promisify(execCb)
 
 // Supabase client (server-side) for auth verification
-const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
+const supabaseUrlAny = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
-const supabaseServer = (supabaseUrl && supabaseAnonKey)
-  ? createSupabaseClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: false, autoRefreshToken: false } })
+const supabaseServer = (supabaseUrlAny && supabaseAnonKey)
+  ? createSupabaseClient(supabaseUrlAny, supabaseAnonKey, { auth: { persistSession: false, autoRefreshToken: false } })
   : null
 
 async function getUserIdFromRequest(req) {
@@ -162,6 +166,28 @@ app.post('/api/admin/restart-server', async (req, res) => {
   }
 })
 
+// Admin: restart server (detached self-reexec)
+app.post('/api/admin/restart-server', async (req, res) => {
+  try {
+    const uid = await ensureAdmin(req, res)
+    if (!uid) return
+
+    res.json({ ok: true, message: 'Restarting server' })
+    // Give time for response to flush, then spawn a detached replacement and exit
+    setTimeout(() => {
+      try {
+        const node = process.argv[0]
+        const args = process.argv.slice(1)
+        const child = spawn(node, args, { detached: true, stdio: 'ignore' })
+        child.unref()
+      } catch {}
+      process.exit(0)
+    }, 150)
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to restart server' })
+  }
+})
+
 app.post('/api/admin/sync-schema', async (req, res) => {
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -248,6 +274,131 @@ app.get('/api/plants', async (_req, res) => {
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Query failed' })
   }
+})
+
+// In-memory token store for one-time backup downloads
+const backupTokenStore = new Map()
+
+// Admin: create a gzip'ed pg_dump and return a one-time download token
+app.post('/api/admin/backup-db', async (req, res) => {
+  try {
+    const uid = await ensureAdmin(req, res)
+    if (!uid) return
+
+    if (!connectionString) {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+
+    const backupDir = path.resolve(__dirname, 'tmp_backups')
+    await fs.mkdir(backupDir, { recursive: true })
+
+    const now = new Date()
+    const pad = (n) => String(n).padStart(2, '0')
+    const ts = `${now.getUTCFullYear()}-${pad(now.getUTCMonth() + 1)}-${pad(now.getUTCDate())}_${pad(now.getUTCHours())}-${pad(now.getUTCMinutes())}-${pad(now.getUTCSeconds())}Z`
+    const filename = `plantswipe_backup_${ts}.sql.gz`
+    const destPath = path.join(backupDir, filename)
+
+    // Spawn pg_dump and gzip the output to a file
+    let stderrBuf = ''
+    const dump = spawn('pg_dump', ['--dbname', connectionString, '--no-owner', '--no-acl'], {
+      env: { ...process.env },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    dump.on('error', async () => {
+      try { await fs.unlink(destPath) } catch {}
+    })
+    dump.stderr.on('data', (d) => { stderrBuf += d.toString() })
+
+    const gzip = zlib.createGzip({ level: 9 })
+    const out = fsSync.createWriteStream(destPath)
+
+    const pipelinePromise = new Promise((resolve, reject) => {
+      streamPipeline(dump.stdout, gzip, out, (err) => {
+        if (err) return reject(err)
+        resolve(null)
+      })
+    })
+    const exitPromise = new Promise((resolve) => {
+      dump.on('close', (code) => resolve(code))
+    })
+
+    const [, code] = await Promise.all([pipelinePromise, exitPromise]).catch(async (e) => {
+      try { await fs.unlink(destPath) } catch {}
+      throw e
+    })
+    if (code !== 0) {
+      try { await fs.unlink(destPath) } catch {}
+      throw new Error(`pg_dump exit code ${code}: ${stderrBuf || 'unknown error'}`)
+    }
+
+    // Stat the file
+    const stat = await fs.stat(destPath)
+    const token = crypto.randomBytes(24).toString('hex')
+    backupTokenStore.set(token, { path: destPath, filename, size: stat.size, createdAt: Date.now() })
+
+    // Expire tokens after 15 minutes
+    const expireMs = 15 * 60 * 1000
+    for (const [t, info] of backupTokenStore.entries()) {
+      if ((Date.now() - info.createdAt) > expireMs) {
+        backupTokenStore.delete(t)
+        try { await fs.unlink(info.path) } catch {}
+      }
+    }
+
+    res.json({ ok: true, token, filename, size: stat.size })
+  } catch (e) {
+    const msg = e?.message || 'Backup failed'
+    // Surface friendly message if pg_dump missing
+    if (/ENOENT/.test(msg) || /pg_dump\s+not\s+found/i.test(msg)) {
+      res.status(500).json({ error: 'pg_dump not available on server. Install PostgreSQL client tools.' })
+      return
+    }
+    res.status(500).json({ error: msg })
+  }
+})
+
+// Admin: download a previously created backup (one-time token + admin auth)
+app.get('/api/admin/download-backup', async (req, res) => {
+  const uid = await ensureAdmin(req, res)
+  if (!uid) return
+
+  const token = (req.query.token || '').toString().trim()
+  if (!token) {
+    res.status(400).json({ error: 'Missing token' })
+    return
+  }
+
+  const info = backupTokenStore.get(token)
+  if (!info) {
+    res.status(404).json({ error: 'Invalid or expired token' })
+    return
+  }
+
+  // Enforce 15-minute token expiry
+  const maxAge = 15 * 60 * 1000
+  if ((Date.now() - info.createdAt) > maxAge) {
+    backupTokenStore.delete(token)
+    try { await fs.unlink(info.path) } catch {}
+    res.status(410).json({ error: 'Token expired' })
+    return
+  }
+
+  res.setHeader('Content-Type', 'application/gzip')
+  res.setHeader('Content-Disposition', `attachment; filename="${info.filename}"`)
+
+  const read = fsSync.createReadStream(info.path)
+  read.on('error', () => {
+    res.status(500).end()
+  })
+  read.pipe(res)
+
+  const cleanup = async () => {
+    backupTokenStore.delete(token)
+    try { await fs.unlink(info.path) } catch {}
+  }
+  res.on('finish', cleanup)
+  res.on('close', cleanup)
 })
 
 // Admin: pull latest code from git repository
