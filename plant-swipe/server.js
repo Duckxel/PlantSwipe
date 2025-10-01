@@ -4,10 +4,12 @@ import postgres from 'postgres'
 import dotenv from 'dotenv'
 import path from 'path'
 import fs from 'fs/promises'
-import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+// duplicate import removed
 import { fileURLToPath } from 'url'
 import { exec as execCb } from 'child_process'
 import { promisify } from 'util'
+// duplicate import removed
+import { spawn } from 'child_process'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 
 dotenv.config()
@@ -131,12 +133,33 @@ const app = express()
 app.use(express.json())
 
 // Supabase service client for admin verification
-const supabaseUrl = process.env.SUPABASE_URL
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_ROLE_TOKEN
 const supabaseAdmin = (supabaseUrl && supabaseServiceKey) ? createSupabaseClient(supabaseUrl, supabaseServiceKey) : null
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true })
+})
+
+// Admin: restart server (detached self-reexec)
+app.post('/api/admin/restart-server', async (req, res) => {
+  try {
+    const uid = await ensureAdmin(req, res)
+    if (!uid) return
+
+    res.json({ ok: true, message: 'Restarting server' })
+    // Give time for response to flush, then spawn a detached replacement and exit
+    setTimeout(() => {
+      try {
+        const node = process.argv[0]
+        const args = process.argv.slice(1)
+        const child = spawn(node, args, { detached: true, stdio: 'ignore' })
+        child.unref()
+      } catch {}
+      process.exit(0)
+    }, 150)
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to restart server' })
+  }
 })
 
 app.post('/api/admin/sync-schema', async (req, res) => {
