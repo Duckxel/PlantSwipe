@@ -20,6 +20,7 @@ import type { Plant } from "@/types/plant";
 import { PlantDetails } from "@/components/plant/PlantDetails";
 import { useAuth } from "@/context/AuthContext";
 import { ProfilePage } from "@/pages/ProfilePage";
+import { AdminPage } from "@/pages/AdminPage";
 import { supabase } from "@/lib/supabaseClient";
 
 // --- Main Component ---
@@ -466,6 +467,7 @@ export default function PlantSwipe() {
                   }
                 />
                 <Route path="/profile" element={user ? <ProfilePage /> : <Navigate to="/" replace />} />
+                <Route path="/admin" element={profile?.is_admin ? <AdminPage /> : <Navigate to="/" replace />} />
                 <Route path="/create" element={user ? (
                   <CreatePlantPage
                     onCancel={() => navigate('/')}
