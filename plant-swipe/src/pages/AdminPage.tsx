@@ -225,10 +225,22 @@ export const AdminPage: React.FC = () => {
     return () => { supabase.removeChannel(channel) }
   }, [])
 
-  // Fetch total registered accounts from profiles table
+  // Fetch total registered accounts (admin API first to bypass RLS; fallback to client count)
   React.useEffect(() => {
     let cancelled = false
     ;(async () => {
+      try {
+        const token = (await supabase.auth.getSession()).data.session?.access_token
+        if (token) {
+          const resp = await fetch('/api/admin/stats', { headers: { 'Authorization': `Bearer ${token}` } })
+          if (resp.ok) {
+            const data = await resp.json().catch(() => ({}))
+            const val = typeof data?.profilesCount === 'number' ? data.profilesCount : null
+            if (!cancelled && val !== null) { setRegisteredCount(val); return }
+          }
+        }
+      } catch {}
+      // Fallback: client-side count (will be limited by RLS to own row)
       const { count, error } = await supabase.from('profiles').select('id', { count: 'exact', head: true })
       if (!cancelled) setRegisteredCount(error ? null : (count ?? 0))
     })()
