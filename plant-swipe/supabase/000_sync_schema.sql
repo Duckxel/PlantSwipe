@@ -19,29 +19,29 @@ do $$ begin
     drop policy profiles_select_self on public.profiles;
   end if;
   create policy profiles_select_self on public.profiles for select to authenticated
-    using (id = auth.uid());
+    using (id = (select auth.uid()));
 end $$;
 do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='profiles' and policyname='profiles_insert_self') then
     drop policy profiles_insert_self on public.profiles;
   end if;
   create policy profiles_insert_self on public.profiles for insert to authenticated
-    with check (id = auth.uid());
+    with check (id = (select auth.uid()));
 end $$;
 do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='profiles' and policyname='profiles_update_self') then
     drop policy profiles_update_self on public.profiles;
   end if;
   create policy profiles_update_self on public.profiles for update to authenticated
-    using (id = auth.uid())
-    with check (id = auth.uid());
+    using (id = (select auth.uid()))
+    with check (id = (select auth.uid()));
 end $$;
 do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='profiles' and policyname='profiles_delete_self') then
     drop policy profiles_delete_self on public.profiles;
   end if;
   create policy profiles_delete_self on public.profiles for delete to authenticated
-    using (id = auth.uid());
+    using (id = (select auth.uid()));
 end $$;
 
 -- ========== Plants (catalog) ==========
@@ -77,6 +77,15 @@ alter table if exists public.plants add column if not exists water_freq_unit tex
 alter table if exists public.plants add column if not exists water_freq_value integer;
 alter table if exists public.plants add column if not exists updated_at timestamptz not null default now();
 alter table public.plants enable row level security;
+-- Clean up legacy duplicate read policies if present
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plants' and policyname='Allow read plants') then
+    drop policy "Allow read plants" on public.plants;
+  end if;
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plants' and policyname='Allow select for all') then
+    drop policy "Allow select for all" on public.plants;
+  end if;
+end $$;
 do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='plants' and policyname='plants_select_all') then
     drop policy plants_select_all on public.plants;
@@ -87,7 +96,18 @@ do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='plants' and policyname='plants_iud_all') then
     drop policy plants_iud_all on public.plants;
   end if;
-  create policy plants_iud_all on public.plants for all to authenticated using (true) with check (true);
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plants' and policyname='plants_insert') then
+    drop policy plants_insert on public.plants;
+  end if;
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plants' and policyname='plants_update') then
+    drop policy plants_update on public.plants;
+  end if;
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plants' and policyname='plants_delete') then
+    drop policy plants_delete on public.plants;
+  end if;
+  create policy plants_insert on public.plants for insert to authenticated with check (true);
+  create policy plants_update on public.plants for update to authenticated using (true) with check (true);
+  create policy plants_delete on public.plants for delete to authenticated using (true);
 end $$;
 
 -- ========== Core tables ==========
@@ -275,25 +295,25 @@ alter table public.garden_plant_task_occurrences enable row level security;
 do $$ begin
   if not exists (select 1 from pg_policies where schemaname='public' and tablename='gardens' and policyname='gardens_select') then
     create policy gardens_select on public.gardens for select
-      using (exists (select 1 from public.garden_members gm where gm.garden_id = id and gm.user_id = auth.uid()));
+      using (exists (select 1 from public.garden_members gm where gm.garden_id = id and gm.user_id = (select auth.uid())));
   end if;
 end $$;
 do $$ begin
   if not exists (select 1 from pg_policies where schemaname='public' and tablename='gardens' and policyname='gardens_insert') then
     create policy gardens_insert on public.gardens for insert to authenticated
-      with check (created_by = auth.uid());
+      with check (created_by = (select auth.uid()));
   end if;
 end $$;
 do $$ begin
   if not exists (select 1 from pg_policies where schemaname='public' and tablename='gardens' and policyname='gardens_update') then
     create policy gardens_update on public.gardens for update to authenticated
-      using (created_by = auth.uid());
+      using (created_by = (select auth.uid()));
   end if;
 end $$;
 do $$ begin
   if not exists (select 1 from pg_policies where schemaname='public' and tablename='gardens' and policyname='gardens_delete') then
     create policy gardens_delete on public.gardens for delete to authenticated
-      using (created_by = auth.uid());
+      using (created_by = (select auth.uid()));
   end if;
 end $$;
 
@@ -303,29 +323,29 @@ do $$ begin
     drop policy gm_select on public.garden_members;
   end if;
   create policy gm_select on public.garden_members for select to authenticated
-    using (exists (select 1 from public.garden_members gm2 where gm2.garden_id = garden_id and gm2.user_id = auth.uid()));
+    using (exists (select 1 from public.garden_members gm2 where gm2.garden_id = garden_id and gm2.user_id = (select auth.uid())));
 end $$;
 do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_members' and policyname='gm_insert') then
     drop policy gm_insert on public.garden_members;
   end if;
   create policy gm_insert on public.garden_members for insert to authenticated
-    with check (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid() and gm.role = 'owner') and user_id is not null);
+    with check (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid()) and gm.role = 'owner') and user_id is not null);
 end $$;
 do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_members' and policyname='gm_delete') then
     drop policy gm_delete on public.garden_members;
   end if;
   create policy gm_delete on public.garden_members for delete to authenticated
-    using (role <> 'owner' and (user_id = auth.uid() or exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid() and gm.role = 'owner')));
+    using (role <> 'owner' and (user_id = (select auth.uid()) or exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid()) and gm.role = 'owner')));
 end $$;
 do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_members' and policyname='gm_update') then
     drop policy gm_update on public.garden_members;
   end if;
   create policy gm_update on public.garden_members for update to authenticated
-    using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid() and gm.role = 'owner'))
-    with check (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid() and gm.role = 'owner'));
+    using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid()) and gm.role = 'owner'))
+    with check (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid()) and gm.role = 'owner'));
 end $$;
 
 -- Garden tasks policies
@@ -337,10 +357,14 @@ do $$ begin
     drop policy gtasks_iud on public.garden_tasks;
   end if;
   create policy gtasks_select on public.garden_tasks for select to authenticated
-    using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()));
-  create policy gtasks_iud on public.garden_tasks for all to authenticated
-    using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()))
-    with check (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()));
+    using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid())));
+  create policy gtasks_insert on public.garden_tasks for insert to authenticated
+    with check (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid())));
+  create policy gtasks_update on public.garden_tasks for update to authenticated
+    using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid())))
+    with check (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid())));
+  create policy gtasks_delete on public.garden_tasks for delete to authenticated
+    using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid())));
 end $$;
 
 -- Schedule tables policies
@@ -350,22 +374,41 @@ do $$ begin
       using (exists (
         select 1 from public.garden_plants gp
         join public.garden_members gm on gm.garden_id = gp.garden_id
-        where gp.id = garden_plant_id and gm.user_id = auth.uid()
+        where gp.id = garden_plant_id and gm.user_id = (select auth.uid())
       ));
   end if;
 end $$;
 do $$ begin
-  if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_plant_schedule' and policyname='gps_iud') then
-    create policy gps_iud on public.garden_plant_schedule for all to authenticated
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_plant_schedule' and policyname='gps_iud') then
+    drop policy gps_iud on public.garden_plant_schedule;
+  end if;
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_plant_schedule' and policyname='gps_insert') then
+    create policy gps_insert on public.garden_plant_schedule for insert to authenticated
+      with check (exists (
+        select 1 from public.garden_plants gp
+        join public.garden_members gm on gm.garden_id = gp.garden_id
+        where gp.id = garden_plant_id and gm.user_id = (select auth.uid())
+      ));
+  end if;
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_plant_schedule' and policyname='gps_update') then
+    create policy gps_update on public.garden_plant_schedule for update to authenticated
       using (exists (
         select 1 from public.garden_plants gp
         join public.garden_members gm on gm.garden_id = gp.garden_id
-        where gp.id = garden_plant_id and gm.user_id = auth.uid()
+        where gp.id = garden_plant_id and gm.user_id = (select auth.uid())
       ))
       with check (exists (
         select 1 from public.garden_plants gp
         join public.garden_members gm on gm.garden_id = gp.garden_id
-        where gp.id = garden_plant_id and gm.user_id = auth.uid()
+        where gp.id = garden_plant_id and gm.user_id = (select auth.uid())
+      ));
+  end if;
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_plant_schedule' and policyname='gps_delete') then
+    create policy gps_delete on public.garden_plant_schedule for delete to authenticated
+      using (exists (
+        select 1 from public.garden_plants gp
+        join public.garden_members gm on gm.garden_id = gp.garden_id
+        where gp.id = garden_plant_id and gm.user_id = (select auth.uid())
       ));
   end if;
 end $$;
@@ -376,22 +419,41 @@ do $$ begin
       using (exists (
         select 1 from public.garden_plants gp
         join public.garden_members gm on gm.garden_id = gp.garden_id
-        where gp.id = garden_plant_id and gm.user_id = auth.uid()
+        where gp.id = garden_plant_id and gm.user_id = (select auth.uid())
       ));
   end if;
 end $$;
 do $$ begin
-  if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_watering_schedule' and policyname='gws_iud') then
-    create policy gws_iud on public.garden_watering_schedule for all to authenticated
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_watering_schedule' and policyname='gws_iud') then
+    drop policy gws_iud on public.garden_watering_schedule;
+  end if;
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_watering_schedule' and policyname='gws_insert') then
+    create policy gws_insert on public.garden_watering_schedule for insert to authenticated
+      with check (exists (
+        select 1 from public.garden_plants gp
+        join public.garden_members gm on gm.garden_id = gp.garden_id
+        where gp.id = garden_plant_id and gm.user_id = (select auth.uid())
+      ));
+  end if;
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_watering_schedule' and policyname='gws_update') then
+    create policy gws_update on public.garden_watering_schedule for update to authenticated
       using (exists (
         select 1 from public.garden_plants gp
         join public.garden_members gm on gm.garden_id = gp.garden_id
-        where gp.id = garden_plant_id and gm.user_id = auth.uid()
+        where gp.id = garden_plant_id and gm.user_id = (select auth.uid())
       ))
       with check (exists (
         select 1 from public.garden_plants gp
         join public.garden_members gm on gm.garden_id = gp.garden_id
-        where gp.id = garden_plant_id and gm.user_id = auth.uid()
+        where gp.id = garden_plant_id and gm.user_id = (select auth.uid())
+      ));
+  end if;
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_watering_schedule' and policyname='gws_delete') then
+    create policy gws_delete on public.garden_watering_schedule for delete to authenticated
+      using (exists (
+        select 1 from public.garden_plants gp
+        join public.garden_members gm on gm.garden_id = gp.garden_id
+        where gp.id = garden_plant_id and gm.user_id = (select auth.uid())
       ));
   end if;
 end $$;
@@ -400,13 +462,13 @@ end $$;
 do $$ begin
   if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_plant_events' and policyname='gpe_select') then
     create policy gpe_select on public.garden_plant_events for select to authenticated
-      using (exists (select 1 from public.garden_plants gp where gp.id = garden_plant_id and exists (select 1 from public.garden_members gm where gm.garden_id = gp.garden_id and gm.user_id = auth.uid())));
+      using (exists (select 1 from public.garden_plants gp where gp.id = garden_plant_id and exists (select 1 from public.garden_members gm where gm.garden_id = gp.garden_id and gm.user_id = (select auth.uid()))));
   end if;
 end $$;
 do $$ begin
   if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_plant_events' and policyname='gpe_insert') then
     create policy gpe_insert on public.garden_plant_events for insert to authenticated
-      with check (exists (select 1 from public.garden_plants gp where gp.id = garden_plant_id and exists (select 1 from public.garden_members gm where gm.garden_id = gp.garden_id and gm.user_id = auth.uid())));
+      with check (exists (select 1 from public.garden_plants gp where gp.id = garden_plant_id and exists (select 1 from public.garden_members gm where gm.garden_id = gp.garden_id and gm.user_id = (select auth.uid()))));
   end if;
 end $$;
 
@@ -414,14 +476,25 @@ end $$;
 do $$ begin
   if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_inventory' and policyname='gi_select') then
     create policy gi_select on public.garden_inventory for select
-      using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()));
+      using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid())));
   end if;
 end $$;
 do $$ begin
-  if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_inventory' and policyname='gi_iud') then
-    create policy gi_iud on public.garden_inventory for all to authenticated
-      using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()))
-      with check (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()));
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_inventory' and policyname='gi_iud') then
+    drop policy gi_iud on public.garden_inventory;
+  end if;
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_inventory' and policyname='gi_insert') then
+    create policy gi_insert on public.garden_inventory for insert to authenticated
+      with check (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid())));
+  end if;
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_inventory' and policyname='gi_update') then
+    create policy gi_update on public.garden_inventory for update to authenticated
+      using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid())))
+      with check (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid())));
+  end if;
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_inventory' and policyname='gi_delete') then
+    create policy gi_delete on public.garden_inventory for delete to authenticated
+      using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid())));
   end if;
 end $$;
 
@@ -429,14 +502,25 @@ end $$;
 do $$ begin
   if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_instance_inventory' and policyname='gii_select') then
     create policy gii_select on public.garden_instance_inventory for select
-      using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()));
+      using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid())));
   end if;
 end $$;
 do $$ begin
-  if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_instance_inventory' and policyname='gii_iud') then
-    create policy gii_iud on public.garden_instance_inventory for all to authenticated
-      using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()))
-      with check (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()));
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_instance_inventory' and policyname='gii_iud') then
+    drop policy gii_iud on public.garden_instance_inventory;
+  end if;
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_instance_inventory' and policyname='gii_insert') then
+    create policy gii_insert on public.garden_instance_inventory for insert to authenticated
+      with check (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid())));
+  end if;
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_instance_inventory' and policyname='gii_update') then
+    create policy gii_update on public.garden_instance_inventory for update to authenticated
+      using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid())))
+      with check (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid())));
+  end if;
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_instance_inventory' and policyname='gii_delete') then
+    create policy gii_delete on public.garden_instance_inventory for delete to authenticated
+      using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid())));
   end if;
 end $$;
 
@@ -444,13 +528,13 @@ end $$;
 do $$ begin
   if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_transactions' and policyname='gt_select') then
     create policy gt_select on public.garden_transactions for select
-      using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()));
+      using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid())));
   end if;
 end $$;
 do $$ begin
   if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_transactions' and policyname='gt_insert') then
     create policy gt_insert on public.garden_transactions for insert to authenticated
-      with check (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()));
+      with check (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid())));
   end if;
 end $$;
 
@@ -458,14 +542,25 @@ end $$;
 do $$ begin
   if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_plant_tasks' and policyname='gpt_select') then
     create policy gpt_select on public.garden_plant_tasks for select to authenticated
-      using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()));
+      using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid())));
   end if;
 end $$;
 do $$ begin
-  if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_plant_tasks' and policyname='gpt_iud') then
-    create policy gpt_iud on public.garden_plant_tasks for all to authenticated
-      using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()))
-      with check (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()));
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_plant_tasks' and policyname='gpt_iud') then
+    drop policy gpt_iud on public.garden_plant_tasks;
+  end if;
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_plant_tasks' and policyname='gpt_insert') then
+    create policy gpt_insert on public.garden_plant_tasks for insert to authenticated
+      with check (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid())));
+  end if;
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_plant_tasks' and policyname='gpt_update') then
+    create policy gpt_update on public.garden_plant_tasks for update to authenticated
+      using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid())))
+      with check (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid())));
+  end if;
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_plant_tasks' and policyname='gpt_delete') then
+    create policy gpt_delete on public.garden_plant_tasks for delete to authenticated
+      using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid())));
   end if;
 end $$;
 
@@ -475,22 +570,41 @@ do $$ begin
       using (exists (
         select 1 from public.garden_plants gp
         join public.garden_members gm on gm.garden_id = gp.garden_id
-        where gp.id = garden_plant_id and gm.user_id = auth.uid()
+        where gp.id = garden_plant_id and gm.user_id = (select auth.uid())
       ));
   end if;
 end $$;
 do $$ begin
-  if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_plant_task_occurrences' and policyname='gpto_iud') then
-    create policy gpto_iud on public.garden_plant_task_occurrences for all to authenticated
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_plant_task_occurrences' and policyname='gpto_iud') then
+    drop policy gpto_iud on public.garden_plant_task_occurrences;
+  end if;
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_plant_task_occurrences' and policyname='gpto_insert') then
+    create policy gpto_insert on public.garden_plant_task_occurrences for insert to authenticated
+      with check (exists (
+        select 1 from public.garden_plants gp
+        join public.garden_members gm on gm.garden_id = gp.garden_id
+        where gp.id = garden_plant_id and gm.user_id = (select auth.uid())
+      ));
+  end if;
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_plant_task_occurrences' and policyname='gpto_update') then
+    create policy gpto_update on public.garden_plant_task_occurrences for update to authenticated
       using (exists (
         select 1 from public.garden_plants gp
         join public.garden_members gm on gm.garden_id = gp.garden_id
-        where gp.id = garden_plant_id and gm.user_id = auth.uid()
+        where gp.id = garden_plant_id and gm.user_id = (select auth.uid())
       ))
       with check (exists (
         select 1 from public.garden_plants gp
         join public.garden_members gm on gm.garden_id = gp.garden_id
-        where gp.id = garden_plant_id and gm.user_id = auth.uid()
+        where gp.id = garden_plant_id and gm.user_id = (select auth.uid())
+      ));
+  end if;
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='garden_plant_task_occurrences' and policyname='gpto_delete') then
+    create policy gpto_delete on public.garden_plant_task_occurrences for delete to authenticated
+      using (exists (
+        select 1 from public.garden_plants gp
+        join public.garden_members gm on gm.garden_id = gp.garden_id
+        where gp.id = garden_plant_id and gm.user_id = (select auth.uid())
       ));
   end if;
 end $$;
@@ -500,12 +614,14 @@ create or replace function public.get_server_now()
 returns timestamptz
 language sql
 stable
+set search_path = public
 as $$ select now(); $$;
 
 create or replace function public.reseed_watering_schedule(_garden_plant_id uuid, _days_ahead integer default 60)
 returns void
 language plpgsql
 security definer
+set search_path = public
 as $$
 declare
   v_gp record;
@@ -581,6 +697,7 @@ create or replace function public.mark_garden_plant_watered(_garden_plant_id uui
 returns void
 language plpgsql
 security definer
+set search_path = public
 as $$
 declare
   v_day date := (_at at time zone 'utc')::date;
@@ -600,6 +717,7 @@ create or replace function public.touch_garden_task(_garden_id uuid, _day date, 
 returns void
 language plpgsql
 security definer
+set search_path = public
 as $$
 declare
   v_id uuid;
@@ -630,6 +748,7 @@ create or replace function public.compute_garden_task_for_day(_garden_id uuid, _
 returns void
 language plpgsql
 security definer
+set search_path = public
 as $$
 declare
   plant_ids uuid[];
@@ -651,6 +770,7 @@ create or replace function public.ensure_daily_tasks_for_gardens(_day date defau
 returns void
 language sql
 security definer
+set search_path = public
 as $$
   insert into public.garden_tasks (garden_id, day, task_type, garden_plant_ids, success)
   select g.id, _day, 'watering', '{}'::uuid[], true
@@ -697,6 +817,7 @@ create or replace function public.create_default_watering_task(_garden_id uuid, 
 returns uuid
 language plpgsql
 security definer
+set search_path = public
 as $$
 declare v_id uuid;
 begin
@@ -714,6 +835,7 @@ create or replace function public.upsert_one_time_task(
 returns uuid
 language plpgsql
 security definer
+set search_path = public
 as $$
 declare v_id uuid;
 begin
@@ -734,6 +856,7 @@ create or replace function public.progress_task_occurrence(_occurrence_id uuid, 
 returns void
 language plpgsql
 security definer
+set search_path = public
 as $$
 begin
   update public.garden_plant_task_occurrences
@@ -747,6 +870,7 @@ $$;
 create or replace function public.compute_garden_streak(_garden_id uuid, _anchor_day date)
 returns integer
 language plpgsql
+set search_path = public
 as $$
 declare d date := _anchor_day; s integer := 0; t record; begin
   loop
@@ -761,6 +885,7 @@ end; $$;
 create or replace function public.update_garden_streak(_garden_id uuid, _anchor_day date)
 returns void
 language plpgsql
+set search_path = public
 as $$
 declare s integer; begin
   s := public.compute_garden_streak(_garden_id, _anchor_day);
@@ -770,6 +895,7 @@ end; $$;
 create or replace function public.compute_daily_tasks_for_all_gardens(_day date)
 returns void
 language plpgsql
+set search_path = public
 as $$
 declare g record; anchor date := (_day - interval '1 day')::date; begin
   for g in select id from public.gardens loop
@@ -781,12 +907,14 @@ end; $$;
 -- ========== Cleanup of unused objects ==========
 -- The app does not use these legacy functions; drop if present to declutter.
 -- Safe: functions only (no data rows dropped)
+drop view if exists public.garden_plants_with_water_eval;
 drop function if exists public.every_between_smallint(smallint[], integer, integer);
 drop function if exists public.every_matches_mmdd(text[]);
 drop function if exists public.is_valid_monthly_nth_weekdays(text[]);
 drop function if exists public.nth_weekday_of_month(integer, integer, integer, integer);
 drop function if exists public.get_garden_plant_water_evaluation(uuid);
 drop function if exists public.get_water_evaluation(text, integer);
+drop function if exists public.upsert_garden_plant_schedule_weekly(uuid, integer, smallint[]);
 drop function if exists public.is_garden_member(uuid);
 drop function if exists public.is_garden_owner(uuid);
 drop function if exists public.is_member(uuid);
