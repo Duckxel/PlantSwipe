@@ -63,20 +63,21 @@ export const AdminPage: React.FC = () => {
         alert('You must be signed in to restart the server')
         return
       }
-      // Try GET first to avoid 405s from proxies that block POST
+      // Try POST first to ensure Authorization header is preserved across proxies
       let resp = await fetch('/api/admin/restart-server', {
-        method: 'GET',
+        method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
         },
+        body: '{}',
       })
       if (resp.status === 405) {
-        // Fallback to POST if GET is blocked
+        // Fallback to GET if POST is blocked
         resp = await fetch('/api/admin/restart-server', {
-          method: 'POST',
+          method: 'GET',
           headers: {
             'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
           },
         })
       }
@@ -105,15 +106,16 @@ export const AdminPage: React.FC = () => {
     setPulling(true)
     try {
       const token = (await supabase.auth.getSession()).data.session?.access_token
-      // Try GET first to avoid 405s from proxies that block POST
+      // Try POST first to ensure Authorization header is preserved across proxies
       let res = await fetch('/api/admin/pull-code', {
-        method: 'GET',
-        headers: token ? { 'Authorization': `Bearer ${token}` } : undefined,
+        method: 'POST',
+        headers: token ? { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } : undefined,
+        body: token ? '{}' : undefined,
       })
       if (res.status === 405) {
-        // Fallback to POST if GET is blocked
+        // Fallback to GET if POST is blocked
         res = await fetch('/api/admin/pull-code', {
-          method: 'POST',
+          method: 'GET',
           headers: token ? { 'Authorization': `Bearer ${token}` } : undefined,
         })
       }
