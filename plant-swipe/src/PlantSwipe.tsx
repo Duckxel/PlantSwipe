@@ -131,6 +131,49 @@ export default function PlantSwipe() {
   // Global presence tracking so Admin can see "currently online" users
   const presenceRef = React.useRef<ReturnType<typeof supabase.channel> | null>(null)
   React.useEffect(() => {
+    // Track SPA route changes to server for visit analytics
+    const sendVisit = async (path: string) => {
+      try {
+        const session = (await supabase.auth.getSession()).data.session
+        const token = session?.access_token
+        const authHeader = token ? { Authorization: `Bearer ${token}` } : {}
+        const ref = document.referrer || ''
+        const extra = {
+          viewport: { w: window.innerWidth, h: window.innerHeight, dpr: window.devicePixelRatio || 1 },
+          screen: { w: window.screen?.width || null, h: window.screen?.height || null, colorDepth: (window.screen as any)?.colorDepth || null },
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || null,
+          platform: navigator.platform || null,
+          vendor: navigator.vendor || null,
+          hardwareConcurrency: (navigator as any).hardwareConcurrency || null,
+          memoryGB: (navigator as any).deviceMemory || null,
+          webgl: (() => { try { const c = document.createElement('canvas'); const gl = (c.getContext('webgl') || c.getContext('experimental-webgl')) as WebGLRenderingContext | null; const debug = gl && gl.getExtension('WEBGL_debug_renderer_info'); return debug && gl ? { vendor: gl.getParameter((debug as any).UNMASKED_VENDOR_WEBGL), renderer: gl.getParameter((debug as any).UNMASKED_RENDERER_WEBGL) } : null } catch { return null } })(),
+        }
+        await fetch('/api/track-visit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeader },
+          body: JSON.stringify({
+            pagePath: path,
+            referrer: ref,
+            userId: user?.id || null,
+            pageTitle: document.title || null,
+            language: navigator.language || (navigator as any).languages?.[0] || null,
+            utm: null,
+            extra,
+          }),
+          keepalive: true,
+        })
+      } catch {}
+    }
+
+    // Initial on mount and on subsequent route changes
+    sendVisit(location.pathname + location.search).catch(() => {})
+    const unlisten = () => {
+      // react-router v6 provides useLocation, so listen via effect dependency
+    }
+    return () => { unlisten() }
+  }, [location.pathname, location.search, user?.id])
+
+  React.useEffect(() => {
     // Stable anonymous id for non-authenticated visitors
     let anonId: string | null = null
     try {
