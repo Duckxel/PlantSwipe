@@ -924,7 +924,7 @@ end $$;
 -- The app does not use these legacy functions; drop if present to declutter.
 -- Safe: functions only (no data rows dropped)
 drop view if exists public.garden_plants_with_water_eval;
-drop function if exists public.every_between_smallint(smallint[], integer, integer);
+drop function if exists public.every_between_smallint(smallint[], integer, integer) cascade;
 drop function if exists public.every_matches_mmdd(text[]);
 drop function if exists public.is_valid_monthly_nth_weekdays(text[]);
 drop function if exists public.nth_weekday_of_month(integer, integer, integer, integer);
