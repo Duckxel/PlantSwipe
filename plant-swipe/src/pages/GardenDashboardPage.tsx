@@ -13,7 +13,7 @@ import type { Garden } from '@/types/garden'
 import type { Plant } from '@/types/plant'
 import { getGarden, getGardenPlants, getGardenMembers, addMemberByEmail, fetchScheduleForPlants, markGardenPlantWatered, updateGardenPlantFrequency, deleteGardenPlant, reseedSchedule, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, getGardenInventory, adjustInventoryAndLogTransaction, updateGardenMemberRole, removeGardenMember, listGardenTasks, syncTaskOccurrencesForGarden, listOccurrencesForTasks, progressTaskOccurrence } from '@/lib/gardens'
 import { supabase } from '@/lib/supabaseClient'
-import { useAuth } from '@/context/AuthContext'
+ 
 
 
 type TabKey = 'overview' | 'plants' | 'routine' | 'settings'
@@ -71,7 +71,6 @@ export const GardenDashboardPage: React.FC = () => {
   const [inviteEmail, setInviteEmail] = React.useState('')
   const [inviteError, setInviteError] = React.useState<string | null>(null)
 
-  const { user } = useAuth()
   const currentUserId = user?.id || null
   const isOwner = React.useMemo(() => {
     if (!currentUserId) return false

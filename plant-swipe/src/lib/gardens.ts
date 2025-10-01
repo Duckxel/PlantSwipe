@@ -137,8 +137,8 @@ export async function addPlantToGarden(params: { gardenId: string; plantId: stri
   const nextIndex = Number((maxRow as any)?.sort_index ?? -1) + 1
   const { data, error } = await supabase
     .from('garden_plants')
-    .insert({ garden_id: gardenId, plant_id: plantId, nickname, seeds_planted: seedsPlanted, planted_at: plantedAt, expected_bloom_date: expectedBloomDate, plants_on_hand: 0 })
-    .select('id, garden_id, plant_id, nickname, seeds_planted, planted_at, expected_bloom_date, plants_on_hand')
+    .insert({ garden_id: gardenId, plant_id: plantId, nickname, seeds_planted: seedsPlanted, planted_at: plantedAt, expected_bloom_date: expectedBloomDate, plants_on_hand: 0, sort_index: nextIndex })
+    .select('id, garden_id, plant_id, nickname, seeds_planted, planted_at, expected_bloom_date, plants_on_hand, sort_index')
     .single()
   if (error) throw new Error(error.message)
   return {
