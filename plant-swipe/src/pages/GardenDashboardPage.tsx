@@ -219,14 +219,23 @@ export const GardenDashboardPage: React.FC = () => {
       setDueToday(dset2)
 
       // Load inventory counts for display
-      const inv = await getGardenInventory(id)
-      const countsMap: Record<string, number> = {}
-      for (const it of inv) {
-        countsMap[String(it.plantId)] = Number(it.plantsOnHand || 0)
+      // Compute per-instance counts and totals from garden_plants instances, not species-level inventory
+      const perInstanceCounts: Record<string, number> = {}
+      let total = 0
+      let species = 0
+      const seenSpecies = new Set<string>()
+      for (const gp of gps as any[]) {
+        const c = Number(gp.plantsOnHand || 0)
+        perInstanceCounts[String(gp.plantId)] = (perInstanceCounts[String(gp.plantId)] || 0) + c
+        total += c
+        if (c > 0 && !seenSpecies.has(String(gp.plantId))) {
+          seenSpecies.add(String(gp.plantId))
+          species += 1
+        }
       }
-      setInventoryCounts(countsMap)
-      setTotalOnHand(Object.values(countsMap).reduce((a, b) => a + (Number(b) || 0), 0))
-      setSpeciesOnHand(Object.values(countsMap).filter(v => (Number(v) || 0) > 0).length)
+      setInventoryCounts(perInstanceCounts)
+      setTotalOnHand(total)
+      setSpeciesOnHand(species)
       // Build last-30-days stats from generic task occurrences instead of watering-only
       const statsStart = new Date(today)
       statsStart.setDate(statsStart.getDate() - 29)
@@ -327,9 +336,10 @@ export const GardenDashboardPage: React.FC = () => {
     try {
       const nicknameVal = addNickname.trim().length > 0 ? addNickname.trim() : null
       const qty = Math.max(0, Number(addCount || 0))
+      // Create a new instance and set its own count; do not merge into species inventory
       const gp = await addPlantToGarden({ gardenId: id, plantId: selectedPlant.id, seedsPlanted: 0, nickname: nicknameVal || undefined })
       if (qty > 0) {
-        await adjustInventoryAndLogTransaction({ gardenId: id, plantId: selectedPlant.id, plantsDelta: qty, transactionType: 'buy_plants' })
+        await supabase.from('garden_plants').update({ plants_on_hand: qty }).eq('id', gp.id)
       }
       setAddDetailsOpen(false)
       setAddNickname('')
@@ -472,7 +482,7 @@ export const GardenDashboardPage: React.FC = () => {
                           <div className="col-span-2 p-3">
                             <div className="font-medium">{gp.nickname || gp.plant?.name}</div>
                             {gp.nickname && <div className="text-xs opacity-60">{gp.plant?.name}</div>}
-                            <div className="text-xs opacity-60">On hand: {inventoryCounts[gp.plantId] ?? 0}</div>
+                            <div className="text-xs opacity-60">On hand: {Number(gp.plantsOnHand ?? 0)}</div>
                         <div className="text-xs opacity-60">Tasks: {taskCountsByPlant[gp.id] || 0}</div>
                         <div className="text-xs opacity-60">Due today: {taskOccDueToday[gp.id] || 0}</div>
                             <div className="mt-2 flex gap-2 flex-wrap">
@@ -757,50 +767,24 @@ function OverviewSection({ plants, membersCount, serverToday, dailyStats, totalO
 function EditPlantButton({ gp, gardenId, onChanged, serverToday }: { gp: any; gardenId: string; onChanged: () => Promise<void>; serverToday: string | null }) {
   const [open, setOpen] = React.useState(false)
   const [nickname, setNickname] = React.useState(gp.nickname || '')
-  const [count, setCount] = React.useState<number>(0)
+  const [count, setCount] = React.useState<number>(Number(gp.plantsOnHand ?? 0))
   const [submitting, setSubmitting] = React.useState(false)
 
   React.useEffect(() => {
     setNickname(gp.nickname || '')
   }, [gp.nickname])
 
-  const loadInitialCount = React.useCallback(async () => {
-    try {
-      const { data } = await supabase
-        .from('garden_inventory')
-        .select('plants_on_hand')
-        .eq('garden_id', gardenId)
-        .eq('plant_id', gp.plantId)
-        .maybeSingle()
-      const current = Number(data?.plants_on_hand ?? 0)
-      setCount(current)
-    } catch {}
-  }, [gardenId, gp.plantId])
-  React.useEffect(() => { loadInitialCount() }, [loadInitialCount])
+  React.useEffect(() => { setCount(Number(gp.plantsOnHand ?? 0)) }, [gp.plantsOnHand])
 
   const save = async () => {
     if (submitting) return
     setSubmitting(true)
     try {
-      // Update nickname
-      await supabase.from('garden_plants').update({ nickname: nickname.trim() || null }).eq('id', gp.id)
-      // Update count via inventory table; delete plant if 0
+      // Update nickname & per-instance count; delete plant if count becomes 0
+      await supabase.from('garden_plants').update({ nickname: nickname.trim() || null, plants_on_hand: Math.max(0, Number(count || 0)) }).eq('id', gp.id)
       if (count <= 0) {
         await supabase.from('garden_plants').delete().eq('id', gp.id)
         if (serverToday) await ensureDailyTasksForGardens(serverToday)
-      } else {
-        // Compute delta by reading current inventory
-        const { data: inv } = await supabase
-          .from('garden_inventory')
-          .select('plants_on_hand')
-          .eq('garden_id', gardenId)
-          .eq('plant_id', gp.plantId)
-          .maybeSingle()
-        const current = Number(inv?.plants_on_hand ?? 0)
-        const delta = count - current
-        if (delta !== 0) {
-          await adjustInventoryAndLogTransaction({ gardenId, plantId: gp.plantId, plantsDelta: delta, transactionType: delta > 0 ? 'buy_plants' : 'sell_plants' })
-        }
       }
       await onChanged()
       setOpen(false)

@@ -70,7 +70,7 @@ export async function getGarden(gardenId: string): Promise<Garden | null> {
 export async function getGardenPlants(gardenId: string): Promise<Array<GardenPlant & { plant?: Plant | null }>> {
   const { data, error } = await supabase
     .from('garden_plants')
-    .select('id, garden_id, plant_id, nickname, seeds_planted, planted_at, expected_bloom_date, override_water_freq_unit, override_water_freq_value')
+    .select('id, garden_id, plant_id, nickname, seeds_planted, planted_at, expected_bloom_date, override_water_freq_unit, override_water_freq_value, plants_on_hand')
     .eq('garden_id', gardenId)
   if (error) throw new Error(error.message)
   const rows = (data || []) as any[]
@@ -115,6 +115,7 @@ export async function getGardenPlants(gardenId: string): Promise<Array<GardenPla
     expectedBloomDate: r.expected_bloom_date,
     overrideWaterFreqUnit: r.override_water_freq_unit || null,
     overrideWaterFreqValue: r.override_water_freq_value ?? null,
+    plantsOnHand: Number(r.plants_on_hand ?? 0),
     plant: idToPlant[String(r.plant_id)] || null,
   }))
 }
@@ -123,8 +124,8 @@ export async function addPlantToGarden(params: { gardenId: string; plantId: stri
   const { gardenId, plantId, nickname = null, seedsPlanted = 0, plantedAt = null, expectedBloomDate = null } = params
   const { data, error } = await supabase
     .from('garden_plants')
-    .insert({ garden_id: gardenId, plant_id: plantId, nickname, seeds_planted: seedsPlanted, planted_at: plantedAt, expected_bloom_date: expectedBloomDate })
-    .select('id, garden_id, plant_id, nickname, seeds_planted, planted_at, expected_bloom_date')
+    .insert({ garden_id: gardenId, plant_id: plantId, nickname, seeds_planted: seedsPlanted, planted_at: plantedAt, expected_bloom_date: expectedBloomDate, plants_on_hand: 0 })
+    .select('id, garden_id, plant_id, nickname, seeds_planted, planted_at, expected_bloom_date, plants_on_hand')
     .single()
   if (error) throw new Error(error.message)
   return {
@@ -135,6 +136,7 @@ export async function addPlantToGarden(params: { gardenId: string; plantId: stri
     seedsPlanted: Number(data.seeds_planted ?? 0),
     plantedAt: data.planted_at,
     expectedBloomDate: data.expected_bloom_date,
+    plantsOnHand: Number((data as any).plants_on_hand ?? 0),
   }
 }
 

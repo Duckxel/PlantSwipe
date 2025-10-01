@@ -28,6 +28,7 @@ export interface GardenPlant {
   expectedBloomDate: string | null
   overrideWaterFreqUnit?: WaterFreqUnit | null
   overrideWaterFreqValue?: number | null
+  plantsOnHand?: number | null
 }
 
 export type GardenPlantEventType = "water" | "fertilize" | "prune" | "harvest" | "note"

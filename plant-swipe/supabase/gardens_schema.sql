@@ -39,7 +39,8 @@ create table if not exists public.garden_plants (
   nickname text,
   seeds_planted integer not null default 0,
   planted_at timestamptz,
-  expected_bloom_date timestamptz
+  expected_bloom_date timestamptz,
+  plants_on_hand integer not null default 0
 );
 
 create table if not exists public.garden_plant_events (
@@ -124,6 +125,10 @@ begin
   end if;
 end;
 $$;
+
+-- Backfill: ensure plants_on_hand exists for existing deployments
+alter table if exists public.garden_plants
+  add column if not exists plants_on_hand integer not null default 0;
 
 -- Ensure an empty task exists for all gardens for a given day
 create or replace function public.ensure_daily_tasks_for_gardens(_day date default now()::date)
