@@ -383,6 +383,15 @@ do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_tasks' and policyname='gtasks_iud') then
     drop policy gtasks_iud on public.garden_tasks;
   end if;
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_tasks' and policyname='gtasks_insert') then
+    drop policy gtasks_insert on public.garden_tasks;
+  end if;
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_tasks' and policyname='gtasks_update') then
+    drop policy gtasks_update on public.garden_tasks;
+  end if;
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_tasks' and policyname='gtasks_delete') then
+    drop policy gtasks_delete on public.garden_tasks;
+  end if;
   create policy gtasks_select on public.garden_tasks for select to authenticated
     using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid())));
   create policy gtasks_insert on public.garden_tasks for insert to authenticated
