@@ -142,6 +142,28 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true })
 })
 
+// Admin: restart server (detached self-reexec)
+app.post('/api/admin/restart-server', async (req, res) => {
+  try {
+    const uid = await ensureAdmin(req, res)
+    if (!uid) return
+
+    res.json({ ok: true, message: 'Restarting server' })
+    // Give time for response to flush, then spawn a detached replacement and exit
+    setTimeout(() => {
+      try {
+        const node = process.argv[0]
+        const args = process.argv.slice(1)
+        const child = spawn(node, args, { detached: true, stdio: 'ignore' })
+        child.unref()
+      } catch {}
+      process.exit(0)
+    }, 150)
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to restart server' })
+  }
+})
+
 app.post('/api/admin/sync-schema', async (req, res) => {
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })

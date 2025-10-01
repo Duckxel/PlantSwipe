@@ -6,12 +6,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { supabase } from '@/lib/supabaseClient'
 
 export const AdminPage: React.FC = () => {
-  const notImplemented = (msg: string) => () => {
-    alert(`${msg} – UI only for now`)
-  }
 
   const [syncing, setSyncing] = React.useState(false)
   const [backingUp, setBackingUp] = React.useState(false)
+  const [restarting, setRestarting] = React.useState(false)
 
   const runSyncSchema = async () => {
     if (syncing) return
@@ -35,10 +33,44 @@ export const AdminPage: React.FC = () => {
         throw new Error(body?.error || `Request failed (${resp.status})`)
       }
       alert('Schema synchronized successfully')
-    } catch (e: any) {
-      alert(`Failed to sync schema: ${e?.message || e}`)
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e)
+      alert(`Failed to sync schema: ${message}`)
     } finally {
       setSyncing(false)
+    }
+  }
+
+  const restartServer = async () => {
+    if (restarting) return
+    setRestarting(true)
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      if (!token) {
+        alert('You must be signed in to restart the server')
+        return
+      }
+      const resp = await fetch('/api/admin/restart-server', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      })
+      const body = await resp.json().catch(() => ({}))
+      if (!resp.ok) {
+        throw new Error(body?.error || `Request failed (${resp.status})`)
+      }
+      // Give the server a moment to restart, then reload client
+      setTimeout(() => {
+        window.location.reload()
+      }, 1000)
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e)
+      alert(`Failed to restart server: ${message}`)
+    } finally {
+      setRestarting(false)
     }
   }
 
@@ -78,8 +110,9 @@ export const AdminPage: React.FC = () => {
       setBranches(list)
       setCurrentBranch(cur)
       setSelectedBranch(cur && list.includes(cur) ? cur : (list[0] || ""))
-    } catch (e: any) {
-      setApiError(e?.message || 'Failed to load branches')
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e)
+      setApiError(message || 'Failed to load branches')
     } finally {
       setLoadingBranches(false)
     }
@@ -107,8 +140,9 @@ export const AdminPage: React.FC = () => {
       setTimeout(() => {
         window.location.reload()
       }, 800)
-    } catch (e: any) {
-      setApiError(e?.message || 'Pull failed')
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e)
+      setApiError(message || 'Pull failed')
     } finally {
       setPulling(false)
     }
@@ -131,7 +165,7 @@ export const AdminPage: React.FC = () => {
           'Content-Type': 'application/json',
         },
       })
-      const startBody = await start.json().catch(() => ({} as any))
+      const startBody: { token?: string; filename?: string; error?: string } = await start.json().catch(() => ({} as { token?: string; filename?: string; error?: string }))
       if (!start.ok) {
         throw new Error(startBody?.error || `Backup failed (${start.status})`)
       }
@@ -145,7 +179,7 @@ export const AdminPage: React.FC = () => {
         headers: { 'Authorization': `Bearer ${token}` },
       })
       if (!resp.ok) {
-        const errBody = await resp.json().catch(() => ({}))
+        const errBody: { error?: string } = await resp.json().catch(() => ({} as { error?: string }))
         throw new Error(errBody?.error || `Download failed (${resp.status})`)
       }
       const blob = await resp.blob()
@@ -157,8 +191,9 @@ export const AdminPage: React.FC = () => {
       a.click()
       a.remove()
       setTimeout(() => URL.revokeObjectURL(url), 2000)
-    } catch (e: any) {
-      alert(`Backup failed: ${e?.message || e}`)
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e)
+      alert(`Backup failed: ${message}`)
     } finally {
       setBackingUp(false)
     }
@@ -170,12 +205,10 @@ export const AdminPage: React.FC = () => {
     const compute = () => {
       const state = channel.presenceState() as Record<string, Array<Record<string, unknown>>>
       const uniqueIds = new Set<string>()
-      for (const [key, metas] of Object.entries(state)) {
+      for (const [key] of Object.entries(state)) {
         // presence key may be anon_* or a user id
         uniqueIds.add(key)
-        for (const _meta of metas) {
-          // no-op; counting by key is enough for unique connections per user
-        }
+        // no-op; counting by key is enough for unique connections per user
       }
       setOnlineCount(uniqueIds.size)
     }
@@ -209,10 +242,10 @@ export const AdminPage: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <Button className="rounded-2xl w-full" onClick={notImplemented('Restart server')}>
+            <Button className="rounded-2xl w-full" onClick={restartServer} disabled={restarting}>
               <Server className="h-4 w-4" />
               <RefreshCw className="h-4 w-4" />
-              <span>Restart Server</span>
+              <span>{restarting ? 'Restarting…' : 'Restart Server'}</span>
             </Button>
             <Button className="rounded-2xl w-full" variant="secondary" onClick={openBranchDialog}>
               <Github className="h-4 w-4" />
