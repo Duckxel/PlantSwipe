@@ -107,7 +107,14 @@ export const AdminPage: React.FC = () => {
         return
       }
       if (!res.ok) throw new Error(`Failed to load branches (${res.status})`)
-      const data = await res.json()
+      let data: any = {}
+      try {
+        data = await res.json()
+      } catch (err) {
+        // Handle unexpected HTML/text responses gracefully (e.g., proxy errors)
+        const text = await res.text().catch(() => '')
+        throw new Error(text?.slice(0, 200) || 'Invalid server response')
+      }
       const list: string[] = Array.isArray(data?.branches) ? data.branches : []
       const cur: string = typeof data?.current === 'string' ? data.current : ""
       setBranches(list)
@@ -136,7 +143,13 @@ export const AdminPage: React.FC = () => {
         return
       }
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
+        let data: any = {}
+        try {
+          data = await res.json()
+        } catch (err) {
+          const text = await res.text().catch(() => '')
+          throw new Error(text?.slice(0, 200) || `Pull failed (${res.status})`)
+        }
         throw new Error(data?.error || `Pull failed (${res.status})`)
       }
       setPullDone(true)
