@@ -6,6 +6,10 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 
 dotenv.config()
+// Optionally load server-only secrets from .env.server (ignored if missing)
+try {
+  dotenv.config({ path: path.resolve(__dirname, '.env.server') })
+} catch {}
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
