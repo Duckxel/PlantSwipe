@@ -41,21 +41,53 @@ flowchart LR
   Static --> User
 ```
 
-Swipe interaction at a glance:
 
-```mermaid
-sequenceDiagram
-  participant U as User
-  participant W as Web (React)
-  participant A as API (Express)
-  participant D as DB (Postgres)
-  U->>W: Drag card ➜ velocity/offset
-  W-->>U: Threshold reached ➜ Like/Pass animation
-  W->>A: POST /api/interaction
-  A->>D: INSERT interaction
-  D-->>A: OK
-  A-->>W: JSON { status: "saved" }
-```
+
+---
+
+## 🌟 Who it's for
+
+- **Plant lovers**: discover new favorites in seconds and learn as you go.
+- **Gardeners & clubs**: plan plantings, track events, and celebrate progress.
+- **Educators & libraries**: curate collections by meaning, season, and care.
+- **Nurseries & communities**: showcase varieties and invite participation.
+
+---
+
+## 💚 Why people love it
+
+- **Feels magical**: fluid swipes, gentle animations, instant feedback.
+- **Teaches without effort**: scientific names, meanings, colors — always at hand.
+- **Grows with you**: from casual browsing to full garden dashboards.
+- **No heavy setup**: works locally, deploys cleanly, extends easily.
+
+---
+
+## 📦 Popular use cases
+
+- Discover plants to match a color palette or season.
+- Track seeds and plants across personal or community gardens.
+- Create themed collections for workshops or classes.
+- Run a kiosk‑style “plant matcher” at events.
+
+---
+
+## 💬 What early users say
+
+> “I found three plants I’d never heard of in five minutes.” — A.
+
+> “Our club finally tracks garden tasks without spreadsheets.” — M.
+
+> “The swipe UI makes learning plant names actually fun.” — R.
+
+---
+
+## 👉 Get involved
+
+- ⭐ Star the repo to follow progress
+- 🐛 Open issues for bugs or ideas
+- 🔧 Submit PRs — the codebase is designed to be friendly
+- 🌱 Share PlantSwipe with a gardener you love
 
 ---
 
@@ -73,17 +105,7 @@ sequenceDiagram
 
 ---
 
-## 🆚 How PlantSwipe compares
 
-|  | PlantSwipe | Spreadsheet | Generic plant app | Marketplace |
-| --- | --- | --- | --- | --- |
-| Discovery UX | ✅ Swipe, badges, animations | ❌ Manual, text‑heavy | ➖ Varies | ➖ Catalog‑first |
-| Data accuracy | ✅ Typed, normalized | ❌ Error‑prone | ➖ Mixed | ➖ Seller‑biased |
-| Collaboration | ✅ Built‑in path | ➖ Difficult | ➖ Varies | ➖ Limited |
-| Care guidance | ✅ Clear hints | ❌ None | ➖ Sometimes | ➖ Sales‑oriented |
-| Extensibility | ✅ Modern web stack | ❌ Hard | ➖ Limited | ➖ Locked |
-
----
 
 ## 🧪 Quick start
 
@@ -147,7 +169,6 @@ For a deeper technical deep‑dive, see `plant-swipe/README.md`.
 
 - **Is it open‑source?** Yes — use, learn, and adapt.
 - **Can I plug in my own database?** Yes — point the server to your Postgres.
-- **Does the client leak secrets?** No — only `VITE_*` env vars are exposed to the browser.
 
 ---
 
