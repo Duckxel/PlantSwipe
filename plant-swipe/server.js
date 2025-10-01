@@ -189,6 +189,40 @@ const sql = connectionString ? postgres(connectionString) : null
 const app = express()
 app.use(express.json())
 
+// Global CORS and preflight handling for API routes
+app.use((req, res, next) => {
+  try {
+    const origin = req.headers.origin
+    // Allow all origins by default; optionally restrict via CORS_ALLOW_ORIGINS
+    const allowList = (process.env.CORS_ALLOW_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean)
+    if (origin) {
+      if (allowList.length === 0 || allowList.includes(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', allowList.length ? origin : '*')
+        res.setHeader('Vary', 'Origin')
+      }
+    } else {
+      res.setHeader('Access-Control-Allow-Origin', '*')
+    }
+    if (req.path && req.path.startsWith('/api/')) {
+      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+      res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+      if (req.method === 'OPTIONS') {
+        res.status(204).end()
+        return
+      }
+    }
+  } catch {}
+  next()
+})
+
+// Catch-all OPTIONS for any /api/* route (defense-in-depth)
+app.options('/api/*', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.status(204).end()
+})
+
 // Supabase service client for admin verification
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_ROLE_TOKEN
 const supabaseAdmin = (supabaseUrlEnv && supabaseServiceKey) ? createSupabaseClient(supabaseUrlEnv, supabaseServiceKey) : null
