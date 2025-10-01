@@ -1,6 +1,6 @@
 import React from "react"
 import { useNavigate, Link, useLocation } from "react-router-dom"
-import { Leaf, Sprout, Sparkles, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Plus } from "lucide-react"
+import { Leaf, Sprout, Sparkles, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Plus, Shield } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 interface TopBarProps {
@@ -12,9 +12,12 @@ interface TopBarProps {
   onLogout?: () => void
 }
 
+import { useAuth } from "@/context/AuthContext"
+
 export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, displayName, onProfile, onLogout }) => {
   const navigate = useNavigate()
   const location = useLocation()
+  const { profile } = useAuth()
   const [menuOpen, setMenuOpen] = React.useState(false)
   const menuRef = React.useRef<HTMLDivElement | null>(null)
   React.useEffect(() => {
@@ -67,6 +70,11 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
             </Button>
             {menuOpen && (
               <div className="absolute right-0 mt-2 w-40 rounded-xl border bg-white shadow z-20 p-1">
+                {profile?.is_admin && (
+                  <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/admin') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 flex items-center gap-2">
+                    <Shield className="h-4 w-4" /> Admin
+                  </button>
+                )}
                 <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); (onProfile ? onProfile : () => navigate('/profile'))() }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 flex items-center gap-2">
                   <User className="h-4 w-4" /> Profile
                 </button>

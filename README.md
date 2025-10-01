@@ -38,26 +38,46 @@ npm install
 
 ### 3. Configure environment variables
 
-Create a **.env** file at the root of the project and add:
+Create a `.env` file in `plant-swipe` with ONLY client vars (Vite exposes only `VITE_`):
 
 ```env
-VITE_SUPABASE_URL=[URL]
-VITE_SUPABASE_ANON_KEY=[API]
-SUPABASE_DB_PASSWORD=[PASSWORD]
+VITE_SUPABASE_URL=YOUR_SUPABASE_URL
+VITE_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
+```
+
+Create `.env.server` in `plant-swipe` for server-only secrets:
+
+```env
+# Option 1: single URL
+# DATABASE_URL=postgresql://user:password@host:5432/dbname?sslmode=require
+
+# Option 2: discrete vars
+# PGHOST=host
+# PGUSER=user
+# PGPASSWORD=pass
+# PGPORT=5432
+# PGDATABASE=postgres
+
+# If using Supabase managed Postgres:
+# SUPABASE_URL=https://<project>.supabase.co
+# SUPABASE_DB_PASSWORD=database_password
+
+# Express listen port (optional)
+# PORT=3000
 ```
 
 ---
 
 ### 4. Start the project
 
-Run the app locally:
+Run the app locally (Vite dev, with API proxy):
 
 ```bash
-npm run dev -- --host 127.0.0.1 --port 3000
+npm run dev
 ```
 
-The application will be available at:
-👉 [http://127.0.0.1:3000](http://127.0.0.1:3000)
+Vite dev server: `http://127.0.0.1:5173` (configurable via `VITE_DEV_HOST`/`VITE_DEV_PORT`).
+API proxy: requests to `/api/*` go to Express on `http://localhost:3000`.
 
 ---
 

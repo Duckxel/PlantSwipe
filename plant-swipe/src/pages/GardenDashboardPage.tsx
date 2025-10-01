@@ -1,5 +1,6 @@
 // @ts-nocheck
 import React from 'react'
+import { useAuth } from '@/context/AuthContext'
 import { useParams, NavLink, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -7,9 +8,10 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
+import { TaskEditorDialog } from '@/components/plant/TaskEditorDialog'
 import type { Garden } from '@/types/garden'
 import type { Plant } from '@/types/plant'
-import { getGarden, getGardenPlants, getGardenMembers, addMemberByEmail, fetchScheduleForPlants, markGardenPlantWatered, updateGardenPlantFrequency, deleteGardenPlant, reseedSchedule, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, getGardenInstanceInventory, adjustInstanceInventoryAndLogTransaction, updateGardenMemberRole, removeGardenMember, computeGardenTaskForDay, getGardenInventory, updateGardenPlantsOrder } from '@/lib/gardens'
+import { getGarden, getGardenPlants, getGardenMembers, addMemberByEmail, fetchScheduleForPlants, markGardenPlantWatered, updateGardenPlantFrequency, deleteGardenPlant, reseedSchedule, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, getGardenInventory, adjustInventoryAndLogTransaction, updateGardenMemberRole, removeGardenMember, listGardenTasks, syncTaskOccurrencesForGarden, listOccurrencesForTasks, progressTaskOccurrence } from '@/lib/gardens'
 import { supabase } from '@/lib/supabaseClient'
 import { useAuth } from '@/context/AuthContext'
 
@@ -37,6 +39,9 @@ export const GardenDashboardPage: React.FC = () => {
   const [serverToday, setServerToday] = React.useState<string | null>(null)
   const [dueToday, setDueToday] = React.useState<Set<string> | null>(null)
   const [dailyStats, setDailyStats] = React.useState<Array<{ date: string; due: number; completed: number; success: boolean }>>([])
+  const [taskOccDueToday, setTaskOccDueToday] = React.useState<Record<string, number>>({})
+  const [taskCountsByPlant, setTaskCountsByPlant] = React.useState<Record<string, number>>({})
+  const [todayTaskOccurrences, setTodayTaskOccurrences] = React.useState<Array<{ id: string; taskId: string; gardenPlantId: string; dueAt: string; requiredCount: number; completedCount: number; completedAt: string | null }>>([])
   const [weekDays, setWeekDays] = React.useState<string[]>([])
   const [weekCounts, setWeekCounts] = React.useState<number[]>([])
   const [dueThisWeekByPlant, setDueThisWeekByPlant] = React.useState<Record<string, number[]>>({})
@@ -50,6 +55,7 @@ export const GardenDashboardPage: React.FC = () => {
   const [selectedPlant, setSelectedPlant] = React.useState<Plant | null>(null)
   const [adding, setAdding] = React.useState(false)
   const [scheduleOpen, setScheduleOpen] = React.useState(false)
+  const [taskOpen, setTaskOpen] = React.useState(false)
   const [pendingGardenPlantId, setPendingGardenPlantId] = React.useState<string | null>(null)
   const [pendingPeriod, setPendingPeriod] = React.useState<'week' | 'month' | 'year' | null>(null)
   const [pendingAmount, setPendingAmount] = React.useState<number>(0)
@@ -64,6 +70,14 @@ export const GardenDashboardPage: React.FC = () => {
   const [inviteOpen, setInviteOpen] = React.useState(false)
   const [inviteEmail, setInviteEmail] = React.useState('')
   const [inviteError, setInviteError] = React.useState<string | null>(null)
+
+  const { user } = useAuth()
+  const currentUserId = user?.id || null
+  const isOwner = React.useMemo(() => {
+    if (!currentUserId) return false
+    const self = members.find(m => m.userId === currentUserId)
+    return self?.role === 'owner'
+  }, [members, currentUserId])
 
   const load = React.useCallback(async () => {
     if (!id) return
@@ -173,6 +187,26 @@ export const GardenDashboardPage: React.FC = () => {
       setWeekCounts(hasAnyDefs ? derivedCounts : weekDaysIso.map(ds => (map[ds]?.due ?? 0)))
       setDueThisWeekByPlant(perPlant)
 
+      // ===== Generic tasks (v2) =====
+      // Ensure occurrences exist in our 30-day window, then load today's per-plant due counts
+      const endWindow = new Date(today)
+      endWindow.setDate(endWindow.getDate() + 30)
+      await syncTaskOccurrencesForGarden(id, startIso, endWindow.toISOString())
+      const allTasks = await listGardenTasks(id)
+      const occs = await listOccurrencesForTasks(allTasks.map(t => t.id), `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`)
+      setTodayTaskOccurrences(occs)
+      const taskCountMap: Record<string, number> = {}
+      for (const t of allTasks) {
+        taskCountMap[t.gardenPlantId] = (taskCountMap[t.gardenPlantId] || 0) + 1
+      }
+      setTaskCountsByPlant(taskCountMap)
+      const dueMap: Record<string, number> = {}
+      for (const o of occs) {
+        const remaining = Math.max(0, (o.requiredCount || 1) - (o.completedCount || 0))
+        if (remaining > 0) dueMap[o.gardenPlantId] = (dueMap[o.gardenPlantId] || 0) + remaining
+      }
+      setTaskOccDueToday(dueMap)
+
       // Determine due-today plants from schedule definitions, excluding those already completed today
       const idxToday = weekDaysIso.indexOf(today)
       const completedToday = new Set<string>()
@@ -187,66 +221,50 @@ export const GardenDashboardPage: React.FC = () => {
       }
       setDueToday(dset2)
 
-      // Load per-instance inventory counts for display and totals
-      // Ensure instance rows exist for any garden_plant without a row
-      try {
-        await supabase.rpc('ensure_instance_inventory_for_garden', { _garden_id: id })
-      } catch {}
-      const invInst = await getGardenInstanceInventory(id)
-      const byInstance: Record<string, number> = {}
-      for (const it of invInst) {
-        byInstance[String(it.gardenPlantId)] = Number(it.plantsOnHand || 0)
-      }
-      // Fallback: if a species has only one instance, mirror species-level inventory into that instance for display
-      try {
-        const speciesInv = await getGardenInventory(id)
-        const speciesCountMap: Record<string, number> = {}
-        for (const row of speciesInv) speciesCountMap[String(row.plantId)] = Number(row.plantsOnHand || 0)
-        const instancesPerSpecies: Record<string, number> = {}
-        for (const gp of gps as any[]) {
-          const pid = String(gp.plantId)
-          instancesPerSpecies[pid] = (instancesPerSpecies[pid] || 0) + 1
-        }
-        for (const gp of gps as any[]) {
-          const key = String(gp.id)
-          const pid = String(gp.plantId)
-          if (!byInstance[key] || byInstance[key] === 0) {
-            if ((instancesPerSpecies[pid] || 0) === 1) {
-              byInstance[key] = Number(speciesCountMap[pid] || 0)
-            }
-          }
-        }
-      } catch {}
-      setInstanceCounts(byInstance)
-      // Totals from instance counts
-      const total = Object.values(byInstance).reduce((a, b) => a + (Number(b) || 0), 0)
-      setTotalOnHand(total)
-      // Species on hand: number of species with aggregated count > 0
-      const speciesSum: Record<string, number> = {}
+
+      // Load inventory counts for display
+      // Compute per-instance counts and totals from garden_plants instances, not species-level inventory
+      const perInstanceCounts: Record<string, number> = {}
+      let total = 0
+      let species = 0
+      const seenSpecies = new Set<string>()
       for (const gp of gps as any[]) {
-        const cnt = Number(byInstance[String(gp.id)] || 0)
-        const pid = String(gp.plantId)
-        speciesSum[pid] = (speciesSum[pid] || 0) + cnt
+        const c = Number(gp.plantsOnHand || 0)
+        perInstanceCounts[String(gp.plantId)] = (perInstanceCounts[String(gp.plantId)] || 0) + c
+        total += c
+        if (c > 0 && !seenSpecies.has(String(gp.plantId))) {
+          seenSpecies.add(String(gp.plantId))
+          species += 1
+        }
       }
-      setSpeciesOnHand(Object.values(speciesSum).filter(v => (Number(v) || 0) > 0).length)
+      setInventoryCounts(perInstanceCounts)
+      setTotalOnHand(total)
+      setSpeciesOnHand(species)
+      // Build last-30-days stats from generic task occurrences instead of watering-only
+      const statsStart = new Date(today)
+      statsStart.setDate(statsStart.getDate() - 29)
+      const statsStartIso = statsStart.toISOString().slice(0,10)
+      const statsEnd = new Date(today)
+      const statsOccs = await listOccurrencesForTasks(allTasks.map(t => t.id), `${statsStartIso}T00:00:00.000Z`, `${statsEnd.toISOString().slice(0,10)}T23:59:59.999Z`)
+      const dayAgg: Record<string, { due: number; completed: number }> = {}
+      for (const o of statsOccs) {
+        const day = new Date(o.dueAt).toISOString().slice(0,10)
+        const req = Math.max(1, Number(o.requiredCount || 1))
+        const comp = Math.min(req, Number(o.completedCount || 0))
+        if (!dayAgg[day]) dayAgg[day] = { due: 0, completed: 0 }
+        dayAgg[day].due += req
+        dayAgg[day].completed += comp
+      }
       const days: Array<{ date: string; due: number; completed: number; success: boolean }> = []
       const anchor30 = new Date(today)
       for (let i = 29; i >= 0; i--) {
         const d = new Date(anchor30)
         d.setDate(d.getDate() - i)
         const ds = d.toISOString().slice(0,10)
-        const entry = map[ds] || { due: 0, completed: 0 }
-        const trow = taskRows.find(tr => tr.day === ds && tr.taskType === 'watering')
-        // If computing for 'today', prefer derived counts from schedule definitions
-        const isToday = ds === today
-        const idxTodayForStats = isToday ? weekDaysIso.indexOf(today) : -1
-        const dueOverride = isToday && idxTodayForStats >= 0 ? (Object.values(perPlant).reduce((acc: number, arr: any) => acc + ((arr as number[]).includes(idxTodayForStats) ? 1 : 0), 0)) : undefined
-        const dueVal = dueOverride !== undefined ? dueOverride : entry.due
-        // Use garden_tasks DB state for success; missing row = failed
-        const success = trow ? Boolean(trow.success) : false
-        days.push({ date: ds, due: dueVal, completed: entry.completed, success })
+        const entry = dayAgg[ds] || { due: 0, completed: 0 }
+        const success = entry.due > 0 ? (entry.completed >= entry.due) : true
+        days.push({ date: ds, due: entry.due, completed: entry.completed, success })
       }
-      // Keep dueToday from schedule definitions (already set)
       setDailyStats(days)
     } catch (e: any) {
       setError(e?.message || 'Failed to load garden')
@@ -356,9 +374,10 @@ export const GardenDashboardPage: React.FC = () => {
       }
       const nicknameVal = addNickname.trim().length > 0 ? addNickname.trim() : null
       const qty = Math.max(0, Number(addCount || 0))
+      // Create a new instance and set its own count; do not merge into species inventory
       const gp = await addPlantToGarden({ gardenId: id, plantId: selectedPlant.id, seedsPlanted: 0, nickname: nicknameVal || undefined })
       if (qty > 0) {
-        await adjustInstanceInventoryAndLogTransaction({ gardenId: id, gardenPlantId: gp.id, plantsDelta: qty, transactionType: 'buy_plants' })
+        await supabase.from('garden_plants').update({ plants_on_hand: qty }).eq('id', gp.id)
       }
       setAddDetailsOpen(false)
       setAddNickname('')
@@ -366,17 +385,9 @@ export const GardenDashboardPage: React.FC = () => {
       setAddOpen(false)
       setSelectedPlant(null)
       setPlantQuery('')
-      // Enforce DB frequency period exactly (week, month, or year) while allowing amount changes
-      const recommended = (selectedPlant.waterFreqPeriod || (selectedPlant.waterFreqUnit as any)) as 'week'|'month'|'year' | undefined
-      const defaultPeriod = (recommended && ['week','month','year'].includes(recommended)) ? recommended : 'week'
-      const defaultAmount = Number(selectedPlant.waterFreqAmount ?? selectedPlant.waterFreqValue ?? 1) || 1
+      // Open Tasks with default watering 2x (user can change unit)
       setPendingGardenPlantId(gp.id)
-      setPendingPeriod(defaultPeriod as any)
-      setPendingAmount(defaultAmount > 0 ? defaultAmount : 1)
-      setInitialSelectionState(undefined)
-      setScheduleLockYear(false)
-      setScheduleAllowedPeriods([defaultPeriod as any])
-      setScheduleOpen(true)
+      setTaskOpen(true)
     } catch (e: any) {
       setError(e?.message || 'Failed to add plant')
     }
@@ -539,10 +550,11 @@ export const GardenDashboardPage: React.FC = () => {
                           <div className="col-span-2 p-3">
                             <div className="font-medium">{gp.nickname || gp.plant?.name}</div>
                             {gp.nickname && <div className="text-xs opacity-60">{gp.plant?.name}</div>}
-                            <div className="text-xs opacity-60">On hand: {instanceCounts[gp.id] ?? 0}</div>
-                            <div className="text-xs opacity-60">Frequency: {gp.overrideWaterFreqValue ? `${gp.overrideWaterFreqValue} / ${gp.overrideWaterFreqUnit}` : 'not set'}</div>
+                            <div className="text-xs opacity-60">On hand: {Number(gp.plantsOnHand ?? 0)}</div>
+                        <div className="text-xs opacity-60">Tasks: {taskCountsByPlant[gp.id] || 0}</div>
+                        <div className="text-xs opacity-60">Due today: {taskOccDueToday[gp.id] || 0}</div>
                             <div className="mt-2 flex gap-2 flex-wrap">
-                              <Button variant="secondary" className="rounded-2xl" onClick={() => openEditSchedule(gp)}>Schedule</Button>
+                              <Button variant="secondary" className="rounded-2xl" onClick={() => { setPendingGardenPlantId(gp.id); setTaskOpen(true) }}>Tasks</Button>
                               <EditPlantButton gp={gp} gardenId={id!} onChanged={load} serverToday={serverToday} />
                               <Button variant="secondary" className="rounded-2xl" onClick={async () => {
                                 await deleteGardenPlant(gp.id)
@@ -573,7 +585,7 @@ export const GardenDashboardPage: React.FC = () => {
                   </div>
                 </div>
               )} />
-              <Route path="routine" element={<RoutineSection plants={plants} duePlantIds={dueToday} onLogWater={logWater} weekDays={weekDays} weekCounts={weekCounts} serverToday={serverToday} dueThisWeekByPlant={dueThisWeekByPlant} />} />
+              <Route path="routine" element={<RoutineSection plants={plants} duePlantIds={dueToday} onLogWater={logWater} weekDays={weekDays} weekCounts={weekCounts} serverToday={serverToday} dueThisWeekByPlant={dueThisWeekByPlant} todayTaskOccurrences={todayTaskOccurrences} onProgressOccurrence={async (occId: string, inc: number) => { await progressTaskOccurrence(occId, inc); await load() }} />} />
               <Route path="settings" element={(
                 <div className="space-y-6">
                   <div className="space-y-3">
@@ -593,11 +605,13 @@ export const GardenDashboardPage: React.FC = () => {
                       ))}
                     </div>
                   </div>
-                  {viewerIsOwner && (
-                    <div className="pt-2">
+                  <div className="pt-2">
+                    {isOwner ? (
                       <Button variant="destructive" className="rounded-2xl" onClick={async () => { if (!id) return; if (!confirm('Delete this garden? This cannot be undone.')) return; try { await supabase.from('gardens').delete().eq('id', id); window.location.href = '/gardens' } catch (e) { alert('Failed to delete garden') } }}>Delete garden</Button>
-                    </div>
-                  )}
+                    ) : (
+                      <Button variant="destructive" className="rounded-2xl" onClick={async () => { if (!id || !currentUserId) return; if (!confirm('Quit this garden? You will be removed as a member.')) return; try { await removeGardenMember({ gardenId: id, userId: currentUserId }); window.location.href = '/gardens' } catch (e) { alert('Failed to quit garden') } }}>Quit garden</Button>
+                    )}
+                  </div>
                 </div>
               )} />
               <Route path="" element={<Navigate to={`overview`} replace />} />
@@ -669,6 +683,9 @@ export const GardenDashboardPage: React.FC = () => {
             allowedPeriods={scheduleAllowedPeriods as any}
           />
 
+          {/* Task Editor Dialog */}
+          <TaskEditorDialog open={taskOpen} onOpenChange={(o) => { setTaskOpen(o); if (!o) setPendingGardenPlantId(null) }} gardenId={id!} gardenPlantId={pendingGardenPlantId || ''} />
+
           {/* Invite Dialog */}
           <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
             <DialogContent className="rounded-2xl">
@@ -691,12 +708,17 @@ export const GardenDashboardPage: React.FC = () => {
   )
 }
 
-function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts, serverToday, dueThisWeekByPlant }: { plants: any[]; duePlantIds: Set<string> | null; onLogWater: (id: string) => Promise<void>; weekDays: string[]; weekCounts: number[]; serverToday: string | null; dueThisWeekByPlant: Record<string, number[]> }) {
+function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts, serverToday, dueThisWeekByPlant, todayTaskOccurrences, onProgressOccurrence }: { plants: any[]; duePlantIds: Set<string> | null; onLogWater: (id: string) => Promise<void>; weekDays: string[]; weekCounts: number[]; serverToday: string | null; dueThisWeekByPlant: Record<string, number[]>; todayTaskOccurrences: Array<{ id: string; taskId: string; gardenPlantId: string; dueAt: string; requiredCount: number; completedCount: number; completedAt: string | null }>; onProgressOccurrence: (id: string, inc: number) => Promise<void> }) {
   const duePlants = React.useMemo(() => {
     if (!duePlantIds) return []
     return plants.filter((gp: any) => duePlantIds.has(gp.id))
   }, [plants, duePlantIds])
   const maxCount = Math.max(1, ...weekCounts)
+  const occsByPlant: Record<string, typeof todayTaskOccurrences> = {}
+  for (const o of todayTaskOccurrences) {
+    if (!occsByPlant[o.gardenPlantId]) occsByPlant[o.gardenPlantId] = [] as any
+    occsByPlant[o.gardenPlantId].push(o)
+  }
   return (
     <div className="space-y-4">
       <div className="text-lg font-medium">This week</div>
@@ -721,28 +743,31 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
       </Card>
       <div className="flex justify-between items-center">
         <div className="text-base font-medium">Today</div>
-        {duePlants.length > 0 && (
-          <Button className="rounded-2xl" onClick={async () => { for (const gp of duePlants) { await onLogWater(gp.id) } }}>Watered all due plants</Button>
-        )}
       </div>
-      {duePlants.length === 0 && (
-        <div className="text-sm opacity-70">No plants to water today</div>
-      )}
-      {duePlants.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {duePlants.map((gp: any) => (
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {plants.map((gp: any) => {
+          const occs = occsByPlant[gp.id] || []
+          const totalReq = occs.reduce((a, o) => a + Math.max(1, o.requiredCount || 1), 0)
+          const totalDone = occs.reduce((a, o) => a + Math.min(Math.max(1, o.requiredCount || 1), o.completedCount || 0), 0)
+          if (occs.length === 0) return null
+          return (
             <Card key={gp.id} className="rounded-2xl p-4">
               <div className="font-medium">{gp.nickname || gp.plant?.name}</div>
               {gp.nickname && <div className="text-xs opacity-60">{gp.plant?.name}</div>}
-              <div className="text-sm opacity-70">Water need: {gp.plant?.care.water}</div>
-              <div className="text-xs opacity-70">Due this week: {dueThisWeekByPlant[gp.id]?.map((i) => ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][i]).join(', ') || '—'}</div>
-              <div className="mt-2 flex items-center gap-2">
-                <Button className="rounded-2xl" onClick={() => onLogWater(gp.id)}>Mark watered</Button>
+              <div className="text-sm opacity-70">Tasks due: {totalDone} / {totalReq}</div>
+              <div className="mt-2 flex flex-col gap-2">
+                {occs.map((o) => (
+                  <div key={o.id} className="flex items-center justify-between text-sm rounded-xl border p-2">
+                    <div className="opacity-80">{new Date(o.dueAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                    <div className="opacity-80">{o.completedCount} / {o.requiredCount}</div>
+                    <Button className="rounded-xl" size="sm" onClick={() => onProgressOccurrence(o.id, 1)} disabled={(o.completedCount || 0) >= (o.requiredCount || 1)}>Complete +1</Button>
+                  </div>
+                ))}
               </div>
             </Card>
-          ))}
-        </div>
-      )}
+          )
+        })}
+      </div>
       <div className="pt-2">
         <div className="text-base font-medium">Due this week</div>
       </div>
@@ -763,10 +788,11 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
   )
 }
 
-function OverviewSection({ plants, membersCount, serverToday, dailyStats, totalOnHand, speciesOnHand, baseStreak }: { plants: any[]; membersCount: number; serverToday: string | null; dailyStats: Array<{ date: string; due: number; completed: number; success: boolean }>; totalOnHand: number; speciesOnHand: number; baseStreak: number }) {
-  const totalToWaterToday = dailyStats.find(d => d.date === (serverToday || ''))?.due ?? 0
+
+function OverviewSection({ plants, membersCount, serverToday, dailyStats, totalOnHand, speciesOnHand }: { plants: any[]; membersCount: number; serverToday: string | null; dailyStats: Array<{ date: string; due: number; completed: number; success: boolean }>; totalOnHand: number; speciesOnHand: number }) {
+  const totalToDoToday = dailyStats.find(d => d.date === (serverToday || ''))?.due ?? 0
   const completedToday = dailyStats.find(d => d.date === (serverToday || ''))?.completed ?? 0
-  const progressPct = totalToWaterToday === 0 ? 100 : Math.min(100, Math.round((completedToday / totalToWaterToday) * 100))
+  const progressPct = totalToDoToday === 0 ? 100 : Math.min(100, Math.round((completedToday / totalToDoToday) * 100))
   const anchor = serverToday ? new Date(serverToday) : new Date()
   const days = Array.from({ length: 30 }, (_, i) => {
     const d = new Date(anchor)
@@ -807,7 +833,7 @@ function OverviewSection({ plants, membersCount, serverToday, dailyStats, totalO
 
       <Card className="rounded-2xl p-4">
         <div className="font-medium mb-2">Today's progress</div>
-        <div className="text-sm opacity-60 mb-2">{completedToday} / {totalToWaterToday || 0} watered</div>
+        <div className="text-sm opacity-60 mb-2">{completedToday} / {totalToDoToday || 0} tasks done</div>
         <div className="h-3 bg-stone-200 rounded-full overflow-hidden">
           <div className="h-3 bg-emerald-500" style={{ width: `${progressPct}%` }} />
         </div>
@@ -833,49 +859,24 @@ function OverviewSection({ plants, membersCount, serverToday, dailyStats, totalO
 function EditPlantButton({ gp, gardenId, onChanged, serverToday }: { gp: any; gardenId: string; onChanged: () => Promise<void>; serverToday: string | null }) {
   const [open, setOpen] = React.useState(false)
   const [nickname, setNickname] = React.useState(gp.nickname || '')
-  const [count, setCount] = React.useState<number>(0)
+  const [count, setCount] = React.useState<number>(Number(gp.plantsOnHand ?? 0))
   const [submitting, setSubmitting] = React.useState(false)
 
   React.useEffect(() => {
     setNickname(gp.nickname || '')
   }, [gp.nickname])
 
-  const loadInitialCount = React.useCallback(async () => {
-    try {
-      const { data } = await supabase
-        .from('garden_inventory')
-        .select('plants_on_hand')
-        .eq('garden_id', gardenId)
-        .eq('plant_id', gp.plantId)
-        .maybeSingle()
-      const current = Number(data?.plants_on_hand ?? 0)
-      setCount(current)
-    } catch {}
-  }, [gardenId, gp.plantId])
-  React.useEffect(() => { loadInitialCount() }, [loadInitialCount])
+  React.useEffect(() => { setCount(Number(gp.plantsOnHand ?? 0)) }, [gp.plantsOnHand])
 
   const save = async () => {
     if (submitting) return
     setSubmitting(true)
     try {
-      // Update nickname
-      await supabase.from('garden_plants').update({ nickname: nickname.trim() || null }).eq('id', gp.id)
-      // Update count via instance inventory table; delete plant if 0
+      // Update nickname & per-instance count; delete plant if count becomes 0
+      await supabase.from('garden_plants').update({ nickname: nickname.trim() || null, plants_on_hand: Math.max(0, Number(count || 0)) }).eq('id', gp.id)
       if (count <= 0) {
         await supabase.from('garden_plants').delete().eq('id', gp.id)
-        if (serverToday) await computeGardenTaskForDay({ gardenId, dayIso: serverToday })
-      } else {
-        // Compute delta by reading current inventory
-        const { data: inv } = await supabase
-          .from('garden_instance_inventory')
-          .select('plants_on_hand')
-          .eq('garden_plant_id', gp.id)
-          .maybeSingle()
-        const current = Number(inv?.plants_on_hand ?? 0)
-        const delta = count - current
-        if (delta !== 0) {
-          await adjustInstanceInventoryAndLogTransaction({ gardenId, gardenPlantId: gp.id, plantsDelta: delta, transactionType: delta > 0 ? 'buy_plants' : 'sell_plants' })
-        }
+        if (serverToday) await ensureDailyTasksForGardens(serverToday)
       }
       await onChanged()
       setOpen(false)

@@ -29,6 +29,7 @@ export interface GardenPlant {
   expectedBloomDate: string | null
   overrideWaterFreqUnit?: WaterFreqUnit | null
   overrideWaterFreqValue?: number | null
+  plantsOnHand?: number | null
 }
 
 export type GardenPlantEventType = "water" | "fertilize" | "prune" | "harvest" | "note"
@@ -76,5 +77,45 @@ export interface GardenTransaction {
   quantity: number
   occurredAt: string
   notes?: string | null
+}
+
+// ===== Tasks v2 (generic per-plant tasks) =====
+
+export type TaskType = 'water' | 'fertilize' | 'harvest' | 'custom'
+export type TaskScheduleKind = 'one_time_date' | 'one_time_duration' | 'repeat_duration' | 'repeat_pattern'
+export type TaskUnit = 'hour' | 'day' | 'week' | 'month' | 'year'
+
+export interface GardenPlantTask {
+  id: string
+  gardenId: string
+  gardenPlantId: string
+  type: TaskType
+  customName?: string | null
+  scheduleKind: TaskScheduleKind
+  // When scheduleKind === 'one_time_date'
+  dueAt?: string | null
+  // When scheduleKind in one_time_duration | repeat_duration
+  intervalAmount?: number | null
+  intervalUnit?: TaskUnit | null
+  // How many times must the task be done per occurrence/period
+  requiredCount: number
+  // When scheduleKind === 'repeat_pattern'
+  period?: 'week' | 'month' | 'year' | null
+  amount?: number | null
+  weeklyDays?: number[] | null
+  monthlyDays?: number[] | null
+  yearlyDays?: string[] | null
+  monthlyNthWeekdays?: string[] | null
+  createdAt: string
+}
+
+export interface GardenPlantTaskOccurrence {
+  id: string
+  taskId: string
+  gardenPlantId: string
+  dueAt: string
+  requiredCount: number
+  completedCount: number
+  completedAt?: string | null
 }
 

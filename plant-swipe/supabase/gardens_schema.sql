@@ -40,7 +40,7 @@ create table if not exists public.garden_plants (
   seeds_planted integer not null default 0,
   planted_at timestamptz,
   expected_bloom_date timestamptz,
-  sort_index integer
+  plants_on_hand integer not null default 0
 );
 
 create table if not exists public.garden_plant_events (
@@ -135,6 +135,10 @@ begin
   end if;
 end;
 $$;
+
+-- Backfill: ensure plants_on_hand exists for existing deployments
+alter table if exists public.garden_plants
+  add column if not exists plants_on_hand integer not null default 0;
 
 -- Ensure an empty task exists for all gardens for a given day
 create or replace function public.ensure_daily_tasks_for_gardens(_day date default now()::date)
@@ -353,6 +357,167 @@ do $$ begin
       using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()));
   end if;
 end $$;
+
+-- ===== Generic per-plant Tasks (v2) =====
+
+-- Task definitions per garden plant
+create table if not exists public.garden_plant_tasks (
+  id uuid primary key default gen_random_uuid(),
+  garden_id uuid not null references public.gardens(id) on delete cascade,
+  garden_plant_id uuid not null references public.garden_plants(id) on delete cascade,
+  type text not null check (type in ('water','fertilize','harvest','custom')),
+  custom_name text,
+  schedule_kind text not null check (schedule_kind in ('one_time_date','one_time_duration','repeat_duration','repeat_pattern')),
+  due_at timestamptz,
+  interval_amount integer,
+  interval_unit text check (interval_unit in ('hour','day','week','month','year')),
+  required_count integer not null default 1 check (required_count > 0),
+  -- Pattern-based repetition fields (for schedule_kind = 'repeat_pattern')
+  period text check (period in ('week','month','year')),
+  amount integer check (amount > 0),
+  weekly_days integer[],
+  monthly_days integer[],
+  yearly_days text[],
+  monthly_nth_weekdays text[],
+  created_at timestamptz not null default now()
+);
+
+alter table public.garden_plant_tasks enable row level security;
+
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_plant_tasks' and policyname = 'gpt_select') then
+    create policy gpt_select on public.garden_plant_tasks for select to authenticated
+      using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()));
+  end if;
+end $$;
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_plant_tasks' and policyname = 'gpt_iud') then
+    create policy gpt_iud on public.garden_plant_tasks for all to authenticated
+      using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()))
+      with check (exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = auth.uid()));
+  end if;
+end $$;
+
+-- Task occurrences (instances) derived from definitions or one-offs
+create table if not exists public.garden_plant_task_occurrences (
+  id uuid primary key default gen_random_uuid(),
+  task_id uuid not null references public.garden_plant_tasks(id) on delete cascade,
+  garden_plant_id uuid not null references public.garden_plants(id) on delete cascade,
+  due_at timestamptz not null,
+  required_count integer not null default 1 check (required_count > 0),
+  completed_count integer not null default 0 check (completed_count >= 0),
+  completed_at timestamptz
+);
+
+alter table public.garden_plant_task_occurrences enable row level security;
+
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_plant_task_occurrences' and policyname = 'gpto_select') then
+    create policy gpto_select on public.garden_plant_task_occurrences for select to authenticated
+      using (exists (
+        select 1 from public.garden_plants gp
+        join public.garden_members gm on gm.garden_id = gp.garden_id
+        where gp.id = garden_plant_id and gm.user_id = auth.uid()
+      ));
+  end if;
+end $$;
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_plant_task_occurrences' and policyname = 'gpto_iud') then
+    create policy gpto_iud on public.garden_plant_task_occurrences for all to authenticated
+      using (exists (
+        select 1 from public.garden_plants gp
+        join public.garden_members gm on gm.garden_id = gp.garden_id
+        where gp.id = garden_plant_id and gm.user_id = auth.uid()
+      ))
+      with check (exists (
+        select 1 from public.garden_plants gp
+        join public.garden_members gm on gm.garden_id = gp.garden_id
+        where gp.id = garden_plant_id and gm.user_id = auth.uid()
+      ));
+  end if;
+end $$;
+
+-- RPC: create default watering task (2 per chosen unit) for a garden plant
+create or replace function public.create_default_watering_task(_garden_id uuid, _garden_plant_id uuid, _unit text)
+returns uuid
+language plpgsql
+security definer
+as $$
+declare
+  v_id uuid;
+begin
+  insert into public.garden_plant_tasks (garden_id, garden_plant_id, type, schedule_kind, interval_amount, interval_unit, required_count)
+  values (_garden_id, _garden_plant_id, 'water', 'repeat_duration', 1, _unit, 2)
+  returning id into v_id;
+  return v_id;
+end;
+$$;
+
+-- Ensure new columns exist for pattern-based schedules in existing deployments
+alter table if exists public.garden_plant_tasks
+  add column if not exists period text check (period in ('week','month','year'));
+alter table if exists public.garden_plant_tasks
+  add column if not exists amount integer;
+alter table if exists public.garden_plant_tasks
+  add column if not exists weekly_days integer[];
+alter table if exists public.garden_plant_tasks
+  add column if not exists monthly_days integer[];
+alter table if exists public.garden_plant_tasks
+  add column if not exists yearly_days text[];
+alter table if exists public.garden_plant_tasks
+  add column if not exists monthly_nth_weekdays text[];
+
+-- Broaden schedule_kind constraint if needed
+do $$ begin
+  if exists (
+    select 1 from information_schema.constraint_column_usage ccu
+    join information_schema.table_constraints tc on tc.constraint_name = ccu.constraint_name
+    where ccu.table_schema = 'public' and ccu.table_name = 'garden_plant_tasks' and tc.constraint_type = 'CHECK'
+  ) then
+    -- no-op; rely on create table definition above for new deployments
+    null;
+  end if;
+end $$;
+
+-- RPC: upsert one-time task for a plant (date or duration)
+create or replace function public.upsert_one_time_task(
+  _garden_id uuid, _garden_plant_id uuid, _type text, _custom_name text,
+  _kind text, _due_at timestamptz, _amount integer, _unit text, _required integer
+)
+returns uuid
+language plpgsql
+security definer
+as $$
+declare v_id uuid;
+begin
+  -- always insert new one-time task
+  insert into public.garden_plant_tasks (
+    garden_id, garden_plant_id, type, custom_name, schedule_kind, due_at, interval_amount, interval_unit, required_count
+  ) values (
+    _garden_id, _garden_plant_id, _type, nullif(_custom_name,''), _kind,
+    _due_at,
+    case when _kind = 'one_time_duration' then _amount else null end,
+    case when _kind = 'one_time_duration' then _unit else null end,
+    greatest(1, coalesce(_required,1))
+  ) returning id into v_id;
+  return v_id;
+end;
+$$;
+
+-- RPC: mark an occurrence progress and optionally complete
+create or replace function public.progress_task_occurrence(_occurrence_id uuid, _increment integer default 1)
+returns void
+language plpgsql
+security definer
+as $$
+begin
+  update public.garden_plant_task_occurrences
+    set completed_count = least(required_count, completed_count + greatest(1, _increment)),
+        completed_at = case when completed_count + greatest(1, _increment) >= required_count then now() else completed_at end
+  where id = _occurrence_id;
+end;
+$$;
+
 do $$ begin
   if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_transactions' and policyname = 'gt_insert') then
     create policy gt_insert on public.garden_transactions for insert to authenticated
