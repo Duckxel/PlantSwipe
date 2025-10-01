@@ -128,6 +128,39 @@ export default function PlantSwipe() {
     loadPlants()
   }, [loadPlants])
 
+  // Global presence tracking so Admin can see "currently online" users
+  const presenceRef = React.useRef<ReturnType<typeof supabase.channel> | null>(null)
+  React.useEffect(() => {
+    // Stable anonymous id for non-authenticated visitors
+    let anonId: string | null = null
+    try {
+      anonId = localStorage.getItem('plantswipe.anon_id')
+      if (!anonId) {
+        anonId = `anon_${Math.random().toString(36).slice(2, 10)}`
+        localStorage.setItem('plantswipe.anon_id', anonId)
+      }
+    } catch {}
+
+    const key = user?.id || anonId || `anon_${Math.random().toString(36).slice(2, 10)}`
+    const channel = supabase.channel('global-presence', { config: { presence: { key } } })
+
+    channel.subscribe((status: unknown) => {
+      if (status === 'SUBSCRIBED') {
+        channel.track({
+          user_id: user?.id || null,
+          display_name: profile?.display_name || null,
+          online_at: new Date().toISOString(),
+        })
+      }
+    })
+
+    presenceRef.current = channel
+    return () => {
+      try { channel.untrack() } catch {}
+      supabase.removeChannel(channel)
+    }
+  }, [user?.id, profile?.display_name])
+
   const filtered = useMemo(() => {
     const likedSet = new Set(likedIds)
     const base = plants.filter((p: Plant) => {
