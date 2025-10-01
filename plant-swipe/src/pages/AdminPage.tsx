@@ -172,7 +172,7 @@ export const AdminPage: React.FC = () => {
       if (!start.ok) {
         throw new Error(startBody?.error || `Backup failed (${start.status})`)
       }
-      const dlToken: string = startBody?.token
+      const dlToken = startBody?.token
       const filename: string = startBody?.filename || 'backup.sql.gz'
       if (!dlToken) throw new Error('Missing download token from server')
 
