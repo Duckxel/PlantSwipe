@@ -11,6 +11,7 @@ export const AdminPage: React.FC = () => {
   }
 
   const [syncing, setSyncing] = React.useState(false)
+  const [backingUp, setBackingUp] = React.useState(false)
 
   const runSyncSchema = async () => {
     if (syncing) return
@@ -113,6 +114,56 @@ export const AdminPage: React.FC = () => {
     }
   }
 
+  const runBackup = async () => {
+    if (backingUp) return
+    setBackingUp(true)
+    try {
+      const token = (await supabase.auth.getSession()).data.session?.access_token
+      if (!token) {
+        alert('You must be signed in to back up the database')
+        return
+      }
+
+      const start = await fetch('/api/admin/backup-db', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      })
+      const startBody = await start.json().catch(() => ({} as any))
+      if (!start.ok) {
+        throw new Error(startBody?.error || `Backup failed (${start.status})`)
+      }
+      const dlToken: string = startBody?.token
+      const filename: string = startBody?.filename || 'backup.sql.gz'
+      if (!dlToken) throw new Error('Missing download token from server')
+
+      const downloadUrl = `/api/admin/download-backup?token=${encodeURIComponent(dlToken)}`
+      const resp = await fetch(downloadUrl, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${token}` },
+      })
+      if (!resp.ok) {
+        const errBody = await resp.json().catch(() => ({}))
+        throw new Error(errBody?.error || `Download failed (${resp.status})`)
+      }
+      const blob = await resp.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 2000)
+    } catch (e: any) {
+      alert(`Backup failed: ${e?.message || e}`)
+    } finally {
+      setBackingUp(false)
+    }
+  }
+
   // Subscribe to global presence channel and compute unique users online
   React.useEffect(() => {
     const channel = supabase.channel('global-presence', { config: { presence: { key: `admin_${Math.random().toString(36).slice(2,8)}` } } })
@@ -171,6 +222,10 @@ export const AdminPage: React.FC = () => {
             <Button className="rounded-2xl w-full" variant="destructive" onClick={runSyncSchema} disabled={syncing}>
               <Database className="h-4 w-4" />
               <span>{syncing ? 'Syncing Schema…' : 'Sync DB Schema'}</span>
+            </Button>
+            <Button className="rounded-2xl w-full" onClick={runBackup} disabled={backingUp}>
+              <Database className="h-4 w-4" />
+              <span>{backingUp ? 'Creating Backup…' : 'Backup DB'}</span>
             </Button>
           </div>
 
