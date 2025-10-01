@@ -920,6 +920,41 @@ do $$ begin
   );
 end $$;
 
+-- ========== Web visits tracking ==========
+-- Track anonymous and authenticated page visits for analytics
+create table if not exists public.web_visits (
+  id uuid primary key default gen_random_uuid(),
+  occurred_at timestamptz not null default now(),
+  session_id text not null,
+  user_id uuid references auth.users(id) on delete set null,
+  page_path text not null,
+  referrer text,
+  user_agent text,
+  ip_address inet,
+  geo_country text,
+  geo_region text,
+  geo_city text,
+  latitude double precision,
+  longitude double precision,
+  extra jsonb not null default '{}'::jsonb
+);
+
+-- Helpful indexes
+create index if not exists web_visits_occurred_at_idx on public.web_visits (occurred_at desc);
+create index if not exists web_visits_session_idx on public.web_visits (session_id);
+create index if not exists web_visits_user_idx on public.web_visits (user_id);
+create index if not exists web_visits_page_idx on public.web_visits (page_path);
+
+-- RLS: restrict reads to admins only; writes are server-side (bypass RLS)
+alter table public.web_visits enable row level security;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='web_visits' and policyname='web_visits_admin_select') then
+    drop policy web_visits_admin_select on public.web_visits;
+  end if;
+  create policy web_visits_admin_select on public.web_visits for select to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+
 -- ========== Cleanup of unused objects ==========
 -- The app does not use these legacy functions; drop if present to declutter.
 -- Safe: functions only (no data rows dropped)
