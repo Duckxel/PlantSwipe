@@ -121,12 +121,61 @@ app.post('/api/admin/pull-code', async (req, res) => {
       return
     }
 
+    const branch = (req.query.branch || '').toString().trim()
     const repoDir = path.resolve(__dirname)
-    const cmd = `git -C "${repoDir}" fetch --all --prune && git -C "${repoDir}" pull --ff-only`
-    const { stdout, stderr } = await exec(cmd, { timeout: 120000 })
-    res.json({ ok: true, stdout, stderr })
+    // Fetch all, prune stale remotes, delete local branches that have no remote (excluding current), checkout selected, and fast-forward pull
+    // Notes:
+    // - Deleting local branches that do not exist on origin anymore
+    // - Skips deleting the currently checked-out branch
+    // - Using --ff-only to avoid merges
+    const deleteStaleLocalsPre = `current=$(git -C "${repoDir}" rev-parse --abbrev-ref HEAD); git -C "${repoDir}" for-each-ref --format='%(refname:short)' refs/heads | while read b; do if [ "$b" = "$current" ]; then continue; fi; git -C "${repoDir}" show-ref --verify --quiet refs/remotes/origin/$b || git -C "${repoDir}" branch -D "$b"; done`
+    const checkoutCmd = branch ? `git -C "${repoDir}" checkout "${branch}"` : ''
+    const deleteStaleLocalsPost = `git -C "${repoDir}" for-each-ref --format='%(refname:short)' refs/heads | while read b; do git -C "${repoDir}" show-ref --verify --quiet refs/remotes/origin/$b || git -C "${repoDir}" branch -D "$b"; done`
+    const parts = [
+      `set -euo pipefail`,
+      `git -C "${repoDir}" remote update --prune`,
+      `git -C "${repoDir}" fetch --all --prune`,
+      deleteStaleLocalsPre,
+      checkoutCmd,
+      deleteStaleLocalsPost,
+      `git -C "${repoDir}" pull --ff-only`,
+    ].filter(Boolean)
+    const fullCmd = parts.join(' && ')
+    const { stdout, stderr } = await exec(fullCmd, { timeout: 240000, shell: '/bin/bash' })
+    res.json({ ok: true, stdout, stderr, branch: branch || undefined })
   } catch (e) {
     res.status(500).json({ ok: false, error: e?.message || 'git pull failed' })
+  }
+})
+
+// Admin: list remote branches and current branch
+app.get('/api/admin/branches', async (req, res) => {
+  try {
+    const requiredToken = process.env.ADMIN_API_TOKEN
+    const providedToken = req.get('x-admin-token') || ''
+    if (requiredToken && providedToken !== requiredToken) {
+      res.status(403).json({ error: 'Forbidden' })
+      return
+    }
+
+    const repoDir = path.resolve(__dirname)
+    await exec(`git -C "${repoDir}" remote update --prune`, { timeout: 60000 })
+    const { stdout: branchesStdout } = await exec(`git -C "${repoDir}" branch -r --format='%(refname:short)'`, { timeout: 60000 })
+    const branches = branchesStdout
+      .split('\n')
+      .map(s => s.trim())
+      .filter(Boolean)
+      .filter(name => name.startsWith('origin/'))
+      .map(name => name.replace(/^origin\//, ''))
+      .filter(name => name !== 'HEAD')
+      .sort((a, b) => a.localeCompare(b))
+
+    const { stdout: currentStdout } = await exec(`git -C "${repoDir}" rev-parse --abbrev-ref HEAD`, { timeout: 30000 })
+    const current = currentStdout.trim()
+
+    res.json({ branches, current })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to list branches' })
   }
 })
 

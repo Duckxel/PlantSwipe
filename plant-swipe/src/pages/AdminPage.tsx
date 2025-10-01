@@ -1,7 +1,9 @@
 import React from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { RefreshCw, Server, Database, Github, ExternalLink } from "lucide-react"
+import { RefreshCw, Server, Database, Github, ExternalLink, Check } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
 import { supabase } from "@/lib/supabaseClient"
 
 export const AdminPage: React.FC = () => {
@@ -11,6 +13,76 @@ export const AdminPage: React.FC = () => {
 
   const [onlineCount, setOnlineCount] = React.useState<number>(0)
   const [registeredCount, setRegisteredCount] = React.useState<number | null>(null)
+
+  // Git controls state
+  const [branchesOpen, setBranchesOpen] = React.useState(false)
+  const [loadingBranches, setLoadingBranches] = React.useState(false)
+  const [branches, setBranches] = React.useState<string[]>([])
+  const [currentBranch, setCurrentBranch] = React.useState<string>("")
+  const [selectedBranch, setSelectedBranch] = React.useState<string>("")
+  const [pulling, setPulling] = React.useState(false)
+  const [pullDone, setPullDone] = React.useState(false)
+  const [apiError, setApiError] = React.useState<string | null>(null)
+  const [adminToken, setAdminToken] = React.useState<string>("")
+
+  const openBranchDialog = async () => {
+    setBranchesOpen(true)
+    setApiError(null)
+    setLoadingBranches(true)
+    try {
+      const res = await fetch('/api/admin/branches', {
+        headers: adminToken ? { 'x-admin-token': adminToken } : undefined,
+      })
+      if (res.status === 403) {
+        setApiError('Forbidden. Provide Admin API token to proceed.')
+        setBranches([])
+        setCurrentBranch("")
+        setSelectedBranch("")
+        return
+      }
+      if (!res.ok) throw new Error(`Failed to load branches (${res.status})`)
+      const data = await res.json()
+      const list: string[] = Array.isArray(data?.branches) ? data.branches : []
+      const cur: string = typeof data?.current === 'string' ? data.current : ""
+      setBranches(list)
+      setCurrentBranch(cur)
+      setSelectedBranch(cur && list.includes(cur) ? cur : (list[0] || ""))
+    } catch (e: any) {
+      setApiError(e?.message || 'Failed to load branches')
+    } finally {
+      setLoadingBranches(false)
+    }
+  }
+
+  const executePull = async () => {
+    setApiError(null)
+    setPulling(true)
+    try {
+      const url = `/api/admin/pull-code?branch=${encodeURIComponent(selectedBranch)}`
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          ...(adminToken ? { 'x-admin-token': adminToken } : {}),
+        },
+      })
+      if (res.status === 403) {
+        setApiError('Forbidden. Provide Admin API token to proceed.')
+        return
+      }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data?.error || `Pull failed (${res.status})`)
+      }
+      setPullDone(true)
+      setTimeout(() => {
+        window.location.reload()
+      }, 800)
+    } catch (e: any) {
+      setApiError(e?.message || 'Pull failed')
+    } finally {
+      setPulling(false)
+    }
+  }
 
   // Subscribe to global presence channel and compute unique users online
   React.useEffect(() => {
@@ -62,9 +134,10 @@ export const AdminPage: React.FC = () => {
               <RefreshCw className="h-4 w-4" />
               <span>Restart Server</span>
             </Button>
-            <Button className="rounded-2xl w-full" variant="secondary" onClick={notImplemented('Restart NGINX')}>
+            <Button className="rounded-2xl w-full" variant="secondary" onClick={openBranchDialog}>
+              <Github className="h-4 w-4" />
               <RefreshCw className="h-4 w-4" />
-              <span>Restart NGINX</span>
+              <span>Pull Code</span>
             </Button>
             <Button className="rounded-2xl w-full" variant="destructive" onClick={notImplemented('Reformat database')}>
               <Database className="h-4 w-4" />
@@ -114,6 +187,63 @@ export const AdminPage: React.FC = () => {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={branchesOpen} onOpenChange={(o: boolean) => { setBranchesOpen(o); if (!o) { setApiError(null); setPullDone(false); } }}>
+        <DialogContent className="rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Pull latest code</DialogTitle>
+            <DialogDescription>
+              Select a branch to checkout and pull. Stale local branches will be deleted.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 gap-2">
+              <label className="text-sm opacity-70">Admin API token (optional)</label>
+              <Input type="password" value={adminToken} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAdminToken(e.target.value)} placeholder="Enter token if required" />
+            </div>
+
+            <div className="grid grid-cols-1 gap-2">
+              <label className="text-sm opacity-70">Branch</label>
+              {loadingBranches ? (
+                <div className="text-sm opacity-70">Loading branches…</div>
+              ) : branches.length > 0 ? (
+                <select
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm md:text-sm"
+                  value={selectedBranch}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedBranch(e.target.value)}
+                >
+                  {branches.map((b: string) => (
+                    <option key={b} value={b}>
+                      {b}{b === currentBranch ? ' (current)' : ''}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="text-sm opacity-70">No branches found. {apiError ? '' : 'Enter token if required and try again.'}</div>
+              )}
+              {apiError && <div className="text-sm text-red-600">{apiError}</div>}
+            </div>
+
+            {pullDone && (
+              <div className="flex items-center gap-2 text-emerald-600">
+                <Check className="h-4 w-4" />
+                <span>Pull complete. Reloading…</span>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <div className="flex gap-2">
+              <Button variant="secondary" className="rounded-2xl" onClick={() => setBranchesOpen(false)} disabled={pulling}>Close</Button>
+              <Button className="rounded-2xl" onClick={openBranchDialog} disabled={pulling}>Refresh</Button>
+              <Button className="rounded-2xl" onClick={executePull} disabled={pulling || !selectedBranch || loadingBranches}>
+                {pulling ? 'Pulling…' : 'Pull'}
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
