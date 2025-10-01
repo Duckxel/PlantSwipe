@@ -23,13 +23,22 @@ export const AdminPage: React.FC = () => {
         alert('You must be signed in to run schema sync')
         return
       }
-      const resp = await fetch('/api/admin/sync-schema', {
+      let resp = await fetch('/api/admin/sync-schema', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
       })
+      if (resp.status === 405) {
+        // Fallback to GET in environments where POST may be blocked
+        resp = await fetch('/api/admin/sync-schema', {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        })
+      }
       const body = await resp.json().catch(() => ({}))
       if (!resp.ok) {
         throw new Error(body?.error || `Request failed (${resp.status})`)

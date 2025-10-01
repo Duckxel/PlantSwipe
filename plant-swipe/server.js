@@ -165,7 +165,8 @@ app.post('/api/admin/restart-server', async (req, res) => {
   }
 })
 
-app.post('/api/admin/sync-schema', async (req, res) => {
+// Support both POST and GET (some environments may block POST from admin UI)
+async function handleSyncSchema(req, res) {
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
     return
@@ -220,6 +221,15 @@ app.post('/api/admin/sync-schema', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to sync schema' })
   }
+}
+
+app.post('/api/admin/sync-schema', handleSyncSchema)
+app.get('/api/admin/sync-schema', handleSyncSchema)
+app.options('/api/admin/sync-schema', (_req, res) => {
+  // Allow standard headers for admin calls
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  res.status(204).end()
 })
 
 app.get('/api/plants', async (_req, res) => {
