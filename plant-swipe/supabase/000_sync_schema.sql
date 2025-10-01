@@ -915,7 +915,7 @@ do $$ begin
   perform cron.schedule(
     'compute_daily_garden_tasks',
     '5 0 * * *',
-    $$ call public.compute_daily_tasks_for_all_gardens((now() at time zone 'utc')::date); $$
+    $cron$select public.compute_daily_tasks_for_all_gardens((now() at time zone 'utc')::date)$cron$
   );
 end $$;
 
