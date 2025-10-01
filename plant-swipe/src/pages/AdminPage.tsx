@@ -3,8 +3,8 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { RefreshCw, Server, Database, Github, ExternalLink, Check } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { supabase } from "@/lib/supabaseClient"
+import { useAuth } from '@/context/AuthContext'
+import { supabase } from '@/lib/supabaseClient'
 
 export const AdminPage: React.FC = () => {
   const notImplemented = (msg: string) => () => {
@@ -23,15 +23,16 @@ export const AdminPage: React.FC = () => {
   const [pulling, setPulling] = React.useState(false)
   const [pullDone, setPullDone] = React.useState(false)
   const [apiError, setApiError] = React.useState<string | null>(null)
-  const [adminToken, setAdminToken] = React.useState<string>("")
+  const { profile } = useAuth()
 
   const openBranchDialog = async () => {
     setBranchesOpen(true)
     setApiError(null)
     setLoadingBranches(true)
     try {
+      const token = (await supabase.auth.getSession()).data.session?.access_token
       const res = await fetch('/api/admin/branches', {
-        headers: adminToken ? { 'x-admin-token': adminToken } : undefined,
+        headers: token ? { 'Authorization': `Bearer ${token}` } : undefined,
       })
       if (res.status === 403) {
         setApiError('Forbidden. Provide Admin API token to proceed.')
@@ -58,12 +59,11 @@ export const AdminPage: React.FC = () => {
     setApiError(null)
     setPulling(true)
     try {
+      const token = (await supabase.auth.getSession()).data.session?.access_token
       const url = `/api/admin/pull-code?branch=${encodeURIComponent(selectedBranch)}`
       const res = await fetch(url, {
         method: 'POST',
-        headers: {
-          ...(adminToken ? { 'x-admin-token': adminToken } : {}),
-        },
+        headers: token ? { 'Authorization': `Bearer ${token}` } : undefined,
       })
       if (res.status === 403) {
         setApiError('Forbidden. Provide Admin API token to proceed.')
@@ -134,7 +134,7 @@ export const AdminPage: React.FC = () => {
               <RefreshCw className="h-4 w-4" />
               <span>Restart Server</span>
             </Button>
-            <Button className="rounded-2xl w-full" variant="secondary" onClick={openBranchDialog}>
+            <Button className="rounded-2xl w-full" variant="secondary" onClick={openBranchDialog} disabled={!profile?.is_admin}>
               <Github className="h-4 w-4" />
               <RefreshCw className="h-4 w-4" />
               <span>Pull Code</span>
@@ -199,11 +199,6 @@ export const AdminPage: React.FC = () => {
 
           <div className="space-y-3">
             <div className="grid grid-cols-1 gap-2">
-              <label className="text-sm opacity-70">Admin API token (optional)</label>
-              <Input type="password" value={adminToken} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAdminToken(e.target.value)} placeholder="Enter token if required" />
-            </div>
-
-            <div className="grid grid-cols-1 gap-2">
               <label className="text-sm opacity-70">Branch</label>
               {loadingBranches ? (
                 <div className="text-sm opacity-70">Loading branches…</div>
@@ -220,7 +215,7 @@ export const AdminPage: React.FC = () => {
                   ))}
                 </select>
               ) : (
-                <div className="text-sm opacity-70">No branches found. {apiError ? '' : 'Enter token if required and try again.'}</div>
+                <div className="text-sm opacity-70">No branches found.</div>
               )}
               {apiError && <div className="text-sm text-red-600">{apiError}</div>}
             </div>

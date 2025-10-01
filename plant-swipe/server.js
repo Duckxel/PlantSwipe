@@ -6,6 +6,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { exec as execCb } from 'child_process'
 import { promisify } from 'util'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 
 dotenv.config()
 // Optionally load server-only secrets from .env.server (ignored if missing)
@@ -17,6 +18,56 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const exec = promisify(execCb)
+
+// Supabase client (server-side) for auth verification
+const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
+const supabaseServer = (supabaseUrl && supabaseAnonKey)
+  ? createSupabaseClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: false, autoRefreshToken: false } })
+  : null
+
+async function getUserIdFromRequest(req) {
+  try {
+    const header = req.get('authorization') || req.get('Authorization') || ''
+    const prefix = 'bearer '
+    if (!header || header.length < 10) return null
+    const low = header.toLowerCase()
+    if (!low.startsWith(prefix)) return null
+    const token = header.slice(prefix.length).trim()
+    if (!token || !supabaseServer) return null
+    const { data, error } = await supabaseServer.auth.getUser(token)
+    if (error || !data?.user?.id) return null
+    return data.user.id
+  } catch {
+    return null
+  }
+}
+
+async function isAdminUserId(userId) {
+  if (!userId || !sql) return false
+  try {
+    const rows = await sql`select is_admin from profiles where id = ${userId} limit 1`
+    if (Array.isArray(rows) && rows.length > 0) {
+      const val = rows[0]?.is_admin
+      return val === true
+    }
+  } catch {}
+  return false
+}
+
+async function ensureAdmin(req, res) {
+  const uid = await getUserIdFromRequest(req)
+  if (!uid) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return null
+  }
+  const ok = await isAdminUserId(uid)
+  if (!ok) {
+    res.status(403).json({ error: 'Forbidden' })
+    return null
+  }
+  return uid
+}
 
 function buildConnectionString() {
   let cs = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.POSTGRES_PRISMA_URL
@@ -114,12 +165,8 @@ app.get('/api/plants', async (_req, res) => {
 // Admin: pull latest code from git repository
 app.post('/api/admin/pull-code', async (req, res) => {
   try {
-    const requiredToken = process.env.ADMIN_API_TOKEN
-    const providedToken = req.get('x-admin-token') || ''
-    if (requiredToken && providedToken !== requiredToken) {
-      res.status(403).json({ error: 'Forbidden' })
-      return
-    }
+    const uid = await ensureAdmin(req, res)
+    if (!uid) return
 
     const branch = (req.query.branch || '').toString().trim()
     const repoDir = path.resolve(__dirname)
@@ -151,12 +198,8 @@ app.post('/api/admin/pull-code', async (req, res) => {
 // Admin: list remote branches and current branch
 app.get('/api/admin/branches', async (req, res) => {
   try {
-    const requiredToken = process.env.ADMIN_API_TOKEN
-    const providedToken = req.get('x-admin-token') || ''
-    if (requiredToken && providedToken !== requiredToken) {
-      res.status(403).json({ error: 'Forbidden' })
-      return
-    }
+    const uid = await ensureAdmin(req, res)
+    if (!uid) return
 
     const repoDir = path.resolve(__dirname)
     await exec(`git -C "${repoDir}" remote update --prune`, { timeout: 60000 })
