@@ -8,7 +8,9 @@ import { supabase } from '@/lib/supabaseClient'
 export const AdminPage: React.FC = () => {
 
   const [syncing, setSyncing] = React.useState(false)
+  
   const [backingUp, setBackingUp] = React.useState(false)
+
   const [restarting, setRestarting] = React.useState(false)
 
   const runSyncSchema = async () => {
@@ -66,6 +68,7 @@ export const AdminPage: React.FC = () => {
       setTimeout(() => {
         window.location.reload()
       }, 1000)
+
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e)
       alert(`Failed to restart server: ${message}`)

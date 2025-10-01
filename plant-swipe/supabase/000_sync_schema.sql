@@ -745,7 +745,8 @@ begin
   end if;
 end;
 $$;
-
+drop function if exists public.compute_daily_tasks_for_all_gardens(date);
+drop function if exists public.compute_garden_task_for_day(uuid, date);
 create or replace function public.compute_garden_task_for_day(_garden_id uuid, _day date)
 returns void
 language plpgsql
@@ -915,7 +916,7 @@ do $$ begin
   perform cron.schedule(
     'compute_daily_garden_tasks',
     '5 0 * * *',
-    $$ call public.compute_daily_tasks_for_all_gardens((now() at time zone 'utc')::date); $$
+    $cron$select public.compute_daily_tasks_for_all_gardens((now() at time zone 'utc')::date)$cron$
   );
 end $$;
 

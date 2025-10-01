@@ -9,9 +9,12 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { fileURLToPath } from 'url'
 import { exec as execCb, spawn } from 'child_process'
 import { promisify } from 'util'
+
 import zlib from 'zlib'
 import crypto from 'crypto'
 import { pipeline as streamPipeline } from 'stream'
+import { spawn } from 'child_process'
+
 
 dotenv.config()
 // Optionally load server-only secrets from .env.server (ignored if missing)
@@ -134,7 +137,6 @@ const app = express()
 app.use(express.json())
 
 // Supabase service client for admin verification
-const supabaseUrl = process.env.SUPABASE_URL
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_ROLE_TOKEN
 const supabaseAdmin = (supabaseUrl && supabaseServiceKey) ? createSupabaseClient(supabaseUrl, supabaseServiceKey) : null
 
