@@ -419,15 +419,26 @@ app.get('/api/admin/branches', async (req, res) => {
 
     const repoDir = path.resolve(__dirname)
     await exec(`git -C "${repoDir}" remote update --prune`, { timeout: 60000 })
-    const { stdout: branchesStdout } = await exec(`git -C "${repoDir}" branch -r --format='%(refname:short)'`, { timeout: 60000 })
-    const branches = branchesStdout
+    // Prefer for-each-ref over branch -r to avoid pointer lines and formatting quirks
+    const { stdout: branchesStdout } = await exec(`git -C "${repoDir}" for-each-ref --format='%(refname:short)' refs/remotes/origin`, { timeout: 60000 })
+    let branches = branchesStdout
       .split('\n')
       .map(s => s.trim())
       .filter(Boolean)
-      .filter(name => name.startsWith('origin/'))
       .map(name => name.replace(/^origin\//, ''))
-      .filter(name => name !== 'HEAD')
+      // Exclude HEAD pointer and any symbolic ref lines
+      .filter(name => name !== 'HEAD' && !name.includes('->'))
       .sort((a, b) => a.localeCompare(b))
+
+    // Fallback to local branches if remote list is empty (e.g., detached or offline)
+    if (branches.length === 0) {
+      const { stdout: localStdout } = await exec(`git -C "${repoDir}" for-each-ref --format='%(refname:short)' refs/heads`, { timeout: 60000 })
+      branches = localStdout
+        .split('\n')
+        .map(s => s.trim())
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b))
+    }
 
     const { stdout: currentStdout } = await exec(`git -C "${repoDir}" rev-parse --abbrev-ref HEAD`, { timeout: 30000 })
     const current = currentStdout.trim()
