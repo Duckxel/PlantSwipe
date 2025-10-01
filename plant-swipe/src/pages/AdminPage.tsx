@@ -6,11 +6,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { supabase } from '@/lib/supabaseClient'
 
 export const AdminPage: React.FC = () => {
-  const notImplemented = (msg: string) => () => {
-    alert(`${msg} – UI only for now`)
-  }
 
   const [syncing, setSyncing] = React.useState(false)
+  const [restarting, setRestarting] = React.useState(false)
 
   const runSyncSchema = async () => {
     if (syncing) return
@@ -38,6 +36,38 @@ export const AdminPage: React.FC = () => {
       alert(`Failed to sync schema: ${e?.message || e}`)
     } finally {
       setSyncing(false)
+    }
+  }
+
+  const restartServer = async () => {
+    if (restarting) return
+    setRestarting(true)
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      if (!token) {
+        alert('You must be signed in to restart the server')
+        return
+      }
+      const resp = await fetch('/api/admin/restart-server', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      })
+      const body = await resp.json().catch(() => ({}))
+      if (!resp.ok) {
+        throw new Error(body?.error || `Request failed (${resp.status})`)
+      }
+      // Give the server a moment to restart, then reload client
+      setTimeout(() => {
+        window.location.reload()
+      }, 1000)
+    } catch (e: any) {
+      alert(`Failed to restart server: ${e?.message || e}`)
+    } finally {
+      setRestarting(false)
     }
   }
 
@@ -158,10 +188,10 @@ export const AdminPage: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <Button className="rounded-2xl w-full" onClick={notImplemented('Restart server')}>
+            <Button className="rounded-2xl w-full" onClick={restartServer} disabled={restarting}>
               <Server className="h-4 w-4" />
               <RefreshCw className="h-4 w-4" />
-              <span>Restart Server</span>
+              <span>{restarting ? 'Restarting…' : 'Restart Server'}</span>
             </Button>
             <Button className="rounded-2xl w-full" variant="secondary" onClick={openBranchDialog}>
               <Github className="h-4 w-4" />
