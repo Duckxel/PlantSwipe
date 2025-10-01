@@ -232,6 +232,28 @@ app.options('/api/admin/sync-schema', (_req, res) => {
   res.status(204).end()
 })
 
+// Admin: global stats (bypass RLS via server connection)
+app.get('/api/admin/stats', async (req, res) => {
+  const uid = await ensureAdmin(req, res)
+  if (!uid) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  try {
+    const profilesRows = await sql`select count(*)::int as count from public.profiles`
+    const profilesCount = Array.isArray(profilesRows) && profilesRows[0] ? Number(profilesRows[0].count) : 0
+    let authUsersCount = null
+    try {
+      const authRows = await sql`select count(*)::int as count from auth.users`
+      authUsersCount = Array.isArray(authRows) && authRows[0] ? Number(authRows[0].count) : null
+    } catch {}
+    res.json({ ok: true, profilesCount, authUsersCount })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to load stats' })
+  }
+})
+
 app.get('/api/plants', async (_req, res) => {
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
