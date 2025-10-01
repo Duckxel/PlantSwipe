@@ -388,6 +388,31 @@ alter table public.garden_plant_events enable row level security;
 alter table public.garden_inventory enable row level security;
 alter table public.garden_transactions enable row level security;
 
+-- Helper functions to avoid RLS self-recursion on garden_members
+create or replace function public.is_garden_member_bypass(_garden_id uuid, _user_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.garden_members
+    where garden_id = _garden_id and user_id = _user_id
+  );
+$$;
+
+create or replace function public.is_garden_owner_bypass(_garden_id uuid, _user_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.garden_members
+    where garden_id = _garden_id and user_id = _user_id and role = 'owner'
+  );
+$$;
+
 -- Policies
 -- Gardens: members can select; owners can update/delete; authenticated can insert own garden
 do $$ begin
@@ -421,38 +446,21 @@ do $$ begin
     drop policy gm_select on public.garden_members;
   end if;
   create policy gm_select on public.garden_members for select to authenticated
-    using (
-      exists (
-        select 1 from public.garden_members gm2
-        where gm2.garden_id = garden_id and gm2.user_id = auth.uid()
-      )
-    );
+    using (public.is_garden_member_bypass(garden_id, auth.uid()));
 end $$;
 do $$ begin
   if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_members' and policyname = 'gm_insert') then
     drop policy gm_insert on public.garden_members;
   end if;
   create policy gm_insert on public.garden_members for insert to authenticated
-    with check (
-      exists (
-        select 1 from public.garden_members gm
-        where gm.garden_id = garden_id and gm.user_id = auth.uid() and gm.role = 'owner'
-      ) and user_id is not null
-    );
+    with check (public.is_garden_owner_bypass(garden_id, auth.uid()) and user_id is not null);
 end $$;
 do $$ begin
   if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_members' and policyname = 'gm_delete') then
     drop policy gm_delete on public.garden_members;
   end if;
   create policy gm_delete on public.garden_members for delete to authenticated
-    using (
-      role <> 'owner' and (
-        user_id = auth.uid() or exists (
-          select 1 from public.garden_members gm
-          where gm.garden_id = garden_id and gm.user_id = auth.uid() and gm.role = 'owner'
-        )
-      )
-    );
+    using (role <> 'owner' and (user_id = auth.uid() or public.is_garden_owner_bypass(garden_id, auth.uid())));
 end $$;
 
 -- Allow owners to update members (e.g., promote to owner)
@@ -461,18 +469,8 @@ do $$ begin
     drop policy gm_update on public.garden_members;
   end if;
   create policy gm_update on public.garden_members for update to authenticated
-    using (
-      exists (
-        select 1 from public.garden_members gm
-        where gm.garden_id = garden_id and gm.user_id = auth.uid() and gm.role = 'owner'
-      )
-    )
-    with check (
-      exists (
-        select 1 from public.garden_members gm
-        where gm.garden_id = garden_id and gm.user_id = auth.uid() and gm.role = 'owner'
-      )
-    );
+    using (public.is_garden_owner_bypass(garden_id, auth.uid()))
+    with check (public.is_garden_owner_bypass(garden_id, auth.uid()));
 end $$;
 
 -- Garden plants: members can select; members can insert/update/delete
