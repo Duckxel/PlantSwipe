@@ -72,15 +72,7 @@ flowchart LR
 
 ---
 
-## 💬 What early users say
-
-> “I found three plants I’d never heard of in five minutes.” — A.
-
-> “Our club finally tracks garden tasks without spreadsheets.” — M.
-
-> “The swipe UI makes learning plant names actually fun.” — R.
-
----
+ 
 
 ## 👉 Get involved
 
