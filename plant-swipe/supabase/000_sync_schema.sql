@@ -4,6 +4,8 @@
 
 -- ========== Extensions ==========
 create extension if not exists pgcrypto;
+-- Optional: scheduling support
+create extension if not exists pg_cron;
 
 -- ========== Profiles (user profiles) ==========
 create table if not exists public.profiles (
@@ -903,6 +905,19 @@ declare g record; anchor date := (_day - interval '1 day')::date; begin
     perform public.compute_garden_task_for_day(g.id, _day);
   end loop;
 end; $$;
+
+-- ========== Scheduling (optional) ==========
+-- Schedule daily computation at 00:05 UTC to update streaks and create daily tasks
+do $$ begin
+  if exists (select 1 from cron.job where jobname = 'compute_daily_garden_tasks') then
+    perform cron.unschedule(jobid) from cron.job where jobname = 'compute_daily_garden_tasks';
+  end if;
+  perform cron.schedule(
+    'compute_daily_garden_tasks',
+    '5 0 * * *',
+    $$ call public.compute_daily_tasks_for_all_gardens((now() at time zone 'utc')::date); $$
+  );
+end $$;
 
 -- ========== Cleanup of unused objects ==========
 -- The app does not use these legacy functions; drop if present to declutter.
