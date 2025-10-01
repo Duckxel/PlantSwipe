@@ -850,6 +850,58 @@ as $$
     and not exists (select 1 from public.garden_instance_inventory gii where gii.garden_plant_id = gp.id);
 $$;
 
+-- Set species-level inventory counts (idempotent upsert)
+create or replace function public.set_inventory_counts(
+  _garden_id uuid,
+  _plant_id text,
+  _seeds_on_hand integer default null,
+  _plants_on_hand integer default null
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.garden_inventory (garden_id, plant_id, seeds_on_hand, plants_on_hand)
+  values (
+    _garden_id,
+    _plant_id,
+    greatest(0, coalesce(_seeds_on_hand, 0)),
+    greatest(0, coalesce(_plants_on_hand, 0))
+  )
+  on conflict (garden_id, plant_id) do update
+    set seeds_on_hand = coalesce(excluded.seeds_on_hand, public.garden_inventory.seeds_on_hand),
+        plants_on_hand = coalesce(excluded.plants_on_hand, public.garden_inventory.plants_on_hand);
+end;
+$$;
+
+-- Set per-instance inventory counts (idempotent upsert)
+create or replace function public.set_instance_inventory_counts(
+  _garden_id uuid,
+  _garden_plant_id uuid,
+  _seeds_on_hand integer default null,
+  _plants_on_hand integer default null
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.garden_instance_inventory (garden_id, garden_plant_id, seeds_on_hand, plants_on_hand)
+  values (
+    _garden_id,
+    _garden_plant_id,
+    greatest(0, coalesce(_seeds_on_hand, 0)),
+    greatest(0, coalesce(_plants_on_hand, 0))
+  )
+  on conflict (garden_plant_id) do update
+    set seeds_on_hand = coalesce(excluded.seeds_on_hand, public.garden_instance_inventory.seeds_on_hand),
+        plants_on_hand = coalesce(excluded.plants_on_hand, public.garden_instance_inventory.plants_on_hand);
+end;
+$$;
+
 create or replace function public.create_default_watering_task(_garden_id uuid, _garden_plant_id uuid, _unit text)
 returns uuid
 language plpgsql
