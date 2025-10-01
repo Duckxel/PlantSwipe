@@ -321,11 +321,18 @@ create table if not exists public.garden_plant_tasks (
   garden_plant_id uuid not null references public.garden_plants(id) on delete cascade,
   type text not null check (type in ('water','fertilize','harvest','custom')),
   custom_name text,
-  schedule_kind text not null check (schedule_kind in ('one_time_date','one_time_duration','repeat_duration')),
+  schedule_kind text not null check (schedule_kind in ('one_time_date','one_time_duration','repeat_duration','repeat_pattern')),
   due_at timestamptz,
   interval_amount integer,
   interval_unit text check (interval_unit in ('hour','day','week','month','year')),
   required_count integer not null default 1 check (required_count > 0),
+  -- Pattern-based repetition fields (for schedule_kind = 'repeat_pattern')
+  period text check (period in ('week','month','year')),
+  amount integer check (amount > 0),
+  weekly_days integer[],
+  monthly_days integer[],
+  yearly_days text[],
+  monthly_nth_weekdays text[],
   created_at timestamptz not null default now()
 );
 
@@ -399,6 +406,32 @@ begin
   return v_id;
 end;
 $$;
+
+-- Ensure new columns exist for pattern-based schedules in existing deployments
+alter table if exists public.garden_plant_tasks
+  add column if not exists period text check (period in ('week','month','year'));
+alter table if exists public.garden_plant_tasks
+  add column if not exists amount integer;
+alter table if exists public.garden_plant_tasks
+  add column if not exists weekly_days integer[];
+alter table if exists public.garden_plant_tasks
+  add column if not exists monthly_days integer[];
+alter table if exists public.garden_plant_tasks
+  add column if not exists yearly_days text[];
+alter table if exists public.garden_plant_tasks
+  add column if not exists monthly_nth_weekdays text[];
+
+-- Broaden schedule_kind constraint if needed
+do $$ begin
+  if exists (
+    select 1 from information_schema.constraint_column_usage ccu
+    join information_schema.table_constraints tc on tc.constraint_name = ccu.constraint_name
+    where ccu.table_schema = 'public' and ccu.table_name = 'garden_plant_tasks' and tc.constraint_type = 'CHECK'
+  ) then
+    -- no-op; rely on create table definition above for new deployments
+    null;
+  end if;
+end $$;
 
 -- RPC: upsert one-time task for a plant (date or duration)
 create or replace function public.upsert_one_time_task(
