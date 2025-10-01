@@ -15,7 +15,7 @@ export async function getUserGardens(userId: string): Promise<Garden[]> {
   if (gardenIds.length === 0) return []
   const { data: gardens, error: gerr } = await supabase
     .from('gardens')
-    .select('id, name, cover_image_url, created_by, created_at')
+    .select('id, name, cover_image_url, created_by, created_at, streak')
     .in('id', gardenIds)
   if (gerr) throw new Error(gerr.message)
   return (gardens || []).map((g: { id: string; name: string; cover_image_url: string | null; created_by: string; created_at: string }) => ({
@@ -24,6 +24,7 @@ export async function getUserGardens(userId: string): Promise<Garden[]> {
     coverImageUrl: g.cover_image_url || null,
     createdBy: String(g.created_by),
     createdAt: String(g.created_at),
+    streak: Number((g as any).streak ?? 0),
   }))
 }
 
@@ -53,7 +54,7 @@ export async function createGarden(params: { name: string; coverImageUrl?: strin
 export async function getGarden(gardenId: string): Promise<Garden | null> {
   const { data, error } = await supabase
     .from('gardens')
-    .select('id, name, cover_image_url, created_by, created_at')
+    .select('id, name, cover_image_url, created_by, created_at, streak')
     .eq('id', gardenId)
     .maybeSingle()
   if (error) throw new Error(error.message)
@@ -64,14 +65,16 @@ export async function getGarden(gardenId: string): Promise<Garden | null> {
     coverImageUrl: data.cover_image_url || null,
     createdBy: String(data.created_by),
     createdAt: String(data.created_at),
+    streak: Number((data as any).streak ?? 0),
   }
 }
 
-export async function getGardenPlants(gardenId: string): Promise<Array<GardenPlant & { plant?: Plant | null }>> {
+export async function getGardenPlants(gardenId: string): Promise<Array<GardenPlant & { plant?: Plant | null; sortIndex?: number | null }>> {
   const { data, error } = await supabase
     .from('garden_plants')
     .select('id, garden_id, plant_id, nickname, seeds_planted, planted_at, expected_bloom_date, override_water_freq_unit, override_water_freq_value, plants_on_hand')
     .eq('garden_id', gardenId)
+    .order('sort_index', { ascending: true, nullsFirst: false })
   if (error) throw new Error(error.message)
   const rows = (data || []) as any[]
   if (rows.length === 0) return []
@@ -117,11 +120,21 @@ export async function getGardenPlants(gardenId: string): Promise<Array<GardenPla
     overrideWaterFreqValue: r.override_water_freq_value ?? null,
     plantsOnHand: Number(r.plants_on_hand ?? 0),
     plant: idToPlant[String(r.plant_id)] || null,
+    sortIndex: (r as any).sort_index ?? null,
   }))
 }
 
 export async function addPlantToGarden(params: { gardenId: string; plantId: string; nickname?: string | null; seedsPlanted?: number; plantedAt?: string | null; expectedBloomDate?: string | null }): Promise<GardenPlant> {
   const { gardenId, plantId, nickname = null, seedsPlanted = 0, plantedAt = null, expectedBloomDate = null } = params
+  // Determine next sort_index to append to bottom
+  const { data: maxRow } = await supabase
+    .from('garden_plants')
+    .select('sort_index')
+    .eq('garden_id', gardenId)
+    .order('sort_index', { ascending: false, nullsFirst: false })
+    .limit(1)
+    .maybeSingle()
+  const nextIndex = Number((maxRow as any)?.sort_index ?? -1) + 1
   const { data, error } = await supabase
     .from('garden_plants')
     .insert({ garden_id: gardenId, plant_id: plantId, nickname, seeds_planted: seedsPlanted, planted_at: plantedAt, expected_bloom_date: expectedBloomDate, plants_on_hand: 0 })
@@ -137,6 +150,15 @@ export async function addPlantToGarden(params: { gardenId: string; plantId: stri
     plantedAt: data.planted_at,
     expectedBloomDate: data.expected_bloom_date,
     plantsOnHand: Number((data as any).plants_on_hand ?? 0),
+  }
+}
+
+export async function updateGardenPlantsOrder(params: { gardenId: string; orderedIds: string[] }): Promise<void> {
+  const { gardenId, orderedIds } = params
+  // Batch update sort_index; keep it simple with sequential updates
+  for (let i = 0; i < orderedIds.length; i++) {
+    const id = orderedIds[i]
+    await supabase.from('garden_plants').update({ sort_index: i }).eq('id', id).eq('garden_id', gardenId)
   }
 }
 
@@ -311,10 +333,14 @@ export async function deleteGardenPlant(gardenPlantId: string): Promise<void> {
 }
 
 export async function fetchServerNowISO(): Promise<string> {
-  const { data, error } = await supabase.rpc('get_server_now')
-  if (error) throw new Error(error.message)
-  const iso = new Date(String(data)).toISOString()
-  return iso
+  try {
+    const { data, error } = await supabase.rpc('get_server_now')
+    if (!error && data) {
+      return new Date(String(data)).toISOString()
+    }
+  } catch {}
+  // Fallback to client time if RPC unavailable (CORS/network outage)
+  return new Date().toISOString()
 }
 
 export async function upsertGardenTask(params: { gardenId: string; day: string; gardenPlantId?: string | null; success?: boolean }): Promise<void> {
@@ -335,7 +361,7 @@ export async function getGardenTasks(gardenId: string, startDay: string, endDay:
   return (data || []).map((r: any) => ({
     id: String(r.id),
     gardenId: String(r.garden_id),
-    day: String(r.day),
+    day: (r.day instanceof Date ? (r.day as Date).toISOString().slice(0,10) : String(r.day).slice(0,10)),
     taskType: 'watering',
     gardenPlantIds: Array.isArray(r.garden_plant_ids) ? r.garden_plant_ids : [],
     success: Boolean(r.success),
@@ -345,6 +371,33 @@ export async function getGardenTasks(gardenId: string, startDay: string, endDay:
 export async function ensureDailyTasksForGardens(dayIso: string): Promise<void> {
   const { error } = await supabase.rpc('ensure_daily_tasks_for_gardens', { _day: dayIso })
   if (error) throw new Error(error.message)
+}
+
+export async function computeGardenTaskForDay(params: { gardenId: string; dayIso: string }): Promise<void> {
+  const { gardenId, dayIso } = params
+  const { error } = await supabase.rpc('compute_garden_task_for_day', { _garden_id: gardenId, _day: dayIso })
+  if (error) throw new Error(error.message)
+}
+
+export async function getGardenTodayProgress(gardenId: string, dayIso: string): Promise<{ due: number; completed: number }> {
+  // Fetch garden plant ids
+  const { data: plantRows, error: plantErr } = await supabase
+    .from('garden_plants')
+    .select('id')
+    .eq('garden_id', gardenId)
+  if (plantErr) throw new Error(plantErr.message)
+  const gardenPlantIds = (plantRows || []).map((r: any) => String(r.id))
+  if (gardenPlantIds.length === 0) return { due: 0, completed: 0 }
+  // Count today's due and completed from schedule
+  const { data: schedRows, error: schedErr } = await supabase
+    .from('garden_watering_schedule')
+    .select('id, completed_at, garden_plant_id, due_date')
+    .in('garden_plant_id', gardenPlantIds)
+    .eq('due_date', dayIso)
+  if (schedErr) throw new Error(schedErr.message)
+  const due = (schedRows || []).length
+  const completed = (schedRows || []).filter((r: any) => Boolean(r.completed_at)).length
+  return { due, completed }
 }
 
 export async function getGardenInventory(gardenId: string): Promise<Array<{ plantId: string; seedsOnHand: number; plantsOnHand: number; plant?: Plant | null }>> {
@@ -411,6 +464,59 @@ export async function adjustInventoryAndLogTransaction(params: { gardenId: strin
     if (uErr) throw new Error(uErr.message)
   }
   // Log transaction
+  const qty = Math.abs(seedsDelta !== 0 ? seedsDelta : plantsDelta)
+  const { error: tErr } = await supabase
+    .from('garden_transactions')
+    .insert({ garden_id: gardenId, plant_id: plantId, type: transactionType, quantity: qty, occurred_at: new Date().toISOString(), notes })
+  if (tErr) throw new Error(tErr.message)
+}
+
+export async function getGardenInstanceInventory(gardenId: string): Promise<Array<{ gardenPlantId: string; seedsOnHand: number; plantsOnHand: number }>> {
+  const { data, error } = await supabase
+    .from('garden_instance_inventory')
+    .select('garden_plant_id, seeds_on_hand, plants_on_hand')
+    .eq('garden_id', gardenId)
+  if (error) throw new Error(error.message)
+  return (data || []).map((r: any) => ({
+    gardenPlantId: String(r.garden_plant_id),
+    seedsOnHand: Number(r.seeds_on_hand ?? 0),
+    plantsOnHand: Number(r.plants_on_hand ?? 0),
+  }))
+}
+
+export async function adjustInstanceInventoryAndLogTransaction(params: { gardenId: string; gardenPlantId: string; seedsDelta?: number; plantsDelta?: number; transactionType: 'buy_seeds' | 'sell_seeds' | 'buy_plants' | 'sell_plants'; notes?: string | null }): Promise<void> {
+  const { gardenId, gardenPlantId, seedsDelta = 0, plantsDelta = 0, transactionType, notes = null } = params
+  // Resolve plant_id for transaction log
+  const { data: gpRow, error: gpErr } = await supabase
+    .from('garden_plants')
+    .select('plant_id')
+    .eq('id', gardenPlantId)
+    .maybeSingle()
+  if (gpErr) throw new Error(gpErr.message)
+  const plantId = String(gpRow?.plant_id || '')
+  // Ensure instance inventory row exists and update
+  const { data: invRow } = await supabase
+    .from('garden_instance_inventory')
+    .select('seeds_on_hand, plants_on_hand')
+    .eq('garden_plant_id', gardenPlantId)
+    .maybeSingle()
+  const currentSeeds = Number(invRow?.seeds_on_hand ?? 0)
+  const currentPlants = Number(invRow?.plants_on_hand ?? 0)
+  const nextSeeds = Math.max(0, currentSeeds + seedsDelta)
+  const nextPlants = Math.max(0, currentPlants + plantsDelta)
+  if (!invRow) {
+    const { error: iErr } = await supabase
+      .from('garden_instance_inventory')
+      .insert({ garden_id: gardenId, garden_plant_id: gardenPlantId, seeds_on_hand: nextSeeds, plants_on_hand: nextPlants })
+    if (iErr) throw new Error(iErr.message)
+  } else {
+    const { error: uErr } = await supabase
+      .from('garden_instance_inventory')
+      .update({ seeds_on_hand: nextSeeds, plants_on_hand: nextPlants })
+      .eq('garden_plant_id', gardenPlantId)
+    if (uErr) throw new Error(uErr.message)
+  }
+  // Log transaction using species plant_id
   const qty = Math.abs(seedsDelta !== 0 ? seedsDelta : plantsDelta)
   const { error: tErr } = await supabase
     .from('garden_transactions')

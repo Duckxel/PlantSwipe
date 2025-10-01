@@ -8,6 +8,7 @@ export interface Garden {
   coverImageUrl: string | null
   createdBy: string
   createdAt: string
+  streak?: number
 }
 
 export interface GardenMember {
