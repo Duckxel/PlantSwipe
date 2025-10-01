@@ -4,6 +4,8 @@ import postgres from 'postgres'
 import dotenv from 'dotenv'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { exec as execCb } from 'child_process'
+import { promisify } from 'util'
 
 dotenv.config()
 // Optionally load server-only secrets from .env.server (ignored if missing)
@@ -13,6 +15,8 @@ try {
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
+
+const exec = promisify(execCb)
 
 function buildConnectionString() {
   let cs = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.POSTGRES_PRISMA_URL
@@ -104,6 +108,25 @@ app.get('/api/plants', async (_req, res) => {
     res.json(mapped)
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Query failed' })
+  }
+})
+
+// Admin: pull latest code from git repository
+app.post('/api/admin/pull-code', async (req, res) => {
+  try {
+    const requiredToken = process.env.ADMIN_API_TOKEN
+    const providedToken = req.get('x-admin-token') || ''
+    if (requiredToken && providedToken !== requiredToken) {
+      res.status(403).json({ error: 'Forbidden' })
+      return
+    }
+
+    const repoDir = path.resolve(__dirname)
+    const cmd = `git -C "${repoDir}" fetch --all --prune && git -C "${repoDir}" pull --ff-only`
+    const { stdout, stderr } = await exec(cmd, { timeout: 120000 })
+    res.json({ ok: true, stdout, stderr })
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e?.message || 'git pull failed' })
   }
 })
 
