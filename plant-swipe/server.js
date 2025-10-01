@@ -143,6 +143,82 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true })
 })
 
+// ==== Helpers: cookie/session/ip/geo ====
+function parseCookies(headerValue) {
+  const cookies = {}
+  if (!headerValue) return cookies
+  const parts = headerValue.split(';')
+  for (const part of parts) {
+    const idx = part.indexOf('=')
+    if (idx > -1) {
+      const k = part.slice(0, idx).trim()
+      const v = part.slice(idx + 1).trim()
+      if (k) cookies[k] = decodeURIComponent(v)
+    }
+  }
+  return cookies
+}
+
+function getOrSetSessionId(req, res) {
+  const COOKIE_NAME = 'ps_sid'
+  const cookies = parseCookies(req.headers.cookie || '')
+  let sid = cookies[COOKIE_NAME]
+  if (!sid || sid.length < 8) {
+    sid = crypto.randomBytes(16).toString('hex')
+    const secure = Boolean((req.headers['x-forwarded-proto'] || '').toString().includes('https')) || process.env.NODE_ENV === 'production'
+    const attrs = [
+      `${COOKIE_NAME}=${encodeURIComponent(sid)}`,
+      'Path=/',
+      'SameSite=Lax',
+      `Max-Age=${60 * 60 * 24 * 180}`,
+      secure ? 'Secure' : '',
+    ].filter(Boolean)
+    res.append('Set-Cookie', attrs.join('; '))
+  }
+  return sid
+}
+
+function getClientIp(req) {
+  const h = req.headers
+  const xff = (h['x-forwarded-for'] || h['X-Forwarded-For'] || '').toString()
+  if (xff) return xff.split(',')[0].trim()
+  const cf = (h['cf-connecting-ip'] || h['CF-Connecting-IP'] || '').toString()
+  if (cf) return cf
+  const real = (h['x-real-ip'] || h['X-Real-IP'] || '').toString()
+  if (real) return real
+  return req.ip || req.connection?.remoteAddress || ''
+}
+
+function getGeoFromHeaders(req) {
+  const h = req.headers
+  const country = (h['x-vercel-ip-country'] || h['cf-ipcountry'] || h['x-geo-country'] || '').toString() || null
+  const region = (h['x-vercel-ip-region'] || h['x-geo-region'] || '').toString() || null
+  const city = (h['x-vercel-ip-city'] || h['x-geo-city'] || '').toString() || null
+  const lat = Number(h['x-vercel-ip-latitude'] || h['x-geo-latitude'] || '')
+  const lon = Number(h['x-vercel-ip-longitude'] || h['x-geo-longitude'] || '')
+  return {
+    geo_country: country || null,
+    geo_region: region || null,
+    geo_city: city || null,
+    latitude: Number.isFinite(lat) ? lat : null,
+    longitude: Number.isFinite(lon) ? lon : null,
+  }
+}
+
+async function insertWebVisit({ sessionId, userId, pagePath, referrer, userAgent, ipAddress, geo, extra }) {
+  if (!sql) return
+  try {
+    await sql`
+      insert into public.web_visits
+        (session_id, user_id, page_path, referrer, user_agent, ip_address, geo_country, geo_region, geo_city, latitude, longitude, extra)
+      values
+        (${sessionId}, ${userId || null}, ${pagePath}, ${referrer || null}, ${userAgent || null}, ${ipAddress || null}, ${geo?.geo_country || null}, ${geo?.geo_region || null}, ${geo?.geo_city || null}, ${geo?.latitude || null}, ${geo?.longitude || null}, ${extra ? sql.json(extra) : sql.json({})})
+    `
+  } catch (e) {
+    // Swallow logging errors
+  }
+}
+
 // Admin: restart server (detached self-reexec)
 app.post('/api/admin/restart-server', async (req, res) => {
   try {
@@ -497,10 +573,68 @@ app.options('/api/admin/branches', (_req, res) => {
   res.status(204).end()
 })
 
+// Public: Track a page visit (client-initiated for SPA navigations)
+app.post('/api/track-visit', async (req, res) => {
+  try {
+    const sessionId = getOrSetSessionId(req, res)
+    const { pagePath, referrer, userId, extra } = req.body || {}
+    const ipAddress = getClientIp(req)
+    const geo = getGeoFromHeaders(req)
+    const userAgent = req.get('user-agent') || ''
+    if (typeof pagePath !== 'string' || pagePath.length === 0) {
+      res.status(400).json({ error: 'Missing pagePath' })
+      return
+    }
+    await insertWebVisit({ sessionId, userId, pagePath, referrer, userAgent, ipAddress, geo, extra })
+    res.status(204).end()
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to record visit' })
+  }
+})
+
+// Admin: unique visitors stats (past 10m and 7 days)
+app.get('/api/admin/visitors-stats', async (req, res) => {
+  const uid = await ensureAdmin(req, res)
+  if (!uid) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  try {
+    const rows10m = await sql`select count(distinct session_id)::int as c from public.web_visits where occurred_at >= now() - interval '10 minutes'`
+    const currentUniqueVisitors10m = rows10m?.[0]?.c ?? 0
+    const rows7 = await sql`
+      with days as (
+        select generate_series((now()::date - 6), now()::date, interval '1 day')::date as d
+      )
+      select d as day,
+             coalesce((select count(distinct session_id)
+                       from public.web_visits v
+                       where (v.occurred_at at time zone 'utc')::date = d), 0)::int as unique_visitors
+      from days
+      order by d asc
+    `
+    const series7d = (rows7 || []).map(r => ({ date: new Date(r.day).toISOString().slice(0,10), uniqueVisitors: Number(r.unique_visitors || 0) }))
+    res.json({ ok: true, currentUniqueVisitors10m, series7d })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to load visitors stats' })
+  }
+})
+
 // Static assets
 const distDir = path.resolve(__dirname, 'dist')
 app.use(express.static(distDir))
-app.get('*', (_req, res) => {
+app.get('*', (req, res) => {
+  // Record initial page load visit for SPA routes
+  try {
+    const sessionId = getOrSetSessionId(req, res)
+    const pagePath = req.path || '/'
+    const referrer = req.get('referer') || req.get('referrer') || ''
+    const ipAddress = getClientIp(req)
+    const geo = getGeoFromHeaders(req)
+    const userAgent = req.get('user-agent') || ''
+    insertWebVisit({ sessionId, userId: null, pagePath, referrer, userAgent, ipAddress, geo, extra: { source: 'initial_load' } }).catch(() => {})
+  } catch {}
   res.sendFile(path.join(distDir, 'index.html'))
 })
 
