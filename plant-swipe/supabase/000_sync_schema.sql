@@ -927,16 +927,16 @@ drop view if exists public.garden_plants_with_water_eval;
 drop function if exists public.every_between_smallint(smallint[], integer, integer) cascade;
 drop function if exists public.every_matches_mmdd(text[]) cascade;
 drop function if exists public.is_valid_monthly_nth_weekdays(text[]) cascade;
-drop function if exists public.nth_weekday_of_month(integer, integer, integer, integer);
-drop function if exists public.get_garden_plant_water_evaluation(uuid);
-drop function if exists public.get_water_evaluation(text, integer);
-drop function if exists public.upsert_garden_plant_schedule_weekly(uuid, integer, smallint[]);
-drop function if exists public.is_garden_member(uuid);
-drop function if exists public.is_garden_owner(uuid);
-drop function if exists public.is_member(uuid);
-drop function if exists public.is_owner(uuid);
-drop function if exists public.mark_garden_plant_done_today(uuid, uuid, date);
-drop function if exists public.set_plant_care_water_from_freq();
-drop function if exists public.set_updated_at();
+drop function if exists public.nth_weekday_of_month(integer, integer, integer, integer) cascade;
+drop function if exists public.get_garden_plant_water_evaluation(uuid) cascade;
+drop function if exists public.get_water_evaluation(text, integer) cascade;
+drop function if exists public.upsert_garden_plant_schedule_weekly(uuid, integer, smallint[]) cascade;
+drop function if exists public.is_garden_member(uuid) cascade;
+drop function if exists public.is_garden_owner(uuid) cascade;
+drop function if exists public.is_member(uuid) cascade;
+drop function if exists public.is_owner(uuid) cascade;
+drop function if exists public.mark_garden_plant_done_today(uuid, uuid, date) cascade;
+drop function if exists public.set_plant_care_water_from_freq() cascade;
+drop function if exists public.set_updated_at() cascade;
 
 
