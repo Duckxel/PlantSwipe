@@ -70,7 +70,7 @@ export async function getGarden(gardenId: string): Promise<Garden | null> {
 export async function getGardenPlants(gardenId: string): Promise<Array<GardenPlant & { plant?: Plant | null }>> {
   const { data, error } = await supabase
     .from('garden_plants')
-    .select('id, garden_id, plant_id, nickname, seeds_planted, planted_at, expected_bloom_date, override_water_freq_unit, override_water_freq_value')
+    .select('id, garden_id, plant_id, nickname, seeds_planted, planted_at, expected_bloom_date, override_water_freq_unit, override_water_freq_value, plants_on_hand')
     .eq('garden_id', gardenId)
   if (error) throw new Error(error.message)
   const rows = (data || []) as any[]
@@ -115,6 +115,7 @@ export async function getGardenPlants(gardenId: string): Promise<Array<GardenPla
     expectedBloomDate: r.expected_bloom_date,
     overrideWaterFreqUnit: r.override_water_freq_unit || null,
     overrideWaterFreqValue: r.override_water_freq_value ?? null,
+    plantsOnHand: Number(r.plants_on_hand ?? 0),
     plant: idToPlant[String(r.plant_id)] || null,
   }))
 }
@@ -123,8 +124,8 @@ export async function addPlantToGarden(params: { gardenId: string; plantId: stri
   const { gardenId, plantId, nickname = null, seedsPlanted = 0, plantedAt = null, expectedBloomDate = null } = params
   const { data, error } = await supabase
     .from('garden_plants')
-    .insert({ garden_id: gardenId, plant_id: plantId, nickname, seeds_planted: seedsPlanted, planted_at: plantedAt, expected_bloom_date: expectedBloomDate })
-    .select('id, garden_id, plant_id, nickname, seeds_planted, planted_at, expected_bloom_date')
+    .insert({ garden_id: gardenId, plant_id: plantId, nickname, seeds_planted: seedsPlanted, planted_at: plantedAt, expected_bloom_date: expectedBloomDate, plants_on_hand: 0 })
+    .select('id, garden_id, plant_id, nickname, seeds_planted, planted_at, expected_bloom_date, plants_on_hand')
     .single()
   if (error) throw new Error(error.message)
   return {
@@ -135,6 +136,7 @@ export async function addPlantToGarden(params: { gardenId: string; plantId: stri
     seedsPlanted: Number(data.seeds_planted ?? 0),
     plantedAt: data.planted_at,
     expectedBloomDate: data.expected_bloom_date,
+    plantsOnHand: Number((data as any).plants_on_hand ?? 0),
   }
 }
 
@@ -492,7 +494,7 @@ export async function upsertOneTimeTask(params: { gardenId: string; gardenPlantI
 export async function listPlantTasks(gardenPlantId: string): Promise<GardenPlantTask[]> {
   const { data, error } = await supabase
     .from('garden_plant_tasks')
-    .select('id, garden_id, garden_plant_id, type, custom_name, schedule_kind, due_at, interval_amount, interval_unit, required_count, created_at')
+    .select('id, garden_id, garden_plant_id, type, custom_name, schedule_kind, due_at, interval_amount, interval_unit, required_count, period, amount, weekly_days, monthly_days, yearly_days, monthly_nth_weekdays, created_at')
     .eq('garden_plant_id', gardenPlantId)
     .order('created_at', { ascending: true })
   if (error) throw new Error(error.message)
@@ -507,6 +509,12 @@ export async function listPlantTasks(gardenPlantId: string): Promise<GardenPlant
     intervalAmount: r.interval_amount ?? null,
     intervalUnit: r.interval_unit || null,
     requiredCount: Number(r.required_count ?? 1),
+    period: r.period || null,
+    amount: r.amount ?? null,
+    weeklyDays: r.weekly_days || null,
+    monthlyDays: r.monthly_days || null,
+    yearlyDays: r.yearly_days || null,
+    monthlyNthWeekdays: r.monthly_nth_weekdays || null,
     createdAt: String(r.created_at),
   }))
 }
@@ -548,7 +556,7 @@ export async function progressTaskOccurrence(occurrenceId: string, increment = 1
 export async function listGardenTasks(gardenId: string): Promise<GardenPlantTask[]> {
   const { data, error } = await supabase
     .from('garden_plant_tasks')
-    .select('id, garden_id, garden_plant_id, type, custom_name, schedule_kind, due_at, interval_amount, interval_unit, required_count, created_at')
+    .select('id, garden_id, garden_plant_id, type, custom_name, schedule_kind, due_at, interval_amount, interval_unit, required_count, period, amount, weekly_days, monthly_days, yearly_days, monthly_nth_weekdays, created_at')
     .eq('garden_id', gardenId)
     .order('created_at', { ascending: true })
   if (error) throw new Error(error.message)
@@ -563,6 +571,12 @@ export async function listGardenTasks(gardenId: string): Promise<GardenPlantTask
     intervalAmount: r.interval_amount ?? null,
     intervalUnit: r.interval_unit || null,
     requiredCount: Number(r.required_count ?? 1),
+    period: r.period || null,
+    amount: r.amount ?? null,
+    weeklyDays: r.weekly_days || null,
+    monthlyDays: r.monthly_days || null,
+    yearlyDays: r.yearly_days || null,
+    monthlyNthWeekdays: r.monthly_nth_weekdays || null,
     createdAt: String(r.created_at),
   }))
 }
@@ -625,8 +639,109 @@ export async function syncTaskOccurrencesForGarden(gardenId: string, startIso: s
         await ensureTaskOccurrence(t.id, t.gardenPlantId, cur.toISOString(), t.requiredCount)
         cur = addInterval(cur, amount, unit)
       }
+    } else if (t.scheduleKind === 'repeat_pattern') {
+      const period = (t.period || 'week') as 'week' | 'month' | 'year'
+      // Iterate each day between start and end and match to pattern
+      const cur = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate(), 12, 0, 0))
+      const endDay = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate(), 12, 0, 0))
+      const weeklyDays = (t.weeklyDays || []) as number[]
+      const monthlyDays = (t.monthlyDays || []) as number[]
+      const monthlyNthWeekdays = (t.monthlyNthWeekdays || []) as string[]
+      const yearlyDays = (t.yearlyDays || []) as string[]
+      while (cur <= endDay) {
+        const m = cur.getUTCMonth() + 1
+        const d = cur.getUTCDate()
+        const weekday = cur.getUTCDay() // 0=Sun..6=Sat
+        const mm = String(m).padStart(2, '0')
+        const dd = String(d).padStart(2, '0')
+        const ymd = `${mm}-${dd}`
+        let match = false
+        if (period === 'week') {
+          match = weeklyDays.includes(weekday)
+        } else if (period === 'month') {
+          if (monthlyDays.includes(d)) match = true
+          if (!match && monthlyNthWeekdays.length > 0) {
+            const weekIndex = Math.floor((d - 1) / 7) + 1 // 1..4
+            const key = `${weekIndex}-${weekday}`
+            if (monthlyNthWeekdays.includes(key)) match = true
+          }
+        } else if (period === 'year') {
+          match = yearlyDays.includes(ymd)
+        }
+        if (match) {
+          await ensureTaskOccurrence(t.id, t.gardenPlantId, cur.toISOString(), t.requiredCount)
+        }
+        cur.setUTCDate(cur.getUTCDate() + 1)
+      }
     }
   }
+}
+
+export async function createPatternTask(params: {
+  gardenId: string
+  gardenPlantId: string
+  type: TaskType
+  customName?: string | null
+  period: 'week' | 'month' | 'year'
+  amount: number
+  weeklyDays?: number[] | null
+  monthlyDays?: number[] | null
+  yearlyDays?: string[] | null
+  monthlyNthWeekdays?: string[] | null
+  requiredCount?: number | null
+}): Promise<string> {
+  const { gardenId, gardenPlantId, type, customName = null, period, amount, weeklyDays = null, monthlyDays = null, yearlyDays = null, monthlyNthWeekdays = null, requiredCount = 1 } = params
+  const { data, error } = await supabase
+    .from('garden_plant_tasks')
+    .insert({
+      garden_id: gardenId,
+      garden_plant_id: gardenPlantId,
+      type,
+      custom_name: customName,
+      schedule_kind: 'repeat_pattern',
+      period,
+      amount,
+      weekly_days: weeklyDays,
+      monthly_days: monthlyDays,
+      yearly_days: yearlyDays,
+      monthly_nth_weekdays: monthlyNthWeekdays,
+      required_count: requiredCount ?? 1,
+    })
+    .select('id')
+    .single()
+  if (error) throw new Error(error.message)
+  return String((data as any).id)
+}
+
+export async function updatePatternTask(params: {
+  taskId: string
+  type?: TaskType
+  customName?: string | null
+  period?: 'week' | 'month' | 'year'
+  amount?: number | null
+  weeklyDays?: number[] | null
+  monthlyDays?: number[] | null
+  yearlyDays?: string[] | null
+  monthlyNthWeekdays?: string[] | null
+  requiredCount?: number | null
+}): Promise<void> {
+  const { taskId, type, customName, period, amount, weeklyDays, monthlyDays, yearlyDays, monthlyNthWeekdays, requiredCount } = params
+  const payload: any = {}
+  if (type) payload.type = type
+  if (customName !== undefined) payload.custom_name = customName
+  if (period) payload.period = period
+  if (amount !== undefined && amount !== null) payload.amount = amount
+  if (weeklyDays !== undefined) payload.weekly_days = weeklyDays
+  if (monthlyDays !== undefined) payload.monthly_days = monthlyDays
+  if (yearlyDays !== undefined) payload.yearly_days = yearlyDays
+  if (monthlyNthWeekdays !== undefined) payload.monthly_nth_weekdays = monthlyNthWeekdays
+  if (requiredCount !== undefined && requiredCount !== null) payload.required_count = requiredCount
+  payload.schedule_kind = 'repeat_pattern'
+  const { error } = await supabase
+    .from('garden_plant_tasks')
+    .update(payload)
+    .eq('id', taskId)
+  if (error) throw new Error(error.message)
 }
 
 export async function listOccurrencesForTasks(taskIds: string[], startIso: string, endIso: string): Promise<GardenPlantTaskOccurrence[]> {
