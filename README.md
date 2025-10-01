@@ -1,116 +1,119 @@
-# 🌱 PlantSwipe  
+# 🌿 PlantSwipe — swipe to discover plants you’ll love
 
-PlantSwipe is an application that catalogs plants and seeds in a collaborative database.  
-It allows users to search, filter, and add new entries based on criteria such as **name**, **family**, or other characteristics.  
+Fall in love with plants, one delightful swipe at a time. PlantSwipe turns plant discovery into a playful, visual experience while keeping serious growers happy with accurate data, care guides, and collaborative tools. 🌱✨
 
----
-
-## 🚀 Features
-- 🔍 Search for plants and seeds by different criteria  
-- ➕ Add new plants to the database  
-- 🌍 Collaborative database enriched by users  
+Built with care by Neolite & Five.
 
 ---
 
-## 🛠️ Installation & Setup
+## 💡 Why PlantSwipe?
 
-### 1. Clone the repository
-Clone the project with Git:  
-```bash
-git clone https://github.com/yourusername/PlantSwipe.git
-````
+- 🌸 Fun first: a smooth, card-based swipe UI that feels instantly familiar.
+- 🌍 Community-powered: a shared catalog of plants and seeds you can browse and enrich.
+- 🔎 Powerful search: filter by name, colors, seasons, rarity, and more.
+- 📚 Learn as you go: scientific names, meanings, and practical care advice.
+- 🧑‍🤝‍🧑 Grow together: gardens, inventories, and activity tracking (designed to scale).
 
 ---
 
-### 2. Install dependencies
+## 🚀 Highlights at a glance
 
-Make sure you have **Node.js** installed.
-👉 [Download Node.js](https://nodejs.org/en/download)
+| 🌟 Feature | What you get |
+| --- | --- |
+| Swipe-to-discover | Fast, visual exploration with like/pass interactions |
+| Rich plant profiles | Images, seasons, rarity, care guides, and meanings |
+| Smart search | Filter by colors, seasons, rarity, and text queries |
+| Collaborative data | A community-enriched catalog of plants and seeds |
+| Admin tooling | Branch listing, pull latest, restart server, sync schema |
+| Modern stack | React + Vite + Tailwind + Supabase + Express |
 
-Then run:
+---
 
+## 🔄 How it works (at a glance)
+
+```mermaid
+flowchart LR
+  User[🧑‍🌾 User] -->|Swipe / Search| Web[⚡ React + Vite]
+  Web -->|/api/*| API[🧩 Express]
+  API -->|SQL| DB[(🌳 Postgres via Supabase)]
+  API --> Static[📦 Static dist]
+  Static --> User
+```
+
+---
+
+## 🆚 Comparison
+
+| | PlantSwipe | Spreadsheet | Generic plant app |
+| --- | --- | --- | --- |
+| Discovery UX | ✅ Swipe, badges, animations | ❌ Manual, text-heavy | ➖ Varies |
+| Data accuracy | ✅ Structured, typed | ❌ Error-prone | ➖ Mixed |
+| Collaboration | ✅ Built-in path | ➖ Difficult | ➖ Varies |
+| Care guidance | ✅ Clear, human + derived hints | ❌ None | ➖ Sometimes |
+| Extensibility | ✅ Modern web stack | ❌ Hard | ➖ Limited |
+
+---
+
+## 🧪 Quick start
+
+1) Install dependencies
 ```bash
 cd plant-swipe
 npm install
 ```
 
----
-
-### 3. Configure environment variables
-
-Create a `.env` file in `plant-swipe` with ONLY client vars (Vite exposes only `VITE_`):
-
-```env
+2) Configure environment
+```bash
+# plant-swipe/.env (client-side)
 VITE_SUPABASE_URL=YOUR_SUPABASE_URL
 VITE_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
-```
 
-Create `.env.server` in `plant-swipe` for server-only secrets:
-
-```env
-# Option 1: single URL
-# DATABASE_URL=postgresql://user:password@host:5432/dbname?sslmode=require
-
-# Option 2: discrete vars
-# PGHOST=host
-# PGUSER=user
-# PGPASSWORD=pass
-# PGPORT=5432
-# PGDATABASE=postgres
-
-# If using Supabase managed Postgres:
+# plant-swipe/.env.server (server-only)
+# DATABASE_URL=postgresql://user:pass@host:5432/dbname?sslmode=require
+# or use PGHOST/PGUSER/PGPASSWORD/PGDATABASE
+# If using Supabase DB:
 # SUPABASE_URL=https://<project>.supabase.co
-# SUPABASE_DB_PASSWORD=database_password
-
-# Express listen port (optional)
-# PORT=3000
+# SUPABASE_DB_PASSWORD=your_password
 ```
 
----
-
-### 4. Start the project
-
-Run the app locally (Vite dev, with API proxy):
-
+3) Run locally (two terminals)
 ```bash
-npm run dev
-```
+# Terminal A: API on http://localhost:3000
+npm run --prefix plant-swipe serve
 
-Vite dev server: `http://127.0.0.1:5173` (configurable via `VITE_DEV_HOST`/`VITE_DEV_PORT`).
-API proxy: requests to `/api/*` go to Express on `http://localhost:3000`.
+# Terminal B: Web on http://127.0.0.1:5173 (proxied to /api)
+npm run --prefix plant-swipe dev
+```
 
 ---
 
-## 📂 Tech Stack
+## 🏗️ Tech stack
 
-* **Frontend**: Vite + React
-* **Backend**: Supabase (PostgreSQL)
-* **Auth & DB**: Supabase
+- ⚛️ React 19 + TypeScript + Vite
+- 🎨 Tailwind CSS + shadcn-inspired UI components
+- 🗄️ Supabase (Postgres + Auth)
+- 🧩 Express server (serves `/api/*` and production static files)
 
+For a deeper technical deep-dive, see `plant-swipe/README.md`.
 
 ---
 
-Server update 
-```bash
-git pull
-```
+## 🔧 Production deployment (snippet)
+
 ```bash
 cd plant-swipe
-```
-```bash
 npm ci
-```
-```bash
 npm run build
-```
-```bash
 sudo rsync -avh --delete ./dist/ /var/www/plant-swipe/
-```
-```bash
 sudo systemctl reload nginx
 ```
 
+---
 
+## 👩‍🎨 Creators
+
+Made with love by **Neolite** and **Five** — builders who care about playful design, clear architecture, and tools that help communities grow. 🌿
 
 ---
-✨ Happy digital gardening with *PlantSwipe*!
+
+Happy digital gardening with PlantSwipe! 🌼
