@@ -739,6 +739,8 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
   try {
     const rows10m = await sql`select count(distinct session_id)::int as c from public.web_visits where occurred_at >= now() - interval '10 minutes'`
     const currentUniqueVisitors10m = rows10m?.[0]?.c ?? 0
+    const rows60m = await sql`select count(*)::int as c from public.web_visits where occurred_at >= now() - interval '60 minutes'`
+    const visitsLast60m = rows60m?.[0]?.c ?? 0
     const rows7 = await sql`
       with days as (
         select generate_series((now()::date - 6), now()::date, interval '1 day')::date as d
@@ -751,7 +753,7 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
       order by d asc
     `
     const series7d = (rows7 || []).map(r => ({ date: new Date(r.day).toISOString().slice(0,10), uniqueVisitors: Number(r.unique_visitors || 0) }))
-    res.json({ ok: true, currentUniqueVisitors10m, series7d })
+    res.json({ ok: true, currentUniqueVisitors10m, visitsLast60m, series7d })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to load visitors stats' })
   }
