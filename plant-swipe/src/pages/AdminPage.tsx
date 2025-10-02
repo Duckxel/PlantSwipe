@@ -223,11 +223,16 @@ export const AdminPage: React.FC = () => {
       try {
         const token = (await supabase.auth.getSession()).data.session?.access_token
         if (token) {
-          const resp = await fetch('/api/admin/stats', { headers: { 'Authorization': `Bearer ${token}` } })
+          // Try POST first to ensure headers are preserved across proxies
+          let resp = await fetch('/api/admin/stats', { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, body: '{}' })
+          if (resp.status === 405) {
+            // Fallback to GET if POST blocked
+            resp = await fetch('/api/admin/stats', { headers: { 'Authorization': `Bearer ${token}` } })
+          }
           if (resp.ok) {
             const data = await resp.json().catch(() => ({}))
-            const val = typeof data?.profilesCount === 'number' ? data.profilesCount : null
-            if (!cancelled && val !== null) { setRegisteredCount(val); return }
+            const val = typeof data?.profilesCount === 'number' ? data.profilesCount : 0
+            if (!cancelled) { setRegisteredCount(val); return }
           }
         }
       } catch {}

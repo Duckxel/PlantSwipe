@@ -439,7 +439,7 @@ app.options('/api/admin/sync-schema', (_req, res) => {
 })
 
 // Admin: global stats (bypass RLS via server connection)
-app.get('/api/admin/stats', async (req, res) => {
+async function handleAdminStats(req, res) {
   const uid = await ensureAdmin(req, res)
   if (!uid) return
   if (!sql) {
@@ -447,8 +447,14 @@ app.get('/api/admin/stats', async (req, res) => {
     return
   }
   try {
-    const profilesRows = await sql`select count(*)::int as count from public.profiles`
-    const profilesCount = Array.isArray(profilesRows) && profilesRows[0] ? Number(profilesRows[0].count) : 0
+    let profilesCount = null
+    try {
+      const exists = await sql`select 1 from information_schema.tables where table_schema = 'public' and table_name = 'profiles'`
+      if (exists?.length) {
+        const rows = await sql`select count(*)::int as count from public.profiles`
+        profilesCount = Array.isArray(rows) && rows[0] ? Number(rows[0].count) : 0
+      }
+    } catch {}
     let authUsersCount = null
     try {
       const authRows = await sql`select count(*)::int as count from auth.users`
@@ -458,6 +464,13 @@ app.get('/api/admin/stats', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to load stats' })
   }
+}
+app.get('/api/admin/stats', handleAdminStats)
+app.post('/api/admin/stats', handleAdminStats)
+app.options('/api/admin/stats', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  res.status(204).end()
 })
 
 app.get('/api/plants', async (_req, res) => {
