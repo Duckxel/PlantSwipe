@@ -134,6 +134,9 @@ export default function PlantSwipe() {
     // Track SPA route changes to server for visit analytics
     const sendVisit = async (path: string) => {
       try {
+        // Allow overriding API base via environment (e.g., VITE_API_BASE="http://172.237.109.227")
+        const apiBase: string = (import.meta as any)?.env?.VITE_API_BASE ? String((import.meta as any).env.VITE_API_BASE) : ''
+        const base = apiBase.replace(/\/$/, '')
         const session = (await supabase.auth.getSession()).data.session
         const token = session?.access_token
         const headers: Record<string, string> = { 'Content-Type': 'application/json' }
@@ -149,7 +152,7 @@ export default function PlantSwipe() {
           memoryGB: (navigator as any).deviceMemory || null,
           webgl: (() => { try { const c = document.createElement('canvas'); const gl = (c.getContext('webgl') || c.getContext('experimental-webgl')) as WebGLRenderingContext | null; const debug = gl && gl.getExtension('WEBGL_debug_renderer_info'); return debug && gl ? { vendor: gl.getParameter((debug as any).UNMASKED_VENDOR_WEBGL), renderer: gl.getParameter((debug as any).UNMASKED_RENDERER_WEBGL) } : null } catch { return null } })(),
         }
-        await fetch('/api/track-visit', {
+        await fetch(`${base}/api/track-visit`, {
           method: 'POST',
           headers,
           body: JSON.stringify({
