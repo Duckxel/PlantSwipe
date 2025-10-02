@@ -189,6 +189,8 @@ if (!connectionString) {
 const sql = connectionString ? postgres(connectionString) : null
 
 const app = express()
+// Trust proxy headers so req.secure and x-forwarded-proto reflect real scheme
+try { app.set('trust proxy', true) } catch {}
 app.use(express.json())
 
 // Global CORS and preflight handling for API routes
@@ -234,7 +236,8 @@ app.get('/api/health', (_req, res) => {
 })
 
 // Runtime environment injector for client (exposes safe VITE_* only)
-app.get('/api/env.js', (_req, res) => {
+// Serve on both /api/env.js and /env.js to be resilient to proxy rules
+app.get(['/api/env.js', '/env.js'], (_req, res) => {
   try {
     const env = {
       VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '',
@@ -274,7 +277,11 @@ function getOrSetSessionId(req, res) {
   let sid = cookies[COOKIE_NAME]
   if (!sid || sid.length < 8) {
     sid = crypto.randomBytes(16).toString('hex')
-    const secure = Boolean((req.headers['x-forwarded-proto'] || '').toString().includes('https')) || process.env.NODE_ENV === 'production'
+    // Mark cookie Secure only when the original request is HTTPS
+    const xfProto = (req.headers['x-forwarded-proto'] || '').toString().toLowerCase()
+    const isHttps = xfProto.includes('https') || (req.secure === true) || (req.protocol === 'https')
+    const forceSecure = String(process.env.FORCE_SECURE_COOKIES || '').toLowerCase() === 'true'
+    const secure = forceSecure || isHttps
     const attrs = [
       `${COOKIE_NAME}=${encodeURIComponent(sid)}`,
       'Path=/',
