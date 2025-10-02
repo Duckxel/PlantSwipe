@@ -233,6 +233,25 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true })
 })
 
+// Runtime environment injector for client (exposes safe VITE_* only)
+app.get('/api/env.js', (_req, res) => {
+  try {
+    const env = {
+      VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '',
+      VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '',
+      VITE_API_BASE: process.env.VITE_API_BASE || '',
+    }
+    const js = `window.__ENV__ = ${JSON.stringify(env).replace(/</g, '\\u003c')};\n`
+    res.setHeader('Content-Type', 'application/javascript; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-store')
+    res.send(js)
+  } catch (e) {
+    res.setHeader('Content-Type', 'application/javascript; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-store')
+    res.send('window.__ENV__ = {}')
+  }
+})
+
 // ==== Helpers: cookie/session/ip/geo ====
 function parseCookies(headerValue) {
   const cookies = {}
