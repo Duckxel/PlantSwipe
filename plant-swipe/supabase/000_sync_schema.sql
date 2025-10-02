@@ -92,7 +92,8 @@ do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='plants' and policyname='plants_select_all') then
     drop policy plants_select_all on public.plants;
   end if;
-  create policy plants_select_all on public.plants for select to authenticated using (true);
+  -- Allow anyone (including anon) to read plants
+  create policy plants_select_all on public.plants for select to authenticated, anon using (true);
 end $$;
 do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='plants' and policyname='plants_iud_all') then
