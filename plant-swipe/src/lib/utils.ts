@@ -6,7 +6,8 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function getEnv(name: string, fallback?: string): string {
-  const v = (import.meta as any).env?.[name]
+  // Prefer build-time Vite env; fallback to runtime window.__ENV__ injected by server
+  const v = (import.meta as any).env?.[name] ?? (globalThis as any)?.__ENV__?.[name]
   if (typeof v === 'string' && v.length > 0) return v
   if (fallback !== undefined) return fallback
   throw new Error(`Missing environment variable: ${name}`)
@@ -14,7 +15,7 @@ export function getEnv(name: string, fallback?: string): string {
 
 export function getEnvAny(names: string[], fallback?: string): string {
   for (const n of names) {
-    const v = (import.meta as any).env?.[n]
+    const v = (import.meta as any).env?.[n] ?? (globalThis as any)?.__ENV__?.[n]
     if (typeof v === 'string' && v.length > 0) return v
   }
   if (fallback !== undefined) return fallback
