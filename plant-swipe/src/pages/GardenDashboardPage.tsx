@@ -236,7 +236,7 @@ export const GardenDashboardPage: React.FC = () => {
           species += 1
         }
       }
-      setInventoryCounts(perInstanceCounts)
+      setInstanceCounts(perInstanceCounts)
       setTotalOnHand(total)
       setSpeciesOnHand(species)
       // Build last-30-days stats from generic task occurrences instead of watering-only
