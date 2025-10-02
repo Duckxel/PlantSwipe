@@ -104,6 +104,7 @@ export const AdminPage: React.FC = () => {
   const [visitorsSeries, setVisitorsSeries] = React.useState<Array<{ date: string; uniqueVisitors: number }>>([])
   const [visitorsLoading, setVisitorsLoading] = React.useState<boolean>(true)
   const [visitorsError, setVisitorsError] = React.useState<string | null>(null)
+  const [visitsLast60m, setVisitsLast60m] = React.useState<number | null>(null)
 
   const pullLatest = async () => {
     if (pulling) return
@@ -256,6 +257,8 @@ export const AdminPage: React.FC = () => {
         }
         const series: Array<{ date: string; uniqueVisitors: number }> = Array.isArray(data?.series7d) ? data.series7d : []
         if (!cancelled) setVisitorsSeries(series)
+        const v60: number = Number.isFinite(Number(data?.visitsLast60m)) ? Number(data.visitsLast60m) : 0
+        if (!cancelled) setVisitsLast60m(v60)
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e)
         if (!cancelled) setVisitorsError(msg || 'Failed to load visitors stats')
@@ -436,6 +439,7 @@ export const AdminPage: React.FC = () => {
                 <CardContent className="p-4">
                   <div className="text-sm opacity-60">Currently online</div>
                   <div className="text-2xl font-semibold">{onlineCount}</div>
+                  <div className="text-xs opacity-60 mt-1">Visits last 60 mins: <span className="font-medium opacity-80">{visitsLast60m ?? 0}</span></div>
                 </CardContent>
               </Card>
               <Card className="rounded-2xl">
