@@ -236,7 +236,8 @@ app.get('/api/health', (_req, res) => {
 })
 
 // Runtime environment injector for client (exposes safe VITE_* only)
-// Serve on both /api/env.js and /env.js to be resilient to proxy rules
+// Serve on both /api/env.js and /env.js to be resilient to proxy rules.
+// Some static hosts might hijack /env.js and serve index.html; prefer /api/env.js in index.html.
 app.get(['/api/env.js', '/env.js'], (_req, res) => {
   try {
     const env = {
