@@ -117,8 +117,49 @@ export default function PlantSwipe() {
       }))
       setPlants(parsed)
     } catch (e: unknown) {
-      const msg = e && typeof e === 'object' && 'message' in e ? String((e as { message?: unknown }).message || '') : ''
-      setLoadError(msg || 'Failed to load plants')
+      // Fallback: fetch from public API which bypasses RLS (guests)
+      try {
+        const apiBase: string = (import.meta as any)?.env?.VITE_API_BASE ? String((import.meta as any).env.VITE_API_BASE) : ''
+        const base = apiBase.replace(/\/$/, '')
+        const resp = await fetch(`${base}/api/plants`, { headers: { 'Accept': 'application/json' } })
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+        type ServerPlant = {
+          id: string
+          name: string
+          scientificName?: string | null
+          colors?: string[] | null
+          seasons?: string[] | null
+          rarity: Plant['rarity']
+          meaning?: string | null
+          description?: string | null
+          image?: string | null
+          care?: Partial<Plant['care']>
+          seedsAvailable?: boolean | null
+        }
+        const arr: ServerPlant[] = await resp.json()
+        const parsed: Plant[] = (Array.isArray(arr) ? arr : []).map((p: ServerPlant) => ({
+          id: String(p.id),
+          name: String(p.name),
+          scientificName: String(p.scientificName || ''),
+          colors: Array.isArray(p.colors) ? p.colors.map(String) : [],
+          seasons: (Array.isArray(p.seasons) ? p.seasons.map(String) : []) as Plant['seasons'],
+          rarity: p.rarity,
+          meaning: p.meaning ? String(p.meaning) : '',
+          description: p.description ? String(p.description) : '',
+          image: p.image || '',
+          care: {
+            sunlight: (p.care?.sunlight || 'Low') as Plant['care']['sunlight'],
+            water: (p.care?.water || 'Low') as Plant['care']['water'],
+            soil: String(p.care?.soil || ''),
+            difficulty: (p.care?.difficulty || 'Easy') as Plant['care']['difficulty']
+          },
+          seedsAvailable: Boolean(p.seedsAvailable ?? false),
+        }))
+        setPlants(parsed)
+      } catch (fallbackErr: unknown) {
+        const msg = fallbackErr && typeof fallbackErr === 'object' && 'message' in fallbackErr ? String((fallbackErr as { message?: unknown }).message || '') : ''
+        setLoadError(msg || 'Failed to load plants')
+      }
     } finally {
       setLoading(false)
     }
