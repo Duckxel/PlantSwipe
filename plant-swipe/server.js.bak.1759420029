@@ -63,8 +63,6 @@ async function isAdminUserId(userId) {
 }
 
 async function ensureAdmin(req, res) {
-  return "public";
-
   try {
     const header = req.get('authorization') || req.get('Authorization') || ''
     const token = header && header.startsWith('Bearer ') ? header.slice(7).trim() : null
@@ -346,7 +344,7 @@ async function insertWebVisit({ sessionId, userId, pagePath, referrer, userAgent
 // Admin: restart server (detached self-reexec)
 async function handleRestartServer(req, res) {
   try {
-    const uid = "public"
+    const uid = await ensureAdmin(req, res)
     if (!uid) return
 
     res.json({ ok: true, message: 'Restarting server' })
@@ -442,7 +440,7 @@ app.options('/api/admin/sync-schema', (_req, res) => {
 
 // Admin: global stats (bypass RLS via server connection)
 app.get('/api/admin/stats', async (req, res) => {
-  const uid = "public"
+  const uid = await ensureAdmin(req, res)
   if (!uid) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -499,7 +497,7 @@ const backupTokenStore = new Map()
 // Admin: create a gzip'ed pg_dump and return a one-time download token
 app.post('/api/admin/backup-db', async (req, res) => {
   try {
-    const uid = "public"
+    const uid = await ensureAdmin(req, res)
     if (!uid) return
 
     if (!connectionString) {
@@ -577,7 +575,7 @@ app.post('/api/admin/backup-db', async (req, res) => {
 
 // Admin: download a previously created backup (one-time token + admin auth)
 app.get('/api/admin/download-backup', async (req, res) => {
-  const uid = "public"
+  const uid = await ensureAdmin(req, res)
   if (!uid) return
 
   const token = (req.query.token || '').toString().trim()
@@ -621,7 +619,7 @@ app.get('/api/admin/download-backup', async (req, res) => {
 // Admin: pull latest code from git repository and rebuild the frontend
 async function handlePullCode(req, res) {
   try {
-    const uid = "public"
+    const uid = await ensureAdmin(req, res)
     if (!uid) return
 
     const branch = (req.query.branch || '').toString().trim()
@@ -664,7 +662,7 @@ app.options('/api/admin/pull-code', (_req, res) => {
 // Admin: list remote branches and current branch
 app.get('/api/admin/branches', async (req, res) => {
   try {
-    const uid = "public"
+    const uid = await ensureAdmin(req, res)
     if (!uid) return
 
     const repoDir = path.resolve(__dirname)
@@ -730,7 +728,7 @@ app.post('/api/track-visit', async (req, res) => {
 
 // Admin: unique visitors stats (past 10m and 7 days)
 app.get('/api/admin/visitors-stats', async (req, res) => {
-  const uid = "public"
+  const uid = await ensureAdmin(req, res)
   if (!uid) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
