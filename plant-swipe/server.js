@@ -27,7 +27,7 @@ const __dirname = path.dirname(__filename)
 const exec = promisify(execCb)
 
 // Supabase client (server-side) for auth verification
-const supabaseUrlEnv = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
+const supabaseUrlEnv = process.env.VITE_SUPABASE_URL
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
 const supabaseServer = (supabaseUrlEnv && supabaseAnonKey)
   ? createSupabaseClient(supabaseUrlEnv, supabaseAnonKey, { auth: { persistSession: false, autoRefreshToken: false } })
@@ -147,27 +147,7 @@ function buildConnectionString() {
       cs = `postgresql://${auth}@${host}:${port}/${database}`
     }
   }
-  if (!cs && process.env.SUPABASE_URL && process.env.SUPABASE_DB_PASSWORD) {
-    try {
-      const host = new URL(process.env.SUPABASE_URL).host
-      let pgHost
-      if (host.endsWith('.supabase.co')) {
-        const parts = host.split('.')
-        const isProjectHost = parts.length === 3 && parts[1] === 'supabase' && parts[2] === 'co' && !!parts[0]
-        const isDbHost = parts.length === 4 && parts[0] === 'db' && !!parts[1] && parts[2] === 'supabase' && parts[3] === 'co'
-        if (isDbHost) {
-          pgHost = host
-        } else if (isProjectHost) {
-          const project = parts[0]
-          pgHost = `db.${project}.supabase.co`
-        }
-      }
-      if (pgHost) {
-        const database = process.env.PGDATABASE || 'postgres'
-        cs = `postgresql://postgres:${encodeURIComponent(process.env.SUPABASE_DB_PASSWORD)}@${pgHost}:5432/${database}`
-      }
-    } catch {}
-  }
+  // Intentionally avoid deriving connection string from Supabase-specific envs
   if (cs) {
     try {
       const url = new URL(cs)
@@ -227,9 +207,8 @@ app.options('/api/*', (_req, res) => {
   res.status(204).end()
 })
 
-// Supabase service client for admin verification
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_ROLE_TOKEN
-const supabaseAdmin = (supabaseUrlEnv && supabaseServiceKey) ? createSupabaseClient(supabaseUrlEnv, supabaseServiceKey) : null
+// Supabase service client disabled to avoid using service-role env vars
+const supabaseAdmin = null
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true })
@@ -241,9 +220,8 @@ app.get('/api/health', (_req, res) => {
 app.get(['/api/env.js', '/env.js'], (_req, res) => {
   try {
     const env = {
-      VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '',
+      VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL || '',
       VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '',
-      VITE_API_BASE: process.env.VITE_API_BASE || '',
     }
     const js = `window.__ENV__ = ${JSON.stringify(env).replace(/</g, '\\u003c')};\n`
     res.setHeader('Content-Type', 'application/javascript; charset=utf-8')
