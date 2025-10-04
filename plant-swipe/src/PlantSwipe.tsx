@@ -134,8 +134,17 @@ export default function PlantSwipe() {
     // Track SPA route changes to server for visit analytics
     const sendVisit = async (path: string) => {
       try {
-        // Allow overriding API base via environment (e.g., VITE_API_BASE="http://172.237.109.227")
-        const apiBase: string = (import.meta as any)?.env?.VITE_API_BASE ? String((import.meta as any).env.VITE_API_BASE) : ''
+        // Allow overriding API base via environment (build-time or runtime)
+        // Reads from import.meta.env first, then window.__ENV__ via getEnvAny
+        const apiBase: string = (() => {
+          try {
+            const v1 = (import.meta as any)?.env?.VITE_API_BASE
+            if (v1 && String(v1).length > 0) return String(v1)
+            const v2 = (globalThis as any)?.__ENV__?.VITE_API_BASE
+            if (v2 && String(v2).length > 0) return String(v2)
+          } catch {}
+          return ''
+        })()
         const base = apiBase.replace(/\/$/, '')
         const session = (await supabase.auth.getSession()).data.session
         const token = session?.access_token
