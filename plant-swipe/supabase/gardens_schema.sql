@@ -720,16 +720,12 @@ alter table if exists public.garden_plant_tasks
   add column if not exists monthly_nth_weekdays text[];
 
 -- Broaden schedule_kind constraint if needed
-do $$ begin
-  if exists (
-    select 1 from information_schema.constraint_column_usage ccu
-    join information_schema.table_constraints tc on tc.constraint_name = ccu.constraint_name
-    where ccu.table_schema = 'public' and ccu.table_name = 'garden_plant_tasks' and tc.constraint_type = 'CHECK'
-  ) then
-    -- no-op; rely on create table definition above for new deployments
-    null;
-  end if;
-end $$;
+-- Ensure schedule_kind allows 'repeat_pattern' for existing deployments
+alter table if exists public.garden_plant_tasks
+  drop constraint if exists garden_plant_tasks_schedule_kind_check;
+alter table if exists public.garden_plant_tasks
+  add constraint garden_plant_tasks_schedule_kind_check
+  check (schedule_kind in ('one_time_date','one_time_duration','repeat_duration','repeat_pattern'));
 
 -- RPC: upsert one-time task for a plant (date or duration)
 create or replace function public.upsert_one_time_task(
