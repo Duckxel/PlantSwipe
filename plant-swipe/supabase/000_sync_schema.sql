@@ -360,10 +360,14 @@ do $$ begin
   end if;
 end $$;
 do $$ begin
-  if not exists (select 1 from pg_policies where schemaname='public' and tablename='gardens' and policyname='gardens_update') then
-    create policy gardens_update on public.gardens for update to authenticated
-      using (created_by = (select auth.uid()));
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='gardens' and policyname='gardens_update') then
+    drop policy gardens_update on public.gardens;
   end if;
+  create policy gardens_update on public.gardens for update to authenticated
+    using (
+      created_by = (select auth.uid())
+      or public.is_garden_owner_bypass(id, (select auth.uid()))
+    );
 end $$;
 do $$ begin
   if not exists (select 1 from pg_policies where schemaname='public' and tablename='gardens' and policyname='gardens_delete') then
