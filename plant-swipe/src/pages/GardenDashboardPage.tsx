@@ -7,6 +7,9 @@ import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Sheet, SheetContent } from '@/components/ui/sheet'
+import { PlantDetails } from '@/components/plant/PlantDetails'
+import { Info } from 'lucide-react'
 import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
 import { TaskEditorDialog } from '@/components/plant/TaskEditorDialog'
 import type { Garden } from '@/types/garden'
@@ -67,6 +70,8 @@ export const GardenDashboardPage: React.FC = () => {
   const [scheduleLockYear, setScheduleLockYear] = React.useState<boolean>(false)
   const [scheduleAllowedPeriods, setScheduleAllowedPeriods] = React.useState<Array<'week'|'month'|'year'> | undefined>(undefined)
   const [dragIdx, setDragIdx] = React.useState<number | null>(null)
+
+  const [infoPlant, setInfoPlant] = React.useState<Plant | null>(null)
 
   const [inviteOpen, setInviteOpen] = React.useState(false)
   const [inviteEmail, setInviteEmail] = React.useState('')
@@ -592,7 +597,7 @@ export const GardenDashboardPage: React.FC = () => {
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {plants.map((gp: any, idx: number) => (
-                      <Card key={gp.id} className={`rounded-2xl overflow-hidden ${dragIdx === idx ? 'ring-2 ring-black' : ''}`}
+                      <Card key={gp.id} className={`rounded-2xl overflow-hidden relative ${dragIdx === idx ? 'ring-2 ring-black' : ''}`}
                         draggable
                         onDragStart={() => setDragIdx(idx)}
                         onDragOver={(e) => e.preventDefault()}
@@ -608,6 +613,17 @@ export const GardenDashboardPage: React.FC = () => {
                           } catch {}
                         }}
                       >
+                        <div className="absolute top-2 right-2 z-10">
+                          <button
+                            onClick={(e: any) => { e.stopPropagation(); if (gp?.plant) setInfoPlant(gp.plant) }}
+                            onMouseDown={(e: any) => e.stopPropagation()}
+                            onTouchStart={(e: any) => e.stopPropagation()}
+                            aria-label="More information"
+                            className="h-8 w-8 rounded-full flex items-center justify-center shadow border bg-white/90 text-black hover:bg-white"
+                          >
+                            <Info className="h-4 w-4" />
+                          </button>
+                        </div>
                         <div className="grid grid-cols-3 gap-0">
                           <div className="col-span-1 h-36 bg-cover bg-center" style={{ backgroundImage: `url(${gp.plant?.image || ''})` }} />
                           <div className="col-span-2 p-3">
@@ -758,6 +774,18 @@ export const GardenDashboardPage: React.FC = () => {
 
           {/* Task Editor Dialog */}
           <TaskEditorDialog open={taskOpen} onOpenChange={(o) => { setTaskOpen(o); if (!o) setPendingGardenPlantId(null) }} gardenId={id!} gardenPlantId={pendingGardenPlantId || ''} />
+
+          {/* Info Sheet */}
+          <Sheet open={!!infoPlant} onOpenChange={(o: boolean) => { if (!o) setInfoPlant(null) }}>
+            <SheetContent side="bottom" className="max-h-[90vh] overflow-y-auto rounded-t-3xl">
+              {infoPlant && (
+                <PlantDetails
+                  plant={infoPlant}
+                  onClose={() => setInfoPlant(null)}
+                />
+              )}
+            </SheetContent>
+          </Sheet>
 
           {/* Invite Dialog */}
           <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
