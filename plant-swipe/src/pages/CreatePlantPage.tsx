@@ -111,6 +111,8 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
       if (insErr) { setError(insErr.message); return }
       setOk('Saved')
       onSaved && onSaved(id)
+      // Ensure list views pick up the new plant immediately
+      try { if (typeof window !== 'undefined') window.location.reload() } catch {}
     } finally {
       setSaving(false)
     }

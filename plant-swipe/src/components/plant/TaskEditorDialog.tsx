@@ -7,7 +7,7 @@ import { listPlantTasks, deletePlantTask, updatePatternTask } from '@/lib/garden
 import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
 import { TaskCreateDialog } from '@/components/plant/TaskCreateDialog'
 
-export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId }: { open: boolean; onOpenChange: (o: boolean) => void; gardenId: string; gardenPlantId: string }) {
+export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, onChanged }: { open: boolean; onOpenChange: (o: boolean) => void; gardenId: string; gardenPlantId: string; onChanged?: () => Promise<void> | void }) {
   const [tasks, setTasks] = React.useState<GardenPlantTask[]>([])
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -70,6 +70,7 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId }
     try {
       await deletePlantTask(taskId)
       await load()
+      if (onChanged) await onChanged()
     } catch (e: any) {
       setError(e?.message || 'Failed to delete task')
     }
@@ -151,6 +152,7 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId }
               })
               setEditingTask(null)
               await load()
+              if (onChanged) await onChanged()
             } catch (e: any) {
               setError(e?.message || 'Failed to update task')
             }
@@ -165,7 +167,7 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId }
         onOpenChange={(o) => setCreateOpen(o)}
         gardenId={gardenId}
         gardenPlantId={gardenPlantId}
-        onCreated={async () => { await load() }}
+        onCreated={async () => { await load(); if (onChanged) await onChanged() }}
       />
     </Dialog>
   )

@@ -757,7 +757,16 @@ export const GardenDashboardPage: React.FC = () => {
           />
 
           {/* Task Editor Dialog */}
-          <TaskEditorDialog open={taskOpen} onOpenChange={(o) => { setTaskOpen(o); if (!o) setPendingGardenPlantId(null) }} gardenId={id!} gardenPlantId={pendingGardenPlantId || ''} />
+          <TaskEditorDialog
+            open={taskOpen}
+            onOpenChange={(o) => { setTaskOpen(o); if (!o) setPendingGardenPlantId(null) }}
+            gardenId={id!}
+            gardenPlantId={pendingGardenPlantId || ''}
+            onChanged={async () => {
+              // Ensure page reflects latest tasks after create/update/delete
+              await load()
+            }}
+          />
 
           {/* Invite Dialog */}
           <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
