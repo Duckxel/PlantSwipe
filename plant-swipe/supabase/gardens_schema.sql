@@ -459,27 +459,29 @@ do $$ begin
   if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_members' and policyname = 'gm_insert') then
     drop policy gm_insert on public.garden_members;
   end if;
+  -- Avoid self-recursion: do NOT reference garden_members in this policy.
+  -- Allow the garden creator to insert membership rows (including for others).
   create policy gm_insert on public.garden_members for insert to authenticated
     with check (
-      (
-        (
-          user_id = auth.uid()
-          and exists (
-            select 1 from public.gardens g
-            where g.id = garden_id and g.created_by = auth.uid()
-          )
-        )
-        or public.is_garden_owner_bypass(garden_id, auth.uid())
+      exists (
+        select 1 from public.gardens g
+        where g.id = garden_id and g.created_by = auth.uid()
       )
-      and user_id is not null
     );
 end $$;
 do $$ begin
   if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_members' and policyname = 'gm_delete') then
     drop policy gm_delete on public.garden_members;
   end if;
+  -- Allow a user to delete their own membership, or the garden creator to manage members
+  -- (no references to garden_members to avoid recursion).
   create policy gm_delete on public.garden_members for delete to authenticated
-    using (role <> 'owner' and (user_id = auth.uid() or public.is_garden_owner_bypass(garden_id, auth.uid())));
+    using (
+      user_id = auth.uid()
+      or exists (
+        select 1 from public.gardens g where g.id = garden_id and g.created_by = auth.uid()
+      )
+    );
 end $$;
 
 -- Allow owners to update members (e.g., promote to owner)
@@ -487,9 +489,18 @@ do $$ begin
   if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_members' and policyname = 'gm_update') then
     drop policy gm_update on public.garden_members;
   end if;
+  -- Only the garden creator can update roles/memberships (no self-reference).
   create policy gm_update on public.garden_members for update to authenticated
-    using (public.is_garden_owner_bypass(garden_id, auth.uid()))
-    with check (public.is_garden_owner_bypass(garden_id, auth.uid()));
+    using (
+      exists (
+        select 1 from public.gardens g where g.id = garden_id and g.created_by = auth.uid()
+      )
+    )
+    with check (
+      exists (
+        select 1 from public.gardens g where g.id = garden_id and g.created_by = auth.uid()
+      )
+    );
 end $$;
 
 -- Garden plants: members can select; members can insert/update/delete

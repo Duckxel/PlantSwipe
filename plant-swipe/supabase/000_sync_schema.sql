@@ -364,35 +364,44 @@ do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_members' and policyname='gm_insert') then
     drop policy gm_insert on public.garden_members;
   end if;
+  -- Avoid self-recursion: reference only gardens; allow garden creator to insert
   create policy gm_insert on public.garden_members for insert to authenticated
     with check (
-      (
-        (
-          user_id = (select auth.uid())
-          and exists (
-            select 1 from public.gardens g
-            where g.id = garden_id and g.created_by = (select auth.uid())
-          )
-        )
-        or public.is_garden_owner_bypass(garden_id, (select auth.uid()))
+      exists (
+        select 1 from public.gardens g
+        where g.id = garden_id and g.created_by = (select auth.uid())
       )
-      and user_id is not null
     );
 end $$;
 do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_members' and policyname='gm_delete') then
     drop policy gm_delete on public.garden_members;
   end if;
+  -- Allow self-removal or garden creator to remove (no gm references)
   create policy gm_delete on public.garden_members for delete to authenticated
-    using (role <> 'owner' and (user_id = (select auth.uid()) or public.is_garden_owner_bypass(garden_id, (select auth.uid()))));
+    using (
+      user_id = (select auth.uid())
+      or exists (
+        select 1 from public.gardens g where g.id = garden_id and g.created_by = (select auth.uid())
+      )
+    );
 end $$;
 do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_members' and policyname='gm_update') then
     drop policy gm_update on public.garden_members;
   end if;
+  -- Only garden creator can update membership rows
   create policy gm_update on public.garden_members for update to authenticated
-    using (public.is_garden_owner_bypass(garden_id, (select auth.uid())))
-    with check (public.is_garden_owner_bypass(garden_id, (select auth.uid())));
+    using (
+      exists (
+        select 1 from public.gardens g where g.id = garden_id and g.created_by = (select auth.uid())
+      )
+    )
+    with check (
+      exists (
+        select 1 from public.gardens g where g.id = garden_id and g.created_by = (select auth.uid())
+      )
+    );
 end $$;
 
 -- Garden tasks policies
