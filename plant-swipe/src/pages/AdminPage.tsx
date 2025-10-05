@@ -13,6 +13,20 @@ export const AdminPage: React.FC = () => {
   const [restarting, setRestarting] = React.useState(false)
   const [pulling, setPulling] = React.useState(false)
 
+  // Safely parse response body into JSON, tolerating HTML/error pages
+  const safeJson = async (resp: Response): Promise<any> => {
+    try {
+      const contentType = (resp.headers.get('content-type') || '').toLowerCase()
+      const text = await resp.text().catch(() => '')
+      if (contentType.includes('application/json') || /^[\s\n]*[\[{]/.test(text)) {
+        try { return JSON.parse(text) } catch { return {} }
+      }
+      return {}
+    } catch {
+      return {}
+    }
+  }
+
   const runSyncSchema = async () => {
     if (syncing) return
     setSyncing(true)
@@ -28,7 +42,9 @@ export const AdminPage: React.FC = () => {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
         },
+        credentials: 'same-origin',
       })
       if (resp.status === 405) {
         // Fallback to POST if GET is blocked
@@ -37,10 +53,12 @@ export const AdminPage: React.FC = () => {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
+            'Accept': 'application/json',
           },
+          credentials: 'same-origin',
         })
       }
-      const body = await resp.json().catch(() => ({}))
+      const body = await safeJson(resp)
       if (!resp.ok) {
         throw new Error(body?.error || `Request failed (${resp.status})`)
       }
@@ -69,7 +87,9 @@ export const AdminPage: React.FC = () => {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
         },
+        credentials: 'same-origin',
         body: '{}',
       })
       if (resp.status === 405) {
@@ -78,10 +98,12 @@ export const AdminPage: React.FC = () => {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${token}`,
+            'Accept': 'application/json',
           },
+          credentials: 'same-origin',
         })
       }
-      const body = await resp.json().catch(() => ({}))
+      const body = await safeJson(resp)
       if (!resp.ok) {
         throw new Error(body?.error || `Request failed (${resp.status})`)
       }
@@ -134,21 +156,21 @@ export const AdminPage: React.FC = () => {
       // Try POST first to ensure Authorization header is preserved across proxies
       let res = await fetch('/api/admin/pull-code', {
         method: 'POST',
-        headers: token ? { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } : undefined,
+        headers: token ? { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Accept': 'application/json' } : { 'Accept': 'application/json' },
         body: token ? '{}' : undefined,
+        credentials: 'same-origin',
       })
       if (res.status === 405) {
         // Fallback to GET if POST is blocked
         res = await fetch('/api/admin/pull-code', {
           method: 'GET',
-          headers: token ? { 'Authorization': `Bearer ${token}` } : undefined,
+          headers: token ? { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } : { 'Accept': 'application/json' },
+          credentials: 'same-origin',
         })
       }
       if (!res.ok) {
-        let body: any = {}
-        try {
-          body = await res.json()
-        } catch {
+        const body: any = await safeJson(res)
+        if (!body || Object.keys(body).length === 0) {
           const text = await res.text().catch(() => '')
           throw new Error(text?.slice(0, 200) || `Request failed (${res.status})`)
         }
@@ -178,9 +200,11 @@ export const AdminPage: React.FC = () => {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
         },
+        credentials: 'same-origin',
       })
-      const startBody: { token?: string; filename?: string; error?: string } = await start.json().catch(() => ({} as { token?: string; filename?: string; error?: string }))
+      const startBody: { token?: string; filename?: string; error?: string } = await safeJson(start)
       if (!start.ok) {
         throw new Error(startBody?.error || `Backup failed (${start.status})`)
       }
@@ -191,11 +215,14 @@ export const AdminPage: React.FC = () => {
       const downloadUrl = `/api/admin/download-backup?token=${encodeURIComponent(dlToken)}`
       const resp = await fetch(downloadUrl, {
         method: 'GET',
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/gzip' },
+        credentials: 'same-origin',
       })
       if (!resp.ok) {
-        const errBody: { error?: string } = await resp.json().catch(() => ({} as { error?: string }))
-        throw new Error(errBody?.error || `Download failed (${resp.status})`)
+        const errText = await resp.text().catch(() => '')
+        let errBody: { error?: string } = {}
+        try { errBody = JSON.parse(errText) } catch {}
+        throw new Error(errBody?.error || errText?.slice(0, 200) || `Download failed (${resp.status})`)
       }
       const blob = await resp.blob()
       const url = URL.createObjectURL(blob)
@@ -246,10 +273,10 @@ export const AdminPage: React.FC = () => {
     setVisitorsError((cur) => (isInitial ? null : cur))
     try {
       const token = (await supabase.auth.getSession()).data.session?.access_token
-      const headers: Record<string, string> = {}
+      const headers: Record<string, string> = { 'Accept': 'application/json' }
       if (token) headers['Authorization'] = `Bearer ${token}`
-      const resp = await fetch('/api/admin/visitors-stats', { headers })
-      const data = await resp.json().catch(() => ({}))
+      const resp = await fetch('/api/admin/visitors-stats', { headers, credentials: 'same-origin' })
+      const data = await safeJson(resp)
       if (!resp.ok) {
         throw new Error(data?.error || `Request failed (${resp.status})`)
       }
