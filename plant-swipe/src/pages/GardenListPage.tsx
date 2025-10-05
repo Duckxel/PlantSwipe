@@ -108,7 +108,7 @@ export const GardenListPage: React.FC = () => {
                 })()
               )}
               <button onClick={() => navigate(`/garden/${g.id}`)} className="grid grid-cols-3 gap-0 w-full text-left">
-                <div className="col-span-1 h-36 bg-cover bg-center" style={{ backgroundImage: `url(${g.coverImageUrl || ''})` }} />
+                <div className="col-span-1 h-36 bg-cover bg-center rounded-l-2xl" style={{ backgroundImage: `url(${g.coverImageUrl || ''})` }} />
                 <div className="col-span-2 p-4">
                   <div className="font-medium">{g.name}</div>
                   <div className="text-xs opacity-60">Created {new Date(g.createdAt).toLocaleDateString()}</div>
