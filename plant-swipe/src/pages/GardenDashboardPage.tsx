@@ -648,7 +648,7 @@ export const GardenDashboardPage: React.FC = () => {
                       >
                         <div className="absolute top-2 right-2 z-10">
                           <button
-                            onClick={(e: any) => { e.stopPropagation(); if (gp?.plant) setInfoPlant(gp.plant) }}
+                            onClick={(e: any) => { e.stopPropagation(); if (gp?.plant) navigate(`/plants/${gp.plant.id}`) }}
                             onMouseDown={(e: any) => e.stopPropagation()}
                             onTouchStart={(e: any) => e.stopPropagation()}
                             aria-label="More information"
@@ -826,19 +826,7 @@ export const GardenDashboardPage: React.FC = () => {
             }}
           />
 
-          {/* Info Sheet */}
-          <Sheet open={!!infoPlant} onOpenChange={(o: boolean) => { if (!o) setInfoPlant(null) }}>
-            <SheetContent side="bottom" className="max-h-[90vh] overflow-y-auto rounded-t-3xl">
-              {infoPlant && (
-                <PlantDetails
-                  plant={infoPlant}
-                  onClose={() => setInfoPlant(null)}
-                  liked={likedIds.includes(infoPlant.id)}
-                  onToggleLike={() => toggleLiked(infoPlant.id)}
-                />
-              )}
-            </SheetContent>
-          </Sheet>
+          {/* Info Sheet removed; using dedicated route /plants/:id */}
 
           {/* Invite Dialog */}
           <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
