@@ -742,8 +742,15 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
     return
   }
   try {
+    // Unique IPs in the last 10 minutes (kept for backwards compatibility)
     const rows10m = await sql`select count(distinct ip_address)::int as c from public.web_visits where occurred_at >= now() - interval '10 minutes'`
     const currentUniqueVisitors10m = rows10m?.[0]?.c ?? 0
+
+    // Unique IPs in the last 30 minutes (for "Currently online" card)
+    const rows30m = await sql`select count(distinct ip_address)::int as c from public.web_visits where occurred_at >= now() - interval '30 minutes'`
+    const uniqueIpsLast30m = rows30m?.[0]?.c ?? 0
+
+    // Raw visit events (not unique) in the last 60 minutes
     const rows60m = await sql`select count(*)::int as c from public.web_visits where occurred_at >= now() - interval '60 minutes'`
     const visitsLast60m = rows60m?.[0]?.c ?? 0
     const rows7 = await sql`
@@ -758,7 +765,7 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
       order by d asc
     `
     const series7d = (rows7 || []).map(r => ({ date: new Date(r.day).toISOString().slice(0,10), uniqueVisitors: Number(r.unique_visitors || 0) }))
-    res.json({ ok: true, currentUniqueVisitors10m, visitsLast60m, series7d })
+    res.json({ ok: true, currentUniqueVisitors10m, uniqueIpsLast30m, visitsLast60m, series7d })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to load visitors stats' })
   }

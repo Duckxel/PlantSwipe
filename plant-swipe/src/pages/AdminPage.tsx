@@ -98,13 +98,13 @@ export const AdminPage: React.FC = () => {
     }
   }
 
-  const [onlineCount, setOnlineCount] = React.useState<number>(0)
+  const [uniqueIpsLast30m, setUniqueIpsLast30m] = React.useState<number>(0)
   const [registeredCount, setRegisteredCount] = React.useState<number | null>(null)
   // Visitors (last 7 days)
   const [visitorsSeries, setVisitorsSeries] = React.useState<Array<{ date: string; uniqueVisitors: number }>>([])
   const [visitorsLoading, setVisitorsLoading] = React.useState<boolean>(true)
   const [visitorsError, setVisitorsError] = React.useState<string | null>(null)
-  const [visitsLast60m, setVisitsLast60m] = React.useState<number | null>(null)
+  // No subtitle needed below the card
 
   const pullLatest = async () => {
     if (pulling) return
@@ -194,27 +194,23 @@ export const AdminPage: React.FC = () => {
     }
   }
 
-  // Subscribe to global presence channel and compute unique users online
+  // Use server-side metric: unique IPs in last 30 minutes
   React.useEffect(() => {
-    const channel = supabase.channel('global-presence', { config: { presence: { key: `admin_${Math.random().toString(36).slice(2,8)}` } } })
-    const compute = () => {
-      const state = channel.presenceState() as Record<string, Array<Record<string, unknown>>>
-      const uniqueIds = new Set<string>()
-      for (const [key] of Object.entries(state)) {
-        // presence key may be anon_* or a user id
-        uniqueIds.add(key)
-        // no-op; counting by key is enough for unique connections per user
-      }
-      setOnlineCount(uniqueIds.size)
-    }
-    channel.on('presence', { event: 'sync' }, compute)
-    channel.on('presence', { event: 'join' }, compute)
-    channel.on('presence', { event: 'leave' }, compute)
-    channel.subscribe(() => {
-      // Track as admin observer (optional)
-      channel.track({ role: 'admin_observer', online_at: new Date().toISOString() })
-    })
-    return () => { supabase.removeChannel(channel) }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const token = (await supabase.auth.getSession()).data.session?.access_token
+        if (token) {
+          const resp = await fetch('/api/admin/visitors-stats', { headers: { 'Authorization': `Bearer ${token}` } })
+          const data = await resp.json().catch(() => ({}))
+          if (resp.ok) {
+            const val: number = Number.isFinite(Number(data?.uniqueIpsLast30m)) ? Number(data.uniqueIpsLast30m) : 0
+            if (!cancelled) setUniqueIpsLast30m(val)
+          }
+        }
+      } catch {}
+    })()
+    return () => { cancelled = true }
   }, [])
 
   // Fetch total registered accounts (admin API first to bypass RLS; fallback to client count)
@@ -257,8 +253,9 @@ export const AdminPage: React.FC = () => {
         }
         const series: Array<{ date: string; uniqueVisitors: number }> = Array.isArray(data?.series7d) ? data.series7d : []
         if (!cancelled) setVisitorsSeries(series)
-        const v60: number = Number.isFinite(Number(data?.visitsLast60m)) ? Number(data.visitsLast60m) : 0
-        if (!cancelled) setVisitsLast60m(v60)
+        // Update the online card metric as well
+        const unique30: number = Number.isFinite(Number(data?.uniqueIpsLast30m)) ? Number(data.uniqueIpsLast30m) : 0
+        if (!cancelled) setUniqueIpsLast30m(unique30)
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e)
         if (!cancelled) setVisitorsError(msg || 'Failed to load visitors stats')
@@ -438,8 +435,7 @@ export const AdminPage: React.FC = () => {
               <Card className="rounded-2xl">
                 <CardContent className="p-4">
                   <div className="text-sm opacity-60">Currently online</div>
-                  <div className="text-2xl font-semibold">{onlineCount}</div>
-                  <div className="text-xs opacity-60 mt-1">Visits last 60 mins: <span className="font-medium opacity-80">{visitsLast60m ?? 0}</span></div>
+                  <div className="text-2xl font-semibold">{uniqueIpsLast30m}</div>
                 </CardContent>
               </Card>
               <Card className="rounded-2xl">
