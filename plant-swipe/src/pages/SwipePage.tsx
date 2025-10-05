@@ -73,7 +73,6 @@ export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, 
                     <Button variant="secondary" className="rounded-2xl" onClick={handlePass}>
                       <ChevronLeft className="h-4 w-4 mr-1" /> Pass
                     </Button>
-                    <div className="text-xs opacity-60 select-none">Swipe: left = pass, right = info</div>
                     <Button className="rounded-2xl" onClick={handleInfo}>
                       More info <ChevronRight className="h-4 w-4 ml-1" />
                     </Button>
