@@ -10,9 +10,11 @@ import type { Plant } from "@/types/plant";
 import { rarityTone, seasonBadge } from "@/constants/badges";
 import { deriveWaterLevelFromFrequency } from "@/lib/utils";
 import { supabase } from "@/lib/supabaseClient";
+import { useAuth } from "@/context/AuthContext";
 
 export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?: boolean; onToggleLike?: () => void }> = ({ plant, onClose, liked = false, onToggleLike }) => {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const y = useMotionValue(0)
   const threshold = 120
   const onDragEnd = (_: unknown, info: { offset: { y: number }; velocity: { y: number } }) => {
@@ -98,16 +100,20 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
       </Card>
 
       <div className="flex justify-between gap-2">
-        <Button variant="destructive" className="rounded-2xl" onClick={async () => {
-          const yes = window.confirm('Delete this plant? This will fail if it is used in any garden.')
-          if (!yes) return
-          const { error } = await supabase.from('plants').delete().eq('id', plant.id)
-          if (error) { alert(error.message); return }
-          onClose()
-          window.location.reload()
-        }}>Delete</Button>
-        <div className="flex gap-2">
-          <Button variant="secondary" className="rounded-2xl" onClick={() => { navigate(`/plants/${plant.id}/edit`); onClose() }}>Edit</Button>
+        {user && (
+          <Button variant="destructive" className="rounded-2xl" onClick={async () => {
+            const yes = window.confirm('Delete this plant? This will fail if it is used in any garden.')
+            if (!yes) return
+            const { error } = await supabase.from('plants').delete().eq('id', plant.id)
+            if (error) { alert(error.message); return }
+            onClose()
+            window.location.reload()
+          }}>Delete</Button>
+        )}
+        <div className="flex gap-2 ml-auto">
+          {user && (
+            <Button variant="secondary" className="rounded-2xl" onClick={() => { navigate(`/plants/${plant.id}/edit`); onClose() }}>Edit</Button>
+          )}
           <Button className="rounded-2xl" onClick={onClose}>Close</Button>
         </div>
       </div>

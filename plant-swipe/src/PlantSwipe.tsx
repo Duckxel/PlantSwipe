@@ -67,6 +67,7 @@ export default function PlantSwipe() {
   const loadPlants = React.useCallback(async () => {
     setLoading(true)
     setLoadError(null)
+    let ok = false
     try {
       const { data, error } = await supabase
         .from('plants')
@@ -116,12 +117,46 @@ export default function PlantSwipe() {
         waterFreqAmount: p.water_freq_amount ?? null
       }))
       setPlants(parsed)
+      ok = true
     } catch (e: unknown) {
-      const msg = e && typeof e === 'object' && 'message' in e ? String((e as { message?: unknown }).message || '') : ''
-      setLoadError(msg || 'Failed to load plants')
+      // Fallback: fetch via public server API to allow anonymous browsing
+      try {
+        const resp = await fetch('/api/plants', { credentials: 'same-origin' })
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+        const arr = await resp.json()
+        const parsedFromApi: Plant[] = (Array.isArray(arr) ? arr : []).map((p: any) => ({
+          id: String(p.id),
+          name: String(p.name),
+          scientificName: String(p.scientificName || p.scientific_name || ''),
+          colors: Array.isArray(p.colors) ? p.colors.map((c: unknown) => String(c)) : [],
+          seasons: Array.isArray(p.seasons) ? (p.seasons as unknown[]).map((s) => String(s)) as Plant['seasons'] : [],
+          rarity: (p.rarity || 'Common') as Plant['rarity'],
+          meaning: p.meaning ? String(p.meaning) : '',
+          description: p.description ? String(p.description) : '',
+          image: String(p.image || p.image_url || ''),
+          care: {
+            sunlight: ((p.care && p.care.sunlight) || p.care_sunlight || 'Low') as Plant['care']['sunlight'],
+            water: ((p.care && p.care.water) || p.care_water || 'Low') as Plant['care']['water'],
+            soil: String((p.care && p.care.soil) || p.care_soil || ''),
+            difficulty: ((p.care && p.care.difficulty) || p.care_difficulty || 'Easy') as Plant['care']['difficulty']
+          },
+          seedsAvailable: Boolean((p.seedsAvailable ?? p.seeds_available) ?? false),
+          waterFreqUnit: (p.waterFreqUnit || p.water_freq_unit) || undefined,
+          waterFreqValue: (p.waterFreqValue ?? p.water_freq_value) ?? null,
+          waterFreqPeriod: (p.waterFreqPeriod || p.water_freq_period) || undefined,
+          waterFreqAmount: (p.waterFreqAmount ?? p.water_freq_amount) ?? null
+        }))
+        setPlants(parsedFromApi)
+        setLoadError(null)
+        ok = true
+      } catch (e2: unknown) {
+        const msg = e2 && typeof e2 === 'object' && 'message' in e2 ? String((e2 as { message?: unknown }).message || '') : ''
+        setLoadError(msg || 'Failed to load plants')
+      }
     } finally {
       setLoading(false)
     }
+    return ok
   }, [])
 
   React.useEffect(() => {
