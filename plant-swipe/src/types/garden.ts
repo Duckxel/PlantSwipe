@@ -91,6 +91,8 @@ export interface GardenPlantTask {
   gardenPlantId: string
   type: TaskType
   customName?: string | null
+  // Optional emoji/icon to display for this task (used mainly for 'custom')
+  emoji?: string | null
   scheduleKind: TaskScheduleKind
   // When scheduleKind === 'one_time_date'
   dueAt?: string | null

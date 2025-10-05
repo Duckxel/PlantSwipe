@@ -23,6 +23,7 @@ export function TaskCreateDialog({
 }) {
   const [type, setType] = React.useState<TaskType>('water')
   const [customName, setCustomName] = React.useState('')
+  const [emoji, setEmoji] = React.useState<string>('')
   const [period, setPeriod] = React.useState<Period>('week')
   const [amount, setAmount] = React.useState<number>(1)
 
@@ -39,6 +40,7 @@ export function TaskCreateDialog({
       // Reset to defaults on open
       setType('water')
       setCustomName('')
+      setEmoji('')
       setPeriod('week')
       setAmount(1)
       setWeeklyDays([])
@@ -79,6 +81,7 @@ export function TaskCreateDialog({
         gardenPlantId,
         type,
         customName: type === 'custom' ? (customName || null) : null,
+        emoji: type === 'custom' ? (emoji.trim() || null) : null,
         period,
         amount,
         weeklyDays: period === 'week' ? [...weeklyDays].sort((a, b) => a - b) : null,
@@ -145,6 +148,21 @@ export function TaskCreateDialog({
             <div className="grid gap-2">
               <label className="text-sm font-medium">Custom task name</label>
               <Input value={customName} onChange={(e: any) => setCustomName(e.target.value)} placeholder="e.g., Prune roses" />
+            </div>
+          )}
+
+          {type === 'custom' && (
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">Emoji</label>
+              <div className="flex items-center gap-2">
+                <Input value={emoji} onChange={(e: any) => setEmoji(e.target.value)} placeholder="Pick an emoji (e.g., ✂️, 🍽️)" maxLength={4} />
+                <div className="text-sm opacity-60">Optional</div>
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                {['💧','🍽️','🌾','✂️','🧴','🧪','🧹','🪴','📌','✅'].map(em => (
+                  <button key={em} type="button" onClick={() => setEmoji(em)} className={`h-9 w-9 rounded-xl border bg-white hover:bg-stone-50 ${emoji === em ? 'ring-2 ring-black' : ''}`}>{em}</button>
+                ))}
+              </div>
             </div>
           )}
 

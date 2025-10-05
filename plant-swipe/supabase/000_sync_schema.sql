@@ -249,6 +249,7 @@ create table if not exists public.garden_plant_tasks (
   garden_plant_id uuid not null references public.garden_plants(id) on delete cascade,
   type text not null check (type in ('water','fertilize','harvest','cut','custom')),
   custom_name text,
+  emoji text,
   schedule_kind text not null check (schedule_kind in ('one_time_date','one_time_duration','repeat_duration','repeat_pattern')),
   due_at timestamptz,
   interval_amount integer,
@@ -269,6 +270,7 @@ alter table if exists public.garden_plant_tasks add column if not exists weekly_
 alter table if exists public.garden_plant_tasks add column if not exists monthly_days integer[];
 alter table if exists public.garden_plant_tasks add column if not exists yearly_days text[];
 alter table if exists public.garden_plant_tasks add column if not exists monthly_nth_weekdays text[];
+alter table if exists public.garden_plant_tasks add column if not exists emoji text;
 
 -- Ensure schedule_kind check constraint is correct on existing deployments
 alter table if exists public.garden_plant_tasks
