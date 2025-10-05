@@ -104,8 +104,6 @@ export const AdminPage: React.FC = () => {
   const [visitorsSeries, setVisitorsSeries] = React.useState<Array<{ date: string; uniqueVisitors: number }>>([])
   const [visitorsLoading, setVisitorsLoading] = React.useState<boolean>(true)
   const [visitorsError, setVisitorsError] = React.useState<string | null>(null)
-  // Realtime presence (fallback when DB metrics unavailable)
-  const [presenceOnlineCount, setPresenceOnlineCount] = React.useState<number | null>(null)
   // No subtitle needed below the card
 
   const pullLatest = async () => {
@@ -196,27 +194,6 @@ export const AdminPage: React.FC = () => {
     }
   }
 
-  // Use server-side metric: unique IPs in last 60 minutes
-  React.useEffect(() => {
-    let cancelled = false
-    let timer: ReturnType<typeof setInterval> | null = null
-    const load = async () => {
-      try {
-        const token = (await supabase.auth.getSession()).data.session?.access_token
-        const headers: Record<string, string> = {}
-        if (token) headers['Authorization'] = `Bearer ${token}`
-        const resp = await fetch('/api/admin/visitors-stats', { headers })
-        const data = await resp.json().catch(() => ({}))
-        if (resp.ok && !cancelled) {
-          const val: number = Number.isFinite(Number(data?.uniqueIpsLast60m)) ? Number(data.uniqueIpsLast60m) : 0
-          setUniqueIpsLast60m(val)
-        }
-      } catch {}
-    }
-    load().catch(() => {})
-    timer = setInterval(() => { load().catch(() => {}) }, 20_000)
-    return () => { cancelled = true; if (timer) clearInterval(timer) }
-  }, [])
 
   // Fetch total registered accounts (admin API first to bypass RLS; fallback to client count)
   React.useEffect(() => {
@@ -240,49 +217,6 @@ export const AdminPage: React.FC = () => {
     return () => { cancelled = true }
   }, [])
 
-  // Realtime presence: subscribe to the shared channel and count active clients
-  React.useEffect(() => {
-    let channel: ReturnType<typeof supabase.channel> | null = null
-    let cancelled = false
-    ;(async () => {
-      try {
-        let anonId: string | null = null
-        try {
-          anonId = localStorage.getItem('plantswipe.admin_anon_id')
-          if (!anonId) {
-            anonId = `admin_${Math.random().toString(36).slice(2, 10)}`
-            localStorage.setItem('plantswipe.admin_anon_id', anonId)
-          }
-        } catch {}
-
-        const uid = (await supabase.auth.getUser()).data.user?.id
-        const key = uid || anonId || `admin_${Math.random().toString(36).slice(2, 10)}`
-        channel = supabase.channel('global-presence', { config: { presence: { key } } })
-
-        const updateCount = () => {
-          if (!channel || cancelled) return
-          const state = channel.presenceState() as Record<string, unknown[]>
-          setPresenceOnlineCount(Object.keys(state).length)
-        }
-
-        channel
-          .on('presence', { event: 'sync' }, updateCount)
-          .on('presence', { event: 'join' }, updateCount)
-          .on('presence', { event: 'leave' }, updateCount)
-          .subscribe((status: unknown) => {
-            if (status === 'SUBSCRIBED') {
-              try { channel!.track({ role: 'admin', online_at: new Date().toISOString() }) } catch {}
-              updateCount()
-            }
-          })
-      } catch {}
-    })()
-    return () => {
-      cancelled = true
-      try { channel?.untrack() } catch {}
-      try { if (channel) supabase.removeChannel(channel) } catch {}
-    }
-  }, [])
 
   // Fetch unique IPs (last 7 days) for the chart
   React.useEffect(() => {
@@ -300,10 +234,11 @@ export const AdminPage: React.FC = () => {
           throw new Error(data?.error || `Request failed (${resp.status})`)
         }
         const series: Array<{ date: string; uniqueVisitors: number }> = Array.isArray(data?.series7d) ? data.series7d : []
-        if (!cancelled) setVisitorsSeries(series)
-        // Update the online card metric as well (60m)
         const unique60: number = Number.isFinite(Number(data?.uniqueIpsLast60m)) ? Number(data.uniqueIpsLast60m) : 0
-        if (!cancelled) setUniqueIpsLast60m(unique60)
+        if (!cancelled) {
+          setVisitorsSeries(series)
+          setUniqueIpsLast60m(unique60)
+        }
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e)
         if (!cancelled) setVisitorsError(msg || 'Failed to load visitors stats')
@@ -496,11 +431,8 @@ export const AdminPage: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
               <Card className="rounded-2xl">
                 <CardContent className="p-4">
-                  <div className="text-sm opacity-60">Currently online</div>
-                  <div className="text-2xl font-semibold">{(presenceOnlineCount ?? uniqueIpsLast60m)}</div>
-                  <div className="text-xs opacity-60 mt-1">
-                    {presenceOnlineCount === null ? 'Last 60m (unique IPs)' : 'Realtime (presence channel)'}
-                  </div>
+                  <div className="text-sm opacity-60">Currently online (last 60m)</div>
+                  <div className="text-2xl font-semibold">{uniqueIpsLast60m}</div>
                 </CardContent>
               </Card>
               <Card className="rounded-2xl">
