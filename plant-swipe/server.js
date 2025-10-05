@@ -8,6 +8,7 @@ import fsSync from 'fs'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { fileURLToPath } from 'url'
 import { exec as execCb, spawn as spawnChild } from 'child_process'
+import http from 'http'
 import { promisify } from 'util'
 
 import zlib from 'zlib'
@@ -20,6 +21,26 @@ dotenv.config()
 try {
   dotenv.config({ path: path.resolve(__dirname, '.env.server') })
 } catch {}
+
+// Best-effort: load admin_api env (used for HMAC/static token) if present
+async function loadAdminApiEnvFallback() {
+  const envPath = '/etc/admin-api/env'
+  try {
+    const txt = await fs.readFile(envPath, 'utf8')
+    for (const line of txt.split(/\r?\n/)) {
+      const trimmed = line.trim()
+      if (!trimmed || trimmed.startsWith('#') || !trimmed.includes('=')) continue
+      const idx = trimmed.indexOf('=')
+      const key = trimmed.slice(0, idx)
+      const val = trimmed.slice(idx + 1)
+      if (key && (process.env[key] === undefined)) {
+        process.env[key] = val
+      }
+    }
+  } catch {}
+}
+// Kick off load; fire-and-forget
+loadAdminApiEnvFallback().catch(() => {})
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -377,25 +398,76 @@ async function insertWebVisit({ sessionId, userId, pagePath, referrer, userAgent
   }
 }
 
-// Admin: restart server (detached self-reexec)
+// Internal helper: POST to admin_api through nginx with static token
+function postAdminApi(pathname, payload) {
+  return new Promise((resolve, reject) => {
+    try {
+      const token = process.env.ADMIN_API_STATIC_TOKEN || process.env.ADMIN_STATIC_TOKEN || ''
+      const hmacSecret = process.env.ADMIN_BUTTON_SECRET || ''
+      const body = JSON.stringify(payload || {})
+      const req = http.request({
+        hostname: '127.0.0.1',
+        port: 80,
+        method: 'POST',
+        path: pathname,
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body),
+          ...(token ? { 'X-Admin-Token': token } : {}),
+          ...(hmacSecret ? { 'X-Button-Token': crypto.createHmac('sha256', hmacSecret).update(body).digest('hex') } : {}),
+        },
+        timeout: 5000,
+      }, (resp) => {
+        let buf = ''
+        resp.on('data', (d) => { buf += d.toString() })
+        resp.on('end', () => {
+          const status = resp.statusCode || 0
+          if (status >= 200 && status < 300) return resolve({ status, body: buf })
+          return reject(new Error(`admin_api ${status}: ${buf.slice(0, 200)}`))
+        })
+      })
+      req.on('error', reject)
+      req.on('timeout', () => {
+        try { req.destroy(new Error('timeout')) } catch {}
+      })
+      req.write(body)
+      req.end()
+    } catch (e) {
+      reject(e)
+    }
+  })
+}
+
+// Admin: restart server by delegating to Python admin_api to reboot the host
 async function handleRestartServer(req, res) {
   try {
-    const uid = "public"
-    if (!uid) return
+    // Authorize caller as admin
+    const userId = await getUserIdFromRequest(req)
+    const allowedUserIds = (process.env.ADMIN_USER_IDS || '').split(',').map(s => s.trim()).filter(Boolean)
+    let isAdmin = false
+    if (userId) {
+      try { isAdmin = await isAdminUserId(userId) } catch { isAdmin = false }
+      if (!isAdmin && allowedUserIds.length) {
+        isAdmin = allowedUserIds.includes(userId)
+      }
+    }
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Admin privileges required' })
+      return
+    }
 
-    res.json({ ok: true, message: 'Restarting server' })
-    // Give time for response to flush, then spawn a detached replacement and exit
+    // Respond immediately so the browser isn't cut off by reboot
+    res.json({ ok: true, message: 'Rebooting host via admin_api' })
+
+    // Fire-and-forget request to admin_api; machine may go down immediately
     setTimeout(() => {
-      try {
-        const node = process.argv[0]
-        const args = process.argv.slice(1)
-        const child = spawnChild(node, args, { detached: true, stdio: 'ignore' })
-        child.unref()
-      } catch {}
-      process.exit(0)
-    }, 150)
+      postAdminApi('/admin/reboot', { ts: Date.now(), by: userId })
+        .catch((e) => { console.error('[restart-server] admin_api call failed:', e?.message || e) })
+    }, 50)
   } catch (e) {
-    res.status(500).json({ error: e?.message || 'Failed to restart server' })
+    try {
+      res.status(500).json({ error: e?.message || 'Failed to initiate reboot' })
+    } catch {}
   }
 }
 
