@@ -321,10 +321,17 @@ $$;
 
 -- Gardens policies
 do $$ begin
-  if not exists (select 1 from pg_policies where schemaname='public' and tablename='gardens' and policyname='gardens_select') then
-    create policy gardens_select on public.gardens for select
-      using (exists (select 1 from public.garden_members gm where gm.garden_id = id and gm.user_id = (select auth.uid())));
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='gardens' and policyname='gardens_select') then
+    drop policy gardens_select on public.gardens;
   end if;
+  create policy gardens_select on public.gardens for select
+    using (
+      created_by = (select auth.uid())
+      or exists (
+        select 1 from public.garden_members gm
+        where gm.garden_id = id and gm.user_id = (select auth.uid())
+      )
+    );
 end $$;
 do $$ begin
   if not exists (select 1 from pg_policies where schemaname='public' and tablename='gardens' and policyname='gardens_insert') then
@@ -358,7 +365,16 @@ do $$ begin
     drop policy gm_insert on public.garden_members;
   end if;
   create policy gm_insert on public.garden_members for insert to authenticated
-    with check (public.is_garden_owner_bypass(garden_id, (select auth.uid())) and user_id is not null);
+    with check (
+      (
+        user_id = (select auth.uid())
+        and exists (
+          select 1 from public.gardens g
+          where g.id = garden_id and g.created_by = (select auth.uid())
+        )
+      )
+      or public.is_garden_owner_bypass(garden_id, (select auth.uid()))
+    ) and user_id is not null;
 end $$;
 do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_members' and policyname='gm_delete') then
