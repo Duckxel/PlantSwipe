@@ -69,61 +69,17 @@ export default function PlantSwipe() {
     setLoadError(null)
     let ok = false
     try {
-      const { data, error } = await supabase
-        .from('plants')
-        .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount')
-        .order('name', { ascending: true })
-      if (error) throw error
-      type PlantRow = {
-        id: string | number
-        name: string
-        scientific_name?: string | null
-        colors?: unknown
-        seasons?: unknown
-        rarity: Plant['rarity']
-        meaning?: string | null
-        description?: string | null
-        image_url?: string | null
-        care_sunlight?: Plant['care']['sunlight'] | null
-        care_water?: Plant['care']['water'] | null
-        care_soil?: string | null
-        care_difficulty?: Plant['care']['difficulty'] | null
-        seeds_available?: boolean | null
-        water_freq_unit?: Plant['waterFreqUnit'] | null
-        water_freq_value?: number | null
-        water_freq_period?: Plant['waterFreqPeriod'] | null
-        water_freq_amount?: number | null
-      }
-      const parsed: Plant[] = (Array.isArray(data) ? data : []).map((p: PlantRow) => ({
-        id: String(p.id),
-        name: String(p.name),
-        scientificName: String(p.scientific_name || ''),
-        colors: Array.isArray(p.colors as string[] | unknown[]) ? (p.colors as unknown[]).map((c) => String(c)) : [],
-        seasons: Array.isArray(p.seasons as string[] | unknown[]) ? (p.seasons as unknown[]).map((s) => String(s)) as Plant['seasons'] : [],
-        rarity: p.rarity as Plant['rarity'],
-        meaning: p.meaning ? String(p.meaning) : '',
-        description: p.description ? String(p.description) : '',
-        image: p.image_url || '',
-        care: {
-          sunlight: (p.care_sunlight || 'Low') as Plant['care']['sunlight'],
-          water: (p.care_water || 'Low') as Plant['care']['water'],
-          soil: String(p.care_soil || ''),
-          difficulty: (p.care_difficulty || 'Easy') as Plant['care']['difficulty']
-        },
-        seedsAvailable: Boolean(p.seeds_available ?? false),
-        waterFreqUnit: p.water_freq_unit || undefined,
-        waterFreqValue: p.water_freq_value ?? null,
-        waterFreqPeriod: p.water_freq_period || undefined,
-        waterFreqAmount: p.water_freq_amount ?? null
-      }))
-      setPlants(parsed)
-      ok = true
-    } catch (e: unknown) {
-      // Fallback: fetch via public server API to allow anonymous browsing
-      try {
-        const resp = await fetch('/api/plants', { credentials: 'same-origin' })
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-        const arr = await resp.json()
+      // Prefer public API first to ensure anonymous browsing works even without Supabase
+      const resp = await fetch('/api/plants', {
+        credentials: 'same-origin',
+        headers: { 'Accept': 'application/json' },
+      })
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+      const ct = (resp.headers.get('content-type') || '').toLowerCase()
+      const text = await resp.text()
+      if (ct.includes('application/json') || /^[\s\n]*[\[{]/.test(text)) {
+        let arr: unknown = []
+        try { arr = JSON.parse(text) } catch { arr = [] }
         const parsedFromApi: Plant[] = (Array.isArray(arr) ? arr : []).map((p: any) => ({
           id: String(p.id),
           name: String(p.name),
@@ -147,7 +103,61 @@ export default function PlantSwipe() {
           waterFreqAmount: (p.waterFreqAmount ?? p.water_freq_amount) ?? null
         }))
         setPlants(parsedFromApi)
-        setLoadError(null)
+        ok = true
+      } else {
+        throw new Error('Non-JSON response from /api/plants')
+      }
+    } catch (_apiErr: unknown) {
+      // Fallback to Supabase client if API unavailable
+      try {
+        const { data, error } = await supabase
+          .from('plants')
+          .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount')
+          .order('name', { ascending: true })
+        if (error) throw error
+        type PlantRow = {
+          id: string | number
+          name: string
+          scientific_name?: string | null
+          colors?: unknown
+          seasons?: unknown
+          rarity: Plant['rarity']
+          meaning?: string | null
+          description?: string | null
+          image_url?: string | null
+          care_sunlight?: Plant['care']['sunlight'] | null
+          care_water?: Plant['care']['water'] | null
+          care_soil?: string | null
+          care_difficulty?: Plant['care']['difficulty'] | null
+          seeds_available?: boolean | null
+          water_freq_unit?: Plant['waterFreqUnit'] | null
+          water_freq_value?: number | null
+          water_freq_period?: Plant['waterFreqPeriod'] | null
+          water_freq_amount?: number | null
+        }
+        const parsed: Plant[] = (Array.isArray(data) ? data : []).map((p: PlantRow) => ({
+          id: String(p.id),
+          name: String(p.name),
+          scientificName: String(p.scientific_name || ''),
+          colors: Array.isArray(p.colors as string[] | unknown[]) ? (p.colors as unknown[]).map((c) => String(c)) : [],
+          seasons: Array.isArray(p.seasons as string[] | unknown[]) ? (p.seasons as unknown[]).map((s) => String(s)) as Plant['seasons'] : [],
+          rarity: p.rarity as Plant['rarity'],
+          meaning: p.meaning ? String(p.meaning) : '',
+          description: p.description ? String(p.description) : '',
+          image: p.image_url || '',
+          care: {
+            sunlight: (p.care_sunlight || 'Low') as Plant['care']['sunlight'],
+            water: (p.care_water || 'Low') as Plant['care']['water'],
+            soil: String(p.care_soil || ''),
+            difficulty: (p.care_difficulty || 'Easy') as Plant['care']['difficulty']
+          },
+          seedsAvailable: Boolean(p.seeds_available ?? false),
+          waterFreqUnit: p.water_freq_unit || undefined,
+          waterFreqValue: p.water_freq_value ?? null,
+          waterFreqPeriod: p.water_freq_period || undefined,
+          waterFreqAmount: p.water_freq_amount ?? null
+        }))
+        setPlants(parsed)
         ok = true
       } catch (e2: unknown) {
         const msg = e2 && typeof e2 === 'object' && 'message' in e2 ? String((e2 as { message?: unknown }).message || '') : ''
@@ -183,7 +193,16 @@ export default function PlantSwipe() {
           vendor: navigator.vendor || null,
           hardwareConcurrency: (navigator as any).hardwareConcurrency || null,
           memoryGB: (navigator as any).deviceMemory || null,
-          webgl: (() => { try { const c = document.createElement('canvas'); const gl = (c.getContext('webgl') || c.getContext('experimental-webgl')) as WebGLRenderingContext | null; const debug = gl && gl.getExtension('WEBGL_debug_renderer_info'); return debug && gl ? { vendor: gl.getParameter((debug as any).UNMASKED_VENDOR_WEBGL), renderer: gl.getParameter((debug as any).UNMASKED_RENDERER_WEBGL) } : null } catch { return null } })(),
+          webgl: (() => {
+            try {
+              const c = document.createElement('canvas')
+              const gl = (c.getContext('webgl2') || c.getContext('webgl')) as WebGLRenderingContext | WebGL2RenderingContext | null
+              if (!gl) return null
+              const vendor = (gl as any).getParameter?.((gl as any).VENDOR)
+              const renderer = (gl as any).getParameter?.((gl as any).RENDERER)
+              return { vendor: vendor ?? null, renderer: renderer ?? null }
+            } catch { return null }
+          })(),
         }
         await fetch(`${base}/api/track-visit`, {
           method: 'POST',
