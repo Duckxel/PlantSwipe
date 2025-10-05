@@ -729,8 +729,11 @@ function PlantInfoOverlay() {
   const navigate = useNavigate()
   return (
     <Sheet open onOpenChange={(o) => { if (!o) navigate(-1) }}>
-      <SheetContent side="bottom" className="rounded-t-2xl max-h-[85vh] overflow-y-auto p-4">
-        <div className="max-w-3xl mx-auto">
+      <SheetContent
+        side="bottom"
+        className="rounded-t-2xl max-h-[85vh] overflow-y-auto p-4 md:p-6"
+      >
+        <div className="max-w-4xl mx-auto w-full">
           <PlantInfoPage />
         </div>
       </SheetContent>
