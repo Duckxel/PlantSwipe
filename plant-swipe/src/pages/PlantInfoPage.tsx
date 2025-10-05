@@ -92,12 +92,12 @@ export const PlantInfoPage: React.FC = () => {
     })
   }
 
-  if (loading) return <div className="max-w-3xl mx-auto mt-8 px-4">Loading…</div>
-  if (error) return <div className="max-w-3xl mx-auto mt-8 px-4 text-red-600 text-sm">{error}</div>
-  if (!plant) return <div className="max-w-3xl mx-auto mt-8 px-4">Plant not found.</div>
+  if (loading) return <div className="max-w-4xl mx-auto mt-8 px-4">Loading…</div>
+  if (error) return <div className="max-w-4xl mx-auto mt-8 px-4 text-red-600 text-sm">{error}</div>
+  if (!plant) return <div className="max-w-4xl mx-auto mt-8 px-4">Plant not found.</div>
 
   return (
-    <div className="max-w-3xl mx-auto mt-6 px-4 md:px-0">
+    <div className="max-w-4xl mx-auto mt-6 px-4 md:px-0">
       <PlantDetails
         plant={plant}
         onClose={() => navigate(-1)}
