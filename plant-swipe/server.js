@@ -742,12 +742,21 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
     return
   }
   try {
-    // Unique IPs in the last 10 minutes (kept for backwards compatibility)
-    const rows10m = await sql`select count(distinct ip_address)::int as c from public.web_visits where occurred_at >= now() - interval '10 minutes'`
+    // Count unique recent visitors, preferring IP when available and
+    // falling back to session_id when IP is missing (local/dev proxies etc.).
+    const rows10m = await sql`
+      select count(distinct coalesce(ip_address::text, session_id))::int as c
+      from public.web_visits
+      where occurred_at >= now() - interval '10 minutes'
+    `
     const currentUniqueVisitors10m = rows10m?.[0]?.c ?? 0
 
-    // Unique IPs in the last 30 minutes (for "Currently online" card)
-    const rows30m = await sql`select count(distinct ip_address)::int as c from public.web_visits where occurred_at >= now() - interval '30 minutes'`
+    // Unique visitors in the last 30 minutes for the "Currently online" card
+    const rows30m = await sql`
+      select count(distinct coalesce(ip_address::text, session_id))::int as c
+      from public.web_visits
+      where occurred_at >= now() - interval '30 minutes'
+    `
     const uniqueIpsLast30m = rows30m?.[0]?.c ?? 0
 
     // Raw visit events (not unique) in the last 60 minutes
