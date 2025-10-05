@@ -31,6 +31,10 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
   return (
     <motion.div className="space-y-4 select-none" drag="y" style={{ y }} dragConstraints={{ top: 0, bottom: 0 }} onDragEnd={onDragEnd}>
       <div className="grid md:grid-cols-2 gap-4 items-center">
+        <SheetHeader className="text-left">
+          <SheetTitle className="text-3xl md:text-4xl font-bold leading-tight">{plant.name}</SheetTitle>
+          <SheetDescription className="italic text-base md:text-lg opacity-80">{plant.scientificName}</SheetDescription>
+        </SheetHeader>
         <div className="rounded-2xl overflow-hidden shadow relative">
           <div className="h-44 md:h-60 bg-cover bg-center select-none rounded-2xl" style={{ backgroundImage: `url(${plant.image})`, userSelect: 'none' as any }} />
           <div className="absolute bottom-3 right-3">
@@ -38,16 +42,12 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
               onClick={() => onToggleLike && onToggleLike()}
               aria-pressed={liked}
               aria-label={liked ? 'Unlike' : 'Like'}
-              className={`h-8 w-8 rounded-full flex items-center justify-center shadow border transition ${liked ? 'bg-rose-600 text-white' : 'bg-white/90 text-black hover:bg-white'}`}
+              className={`h-8 w-8 rounded-full flex items-center justify-center border transition shadow-[0_4px_12px_rgba(0,0,0,0.28)] ${liked ? 'bg-rose-600 text-white' : 'bg-white/90 text-black hover:bg-white'}`}
             >
               <Heart className={liked ? 'fill-current' : ''} />
             </button>
           </div>
         </div>
-        <SheetHeader className="text-left">
-          <SheetTitle className="text-3xl md:text-4xl font-bold leading-tight">{plant.name}</SheetTitle>
-          <SheetDescription className="italic text-base md:text-lg opacity-80">{plant.scientificName}</SheetDescription>
-        </SheetHeader>
       </div>
 
       <div className="grid md:grid-cols-3 gap-3">
