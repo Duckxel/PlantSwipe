@@ -722,7 +722,7 @@ export const GardenDashboardPage: React.FC = () => {
                   <div className="space-y-3">
                     <div className="text-lg font-medium">Garden details</div>
                     <Card className="rounded-2xl p-4">
-                      <GardenDetailsEditor garden={garden} onSaved={load} />
+                      <GardenDetailsEditor garden={garden} onSaved={load} canEdit={viewerIsOwner} />
                     </Card>
                   </div>
                   <div className="space-y-3">
@@ -1141,15 +1141,25 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner }: { member: { 
   )
 }
 
-function GardenDetailsEditor({ garden, onSaved }: { garden: Garden; onSaved: () => Promise<void> }) {
+function GardenDetailsEditor({ garden, onSaved, canEdit }: { garden: Garden; onSaved: () => Promise<void>; canEdit?: boolean }) {
   const [name, setName] = React.useState(garden.name)
   const [imageUrl, setImageUrl] = React.useState(garden.coverImageUrl || '')
   const [submitting, setSubmitting] = React.useState(false)
+  const [err, setErr] = React.useState<string | null>(null)
   const save = async () => {
     if (submitting) return
+    if (!canEdit) return
     setSubmitting(true)
     try {
-      await supabase.from('gardens').update({ name: name.trim() || garden.name, cover_image_url: imageUrl.trim() || null }).eq('id', garden.id)
+      const { error } = await supabase
+        .from('gardens')
+        .update({ name: name.trim() || garden.name, cover_image_url: imageUrl.trim() || null })
+        .eq('id', garden.id)
+      if (error) {
+        setErr(error.message || 'Failed to save garden')
+        return
+      }
+      setErr(null)
       await onSaved()
     } finally {
       setSubmitting(false)
@@ -1159,14 +1169,15 @@ function GardenDetailsEditor({ garden, onSaved }: { garden: Garden; onSaved: () 
     <div className="space-y-3">
       <div>
         <label className="text-sm font-medium">Garden name</label>
-        <Input value={name} onChange={(e: any) => setName(e.target.value)} />
+        <Input value={name} onChange={(e: any) => setName(e.target.value)} disabled={!canEdit} />
       </div>
       <div>
         <label className="text-sm font-medium">Cover image URL</label>
-        <Input value={imageUrl} onChange={(e: any) => setImageUrl(e.target.value)} placeholder="https://…" />
+        <Input value={imageUrl} onChange={(e: any) => setImageUrl(e.target.value)} placeholder="https://…" disabled={!canEdit} />
       </div>
+      {err && <div className="text-sm text-red-600">{err}</div>}
       <div className="flex justify-end gap-2 pt-2">
-        <Button className="rounded-2xl" onClick={save} disabled={submitting}>{submitting ? 'Saving…' : 'Save changes'}</Button>
+        <Button className="rounded-2xl" onClick={save} disabled={submitting || !canEdit}>{submitting ? 'Saving…' : 'Save changes'}</Button>
       </div>
     </div>
   )
