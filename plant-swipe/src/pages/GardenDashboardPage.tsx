@@ -174,7 +174,15 @@ export const GardenDashboardPage: React.FC = () => {
               }
             } else if (p === 'year') {
               const arr: string[] = ((def as any).yearly_days || []) as string[]
-              if (arr.includes(ymd)) idxs.add(i)
+              if (arr.includes(ymd)) {
+                idxs.add(i)
+              } else if (arr.length > 0) {
+                const date = dt.getUTCDate()
+                const weekday = dt.getUTCDay() // 0=Sun..6=Sat
+                const weekIndex = Math.floor((date - 1) / 7) + 1 // 1..4
+                const key = `${mm}-${weekIndex}-${weekday}`
+                if (arr.includes(key)) idxs.add(i)
+              }
             }
           }
         }

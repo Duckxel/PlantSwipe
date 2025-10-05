@@ -68,7 +68,7 @@ export function TaskCreateDialog({
     setError(null)
     if (countSelected !== amount) {
       setError(
-        `Select exactly ${amount} ${period === 'week' ? 'day(s) per week' : period === 'month' ? 'day(s) per month' : 'date(s) per year'}`
+        `Select exactly ${amount} ${period === 'week' ? 'day(s) per week' : period === 'month' ? 'day(s) per month' : 'time(s) per year'}`
       )
       return
     }
@@ -153,7 +153,7 @@ export function TaskCreateDialog({
           <div className="text-sm opacity-60">
             {period === 'week' && 'Pick days Monday–Sunday'}
             {period === 'month' && 'Pick 1st–4th weekdays (e.g., 1st Mon)'}
-            {period === 'year' && 'Pick specific dates across the year'}
+            {period === 'year' && 'Pick 1st–4th weekdays per month (e.g., Jan 1st Mon)'}
           </div>
 
           {period === 'week' && (
@@ -210,13 +210,36 @@ export function TaskCreateDialog({
             </>
           )}
           {period === 'year' && (
-            <YearPicker
+            <YearMonthNthWeekdayPicker
               selected={yearlyDays}
-              onToggle={(mmdd) => {
+              onToggle={(monthIdx, weekIndex, uiIndex) => {
+                const map = [1,2,3,4,5,6,0]
+                const weekday = map[uiIndex]
+                const mm = String(monthIdx + 1).padStart(2, '0')
+                const key = `${mm}-${weekIndex}-${weekday}`
                 setYearlyDays((cur) => {
-                  if (cur.includes(mmdd)) return cur.filter((x) => x !== mmdd)
+                  const has = cur.includes(key)
+                  if (has) return cur.filter((x) => x !== key)
                   if (disabledMore) return cur
-                  return [...cur, mmdd]
+                  return [...cur, key]
+                })
+              }}
+              onToggleHeader={(monthIdx, uiIndex) => {
+                const map = [1,2,3,4,5,6,0]
+                const weekday = map[uiIndex]
+                const mm = String(monthIdx + 1).padStart(2, '0')
+                const keys = [1,2,3,4].map(w => `${mm}-${w}-${weekday}`)
+                setYearlyDays((cur) => {
+                  const allSelected = keys.every(k => cur.includes(k))
+                  if (allSelected) return cur.filter(k => !keys.includes(k))
+                  const result = [...cur]
+                  for (const k of keys) {
+                    if (result.includes(k)) continue
+                    if (result.length >= amount) break
+                    if (disabledMore) break
+                    result.push(k)
+                  }
+                  return result
                 })
               }}
               disabledMore={disabledMore}
@@ -308,34 +331,53 @@ function MonthNthWeekdayPicker({ selected, onToggle, onToggleHeader, disabledMor
   )
 }
 
-function YearPicker({ selected, onToggle, disabledMore }: { selected: string[]; onToggle: (mmdd: string) => void; disabledMore: boolean }) {
+function YearMonthNthWeekdayPicker({ selected, onToggle, onToggleHeader, disabledMore }: { selected: string[]; onToggle: (monthIdx: number, weekIndex: number, uiIndex: number) => void; onToggleHeader: (monthIdx: number, uiIndex: number) => void; disabledMore: boolean }) {
   const months = [
-    ['Jan', 31], ['Feb', 29], ['Mar', 31], ['Apr', 30], ['May', 31], ['Jun', 30],
-    ['Jul', 31], ['Aug', 31], ['Sep', 30], ['Oct', 31], ['Nov', 30], ['Dec', 31],
-  ] as Array<[string, number]>
+    'Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'
+  ]
+  const labels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+  const weekNames = ['1st','2nd','3rd','4th']
+  const mondayFirstMap = [1,2,3,4,5,6,0]
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 max-h-[60vh] overflow-auto pr-1">
-      {months.map(([label, count], monthIdx) => (
+    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 max-h-[60vh] overflow-auto pr-1">
+      {months.map((label, monthIdx) => (
         <div key={label} className="rounded-xl border p-2">
           <div className="text-xs opacity-70 mb-2">{label}</div>
-          <div className="grid grid-cols-7 gap-1">
-            {Array.from({ length: count }, (_, i) => i + 1).map((d) => {
-              const mm = String(monthIdx + 1).padStart(2, '0')
-              const dd = String(d).padStart(2, '0')
-              const mmdd = `${mm}-${dd}`
-              const isOn = selected.includes(mmdd)
-              return (
+          <div className="space-y-2">
+            <div className="grid grid-cols-[60px_repeat(7,minmax(0,1fr))] gap-2 items-center">
+              <div className="text-xs opacity-70 text-center">WEEK</div>
+              {labels.map((l, uiIndex) => (
                 <button
-                  key={mmdd}
+                  key={l}
                   type="button"
-                  onClick={() => onToggle(mmdd)}
-                  className={`h-9 rounded-lg border text-[11px] ${isOn ? 'bg-black text-white' : 'bg-white hover:bg-stone-50'} ${!isOn && disabledMore ? 'opacity-60 cursor-not-allowed' : ''}`}
-                  disabled={!isOn && disabledMore}
+                  onClick={() => onToggleHeader(monthIdx, uiIndex)}
+                  className={`h-8 rounded-lg border text-[11px] ${'bg-white hover:bg-stone-50'}`}
                 >
-                  {d}
+                  {l}
                 </button>
-              )
-            })}
+              ))}
+            </div>
+            {weekNames.map((wn, rowIdx) => (
+              <div key={wn} className="grid grid-cols-[60px_repeat(7,minmax(0,1fr))] gap-2 items-center">
+                <div className="text-xs opacity-70 text-center">{rowIdx + 1}</div>
+                {labels.map((_, uiIndex) => {
+                  const weekday = mondayFirstMap[uiIndex]
+                  const mm = String(monthIdx + 1).padStart(2, '0')
+                  const key = `${mm}-${rowIdx + 1}-${weekday}`
+                  const isOn = selected.includes(key)
+                  return (
+                    <button
+                      key={uiIndex}
+                      type="button"
+                      onClick={() => onToggle(monthIdx, rowIdx + 1, uiIndex)}
+                      className={`h-10 rounded-xl border text-sm ${isOn ? 'bg-black text-white' : 'bg-white hover:bg-stone-50'} ${!isOn && disabledMore ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      disabled={!isOn && disabledMore}
+                      aria-label={`${label} ${wn} ${labels[uiIndex]}`}
+                    />
+                  )
+                })}
+              </div>
+            ))}
           </div>
         </div>
       ))}

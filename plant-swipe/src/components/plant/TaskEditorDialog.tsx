@@ -175,7 +175,7 @@ function renderTaskSummary(t: GardenPlantTask): string {
   if (t.scheduleKind === 'repeat_pattern') {
     if (t.period === 'week') return `Per week: ${(t.weeklyDays || []).length} day(s)`
     if (t.period === 'month') return `Per month: ${(t.monthlyNthWeekdays || t.monthlyDays || []).length} time(s)`
-    return `Per year: ${(t.yearlyDays || []).length} date(s)`
+    return `Per year: ${(t.yearlyDays || []).length} time(s)`
   }
   return ''
 }
