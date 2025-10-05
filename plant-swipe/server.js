@@ -273,15 +273,44 @@ function getOrSetSessionId(req, res) {
   return sid
 }
 
+// Normalize various proxy/IP header formats into a canonical representation
+function normalizeIp(ip) {
+  try {
+    if (!ip) return ''
+    let out = String(ip).trim()
+    // Remove square brackets around IPv6 literals if present
+    if (out.startsWith('[') && out.endsWith(']')) {
+      out = out.slice(1, -1)
+    }
+    // Strip port suffix from IPv4 "a.b.c.d:port" or IPv6 ":port"
+    // Do not naively split on ':' because IPv6 uses ':' as part of the address
+    const lastColon = out.lastIndexOf(':')
+    const lastRightBracket = out.lastIndexOf(']')
+    if (lastColon > -1 && lastRightBracket === -1 && out.indexOf('.') > -1) {
+      // Looks like IPv4 with port
+      const maybePort = out.slice(lastColon + 1)
+      if (/^\d{1,5}$/.test(maybePort)) {
+        out = out.slice(0, lastColon)
+      }
+    }
+    // Handle IPv6-mapped IPv4 addresses like ::ffff:127.0.0.1
+    const v4mapped = out.match(/::ffff:(\d{1,3}(?:\.\d{1,3}){3})/i)
+    if (v4mapped) return v4mapped[1]
+    return out.toLowerCase()
+  } catch {
+    return typeof ip === 'string' ? ip : ''
+  }
+}
+
 function getClientIp(req) {
   const h = req.headers
   const xff = (h['x-forwarded-for'] || h['X-Forwarded-For'] || '').toString()
-  if (xff) return xff.split(',')[0].trim()
+  if (xff) return normalizeIp(xff.split(',')[0].trim())
   const cf = (h['cf-connecting-ip'] || h['CF-Connecting-IP'] || '').toString()
-  if (cf) return cf
+  if (cf) return normalizeIp(cf)
   const real = (h['x-real-ip'] || h['X-Real-IP'] || '').toString()
-  if (real) return real
-  return req.ip || req.connection?.remoteAddress || ''
+  if (real) return normalizeIp(real)
+  return normalizeIp(req.ip || req.connection?.remoteAddress || '')
 }
 
 function getGeoFromHeaders(req) {
@@ -742,39 +771,33 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
     return
   }
   try {
-    // Count unique recent visitors, preferring IP when available and
-    // falling back to session_id when IP is missing (local/dev proxies etc.).
-    const rows10m = await sql`
-      select count(distinct coalesce(ip_address::text, session_id))::int as c
-      from public.web_visits
-      where occurred_at >= now() - interval '10 minutes'
-    `
+    // Unique IPs in recent windows
+    const [rows10m, rows30m, rows60mUnique, rows60mRaw] = await Promise.all([
+      sql`select count(distinct v.ip_address::text)::int as c from public.web_visits v where v.ip_address is not null and v.occurred_at >= now() - interval '10 minutes'`,
+      sql`select count(distinct v.ip_address::text)::int as c from public.web_visits v where v.ip_address is not null and v.occurred_at >= now() - interval '30 minutes'`,
+      sql`select count(distinct v.ip_address::text)::int as c from public.web_visits v where v.ip_address is not null and v.occurred_at >= now() - interval '60 minutes'`,
+      sql`select count(*)::int as c from public.web_visits where occurred_at >= now() - interval '60 minutes'`,
+    ])
     const currentUniqueVisitors10m = rows10m?.[0]?.c ?? 0
-
-    // Unique visitors in the last 30 minutes for the "Currently online" card
-    const rows30m = await sql`
-      select count(distinct coalesce(ip_address::text, session_id))::int as c
-      from public.web_visits
-      where occurred_at >= now() - interval '30 minutes'
-    `
     const uniqueIpsLast30m = rows30m?.[0]?.c ?? 0
+    const uniqueIpsLast60m = rows60mUnique?.[0]?.c ?? 0
+    const visitsLast60m = rows60mRaw?.[0]?.c ?? 0
 
-    // Raw visit events (not unique) in the last 60 minutes
-    const rows60m = await sql`select count(*)::int as c from public.web_visits where occurred_at >= now() - interval '60 minutes'`
-    const visitsLast60m = rows60m?.[0]?.c ?? 0
+    // Unique IPs by day (UTC) for last 7 days
     const rows7 = await sql`
       with days as (
-        select generate_series((now()::date - 6), now()::date, interval '1 day')::date as d
+        select generate_series(((now() at time zone 'utc')::date - 6), (now() at time zone 'utc')::date, interval '1 day')::date as d
       )
       select d as day,
-             coalesce((select count(distinct coalesce(v.ip_address::text, v.session_id))
+             coalesce((select count(distinct v.ip_address::text)
                        from public.web_visits v
-                       where (v.occurred_at at time zone 'utc')::date = d), 0)::int as unique_visitors
+                       where (v.occurred_at at time zone 'utc')::date = d
+                         and v.ip_address is not null), 0)::int as unique_visitors
       from days
       order by d asc
     `
     const series7d = (rows7 || []).map(r => ({ date: new Date(r.day).toISOString().slice(0,10), uniqueVisitors: Number(r.unique_visitors || 0) }))
-    res.json({ ok: true, currentUniqueVisitors10m, uniqueIpsLast30m, visitsLast60m, series7d })
+    res.json({ ok: true, currentUniqueVisitors10m, uniqueIpsLast30m, uniqueIpsLast60m, visitsLast60m, series7d })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to load visitors stats' })
   }
