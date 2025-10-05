@@ -13,7 +13,7 @@ export const GalleryPage: React.FC<GalleryPageProps> = ({ plants, onOpen }) => (
       {plants.map((p) => (
         <button key={p.id} onClick={() => onOpen(p)} className="text-left">
           <Card className="rounded-2xl overflow-hidden hover:shadow-lg transition-shadow">
-            <div className="h-36 bg-cover bg-center" style={{ backgroundImage: `url(${p.image})` }} />
+            <div className="h-36 bg-cover bg-center rounded-t-2xl" style={{ backgroundImage: `url(${p.image})` }} />
             <CardContent className="p-3">
               <div className="flex items-center gap-2 mb-1">
                 <Badge className={`${rarityTone[p.rarity]} rounded-xl`}>{p.rarity}</Badge>

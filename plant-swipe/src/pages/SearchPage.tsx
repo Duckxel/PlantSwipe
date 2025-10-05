@@ -24,7 +24,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ plants, openInfo, likedI
           onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => { if (e.key === 'Enter') openInfo(p) }}
         >
           <div className="grid grid-cols-3 gap-0">
-            <div className="col-span-1 h-36 bg-cover bg-center" style={{ backgroundImage: `url(${p.image})` }} />
+            <div className="col-span-1 h-36 bg-cover bg-center rounded-l-2xl" style={{ backgroundImage: `url(${p.image})` }} />
             <div className="col-span-2 p-3">
               <div className="flex items-center gap-2 mb-1">
                 <Badge className={`${rarityTone[p.rarity]} rounded-xl`}>{p.rarity}</Badge>
