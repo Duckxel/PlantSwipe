@@ -742,7 +742,7 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
     return
   }
   try {
-    const rows10m = await sql`select count(distinct session_id)::int as c from public.web_visits where occurred_at >= now() - interval '10 minutes'`
+    const rows10m = await sql`select count(distinct ip_address)::int as c from public.web_visits where occurred_at >= now() - interval '10 minutes'`
     const currentUniqueVisitors10m = rows10m?.[0]?.c ?? 0
     const rows60m = await sql`select count(*)::int as c from public.web_visits where occurred_at >= now() - interval '60 minutes'`
     const visitsLast60m = rows60m?.[0]?.c ?? 0
@@ -751,7 +751,7 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
         select generate_series((now()::date - 6), now()::date, interval '1 day')::date as d
       )
       select d as day,
-             coalesce((select count(distinct session_id)
+             coalesce((select count(distinct ip_address)
                        from public.web_visits v
                        where (v.occurred_at at time zone 'utc')::date = d), 0)::int as unique_visitors
       from days

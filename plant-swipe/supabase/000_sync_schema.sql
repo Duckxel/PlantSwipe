@@ -1041,6 +1041,7 @@ create index if not exists web_visits_occurred_at_idx on public.web_visits (occu
 create index if not exists web_visits_session_idx on public.web_visits (session_id);
 create index if not exists web_visits_user_idx on public.web_visits (user_id);
 create index if not exists web_visits_page_idx on public.web_visits (page_path);
+create index if not exists web_visits_ip_idx on public.web_visits (ip_address);
 
 -- RLS: restrict reads to admins only; writes are server-side (bypass RLS)
 alter table public.web_visits enable row level security;
