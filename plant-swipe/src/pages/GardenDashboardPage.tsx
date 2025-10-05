@@ -618,6 +618,11 @@ export const GardenDashboardPage: React.FC = () => {
                       </Card>
                     ))}
                   </div>
+                  {plants.length === 0 && (
+                    <div className="p-10 text-center opacity-60 text-sm">
+                      No plants yet. Add your first plant to get started.
+                    </div>
+                  )}
                 </div>
               )} />
               <Route path="routine" element={<RoutineSection plants={plants} duePlantIds={dueToday} onLogWater={logWater} weekDays={weekDays} weekCounts={weekCounts} weekCountsByType={weekCountsByType} serverToday={serverToday} dueThisWeekByPlant={dueThisWeekByPlant} todayTaskOccurrences={todayTaskOccurrences} onProgressOccurrence={async (occId: string, inc: number) => { await progressTaskOccurrence(occId, inc); await load() }} />} />
