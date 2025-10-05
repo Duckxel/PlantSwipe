@@ -338,7 +338,7 @@ export const AdminPage: React.FC = () => {
 
     return (
       <div ref={containerRef} className="relative">
-        <svg viewBox={`0 0 ${w} ${h}`} role="img" aria-label="Unique IPs last 7 days" className="w-full h-[240px]">
+        <svg viewBox={`0 0 ${w} ${h}`} role="img" aria-label="Visitors last 7 days" className="w-full h-[240px]">
           <defs>
             <linearGradient id="visitorsGradient" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="hsl(var(--chart-1))" stopOpacity="0.20" />
@@ -370,7 +370,7 @@ export const AdminPage: React.FC = () => {
               <circle
                 cx={p.x}
                 cy={p.y}
-                r={5}
+                r={hoverIndex === i ? 6 : 5}
                 fill={i === todayIdx ? 'hsl(var(--primary))' : 'white'}
                 stroke={i === todayIdx ? 'hsl(var(--primary))' : 'hsl(var(--chart-1))'}
                 strokeWidth={i === todayIdx ? 3 : 2}
@@ -388,14 +388,13 @@ export const AdminPage: React.FC = () => {
           ))}
         </svg>
 
-        {/* Tooltip */}
+        {/* Tooltip (simplified) */}
         {hoverIndex !== null && points[hoverIndex] && (
           <div
-            className="pointer-events-none absolute -translate-x-1/2 -translate-y-[115%] rounded-xl bg-white/95 shadow-lg ring-1 ring-black/5 px-2 py-1 text-xs"
+            className="pointer-events-none absolute -translate-x-1/2 -translate-y-[110%] rounded-lg bg-white/95 shadow-md ring-1 ring-black/5 px-2 py-0.5 text-[11px]"
             style={{ left: `${((points[hoverIndex].x) / w) * 100}%`, top: `${((points[hoverIndex].y) / h) * 100}%` }}
           >
-              <div className="font-medium">{values[hoverIndex]} unique IPs</div>
-            <div className="opacity-60">{xLabels[hoverIndex]}</div>
+            <div className="font-medium tabular-nums">{values[hoverIndex]} <span className="opacity-60">• {xLabels[hoverIndex]}</span></div>
           </div>
         )}
       </div>
@@ -450,7 +449,7 @@ export const AdminPage: React.FC = () => {
             <Card className="rounded-2xl mb-4">
               <CardContent className="p-4 md:p-6">
                 <div className="flex items-baseline justify-between mb-3">
-                  <div className="text-sm opacity-60">Unique IPs (last 7 days)</div>
+                  <div className="text-sm opacity-60">Visitors (last 7 days)</div>
                   {!visitorsLoading && !visitorsError && visitorsSeries.length > 0 && (
                     <div className="text-sm opacity-70">Today: <span className="font-medium">{visitorsSeries[visitorsSeries.length - 1]?.uniqueVisitors ?? 0}</span></div>
                   )}
