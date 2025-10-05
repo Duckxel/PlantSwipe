@@ -194,27 +194,6 @@ export const AdminPage: React.FC = () => {
     }
   }
 
-  // Use server-side metric: unique IPs in last 60 minutes
-  React.useEffect(() => {
-    let cancelled = false
-    let timer: ReturnType<typeof setInterval> | null = null
-    const load = async () => {
-      try {
-        const token = (await supabase.auth.getSession()).data.session?.access_token
-        const headers: Record<string, string> = {}
-        if (token) headers['Authorization'] = `Bearer ${token}`
-        const resp = await fetch('/api/admin/visitors-stats', { headers })
-        const data = await resp.json().catch(() => ({}))
-        if (resp.ok && !cancelled) {
-          const val: number = Number.isFinite(Number(data?.uniqueIpsLast60m)) ? Number(data.uniqueIpsLast60m) : 0
-          setUniqueIpsLast60m(val)
-        }
-      } catch {}
-    }
-    load().catch(() => {})
-    timer = setInterval(() => { load().catch(() => {}) }, 20_000)
-    return () => { cancelled = true; if (timer) clearInterval(timer) }
-  }, [])
 
   // Fetch total registered accounts (admin API first to bypass RLS; fallback to client count)
   React.useEffect(() => {
@@ -238,6 +217,7 @@ export const AdminPage: React.FC = () => {
     return () => { cancelled = true }
   }, [])
 
+
   // Fetch unique IPs (last 7 days) for the chart
   React.useEffect(() => {
     let cancelled = false
@@ -254,10 +234,11 @@ export const AdminPage: React.FC = () => {
           throw new Error(data?.error || `Request failed (${resp.status})`)
         }
         const series: Array<{ date: string; uniqueVisitors: number }> = Array.isArray(data?.series7d) ? data.series7d : []
-        if (!cancelled) setVisitorsSeries(series)
-        // Update the online card metric as well (60m)
         const unique60: number = Number.isFinite(Number(data?.uniqueIpsLast60m)) ? Number(data.uniqueIpsLast60m) : 0
-        if (!cancelled) setUniqueIpsLast60m(unique60)
+        if (!cancelled) {
+          setVisitorsSeries(series)
+          setUniqueIpsLast60m(unique60)
+        }
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e)
         if (!cancelled) setVisitorsError(msg || 'Failed to load visitors stats')
