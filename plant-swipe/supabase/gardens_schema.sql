@@ -462,14 +462,17 @@ do $$ begin
   create policy gm_insert on public.garden_members for insert to authenticated
     with check (
       (
-        user_id = auth.uid()
-        and exists (
-          select 1 from public.gardens g
-          where g.id = garden_id and g.created_by = auth.uid()
+        (
+          user_id = auth.uid()
+          and exists (
+            select 1 from public.gardens g
+            where g.id = garden_id and g.created_by = auth.uid()
+          )
         )
+        or public.is_garden_owner_bypass(garden_id, auth.uid())
       )
-      or public.is_garden_owner_bypass(garden_id, auth.uid())
-    ) and user_id is not null;
+      and user_id is not null
+    );
 end $$;
 do $$ begin
   if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_members' and policyname = 'gm_delete') then
