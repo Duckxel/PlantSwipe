@@ -26,11 +26,11 @@ export const SearchPage: React.FC<SearchPageProps> = ({ plants, openInfo, likedI
           <div className="grid grid-cols-3 gap-0">
             <div className="col-span-1 h-36 rounded-l-2xl overflow-hidden bg-stone-100">
               {p.image ? (
-                <img
+              <img
                   src={p.image}
                   alt={p.name}
                   loading="lazy"
-                  className="h-full w-full object-cover"
+                  className="h-full w-full object-cover object-center"
                 />
               ) : null}
             </div>
