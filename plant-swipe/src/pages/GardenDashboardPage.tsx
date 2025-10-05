@@ -203,10 +203,14 @@ export const GardenDashboardPage: React.FC = () => {
       await syncTaskOccurrencesForGarden(id, startIso, endWindow.toISOString())
       const allTasks = await listGardenTasks(id)
       const occs = await listOccurrencesForTasks(allTasks.map(t => t.id), `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`)
-      // Annotate today's occurrences with task type for UI coloring
+      // Annotate today's occurrences with task type and emoji for UI rendering
       const taskTypeById: Record<string, 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'> = {}
-      for (const t of allTasks) taskTypeById[t.id] = t.type as any
-      const occsWithType = occs.map(o => ({ ...o, taskType: taskTypeById[o.taskId] || 'custom' }))
+      const taskEmojiById: Record<string, string | null> = {}
+      for (const t of allTasks) {
+        taskTypeById[t.id] = t.type as any
+        taskEmojiById[t.id] = (t as any).emoji || null
+      }
+      const occsWithType = occs.map(o => ({ ...o, taskType: taskTypeById[o.taskId] || 'custom', taskEmoji: taskEmojiById[o.taskId] || null }))
       setTodayTaskOccurrences(occsWithType as any)
       const taskCountMap: Record<string, number> = {}
       for (const t of allTasks) {
@@ -851,9 +855,12 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
                 {occs.map((o) => {
                   const tt = (o as any).taskType || 'custom'
                   const badgeClass = `${typeToColor[tt]} ${tt === 'harvest' ? 'text-black' : 'text-white'}`
+                  const customEmoji = (o as any).taskEmoji || null
+                  const icon = customEmoji || (tt === 'water' ? '💧' : tt === 'fertilize' ? '🍽️' : tt === 'harvest' ? '🌾' : tt === 'cut' ? '✂️' : '🪴')
                   return (
                     <div key={o.id} className="flex items-center justify-between gap-3 text-sm rounded-xl border p-2">
                       <div className="flex items-center gap-2">
+                        <span className={`h-6 w-6 flex items-center justify-center rounded-md border`}>{icon}</span>
                         <span className={`text-[10px] px-2 py-0.5 rounded-full ${badgeClass}`}>{String(tt).toUpperCase()}</span>
                         {/* Time removed per request */}
                       </div>

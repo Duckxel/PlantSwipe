@@ -598,11 +598,21 @@ export async function upsertOneTimeTask(params: { gardenId: string; gardenPlantI
 }
 
 export async function listPlantTasks(gardenPlantId: string): Promise<GardenPlantTask[]> {
-  const { data, error } = await supabase
-    .from('garden_plant_tasks')
-    .select('id, garden_id, garden_plant_id, type, custom_name, schedule_kind, due_at, interval_amount, interval_unit, required_count, period, amount, weekly_days, monthly_days, yearly_days, monthly_nth_weekdays, created_at')
+  const base = supabase.from('garden_plant_tasks')
+  const selectWithEmoji = 'id, garden_id, garden_plant_id, type, custom_name, emoji, schedule_kind, due_at, interval_amount, interval_unit, required_count, period, amount, weekly_days, monthly_days, yearly_days, monthly_nth_weekdays, created_at'
+  const selectWithoutEmoji = 'id, garden_id, garden_plant_id, type, custom_name, schedule_kind, due_at, interval_amount, interval_unit, required_count, period, amount, weekly_days, monthly_days, yearly_days, monthly_nth_weekdays, created_at'
+  let { data, error } = await base
+    .select(selectWithEmoji)
     .eq('garden_plant_id', gardenPlantId)
     .order('created_at', { ascending: true })
+  if (error && /column .*emoji.* does not exist/i.test(error.message)) {
+    const res2 = await base
+      .select(selectWithoutEmoji)
+      .eq('garden_plant_id', gardenPlantId)
+      .order('created_at', { ascending: true })
+    data = res2.data as any
+    error = res2.error as any
+  }
   if (error) throw new Error(error.message)
   return (data || []).map((r: any) => ({
     id: String(r.id),
@@ -610,6 +620,7 @@ export async function listPlantTasks(gardenPlantId: string): Promise<GardenPlant
     gardenPlantId: String(r.garden_plant_id),
     type: r.type,
     customName: r.custom_name || null,
+    emoji: (r as any).emoji || null,
     scheduleKind: r.schedule_kind,
     dueAt: r.due_at || null,
     intervalAmount: r.interval_amount ?? null,
@@ -660,11 +671,21 @@ export async function progressTaskOccurrence(occurrenceId: string, increment = 1
 }
 
 export async function listGardenTasks(gardenId: string): Promise<GardenPlantTask[]> {
-  const { data, error } = await supabase
-    .from('garden_plant_tasks')
-    .select('id, garden_id, garden_plant_id, type, custom_name, schedule_kind, due_at, interval_amount, interval_unit, required_count, period, amount, weekly_days, monthly_days, yearly_days, monthly_nth_weekdays, created_at')
+  const base = supabase.from('garden_plant_tasks')
+  const selectWithEmoji = 'id, garden_id, garden_plant_id, type, custom_name, emoji, schedule_kind, due_at, interval_amount, interval_unit, required_count, period, amount, weekly_days, monthly_days, yearly_days, monthly_nth_weekdays, created_at'
+  const selectWithoutEmoji = 'id, garden_id, garden_plant_id, type, custom_name, schedule_kind, due_at, interval_amount, interval_unit, required_count, period, amount, weekly_days, monthly_days, yearly_days, monthly_nth_weekdays, created_at'
+  let { data, error } = await base
+    .select(selectWithEmoji)
     .eq('garden_id', gardenId)
     .order('created_at', { ascending: true })
+  if (error && /column .*emoji.* does not exist/i.test(error.message)) {
+    const res2 = await base
+      .select(selectWithoutEmoji)
+      .eq('garden_id', gardenId)
+      .order('created_at', { ascending: true })
+    data = res2.data as any
+    error = res2.error as any
+  }
   if (error) throw new Error(error.message)
   return (data || []).map((r: any) => ({
     id: String(r.id),
@@ -672,6 +693,7 @@ export async function listGardenTasks(gardenId: string): Promise<GardenPlantTask
     gardenPlantId: String(r.garden_plant_id),
     type: r.type,
     customName: r.custom_name || null,
+    emoji: (r as any).emoji || null,
     scheduleKind: r.schedule_kind,
     dueAt: r.due_at || null,
     intervalAmount: r.interval_amount ?? null,
@@ -795,6 +817,7 @@ export async function createPatternTask(params: {
   gardenPlantId: string
   type: TaskType
   customName?: string | null
+  emoji?: string | null
   period: 'week' | 'month' | 'year'
   amount: number
   weeklyDays?: number[] | null
@@ -803,10 +826,9 @@ export async function createPatternTask(params: {
   monthlyNthWeekdays?: string[] | null
   requiredCount?: number | null
 }): Promise<string> {
-  const { gardenId, gardenPlantId, type, customName = null, period, amount, weeklyDays = null, monthlyDays = null, yearlyDays = null, monthlyNthWeekdays = null, requiredCount = 1 } = params
-  const { data, error } = await supabase
-    .from('garden_plant_tasks')
-    .insert({
+  const { gardenId, gardenPlantId, type, customName = null, emoji = null, period, amount, weeklyDays = null, monthlyDays = null, yearlyDays = null, monthlyNthWeekdays = null, requiredCount = 1 } = params
+  const attempt = async (includeEmoji: boolean) => {
+    const payload: any = {
       garden_id: gardenId,
       garden_plant_id: gardenPlantId,
       type,
@@ -819,9 +841,20 @@ export async function createPatternTask(params: {
       yearly_days: yearlyDays,
       monthly_nth_weekdays: monthlyNthWeekdays,
       required_count: requiredCount ?? 1,
-    })
-    .select('id')
-    .single()
+    }
+    if (includeEmoji && type === 'custom') payload.emoji = emoji || null
+    return await supabase
+      .from('garden_plant_tasks')
+      .insert(payload)
+      .select('id')
+      .single()
+  }
+  let { data, error } = await attempt(true)
+  if (error && /column .*emoji.* does not exist/i.test(error.message)) {
+    const res2 = await attempt(false)
+    data = res2.data as any
+    error = res2.error as any
+  }
   if (error) throw new Error(error.message)
   return String((data as any).id)
 }
@@ -830,6 +863,7 @@ export async function updatePatternTask(params: {
   taskId: string
   type?: TaskType
   customName?: string | null
+  emoji?: string | null
   period?: 'week' | 'month' | 'year'
   amount?: number | null
   weeklyDays?: number[] | null
@@ -838,10 +872,11 @@ export async function updatePatternTask(params: {
   monthlyNthWeekdays?: string[] | null
   requiredCount?: number | null
 }): Promise<void> {
-  const { taskId, type, customName, period, amount, weeklyDays, monthlyDays, yearlyDays, monthlyNthWeekdays, requiredCount } = params
+  const { taskId, type, customName, emoji, period, amount, weeklyDays, monthlyDays, yearlyDays, monthlyNthWeekdays, requiredCount } = params
   const payload: any = {}
   if (type) payload.type = type
   if (customName !== undefined) payload.custom_name = customName
+  if (emoji !== undefined) payload.emoji = emoji
   if (period) payload.period = period
   if (amount !== undefined && amount !== null) payload.amount = amount
   if (weeklyDays !== undefined) payload.weekly_days = weeklyDays
@@ -850,10 +885,19 @@ export async function updatePatternTask(params: {
   if (monthlyNthWeekdays !== undefined) payload.monthly_nth_weekdays = monthlyNthWeekdays
   if (requiredCount !== undefined && requiredCount !== null) payload.required_count = requiredCount
   payload.schedule_kind = 'repeat_pattern'
-  const { error } = await supabase
-    .from('garden_plant_tasks')
-    .update(payload)
-    .eq('id', taskId)
+  const attempt = async (includeEmoji: boolean) => {
+    const pl = { ...payload }
+    if (!includeEmoji) delete (pl as any).emoji
+    return await supabase
+      .from('garden_plant_tasks')
+      .update(pl)
+      .eq('id', taskId)
+  }
+  let { error } = await attempt(true)
+  if (error && /column .*emoji.* does not exist/i.test(error.message)) {
+    const res2 = await attempt(false)
+    error = res2.error as any
+  }
   if (error) throw new Error(error.message)
 }
 

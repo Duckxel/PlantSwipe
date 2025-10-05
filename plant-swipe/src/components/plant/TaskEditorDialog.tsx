@@ -94,7 +94,16 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId }
               {tasks.map(t => (
                 <div key={t.id} className="flex items-center justify-between px-3 py-2">
                   <div className="text-sm">
-                    <div className="font-medium capitalize">{t.type === 'custom' ? (t.customName || 'Custom') : t.type}</div>
+                    <div className="font-medium capitalize flex items-center gap-2">
+                      <span className="h-6 w-6 rounded-md border bg-stone-100 flex items-center justify-center text-base">
+                        {t.type === 'water' && '💧'}
+                        {t.type === 'fertilize' && '🍽️'}
+                        {t.type === 'harvest' && '🌾'}
+                        {t.type === 'cut' && '✂️'}
+                        {t.type === 'custom' && (t.emoji || '🪴')}
+                      </span>
+                      <span>{t.type === 'custom' ? (t.customName || 'Custom') : t.type}</span>
+                    </div>
                     <div className="text-xs opacity-60">{renderTaskSummary(t)}</div>
                   </div>
                   <TaskRowMenu
