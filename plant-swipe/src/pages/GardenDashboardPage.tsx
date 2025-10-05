@@ -294,7 +294,10 @@ export const GardenDashboardPage: React.FC = () => {
         d.setDate(d.getDate() - i)
         const ds = d.toISOString().slice(0,10)
         const entry = dayAgg[ds] || { due: 0, completed: 0 }
-        const success = entry.due > 0 ? (entry.completed >= entry.due) : true
+        // Do not count days before the garden was created as successful
+        const createdDayIso = (() => { try { return new Date((g as any).createdAt).toISOString().slice(0,10) } catch { return null } })()
+        const beforeCreation = createdDayIso ? (ds < createdDayIso) : false
+        const success = beforeCreation ? false : (entry.due > 0 ? (entry.completed >= entry.due) : true)
         days.push({ date: ds, due: entry.due, completed: entry.completed, success })
       }
       setDailyStats(days)
