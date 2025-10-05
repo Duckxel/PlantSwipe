@@ -81,7 +81,7 @@ export interface GardenTransaction {
 
 // ===== Tasks v2 (generic per-plant tasks) =====
 
-export type TaskType = 'water' | 'fertilize' | 'harvest' | 'custom'
+export type TaskType = 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'
 export type TaskScheduleKind = 'one_time_date' | 'one_time_duration' | 'repeat_duration' | 'repeat_pattern'
 export type TaskUnit = 'hour' | 'day' | 'week' | 'month' | 'year'
 
