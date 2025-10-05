@@ -273,15 +273,21 @@ export default function PlantSwipe() {
     const key = user?.id || anonId || `anon_${Math.random().toString(36).slice(2, 10)}`
     const channel = supabase.channel('global-presence', { config: { presence: { key } } })
 
-    channel.subscribe((status: unknown) => {
-      if (status === 'SUBSCRIBED') {
-        channel.track({
-          user_id: user?.id || null,
-          display_name: profile?.display_name || null,
-          online_at: new Date().toISOString(),
-        })
-      }
-    })
+    channel
+      .on('presence', { event: 'sync' }, () => {
+        // no-op: can be used for debugging presence state
+      })
+      .subscribe((status: unknown) => {
+        if (status === 'SUBSCRIBED') {
+          try {
+            channel.track({
+              user_id: user?.id || null,
+              display_name: profile?.display_name || null,
+              online_at: new Date().toISOString(),
+            })
+          } catch {}
+        }
+      })
 
     presenceRef.current = channel
     return () => {
