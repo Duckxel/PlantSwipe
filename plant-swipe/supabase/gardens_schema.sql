@@ -617,7 +617,7 @@ create table if not exists public.garden_plant_tasks (
   id uuid primary key default gen_random_uuid(),
   garden_id uuid not null references public.gardens(id) on delete cascade,
   garden_plant_id uuid not null references public.garden_plants(id) on delete cascade,
-  type text not null check (type in ('water','fertilize','harvest','custom')),
+  type text not null check (type in ('water','fertilize','harvest','cut','custom')),
   custom_name text,
   schedule_kind text not null check (schedule_kind in ('one_time_date','one_time_duration','repeat_duration','repeat_pattern')),
   due_at timestamptz,
