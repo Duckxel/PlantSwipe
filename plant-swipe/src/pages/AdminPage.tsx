@@ -194,23 +194,25 @@ export const AdminPage: React.FC = () => {
     }
   }
 
-  // Use server-side metric: unique IPs in last 30 minutes
+  // Use server-side metric: unique visitors in last 30 minutes
   React.useEffect(() => {
     let cancelled = false
-    ;(async () => {
+    let timer: ReturnType<typeof setInterval> | null = null
+    const load = async () => {
       try {
         const token = (await supabase.auth.getSession()).data.session?.access_token
-        if (token) {
-          const resp = await fetch('/api/admin/visitors-stats', { headers: { 'Authorization': `Bearer ${token}` } })
-          const data = await resp.json().catch(() => ({}))
-          if (resp.ok) {
-            const val: number = Number.isFinite(Number(data?.uniqueIpsLast30m)) ? Number(data.uniqueIpsLast30m) : 0
-            if (!cancelled) setUniqueIpsLast30m(val)
-          }
+        if (!token) return
+        const resp = await fetch('/api/admin/visitors-stats', { headers: { 'Authorization': `Bearer ${token}` } })
+        const data = await resp.json().catch(() => ({}))
+        if (resp.ok && !cancelled) {
+          const val: number = Number.isFinite(Number(data?.uniqueIpsLast30m)) ? Number(data.uniqueIpsLast30m) : 0
+          setUniqueIpsLast30m(val)
         }
       } catch {}
-    })()
-    return () => { cancelled = true }
+    }
+    load().catch(() => {})
+    timer = setInterval(() => { load().catch(() => {}) }, 20_000)
+    return () => { cancelled = true; if (timer) clearInterval(timer) }
   }, [])
 
   // Fetch total registered accounts (admin API first to bypass RLS; fallback to client count)

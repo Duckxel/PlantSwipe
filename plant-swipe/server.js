@@ -767,7 +767,7 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
         select generate_series((now()::date - 6), now()::date, interval '1 day')::date as d
       )
       select d as day,
-             coalesce((select count(distinct ip_address)
+             coalesce((select count(distinct coalesce(v.ip_address::text, v.session_id))
                        from public.web_visits v
                        where (v.occurred_at at time zone 'utc')::date = d), 0)::int as unique_visitors
       from days

@@ -229,6 +229,36 @@ export default function PlantSwipe() {
     return () => { unlisten() }
   }, [location.pathname, location.search, user?.id])
 
+  // Heartbeat: periodically record a lightweight visit so Admin "online" stays fresh
+  React.useEffect(() => {
+    const HEARTBEAT_MS = 60_000
+    let timer: ReturnType<typeof setInterval> | null = null
+    const sendHeartbeat = async () => {
+      try {
+        const session = (await supabase.auth.getSession()).data.session
+        const token = session?.access_token
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+        if (token) headers.Authorization = `Bearer ${token}`
+        await fetch('/api/track-visit', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            pagePath: location.pathname + location.search,
+            referrer: document.referrer || '',
+            userId: user?.id || null,
+            pageTitle: document.title || null,
+            language: navigator.language || (navigator as any).languages?.[0] || null,
+            utm: null,
+            extra: { source: 'heartbeat' },
+          }),
+          keepalive: true,
+        })
+      } catch {}
+    }
+    timer = setInterval(() => { sendHeartbeat().catch(() => {}) }, HEARTBEAT_MS)
+    return () => { if (timer) clearInterval(timer) }
+  }, [location.pathname, location.search, user?.id])
+
   React.useEffect(() => {
     // Stable anonymous id for non-authenticated visitors
     let anonId: string | null = null
