@@ -400,6 +400,47 @@ export async function getGardenTodayProgress(gardenId: string, dayIso: string): 
   return { due, completed }
 }
 
+export async function getGardensTodayProgressMap(gardenIds: string[], dayIso: string): Promise<Record<string, { due: number; completed: number }>> {
+  const result: Record<string, { due: number; completed: number }> = {}
+  if (gardenIds.length === 0) return result
+  // Fetch all garden plants for provided gardens in one request
+  const { data: gpRows, error: gpErr } = await supabase
+    .from('garden_plants')
+    .select('id, garden_id')
+    .in('garden_id', gardenIds)
+  if (gpErr) throw new Error(gpErr.message)
+  const gpIdToGardenId: Record<string, string> = {}
+  const gpIds: string[] = []
+  for (const r of gpRows || []) {
+    const gpId = String((r as any).id)
+    const gId = String((r as any).garden_id)
+    gpIdToGardenId[gpId] = gId
+    gpIds.push(gpId)
+    if (!result[gId]) result[gId] = { due: 0, completed: 0 }
+  }
+  if (gpIds.length === 0) return result
+  // Fetch today's schedule rows for all these garden plants
+  const { data: schedRows, error: schedErr } = await supabase
+    .from('garden_watering_schedule')
+    .select('garden_plant_id, completed_at')
+    .in('garden_plant_id', gpIds)
+    .eq('due_date', dayIso)
+  if (schedErr) throw new Error(schedErr.message)
+  for (const r of schedRows || []) {
+    const gpId = String((r as any).garden_plant_id)
+    const gId = gpIdToGardenId[gpId]
+    if (!gId) continue
+    result[gId] = result[gId] || { due: 0, completed: 0 }
+    result[gId].due += 1
+    if ((r as any).completed_at) result[gId].completed += 1
+  }
+  // Ensure all gardens in input exist in result
+  for (const gid of gardenIds) {
+    if (!result[gid]) result[gid] = { due: 0, completed: 0 }
+  }
+  return result
+}
+
 export async function getGardenInventory(gardenId: string): Promise<Array<{ plantId: string; seedsOnHand: number; plantsOnHand: number; plant?: Plant | null }>> {
   const { data, error } = await supabase
     .from('garden_inventory')

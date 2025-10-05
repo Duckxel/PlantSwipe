@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useAuth } from '@/context/AuthContext'
-import { getUserGardens, createGarden, fetchServerNowISO, getGardenTodayProgress } from '@/lib/gardens'
+import { getUserGardens, createGarden, fetchServerNowISO, getGardensTodayProgressMap } from '@/lib/gardens'
 import type { Garden } from '@/types/garden'
 import { useNavigate } from 'react-router-dom'
 
@@ -32,18 +32,7 @@ export const GardenListPage: React.FC = () => {
       // Fetch server 'today' and compute per-garden progress
       const nowIso = await fetchServerNowISO()
       const today = nowIso.slice(0,10)
-      const entries = await Promise.all(
-        data.map(async (g) => {
-          try {
-            const prog = await getGardenTodayProgress(g.id, today)
-            return [g.id, prog] as const
-          } catch {
-            return [g.id, { due: 0, completed: 0 }] as const
-          }
-        })
-      )
-      const map: Record<string, { due: number; completed: number }> = {}
-      for (const [gid, prog] of entries) map[gid] = prog
+      const map = await getGardensTodayProgressMap(data.map(g => g.id), today)
       setProgressByGarden(map)
     } catch (e: any) {
       setError(e?.message || 'Failed to load gardens')
@@ -108,7 +97,9 @@ export const GardenListPage: React.FC = () => {
                 })()
               )}
               <button onClick={() => navigate(`/garden/${g.id}`)} className="grid grid-cols-3 gap-0 w-full text-left">
-                <div className="col-span-1 h-36 bg-cover bg-center" style={{ backgroundImage: `url(${g.coverImageUrl || ''})` }} />
+                <div className="col-span-1 h-36">
+                  <img src={g.coverImageUrl || ''} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                </div>
                 <div className="col-span-2 p-4">
                   <div className="font-medium">{g.name}</div>
                   <div className="text-xs opacity-60">Created {new Date(g.createdAt).toLocaleDateString()}</div>

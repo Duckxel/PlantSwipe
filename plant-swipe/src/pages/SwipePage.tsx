@@ -39,7 +39,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, 
             >
               <Card className="h-full rounded-3xl overflow-hidden shadow-xl">
                 <div className="h-2/3 relative">
-                  <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${current.image})` }} />
+                  <img src={current.image} alt="" loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
                   <div className="absolute top-2 right-2 z-10">
                     <button

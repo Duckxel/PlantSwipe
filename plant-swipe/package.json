@@ -19,6 +19,7 @@
     "clsx": "^2.1.1",
     "dotenv": "^16.6.1",
     "express": "^4.19.2",
+    "compression": "^1.7.4",
     "framer-motion": "^12.23.12",
     "lucide-react": "^0.542.0",
     "postgres": "^3.4.7",

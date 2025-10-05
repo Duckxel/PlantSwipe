@@ -13,6 +13,7 @@ import { promisify } from 'util'
 import zlib from 'zlib'
 import crypto from 'crypto'
 import { pipeline as streamPipeline } from 'stream'
+import compression from 'compression'
 
 
 dotenv.config()
@@ -172,6 +173,8 @@ const app = express()
 // Trust proxy headers so req.secure and x-forwarded-proto reflect real scheme
 try { app.set('trust proxy', true) } catch {}
 app.use(express.json())
+// Enable gzip/br compression for API and HTML
+try { app.use(compression({ threshold: 1024 })) } catch {}
 
 // Global CORS and preflight handling for API routes
 app.use((req, res, next) => {
@@ -766,7 +769,22 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
 
 // Static assets
 const distDir = path.resolve(__dirname, 'dist')
-app.use(express.static(distDir))
+// Serve static with strong caching for hashed assets; softer for HTML
+app.use(express.static(distDir, {
+  setHeaders: (res, filePath) => {
+    try {
+      const fileName = path.basename(filePath)
+      const isHtml = fileName.endsWith('.html')
+      const isMap = fileName.endsWith('.map')
+      if (isHtml) {
+        res.setHeader('Cache-Control', 'no-cache')
+      } else if (!isMap) {
+        // Vite emits hashed filenames; cache them aggressively
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+      }
+    } catch {}
+  }
+}))
 app.get('*', (req, res) => {
   // Record initial page load visit for SPA routes
   try {

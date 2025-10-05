@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, Suspense, lazy } from "react";
 import { Routes, Route, NavLink, useLocation, useNavigate, Navigate } from "react-router-dom";
 import { useMotionValue } from "framer-motion";
 import { Search, Sparkles } from "lucide-react";
@@ -10,18 +10,20 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { TopBar } from "@/components/layout/TopBar";
 import { BottomBar } from "@/components/layout/BottomBar";
-import { SwipePage } from "@/pages/SwipePage";
-import { GardenListPage } from "@/pages/GardenListPage";
-import { GardenDashboardPage } from "@/pages/GardenDashboardPage";
-import { SearchPage } from "@/pages/SearchPage";
-import { CreatePlantPage } from "@/pages/CreatePlantPage";
-import { EditPlantPage } from "@/pages/EditPlantPage";
 import type { Plant } from "@/types/plant";
-import { PlantDetails } from "@/components/plant/PlantDetails";
 import { useAuth } from "@/context/AuthContext";
-import { ProfilePage } from "@/pages/ProfilePage";
-import { AdminPage } from "@/pages/AdminPage";
 import { supabase } from "@/lib/supabaseClient";
+
+// Lazy-loaded routes and heavy components for smaller initial bundle
+const SwipePage = lazy(() => import("@/pages/SwipePage").then(m => ({ default: m.SwipePage })));
+const GardenListPage = lazy(() => import("@/pages/GardenListPage").then(m => ({ default: m.GardenListPage })));
+const GardenDashboardPage = lazy(() => import("@/pages/GardenDashboardPage").then(m => ({ default: m.GardenDashboardPage })));
+const SearchPage = lazy(() => import("@/pages/SearchPage").then(m => ({ default: m.SearchPage })));
+const CreatePlantPage = lazy(() => import("@/pages/CreatePlantPage").then(m => ({ default: m.CreatePlantPage })));
+const EditPlantPage = lazy(() => import("@/pages/EditPlantPage").then(m => ({ default: m.EditPlantPage })));
+const ProfilePage = lazy(() => import("@/pages/ProfilePage").then(m => ({ default: m.ProfilePage })));
+const AdminPage = lazy(() => import("@/pages/AdminPage").then(m => ({ default: m.AdminPage })));
+const PlantDetails = lazy(() => import("@/components/plant/PlantDetails").then(m => ({ default: m.PlantDetails })));
 
 // --- Main Component ---
 export default function PlantSwipe() {
@@ -567,57 +569,59 @@ export default function PlantSwipe() {
                   No plants found. Insert rows into table "plants" (columns: id, name, scientific_name, colors[], seasons[], rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available) then refresh.
                 </div>
               )}
-              <Routes>
-                <Route
-                  path="/"
-                  element={plants.length > 0 ? (
-                    <SwipePage
-                      current={current}
-                      index={index}
-                      setIndex={setIndex}
-                      x={x}
-                      onDragEnd={onDragEnd}
-                      handleInfo={handleInfo}
-                      handlePass={handlePass}
-                      liked={current ? likedIds.includes(current.id) : false}
-                      onToggleLike={() => { if (current) toggleLiked(current.id) }}
+              <Suspense fallback={<div className="p-8 text-center text-sm opacity-60">Loading view…</div>}>
+                <Routes>
+                  <Route
+                    path="/"
+                    element={plants.length > 0 ? (
+                      <SwipePage
+                        current={current}
+                        index={index}
+                        setIndex={setIndex}
+                        x={x}
+                        onDragEnd={onDragEnd}
+                        handleInfo={handleInfo}
+                        handlePass={handlePass}
+                        liked={current ? likedIds.includes(current.id) : false}
+                        onToggleLike={() => { if (current) toggleLiked(current.id) }}
+                      />
+                    ) : (
+                      <></>
+                    )}
+                  />
+                  <Route path="/gardens" element={<GardenListPage />} />
+                  <Route path="/garden/:id/*" element={<GardenDashboardPage />} />
+                  <Route
+                    path="/search"
+                    element={
+                      <SearchPage
+                        plants={filtered}
+                        openInfo={(p) => setOpenInfo(p)}
+                        likedIds={likedIds}
+                      />
+                    }
+                  />
+                  <Route path="/profile" element={user ? <ProfilePage /> : <Navigate to="/" replace />} />
+                  <Route path="/admin" element={profile?.is_admin ? <AdminPage /> : <Navigate to="/" replace />} />
+                  <Route path="/create" element={user ? (
+                    <CreatePlantPage
+                      onCancel={() => navigate('/')} 
+                      onSaved={async () => { await loadPlants(); navigate('/search') }}
                     />
                   ) : (
-                    <></>
-                  )}
-                />
-                <Route path="/gardens" element={<GardenListPage />} />
-                <Route path="/garden/:id/*" element={<GardenDashboardPage />} />
-                <Route
-                  path="/search"
-                  element={
-                    <SearchPage
-                      plants={filtered}
-                      openInfo={(p) => setOpenInfo(p)}
-                      likedIds={likedIds}
+                    <Navigate to="/" replace />
+                  )} />
+                  <Route path="/plants/:id/edit" element={user ? (
+                    <EditPlantPage
+                      onCancel={() => navigate('/search')}
+                      onSaved={async () => { await loadPlants(); navigate('/search') }}
                     />
-                  }
-                />
-                <Route path="/profile" element={user ? <ProfilePage /> : <Navigate to="/" replace />} />
-                <Route path="/admin" element={profile?.is_admin ? <AdminPage /> : <Navigate to="/" replace />} />
-                <Route path="/create" element={user ? (
-                  <CreatePlantPage
-                    onCancel={() => navigate('/')}
-                    onSaved={async () => { await loadPlants(); navigate('/search') }}
-                  />
-                ) : (
-                  <Navigate to="/" replace />
-                )} />
-                <Route path="/plants/:id/edit" element={user ? (
-                  <EditPlantPage
-                    onCancel={() => navigate('/search')}
-                    onSaved={async () => { await loadPlants(); navigate('/search') }}
-                  />
-                ) : (
-                  <Navigate to="/" replace />
-                )} />
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
+                  ) : (
+                    <Navigate to="/" replace />
+                  )} />
+                  <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+              </Suspense>
             </>
           )}
         </main>
@@ -627,12 +631,14 @@ export default function PlantSwipe() {
       <Sheet open={!!openInfo} onOpenChange={(o: boolean) => !o && setOpenInfo(null)}>
         <SheetContent side="bottom" className="max-h-[90vh] overflow-y-auto rounded-t-3xl">
           {openInfo && (
-            <PlantDetails
-              plant={openInfo}
-              onClose={() => setOpenInfo(null)}
-              liked={likedIds.includes(openInfo.id)}
-              onToggleLike={() => toggleLiked(openInfo.id)}
-            />
+            <Suspense fallback={<div className="p-6 text-center text-sm opacity-60">Loading details…</div>}>
+              <PlantDetails
+                plant={openInfo}
+                onClose={() => setOpenInfo(null)}
+                liked={likedIds.includes(openInfo.id)}
+                onToggleLike={() => toggleLiked(openInfo.id)}
+              />
+            </Suspense>
           )}
         </SheetContent>
       </Sheet>

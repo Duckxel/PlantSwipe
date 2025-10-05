@@ -84,13 +84,16 @@ export const GardenDashboardPage: React.FC = () => {
     setLoading(true)
     setError(null)
     try {
-      const g = await getGarden(id)
+      // Fetch independent resources in parallel to cut load time
+      const [g, gps, ms, nowIso] = await Promise.all([
+        getGarden(id),
+        getGardenPlants(id),
+        getGardenMembers(id),
+        fetchServerNowISO(),
+      ])
       setGarden(g)
-      const gps = await getGardenPlants(id)
       setPlants(gps)
-      const ms = await getGardenMembers(id)
       setMembers(ms.map(m => ({ userId: m.userId, displayName: m.displayName ?? null, role: m.role })))
-      const nowIso = await fetchServerNowISO()
       const today = nowIso.slice(0,10)
       setServerToday(today)
       // Do not recompute today's task here to avoid overriding recent actions; rely on action-specific updates
@@ -202,7 +205,17 @@ export const GardenDashboardPage: React.FC = () => {
       endWindow.setDate(endWindow.getDate() + 30)
       await syncTaskOccurrencesForGarden(id, startIso, endWindow.toISOString())
       const allTasks = await listGardenTasks(id)
-      const occs = await listOccurrencesForTasks(allTasks.map(t => t.id), `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`)
+      const [occs, weekOccs] = await Promise.all([
+        listOccurrencesForTasks(allTasks.map(t => t.id), `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`),
+        (async () => {
+          if (weekDays.length === 7) {
+            const weekStart = `${weekDays[0]}T00:00:00.000Z`
+            const weekEnd = `${weekDays[6]}T23:59:59.999Z`
+            return await listOccurrencesForTasks(allTasks.map(t => t.id), weekStart, weekEnd)
+          }
+          return []
+        })()
+      ])
       // Annotate today's occurrences with task type and emoji for UI rendering
       const taskTypeById: Record<string, 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'> = {}
       const taskEmojiById: Record<string, string | null> = {}
@@ -226,9 +239,7 @@ export const GardenDashboardPage: React.FC = () => {
 
       // Build current-week counts from generic task occurrences (includes water, fertilize, harvest, custom)
       if (weekDaysIso.length === 7) {
-        const weekStart = `${weekDaysIso[0]}T00:00:00.000Z`
-        const weekEnd = `${weekDaysIso[6]}T23:59:59.999Z`
-        const weekOccs = await listOccurrencesForTasks(allTasks.map(t => t.id), weekStart, weekEnd)
+        const weekOccsLocal = weekOccs as any[]
         const typeCounts: { water: number[]; fertilize: number[]; harvest: number[]; cut: number[]; custom: number[] } = {
           water: Array(7).fill(0),
           fertilize: Array(7).fill(0),
@@ -238,7 +249,7 @@ export const GardenDashboardPage: React.FC = () => {
         }
         const tById: Record<string, 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'> = {}
         for (const t of allTasks) tById[t.id] = t.type as any
-        for (const o of weekOccs) {
+        for (const o of weekOccsLocal) {
           const dayIso = new Date(o.dueAt).toISOString().slice(0,10)
           const idx = weekDaysIso.indexOf(dayIso)
           if (idx >= 0) {
@@ -608,8 +619,10 @@ export const GardenDashboardPage: React.FC = () => {
                           } catch {}
                         }}
                       >
-                        <div className="grid grid-cols-3 gap-0">
-                          <div className="col-span-1 h-36 bg-cover bg-center" style={{ backgroundImage: `url(${gp.plant?.image || ''})` }} />
+                <div className="grid grid-cols-3 gap-0">
+                  <div className="col-span-1 h-36">
+                    <img src={gp.plant?.image || ''} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                  </div>
                           <div className="col-span-2 p-3">
                             <div className="font-medium">{gp.nickname || gp.plant?.name}</div>
                             {gp.nickname && <div className="text-xs opacity-60">{gp.plant?.name}</div>}

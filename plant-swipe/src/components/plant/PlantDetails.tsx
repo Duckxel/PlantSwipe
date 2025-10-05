@@ -36,7 +36,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
       </SheetHeader>
 
       <div className="rounded-2xl overflow-hidden shadow relative">
-        <div className="h-56 bg-cover bg-center select-none" style={{ backgroundImage: `url(${plant.image})`, userSelect: 'none' as any }} />
+        <img src={plant.image} alt="" loading="lazy" decoding="async" className="h-56 w-full object-cover select-none" />
         <div className="absolute bottom-3 right-3">
           <button
             onClick={() => onToggleLike && onToggleLike()}
