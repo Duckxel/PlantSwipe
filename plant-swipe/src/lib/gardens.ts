@@ -772,7 +772,14 @@ export async function syncTaskOccurrencesForGarden(gardenId: string, startIso: s
             if (monthlyNthWeekdays.includes(key)) match = true
           }
         } else if (period === 'year') {
-          match = yearlyDays.includes(ymd)
+          // Backward compatibility: support legacy MM-DD dates and new MM-weekIndex-weekday keys
+          if (yearlyDays.includes(ymd)) {
+            match = true
+          } else if (yearlyDays.length > 0) {
+            const weekIndex = Math.floor((d - 1) / 7) + 1 // 1..4
+            const key = `${mm}-${weekIndex}-${weekday}`
+            if (yearlyDays.includes(key)) match = true
+          }
         }
         if (match) {
           await ensureTaskOccurrence(t.id, t.gardenPlantId, cur.toISOString(), t.requiredCount)
