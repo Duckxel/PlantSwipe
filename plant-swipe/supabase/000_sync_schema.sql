@@ -405,7 +405,8 @@ drop policy if exists "__gm_temp_all" on public.garden_members;
 drop policy if exists gm_select on public.garden_members;
 create policy gm_select on public.garden_members for select to authenticated
   using (
-    user_id = (select auth.uid())
+    -- Any member of the garden can read all memberships for that garden
+    public.is_garden_member_bypass(garden_id, (select auth.uid()))
     or public.is_garden_creator_bypass(garden_id, (select auth.uid()))
   );
 
