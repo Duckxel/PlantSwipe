@@ -201,8 +201,9 @@ export const AdminPage: React.FC = () => {
     const load = async () => {
       try {
         const token = (await supabase.auth.getSession()).data.session?.access_token
-        if (!token) return
-        const resp = await fetch('/api/admin/visitors-stats', { headers: { 'Authorization': `Bearer ${token}` } })
+        const headers: Record<string, string> = {}
+        if (token) headers['Authorization'] = `Bearer ${token}`
+        const resp = await fetch('/api/admin/visitors-stats', { headers })
         const data = await resp.json().catch(() => ({}))
         if (resp.ok && !cancelled) {
           const val: number = Number.isFinite(Number(data?.uniqueIpsLast60m)) ? Number(data.uniqueIpsLast60m) : 0
@@ -245,10 +246,9 @@ export const AdminPage: React.FC = () => {
       setVisitorsError(null)
       try {
         const token = (await supabase.auth.getSession()).data.session?.access_token
-        if (!token) {
-          throw new Error('Not authenticated')
-        }
-        const resp = await fetch('/api/admin/visitors-stats', { headers: { 'Authorization': `Bearer ${token}` } })
+        const headers: Record<string, string> = {}
+        if (token) headers['Authorization'] = `Bearer ${token}`
+        const resp = await fetch('/api/admin/visitors-stats', { headers })
         const data = await resp.json().catch(() => ({}))
         if (!resp.ok) {
           throw new Error(data?.error || `Request failed (${resp.status})`)
