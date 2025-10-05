@@ -457,8 +457,10 @@ do $$ begin
   if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_members' and policyname = 'gm_select') then
     drop policy gm_select on public.garden_members;
   end if;
+  -- Allow any member of a garden to read all its members.
+  -- Uses security-definer helper to avoid RLS self-recursion.
   create policy gm_select on public.garden_members for select to authenticated
-    using (user_id = auth.uid());
+    using (public.is_garden_member_bypass(garden_id, auth.uid()));
 end $$;
 do $$ begin
   if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'garden_members' and policyname = 'gm_insert') then
