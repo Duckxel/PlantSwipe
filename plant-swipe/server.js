@@ -771,12 +771,12 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
     return
   }
   try {
-    // Unique IPs in recent windows
+    // Unique IPs in recent windows (treat inet canonically; avoid tz casts)
     const [rows10m, rows30m, rows60mUnique, rows60mRaw] = await Promise.all([
-      sql`select count(distinct v.ip_address::text)::int as c from public.web_visits v where v.ip_address is not null and (v.occurred_at at time zone 'utc') >= (now() at time zone 'utc') - interval '10 minutes'`,
-      sql`select count(distinct v.ip_address::text)::int as c from public.web_visits v where v.ip_address is not null and (v.occurred_at at time zone 'utc') >= (now() at time zone 'utc') - interval '30 minutes'`,
-      sql`select count(distinct v.ip_address::text)::int as c from public.web_visits v where v.ip_address is not null and (v.occurred_at at time zone 'utc') >= (now() at time zone 'utc') - interval '60 minutes'`,
-      sql`select count(*)::int as c from public.web_visits where (occurred_at at time zone 'utc') >= (now() at time zone 'utc') - interval '60 minutes'`,
+      sql`select count(distinct v.ip_address)::int as c from public.web_visits v where v.ip_address is not null and v.occurred_at >= now() - interval '10 minutes'`,
+      sql`select count(distinct v.ip_address)::int as c from public.web_visits v where v.ip_address is not null and v.occurred_at >= now() - interval '30 minutes'`,
+      sql`select count(distinct v.ip_address)::int as c from public.web_visits v where v.ip_address is not null and v.occurred_at >= now() - interval '60 minutes'`,
+      sql`select count(*)::int as c from public.web_visits where occurred_at >= now() - interval '60 minutes'`,
     ])
     const currentUniqueVisitors10m = rows10m?.[0]?.c ?? 0
     const uniqueIpsLast30m = rows30m?.[0]?.c ?? 0
@@ -786,12 +786,12 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
     // Unique IPs by day (UTC) for last 7 days
     const rows7 = await sql`
       with days as (
-        select generate_series(((now() at time zone 'utc')::date - 6), (now() at time zone 'utc')::date, interval '1 day')::date as d
+        select generate_series((now()::date - 6), now()::date, interval '1 day')::date as d
       )
       select d as day,
-             coalesce((select count(distinct v.ip_address::text)
+             coalesce((select count(distinct v.ip_address)
                        from public.web_visits v
-                       where (v.occurred_at at time zone 'utc')::date = d
+                       where v.occurred_at::date = d
                          and v.ip_address is not null), 0)::int as unique_visitors
       from days
       order by d asc
