@@ -98,7 +98,7 @@ export const AdminPage: React.FC = () => {
     }
   }
 
-  const [uniqueIpsLast30m, setUniqueIpsLast30m] = React.useState<number>(0)
+  const [uniqueIpsLast60m, setUniqueIpsLast60m] = React.useState<number>(0)
   const [registeredCount, setRegisteredCount] = React.useState<number | null>(null)
   // Visitors (last 7 days)
   const [visitorsSeries, setVisitorsSeries] = React.useState<Array<{ date: string; uniqueVisitors: number }>>([])
@@ -194,7 +194,7 @@ export const AdminPage: React.FC = () => {
     }
   }
 
-  // Use server-side metric: unique visitors in last 30 minutes
+  // Use server-side metric: unique IPs in last 60 minutes
   React.useEffect(() => {
     let cancelled = false
     let timer: ReturnType<typeof setInterval> | null = null
@@ -205,8 +205,8 @@ export const AdminPage: React.FC = () => {
         const resp = await fetch('/api/admin/visitors-stats', { headers: { 'Authorization': `Bearer ${token}` } })
         const data = await resp.json().catch(() => ({}))
         if (resp.ok && !cancelled) {
-          const val: number = Number.isFinite(Number(data?.uniqueIpsLast30m)) ? Number(data.uniqueIpsLast30m) : 0
-          setUniqueIpsLast30m(val)
+          const val: number = Number.isFinite(Number(data?.uniqueIpsLast60m)) ? Number(data.uniqueIpsLast60m) : 0
+          setUniqueIpsLast60m(val)
         }
       } catch {}
     }
@@ -237,7 +237,7 @@ export const AdminPage: React.FC = () => {
     return () => { cancelled = true }
   }, [])
 
-  // Fetch unique visitors (last 7 days) for the chart
+  // Fetch unique IPs (last 7 days) for the chart
   React.useEffect(() => {
     let cancelled = false
     ;(async () => {
@@ -255,9 +255,9 @@ export const AdminPage: React.FC = () => {
         }
         const series: Array<{ date: string; uniqueVisitors: number }> = Array.isArray(data?.series7d) ? data.series7d : []
         if (!cancelled) setVisitorsSeries(series)
-        // Update the online card metric as well
-        const unique30: number = Number.isFinite(Number(data?.uniqueIpsLast30m)) ? Number(data.uniqueIpsLast30m) : 0
-        if (!cancelled) setUniqueIpsLast30m(unique30)
+        // Update the online card metric as well (60m)
+        const unique60: number = Number.isFinite(Number(data?.uniqueIpsLast60m)) ? Number(data.uniqueIpsLast60m) : 0
+        if (!cancelled) setUniqueIpsLast60m(unique60)
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e)
         if (!cancelled) setVisitorsError(msg || 'Failed to load visitors stats')
@@ -338,7 +338,7 @@ export const AdminPage: React.FC = () => {
 
     return (
       <div ref={containerRef} className="relative">
-        <svg viewBox={`0 0 ${w} ${h}`} role="img" aria-label="Unique visitors last 7 days" className="w-full h-[240px]">
+        <svg viewBox={`0 0 ${w} ${h}`} role="img" aria-label="Unique IPs last 7 days" className="w-full h-[240px]">
           <defs>
             <linearGradient id="visitorsGradient" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="hsl(var(--chart-1))" stopOpacity="0.20" />
@@ -394,7 +394,7 @@ export const AdminPage: React.FC = () => {
             className="pointer-events-none absolute -translate-x-1/2 -translate-y-[115%] rounded-xl bg-white/95 shadow-lg ring-1 ring-black/5 px-2 py-1 text-xs"
             style={{ left: `${((points[hoverIndex].x) / w) * 100}%`, top: `${((points[hoverIndex].y) / h) * 100}%` }}
           >
-            <div className="font-medium">{values[hoverIndex]} visitors</div>
+              <div className="font-medium">{values[hoverIndex]} unique IPs</div>
             <div className="opacity-60">{xLabels[hoverIndex]}</div>
           </div>
         )}
@@ -436,8 +436,8 @@ export const AdminPage: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
               <Card className="rounded-2xl">
                 <CardContent className="p-4">
-                  <div className="text-sm opacity-60">Currently online</div>
-                  <div className="text-2xl font-semibold">{uniqueIpsLast30m}</div>
+                  <div className="text-sm opacity-60">Currently online (last 60m)</div>
+                  <div className="text-2xl font-semibold">{uniqueIpsLast60m}</div>
                 </CardContent>
               </Card>
               <Card className="rounded-2xl">
@@ -450,7 +450,7 @@ export const AdminPage: React.FC = () => {
             <Card className="rounded-2xl mb-4">
               <CardContent className="p-4 md:p-6">
                 <div className="flex items-baseline justify-between mb-3">
-                  <div className="text-sm opacity-60">Unique visitors (last 7 days)</div>
+                  <div className="text-sm opacity-60">Unique IPs (last 7 days)</div>
                   {!visitorsLoading && !visitorsError && visitorsSeries.length > 0 && (
                     <div className="text-sm opacity-70">Today: <span className="font-medium">{visitorsSeries[visitorsSeries.length - 1]?.uniqueVisitors ?? 0}</span></div>
                   )}
