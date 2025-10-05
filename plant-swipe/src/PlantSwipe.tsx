@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { Routes, Route, NavLink, useLocation, useNavigate, Navigate } from "react-router-dom";
 import { useMotionValue } from "framer-motion";
 import { Search, Sparkles } from "lucide-react";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+// Sheet no longer used for plant info
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -17,7 +17,8 @@ import { SearchPage } from "@/pages/SearchPage";
 import { CreatePlantPage } from "@/pages/CreatePlantPage";
 import { EditPlantPage } from "@/pages/EditPlantPage";
 import type { Plant } from "@/types/plant";
-import { PlantDetails } from "@/components/plant/PlantDetails";
+// PlantDetails imported in PlantInfoPage route component
+import PlantInfoPage from "@/pages/PlantInfoPage";
 import { useAuth } from "@/context/AuthContext";
 import { ProfilePage } from "@/pages/ProfilePage";
 import { AdminPage } from "@/pages/AdminPage";
@@ -34,7 +35,6 @@ export default function PlantSwipe() {
   const [favoritesFirst, setFavoritesFirst] = useState(false)
 
   const [index, setIndex] = useState(0)
-  const [openInfo, setOpenInfo] = useState<Plant | null>(null)
   const [likedIds, setLikedIds] = useState<string[]>([])
 
   const location = useLocation()
@@ -343,7 +343,7 @@ export default function PlantSwipe() {
   }
 
   const handleInfo = () => {
-    if (current) setOpenInfo(current)
+    if (current) navigate(`/plants/${current.id}`)
   }
 
   // Swipe logic
@@ -623,7 +623,7 @@ export default function PlantSwipe() {
                   element={
                     <SearchPage
                       plants={filtered}
-                      openInfo={(p) => setOpenInfo(p)}
+                      openInfo={(p) => navigate(`/plants/${p.id}`)}
                       likedIds={likedIds}
                     />
                   }
@@ -646,6 +646,7 @@ export default function PlantSwipe() {
                 ) : (
                   <Navigate to="/" replace />
                 )} />
+                <Route path="/plants/:id" element={<PlantInfoPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </>
@@ -653,19 +654,6 @@ export default function PlantSwipe() {
         </main>
       </div>
 
-      {/* Info Sheet */}
-      <Sheet open={!!openInfo} onOpenChange={(o: boolean) => !o && setOpenInfo(null)}>
-        <SheetContent side="bottom" className="max-h-[90vh] overflow-y-auto rounded-t-3xl">
-          {openInfo && (
-            <PlantDetails
-              plant={openInfo}
-              onClose={() => setOpenInfo(null)}
-              liked={likedIds.includes(openInfo.id)}
-              onToggleLike={() => toggleLiked(openInfo.id)}
-            />
-          )}
-        </SheetContent>
-      </Sheet>
 
       {/* Auth Dialog (Login / Sign up) */}
       <Dialog open={authOpen && !user} onOpenChange={setAuthOpen}>
