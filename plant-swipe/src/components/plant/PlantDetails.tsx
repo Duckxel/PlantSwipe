@@ -30,23 +30,24 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
     : null
   return (
     <motion.div className="space-y-4 select-none" drag="y" style={{ y }} dragConstraints={{ top: 0, bottom: 0 }} onDragEnd={onDragEnd}>
-      <SheetHeader>
-        <SheetTitle className="text-xl">{plant.name}</SheetTitle>
-        <SheetDescription className="italic">{plant.scientificName}</SheetDescription>
-      </SheetHeader>
-
-      <div className="rounded-2xl overflow-hidden shadow relative">
-        <div className="h-56 bg-cover bg-center select-none rounded-2xl" style={{ backgroundImage: `url(${plant.image})`, userSelect: 'none' as any }} />
-        <div className="absolute bottom-3 right-3">
-          <button
-            onClick={() => onToggleLike && onToggleLike()}
-            aria-pressed={liked}
-            aria-label={liked ? 'Unlike' : 'Like'}
-            className={`h-8 w-8 rounded-full flex items-center justify-center shadow border transition ${liked ? 'bg-rose-600 text-white' : 'bg-white/90 text-black hover:bg-white'}`}
-          >
-            <Heart className={liked ? 'fill-current' : ''} />
-          </button>
+      <div className="grid md:grid-cols-2 gap-4 items-center">
+        <div className="rounded-2xl overflow-hidden shadow relative">
+          <div className="h-44 md:h-60 bg-cover bg-center select-none rounded-2xl" style={{ backgroundImage: `url(${plant.image})`, userSelect: 'none' as any }} />
+          <div className="absolute bottom-3 right-3">
+            <button
+              onClick={() => onToggleLike && onToggleLike()}
+              aria-pressed={liked}
+              aria-label={liked ? 'Unlike' : 'Like'}
+              className={`h-8 w-8 rounded-full flex items-center justify-center shadow border transition ${liked ? 'bg-rose-600 text-white' : 'bg-white/90 text-black hover:bg-white'}`}
+            >
+              <Heart className={liked ? 'fill-current' : ''} />
+            </button>
+          </div>
         </div>
+        <SheetHeader className="text-left">
+          <SheetTitle className="text-3xl md:text-4xl font-bold leading-tight">{plant.name}</SheetTitle>
+          <SheetDescription className="italic text-base md:text-lg opacity-80">{plant.scientificName}</SheetDescription>
+        </SheetHeader>
       </div>
 
       <div className="grid md:grid-cols-3 gap-3">
@@ -57,9 +58,9 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
 
       <Card className="rounded-2xl">
         <CardHeader>
-          <CardTitle className="text-base">Overview</CardTitle>
+          <CardTitle className="text-lg md:text-xl">Overview</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3 text-sm">
+        <CardContent className="space-y-3 text-[15px] md:text-base leading-relaxed">
           <p>{plant.description}</p>
           <div className="flex flex-wrap gap-2">
             <Badge className={`${rarityTone[plant.rarity]} rounded-xl`}>{plant.rarity}</Badge>
@@ -75,16 +76,16 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
 
       <Card className="rounded-2xl">
         <CardHeader>
-          <CardTitle className="text-base">Meaning</CardTitle>
+          <CardTitle className="text-lg md:text-xl">Meaning</CardTitle>
         </CardHeader>
-        <CardContent className="text-sm">{plant.meaning}</CardContent>
+        <CardContent className="text-[15px] md:text-base leading-relaxed">{plant.meaning}</CardContent>
       </Card>
 
       <Card className="rounded-2xl">
         <CardHeader>
-          <CardTitle className="text-base">Care Guide</CardTitle>
+          <CardTitle className="text-lg md:text-xl">Care Guide</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2 text-sm">
+        <CardContent className="space-y-2 text-[15px] md:text-base leading-relaxed">
           <div><span className="font-medium">Sunlight:</span> {plant.care.sunlight}</div>
             <div><span className="font-medium">Water:</span> {derivedWater}</div>
             {freqLabel && (
