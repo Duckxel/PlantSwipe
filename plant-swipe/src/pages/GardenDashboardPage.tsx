@@ -624,8 +624,8 @@ export const GardenDashboardPage: React.FC = () => {
                             <Info className="h-4 w-4" />
                           </button>
                         </div>
-                        <div className="grid grid-cols-3 gap-0">
-                          <div className="col-span-1 h-36 rounded-l-2xl overflow-hidden bg-stone-100">
+                        <div className="grid grid-cols-3 items-stretch gap-0">
+                          <div className="col-span-1 h-full min-h-[148px] rounded-l-2xl overflow-hidden bg-stone-100">
                             {gp.plant?.image ? (
                               <img
                                 src={gp.plant.image}
