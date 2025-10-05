@@ -25,7 +25,6 @@ export function TaskCreateDialog({
   const [customName, setCustomName] = React.useState('')
   const [period, setPeriod] = React.useState<Period>('week')
   const [amount, setAmount] = React.useState<number>(1)
-  const [requiredCount, setRequiredCount] = React.useState<number>(1)
 
   // Inline schedule selection state
   const [weeklyDays, setWeeklyDays] = React.useState<number[]>([])
@@ -42,7 +41,6 @@ export function TaskCreateDialog({
       setCustomName('')
       setPeriod('week')
       setAmount(1)
-      setRequiredCount(1)
       setWeeklyDays([])
       setMonthlyNthWeekdays([])
       setYearlyDays([])
@@ -87,7 +85,6 @@ export function TaskCreateDialog({
         monthlyDays: period === 'month' ? [] : null,
         yearlyDays: period === 'year' ? [...yearlyDays].sort() : null,
         monthlyNthWeekdays: period === 'month' ? [...monthlyNthWeekdays].sort() : null,
-        requiredCount,
       })
       if (onCreated) await onCreated()
       onOpenChange(false)
@@ -151,16 +148,7 @@ export function TaskCreateDialog({
             </div>
           )}
 
-          <div className="grid gap-2">
-            <label className="text-sm font-medium">Required count</label>
-            <Input
-              type="number"
-              min={1}
-              value={String(requiredCount)}
-              onChange={(e: any) => setRequiredCount(Math.max(1, Number(e.target.value || '1')))}
-            />
-            <div className="text-xs opacity-60">Progress and completion use this count.</div>
-          </div>
+          
 
           <div className="text-sm opacity-60">
             {period === 'week' && 'Pick days Monday–Sunday'}
