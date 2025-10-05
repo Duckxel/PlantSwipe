@@ -539,6 +539,21 @@ export const GardenDashboardPage: React.FC = () => {
     }
   }
 
+  const completeAllTodayForPlant = async (gardenPlantId: string) => {
+    try {
+      const occs = todayTaskOccurrences.filter(o => o.gardenPlantId === gardenPlantId)
+      const ops: Promise<any>[] = []
+      for (const o of occs) {
+        const remaining = Math.max(0, (Number(o.requiredCount || 1)) - Number(o.completedCount || 0))
+        if (remaining > 0) ops.push(progressTaskOccurrence(o.id, remaining))
+      }
+      if (ops.length > 0) await Promise.all(ops)
+      await load()
+    } catch (e) {
+      // swallow; global error display exists
+    }
+  }
+
   // invite by email only (implemented in submitInvite)
 
   return (
@@ -596,7 +611,12 @@ export const GardenDashboardPage: React.FC = () => {
                             {gp.nickname && <div className="text-xs opacity-60">{gp.plant?.name}</div>}
                             <div className="text-xs opacity-60">On hand: {Number(gp.plantsOnHand ?? 0)}</div>
                         <div className="text-xs opacity-60">Tasks: {taskCountsByPlant[gp.id] || 0}</div>
-                        <div className="text-xs opacity-60">Due today: {taskOccDueToday[gp.id] || 0}</div>
+                        <div className="flex items-center justify-between">
+                          <div className="text-xs opacity-60">Due today: {taskOccDueToday[gp.id] || 0}</div>
+                          {(taskOccDueToday[gp.id] || 0) > 0 && (
+                            <Button size="sm" className="rounded-xl" onClick={() => completeAllTodayForPlant(gp.id)}>Complete all</Button>
+                          )}
+                        </div>
                             <div className="mt-2 flex gap-2 flex-wrap">
                               <Button variant="secondary" className="rounded-2xl" onClick={() => { setPendingGardenPlantId(gp.id); setTaskOpen(true) }}>Tasks</Button>
                               <EditPlantButton gp={gp} gardenId={id!} onChanged={load} serverToday={serverToday} />
@@ -835,7 +855,7 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
                     <div key={o.id} className="flex items-center justify-between gap-3 text-sm rounded-xl border p-2">
                       <div className="flex items-center gap-2">
                         <span className={`text-[10px] px-2 py-0.5 rounded-full ${badgeClass}`}>{String(tt).toUpperCase()}</span>
-                        <div className="opacity-80">{new Date(o.dueAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                        {/* Time removed per request */}
                       </div>
                       <div className="opacity-80">{o.completedCount} / {o.requiredCount}</div>
                       <Button className="rounded-xl" size="sm" onClick={() => onProgressOccurrence(o.id, 1)} disabled={(o.completedCount || 0) >= (o.requiredCount || 1)}>Complete +1</Button>
