@@ -625,7 +625,16 @@ export const GardenDashboardPage: React.FC = () => {
                           </button>
                         </div>
                         <div className="grid grid-cols-3 gap-0">
-                          <div className="col-span-1 h-36 bg-cover bg-center rounded-l-2xl" style={{ backgroundImage: `url(${gp.plant?.image || ''})` }} />
+                          <div className="col-span-1 h-36 rounded-l-2xl overflow-hidden bg-stone-100">
+                            {gp.plant?.image ? (
+                              <img
+                                src={gp.plant.image}
+                                alt={gp.nickname || gp.plant?.name || 'Plant'}
+                                className="h-full w-full object-cover object-center select-none"
+                                draggable={false}
+                              />
+                            ) : null}
+                          </div>
                           <div className="col-span-2 p-3">
                             <div className="font-medium">{gp.nickname || gp.plant?.name}</div>
                             {gp.nickname && <div className="text-xs opacity-60">{gp.plant?.name}</div>}
