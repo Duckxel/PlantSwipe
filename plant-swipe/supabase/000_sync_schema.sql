@@ -361,57 +361,76 @@ do $$ begin
   end if;
 end $$;
 
--- Garden members policies (recreated idempotently)
-do $$ begin
-  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_members' and policyname='gm_select') then
-    drop policy gm_select on public.garden_members;
-  end if;
-  create policy gm_select on public.garden_members for select to authenticated
-    using (user_id = (select auth.uid()));
+-- Garden members policies: hard reset to prevent recursion
+-- 1) Break any recursion while we clean up
+alter table public.garden_members disable row level security;
+
+-- 2) Drop ALL existing policies on garden_members (idempotent regardless of names)
+do $$
+declare r record;
+begin
+  for r in
+    select policyname from pg_policies
+    where schemaname = 'public' and tablename = 'garden_members'
+  loop
+    execute format('drop policy %I on public.garden_members', r.policyname);
+  end loop;
 end $$;
-do $$ begin
-  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_members' and policyname='gm_insert') then
-    drop policy gm_insert on public.garden_members;
-  end if;
-  -- Avoid self-recursion: reference only gardens; allow garden creator to insert
-  create policy gm_insert on public.garden_members for insert to authenticated
-    with check (
-      exists (
-        select 1 from public.gardens g
-        where g.id = garden_id and g.created_by = (select auth.uid())
-      )
-    );
-end $$;
-do $$ begin
-  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_members' and policyname='gm_delete') then
-    drop policy gm_delete on public.garden_members;
-  end if;
-  -- Allow self-removal or garden creator to remove (no gm references)
-  create policy gm_delete on public.garden_members for delete to authenticated
-    using (
-      user_id = (select auth.uid())
-      or exists (
-        select 1 from public.gardens g where g.id = garden_id and g.created_by = (select auth.uid())
-      )
-    );
-end $$;
-do $$ begin
-  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_members' and policyname='gm_update') then
-    drop policy gm_update on public.garden_members;
-  end if;
-  -- Only garden creator can update membership rows
-  create policy gm_update on public.garden_members for update to authenticated
-    using (
-      exists (
-        select 1 from public.gardens g where g.id = garden_id and g.created_by = (select auth.uid())
-      )
+
+-- 3) Drop legacy helper functions that old policies might reference (safe if absent)
+drop function if exists public.is_garden_member(uuid) cascade;
+drop function if exists public.is_member(uuid) cascade;
+drop function if exists public.is_garden_owner(uuid) cascade;
+drop function if exists public.is_owner(uuid) cascade;
+
+-- 4) Temporarily open policy so subsequent statements cannot recurse
+drop policy if exists "__gm_temp_all" on public.garden_members;
+create policy "__gm_temp_all" on public.garden_members for all to authenticated
+  using (true) with check (true);
+
+-- 5) Re-enable RLS
+alter table public.garden_members enable row level security;
+
+-- 6) Replace with final, non-recursive policies
+drop policy if exists "__gm_temp_all" on public.garden_members;
+
+drop policy if exists gm_select on public.garden_members;
+create policy gm_select on public.garden_members for select to authenticated
+  using (user_id = (select auth.uid()));
+
+drop policy if exists gm_insert on public.garden_members;
+create policy gm_insert on public.garden_members for insert to authenticated
+  with check (
+    exists (
+      select 1 from public.gardens g
+      where g.id = garden_id and g.created_by = (select auth.uid())
     )
-    with check (
-      exists (
-        select 1 from public.gardens g where g.id = garden_id and g.created_by = (select auth.uid())
-      )
-    );
-end $$;
+  );
+
+drop policy if exists gm_update on public.garden_members;
+create policy gm_update on public.garden_members for update to authenticated
+  using (
+    exists (
+      select 1 from public.gardens g
+      where g.id = garden_id and g.created_by = (select auth.uid())
+    )
+  )
+  with check (
+    exists (
+      select 1 from public.gardens g
+      where g.id = garden_id and g.created_by = (select auth.uid())
+    )
+  );
+
+drop policy if exists gm_delete on public.garden_members;
+create policy gm_delete on public.garden_members for delete to authenticated
+  using (
+    user_id = (select auth.uid())
+    or exists (
+      select 1 from public.gardens g
+      where g.id = garden_id and g.created_by = (select auth.uid())
+    )
+  );
 
 -- Garden tasks policies
 do $$ begin
