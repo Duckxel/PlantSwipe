@@ -280,7 +280,7 @@ export const AdminPage: React.FC = () => {
     const maxVal: number = Math.max(5, ...values)
     const w = 800
     const h = 240
-    const m = { top: 14, right: 12, bottom: 36, left: 40 }
+    const m = { top: 16, right: 40, bottom: 40, left: 40 }
     const iw = w - m.left - m.right
     const ih = h - m.top - m.bottom
     const stepX: number = n > 1 ? (iw / (n - 1)) : 0
@@ -337,8 +337,14 @@ export const AdminPage: React.FC = () => {
     const todayIdx: number = data.length - 1
 
     return (
-      <div ref={containerRef} className="relative">
-        <svg viewBox={`0 0 ${w} ${h}`} role="img" aria-label="Visitors last 7 days" className="w-full h-[240px]">
+      <div ref={containerRef} className="relative px-3 sm:px-4 md:px-6">
+        <svg
+          viewBox={`0 0 ${w} ${h}`}
+          role="img"
+          aria-label="Visitors last 7 days"
+          preserveAspectRatio="xMidYMid meet"
+          className="w-full h-[240px]"
+        >
           <defs>
             <linearGradient id="visitorsGradient" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="hsl(var(--chart-1))" stopOpacity="0.20" />
@@ -384,7 +390,16 @@ export const AdminPage: React.FC = () => {
 
           {/* X axis labels */}
           {xLabels.map((label: string, i: number) => (
-            <text key={i} x={xAt(i)} y={h - 8} textAnchor="middle" fontSize={12} fill="hsl(var(--muted-foreground))">{label}</text>
+            <text
+              key={i}
+              x={xAt(i)}
+              y={h - 8}
+              textAnchor={i === 0 ? 'start' : (i === xLabels.length - 1 ? 'end' : 'middle')}
+              fontSize={12}
+              fill="hsl(var(--muted-foreground))"
+            >
+              {label}
+            </text>
           ))}
         </svg>
 
