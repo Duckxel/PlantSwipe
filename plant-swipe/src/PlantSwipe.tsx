@@ -2,8 +2,9 @@ import React, { useMemo, useState } from "react";
 import { Routes, Route, NavLink, useLocation, useNavigate, Navigate } from "react-router-dom";
 import { useMotionValue } from "framer-motion";
 import { Search, Sparkles } from "lucide-react";
-// Sheet no longer used for plant info
+// Sheet is used for plant info overlay
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -38,6 +39,8 @@ export default function PlantSwipe() {
   const [likedIds, setLikedIds] = useState<string[]>([])
 
   const location = useLocation()
+  const state = location.state as { backgroundLocation?: any } | null
+  const backgroundLocation = state?.backgroundLocation
   const navigate = useNavigate()
   const currentView: "discovery" | "gardens" | "search" | "profile" | "create" =
     location.pathname === "/" ? "discovery" :
@@ -343,7 +346,7 @@ export default function PlantSwipe() {
   }
 
   const handleInfo = () => {
-    if (current) navigate(`/plants/${current.id}`)
+    if (current) navigate(`/plants/${current.id}`, { state: { backgroundLocation: location } })
   }
 
   // Swipe logic
@@ -597,7 +600,8 @@ export default function PlantSwipe() {
                   No plants found. Insert rows into table "plants" (columns: id, name, scientific_name, colors[], seasons[], rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available) then refresh.
                 </div>
               )}
-              <Routes>
+              {/* Use background location for primary routes so overlays render on top */}
+              <Routes location={(backgroundLocation as any) || location}>
                 <Route
                   path="/"
                   element={plants.length > 0 ? (
@@ -623,7 +627,7 @@ export default function PlantSwipe() {
                   element={
                     <SearchPage
                       plants={filtered}
-                      openInfo={(p) => navigate(`/plants/${p.id}`)}
+                      openInfo={(p) => navigate(`/plants/${p.id}`, { state: { backgroundLocation: location } })}
                       likedIds={likedIds}
                     />
                   }
@@ -649,6 +653,15 @@ export default function PlantSwipe() {
                 <Route path="/plants/:id" element={<PlantInfoPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
+              {/* When a background location is set, also render the overlay route on top */}
+              {backgroundLocation && (
+                <Routes>
+                  <Route
+                    path="/plants/:id"
+                    element={<PlantInfoOverlay />}
+                  />
+                </Routes>
+              )}
             </>
           )}
         </main>
@@ -703,6 +716,19 @@ export default function PlantSwipe() {
 
       <BottomBar />
     </div>
+  )
+}
+
+function PlantInfoOverlay() {
+  const navigate = useNavigate()
+  return (
+    <Sheet open onOpenChange={(o) => { if (!o) navigate(-1) }}>
+      <SheetContent side="bottom" className="rounded-t-2xl max-h-[85vh] overflow-y-auto p-4">
+        <div className="max-w-3xl mx-auto">
+          <PlantInfoPage />
+        </div>
+      </SheetContent>
+    </Sheet>
   )
 }
 
