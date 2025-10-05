@@ -25,7 +25,7 @@ export const GardenDashboardPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const location = useLocation()
-  const { user } = useAuth()
+  const { user, profile, refreshProfile } = useAuth()
   const [garden, setGarden] = React.useState<Garden | null>(null)
   const [tab, setTab] = React.useState<TabKey>('overview')
   // derive tab from URL path segment after /garden/:id
@@ -72,6 +72,14 @@ export const GardenDashboardPage: React.FC = () => {
   const [dragIdx, setDragIdx] = React.useState<number | null>(null)
 
   const [infoPlant, setInfoPlant] = React.useState<Plant | null>(null)
+  // Favorites (liked plants)
+  const [likedIds, setLikedIds] = React.useState<string[]>([])
+  React.useEffect(() => {
+    const arr = Array.isArray((profile as any)?.liked_plant_ids)
+      ? ((profile as any).liked_plant_ids as any[]).map(String)
+      : []
+    setLikedIds(arr)
+  }, [profile?.liked_plant_ids])
 
   const [inviteOpen, setInviteOpen] = React.useState(false)
   const [inviteEmail, setInviteEmail] = React.useState('')
@@ -563,6 +571,31 @@ export const GardenDashboardPage: React.FC = () => {
     }
   }
 
+  // Toggle like for a plant and sync to profile
+  const toggleLiked = async (plantId: string) => {
+    if (!user?.id) return
+    setLikedIds((prev) => {
+      const has = prev.includes(plantId)
+      const next = has ? prev.filter((id) => id !== plantId) : [...prev, plantId]
+      ;(async () => {
+        try {
+          const { error } = await supabase
+            .from('profiles')
+            .update({ liked_plant_ids: next })
+            .eq('id', user.id)
+          if (error) {
+            setLikedIds(prev)
+          } else {
+            refreshProfile().catch(() => {})
+          }
+        } catch {
+          setLikedIds(prev)
+        }
+      })()
+      return next
+    })
+  }
+
   // invite by email only (implemented in submitInvite)
 
   return (
@@ -800,6 +833,8 @@ export const GardenDashboardPage: React.FC = () => {
                 <PlantDetails
                   plant={infoPlant}
                   onClose={() => setInfoPlant(null)}
+                  liked={likedIds.includes(infoPlant.id)}
+                  onToggleLike={() => toggleLiked(infoPlant.id)}
                 />
               )}
             </SheetContent>
