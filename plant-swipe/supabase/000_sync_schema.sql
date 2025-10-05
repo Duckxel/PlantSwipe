@@ -328,6 +328,20 @@ as $$
   );
 $$;
 
+-- Check if a user is the creator (owner in gardens.created_by) of a garden.
+-- SECURITY DEFINER ensures the query bypasses RLS on public.gardens and avoids policy recursion.
+create or replace function public.is_garden_creator_bypass(_garden_id uuid, _user_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.gardens
+    where id = _garden_id and created_by = _user_id
+  );
+$$;
+
 -- Gardens policies
 do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='gardens' and policyname='gardens_select') then
@@ -336,10 +350,7 @@ do $$ begin
   create policy gardens_select on public.gardens for select
     using (
       created_by = (select auth.uid())
-      or exists (
-        select 1 from public.garden_members gm
-        where gm.garden_id = id and gm.user_id = (select auth.uid())
-      )
+      or public.is_garden_member_bypass(id, (select auth.uid()))
     );
 end $$;
 do $$ begin
@@ -389,40 +400,31 @@ drop policy if exists "__gm_temp_all" on public.garden_members;
 
 drop policy if exists gm_select on public.garden_members;
 create policy gm_select on public.garden_members for select to authenticated
-  using (user_id = (select auth.uid()));
+  using (
+    user_id = (select auth.uid())
+    or public.is_garden_creator_bypass(garden_id, (select auth.uid()))
+  );
 
 drop policy if exists gm_insert on public.garden_members;
 create policy gm_insert on public.garden_members for insert to authenticated
   with check (
-    exists (
-      select 1 from public.gardens g
-      where g.id = garden_id and g.created_by = (select auth.uid())
-    )
+    public.is_garden_creator_bypass(garden_id, (select auth.uid()))
   );
 
 drop policy if exists gm_update on public.garden_members;
 create policy gm_update on public.garden_members for update to authenticated
   using (
-    exists (
-      select 1 from public.gardens g
-      where g.id = garden_id and g.created_by = (select auth.uid())
-    )
+    public.is_garden_creator_bypass(garden_id, (select auth.uid()))
   )
   with check (
-    exists (
-      select 1 from public.gardens g
-      where g.id = garden_id and g.created_by = (select auth.uid())
-    )
+    public.is_garden_creator_bypass(garden_id, (select auth.uid()))
   );
 
 drop policy if exists gm_delete on public.garden_members;
 create policy gm_delete on public.garden_members for delete to authenticated
   using (
     user_id = (select auth.uid())
-    or exists (
-      select 1 from public.gardens g
-      where g.id = garden_id and g.created_by = (select auth.uid())
-    )
+    or public.is_garden_creator_bypass(garden_id, (select auth.uid()))
   );
 
 -- Garden tasks policies
