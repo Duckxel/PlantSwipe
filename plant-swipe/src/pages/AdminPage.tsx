@@ -103,8 +103,28 @@ export const AdminPage: React.FC = () => {
   // Visitors (last 7 days)
   const [visitorsSeries, setVisitorsSeries] = React.useState<Array<{ date: string; uniqueVisitors: number }>>([])
   const [visitorsLoading, setVisitorsLoading] = React.useState<boolean>(true)
+  const [visitorsRefreshing, setVisitorsRefreshing] = React.useState<boolean>(false)
   const [visitorsError, setVisitorsError] = React.useState<string | null>(null)
+  const [visitorsUpdatedAt, setVisitorsUpdatedAt] = React.useState<number | null>(null)
+  // Tick every minute to update the "Updated X ago" label without refetching
+  const [nowMs, setNowMs] = React.useState<number>(() => Date.now())
+  React.useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 60_000)
+    return () => clearInterval(id)
+  }, [])
   // No subtitle needed below the card
+
+  const formatTimeAgo = (ts: number): string => {
+    const diff = Math.max(0, nowMs - ts)
+    const s = Math.floor(diff / 1000)
+    if (s < 45) return 'just now'
+    const m = Math.floor(s / 60)
+    if (m < 60) return `${m}m ago`
+    const h = Math.floor(m / 60)
+    if (h < 24) return `${h}h ago`
+    const d = Math.floor(h / 24)
+    return `${d}d ago`
+  }
 
   const pullLatest = async () => {
     if (pulling) return
@@ -218,36 +238,40 @@ export const AdminPage: React.FC = () => {
   }, [])
 
 
-  // Fetch unique IPs (last 7 days) for the chart
-  React.useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      setVisitorsLoading(true)
-      setVisitorsError(null)
-      try {
-        const token = (await supabase.auth.getSession()).data.session?.access_token
-        const headers: Record<string, string> = {}
-        if (token) headers['Authorization'] = `Bearer ${token}`
-        const resp = await fetch('/api/admin/visitors-stats', { headers })
-        const data = await resp.json().catch(() => ({}))
-        if (!resp.ok) {
-          throw new Error(data?.error || `Request failed (${resp.status})`)
-        }
-        const series: Array<{ date: string; uniqueVisitors: number }> = Array.isArray(data?.series7d) ? data.series7d : []
-        const unique60: number = Number.isFinite(Number(data?.uniqueIpsLast60m)) ? Number(data.uniqueIpsLast60m) : 0
-        if (!cancelled) {
-          setVisitorsSeries(series)
-          setUniqueIpsLast60m(unique60)
-        }
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : String(e)
-        if (!cancelled) setVisitorsError(msg || 'Failed to load visitors stats')
-      } finally {
-        if (!cancelled) setVisitorsLoading(false)
+  // Shared loader for visitors stats (used on initial load and manual refresh)
+  const loadVisitorsStats = React.useCallback(async (opts?: { initial?: boolean }) => {
+    const isInitial = !!opts?.initial
+    if (isInitial) setVisitorsLoading(true)
+    else setVisitorsRefreshing(true)
+    setVisitorsError((cur) => (isInitial ? null : cur))
+    try {
+      const token = (await supabase.auth.getSession()).data.session?.access_token
+      const headers: Record<string, string> = {}
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      const resp = await fetch('/api/admin/visitors-stats', { headers })
+      const data = await resp.json().catch(() => ({}))
+      if (!resp.ok) {
+        throw new Error(data?.error || `Request failed (${resp.status})`)
       }
-    })()
-    return () => { cancelled = true }
+      const series: Array<{ date: string; uniqueVisitors: number }> = Array.isArray(data?.series7d) ? data.series7d : []
+      const unique60: number = Number.isFinite(Number(data?.uniqueIpsLast60m)) ? Number(data.uniqueIpsLast60m) : 0
+      setVisitorsSeries(series)
+      setUniqueIpsLast60m(unique60)
+      setVisitorsUpdatedAt(Date.now())
+      setVisitorsError(null)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setVisitorsError(msg || 'Failed to load visitors stats')
+    } finally {
+      if (isInitial) setVisitorsLoading(false)
+      else setVisitorsRefreshing(false)
+    }
   }, [])
+
+  // Initial load (page load only)
+  React.useEffect(() => {
+    loadVisitorsStats({ initial: true })
+  }, [loadVisitorsStats])
 
   // Inline chart (SVG) using Tailwind chart palette via CSS variables
   type VisitorsDatum = { date: string; uniqueVisitors: number }
@@ -431,8 +455,25 @@ export const AdminPage: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
               <Card className="rounded-2xl">
                 <CardContent className="p-4">
-                  <div className="text-sm opacity-60">Currently online (last 60m)</div>
-                  <div className="text-2xl font-semibold">{uniqueIpsLast60m}</div>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-sm opacity-60">Currently online</div>
+                      <div className="text-xs opacity-60">{visitorsUpdatedAt ? `Updated ${formatTimeAgo(visitorsUpdatedAt)}` : 'Updated —'}</div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Refresh currently online"
+                      onClick={() => loadVisitorsStats({ initial: false })}
+                      disabled={visitorsLoading || visitorsRefreshing}
+                      className="h-8 w-8"
+                    >
+                      <RefreshCw className={`h-4 w-4 ${visitorsLoading || visitorsRefreshing ? 'animate-spin' : ''}`} />
+                    </Button>
+                  </div>
+                  <div className="text-2xl font-semibold tabular-nums mt-1">
+                    {visitorsLoading ? '—' : uniqueIpsLast60m}
+                  </div>
                 </CardContent>
               </Card>
               <Card className="rounded-2xl">
