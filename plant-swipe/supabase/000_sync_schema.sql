@@ -361,11 +361,8 @@ do $$ begin
   end if;
 end $$;
 
--- Garden members policies: hard reset to prevent recursion
--- 1) Break any recursion while we clean up
 alter table public.garden_members disable row level security;
 
--- 2) Drop ALL existing policies on garden_members (idempotent regardless of names)
 do $$
 declare r record;
 begin
@@ -377,21 +374,17 @@ begin
   end loop;
 end $$;
 
--- 3) Drop legacy helper functions that old policies might reference (safe if absent)
 drop function if exists public.is_garden_member(uuid) cascade;
 drop function if exists public.is_member(uuid) cascade;
 drop function if exists public.is_garden_owner(uuid) cascade;
 drop function if exists public.is_owner(uuid) cascade;
 
--- 4) Temporarily open policy so subsequent statements cannot recurse
 drop policy if exists "__gm_temp_all" on public.garden_members;
 create policy "__gm_temp_all" on public.garden_members for all to authenticated
   using (true) with check (true);
 
--- 5) Re-enable RLS
 alter table public.garden_members enable row level security;
 
--- 6) Replace with final, non-recursive policies
 drop policy if exists "__gm_temp_all" on public.garden_members;
 
 drop policy if exists gm_select on public.garden_members;
