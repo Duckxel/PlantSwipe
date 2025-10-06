@@ -13,6 +13,7 @@ import { promisify } from 'util'
 import zlib from 'zlib'
 import crypto from 'crypto'
 import { pipeline as streamPipeline } from 'stream'
+import net from 'net'
 
 
 dotenv.config()
@@ -322,10 +323,11 @@ function normalizeIp(ip) {
     }
     // Handle IPv6-mapped IPv4 addresses like ::ffff:127.0.0.1
     const v4mapped = out.match(/::ffff:(\d{1,3}(?:\.\d{1,3}){3})/i)
-    if (v4mapped) return v4mapped[1]
-    return out.toLowerCase()
+    if (v4mapped) out = v4mapped[1]
+    const lower = out.toLowerCase()
+    return net.isIP(lower) ? lower : ''
   } catch {
-    return typeof ip === 'string' ? ip : ''
+    return ''
   }
 }
 
@@ -850,13 +852,13 @@ app.get('/api/admin/online-users', async (req, res) => {
     return
   }
   try {
-    const rows = await sql`
-      select count(distinct v.ip_address)::int as c
-      from public.web_visits v
-      where v.ip_address is not null
-        and v.occurred_at >= now() - interval '60 minutes'
-    `
-    const onlineUsers = rows?.[0]?.c ?? 0
+    const [ipRows, sessionRows] = await Promise.all([
+      sql`select count(distinct v.ip_address)::int as c from public.web_visits v where v.ip_address is not null and v.occurred_at >= now() - interval '60 minutes'`,
+      sql`select count(distinct v.session_id)::int as c from public.web_visits v where v.occurred_at >= now() - interval '60 minutes'`,
+    ])
+    const ipCount = ipRows?.[0]?.c ?? 0
+    const sessionCount = sessionRows?.[0]?.c ?? 0
+    const onlineUsers = ipCount > 0 ? ipCount : sessionCount
     res.json({ onlineUsers })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to load online users' })
