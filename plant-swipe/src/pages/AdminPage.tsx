@@ -181,13 +181,41 @@ export const AdminPage: React.FC = () => {
     }
   }, [safeJson])
 
+  const probeDbWithFallback = React.useCallback(async (): Promise<ProbeResult> => {
+    const started = Date.now()
+    try {
+      // First try server DB health
+      const r = await fetch('/api/health/db', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+      const t = Date.now() - started
+      let body: any = {}
+      try { body = await r.json() } catch {}
+      if (r.ok && body?.ok === true) {
+        return { ok: true, latencyMs: Number.isFinite(body?.latencyMs) ? body.latencyMs : t, updatedAt: Date.now() }
+      }
+      // Fallback to client Supabase reachability
+      const t2Start = Date.now()
+      const { error } = await supabase.from('plants').select('id', { head: true, count: 'exact' }).limit(1)
+      const t2 = Date.now() - t2Start
+      if (!error) return { ok: true, latencyMs: t2, updatedAt: Date.now() }
+      return { ok: false, latencyMs: null, updatedAt: Date.now() }
+    } catch {
+      try {
+        // As a last resort, try an auth no-op which hits Supabase API
+        await supabase.auth.getSession()
+        return { ok: true, latencyMs: Date.now() - started, updatedAt: Date.now() }
+      } catch {
+        return { ok: false, latencyMs: null, updatedAt: Date.now() }
+      }
+    }
+  }, [])
+
   React.useEffect(() => {
     let cancelled = false
     const run = async () => {
       const [apiRes, adminRes, dbRes] = await Promise.all([
         probeEndpoint('/api/health', (b) => b?.ok === true),
         probeEndpoint('/api/admin/stats', (b) => b?.ok === true && typeof b?.profilesCount === 'number'),
-        probeEndpoint('/api/health/db', (b) => b?.ok === true),
+        probeDbWithFallback(),
       ])
       if (!cancelled) {
         setApiProbe(apiRes)
@@ -199,7 +227,7 @@ export const AdminPage: React.FC = () => {
     run()
     const id = setInterval(run, 1000)
     return () => { cancelled = true; clearInterval(id) }
-  }, [probeEndpoint])
+  }, [probeEndpoint, probeDbWithFallback])
 
   const StatusDot: React.FC<{ ok: boolean | null }> = ({ ok }) => (
     <span
