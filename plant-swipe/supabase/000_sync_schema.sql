@@ -1117,6 +1117,17 @@ do $$ begin
     using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
 end $$;
 
+-- Allow inserts into web_visits so server/API can log visits even with RLS enabled
+-- This addresses cases where server connects as a non-superuser role and inserts were being blocked silently
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='web_visits' and policyname='web_visits_insert_all') then
+    drop policy web_visits_insert_all on public.web_visits;
+  end if;
+  -- Permit insert for all roles (PUBLIC); the app only writes via server/API
+  create policy web_visits_insert_all on public.web_visits for insert to public
+    with check (true);
+end $$;
+
 -- ========== Cleanup of unused objects ==========
 -- The app does not use these legacy functions; drop if present to declutter.
 -- Safe: functions only (no data rows dropped)
