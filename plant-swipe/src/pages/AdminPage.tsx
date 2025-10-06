@@ -12,7 +12,7 @@ import {
   Tooltip,
   ReferenceLine,
 } from 'recharts'
-import { RefreshCw, Server, Database, Github, ExternalLink } from "lucide-react"
+import { RefreshCw, Server, Database, Github, ExternalLink, ShieldCheck } from "lucide-react"
 import { supabase } from '@/lib/supabaseClient'
 
 export const AdminPage: React.FC = () => {
@@ -159,6 +159,53 @@ export const AdminPage: React.FC = () => {
     const d = Math.floor(h / 24)
     return `${d}d ago`
   }
+
+  // --- Health monitor: ping API, Admin, DB every second ---
+  type ProbeResult = { ok: boolean | null; latencyMs: number | null; updatedAt: number | null }
+  const [apiProbe, setApiProbe] = React.useState<ProbeResult>({ ok: null, latencyMs: null, updatedAt: null })
+  const [adminProbe, setAdminProbe] = React.useState<ProbeResult>({ ok: null, latencyMs: null, updatedAt: null })
+  const [dbProbe, setDbProbe] = React.useState<ProbeResult>({ ok: null, latencyMs: null, updatedAt: null })
+
+  const probeEndpoint = React.useCallback(async (url: string, okCheck?: (body: any) => boolean): Promise<ProbeResult> => {
+    const started = Date.now()
+    try {
+      const resp = await fetch(url, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+      const body = await safeJson(resp)
+      const ok = (typeof okCheck === 'function') ? okCheck(body) && resp.ok : (resp.ok && body?.ok === true)
+      return { ok, latencyMs: Date.now() - started, updatedAt: Date.now() }
+    } catch {
+      return { ok: false, latencyMs: Date.now() - started, updatedAt: Date.now() }
+    }
+  }, [safeJson])
+
+  React.useEffect(() => {
+    let cancelled = false
+    const run = async () => {
+      const [apiRes, adminRes, dbRes] = await Promise.all([
+        probeEndpoint('/api/health', (b) => b?.ok === true),
+        probeEndpoint('/api/admin/stats', (b) => b?.ok === true && typeof b?.profilesCount === 'number'),
+        probeEndpoint('/api/health/db', (b) => b?.ok === true),
+      ])
+      if (!cancelled) {
+        setApiProbe(apiRes)
+        setAdminProbe(adminRes)
+        setDbProbe(dbRes)
+      }
+    }
+    // initial
+    run()
+    const id = setInterval(run, 1000)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [probeEndpoint])
+
+  const StatusDot: React.FC<{ ok: boolean | null }> = ({ ok }) => (
+    <span
+      className={
+        `inline-block h-3 w-3 rounded-full ${ok === null ? 'bg-zinc-400' : ok ? 'bg-emerald-500' : 'bg-rose-500'}`
+      }
+      aria-label={ok === null ? 'unknown' : ok ? 'ok' : 'error'}
+    />
+  )
 
   // Fallback to Supabase Realtime presence if API is unavailable
   const getPresenceCountOnce = React.useCallback(async (): Promise<number | null> => {
@@ -388,6 +435,56 @@ export const AdminPage: React.FC = () => {
             <div className="text-2xl font-semibold tracking-tight">Admin Controls</div>
             <div className="text-sm opacity-60 mt-1">Admin actions: monitor and manage infrastructure.</div>
           </div>
+
+          {/* Health monitor */}
+          <Card className="rounded-2xl">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium">Health monitor</div>
+                  <div className="text-xs opacity-60">Pinging every second</div>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
+                <div className="flex items-center justify-between rounded-xl border p-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Server className="h-4 w-4 opacity-70" />
+                    <div className="text-sm truncate">API</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-xs tabular-nums opacity-60">
+                      {apiProbe.latencyMs !== null ? `${apiProbe.latencyMs} ms` : '—'}
+                    </div>
+                    <StatusDot ok={apiProbe.ok} />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between rounded-xl border p-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <ShieldCheck className="h-4 w-4 opacity-70" />
+                    <div className="text-sm truncate">Admin API</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-xs tabular-nums opacity-60">
+                      {adminProbe.latencyMs !== null ? `${adminProbe.latencyMs} ms` : '—'}
+                    </div>
+                    <StatusDot ok={adminProbe.ok} />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between rounded-xl border p-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Database className="h-4 w-4 opacity-70" />
+                    <div className="text-sm truncate">Database</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-xs tabular-nums opacity-60">
+                      {dbProbe.latencyMs !== null ? `${dbProbe.latencyMs} ms` : '—'}
+                    </div>
+                    <StatusDot ok={dbProbe.ok} />
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <Button className="rounded-2xl w-full" onClick={restartServer} disabled={restarting}>
