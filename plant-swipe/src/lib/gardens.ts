@@ -69,6 +69,19 @@ export async function getGarden(gardenId: string): Promise<Garden | null> {
   }
 }
 
+export async function refreshGardenStreak(gardenId: string, anchorDayIso?: string | null): Promise<void> {
+  // Anchor defaults to yesterday in UTC if not provided
+  let anchor = anchorDayIso
+  if (!anchor) {
+    const now = new Date()
+    const y = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+    y.setUTCDate(y.getUTCDate() - 1)
+    anchor = y.toISOString().slice(0, 10)
+  }
+  const { error } = await supabase.rpc('update_garden_streak', { _garden_id: gardenId, _anchor_day: anchor })
+  if (error) throw new Error(error.message)
+}
+
 export async function getGardenPlants(gardenId: string): Promise<Array<GardenPlant & { plant?: Plant | null; sortIndex?: number | null }>> {
   const { data, error } = await supabase
     .from('garden_plants')
