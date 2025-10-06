@@ -120,14 +120,11 @@ export const AdminPage: React.FC = () => {
     }
   }
 
-  const [uniqueIpsLast60m, setUniqueIpsLast60m] = React.useState<number>(0)
+  const [onlineUsers, setOnlineUsers] = React.useState<number>(0)
   const [registeredCount, setRegisteredCount] = React.useState<number | null>(null)
-  // Visitors (last 7 days)
-  const [visitorsSeries, setVisitorsSeries] = React.useState<Array<{ date: string; uniqueVisitors: number }>>([])
-  const [visitorsLoading, setVisitorsLoading] = React.useState<boolean>(true)
-  const [visitorsRefreshing, setVisitorsRefreshing] = React.useState<boolean>(false)
-  const [visitorsError, setVisitorsError] = React.useState<string | null>(null)
-  const [visitorsUpdatedAt, setVisitorsUpdatedAt] = React.useState<number | null>(null)
+  const [onlineLoading, setOnlineLoading] = React.useState<boolean>(true)
+  const [onlineRefreshing, setOnlineRefreshing] = React.useState<boolean>(false)
+  const [onlineUpdatedAt, setOnlineUpdatedAt] = React.useState<number | null>(null)
   // Tick every minute to update the "Updated X ago" label without refetching
   const [nowMs, setNowMs] = React.useState<number>(() => Date.now())
   React.useEffect(() => {
@@ -266,187 +263,36 @@ export const AdminPage: React.FC = () => {
 
 
   // Shared loader for visitors stats (used on initial load and manual refresh)
-  const loadVisitorsStats = React.useCallback(async (opts?: { initial?: boolean }) => {
+  const loadOnlineUsers = React.useCallback(async (opts?: { initial?: boolean }) => {
     const isInitial = !!opts?.initial
-    if (isInitial) setVisitorsLoading(true)
-    else setVisitorsRefreshing(true)
-    setVisitorsError((cur) => (isInitial ? null : cur))
+    if (isInitial) setOnlineLoading(true)
+    else setOnlineRefreshing(true)
     try {
-      const token = (await supabase.auth.getSession()).data.session?.access_token
-      const headers: Record<string, string> = { 'Accept': 'application/json' }
-      if (token) headers['Authorization'] = `Bearer ${token}`
-      const resp = await fetch('/api/admin/visitors-stats', { headers, credentials: 'same-origin' })
+      const resp = await fetch('/api/admin/online-users', {
+        headers: { 'Accept': 'application/json' },
+        credentials: 'same-origin',
+      })
       const data = await safeJson(resp)
       if (!resp.ok) {
         throw new Error(data?.error || `Request failed (${resp.status})`)
       }
-      const series: Array<{ date: string; uniqueVisitors: number }> = Array.isArray(data?.series7d) ? data.series7d : []
-      const unique60: number = Number.isFinite(Number(data?.uniqueIpsLast60m)) ? Number(data.uniqueIpsLast60m) : 0
-      setVisitorsSeries(series)
-      setUniqueIpsLast60m(unique60)
-      setVisitorsUpdatedAt(Date.now())
-      setVisitorsError(null)
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e)
-      setVisitorsError(msg || 'Failed to load visitors stats')
+      const num = Number(data?.onlineUsers)
+      setOnlineUsers(Number.isFinite(num) ? num : 0)
+      setOnlineUpdatedAt(Date.now())
+    } catch {
+      // Keep last known value on error
     } finally {
-      if (isInitial) setVisitorsLoading(false)
-      else setVisitorsRefreshing(false)
+      if (isInitial) setOnlineLoading(false)
+      else setOnlineRefreshing(false)
     }
   }, [])
 
   // Initial load (page load only)
   React.useEffect(() => {
-    loadVisitorsStats({ initial: true })
-  }, [loadVisitorsStats])
+    loadOnlineUsers({ initial: true })
+  }, [loadOnlineUsers])
 
-  // Inline chart (SVG) using Tailwind chart palette via CSS variables
-  type VisitorsDatum = { date: string; uniqueVisitors: number }
-  type VisitorsPoint = { x: number; y: number }
-  function VisitorsLineChart(props: { data: VisitorsDatum[] }): React.ReactElement {
-    const data: VisitorsDatum[] = props.data
-    const containerRef = React.useRef<HTMLDivElement | null>(null)
-    const [hoverIndex, setHoverIndex] = React.useState<number | null>(null)
-    const n: number = data.length
-    const values: number[] = data.map((d: VisitorsDatum) => Math.max(0, Number(d.uniqueVisitors || 0)))
-    const maxVal: number = Math.max(5, ...values)
-    const w = 800
-    const h = 240
-    const m = { top: 16, right: 40, bottom: 40, left: 40 }
-    const iw = w - m.left - m.right
-    const ih = h - m.top - m.bottom
-    const stepX: number = n > 1 ? (iw / (n - 1)) : 0
-    const xAt = (i: number): number => m.left + (stepX * i)
-    const yAt = (v: number): number => m.top + (ih - (ih * (v / (maxVal || 1))))
-    const points: VisitorsPoint[] = values.map((v: number, i: number) => ({ x: xAt(i), y: yAt(v) }))
-
-    const pathD = React.useMemo<string>(() => {
-      if (points.length === 0) return ''
-      if (points.length === 1) return `M ${points[0].x} ${points[0].y}`
-      const s = 0.7 // smoothing factor
-      let d = `M ${points[0].x} ${points[0].y}`
-      for (let i = 0; i < points.length - 1; i++) {
-        const p0: VisitorsPoint = points[Math.max(0, i - 1)]
-        const p1: VisitorsPoint = points[i]
-        const p2: VisitorsPoint = points[i + 1]
-        const p3: VisitorsPoint = points[Math.min(points.length - 1, i + 2)]
-        const c1x = p1.x + (p2.x - p0.x) / 6 * s
-        const c1y = p1.y + (p2.y - p0.y) / 6 * s
-        const c2x = p2.x - (p3.x - p1.x) / 6 * s
-        const c2y = p2.y - (p3.y - p1.y) / 6 * s
-        d += ` C ${c1x} ${c1y}, ${c2x} ${c2y}, ${p2.x} ${p2.y}`
-      }
-      return d
-    }, [points])
-
-    const areaD = React.useMemo<string>(() => {
-      if (points.length === 0) return ''
-      const baseline = yAt(0)
-      if (points.length === 1) return `M ${points[0].x} ${baseline} L ${points[0].x} ${points[0].y} L ${points[0].x} ${baseline} Z`
-      const s = 0.7
-      let d = `M ${points[0].x} ${baseline} L ${points[0].x} ${points[0].y}`
-      for (let i = 0; i < points.length - 1; i++) {
-        const p0: VisitorsPoint = points[Math.max(0, i - 1)]
-        const p1: VisitorsPoint = points[i]
-        const p2: VisitorsPoint = points[i + 1]
-        const p3: VisitorsPoint = points[Math.min(points.length - 1, i + 2)]
-        const c1x = p1.x + (p2.x - p0.x) / 6 * s
-        const c1y = p1.y + (p2.y - p0.y) / 6 * s
-        const c2x = p2.x - (p3.x - p1.x) / 6 * s
-        const c2y = p2.y - (p3.y - p1.y) / 6 * s
-        d += ` C ${c1x} ${c1y}, ${c2x} ${c2y}, ${p2.x} ${p2.y}`
-      }
-      const last: VisitorsPoint = points[points.length - 1]
-      d += ` L ${last.x} ${baseline} Z`
-      return d
-    }, [points])
-
-    const xLabels: string[] = data.map((d: VisitorsDatum) => {
-      const dt = new Date(d.date)
-      return dt.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-    })
-
-    const todayIdx: number = data.length - 1
-
-    return (
-      <div ref={containerRef} className="relative px-3 sm:px-4 md:px-6">
-        <svg
-          viewBox={`0 0 ${w} ${h}`}
-          role="img"
-          aria-label="Visitors last 7 days"
-          preserveAspectRatio="xMidYMid meet"
-          className="w-full h-[240px]"
-        >
-          <defs>
-            <linearGradient id="visitorsGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="hsl(var(--chart-1))" stopOpacity="0.20" />
-              <stop offset="100%" stopColor="hsl(var(--chart-1))" stopOpacity="0.02" />
-            </linearGradient>
-          </defs>
-
-          {/* Gridlines */}
-          {Array.from({ length: 5 }).map((_: unknown, i: number) => {
-            const y = m.top + (ih * (i / 4))
-            return (
-              <line key={i} x1={m.left} x2={m.left + iw} y1={y} y2={y} stroke="hsl(var(--border))" strokeDasharray="3 4" />
-            )
-          })}
-
-          {/* Area fill */}
-          {areaD && (
-            <path d={areaD} fill="url(#visitorsGradient)" />
-          )}
-
-          {/* Line */}
-          {pathD && (
-            <path d={pathD} fill="none" stroke="hsl(var(--chart-1))" strokeWidth={3} strokeLinejoin="round" strokeLinecap="round" />
-          )}
-
-          {/* Points */}
-          {points.map((p: VisitorsPoint, i: number) => (
-            <g key={i}>
-              <circle
-                cx={p.x}
-                cy={p.y}
-                r={hoverIndex === i ? 6 : 5}
-                fill={i === todayIdx ? 'hsl(var(--primary))' : 'white'}
-                stroke={i === todayIdx ? 'hsl(var(--primary))' : 'hsl(var(--chart-1))'}
-                strokeWidth={i === todayIdx ? 3 : 2}
-                onMouseEnter={() => setHoverIndex(i)}
-                onMouseLeave={() => setHoverIndex((cur: number | null) => (cur === i ? null : cur))}
-              >
-                <title>{`${xLabels[i]}: ${values[i]} visitors`}</title>
-              </circle>
-            </g>
-          ))}
-
-          {/* X axis labels */}
-          {xLabels.map((label: string, i: number) => (
-            <text
-              key={i}
-              x={xAt(i)}
-              y={h - 8}
-              textAnchor={i === 0 ? 'start' : (i === xLabels.length - 1 ? 'end' : 'middle')}
-              fontSize={12}
-              fill="hsl(var(--muted-foreground))"
-            >
-              {label}
-            </text>
-          ))}
-        </svg>
-
-        {/* Tooltip (simplified) */}
-        {hoverIndex !== null && points[hoverIndex] && (
-          <div
-            className="pointer-events-none absolute -translate-x-1/2 -translate-y-[110%] rounded-lg bg-white/95 shadow-md ring-1 ring-black/5 px-2 py-0.5 text-[11px]"
-            style={{ left: `${((points[hoverIndex].x) / w) * 100}%`, top: `${((points[hoverIndex].y) / h) * 100}%` }}
-          >
-            <div className="font-medium tabular-nums">{values[hoverIndex]} <span className="opacity-60">• {xLabels[hoverIndex]}</span></div>
-          </div>
-        )}
-      </div>
-    )
-  }
+  // Visitors chart and complex stats removed for simplicity
 
   return (
     <div className="max-w-3xl mx-auto mt-8 px-4 md:px-0">
@@ -485,21 +331,21 @@ export const AdminPage: React.FC = () => {
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       <div className="text-sm opacity-60">Currently online</div>
-                      <div className="text-xs opacity-60">{visitorsUpdatedAt ? `Updated ${formatTimeAgo(visitorsUpdatedAt)}` : 'Updated —'}</div>
+                      <div className="text-xs opacity-60">{onlineUpdatedAt ? `Updated ${formatTimeAgo(onlineUpdatedAt)}` : 'Updated —'}</div>
                     </div>
                     <Button
                       variant="ghost"
                       size="icon"
                       aria-label="Refresh currently online"
-                      onClick={() => loadVisitorsStats({ initial: false })}
-                      disabled={visitorsLoading || visitorsRefreshing}
+                      onClick={() => loadOnlineUsers({ initial: false })}
+                      disabled={onlineLoading || onlineRefreshing}
                       className="h-8 w-8"
                     >
-                      <RefreshCw className={`h-4 w-4 ${visitorsLoading || visitorsRefreshing ? 'animate-spin' : ''}`} />
+                      <RefreshCw className={`h-4 w-4 ${onlineLoading || onlineRefreshing ? 'animate-spin' : ''}`} />
                     </Button>
                   </div>
                   <div className="text-2xl font-semibold tabular-nums mt-1">
-                    {visitorsLoading ? '—' : uniqueIpsLast60m}
+                    {onlineLoading ? '—' : onlineUsers}
                   </div>
                 </CardContent>
               </Card>
@@ -510,25 +356,7 @@ export const AdminPage: React.FC = () => {
                 </CardContent>
               </Card>
             </div>
-            <Card className="rounded-2xl mb-4">
-              <CardContent className="p-4 md:p-6">
-                <div className="flex items-baseline justify-between mb-3">
-                  <div className="text-sm opacity-60">Visitors (last 7 days)</div>
-                  {!visitorsLoading && !visitorsError && visitorsSeries.length > 0 && (
-                    <div className="text-sm opacity-70">Today: <span className="font-medium">{visitorsSeries[visitorsSeries.length - 1]?.uniqueVisitors ?? 0}</span></div>
-                  )}
-                </div>
-                {visitorsError && (
-                  <div className="text-sm text-red-600">{visitorsError}</div>
-                )}
-                {visitorsLoading && !visitorsError && (
-                  <div className="h-[240px] w-full animate-pulse rounded-xl bg-muted" />
-                )}
-                {!visitorsLoading && !visitorsError && (
-                  <VisitorsLineChart data={visitorsSeries} />
-                )}
-              </CardContent>
-            </Card>
+            {/* Visitors chart removed for simplification */}
             <div className="text-xs font-medium uppercase tracking-wide opacity-60 mb-2">Quick Links</div>
             <div className="flex flex-wrap gap-2">
               <Button asChild variant="outline" className="rounded-2xl">
