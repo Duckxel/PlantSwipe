@@ -246,6 +246,9 @@ export const AdminPage: React.FC = () => {
         setDbProbe(dbRes)
       }
     }
+  }, [runHealthProbes])
+
+  React.useEffect(() => {
     // initial
     run()
     const id = setInterval(run, 1000)
@@ -514,8 +517,18 @@ export const AdminPage: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-sm font-medium">Health monitor</div>
-                  <div className="text-xs opacity-60">Pinging every second</div>
+                  <div className="text-xs opacity-60">Auto‑ping every 60s</div>
                 </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Refresh health"
+                  onClick={refreshHealth}
+                  disabled={healthRefreshing}
+                  className="h-8 w-8"
+                >
+                  <RefreshCw className={`h-4 w-4 ${healthRefreshing ? 'animate-spin' : ''}`} />
+                </Button>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
                 <div className="flex items-center justify-between rounded-xl border p-3">
