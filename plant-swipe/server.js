@@ -54,7 +54,7 @@ async function getUserIdFromRequest(req) {
 async function isAdminUserId(userId) {
   if (!userId || !sql) return false
   try {
-    const rows = await sql`select is_admin from profiles where id = ${userId} limit 1`
+    const rows = await sql`select is_admin from public.profiles where id = ${userId} limit 1`
     if (Array.isArray(rows) && rows.length > 0) {
       const val = rows[0]?.is_admin
       return val === true
@@ -619,6 +619,46 @@ app.get('/api/admin/member', async (req, res) => {
     res.json({ ok: true, user: { id: user.id, email: user.email, created_at: user.created_at }, profile, ips })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to lookup member' })
+  }
+})
+
+// Admin: suggest emails by prefix for autocomplete (top 3)
+app.get('/api/admin/member-suggest', async (req, res) => {
+  try {
+    if (!sql) {
+      res.json({ ok: true, suggestions: [] })
+      return
+    }
+    // Require admin
+    const callerId = await getUserIdFromRequest(req)
+    const isAdmin = await isAdminUserId(callerId)
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Admin privileges required' })
+      return
+    }
+    const raw = (req.query.q || req.query.query || req.query.email || '').toString().trim()
+    const q = raw.toLowerCase()
+    if (!q || q.length < 2) {
+      res.json({ ok: true, suggestions: [] })
+      return
+    }
+    // Prefix match on email (case-insensitive via lower())
+    let rows = []
+    try {
+      rows = await sql`
+        select id, email, created_at
+        from auth.users
+        where lower(email) like ${q + '%'}
+        order by created_at desc
+        limit 3
+      `
+    } catch {}
+    const suggestions = Array.isArray(rows)
+      ? rows.map(r => ({ id: r.id, email: r.email, created_at: r.created_at }))
+      : []
+    res.json({ ok: true, suggestions })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to suggest members' })
   }
 })
 
