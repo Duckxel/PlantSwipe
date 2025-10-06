@@ -214,6 +214,22 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true })
 })
 
+// Database health: returns ok along with latency; always 200 for easier probes
+app.get('/api/health/db', async (_req, res) => {
+  const started = Date.now()
+  try {
+    if (!sql) {
+      res.status(200).json({ ok: false, error: 'Database not configured', latencyMs: Date.now() - started })
+      return
+    }
+    const rows = await sql`select 1 as one`
+    const ok = Array.isArray(rows) && rows[0] && Number(rows[0].one) === 1
+    res.status(200).json({ ok, latencyMs: Date.now() - started })
+  } catch (e) {
+    res.status(200).json({ ok: false, latencyMs: Date.now() - started, error: e?.message || 'query failed' })
+  }
+})
+
 // Runtime environment injector for client (exposes safe VITE_* only)
 // Serve on both /api/env.js and /env.js to be resilient to proxy rules.
 // Some static hosts might hijack /env.js and serve index.html; prefer /api/env.js in index.html.
