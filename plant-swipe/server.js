@@ -803,6 +803,28 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
   }
 })
 
+// Admin: simple online users count (unique IPs past 60 minutes)
+app.get('/api/admin/online-users', async (req, res) => {
+  const uid = "public"
+  if (!uid) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  try {
+    const rows = await sql`
+      select count(distinct v.ip_address)::int as c
+      from public.web_visits v
+      where v.ip_address is not null
+        and v.occurred_at >= now() - interval '60 minutes'
+    `
+    const onlineUsers = rows?.[0]?.c ?? 0
+    res.json({ onlineUsers })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to load online users' })
+  }
+})
+
 // Static assets
 const distDir = path.resolve(__dirname, 'dist')
 app.use(express.static(distDir))
