@@ -1160,6 +1160,48 @@ do $$ begin
     with check (true);
 end $$;
 
+-- ========== Ban system ==========
+-- Records account-level bans and IP-level bans, including metadata for auditing
+create table if not exists public.banned_accounts (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid,
+  email text not null,
+  ip_addresses text[] not null default '{}',
+  reason text,
+  banned_by uuid,
+  banned_at timestamptz not null default now()
+);
+create index if not exists banned_accounts_email_idx on public.banned_accounts (lower(email));
+create index if not exists banned_accounts_user_idx on public.banned_accounts (user_id);
+
+create table if not exists public.banned_ips (
+  ip_address inet primary key,
+  reason text,
+  banned_by uuid,
+  banned_at timestamptz not null default now(),
+  user_id uuid,
+  email text
+);
+create index if not exists banned_ips_banned_at_idx on public.banned_ips (banned_at desc);
+
+-- RLS: only admins can read; inserts/updates are performed by server using privileged role
+alter table public.banned_accounts enable row level security;
+alter table public.banned_ips enable row level security;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='banned_accounts' and policyname='banned_accounts_admin_select') then
+    drop policy banned_accounts_admin_select on public.banned_accounts;
+  end if;
+  create policy banned_accounts_admin_select on public.banned_accounts for select to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='banned_ips' and policyname='banned_ips_admin_select') then
+    drop policy banned_ips_admin_select on public.banned_ips;
+  end if;
+  create policy banned_ips_admin_select on public.banned_ips for select to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+
 -- ========== Cleanup of unused objects ==========
 -- The app does not use these legacy functions; drop if present to declutter.
 -- Safe: functions only (no data rows dropped)

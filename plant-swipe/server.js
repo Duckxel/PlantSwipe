@@ -459,6 +459,37 @@ app.options('/api/admin/restart-server', (_req, res) => {
   res.status(204).end()
 })
 
+// Ensure ban tables exist (idempotent)
+async function ensureBanTables() {
+  if (!sql) return
+  try {
+    await sql`
+      create table if not exists public.banned_accounts (
+        id uuid primary key default gen_random_uuid(),
+        user_id uuid,
+        email text not null,
+        ip_addresses text[] not null default '{}',
+        reason text,
+        banned_by uuid,
+        banned_at timestamptz not null default now()
+      );
+    `
+    await sql`create index if not exists banned_accounts_email_idx on public.banned_accounts (lower(email));`
+    await sql`create index if not exists banned_accounts_user_idx on public.banned_accounts (user_id);`
+    await sql`
+      create table if not exists public.banned_ips (
+        ip_address inet primary key,
+        reason text,
+        banned_by uuid,
+        banned_at timestamptz not null default now(),
+        user_id uuid,
+        email text
+      );
+    `
+    await sql`create index if not exists banned_ips_banned_at_idx on public.banned_ips (banned_at desc);`
+  } catch {}
+}
+
 // Support both POST and GET (some environments may block POST from admin UI)
 async function handleSyncSchema(req, res) {
   if (!sql) {
@@ -546,6 +577,157 @@ app.get('/api/admin/stats', async (req, res) => {
     res.json({ ok: true, profilesCount, authUsersCount })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to load stats', errorCode: 'ADMIN_STATS_ERROR' })
+  }
+})
+
+// Admin: lookup member by email (returns user, profile, and known IPs)
+app.get('/api/admin/member', async (req, res) => {
+  try {
+    if (!sql) {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+    // Require admin
+    const callerId = await getUserIdFromRequest(req)
+    const isAdmin = await isAdminUserId(callerId)
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Admin privileges required' })
+      return
+    }
+    const emailParam = (req.query.email || '').toString().trim()
+    if (!emailParam) {
+      res.status(400).json({ error: 'Missing email' })
+      return
+    }
+    const email = emailParam.toLowerCase()
+    const users = await sql`select id, email, created_at from auth.users where lower(email) = ${email} limit 1`
+    if (!Array.isArray(users) || users.length === 0) {
+      res.status(404).json({ error: 'User not found' })
+      return
+    }
+    const user = users[0]
+    let profile = null
+    try {
+      const rows = await sql`select id, display_name, avatar_url, is_admin from public.profiles where id = ${user.id} limit 1`
+      profile = Array.isArray(rows) && rows[0] ? rows[0] : null
+    } catch {}
+    let ips = []
+    try {
+      const ipRows = await sql`select distinct ip_address::text as ip from public.web_visits where user_id = ${user.id} and ip_address is not null order by ip asc`
+      ips = (ipRows || []).map(r => String(r.ip)).filter(Boolean)
+    } catch {}
+    res.json({ ok: true, user: { id: user.id, email: user.email, created_at: user.created_at }, profile, ips })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to lookup member' })
+  }
+})
+
+// Public: check if an email or current IP is banned
+app.get('/api/banned/check', async (req, res) => {
+  try {
+    if (!sql) {
+      res.json({ banned: false })
+      return
+    }
+    const emailParam = (req.query.email || '').toString().trim()
+    const ip = getClientIp(req)
+    // Check IP ban first
+    if (ip) {
+      try {
+        const rows = await sql`select 1 from public.banned_ips where ip_address = ${ip}::inet limit 1`
+        if (Array.isArray(rows) && rows.length > 0) {
+          res.json({ banned: true, source: 'ip' })
+          return
+        }
+      } catch {}
+    }
+    if (emailParam) {
+      try {
+        const rows = await sql`
+          select reason, banned_at from public.banned_accounts
+          where lower(email) = ${emailParam.toLowerCase()}
+          order by banned_at desc
+          limit 1
+        `
+        if (Array.isArray(rows) && rows.length > 0) {
+          const r = rows[0]
+          res.json({ banned: true, source: 'email', reason: r.reason || null, bannedAt: r.banned_at || null })
+          return
+        }
+      } catch {}
+    }
+    res.json({ banned: false })
+  } catch (e) {
+    res.status(500).json({ banned: false })
+  }
+})
+
+// Admin: ban a user by email, record IPs, and attempt account deletion
+app.post('/api/admin/ban', async (req, res) => {
+  try {
+    if (!sql) {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+    // Require admin
+    const callerId = await getUserIdFromRequest(req)
+    const isAdmin = await isAdminUserId(callerId)
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Admin privileges required' })
+      return
+    }
+    const { email: rawEmail, reason: rawReason } = req.body || {}
+    const emailParam = (rawEmail || '').toString().trim()
+    const reason = (rawReason || '').toString().trim() || null
+    if (!emailParam) {
+      res.status(400).json({ error: 'Missing email' })
+      return
+    }
+    const email = emailParam.toLowerCase()
+    const userRows = await sql`select id, email from auth.users where lower(email) = ${email} limit 1`
+    const userId = Array.isArray(userRows) && userRows[0] ? userRows[0].id : null
+    // Gather distinct IPs used by this user
+    let ips = []
+    if (userId) {
+      const ipRows = await sql`select distinct ip_address::text as ip from public.web_visits where user_id = ${userId} and ip_address is not null`
+      ips = (ipRows || []).map(r => String(r.ip)).filter(Boolean)
+    }
+    // Best-effort admin identification from token
+    let bannedBy = callerId || null
+
+    // Insert ban records
+    try {
+      await sql`
+        insert into public.banned_accounts (user_id, email, ip_addresses, reason, banned_by)
+        values (${userId}, ${email}, ${ips}, ${reason}, ${bannedBy})
+      `
+    } catch {}
+    // Insert per-IP rows (upsert to avoid duplicates)
+    for (const ip of ips) {
+      try {
+        await sql`
+          insert into public.banned_ips (ip_address, reason, banned_by, user_id, email)
+          values (${ip}::inet, ${reason}, ${bannedBy}, ${userId}, ${email})
+          on conflict (ip_address) do update set
+            reason = coalesce(excluded.reason, public.banned_ips.reason),
+            banned_by = coalesce(excluded.banned_by, public.banned_ips.banned_by),
+            banned_at = excluded.banned_at,
+            user_id = coalesce(excluded.user_id, public.banned_ips.user_id),
+            email = coalesce(excluded.email, public.banned_ips.email)
+        `
+      } catch {}
+    }
+
+    // Delete profile row
+    if (userId) {
+      try { await sql`delete from public.profiles where id = ${userId}` } catch {}
+      // Attempt to delete auth user as well; ignore failures
+      try { await sql`delete from auth.users where id = ${userId}` } catch {}
+    }
+
+    res.json({ ok: true, userId: userId || null, email, ipCount: ips.length, bannedAt: new Date().toISOString() })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to ban user' })
   }
 })
 
@@ -911,5 +1093,7 @@ app.get('*', (req, res) => {
 const port = process.env.PORT || 3000
 app.listen(port, () => {
   console.log(`[server] listening on http://localhost:${port}`)
+  // Best-effort ensure ban tables are present at startup
+  ensureBanTables().catch(() => {})
 })
 
