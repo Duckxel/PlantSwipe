@@ -99,6 +99,8 @@ export const GardenDashboardPage: React.FC = () => {
     try {
       const g0 = await getGarden(id)
       setGarden(g0)
+      // Track garden creation day (YYYY-MM-DD) to avoid validating pre-creation days
+      let gardenCreatedDayIso: string | null = g0?.createdAt ? new Date(g0.createdAt).toISOString().slice(0,10) : null
       const gps = await getGardenPlants(id)
       setPlants(gps)
       const ms = await getGardenMembers(id)
@@ -111,6 +113,8 @@ export const GardenDashboardPage: React.FC = () => {
         await refreshGardenStreak(id, new Date(new Date(today).getTime() - 24*3600*1000).toISOString().slice(0,10))
         const g1 = await getGarden(id)
         setGarden(g1)
+        // Prefer refreshed garden's createdAt if available
+        gardenCreatedDayIso = g1?.createdAt ? new Date(g1.createdAt).toISOString().slice(0,10) : gardenCreatedDayIso
       } catch {}
       // Do not recompute today's task here to avoid overriding recent actions; rely on action-specific updates
       const start = new Date(today)
@@ -261,8 +265,7 @@ export const GardenDashboardPage: React.FC = () => {
         const ds = d.toISOString().slice(0,10)
         const entry = dayAgg[ds] || { due: 0, completed: 0 }
         // Do not count days before the garden was created as successful
-        const createdDayIso = (() => { try { return new Date((g as any).createdAt).toISOString().slice(0,10) } catch { return null } })()
-        const beforeCreation = createdDayIso ? (ds < createdDayIso) : false
+        const beforeCreation = gardenCreatedDayIso ? (ds < gardenCreatedDayIso) : false
         const success = beforeCreation ? false : (entry.due > 0 ? (entry.completed >= entry.due) : true)
         days.push({ date: ds, due: entry.due, completed: entry.completed, success })
       }
