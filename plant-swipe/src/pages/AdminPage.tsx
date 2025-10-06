@@ -12,7 +12,7 @@ import {
   Tooltip,
   ReferenceLine,
 } from 'recharts'
-import { RefreshCw, Server, Database, Github, ExternalLink, ShieldCheck } from "lucide-react"
+import { RefreshCw, Server, Database, Github, ExternalLink, ShieldCheck, Mail, Ban, UserSearch, AlertTriangle } from "lucide-react"
 import { supabase } from '@/lib/supabaseClient'
 
 export const AdminPage: React.FC = () => {
@@ -535,15 +535,94 @@ export const AdminPage: React.FC = () => {
     return () => clearInterval(id)
   }, [loadVisitorsStats])
 
+  // ---- Members tab state ----
+  const [activeTab, setActiveTab] = React.useState<'overview' | 'members'>('overview')
+  const [lookupEmail, setLookupEmail] = React.useState('')
+  const [memberLoading, setMemberLoading] = React.useState(false)
+  const [memberError, setMemberError] = React.useState<string | null>(null)
+  const [memberData, setMemberData] = React.useState<{ user: { id: string; email: string; created_at?: string } | null; profile: any; ips: string[] } | null>(null)
+  const [banReason, setBanReason] = React.useState('')
+  const [banSubmitting, setBanSubmitting] = React.useState(false)
+
+  const lookupMember = React.useCallback(async () => {
+    if (!lookupEmail || memberLoading) return
+    setMemberLoading(true)
+    setMemberError(null)
+    setMemberData(null)
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      const url = `/api/admin/member?email=${encodeURIComponent(lookupEmail)}`
+      const headers: Record<string,string> = { 'Accept': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      const resp = await fetch(url, { headers, credentials: 'same-origin' })
+      const data = await safeJson(resp)
+      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`)
+      setMemberData({ user: data?.user || null, profile: data?.profile || null, ips: Array.isArray(data?.ips) ? data.ips : [] })
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setMemberError(msg || 'Lookup failed')
+    } finally {
+      setMemberLoading(false)
+    }
+  }, [lookupEmail, memberLoading, safeJson])
+
+  const performBan = React.useCallback(async () => {
+    if (!lookupEmail || banSubmitting) return
+    const confirmTxt = `Ban ${lookupEmail}? This will delete their account and ban all known IPs.`
+    if (!window.confirm(confirmTxt)) return
+    setBanSubmitting(true)
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      const headers: Record<string,string> = { 'Content-Type': 'application/json', 'Accept': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      const resp = await fetch('/api/admin/ban', {
+        method: 'POST',
+        headers,
+        credentials: 'same-origin',
+        body: JSON.stringify({ email: lookupEmail, reason: banReason })
+      })
+      const data = await safeJson(resp)
+      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`)
+      alert('User banned successfully')
+      setBanReason('')
+      // Refresh lookup data to reflect deletion
+      setMemberData(null)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      alert(`Ban failed: ${msg}`)
+    } finally {
+      setBanSubmitting(false)
+    }
+  }, [lookupEmail, banReason, banSubmitting, safeJson])
+
   return (
     <div className="max-w-3xl mx-auto mt-8 px-4 md:px-0">
       <Card className="rounded-3xl">
         <CardContent className="p-6 md:p-8 space-y-6">
-          <div>
-            <div className="text-2xl font-semibold tracking-tight">Admin Controls</div>
-            <div className="text-sm opacity-60 mt-1">Admin actions: monitor and manage infrastructure.</div>
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-2xl font-semibold tracking-tight">Admin Controls</div>
+              <div className="text-sm opacity-60 mt-1">Admin actions: monitor and manage infrastructure.</div>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant={activeTab === 'overview' ? 'default' : 'secondary'}
+                className="rounded-2xl"
+                onClick={() => setActiveTab('overview')}
+              >Overview</Button>
+              <Button
+                variant={activeTab === 'members' ? 'default' : 'secondary'}
+                className="rounded-2xl"
+                onClick={() => setActiveTab('members')}
+              >Members</Button>
+            </div>
           </div>
 
+          {/* Overview Tab */}
+          {activeTab === 'overview' && (
+          <>
           {/* Health monitor */}
           <Card className="rounded-2xl">
             <CardContent className="p-4">
@@ -822,6 +901,70 @@ export const AdminPage: React.FC = () => {
               </Button>
             </div>
           </div>
+          </>
+          )}
+
+          {/* Members Tab */}
+          {activeTab === 'members' && (
+            <div className="space-y-4">
+              <Card className="rounded-2xl">
+                <CardContent className="p-4 space-y-3">
+                  <div className="text-sm font-medium flex items-center gap-2"><UserSearch className="h-4 w-4" /> Find member by email</div>
+                  <div className="flex gap-2">
+                    <input
+                      className="flex-1 px-3 py-2 rounded-xl border"
+                      placeholder="user@example.com"
+                      value={lookupEmail}
+                      onChange={(e) => setLookupEmail(e.target.value)}
+                    />
+                    <Button className="rounded-2xl" onClick={lookupMember} disabled={memberLoading || !lookupEmail}>
+                      <Mail className="h-4 w-4" /> Lookup
+                    </Button>
+                  </div>
+                  {memberError && <div className="text-sm text-rose-600">{memberError}</div>}
+                  {memberLoading && <div className="text-sm opacity-60">Looking up…</div>}
+                  {memberData && (
+                    <div className="space-y-3">
+                      <div className="text-sm">User: <span className="font-medium">{memberData.user?.email || '—'}</span>{memberData.user?.id ? (<span className="opacity-60"> · id {memberData.user.id}</span>) : null}</div>
+                      <div className="text-sm">Display name: <span className="font-medium">{memberData.profile?.display_name || '—'}</span></div>
+                      <div className="text-sm">Known IPs ({memberData.ips.length}):
+                        <div className="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-1">
+                          {memberData.ips.map((ip) => (
+                            <div key={ip} className="text-xs px-2 py-1 rounded-lg border bg-white">{ip}</div>
+                          ))}
+                          {memberData.ips.length === 0 && <div className="text-xs opacity-60">No IPs recorded</div>}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card className="rounded-2xl">
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex items-center gap-2 text-sm font-medium text-rose-700"><AlertTriangle className="h-4 w-4" /> Ban account</div>
+                  <div className="text-xs opacity-70">This deletes the account and bans all known IPs. Provide a reason for audit.</div>
+                  <div className="grid gap-2">
+                    <label className="text-xs opacity-60">Reason</label>
+                    <textarea
+                      className="min-h-[80px] px-3 py-2 rounded-xl border"
+                      placeholder="Reason for ban"
+                      value={banReason}
+                      onChange={(e) => setBanReason(e.target.value)}
+                    />
+                  </div>
+                  <Button
+                    variant="destructive"
+                    className="rounded-2xl"
+                    onClick={performBan}
+                    disabled={!lookupEmail || banSubmitting}
+                  >
+                    <Ban className="h-4 w-4" /> {banSubmitting ? 'Banning…' : 'Ban user'}
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          )}
         </CardContent>
       </Card>
 

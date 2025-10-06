@@ -66,6 +66,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [loadSession, refreshProfile])
 
   const signUp: AuthContextValue['signUp'] = async ({ email, password, displayName }) => {
+    // Check ban by email and IP before attempting signup
+    try {
+      const check = await fetch(`/api/banned/check?email=${encodeURIComponent(email)}`, { credentials: 'same-origin' }).then(r => r.json()).catch(() => ({ banned: false }))
+      if (check?.banned) return { error: 'Your account is banned. Signup is not allowed.' }
+    } catch {}
     // Ensure unique email handled by Supabase; ensure unique display_name in profiles
     // First check display_name uniqueness
     const existing = await supabase.from('profiles').select('id').ilike('display_name', displayName).maybeSingle()
@@ -92,6 +97,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }
 
   const signIn: AuthContextValue['signIn'] = async ({ email, password }) => {
+    // Gate sign-in if email/IP banned, and show a clear message
+    try {
+      const check = await fetch(`/api/banned/check?email=${encodeURIComponent(email)}`, { credentials: 'same-origin' }).then(r => r.json()).catch(() => ({ banned: false }))
+      if (check?.banned) return { error: 'Your account has been banned.' }
+    } catch {}
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) return { error: error.message }
     // Fetch profile in background; do not block sign-in completion
