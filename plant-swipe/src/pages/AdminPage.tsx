@@ -173,6 +173,13 @@ export const AdminPage: React.FC = () => {
   const [apiProbe, setApiProbe] = React.useState<ProbeResult>(emptyProbe)
   const [adminProbe, setAdminProbe] = React.useState<ProbeResult>(emptyProbe)
   const [dbProbe, setDbProbe] = React.useState<ProbeResult>(emptyProbe)
+  const [healthRefreshing, setHealthRefreshing] = React.useState<boolean>(false)
+
+  // Track mount state to avoid setState on unmounted component during async probes
+  const isMountedRef = React.useRef(true)
+  React.useEffect(() => {
+    return () => { isMountedRef.current = false }
+  }, [])
 
   const probeEndpoint = React.useCallback(async (url: string, okCheck?: (body: any) => boolean): Promise<ProbeResult> => {
     const started = Date.now()
@@ -208,52 +215,64 @@ export const AdminPage: React.FC = () => {
     const started = Date.now()
     try {
       // First try server DB health
-      const r = await fetch('/api/health/db', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
-      const t = Date.now() - started
-      let body: any = {}
-      try { body = await r.json() } catch {}
-      if (r.ok && body?.ok === true) {
-        return { ok: true, latencyMs: Number.isFinite(body?.latencyMs) ? body.latencyMs : t, updatedAt: Date.now() }
+      const resp = await fetch('/api/health/db', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+      const elapsedMs = Date.now() - started
+      const body = await safeJson(resp)
+      if (resp.ok && body?.ok === true) {
+        return { ok: true, latencyMs: Number.isFinite(body?.latencyMs) ? body.latencyMs : elapsedMs, updatedAt: Date.now(), status: resp.status, errorCode: null, errorMessage: null }
       }
+      // Not OK: derive error info
+      const errorCodeFromBody = typeof body?.errorCode === 'string' && body.errorCode ? body.errorCode : null
+      const errorMessageFromBody = typeof body?.error === 'string' && body.error ? body.error : null
+      const fallbackCode = !resp.ok ? `HTTP_${resp.status}` : (errorCodeFromBody || 'CHECK_FAILED')
       // Fallback to client Supabase reachability
       const t2Start = Date.now()
       const { error } = await supabase.from('plants').select('id', { head: true, count: 'exact' }).limit(1)
       const t2 = Date.now() - t2Start
-      if (!error) return { ok: true, latencyMs: t2, updatedAt: Date.now() }
-      return { ok: false, latencyMs: null, updatedAt: Date.now() }
+      if (!error) {
+        return { ok: true, latencyMs: t2, updatedAt: Date.now(), status: null, errorCode: null, errorMessage: null }
+      }
+      return { ok: false, latencyMs: null, updatedAt: Date.now(), status: resp.status, errorCode: errorCodeFromBody || fallbackCode, errorMessage: errorMessageFromBody }
     } catch {
       try {
         // As a last resort, try an auth no-op which hits Supabase API
         await supabase.auth.getSession()
-        return { ok: true, latencyMs: Date.now() - started, updatedAt: Date.now() }
+        return { ok: true, latencyMs: Date.now() - started, updatedAt: Date.now(), status: null, errorCode: null, errorMessage: null }
       } catch {
-        return { ok: false, latencyMs: null, updatedAt: Date.now() }
+        return { ok: false, latencyMs: null, updatedAt: Date.now(), status: null, errorCode: 'NETWORK_ERROR', errorMessage: null }
       }
     }
-  }, [])
+  }, [safeJson])
 
-  React.useEffect(() => {
-    let cancelled = false
-    const run = async () => {
-      const [apiRes, adminRes, dbRes] = await Promise.all([
-        probeEndpoint('/api/health', (b) => b?.ok === true),
-        probeEndpoint('/api/admin/stats', (b) => b?.ok === true && typeof b?.profilesCount === 'number'),
-        probeDbWithFallback(),
-      ])
-      if (!cancelled) {
-        setApiProbe(apiRes)
-        setAdminProbe(adminRes)
-        setDbProbe(dbRes)
-      }
+  const runHealthProbes = React.useCallback(async () => {
+    const [apiRes, adminRes, dbRes] = await Promise.all([
+      probeEndpoint('/api/health', (b) => b?.ok === true),
+      probeEndpoint('/api/admin/stats', (b) => b?.ok === true && typeof b?.profilesCount === 'number'),
+      probeDbWithFallback(),
+    ])
+    if (isMountedRef.current) {
+      setApiProbe(apiRes)
+      setAdminProbe(adminRes)
+      setDbProbe(dbRes)
     }
-  }, [runHealthProbes])
-
-  React.useEffect(() => {
-    // initial
-    run()
-    const id = setInterval(run, 1000)
-    return () => { cancelled = true; clearInterval(id) }
   }, [probeEndpoint, probeDbWithFallback])
+
+  const refreshHealth = React.useCallback(async () => {
+    if (healthRefreshing) return
+    setHealthRefreshing(true)
+    try {
+      await runHealthProbes()
+    } finally {
+      if (isMountedRef.current) setHealthRefreshing(false)
+    }
+  }, [healthRefreshing, runHealthProbes])
+
+  React.useEffect(() => {
+    // Initial probe and auto-refresh every 60s
+    runHealthProbes()
+    const id = setInterval(runHealthProbes, 60_000)
+    return () => clearInterval(id)
+  }, [runHealthProbes])
 
   const StatusDot: React.FC<{ ok: boolean | null; title?: string }> = ({ ok, title }) => (
     <span
