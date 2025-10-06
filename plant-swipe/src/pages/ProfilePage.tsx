@@ -9,15 +9,13 @@ import { supabase } from "@/lib/supabaseClient"
 export const ProfilePage: React.FC = () => {
   const { user, profile, refreshProfile, signOut, deleteAccount } = useAuth()
   const [displayName, setDisplayName] = React.useState(profile?.display_name || "")
-  const [avatarUrl, setAvatarUrl] = React.useState(profile?.avatar_url || "")
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [ok, setOk] = React.useState<string | null>(null)
 
   React.useEffect(() => {
     setDisplayName(profile?.display_name || "")
-    setAvatarUrl(profile?.avatar_url || "")
-  }, [profile?.display_name, profile?.avatar_url])
+  }, [profile?.display_name])
 
   const save = async () => {
     setError(null)
@@ -38,7 +36,7 @@ export const ProfilePage: React.FC = () => {
       }
       const { error: uerr } = await supabase
         .from('profiles')
-        .upsert({ id: user.id, display_name: displayName, avatar_url: avatarUrl }, { onConflict: 'id' })
+        .upsert({ id: user.id, display_name: displayName }, { onConflict: 'id' })
       if (uerr) {
         setError(uerr.message)
         return
@@ -64,8 +62,6 @@ export const ProfilePage: React.FC = () => {
             <Input id="profile-display-name" name="displayName" value={displayName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDisplayName(e.target.value)} />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="profile-avatar-url">Avatar URL</Label>
-            <Input id="profile-avatar-url" name="avatarUrl" value={avatarUrl} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAvatarUrl(e.target.value)} />
           </div>
           {error && <div className="text-sm text-red-600">{error}</div>}
           {ok && <div className="text-sm text-green-600">{ok}</div>}

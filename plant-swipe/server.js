@@ -728,7 +728,7 @@ app.get('/api/admin/member', async (req, res) => {
         // Profile
         let profile = null
         try {
-          const pr = await fetch(`${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(targetId)}&select=id,display_name,avatar_url,is_admin`, {
+          const pr = await fetch(`${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(targetId)}&select=id,display_name,is_admin`, {
             headers: { 'apikey': supabaseAnonKey, 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
           })
           if (pr.ok) {
@@ -834,7 +834,7 @@ app.get('/api/admin/member', async (req, res) => {
     const user = users[0]
     let profile = null
     try {
-      const rows = await sql`select id, display_name, avatar_url, is_admin from public.profiles where id = ${user.id} limit 1`
+      const rows = await sql`select id, display_name, is_admin from public.profiles where id = ${user.id} limit 1`
       profile = Array.isArray(rows) && rows[0] ? rows[0] : null
     } catch {}
     let ips = []

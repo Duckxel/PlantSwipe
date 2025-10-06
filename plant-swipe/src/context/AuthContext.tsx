@@ -39,7 +39,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, display_name, avatar_url, liked_plant_ids, is_admin')
+      .select('id, display_name, liked_plant_ids, is_admin')
       .eq('id', currentId)
       .maybeSingle()
     if (!error) {
@@ -85,7 +85,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const { error: perr } = await supabase.from('profiles').insert({
       id: uid,
       display_name: displayName,
-      avatar_url: null,
       liked_plant_ids: [],
     })
     if (perr) return { error: perr.message }
