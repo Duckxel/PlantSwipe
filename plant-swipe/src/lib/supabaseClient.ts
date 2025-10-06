@@ -1,9 +1,17 @@
 import { createClient } from '@supabase/supabase-js'
 import { getEnvAny } from '@/lib/utils'
 
-// Frontend should only consume VITE_ variables (never server secrets)
-const supabaseUrl = getEnvAny(['VITE_SUPABASE_URL'])
-const supabaseAnonKey = getEnvAny(['VITE_SUPABASE_ANON_KEY'])
+// Frontend should only consume public env vars. Accept common prefixes for portability.
+const supabaseUrl = getEnvAny([
+  'VITE_SUPABASE_URL',
+  'REACT_APP_SUPABASE_URL',
+  'NEXT_PUBLIC_SUPABASE_URL',
+])
+const supabaseAnonKey = getEnvAny([
+  'VITE_SUPABASE_ANON_KEY',
+  'REACT_APP_SUPABASE_ANON_KEY',
+  'NEXT_PUBLIC_SUPABASE_ANON_KEY',
+])
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {

@@ -13,6 +13,7 @@ import { promisify } from 'util'
 import zlib from 'zlib'
 import crypto from 'crypto'
 import { pipeline as streamPipeline } from 'stream'
+import net from 'net'
 
 
 dotenv.config()
@@ -27,8 +28,8 @@ const __dirname = path.dirname(__filename)
 const exec = promisify(execCb)
 
 // Supabase client (server-side) for auth verification
-const supabaseUrlEnv = process.env.VITE_SUPABASE_URL
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
+const supabaseUrlEnv = process.env.VITE_SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.REACT_APP_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 const supabaseServer = (supabaseUrlEnv && supabaseAnonKey)
   ? createSupabaseClient(supabaseUrlEnv, supabaseAnonKey, { auth: { persistSession: false, autoRefreshToken: false } })
   : null
@@ -133,7 +134,7 @@ async function ensureAdmin(req, res) {
 }
 
 function buildConnectionString() {
-  let cs = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.POSTGRES_PRISMA_URL
+  let cs = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.POSTGRES_PRISMA_URL || process.env.SUPABASE_DB_URL
   if (!cs) {
     const host = process.env.PGHOST || process.env.POSTGRES_HOST
     const user = process.env.PGUSER || process.env.POSTGRES_USER
@@ -145,6 +146,19 @@ function buildConnectionString() {
       const encPass = password ? encodeURIComponent(password) : ''
       const auth = encPass ? `${encUser}:${encPass}` : encUser
       cs = `postgresql://${auth}@${host}:${port}/${database}`
+    }
+  }
+  // Fallback: support explicit Supabase DB host credentials if provided
+  if (!cs) {
+    const sbHost = process.env.SUPABASE_DB_HOST
+    const sbUser = process.env.SUPABASE_DB_USER || process.env.PGUSER || process.env.POSTGRES_USER || 'postgres'
+    const sbPass = process.env.SUPABASE_DB_PASSWORD || process.env.PGPASSWORD || process.env.POSTGRES_PASSWORD
+    const sbPort = process.env.SUPABASE_DB_PORT || process.env.PGPORT || process.env.POSTGRES_PORT || '5432'
+    const sbDb = process.env.SUPABASE_DB_NAME || process.env.PGDATABASE || process.env.POSTGRES_DB || 'postgres'
+    if (sbHost && sbPass) {
+      const encUser = encodeURIComponent(sbUser)
+      const encPass = encodeURIComponent(sbPass)
+      cs = `postgresql://${encUser}:${encPass}@${sbHost}:${sbPort}/${sbDb}`
     }
   }
   // Intentionally avoid deriving connection string from Supabase-specific envs
@@ -211,6 +225,7 @@ app.options('/api/*', (_req, res) => {
 const supabaseAdmin = null
 
 app.get('/api/health', (_req, res) => {
+  // Keep this lightweight and always-ok; error codes are surfaced on specific probes
   res.json({ ok: true })
 })
 
@@ -219,14 +234,34 @@ app.get('/api/health/db', async (_req, res) => {
   const started = Date.now()
   try {
     if (!sql) {
-      res.status(200).json({ ok: false, error: 'Database not configured', latencyMs: Date.now() - started })
+      // Fallback: try Supabase reachability via anon client
+      if (supabaseServer) {
+        try {
+          const { error } = await supabaseServer.from('plants').select('id', { head: true, count: 'exact' }).limit(1)
+          const ok = !error
+          res.status(200).json({ ok, latencyMs: Date.now() - started, via: 'supabase' })
+          return
+        } catch {}
+      }
+      res.status(200).json({
+        ok: false,
+        error: 'Database not configured',
+        errorCode: 'DB_NOT_CONFIGURED',
+        latencyMs: Date.now() - started,
+      })
       return
     }
     const rows = await sql`select 1 as one`
     const ok = Array.isArray(rows) && rows[0] && Number(rows[0].one) === 1
     res.status(200).json({ ok, latencyMs: Date.now() - started })
   } catch (e) {
-    res.status(200).json({ ok: false, latencyMs: Date.now() - started, error: e?.message || 'query failed' })
+    res.status(200).json({
+      ok: false,
+      latencyMs: Date.now() - started,
+      error: e?.message || 'query failed',
+      errorCode: 'DB_QUERY_FAILED',
+    })
+
   }
 })
 
@@ -236,8 +271,8 @@ app.get('/api/health/db', async (_req, res) => {
 app.get(['/api/env.js', '/env.js'], (_req, res) => {
   try {
     const env = {
-      VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL || '',
-      VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '',
+      VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+      VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY || process.env.REACT_APP_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '',
     }
     const js = `window.__ENV__ = ${JSON.stringify(env).replace(/</g, '\\u003c')};\n`
     res.setHeader('Content-Type', 'application/javascript; charset=utf-8')
@@ -311,10 +346,11 @@ function normalizeIp(ip) {
     }
     // Handle IPv6-mapped IPv4 addresses like ::ffff:127.0.0.1
     const v4mapped = out.match(/::ffff:(\d{1,3}(?:\.\d{1,3}){3})/i)
-    if (v4mapped) return v4mapped[1]
-    return out.toLowerCase()
+    if (v4mapped) out = v4mapped[1]
+    const lower = out.toLowerCase()
+    return net.isIP(lower) ? lower : ''
   } catch {
-    return typeof ip === 'string' ? ip : ''
+    return ''
   }
 }
 
@@ -509,7 +545,7 @@ app.get('/api/admin/stats', async (req, res) => {
     } catch {}
     res.json({ ok: true, profilesCount, authUsersCount })
   } catch (e) {
-    res.status(500).json({ error: e?.message || 'Failed to load stats' })
+    res.status(500).json({ error: e?.message || 'Failed to load stats', errorCode: 'ADMIN_STATS_ERROR' })
   }
 })
 
@@ -839,13 +875,13 @@ app.get('/api/admin/online-users', async (req, res) => {
     return
   }
   try {
-    const rows = await sql`
-      select count(distinct v.ip_address)::int as c
-      from public.web_visits v
-      where v.ip_address is not null
-        and v.occurred_at >= now() - interval '60 minutes'
-    `
-    const onlineUsers = rows?.[0]?.c ?? 0
+    const [ipRows, sessionRows] = await Promise.all([
+      sql`select count(distinct v.ip_address)::int as c from public.web_visits v where v.ip_address is not null and v.occurred_at >= now() - interval '60 minutes'`,
+      sql`select count(distinct v.session_id)::int as c from public.web_visits v where v.occurred_at >= now() - interval '60 minutes'`,
+    ])
+    const ipCount = ipRows?.[0]?.c ?? 0
+    const sessionCount = sessionRows?.[0]?.c ?? 0
+    const onlineUsers = ipCount > 0 ? ipCount : sessionCount
     res.json({ onlineUsers })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to load online users' })
