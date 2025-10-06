@@ -1,6 +1,17 @@
 import React from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import {
+  ResponsiveContainer,
+  ComposedChart,
+  Line,
+  Area,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ReferenceLine,
+} from 'recharts'
 import { RefreshCw, Server, Database, Github, ExternalLink } from "lucide-react"
 import { supabase } from '@/lib/supabaseClient'
 
@@ -449,30 +460,109 @@ export const AdminPage: React.FC = () => {
                     <RefreshCw className={`h-4 w-4 ${visitorsLoading || visitorsRefreshing ? 'animate-spin' : ''}`} />
                   </Button>
                 </div>
+
                 {visitorsLoading ? (
                   <div className="text-sm opacity-60">Loading…</div>
+                ) : visitorsSeries.length === 0 ? (
+                  <div className="text-sm opacity-60">No data yet.</div>
                 ) : (
-                  <div className="grid grid-cols-7 gap-2">
+                  <div className="h-64">
                     {(() => {
-                      const max = Math.max(1, ...visitorsSeries.map((d) => d.uniqueVisitors))
-                      return visitorsSeries.map((d) => {
-                        const pct = d.uniqueVisitors === 0 ? 0 : Math.round((d.uniqueVisitors / max) * 100)
-                        let label = '—'
+                      const values = visitorsSeries.map(d => d.uniqueVisitors)
+                      const maxVal = Math.max(...values, 1)
+                      const avgVal = Math.round(values.reduce((a, b) => a + b, 0) / values.length)
+
+                      const formatDow = (isoDate: string) => {
                         try {
-                          const dt = new Date(d.date + 'T00:00:00Z')
-                          const dow = dt.getUTCDay()
-                          label = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dow]
-                        } catch {}
+                          const dt = new Date(isoDate + 'T00:00:00Z')
+                          return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dt.getUTCDay()]
+                        } catch {
+                          return isoDate
+                        }
+                      }
+
+                      const formatFullDate = (isoDate: string) => {
+                        try {
+                          const dt = new Date(isoDate + 'T00:00:00Z')
+                          return new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(dt)
+                        } catch {
+                          return isoDate
+                        }
+                      }
+
+                      const TooltipContent = ({ active, payload, label }: any) => {
+                        if (!active || !payload || payload.length === 0) return null
+                        const current = payload[0]?.value as number
+                        const idx = visitorsSeries.findIndex(d => d.date === label)
+                        const prev = idx > 0 ? visitorsSeries[idx - 1]?.uniqueVisitors ?? 0 : 0
+                        const delta = current - prev
+                        const pct = prev > 0 ? Math.round((delta / prev) * 100) : null
+                        const up = delta > 0
+                        const down = delta < 0
                         return (
-                          <div key={d.date} className="flex flex-col items-center justify-end gap-1 h-32">
-                            <div className="w-7 h-full bg-stone-300 rounded-md overflow-hidden flex items-end">
-                              <div className="w-full bg-black" style={{ height: `${pct}%` }} />
+                          <div className="rounded-xl border bg-white/90 backdrop-blur p-3 shadow-lg">
+                            <div className="text-xs opacity-60">{formatFullDate(label)}</div>
+                            <div className="mt-1 text-base font-semibold tabular-nums">{current}</div>
+                            <div className="text-xs mt-0.5">
+                              <span className={up ? 'text-emerald-600' : down ? 'text-rose-600' : 'text-neutral-600'}>
+                                {delta === 0 ? 'No change' : `${up ? '+' : ''}${delta}${pct !== null ? ` (${pct}%)` : ''}`}
+                              </span>
+                              <span className="opacity-60"> vs previous day</span>
                             </div>
-                            <div className="text-[11px] opacity-70">{label}</div>
-                            <div className="text-[10px] opacity-60">{d.uniqueVisitors}</div>
+                            <div className="text-[11px] opacity-70 mt-1">7‑day avg: <span className="font-medium">{avgVal}</span></div>
                           </div>
                         )
-                      })
+                      }
+
+                      return (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <ComposedChart
+                            data={visitorsSeries}
+                            margin={{ top: 10, right: 8, bottom: 8, left: 0 }}
+                          >
+                            <defs>
+                              <linearGradient id="visitsLineGrad" x1="0" y1="0" x2="1" y2="0">
+                                <stop offset="0%" stopColor="#111827" />
+                                <stop offset="100%" stopColor="#6b7280" />
+                              </linearGradient>
+                              <linearGradient id="visitsAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#111827" stopOpacity={0.35} />
+                                <stop offset="100%" stopColor="#111827" stopOpacity={0.05} />
+                              </linearGradient>
+                            </defs>
+
+                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
+                            <XAxis
+                              dataKey="date"
+                              tickFormatter={formatDow}
+                              tick={{ fontSize: 11, fill: '#525252' }}
+                              axisLine={false}
+                              tickLine={false}
+                              interval={0}
+                            />
+                            <YAxis
+                              allowDecimals={false}
+                              domain={[0, Math.max(maxVal, 5)]}
+                              tick={{ fontSize: 11, fill: '#525252' }}
+                              axisLine={false}
+                              tickLine={false}
+                            />
+                            <Tooltip content={<TooltipContent />} cursor={{ stroke: 'rgba(0,0,0,0.1)' }} />
+                            <ReferenceLine y={avgVal} stroke="#a3a3a3" strokeDasharray="4 4" ifOverflow="extendDomain" label={{ value: 'avg', position: 'right', fill: '#737373', fontSize: 11 }} />
+
+                            <Area type="monotone" dataKey="uniqueVisitors" fill="url(#visitsAreaGrad)" stroke="none" animationDuration={600} />
+                            <Line
+                              type="monotone"
+                              dataKey="uniqueVisitors"
+                              stroke="url(#visitsLineGrad)"
+                              strokeWidth={3}
+                              dot={false}
+                              activeDot={{ r: 5, strokeWidth: 2, stroke: '#111827', fill: '#ffffff' }}
+                              animationDuration={700}
+                            />
+                          </ComposedChart>
+                        </ResponsiveContainer>
+                      )
                     })()}
                   </div>
                 )}
