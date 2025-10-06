@@ -188,6 +188,27 @@ export const GardenDashboardPage: React.FC = () => {
         const totals = weekDaysIso.map((_, i) => typeCounts.water[i] + typeCounts.fertilize[i] + typeCounts.harvest[i] + typeCounts.cut[i] + typeCounts.custom[i])
         setWeekCountsByType(typeCounts)
         setWeekCounts(totals)
+
+        // Build per-plant upcoming days (Mon=0..Sun=6) for "Due this week"
+        const dueMapSets: Record<string, Set<number>> = {}
+        for (const o of weekOccs) {
+          const dayIso = new Date(o.dueAt).toISOString().slice(0,10)
+          // Only consider remaining work and days from today forward (upcoming)
+          const remaining = Math.max(0, Number(o.requiredCount || 1) - Number(o.completedCount || 0))
+          if (remaining <= 0) continue
+          if (dayIso <= today) continue
+          const idx = weekDaysIso.indexOf(dayIso)
+          if (idx >= 0) {
+            const pid = String(o.gardenPlantId)
+            if (!dueMapSets[pid]) dueMapSets[pid] = new Set<number>()
+            dueMapSets[pid].add(idx)
+          }
+        }
+        const dueMap: Record<string, number[]> = {}
+        for (const pid of Object.keys(dueMapSets)) {
+          dueMap[pid] = Array.from(dueMapSets[pid]).sort((a, b) => a - b)
+        }
+        setDueThisWeekByPlant(dueMap)
       }
 
       // Determine due-today plants from task occurrences
