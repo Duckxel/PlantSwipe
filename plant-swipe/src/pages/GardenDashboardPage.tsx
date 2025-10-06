@@ -14,7 +14,7 @@ import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
 import { TaskEditorDialog } from '@/components/plant/TaskEditorDialog'
 import type { Garden } from '@/types/garden'
 import type { Plant } from '@/types/plant'
-import { getGarden, getGardenPlants, getGardenMembers, addMemberByEmail, fetchScheduleForPlants, markGardenPlantWatered, updateGardenPlantFrequency, deleteGardenPlant, reseedSchedule, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, getGardenInventory, adjustInventoryAndLogTransaction, updateGardenMemberRole, removeGardenMember, listGardenTasks, syncTaskOccurrencesForGarden, listOccurrencesForTasks, progressTaskOccurrence, updateGardenPlantsOrder } from '@/lib/gardens'
+import { getGarden, getGardenPlants, getGardenMembers, addMemberByEmail, deleteGardenPlant, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, getGardenInventory, adjustInventoryAndLogTransaction, updateGardenMemberRole, removeGardenMember, listGardenTasks, syncTaskOccurrencesForGarden, listOccurrencesForTasks, progressTaskOccurrence, updateGardenPlantsOrder } from '@/lib/gardens'
 import { supabase } from '@/lib/supabaseClient'
  
 
@@ -111,19 +111,6 @@ export const GardenDashboardPage: React.FC = () => {
       start.setDate(start.getDate() - 29)
       const startIso = start.toISOString().slice(0,10)
       const taskRows = await getGardenTasks(id, startIso, today)
-
-      const sched = await fetchScheduleForPlants(gps.map((gp: any) => gp.id), 45)
-      const dset = new Set<string>()
-      const map: Record<string, { due: number; completed: number }> = {}
-      for (const gpId of Object.keys(sched)) {
-        for (const row of (sched as any)[gpId] as any[]) {
-          const d = row.dueDate
-          if (!map[d]) map[d] = { due: 0, completed: 0 }
-          map[d].due += 1
-          if (row.completedAt) map[d].completed += 1
-          if (d === today && !row.completedAt) dset.add(gpId)
-        }
-      }
       // Compute current week (Mon-Sun) in UTC based on server 'today'
       const parseUTC = (iso: string) => new Date(`${iso}T00:00:00Z`)
       const anchorUTC = parseUTC(today)
@@ -139,75 +126,7 @@ export const GardenDashboardPage: React.FC = () => {
       }
       setWeekDays(weekDaysIso)
 
-      // Prefer deriving week due from explicit plant schedule definitions to avoid stale pre-seeded rows
-      const gpIds = gps.map((gp: any) => gp.id)
-      const { data: sdefs } = await supabase
-        .from('garden_plant_schedule')
-        .select('garden_plant_id, period, amount, weekly_days, monthly_days, yearly_days, monthly_nth_weekdays')
-        .in('garden_plant_id', gpIds)
-
-      const defByPlant: Record<string, any> = {}
-      for (const row of (sdefs || [])) {
-        defByPlant[String((row as any).garden_plant_id)] = row
-      }
-
-      const perPlant: Record<string, number[]> = {}
-      const weeklyDayNumberForIdx = [1,2,3,4,5,6,0] // Mon..Sun -> 1..6,0
-      const derivedCounts = Array(7).fill(0)
-
-      for (const gp of gps as any[]) {
-        const gpId = String(gp.id)
-        const def = defByPlant[gpId]
-        const idxs = new Set<number>()
-        if (def) {
-          for (let i = 0; i < 7; i++) {
-            const ds = weekDaysIso[i]
-            const dt = new Date(`${ds}T00:00:00Z`)
-            const mm = String(dt.getUTCMonth() + 1).padStart(2, '0')
-            const dd = String(dt.getUTCDate()).padStart(2, '0')
-            const ymd = `${mm}-${dd}`
-            const weekdayNum = weeklyDayNumberForIdx[i]
-            const p = (def as any).period
-            if (p === 'week') {
-              const arr: number[] = ((def as any).weekly_days || []) as number[]
-              if (arr.includes(weekdayNum)) idxs.add(i)
-            } else if (p === 'month') {
-              const arr: number[] = ((def as any).monthly_days || []) as number[]
-              const nth: string[] = ((def as any).monthly_nth_weekdays || []) as string[]
-              const date = dt.getUTCDate()
-              if (arr.includes(date)) idxs.add(i)
-              if (nth.length > 0) {
-                // Compute week-of-month (1-4) and weekday (0=Sun..6=Sat) for current date
-                const weekday = dt.getUTCDay()
-                const weekIndex = Math.floor((date - 1) / 7) + 1 // 1..4 (ignore 5th occurrences)
-                if (weekIndex >= 1 && weekIndex <= 4) {
-                  const key = `${weekIndex}-${weekday}`
-                  if (nth.includes(key)) idxs.add(i)
-                }
-              }
-            } else if (p === 'year') {
-              const arr: string[] = ((def as any).yearly_days || []) as string[]
-              if (arr.includes(ymd)) {
-                idxs.add(i)
-              } else if (arr.length > 0) {
-                const date = dt.getUTCDate()
-                const weekday = dt.getUTCDay() // 0=Sun..6=Sat
-                const weekIndex = Math.floor((date - 1) / 7) + 1 // 1..4
-                const key = `${mm}-${weekIndex}-${weekday}`
-                if (arr.includes(key)) idxs.add(i)
-              }
-            }
-          }
-        }
-        const list = Array.from(idxs).sort((a, b) => a - b)
-        perPlant[gpId] = list
-        for (const i of list) derivedCounts[i] += 1
-      }
-      // Fallback to existing schedule-based counts if definitions missing entirely
-      const hasAnyDefs = Object.keys(perPlant).length > 0 && Object.values(perPlant).some(arr => (arr as number[]).length > 0)
-      // temporarily seed weekCounts using legacy watering-only counts; will overwrite with generic tasks below
-      setWeekCounts(hasAnyDefs ? derivedCounts : weekDaysIso.map(ds => (map[ds]?.due ?? 0)))
-      setDueThisWeekByPlant(perPlant)
+      // Derive week counts exclusively from Tasks v2 occurrences (no legacy schedule)
 
       // ===== Generic tasks (v2) =====
       // Ensure occurrences exist in our 30-day window, then load today's per-plant due counts
@@ -265,19 +184,13 @@ export const GardenDashboardPage: React.FC = () => {
         setWeekCounts(totals)
       }
 
-      // Determine due-today plants from schedule definitions, excluding those already completed today
-      const idxToday = weekDaysIso.indexOf(today)
-      const completedToday = new Set<string>()
-      for (const gpId of Object.keys(sched)) {
-        for (const row of (sched as any)[gpId] as any[]) {
-          if (row.dueDate === today && row.completedAt) completedToday.add(gpId)
-        }
+      // Determine due-today plants from task occurrences
+      const dueTodaySet = new Set<string>()
+      for (const o of occs) {
+        const remaining = Math.max(0, (o.requiredCount || 1) - (o.completedCount || 0))
+        if (remaining > 0) dueTodaySet.add(o.gardenPlantId)
       }
-      const dset2 = new Set<string>()
-      for (const [gpId, idxs] of Object.entries(perPlant)) {
-        if (idxToday >= 0 && (idxs as number[]).includes(idxToday) && !completedToday.has(gpId)) dset2.add(gpId)
-      }
-      setDueToday(dset2)
+      setDueToday(dueTodaySet)
 
 
       // Load inventory counts for display
@@ -298,7 +211,7 @@ export const GardenDashboardPage: React.FC = () => {
       setInstanceCounts(perInstanceCounts)
       setTotalOnHand(total)
       setSpeciesOnHand(species)
-      // Build last-30-days stats from generic task occurrences instead of watering-only
+      // Build last-30-days stats from generic task occurrences
       const statsStart = new Date(today)
       statsStart.setDate(statsStart.getDate() - 29)
       const statsStartIso = statsStart.toISOString().slice(0,10)
@@ -490,7 +403,6 @@ export const GardenDashboardPage: React.FC = () => {
   const handleSaveSchedule = async (selection: { weeklyDays?: number[]; monthlyDays?: number[]; yearlyDays?: string[]; monthlyNthWeekdays?: string[] }) => {
     if (!pendingGardenPlantId || !pendingPeriod || !id) return
     try {
-      await updateGardenPlantFrequency({ gardenPlantId: pendingGardenPlantId, unit: pendingPeriod, value: pendingAmount })
       await upsertGardenPlantSchedule({
         gardenPlantId: pendingGardenPlantId,
         period: pendingPeriod,
@@ -500,16 +412,6 @@ export const GardenDashboardPage: React.FC = () => {
         yearlyDays: selection.yearlyDays || null,
         monthlyNthWeekdays: selection.monthlyNthWeekdays || null,
       })
-      if (serverToday) {
-        // Clear upcoming due rows from today forward, then reseed fresh based on new schedule
-        await supabase
-          .from('garden_watering_schedule')
-          .delete()
-          .eq('garden_plant_id', pendingGardenPlantId)
-          .gte('due_date', serverToday)
-          .is('completed_at', null)
-      }
-      await reseedSchedule(pendingGardenPlantId)
       if (serverToday && garden?.id) {
         // Recompute today's task for this garden to reflect new schedule
         await computeGardenTaskForDay({ gardenId: garden.id, dayIso: serverToday })
@@ -530,23 +432,23 @@ export const GardenDashboardPage: React.FC = () => {
 
   const logWater = async (gardenPlantId: string) => {
     try {
-      await markGardenPlantWatered(gardenPlantId)
+      // Transition path: no legacy watering schedule updates; users should complete occurrences instead
       if (serverToday && garden?.id) {
         try {
-          // Compute today's due/completed from schedule and set garden_tasks.success accordingly
-          const schedMap = await fetchScheduleForPlants(plants.map((gp: any) => gp.id), 1)
-          let due = 0
-          let completed = 0
-          for (const gpId of Object.keys(schedMap)) {
-            for (const row of (schedMap as any)[gpId] as any[]) {
-              if (row.dueDate === serverToday) {
-                due += 1
-                if (row.completedAt) completed += 1
-              }
-            }
+          // Recompute success solely from task occurrences
+          const today = serverToday
+          const allTasks = await listGardenTasks(garden.id)
+          await syncTaskOccurrencesForGarden(garden.id, `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`)
+          const occs = await listOccurrencesForTasks(allTasks.map(t => t.id), `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`)
+          let due = 0, completed = 0
+          for (const o of occs) {
+            const req = Math.max(1, Number(o.requiredCount || 1))
+            const comp = Math.min(req, Number(o.completedCount || 0))
+            due += req
+            completed += comp
           }
-          const success = completed >= due
-          await upsertGardenTask({ gardenId: garden.id, day: serverToday, gardenPlantId: null, success })
+          const success = due === 0 ? true : (completed >= due)
+          await upsertGardenTask({ gardenId: garden.id, day: today, gardenPlantId: null, success })
         } catch {}
       }
       await load()
@@ -686,19 +588,20 @@ export const GardenDashboardPage: React.FC = () => {
                                 await deleteGardenPlant(gp.id)
                                 if (serverToday && id) {
                                   try {
-                                    const remainingIds = plants.filter((p: any) => p.id !== gp.id).map((p: any) => p.id)
-                                    const schedMap = await fetchScheduleForPlants(remainingIds, 1)
+                                    // Recompute success from occurrences only
+                                    const today = serverToday
+                                    const allTasks = await listGardenTasks(id)
+                                    await syncTaskOccurrencesForGarden(id, `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`)
+                                    const occs = await listOccurrencesForTasks(allTasks.map(t => t.id), `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`)
                                     let due = 0, completed = 0
-                                    for (const pid of Object.keys(schedMap)) {
-                                      for (const row of (schedMap as any)[pid] as any[]) {
-                                        if (row.dueDate === serverToday) {
-                                          due += 1
-                                          if (row.completedAt) completed += 1
-                                        }
-                                      }
+                                    for (const o of occs) {
+                                      const req = Math.max(1, Number(o.requiredCount || 1))
+                                      const comp = Math.min(req, Number(o.completedCount || 0))
+                                      due += req
+                                      completed += comp
                                     }
-                                    const success = completed >= due
-                                    await upsertGardenTask({ gardenId: id, day: serverToday, gardenPlantId: null, success })
+                                    const success = due === 0 ? true : (completed >= due)
+                                    await upsertGardenTask({ gardenId: id, day: today, gardenPlantId: null, success })
                                   } catch {}
                                 }
                                 await load()

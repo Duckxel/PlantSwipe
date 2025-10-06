@@ -234,18 +234,26 @@ language plpgsql
 security definer
 as $$
 declare
-  plant_ids uuid[];
-  due_count int;
-  done_count int;
+  task_ids uuid[];
+  due_count int := 0;
+  done_count int := 0;
 begin
-  select array_agg(gp.id) into plant_ids from public.garden_plants gp where gp.garden_id = _garden_id;
-  if plant_ids is null or array_length(plant_ids,1) is null then
+  select array_agg(t.id) into task_ids from public.garden_plant_tasks t where t.garden_id = _garden_id;
+  if task_ids is null or array_length(task_ids,1) is null then
     perform public.touch_garden_task(_garden_id, _day, null, true);
     return;
   end if;
-  select count(*) into due_count from public.garden_watering_schedule where garden_plant_id = any(plant_ids) and due_date = _day;
-  select count(*) into done_count from public.garden_watering_schedule where garden_plant_id = any(plant_ids) and due_date = _day and completed_at is not null;
-  perform public.touch_garden_task(_garden_id, _day, null, (done_count >= due_count));
+  select coalesce(sum(gpto.required_count), 0) into due_count
+  from public.garden_plant_task_occurrences gpto
+  where gpto.task_id = any(task_ids)
+    and (gpto.due_at at time zone 'utc')::date = _day;
+
+  select coalesce(sum(least(gpto.required_count, gpto.completed_count)), 0) into done_count
+  from public.garden_plant_task_occurrences gpto
+  where gpto.task_id = any(task_ids)
+    and (gpto.due_at at time zone 'utc')::date = _day;
+
+  perform public.touch_garden_task(_garden_id, _day, null, (due_count = 0) or (done_count >= due_count));
 end;
 $$;
 
