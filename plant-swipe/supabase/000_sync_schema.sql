@@ -11,10 +11,11 @@ create extension if not exists pg_cron;
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   display_name text not null check (length(trim(both from display_name)) >= 1 and length(trim(both from display_name)) <= 64),
-  avatar_url text,
   liked_plant_ids text[] not null default '{}',
   is_admin boolean not null default false
 );
+-- Remove legacy avatar_url column if present
+alter table if exists public.profiles drop column if exists avatar_url;
 alter table public.profiles enable row level security;
 do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='profiles' and policyname='profiles_select_self') then
