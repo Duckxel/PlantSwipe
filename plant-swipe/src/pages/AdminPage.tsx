@@ -453,7 +453,8 @@ export const AdminPage: React.FC = () => {
     if (isInitial) setOnlineLoading(true)
     else setOnlineRefreshing(true)
     try {
-      const resp = await fetch('/api/admin/online-users', {
+      // Use visitors-stats endpoint to reflect "currently online" via recent uniques
+      const resp = await fetch('/api/admin/visitors-stats', {
         headers: { 'Accept': 'application/json' },
         credentials: 'same-origin',
       })
@@ -461,7 +462,12 @@ export const AdminPage: React.FC = () => {
       if (!resp.ok) {
         throw new Error(data?.error || `Request failed (${resp.status})`)
       }
-      const num = Number(data?.onlineUsers)
+      const num = Number(
+        (data?.currentUniqueVisitors10m ??
+        data?.uniqueIpsLast30m ??
+        data?.uniqueIpsLast60m ??
+        data?.onlineUsers)
+      )
       setOnlineUsers(Number.isFinite(num) ? num : 0)
       setOnlineUpdatedAt(Date.now())
     } catch {
