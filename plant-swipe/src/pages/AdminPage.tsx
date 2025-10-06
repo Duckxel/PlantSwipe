@@ -161,23 +161,46 @@ export const AdminPage: React.FC = () => {
   }
 
   // --- Health monitor: ping API, Admin, DB every second ---
-  type ProbeResult = { ok: boolean | null; latencyMs: number | null; updatedAt: number | null }
-  const [apiProbe, setApiProbe] = React.useState<ProbeResult>({ ok: null, latencyMs: null, updatedAt: null })
-  const [adminProbe, setAdminProbe] = React.useState<ProbeResult>({ ok: null, latencyMs: null, updatedAt: null })
-  const [dbProbe, setDbProbe] = React.useState<ProbeResult>({ ok: null, latencyMs: null, updatedAt: null })
+  type ProbeResult = {
+    ok: boolean | null
+    latencyMs: number | null
+    updatedAt: number | null
+    status: number | null
+    errorCode: string | null
+    errorMessage: string | null
+  }
+  const emptyProbe: ProbeResult = { ok: null, latencyMs: null, updatedAt: null, status: null, errorCode: null, errorMessage: null }
+  const [apiProbe, setApiProbe] = React.useState<ProbeResult>(emptyProbe)
+  const [adminProbe, setAdminProbe] = React.useState<ProbeResult>(emptyProbe)
+  const [dbProbe, setDbProbe] = React.useState<ProbeResult>(emptyProbe)
 
   const probeEndpoint = React.useCallback(async (url: string, okCheck?: (body: any) => boolean): Promise<ProbeResult> => {
     const started = Date.now()
     try {
       const resp = await fetch(url, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
       const body = await safeJson(resp)
-      const ok = (typeof okCheck === 'function') ? okCheck(body) && resp.ok : (resp.ok && body?.ok === true)
+      const isOk = (typeof okCheck === 'function') ? (resp.ok && okCheck(body)) : (resp.ok && body?.ok === true)
       const latency = Date.now() - started
-      // Only show latency when the probe is actually healthy to avoid confusion
-      return { ok, latencyMs: ok ? latency : null, updatedAt: Date.now() }
+      if (isOk) {
+        return { ok: true, latencyMs: latency, updatedAt: Date.now(), status: resp.status, errorCode: null, errorMessage: null }
+      }
+      // Derive error info when not ok
+      const errorCodeFromBody = typeof body?.errorCode === 'string' && body.errorCode ? body.errorCode : null
+      const errorMessageFromBody = typeof body?.error === 'string' && body.error ? body.error : null
+      const fallbackCode = !resp.ok
+        ? `HTTP_${resp.status}`
+        : (errorCodeFromBody || 'CHECK_FAILED')
+      return {
+        ok: false,
+        latencyMs: null,
+        updatedAt: Date.now(),
+        status: resp.status,
+        errorCode: errorCodeFromBody || fallbackCode,
+        errorMessage: errorMessageFromBody,
+      }
     } catch {
-      // On failures, hide latency (show "—") but still update timestamp
-      return { ok: false, latencyMs: null, updatedAt: Date.now() }
+      // Network/other failure
+      return { ok: false, latencyMs: null, updatedAt: Date.now(), status: null, errorCode: 'NETWORK_ERROR', errorMessage: null }
     }
   }, [safeJson])
 
@@ -229,14 +252,24 @@ export const AdminPage: React.FC = () => {
     return () => { cancelled = true; clearInterval(id) }
   }, [probeEndpoint, probeDbWithFallback])
 
-  const StatusDot: React.FC<{ ok: boolean | null }> = ({ ok }) => (
+  const StatusDot: React.FC<{ ok: boolean | null; title?: string }> = ({ ok, title }) => (
     <span
       className={
         `inline-block h-3 w-3 rounded-full ${ok === null ? 'bg-zinc-400' : ok ? 'bg-emerald-500' : 'bg-rose-500'}`
       }
       aria-label={ok === null ? 'unknown' : ok ? 'ok' : 'error'}
+      title={title}
     />
   )
+
+  const ErrorBadge: React.FC<{ code: string | null }> = ({ code }) => {
+    if (!code) return null
+    return (
+      <span className="text-[11px] px-1.5 py-0.5 rounded border bg-rose-50 text-rose-700 border-rose-200">
+        {code}
+      </span>
+    )
+  }
 
   // Fallback to Supabase Realtime presence if API is unavailable
   const getPresenceCountOnce = React.useCallback(async (): Promise<number | null> => {
@@ -494,7 +527,8 @@ export const AdminPage: React.FC = () => {
                     <div className="text-xs tabular-nums opacity-60">
                       {apiProbe.latencyMs !== null ? `${apiProbe.latencyMs} ms` : '—'}
                     </div>
-                    <StatusDot ok={apiProbe.ok} />
+                    <StatusDot ok={apiProbe.ok} title={!apiProbe.ok ? (apiProbe.errorCode || undefined) : undefined} />
+                    {!apiProbe?.ok && <ErrorBadge code={apiProbe.errorCode} />}
                   </div>
                 </div>
                 <div className="flex items-center justify-between rounded-xl border p-3">
@@ -506,7 +540,8 @@ export const AdminPage: React.FC = () => {
                     <div className="text-xs tabular-nums opacity-60">
                       {adminProbe.latencyMs !== null ? `${adminProbe.latencyMs} ms` : '—'}
                     </div>
-                    <StatusDot ok={adminProbe.ok} />
+                    <StatusDot ok={adminProbe.ok} title={!adminProbe.ok ? (adminProbe.errorCode || undefined) : undefined} />
+                    {!adminProbe?.ok && <ErrorBadge code={adminProbe.errorCode} />}
                   </div>
                 </div>
                 <div className="flex items-center justify-between rounded-xl border p-3">
@@ -518,7 +553,8 @@ export const AdminPage: React.FC = () => {
                     <div className="text-xs tabular-nums opacity-60">
                       {dbProbe.latencyMs !== null ? `${dbProbe.latencyMs} ms` : '—'}
                     </div>
-                    <StatusDot ok={dbProbe.ok} />
+                    <StatusDot ok={dbProbe.ok} title={!dbProbe.ok ? (dbProbe.errorCode || undefined) : undefined} />
+                    {!dbProbe?.ok && <ErrorBadge code={dbProbe.errorCode} />}
                   </div>
                 </div>
               </div>
