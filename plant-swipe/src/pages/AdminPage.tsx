@@ -569,6 +569,8 @@ export const AdminPage: React.FC = () => {
   const [banReason, setBanReason] = React.useState('')
   const [banSubmitting, setBanSubmitting] = React.useState(false)
   const [banOpen, setBanOpen] = React.useState(false)
+  const [promoteOpen, setPromoteOpen] = React.useState(false)
+  const [promoteSubmitting, setPromoteSubmitting] = React.useState(false)
 
   // Email autocomplete state
   const [emailSuggestions, setEmailSuggestions] = React.useState<Array<{ id: string; email: string }>>([])
@@ -642,6 +644,34 @@ export const AdminPage: React.FC = () => {
       setBanSubmitting(false)
     }
   }, [lookupEmail, banReason, banSubmitting, safeJson])
+
+  const performPromote = React.useCallback(async () => {
+    if (!lookupEmail || promoteSubmitting) return
+    setPromoteSubmitting(true)
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      const headers: Record<string,string> = { 'Content-Type': 'application/json', 'Accept': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      const resp = await fetch('/api/admin/promote-admin', {
+        method: 'POST',
+        headers,
+        credentials: 'same-origin',
+        body: JSON.stringify({ email: lookupEmail })
+      })
+      const data = await safeJson(resp)
+      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`)
+      alert('User promoted to admin successfully')
+      setPromoteOpen(false)
+      // Refresh profile info
+      setMemberData((prev) => prev ? { ...prev, profile: { ...(prev.profile || {}), is_admin: true } } : prev)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      alert(`Promotion failed: ${msg}`)
+    } finally {
+      setPromoteSubmitting(false)
+    }
+  }, [lookupEmail, promoteSubmitting, safeJson])
 
   // Debounced email suggestions fetch
   React.useEffect(() => {
@@ -1111,8 +1141,42 @@ export const AdminPage: React.FC = () => {
                             </DialogFooter>
                           </DialogContent>
                         </Dialog>
+                        <Dialog open={promoteOpen} onOpenChange={setPromoteOpen}>
+                          <DialogTrigger asChild>
+                            <Button
+                              variant="secondary"
+                              size="icon"
+                              className="rounded-xl ml-2"
+                              title="Promote to admin"
+                              aria-label="Promote to admin"
+                              disabled={!lookupEmail}
+                            >
+                              <ShieldCheck className="h-4 w-4" />
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent>
+                            <DialogHeader>
+                              <DialogTitle>Promote {lookupEmail || 'user'} to Admin</DialogTitle>
+                              <DialogDescription>
+                                This grants full administrative privileges. Are you sure?
+                              </DialogDescription>
+                            </DialogHeader>
+                            <DialogFooter>
+                              <DialogClose asChild>
+                                <Button variant="secondary">Cancel</Button>
+                              </DialogClose>
+                              <Button
+                                onClick={performPromote}
+                                disabled={!lookupEmail || promoteSubmitting}
+                              >
+                                {promoteSubmitting ? 'Promoting…' : 'Confirm promote'}
+                              </Button>
+                            </DialogFooter>
+                          </DialogContent>
+                        </Dialog>
                       </div>
                       <div className="text-sm">User: <span className="font-medium">{memberData.user?.email || '—'}</span>{memberData.user?.id ? (<span className="opacity-60"> · id {memberData.user.id}</span>) : null}</div>
+                      <div className="text-sm">Admin: <span className="font-medium">{memberData.profile?.is_admin ? 'Yes' : 'No'}</span></div>
                       <div className="text-sm">Display name: <span className="font-medium">{memberData.profile?.display_name || '—'}</span></div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <div className="text-sm">Last online: <span className="font-medium">{memberData.lastOnlineAt ? new Date(memberData.lastOnlineAt).toLocaleString() : '—'}</span></div>

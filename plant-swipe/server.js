@@ -34,6 +34,8 @@ const supabaseServer = (supabaseUrlEnv && supabaseAnonKey)
   ? createSupabaseClient(supabaseUrlEnv, supabaseAnonKey, { auth: { persistSession: false, autoRefreshToken: false } })
   : null
 
+// Extract Supabase user id and email from Authorization header. Falls back to
+// decoding the JWT locally when the server anon client isn't configured.
 async function getUserIdFromRequest(req) {
   try {
     const header = req.get('authorization') || req.get('Authorization') || ''
@@ -42,10 +44,27 @@ async function getUserIdFromRequest(req) {
     const low = header.toLowerCase()
     if (!low.startsWith(prefix)) return null
     const token = header.slice(prefix.length).trim()
-    if (!token || !supabaseServer) return null
-    const { data, error } = await supabaseServer.auth.getUser(token)
-    if (error || !data?.user?.id) return null
-    return data.user.id
+    if (!token) return null
+    // Preferred: ask Supabase to resolve the token (works with anon key)
+    if (supabaseServer) {
+      try {
+        const { data, error } = await supabaseServer.auth.getUser(token)
+        if (!error && data?.user?.id) return data.user.id
+      } catch {}
+    }
+    // Fallback: decode JWT payload locally to grab the subject (sub)
+    try {
+      const parts = token.split('.')
+      if (parts.length >= 2) {
+        const b64 = parts[1]
+        const norm = (b64 + '==='.slice((b64.length + 3) % 4)).replace(/-/g, '+').replace(/_/g, '/')
+        const json = Buffer.from(norm, 'base64').toString('utf8')
+        const payload = JSON.parse(json)
+        const sub = (payload && (payload.sub || payload.user_id))
+        if (typeof sub === 'string' && sub.length > 0) return sub
+      }
+    } catch {}
+    return null
   } catch {
     return null
   }
@@ -61,6 +80,70 @@ async function isAdminUserId(userId) {
     }
   } catch {}
   return false
+}
+
+// Resolve user (id/email) from request. Uses Supabase if available, otherwise
+// decodes the JWT locally. Returns null if no valid bearer token.
+async function getUserFromRequest(req) {
+  try {
+    const header = req.get('authorization') || req.get('Authorization') || ''
+    const prefix = 'bearer '
+    if (!header || header.length < 10) return null
+    const low = header.toLowerCase()
+    if (!low.startsWith(prefix)) return null
+    const token = header.slice(prefix.length).trim()
+    if (!token) return null
+    if (supabaseServer) {
+      try {
+        const { data, error } = await supabaseServer.auth.getUser(token)
+        if (!error && data?.user?.id) {
+          return { id: data.user.id, email: data.user.email || null }
+        }
+      } catch {}
+    }
+    try {
+      const parts = token.split('.')
+      if (parts.length >= 2) {
+        const b64 = parts[1]
+        const norm = (b64 + '==='.slice((b64.length + 3) % 4)).replace(/-/g, '+').replace(/_/g, '/')
+        const json = Buffer.from(norm, 'base64').toString('utf8')
+        const payload = JSON.parse(json)
+        const id = (payload && (payload.sub || payload.user_id)) || null
+        const email = (payload && (payload.email || payload.user_email)) || null
+        if (id) return { id, email }
+      }
+    } catch {}
+    return null
+  } catch {
+    return null
+  }
+}
+
+// Determine whether a user (from Authorization) has admin privileges. Checks
+// profiles.is_admin when DB is configured, and falls back to environment allowlists.
+async function isAdminFromRequest(req) {
+  try {
+    const user = await getUserFromRequest(req)
+    if (!user) return false
+    // Primary: DB flag
+    if (await isAdminUserId(user.id)) return true
+    // Fallbacks via env
+    const allowedEmails = (process.env.ADMIN_EMAILS || '')
+      .split(',')
+      .map(s => s.trim().toLowerCase())
+      .filter(Boolean)
+    const allowedUserIds = (process.env.ADMIN_USER_IDS || '')
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean)
+    const email = (user.email || '').toLowerCase()
+    if ((email && allowedEmails.includes(email)) || allowedUserIds.includes(user.id)) {
+      return true
+    }
+    return false
+  } catch {
+    return false
+  }
 }
 
 async function ensureAdmin(req, res) {
@@ -587,9 +670,8 @@ app.get('/api/admin/member', async (req, res) => {
       res.status(500).json({ error: 'Database not configured' })
       return
     }
-    // Require admin
-    const callerId = await getUserIdFromRequest(req)
-    const isAdmin = await isAdminUserId(callerId)
+    // Require admin (support env allowlist and JWT fallback)
+    const isAdmin = await isAdminFromRequest(req)
     if (!isAdmin) {
       res.status(403).json({ error: 'Admin privileges required' })
       return
@@ -709,9 +791,8 @@ app.get('/api/admin/member-suggest', async (req, res) => {
       res.json({ ok: true, suggestions: [] })
       return
     }
-    // Require admin
-    const callerId = await getUserIdFromRequest(req)
-    const isAdmin = await isAdminUserId(callerId)
+    // Require admin (support env allowlist and JWT fallback)
+    const isAdmin = await isAdminFromRequest(req)
     if (!isAdmin) {
       res.status(403).json({ error: 'Admin privileges required' })
       return
@@ -782,6 +863,67 @@ app.get('/api/admin/member-suggest', async (req, res) => {
   }
 })
 
+// Admin: promote a user to admin by email or user_id
+app.post('/api/admin/promote-admin', async (req, res) => {
+  try {
+    if (!sql) {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+    const isAdmin = await isAdminFromRequest(req)
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Admin privileges required' })
+      return
+    }
+    const { email: rawEmail, userId: rawUserId } = req.body || {}
+    const emailParam = (rawEmail || '').toString().trim()
+    const userIdParam = (rawUserId || '').toString().trim()
+    if (!emailParam && !userIdParam) {
+      res.status(400).json({ error: 'Missing email or userId' })
+      return
+    }
+    let targetId = userIdParam || null
+    let targetEmail = emailParam || null
+    if (!targetId) {
+      const email = emailParam.toLowerCase()
+      const userRows = await sql`select id, email from auth.users where lower(email) = ${email} limit 1`
+      if (!Array.isArray(userRows) || !userRows[0]) {
+        res.status(404).json({ error: 'User not found' })
+        return
+      }
+      targetId = userRows[0].id
+      targetEmail = userRows[0].email || emailParam
+    }
+    // Ensure profiles table exists, then upsert is_admin = true
+    try {
+      const exists = await sql`select 1 from information_schema.tables where table_schema = 'public' and table_name = 'profiles'`
+      if (!exists || exists.length === 0) {
+        res.status(500).json({ error: 'Profiles table not found' })
+        return
+      }
+    } catch {}
+    try {
+      await sql`
+        insert into public.profiles (id, is_admin)
+        values (${targetId}, true)
+        on conflict (id) do update set is_admin = excluded.is_admin
+      `
+    } catch (e) {
+      res.status(500).json({ error: e?.message || 'Failed to promote user' })
+      return
+    }
+    res.json({ ok: true, userId: targetId, email: targetEmail, isAdmin: true })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to promote user' })
+  }
+})
+
+app.options('/api/admin/promote-admin', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  res.status(204).end()
+})
+
 // Public: check if an email or current IP is banned
 app.get('/api/banned/check', async (req, res) => {
   try {
@@ -829,9 +971,8 @@ app.post('/api/admin/ban', async (req, res) => {
       res.status(500).json({ error: 'Database not configured' })
       return
     }
-    // Require admin
-    const callerId = await getUserIdFromRequest(req)
-    const isAdmin = await isAdminUserId(callerId)
+    // Require admin with robust detection
+    const isAdmin = await isAdminFromRequest(req)
     if (!isAdmin) {
       res.status(403).json({ error: 'Admin privileges required' })
       return
@@ -853,7 +994,8 @@ app.post('/api/admin/ban', async (req, res) => {
       ips = (ipRows || []).map(r => String(r.ip)).filter(Boolean)
     }
     // Best-effort admin identification from token
-    let bannedBy = callerId || null
+    const caller = await getUserFromRequest(req)
+    let bannedBy = caller?.id || null
 
     // Insert ban records
     try {
