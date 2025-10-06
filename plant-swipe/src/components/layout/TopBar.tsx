@@ -31,7 +31,7 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
   }, [menuOpen])
   const label = displayName && displayName.trim().length > 0 ? displayName : 'Profile'
   return (
-    <header className="max-w-5xl mx-auto flex items-center gap-3">
+    <header className="max-w-5xl mx-auto w-full flex items-center gap-3 px-2 overflow-x-hidden">
       <div className="h-10 w-10 rounded-2xl bg-green-200 flex items-center justify-center shadow">
         <Leaf className="h-5 w-5" />
       </div>
@@ -47,10 +47,10 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
         <NavPill to="/gardens" isActive={location.pathname.startsWith('/gardens') || location.pathname.startsWith('/garden/')} icon={<Sprout className="h-4 w-4" />} label="Garden" />
         <NavPill to="/search" isActive={location.pathname.startsWith('/search')} icon={<Search className="h-4 w-4" />} label="Search" />
       </nav>
-  <div className="ml-auto flex items-center gap-2">
+  <div className="ml-auto flex items-center gap-2 flex-wrap sm:flex-nowrap min-w-0 justify-end">
         {user && (
           <Button className="rounded-2xl" variant="default" onClick={() => navigate('/create')}>
-            <Plus className="h-4 w-4 mr-2" /> Add Plant
+            <Plus className="h-4 w-4 sm:mr-2" /> <span className="hidden sm:inline">Add Plant</span>
           </Button>
         )}
         {!user ? (
@@ -64,8 +64,9 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
           </>
         ) : (
           <div className="relative" ref={menuRef}>
-            <Button className="rounded-2xl" variant="secondary" onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); setMenuOpen((o) => !o) }}>
-              <User className="h-4 w-4 mr-2" /> {label}
+            <Button className="rounded-2xl" variant="secondary" onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); setMenuOpen((o) => !o) }} aria-label="Profile menu">
+              <User className="h-4 w-4 mr-2 shrink-0" />
+              <span className="hidden sm:inline max-w-[40vw] truncate min-w-0">{label}</span>
               <ChevronDown className="h-4 w-4 ml-2 opacity-70" />
             </Button>
             {menuOpen && (

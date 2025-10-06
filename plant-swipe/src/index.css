@@ -27,6 +27,8 @@ body {
   -webkit-user-select: none;
   -ms-user-select: none;
   user-select: none;
+  /* Prevent horizontal scroll bounce on mobile */
+  overflow-x: hidden;
 }
 
 h1 {

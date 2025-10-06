@@ -1216,7 +1216,7 @@ export const AdminPage: React.FC = () => {
                       </div>
                       <div className="text-sm">User: <span className="font-medium">{memberData.user?.email || '—'}</span>{memberData.user?.id ? (<span className="opacity-60"> · id {memberData.user.id}</span>) : null}</div>
                       <div className="text-sm">Admin: <span className="font-medium">{memberData.profile?.is_admin ? 'Yes' : 'No'}</span></div>
-                      <div className="text-sm">Display name: <span className="font-medium">{memberData.profile?.display_name || '—'}</span></div>
+                      <div className="text-sm">Display name: <span className="font-medium inline-block max-w-full truncate align-bottom">{memberData.profile?.display_name || '—'}</span></div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <div className="text-sm">Last online: <span className="font-medium">{memberData.lastOnlineAt ? new Date(memberData.lastOnlineAt).toLocaleString() : '—'}</span></div>
                         <div className="text-sm">Last IP: <span className="font-medium">{memberData.lastIp || '—'}</span></div>
