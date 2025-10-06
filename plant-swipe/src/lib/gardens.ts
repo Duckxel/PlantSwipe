@@ -380,7 +380,29 @@ export async function computeGardenTaskForDay(params: { gardenId: string; dayIso
 }
 
 export async function getGardenTodayProgress(gardenId: string, dayIso: string): Promise<{ due: number; completed: number }> {
-  // Fetch garden plant ids
+  // Prefer Tasks v2 occurrences if available; fallback to legacy watering schedule.
+  try {
+    const tasks = await listGardenTasks(gardenId)
+    if (tasks.length > 0) {
+      const start = `${dayIso}T00:00:00.000Z`
+      const end = `${dayIso}T23:59:59.999Z`
+      // Ensure occurrences for today exist
+      await syncTaskOccurrencesForGarden(gardenId, start, end)
+      const occs = await listOccurrencesForTasks(tasks.map(t => t.id), start, end)
+      let due = 0
+      let completed = 0
+      for (const o of occs) {
+        const req = Math.max(1, Number(o.requiredCount || 1))
+        const comp = Math.min(req, Number(o.completedCount || 0))
+        due += req
+        completed += comp
+      }
+      return { due, completed }
+    }
+  } catch {
+    // Fall through to legacy schedule
+  }
+  // Legacy schedule-based progress (watering only)
   const { data: plantRows, error: plantErr } = await supabase
     .from('garden_plants')
     .select('id')
@@ -388,7 +410,6 @@ export async function getGardenTodayProgress(gardenId: string, dayIso: string): 
   if (plantErr) throw new Error(plantErr.message)
   const gardenPlantIds = (plantRows || []).map((r: any) => String(r.id))
   if (gardenPlantIds.length === 0) return { due: 0, completed: 0 }
-  // Count today's due and completed from schedule
   const { data: schedRows, error: schedErr } = await supabase
     .from('garden_watering_schedule')
     .select('id, completed_at, garden_plant_id, due_date')
