@@ -895,6 +895,20 @@ security definer
 set search_path = public
 as $$ select id from auth.users where email ilike _email limit 1; $$;
 
+-- Suggest users by email prefix (security definer to bypass RLS on auth schema)
+create or replace function public.suggest_users_by_email_prefix(_prefix text, _limit int default 5)
+returns table(id uuid, email text, created_at timestamptz)
+language sql
+security definer
+set search_path = public
+as $$
+  select u.id, u.email, u.created_at
+  from auth.users u
+  where u.email ilike _prefix || '%'
+  order by u.created_at desc
+  limit greatest(1, coalesce(_limit, 5));
+$$;
+
 -- Ensure we can change the return table shape if it evolved
 drop function if exists public.get_profiles_for_garden(uuid);
 create or replace function public.get_profiles_for_garden(_garden_id uuid)

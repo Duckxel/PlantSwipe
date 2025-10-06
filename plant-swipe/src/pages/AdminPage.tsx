@@ -61,21 +61,26 @@ export const AdminPage: React.FC = () => {
       // Try GET first to avoid 405s from proxies that block POST
       let resp = await fetch('/api/admin/sync-schema', {
         method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json',
-        },
+        headers: (() => {
+          const h: Record<string, string> = { 'Accept': 'application/json' }
+          if (token) h['Authorization'] = `Bearer ${token}`
+          const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+          if (adminToken) h['X-Admin-Token'] = String(adminToken)
+          return h
+        })(),
         credentials: 'same-origin',
       })
       if (resp.status === 405) {
         // Fallback to POST if GET is blocked
         resp = await fetch('/api/admin/sync-schema', {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
+          headers: (() => {
+            const h: Record<string, string> = { 'Content-Type': 'application/json', 'Accept': 'application/json' }
+            if (token) h['Authorization'] = `Bearer ${token}`
+            const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+            if (adminToken) h['X-Admin-Token'] = String(adminToken)
+            return h
+          })(),
           credentials: 'same-origin',
         })
       }
@@ -105,11 +110,13 @@ export const AdminPage: React.FC = () => {
       // Try POST first to ensure Authorization header is preserved across proxies
       let resp = await fetch('/api/admin/restart-server', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
+        headers: (() => {
+          const h: Record<string, string> = { 'Content-Type': 'application/json', 'Accept': 'application/json' }
+          if (token) h['Authorization'] = `Bearer ${token}`
+          const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+          if (adminToken) h['X-Admin-Token'] = String(adminToken)
+          return h
+        })(),
         credentials: 'same-origin',
         body: '{}',
       })
@@ -117,10 +124,13 @@ export const AdminPage: React.FC = () => {
         // Fallback to GET if POST is blocked
         resp = await fetch('/api/admin/restart-server', {
           method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Accept': 'application/json',
-          },
+          headers: (() => {
+            const h: Record<string, string> = { 'Accept': 'application/json' }
+            if (token) h['Authorization'] = `Bearer ${token}`
+            const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+            if (adminToken) h['X-Admin-Token'] = String(adminToken)
+            return h
+          })(),
           credentials: 'same-origin',
         })
       }
@@ -194,7 +204,14 @@ export const AdminPage: React.FC = () => {
   const probeEndpoint = React.useCallback(async (url: string, okCheck?: (body: any) => boolean): Promise<ProbeResult> => {
     const started = Date.now()
     try {
-      const resp = await fetch(url, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+      const headers: Record<string, string> = { 'Accept': 'application/json' }
+      try {
+        const token = (await supabase.auth.getSession()).data.session?.access_token
+        if (token) headers['Authorization'] = `Bearer ${token}`
+        const staticToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+        if (staticToken) headers['X-Admin-Token'] = staticToken
+      } catch {}
+      const resp = await fetch(url, { headers, credentials: 'same-origin' })
       const body = await safeJson(resp)
       const isOk = (typeof okCheck === 'function') ? (resp.ok && okCheck(body)) : (resp.ok && body?.ok === true)
       const latency = Date.now() - started
@@ -441,7 +458,13 @@ export const AdminPage: React.FC = () => {
       try {
         const token = (await supabase.auth.getSession()).data.session?.access_token
         if (token) {
-          const resp = await fetch('/api/admin/stats', { headers: { 'Authorization': `Bearer ${token}` } })
+          const resp = await fetch('/api/admin/stats', { headers: (() => {
+            const h: Record<string, string> = {}
+            if (token) h['Authorization'] = `Bearer ${token}`
+            const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+            if (adminToken) h['X-Admin-Token'] = String(adminToken)
+            return h
+          })() })
           if (resp.ok) {
             const data = await resp.json().catch(() => ({}))
             const val = typeof data?.profilesCount === 'number' ? data.profilesCount : null
@@ -589,6 +612,10 @@ export const AdminPage: React.FC = () => {
       const url = `/api/admin/member?email=${encodeURIComponent(lookupEmail)}`
       const headers: Record<string,string> = { 'Accept': 'application/json' }
       if (token) headers['Authorization'] = `Bearer ${token}`
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+        if (adminToken) headers['X-Admin-Token'] = String(adminToken)
+      } catch {}
       const resp = await fetch(url, { headers, credentials: 'same-origin' })
       const data = await safeJson(resp)
       if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`)
@@ -624,6 +651,10 @@ export const AdminPage: React.FC = () => {
       const token = session?.access_token
       const headers: Record<string,string> = { 'Content-Type': 'application/json', 'Accept': 'application/json' }
       if (token) headers['Authorization'] = `Bearer ${token}`
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+        if (adminToken) headers['X-Admin-Token'] = String(adminToken)
+      } catch {}
       const resp = await fetch('/api/admin/ban', {
         method: 'POST',
         headers,
@@ -653,6 +684,10 @@ export const AdminPage: React.FC = () => {
       const token = session?.access_token
       const headers: Record<string,string> = { 'Content-Type': 'application/json', 'Accept': 'application/json' }
       if (token) headers['Authorization'] = `Bearer ${token}`
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+        if (adminToken) headers['X-Admin-Token'] = String(adminToken)
+      } catch {}
       const resp = await fetch('/api/admin/promote-admin', {
         method: 'POST',
         headers,
@@ -690,6 +725,10 @@ export const AdminPage: React.FC = () => {
         const token = (await supabase.auth.getSession()).data.session?.access_token
         const headers: Record<string,string> = { 'Accept': 'application/json' }
         if (token) headers['Authorization'] = `Bearer ${token}`
+        try {
+          const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+          if (adminToken) headers['X-Admin-Token'] = String(adminToken)
+        } catch {}
         const resp = await fetch(`/api/admin/member-suggest?q=${encodeURIComponent(q)}`, {
           headers,
           credentials: 'same-origin',
