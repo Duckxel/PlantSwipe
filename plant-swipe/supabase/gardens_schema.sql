@@ -546,14 +546,15 @@ $$;
 
 -- Return profiles (id, display_name) for all members of a garden
 create or replace function public.get_profiles_for_garden(_garden_id uuid)
-returns table(user_id uuid, display_name text)
+returns table(user_id uuid, display_name text, email text)
 language sql
 security definer
 set search_path = public
 as $$
-  select p.id as user_id, p.display_name
+  select p.id as user_id, p.display_name, u.email
   from public.garden_members gm
   join public.profiles p on p.id = gm.user_id
+  join auth.users u on u.id = gm.user_id
   where gm.garden_id = _garden_id;
 $$;
 
