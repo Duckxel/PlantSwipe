@@ -172,9 +172,12 @@ export const AdminPage: React.FC = () => {
       const resp = await fetch(url, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
       const body = await safeJson(resp)
       const ok = (typeof okCheck === 'function') ? okCheck(body) && resp.ok : (resp.ok && body?.ok === true)
-      return { ok, latencyMs: Date.now() - started, updatedAt: Date.now() }
+      const latency = Date.now() - started
+      // Only show latency when the probe is actually healthy to avoid confusion
+      return { ok, latencyMs: ok ? latency : null, updatedAt: Date.now() }
     } catch {
-      return { ok: false, latencyMs: Date.now() - started, updatedAt: Date.now() }
+      // On failures, hide latency (show "—") but still update timestamp
+      return { ok: false, latencyMs: null, updatedAt: Date.now() }
     }
   }, [safeJson])
 
