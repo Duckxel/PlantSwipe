@@ -762,19 +762,70 @@ app.get('/api/admin/member', async (req, res) => {
           const arr = await pr.json().catch(() => [])
           profile = Array.isArray(arr) && arr[0] ? arr[0] : null
         }
-      } catch {}
-      // Last online and last IP
-      let lastOnlineAt = null
-      let lastIp = null
-      try {
-        const lr = await fetch(`${supabaseUrlEnv}/rest/v1/web_visits?user_id=eq.${encodeURIComponent(targetId)}&select=occurred_at,ip_address&order=occurred_at.desc&limit=1`, {
-          headers: { 'apikey': supabaseAnonKey, 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
-        })
-        if (lr.ok) {
-          const arr = await lr.json().catch(() => [])
-          if (Array.isArray(arr) && arr[0]) {
-            lastOnlineAt = arr[0].occurred_at || null
-            lastIp = arr[0].ip_address || null
+        // Profile
+        let profile = null
+        try {
+          const pr = await fetch(`${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(targetId)}&select=id,display_name,is_admin`, {
+            headers: { 'apikey': supabaseAnonKey, 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+          })
+          if (pr.ok) {
+            const arr = await pr.json().catch(() => [])
+            profile = Array.isArray(arr) && arr[0] ? arr[0] : null
+          }
+        } catch {}
+        // Last online and last IP
+        let lastOnlineAt = null
+        let lastIp = null
+        try {
+          const lr = await fetch(`${supabaseUrlEnv}/rest/v1/web_visits?user_id=eq.${encodeURIComponent(targetId)}&select=occurred_at,ip_address&order=occurred_at.desc&limit=1`, {
+            headers: { 'apikey': supabaseAnonKey, 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+          })
+          if (lr.ok) {
+            const arr = await lr.json().catch(() => [])
+            if (Array.isArray(arr) && arr[0]) {
+              lastOnlineAt = arr[0].occurred_at || null
+              lastIp = arr[0].ip_address || null
+            }
+          }
+        } catch {}
+        // Distinct IPs
+        let ips = []
+        try {
+          const ipRes = await fetch(`${supabaseUrlEnv}/rest/v1/web_visits?user_id=eq.${encodeURIComponent(targetId)}&select=ip_address&order=ip_address.asc`, {
+            headers: { 'apikey': supabaseAnonKey, 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+          })
+          if (ipRes.ok) {
+            const arr = await ipRes.json().catch(() => [])
+            const set = new Set(arr.map(r => r && r.ip_address ? String(r.ip_address) : null).filter(Boolean))
+            ips = Array.from(set)
+          }
+        } catch {}
+        // Counts (best-effort via headers)
+        let visitsCount = undefined
+        try {
+          const vc = await fetch(`${supabaseUrlEnv}/rest/v1/web_visits?user_id=eq.${encodeURIComponent(targetId)}&select=id`, {
+            headers: { 'apikey': supabaseAnonKey, 'Authorization': `Bearer ${token}`, 'Prefer': 'count=exact', 'Range': '0-0', 'Accept': 'application/json' },
+          })
+          const cr = vc.headers.get('content-range') || ''
+          const m = cr.match(/\/(\d+)$/)
+          if (m) visitsCount = Number(m[1])
+        } catch {}
+        // Bans (best-effort)
+        let isBannedEmail = false
+        let bannedReason = null
+        let bannedAt = null
+        let bannedIps = []
+        try {
+          const br = await fetch(`${supabaseUrlEnv}/rest/v1/banned_accounts?email=eq.${encodeURIComponent(email)}&select=reason,banned_at&order=banned_at.desc&limit=1`, {
+            headers: { 'apikey': supabaseAnonKey, 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+          })
+          if (br.ok) {
+            const arr = await br.json().catch(() => [])
+            if (Array.isArray(arr) && arr[0]) {
+              isBannedEmail = true
+              bannedReason = arr[0].reason || null
+              bannedAt = arr[0].banned_at || null
+            }
           }
         }
       } catch {}
@@ -865,7 +916,7 @@ app.get('/api/admin/member', async (req, res) => {
     }
     let profile = null
     try {
-      const rows = await sql`select id, display_name, avatar_url, is_admin from public.profiles where id = ${user.id} limit 1`
+      const rows = await sql`select id, display_name, is_admin from public.profiles where id = ${user.id} limit 1`
       profile = Array.isArray(rows) && rows[0] ? rows[0] : null
     } catch {}
     let ips = []

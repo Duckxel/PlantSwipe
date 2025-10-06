@@ -26,7 +26,6 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 export type ProfileRow = {
   id: string
   display_name: string | null
-  avatar_url: string | null
   liked_plant_ids: string[] | null
   is_admin?: boolean | null
 }
