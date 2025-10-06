@@ -25,7 +25,7 @@ export const AdminPage: React.FC = () => {
   const [pulling, setPulling] = React.useState(false)
 
   // Safely parse response body into JSON, tolerating HTML/error pages
-  const safeJson = async (resp: Response): Promise<any> => {
+  const safeJson = React.useCallback(async (resp: Response): Promise<any> => {
     try {
       const contentType = (resp.headers.get('content-type') || '').toLowerCase()
       const text = await resp.text().catch(() => '')
@@ -36,7 +36,7 @@ export const AdminPage: React.FC = () => {
     } catch {
       return {}
     }
-  }
+  }, [])
 
   const runSyncSchema = async () => {
     if (syncing) return
@@ -160,7 +160,7 @@ export const AdminPage: React.FC = () => {
     return `${d}d ago`
   }
 
-  // --- Health monitor: ping API, Admin, DB every second ---
+  // --- Health monitor: ping API, Admin, DB every minute ---
   type ProbeResult = {
     ok: boolean | null
     latencyMs: number | null
@@ -519,6 +519,14 @@ export const AdminPage: React.FC = () => {
 
   React.useEffect(() => {
     loadVisitorsStats({ initial: true })
+  }, [loadVisitorsStats])
+
+  // Auto-refresh visitors graph every 60 seconds
+  React.useEffect(() => {
+    const id = setInterval(() => {
+      loadVisitorsStats({ initial: false })
+    }, 60_000)
+    return () => clearInterval(id)
   }, [loadVisitorsStats])
 
   return (
