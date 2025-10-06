@@ -733,7 +733,7 @@ export const AdminPage: React.FC = () => {
                           <ResponsiveContainer width="100%" height="100%">
                             <ComposedChart
                               data={visitorsSeries}
-                              margin={{ top: 10, right: 8, bottom: 8, left: 0 }}
+                              margin={{ top: 10, right: 16, bottom: 14, left: 16 }}
                             >
                               <defs>
                                 <linearGradient id="visitsLineGrad" x1="0" y1="0" x2="1" y2="0">
@@ -754,6 +754,7 @@ export const AdminPage: React.FC = () => {
                                 axisLine={false}
                                 tickLine={false}
                                 interval={0}
+                                padding={{ left: 12, right: 12 }}
                               />
                               <YAxis
                                 allowDecimals={false}
@@ -763,7 +764,13 @@ export const AdminPage: React.FC = () => {
                                 tickLine={false}
                               />
                               <Tooltip content={<TooltipContent />} cursor={{ stroke: 'rgba(0,0,0,0.1)' }} />
-                              <ReferenceLine y={avgVal} stroke="#a3a3a3" strokeDasharray="4 4" ifOverflow="extendDomain" label={{ value: 'avg', position: 'right', fill: '#737373', fontSize: 11 }} />
+                              <ReferenceLine
+                                y={avgVal}
+                                stroke="#a3a3a3"
+                                strokeDasharray="4 4"
+                                ifOverflow="extendDomain"
+                                label={{ value: 'avg', position: 'insideRight', fill: '#737373', fontSize: 11, dx: -6 }}
+                              />
 
                               <Area type="monotone" dataKey="uniqueVisitors" fill="url(#visitsAreaGrad)" stroke="none" animationDuration={600} />
                               <Line
