@@ -2,7 +2,6 @@ import * as React from "react"
 import * as SheetPrimitive from "@radix-ui/react-dialog"
 import { cva, type VariantProps } from "class-variance-authority"
 import { X } from "lucide-react"
-import { motion, useMotionValue } from "framer-motion"
 
 import { cn } from "@/lib/utils"
 
@@ -56,14 +55,39 @@ const SheetContent = React.forwardRef<
   React.ElementRef<typeof SheetPrimitive.Content>,
   SheetContentProps
 >(({ side = "right", className, children, ...props }, ref) => {
-  const y = useMotionValue(0)
   const closeRef = React.useRef<HTMLButtonElement | null>(null)
-  const onDragEnd = (_: any, info: { offset: { y: number }; velocity: { y: number } }) => {
-    const dy = (info?.offset?.y || 0) + (info?.velocity?.y || 0) * 0.2
-    if (dy > 120) {
-      // Programmatically close via hidden close button
+  const contentRef = React.useRef<HTMLDivElement | null>(null)
+  const touchStartYRef = React.useRef<number | null>(null)
+
+  const mergeRefs = (node: HTMLDivElement | null) => {
+    contentRef.current = node
+    if (typeof ref === 'function') {
+      ref(node as any)
+    } else if (ref && typeof ref === 'object') {
+      ;(ref as any).current = node
+    }
+  }
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    const y = e.touches && e.touches.length > 0 ? e.touches[0].clientY : null
+    touchStartYRef.current = y
+  }
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    const startY = touchStartYRef.current
+    const el = contentRef.current
+    if (!el || startY == null) return
+    const currentY = e.touches && e.touches.length > 0 ? e.touches[0].clientY : startY
+    const dy = currentY - startY
+    // Only close when user pulls down while scrolled at the very top
+    if (el.scrollTop <= 0 && dy > 120) {
+      touchStartYRef.current = null
       closeRef.current?.click()
     }
+  }
+
+  const handleTouchEnd = () => {
+    touchStartYRef.current = null
   }
   const content = (
     <>
@@ -77,17 +101,16 @@ const SheetContent = React.forwardRef<
   return (
     <SheetPortal>
       <SheetOverlay />
-      {side === 'bottom' ? (
-        <SheetPrimitive.Content asChild ref={ref} {...props}>
-          <motion.div drag="y" style={{ y }} onDragEnd={onDragEnd} className={cn(sheetVariants({ side }), className)}>
-            {content}
-          </motion.div>
-        </SheetPrimitive.Content>
-      ) : (
-        <SheetPrimitive.Content ref={ref} className={cn(sheetVariants({ side }), className)} {...props}>
-          {content}
-        </SheetPrimitive.Content>
-      )}
+      <SheetPrimitive.Content
+        ref={mergeRefs}
+        className={cn(sheetVariants({ side }), className)}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        {...props}
+      >
+        {content}
+      </SheetPrimitive.Content>
     </SheetPortal>
   )
 })
