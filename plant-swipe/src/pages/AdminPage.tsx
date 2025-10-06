@@ -351,6 +351,14 @@ export const AdminPage: React.FC = () => {
     loadOnlineUsers({ initial: true })
   }, [loadOnlineUsers])
 
+  // Auto-refresh the "Currently online" count every minute
+  React.useEffect(() => {
+    const intervalId = setInterval(() => {
+      loadOnlineUsers({ initial: false })
+    }, 60_000)
+    return () => clearInterval(intervalId)
+  }, [loadOnlineUsers])
+
   // Load visitors stats (last 7 days)
   const loadVisitorsStats = React.useCallback(async (opts?: { initial?: boolean }) => {
     const isInitial = !!opts?.initial
