@@ -120,22 +120,43 @@ async function getUserFromRequest(req) {
 }
 
 // Determine whether a user (from Authorization) has admin privileges. Checks
-// profiles.is_admin when DB is configured, and falls back to environment allowlists.
+// profiles.is_admin when DB is configured, and falls back to Supabase REST and environment allowlists.
+function getBearerTokenFromRequest(req) {
+  try {
+    const header = req.get('authorization') || req.get('Authorization') || ''
+    const prefix = 'bearer '
+    if (!header || header.length < 10) return null
+    const low = header.toLowerCase()
+    if (!low.startsWith(prefix)) return null
+    const token = header.slice(prefix.length).trim()
+    return token || null
+  } catch { return null }
+}
 async function isAdminFromRequest(req) {
   try {
     const user = await getUserFromRequest(req)
     if (!user) return false
     // Primary: DB flag
     if (await isAdminUserId(user.id)) return true
+    // Secondary: query profiles via Supabase REST with caller's token (respects RLS)
+    try {
+      const token = getBearerTokenFromRequest(req)
+      if (token && supabaseUrlEnv && supabaseAnonKey) {
+        const resp = await fetch(`${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}&select=is_admin`, {
+          headers: { 'apikey': supabaseAnonKey, 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+        })
+        if (resp.ok) {
+          const arr = await resp.json().catch(() => [])
+          const val = Array.isArray(arr) && arr[0] ? (arr[0].is_admin === true) : false
+          if (val) return true
+        }
+      }
+    } catch {}
     // Fallbacks via env
     const allowedEmails = (process.env.ADMIN_EMAILS || '')
-      .split(',')
-      .map(s => s.trim().toLowerCase())
-      .filter(Boolean)
+      .split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
     const allowedUserIds = (process.env.ADMIN_USER_IDS || '')
-      .split(',')
-      .map(s => s.trim())
-      .filter(Boolean)
+      .split(',').map(s => s.trim()).filter(Boolean)
     const email = (user.email || '').toLowerCase()
     if ((email && allowedEmails.includes(email)) || allowedUserIds.includes(user.id)) {
       return true
@@ -666,10 +687,6 @@ app.get('/api/admin/stats', async (req, res) => {
 // Admin: lookup member by email (returns user, profile, and known IPs)
 app.get('/api/admin/member', async (req, res) => {
   try {
-    if (!sql) {
-      res.status(500).json({ error: 'Database not configured' })
-      return
-    }
     // Require admin (support env allowlist and JWT fallback)
     const isAdmin = await isAdminFromRequest(req)
     if (!isAdmin) {
@@ -682,6 +699,133 @@ app.get('/api/admin/member', async (req, res) => {
       return
     }
     const email = emailParam.toLowerCase()
+
+    // Fallback via Supabase REST when SQL connection is not configured
+    if (!sql) {
+      try {
+        const token = getBearerTokenFromRequest(req)
+        if (!token || !supabaseUrlEnv || !supabaseAnonKey) {
+          res.status(500).json({ error: 'Database not configured' })
+          return
+        }
+        // Resolve user id via RPC (security definer)
+        let targetId = null
+        try {
+          const rpc = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_user_id_by_email`, {
+            method: 'POST',
+            headers: { 'apikey': supabaseAnonKey, 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ _email: emailParam }),
+          })
+          if (rpc.ok) {
+            const val = await rpc.json().catch(() => null)
+            if (val) targetId = String(val)
+          }
+        } catch {}
+        if (!targetId) {
+          res.status(404).json({ error: 'User not found' })
+          return
+        }
+        // Profile
+        let profile = null
+        try {
+          const pr = await fetch(`${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(targetId)}&select=id,display_name,avatar_url,is_admin`, {
+            headers: { 'apikey': supabaseAnonKey, 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+          })
+          if (pr.ok) {
+            const arr = await pr.json().catch(() => [])
+            profile = Array.isArray(arr) && arr[0] ? arr[0] : null
+          }
+        } catch {}
+        // Last online and last IP
+        let lastOnlineAt = null
+        let lastIp = null
+        try {
+          const lr = await fetch(`${supabaseUrlEnv}/rest/v1/web_visits?user_id=eq.${encodeURIComponent(targetId)}&select=occurred_at,ip_address&order=occurred_at.desc&limit=1`, {
+            headers: { 'apikey': supabaseAnonKey, 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+          })
+          if (lr.ok) {
+            const arr = await lr.json().catch(() => [])
+            if (Array.isArray(arr) && arr[0]) {
+              lastOnlineAt = arr[0].occurred_at || null
+              lastIp = arr[0].ip_address || null
+            }
+          }
+        } catch {}
+        // Distinct IPs
+        let ips = []
+        try {
+          const ipRes = await fetch(`${supabaseUrlEnv}/rest/v1/web_visits?user_id=eq.${encodeURIComponent(targetId)}&select=ip_address&order=ip_address.asc`, {
+            headers: { 'apikey': supabaseAnonKey, 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+          })
+          if (ipRes.ok) {
+            const arr = await ipRes.json().catch(() => [])
+            const set = new Set(arr.map(r => r && r.ip_address ? String(r.ip_address) : null).filter(Boolean))
+            ips = Array.from(set)
+          }
+        } catch {}
+        // Counts (best-effort via headers)
+        let visitsCount = undefined
+        try {
+          const vc = await fetch(`${supabaseUrlEnv}/rest/v1/web_visits?user_id=eq.${encodeURIComponent(targetId)}&select=id`, {
+            headers: { 'apikey': supabaseAnonKey, 'Authorization': `Bearer ${token}`, 'Prefer': 'count=exact', 'Range': '0-0', 'Accept': 'application/json' },
+          })
+          const cr = vc.headers.get('content-range') || ''
+          const m = cr.match(/\/(\d+)$/)
+          if (m) visitsCount = Number(m[1])
+        } catch {}
+        // Bans (best-effort)
+        let isBannedEmail = false
+        let bannedReason = null
+        let bannedAt = null
+        let bannedIps = []
+        try {
+          const br = await fetch(`${supabaseUrlEnv}/rest/v1/banned_accounts?email=eq.${encodeURIComponent(email)}&select=reason,banned_at&order=banned_at.desc&limit=1`, {
+            headers: { 'apikey': supabaseAnonKey, 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+          })
+          if (br.ok) {
+            const arr = await br.json().catch(() => [])
+            if (Array.isArray(arr) && arr[0]) {
+              isBannedEmail = true
+              bannedReason = arr[0].reason || null
+              bannedAt = arr[0].banned_at || null
+            }
+          }
+        } catch {}
+        try {
+          const bi = await fetch(`${supabaseUrlEnv}/rest/v1/banned_ips?or=(user_id.eq.${encodeURIComponent(targetId)},email.eq.${encodeURIComponent(email)})&select=ip_address`, {
+            headers: { 'apikey': supabaseAnonKey, 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+          })
+          if (bi.ok) {
+            const arr = await bi.json().catch(() => [])
+            bannedIps = Array.isArray(arr) ? arr.map(r => String(r.ip_address)).filter(Boolean) : []
+          }
+        } catch {}
+
+        res.json({
+          ok: true,
+          user: { id: targetId, email: emailParam, created_at: null },
+          profile,
+          ips,
+          lastOnlineAt,
+          lastIp,
+          visitsCount,
+          uniqueIpsCount: undefined,
+          gardensOwned: undefined,
+          gardensMember: undefined,
+          gardensTotal: undefined,
+          isBannedEmail,
+          bannedReason,
+          bannedAt,
+          bannedIps,
+        })
+        return
+      } catch (e) {
+        res.status(500).json({ error: e?.message || 'Failed to lookup member' })
+        return
+      }
+    }
+
+    // SQL path (preferred when server DB connection is configured)
     const users = await sql`select id, email, created_at from auth.users where lower(email) = ${email} limit 1`
     if (!Array.isArray(users) || users.length === 0) {
       res.status(404).json({ error: 'User not found' })
@@ -787,10 +931,6 @@ app.get('/api/admin/member', async (req, res) => {
 // Admin: suggest emails by prefix for autocomplete (top 3)
 app.get('/api/admin/member-suggest', async (req, res) => {
   try {
-    if (!sql) {
-      res.json({ ok: true, suggestions: [] })
-      return
-    }
     // Require admin (support env allowlist and JWT fallback)
     const isAdmin = await isAdminFromRequest(req)
     if (!isAdmin) {
@@ -803,27 +943,8 @@ app.get('/api/admin/member-suggest', async (req, res) => {
       res.json({ ok: true, suggestions: [] })
       return
     }
-    // DB suggestions by prefix
-    let rows = []
-    try {
-      rows = await sql`
-        select id, email, created_at
-        from auth.users
-        where lower(email) like ${q + '%'}
-        order by created_at desc
-        limit 5
-      `
-    } catch {}
     const out = []
     const seen = new Set()
-    if (Array.isArray(rows)) {
-      for (const r of rows) {
-        const key = String(r.email).toLowerCase()
-        if (seen.has(key)) continue
-        seen.add(key)
-        out.push({ id: r.id, email: r.email, created_at: r.created_at })
-      }
-    }
     // Domain completions using the same base the admin is typing
     const commonDomains = ['gmail.com','outlook.com','icloud.com','yahoo.com','hotmail.com','proton.me','protonmail.com','live.com','aol.com','mail.com']
     const atIdx = q.indexOf('@')
@@ -856,6 +977,44 @@ app.get('/api/admin/member-suggest', async (req, res) => {
         }
       }
     }
+    // DB suggestions by prefix (append after domain hints)
+    try {
+      if (sql) {
+        const rows = await sql`
+          select id, email, created_at
+          from auth.users
+          where lower(email) like ${q + '%'}
+          order by created_at desc
+          limit 5
+        `
+        if (Array.isArray(rows)) {
+          for (const r of rows) {
+            const key = String(r.email).toLowerCase()
+            if (seen.has(key)) continue
+            seen.add(key)
+            out.push({ id: r.id, email: r.email, created_at: r.created_at })
+          }
+        }
+      } else {
+        // Fallback via Supabase REST with caller token
+        const token = getBearerTokenFromRequest(req)
+        if (token && supabaseUrlEnv && supabaseAnonKey) {
+          const resp = await fetch(`${supabaseUrlEnv}/rest/v1/auth.users?email=like.${encodeURIComponent(q + '%')}&select=id,email,created_at&order=created_at.desc&limit=5`, {
+            headers: { 'apikey': supabaseAnonKey, 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+          })
+          if (resp.ok) {
+            const arr = await resp.json().catch(() => [])
+            for (const r of Array.isArray(arr) ? arr : []) {
+              const key = String(r.email).toLowerCase()
+              if (seen.has(key)) continue
+              seen.add(key)
+              out.push({ id: r.id, email: r.email, created_at: r.created_at })
+            }
+          }
+        }
+      }
+    } catch {}
+
     const suggestions = out.slice(0, 7)
     res.json({ ok: true, suggestions })
   } catch (e) {
