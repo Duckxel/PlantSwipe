@@ -814,6 +814,7 @@ set search_path = public
 as $$
 declare
   v_id uuid;
+  v_yesterday date := ((now() at time zone 'utc')::date - interval '1 day')::date;
 begin
   select id into v_id
   from public.garden_tasks
@@ -834,6 +835,9 @@ begin
       where id = v_id;
     end if;
   end if;
+
+  -- After any change to day's record, refresh base streak up to yesterday
+  perform public.update_garden_streak(_garden_id, v_yesterday);
 end;
 $$;
 drop function if exists public.compute_daily_tasks_for_all_gardens(date);
@@ -1012,11 +1016,38 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  v_occ record;
+  v_day date;
+  v_yesterday date := ((now() at time zone 'utc')::date - interval '1 day')::date;
 begin
+  -- Update the occurrence progress and completion timestamp when reaching required count
   update public.garden_plant_task_occurrences
     set completed_count = least(required_count, completed_count + greatest(1, _increment)),
         completed_at = case when completed_count + greatest(1, _increment) >= required_count then now() else completed_at end
   where id = _occurrence_id;
+
+  -- Resolve garden and day for this occurrence to recompute day success and streak
+  select o.id,
+         o.due_at,
+         t.garden_id
+  into v_occ
+  from public.garden_plant_task_occurrences o
+  join public.garden_plant_tasks t on t.id = o.task_id
+  where o.id = _occurrence_id
+  limit 1;
+
+  if v_occ is null then
+    return;
+  end if;
+
+  v_day := (v_occ.due_at at time zone 'utc')::date;
+
+  -- Recompute the aggregated garden_tasks success for that day based on all occurrences
+  perform public.compute_garden_task_for_day(v_occ.garden_id, v_day);
+
+  -- Refresh the base streak up to yesterday so UI can add today's preview if successful
+  perform public.update_garden_streak(v_occ.garden_id, v_yesterday);
 end;
 $$;
 
@@ -1039,6 +1070,7 @@ end; $$;
 create or replace function public.update_garden_streak(_garden_id uuid, _anchor_day date)
 returns void
 language plpgsql
+security definer
 set search_path = public
 as $$
 declare s integer; begin

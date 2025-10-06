@@ -14,7 +14,7 @@ import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
 import { TaskEditorDialog } from '@/components/plant/TaskEditorDialog'
 import type { Garden } from '@/types/garden'
 import type { Plant } from '@/types/plant'
-import { getGarden, getGardenPlants, getGardenMembers, addMemberByEmail, deleteGardenPlant, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, getGardenInventory, adjustInventoryAndLogTransaction, updateGardenMemberRole, removeGardenMember, listGardenTasks, syncTaskOccurrencesForGarden, listOccurrencesForTasks, progressTaskOccurrence, updateGardenPlantsOrder } from '@/lib/gardens'
+import { getGarden, getGardenPlants, getGardenMembers, addMemberByEmail, deleteGardenPlant, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, getGardenInventory, adjustInventoryAndLogTransaction, updateGardenMemberRole, removeGardenMember, listGardenTasks, syncTaskOccurrencesForGarden, listOccurrencesForTasks, progressTaskOccurrence, updateGardenPlantsOrder, refreshGardenStreak } from '@/lib/gardens'
 import { supabase } from '@/lib/supabaseClient'
  
 
@@ -97,8 +97,8 @@ export const GardenDashboardPage: React.FC = () => {
     setLoading(true)
     setError(null)
     try {
-      const g = await getGarden(id)
-      setGarden(g)
+      const g0 = await getGarden(id)
+      setGarden(g0)
       const gps = await getGardenPlants(id)
       setPlants(gps)
       const ms = await getGardenMembers(id)
@@ -106,6 +106,12 @@ export const GardenDashboardPage: React.FC = () => {
       const nowIso = await fetchServerNowISO()
       const today = nowIso.slice(0,10)
       setServerToday(today)
+      // Ensure base streak is refreshed from server on reload
+      try {
+        await refreshGardenStreak(id, new Date(new Date(today).getTime() - 24*3600*1000).toISOString().slice(0,10))
+        const g1 = await getGarden(id)
+        setGarden(g1)
+      } catch {}
       // Do not recompute today's task here to avoid overriding recent actions; rely on action-specific updates
       const start = new Date(today)
       start.setDate(start.getDate() - 29)
