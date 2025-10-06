@@ -1,6 +1,6 @@
 import React from "react"
 import { useNavigate, Link, useLocation } from "react-router-dom"
-import { Leaf, Grid3X3, ScrollText, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Plus } from "lucide-react"
+import { Leaf, Sprout, Sparkles, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 interface TopBarProps {
@@ -40,8 +40,8 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
         PLANT SWIPE
       </Link>
       <nav className="ml-4 hidden md:flex gap-2">
-        <NavPill to="/" isActive={location.pathname === '/'} icon={<ScrollText className="h-4 w-4" />} label="Swipe" />
-        <NavPill to="/gallery" isActive={location.pathname.startsWith('/gallery')} icon={<Grid3X3 className="h-4 w-4" />} label="Gallery" />
+        <NavPill to="/" isActive={location.pathname === '/'} icon={<Sparkles className="h-4 w-4" />} label="Discovery" />
+        <NavPill to="/gardens" isActive={location.pathname.startsWith('/gardens') || location.pathname.startsWith('/garden/')} icon={<Sprout className="h-4 w-4" />} label="Garden" />
         <NavPill to="/search" isActive={location.pathname.startsWith('/search')} icon={<Search className="h-4 w-4" />} label="Search" />
       </nav>
   <div className="ml-auto flex items-center gap-2">
@@ -61,16 +61,16 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
           </>
         ) : (
           <div className="relative" ref={menuRef}>
-            <Button className="rounded-2xl" variant="secondary" onClick={(e) => { e.stopPropagation(); setMenuOpen((o) => !o) }}>
+            <Button className="rounded-2xl" variant="secondary" onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); setMenuOpen((o) => !o) }}>
               <User className="h-4 w-4 mr-2" /> {label}
               <ChevronDown className="h-4 w-4 ml-2 opacity-70" />
             </Button>
             {menuOpen && (
               <div className="absolute right-0 mt-2 w-40 rounded-xl border bg-white shadow z-20 p-1">
-                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); onProfile ? onProfile() : navigate('/profile') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 flex items-center gap-2">
+                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); (onProfile ? onProfile : () => navigate('/profile'))() }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 flex items-center gap-2">
                   <User className="h-4 w-4" /> Profile
                 </button>
-                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); onLogout && onLogout() }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 text-red-600 flex items-center gap-2">
+                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); if (onLogout) { onLogout() } }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 text-red-600 flex items-center gap-2">
                   <LogOut className="h-4 w-4" /> Logout
                 </button>
               </div>

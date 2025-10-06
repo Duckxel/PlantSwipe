@@ -1,6 +1,6 @@
 import React from "react"
-import { motion, AnimatePresence } from "framer-motion"
-import { ChevronLeft, ChevronRight, Info, Sparkles, X } from "lucide-react"
+import { motion, AnimatePresence, type MotionValue } from "framer-motion"
+import { ChevronLeft, ChevronRight, Heart, Info, Sparkles, X } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -11,13 +11,15 @@ interface SwipePageProps {
   current: Plant | undefined
   index: number
   setIndex: (i: number) => void
-  x: any
-  onDragEnd: any
+  x: MotionValue<number>
+  onDragEnd: (_: unknown, info: { offset: { x: number }; velocity: { x: number } }) => void
   handleInfo: () => void
   handlePass: () => void
+  liked?: boolean
+  onToggleLike?: () => void
 }
 
-export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, x, onDragEnd, handleInfo, handlePass }) => {
+export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, x, onDragEnd, handleInfo, handlePass, liked = false, onToggleLike }) => {
   return (
     <div className="max-w-3xl mx-auto mt-8 px-4 md:px-0">
       <div className="relative h-[520px]">
@@ -39,6 +41,16 @@ export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, 
                 <div className="h-2/3 relative">
                   <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${current.image})` }} />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
+                  <div className="absolute top-2 right-2 z-10">
+                    <button
+                      onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); onToggleLike && onToggleLike() }}
+                      aria-pressed={liked}
+                      aria-label={liked ? 'Unlike' : 'Like'}
+                      className={`h-8 w-8 rounded-full flex items-center justify-center shadow border transition ${liked ? 'bg-rose-600 text-white' : 'bg-white/90 text-black hover:bg-white'}`}
+                    >
+                      <Heart className={liked ? 'fill-current' : ''} />
+                    </button>
+                  </div>
                   <div className="absolute bottom-0 p-5 text-white">
                     <div className="flex items-center gap-2 mb-2">
                       <Badge className={`${rarityTone[current.rarity]} backdrop-blur bg-opacity-80`}>{current.rarity}</Badge>
