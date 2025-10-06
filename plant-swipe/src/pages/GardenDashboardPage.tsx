@@ -36,7 +36,7 @@ export const GardenDashboardPage: React.FC = () => {
     setTab((seg as TabKey) || 'overview')
   }, [location.pathname, id])
   const [plants, setPlants] = React.useState<Array<any>>([])
-  const [members, setMembers] = React.useState<Array<{ userId: string; displayName?: string | null; role: 'owner' | 'member' }>>([])
+  const [members, setMembers] = React.useState<Array<{ userId: string; displayName?: string | null; email?: string | null; role: 'owner' | 'member'; joinedAt?: string }>>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [serverToday, setServerToday] = React.useState<string | null>(null)
@@ -104,7 +104,7 @@ export const GardenDashboardPage: React.FC = () => {
       const gps = await getGardenPlants(id)
       setPlants(gps)
       const ms = await getGardenMembers(id)
-      setMembers(ms.map(m => ({ userId: m.userId, displayName: m.displayName ?? null, role: m.role })))
+      setMembers(ms.map(m => ({ userId: m.userId, displayName: m.displayName ?? null, email: (m as any).email ?? null, role: m.role, joinedAt: (m as any).joinedAt })))
       const nowIso = await fetchServerNowISO()
       const today = nowIso.slice(0,10)
       setServerToday(today)
@@ -1023,7 +1023,7 @@ function EditPlantButton({ gp, gardenId, onChanged, serverToday }: { gp: any; ga
   )
 }
 
-function MemberCard({ member, gardenId, onChanged, viewerIsOwner }: { member: { userId: string; displayName?: string | null; role: 'owner' | 'member' }; gardenId: string; onChanged: () => Promise<void>; viewerIsOwner: boolean }) {
+function MemberCard({ member, gardenId, onChanged, viewerIsOwner }: { member: { userId: string; displayName?: string | null; email?: string | null; joinedAt?: string | null; role: 'owner' | 'member' }; gardenId: string; onChanged: () => Promise<void>; viewerIsOwner: boolean }) {
   const [open, setOpen] = React.useState(false)
   const [busy, setBusy] = React.useState(false)
   const canPromote = viewerIsOwner && member.role !== 'owner'
@@ -1056,7 +1056,8 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner }: { member: { 
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="font-medium">{member.displayName || member.userId}</div>
-          <div className="text-xs opacity-60">{member.role}</div>
+          {member.email && <div className="text-xs opacity-60">{member.email}</div>}
+          <div className="text-xs opacity-60">{member.role}{member.joinedAt ? ` • Joined ${new Date(member.joinedAt).toLocaleString()}` : ''}</div>
         </div>
         <div className="relative">
           {viewerIsOwner && member.role !== 'owner' && (

@@ -187,8 +187,11 @@ export async function getGardenMembers(gardenId: string): Promise<GardenMember[]
   const { data: profilesData, error: pErr } = await supabase.rpc('get_profiles_for_garden', { _garden_id: gardenId })
   if (pErr) throw new Error(pErr.message)
   const idToName: Record<string, string | null> = {}
+  const idToEmail: Record<string, string | null> = {}
   for (const r of (profilesData as any[]) || []) {
-    idToName[String((r as any).user_id)] = (r as any).display_name || null
+    const uid = String((r as any).user_id)
+    idToName[uid] = (r as any).display_name || null
+    idToEmail[uid] = (r as any).email || null
   }
   return rows.map((r: any) => ({
     gardenId: String(r.garden_id),
@@ -196,6 +199,7 @@ export async function getGardenMembers(gardenId: string): Promise<GardenMember[]
     role: r.role,
     joinedAt: String(r.joined_at),
     displayName: idToName[String(r.user_id)] ?? null,
+    email: idToEmail[String(r.user_id)] ?? null,
   }))
 }
 
