@@ -12,7 +12,7 @@ import {
   Tooltip,
   ReferenceLine,
 } from 'recharts'
-import { RefreshCw, Server, Database, Github, ExternalLink, ShieldCheck, Mail, Ban, UserSearch, AlertTriangle } from "lucide-react"
+import { RefreshCw, Server, Database, Github, ExternalLink, ShieldCheck, Mail, UserSearch, AlertTriangle, Gavel } from "lucide-react"
 import { supabase } from '@/lib/supabaseClient'
 import {
   Dialog,
@@ -550,7 +550,22 @@ export const AdminPage: React.FC = () => {
   const [lookupEmail, setLookupEmail] = React.useState('')
   const [memberLoading, setMemberLoading] = React.useState(false)
   const [memberError, setMemberError] = React.useState<string | null>(null)
-  const [memberData, setMemberData] = React.useState<{ user: { id: string; email: string; created_at?: string } | null; profile: any; ips: string[] } | null>(null)
+  const [memberData, setMemberData] = React.useState<{
+    user: { id: string; email: string; created_at?: string } | null
+    profile: any
+    ips: string[]
+    lastOnlineAt?: string | null
+    lastIp?: string | null
+    visitsCount?: number
+    uniqueIpsCount?: number
+    gardensOwned?: number
+    gardensMember?: number
+    gardensTotal?: number
+    isBannedEmail?: boolean
+    bannedReason?: string | null
+    bannedAt?: string | null
+    bannedIps?: string[]
+  } | null>(null)
   const [banReason, setBanReason] = React.useState('')
   const [banSubmitting, setBanSubmitting] = React.useState(false)
   const [banOpen, setBanOpen] = React.useState(false)
@@ -575,7 +590,22 @@ export const AdminPage: React.FC = () => {
       const resp = await fetch(url, { headers, credentials: 'same-origin' })
       const data = await safeJson(resp)
       if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`)
-      setMemberData({ user: data?.user || null, profile: data?.profile || null, ips: Array.isArray(data?.ips) ? data.ips : [] })
+      setMemberData({
+        user: data?.user || null,
+        profile: data?.profile || null,
+        ips: Array.isArray(data?.ips) ? data.ips : [],
+        lastOnlineAt: data?.lastOnlineAt ?? null,
+        lastIp: data?.lastIp ?? null,
+        visitsCount: typeof data?.visitsCount === 'number' ? data.visitsCount : undefined,
+        uniqueIpsCount: typeof data?.uniqueIpsCount === 'number' ? data.uniqueIpsCount : undefined,
+        gardensOwned: typeof data?.gardensOwned === 'number' ? data.gardensOwned : undefined,
+        gardensMember: typeof data?.gardensMember === 'number' ? data.gardensMember : undefined,
+        gardensTotal: typeof data?.gardensTotal === 'number' ? data.gardensTotal : undefined,
+        isBannedEmail: !!data?.isBannedEmail,
+        bannedReason: data?.bannedReason ?? null,
+        bannedAt: data?.bannedAt ?? null,
+        bannedIps: Array.isArray(data?.bannedIps) ? data.bannedIps : [],
+      })
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       setMemberError(msg || 'Lookup failed')
@@ -1036,8 +1066,63 @@ export const AdminPage: React.FC = () => {
                   {memberLoading && <div className="text-sm opacity-60">Looking up…</div>}
                   {memberData && (
                     <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm font-medium opacity-70">Member profile</div>
+                        <Dialog open={banOpen} onOpenChange={setBanOpen}>
+                          <DialogTrigger asChild>
+                            <Button
+                              variant="destructive"
+                              size="icon"
+                              className="rounded-xl"
+                              title="Ban user"
+                              aria-label="Ban user"
+                              disabled={!lookupEmail}
+                            >
+                              <Gavel className="h-4 w-4" />
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent>
+                            <DialogHeader>
+                              <DialogTitle>Ban {lookupEmail || 'user'}</DialogTitle>
+                              <DialogDescription>
+                                This will delete the account and ban all known IPs for this user.
+                              </DialogDescription>
+                            </DialogHeader>
+                            <div className="grid gap-2 mt-2">
+                              <label className="text-xs opacity-60">Reason</label>
+                              <textarea
+                                className="min-h-[80px] px-3 py-2 rounded-xl border"
+                                placeholder="Reason for ban"
+                                value={banReason}
+                                onChange={(e) => setBanReason(e.target.value)}
+                              />
+                            </div>
+                            <DialogFooter>
+                              <DialogClose asChild>
+                                <Button variant="secondary">Cancel</Button>
+                              </DialogClose>
+                              <Button
+                                variant="destructive"
+                                onClick={performBan}
+                                disabled={!lookupEmail || banSubmitting}
+                              >
+                                {banSubmitting ? 'Banning…' : 'Confirm ban'}
+                              </Button>
+                            </DialogFooter>
+                          </DialogContent>
+                        </Dialog>
+                      </div>
                       <div className="text-sm">User: <span className="font-medium">{memberData.user?.email || '—'}</span>{memberData.user?.id ? (<span className="opacity-60"> · id {memberData.user.id}</span>) : null}</div>
                       <div className="text-sm">Display name: <span className="font-medium">{memberData.profile?.display_name || '—'}</span></div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div className="text-sm">Last online: <span className="font-medium">{memberData.lastOnlineAt ? new Date(memberData.lastOnlineAt).toLocaleString() : '—'}</span></div>
+                        <div className="text-sm">Last IP: <span className="font-medium">{memberData.lastIp || '—'}</span></div>
+                        <div className="text-sm">Visits: <span className="font-medium tabular-nums">{memberData.visitsCount ?? '—'}</span></div>
+                        <div className="text-sm">Unique IPs: <span className="font-medium tabular-nums">{memberData.uniqueIpsCount ?? '—'}</span></div>
+                        <div className="text-sm">Gardens owned: <span className="font-medium tabular-nums">{memberData.gardensOwned ?? '—'}</span></div>
+                        <div className="text-sm">Member of gardens: <span className="font-medium tabular-nums">{memberData.gardensMember ?? '—'}</span></div>
+                        <div className="text-sm">Total gardens: <span className="font-medium tabular-nums">{memberData.gardensTotal ?? '—'}</span></div>
+                      </div>
                       <div className="text-sm">Known IPs ({memberData.ips.length}):
                         <div className="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-1">
                           {memberData.ips.map((ip) => (
@@ -1046,58 +1131,29 @@ export const AdminPage: React.FC = () => {
                           {memberData.ips.length === 0 && <div className="text-xs opacity-60">No IPs recorded</div>}
                         </div>
                       </div>
+                      {(memberData.isBannedEmail || (memberData.bannedIps && memberData.bannedIps.length > 0)) && (
+                        <div className="rounded-xl border p-3 bg-rose-50/60">
+                          <div className="text-sm font-medium text-rose-700 flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Banned</div>
+                          {memberData.isBannedEmail && (
+                            <div className="text-sm mt-1">Email banned {memberData.bannedAt ? `on ${new Date(memberData.bannedAt).toLocaleString()}` : ''}{memberData.bannedReason ? ` — ${memberData.bannedReason}` : ''}</div>
+                          )}
+                          {memberData.bannedIps && memberData.bannedIps.length > 0 && (
+                            <div className="text-sm mt-1">Blocked IPs:
+                              <div className="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-1">
+                                {memberData.bannedIps.map(ip => (
+                                  <div key={ip} className="text-xs px-2 py-1 rounded-lg border bg-white">{ip}</div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                 </CardContent>
               </Card>
 
-              <Card className="rounded-2xl">
-                <CardContent className="p-4 space-y-3">
-                  <div className="flex items-center gap-2 text-sm font-medium text-rose-700"><AlertTriangle className="h-4 w-4" /> Ban account</div>
-                  <div className="text-xs opacity-70">This deletes the account and bans all known IPs. Provide a reason for audit.</div>
-
-                  <Dialog open={banOpen} onOpenChange={setBanOpen}>
-                    <DialogTrigger asChild>
-                      <Button
-                        variant="destructive"
-                        className="rounded-2xl"
-                        disabled={!lookupEmail}
-                      >
-                        <Ban className="h-4 w-4" /> Ban user
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>Ban {lookupEmail || 'user'}</DialogTitle>
-                        <DialogDescription>
-                          This will delete the account and ban all known IPs for this user.
-                        </DialogDescription>
-                      </DialogHeader>
-                      <div className="grid gap-2 mt-2">
-                        <label className="text-xs opacity-60">Reason</label>
-                        <textarea
-                          className="min-h-[80px] px-3 py-2 rounded-xl border"
-                          placeholder="Reason for ban"
-                          value={banReason}
-                          onChange={(e) => setBanReason(e.target.value)}
-                        />
-                      </div>
-                      <DialogFooter>
-                        <DialogClose asChild>
-                          <Button variant="secondary">Cancel</Button>
-                        </DialogClose>
-                        <Button
-                          variant="destructive"
-                          onClick={performBan}
-                          disabled={!lookupEmail || banSubmitting}
-                        >
-                          {banSubmitting ? 'Banning…' : 'Confirm ban'}
-                        </Button>
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
-                </CardContent>
-              </Card>
+              {/* Ban action moved into member card header via hammer button */}
             </div>
           )}
         </CardContent>

@@ -612,11 +612,91 @@ app.get('/api/admin/member', async (req, res) => {
       profile = Array.isArray(rows) && rows[0] ? rows[0] : null
     } catch {}
     let ips = []
+    let lastOnlineAt = null
+    let lastIp = null
+    let visitsCount = 0
+    let uniqueIpsCount = 0
+    let gardensOwned = 0
+    let gardensMember = 0
+    let gardensTotal = 0
+    let isBannedEmail = false
+    let bannedReason = null
+    let bannedAt = null
+    let bannedIps = []
     try {
       const ipRows = await sql`select distinct ip_address::text as ip from public.web_visits where user_id = ${user.id} and ip_address is not null order by ip asc`
       ips = (ipRows || []).map(r => String(r.ip)).filter(Boolean)
     } catch {}
-    res.json({ ok: true, user: { id: user.id, email: user.email, created_at: user.created_at }, profile, ips })
+    try {
+      const lastRows = await sql`
+        select occurred_at, ip_address::text as ip
+        from public.web_visits
+        where user_id = ${user.id}
+        order by occurred_at desc
+        limit 1
+      `
+      if (Array.isArray(lastRows) && lastRows[0]) {
+        lastOnlineAt = lastRows[0].occurred_at || null
+        lastIp = lastRows[0].ip || null
+      }
+    } catch {}
+    try {
+      const [vcRows, uipRows] = await Promise.all([
+        sql`select count(*)::int as c from public.web_visits where user_id = ${user.id}`,
+        sql`select count(distinct ip_address)::int as c from public.web_visits where user_id = ${user.id} and ip_address is not null`,
+      ])
+      visitsCount = vcRows?.[0]?.c ?? 0
+      uniqueIpsCount = uipRows?.[0]?.c ?? 0
+    } catch {}
+    try {
+      const [ownRows, memRows, totalRows] = await Promise.all([
+        sql`select count(*)::int as c from public.gardens where created_by = ${user.id}`,
+        sql`select count(distinct garden_id)::int as c from public.garden_members where user_id = ${user.id}`,
+        sql`select count(distinct g.id)::int as c from public.gardens g left join public.garden_members gm on gm.garden_id = g.id where g.created_by = ${user.id} or gm.user_id = ${user.id}`,
+      ])
+      gardensOwned = ownRows?.[0]?.c ?? 0
+      gardensMember = memRows?.[0]?.c ?? 0
+      gardensTotal = totalRows?.[0]?.c ?? (gardensOwned + gardensMember)
+    } catch {}
+    try {
+      const br = await sql`
+        select reason, banned_at
+        from public.banned_accounts
+        where lower(email) = ${email}
+        order by banned_at desc
+        limit 1
+      `
+      if (Array.isArray(br) && br[0]) {
+        isBannedEmail = true
+        bannedReason = br[0].reason || null
+        bannedAt = br[0].banned_at || null
+      }
+    } catch {}
+    try {
+      const bi = await sql`
+        select ip_address::text as ip
+        from public.banned_ips
+        where user_id = ${user.id} or lower(email) = ${email}
+      `
+      bannedIps = Array.isArray(bi) ? bi.map(r => String(r.ip)).filter(Boolean) : []
+    } catch {}
+    res.json({
+      ok: true,
+      user: { id: user.id, email: user.email, created_at: user.created_at },
+      profile,
+      ips,
+      lastOnlineAt,
+      lastIp,
+      visitsCount,
+      uniqueIpsCount,
+      gardensOwned,
+      gardensMember,
+      gardensTotal,
+      isBannedEmail,
+      bannedReason,
+      bannedAt,
+      bannedIps,
+    })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to lookup member' })
   }
@@ -642,7 +722,7 @@ app.get('/api/admin/member-suggest', async (req, res) => {
       res.json({ ok: true, suggestions: [] })
       return
     }
-    // Prefix match on email (case-insensitive via lower())
+    // DB suggestions by prefix
     let rows = []
     try {
       rows = await sql`
@@ -650,12 +730,52 @@ app.get('/api/admin/member-suggest', async (req, res) => {
         from auth.users
         where lower(email) like ${q + '%'}
         order by created_at desc
-        limit 3
+        limit 5
       `
     } catch {}
-    const suggestions = Array.isArray(rows)
-      ? rows.map(r => ({ id: r.id, email: r.email, created_at: r.created_at }))
-      : []
+    const out = []
+    const seen = new Set()
+    if (Array.isArray(rows)) {
+      for (const r of rows) {
+        const key = String(r.email).toLowerCase()
+        if (seen.has(key)) continue
+        seen.add(key)
+        out.push({ id: r.id, email: r.email, created_at: r.created_at })
+      }
+    }
+    // Domain completions using the same base the admin is typing
+    const commonDomains = ['gmail.com','outlook.com','icloud.com','yahoo.com','hotmail.com','proton.me','protonmail.com','live.com','aol.com','mail.com']
+    const atIdx = q.indexOf('@')
+    if (atIdx > -1) {
+      const local = q.slice(0, atIdx)
+      const domPart = q.slice(atIdx + 1)
+      if (local.length >= 1) {
+        const domainMatches = commonDomains
+          .filter(d => domPart ? d.startsWith(domPart) : true)
+          .slice(0, 5)
+        for (const d of domainMatches) {
+          const email = `${local}@${d}`
+          const key = email.toLowerCase()
+          if (seen.has(key)) continue
+          seen.add(key)
+          out.push({ id: `domain:${d}`, email })
+          if (out.length >= 7) break
+        }
+      }
+    } else {
+      // No @ yet: propose popular domains with the typed local part
+      if (q.length >= 2) {
+        const local = q
+        for (const d of commonDomains.slice(0, 3)) {
+          const email = `${local}@${d}`
+          const key = email.toLowerCase()
+          if (seen.has(key)) continue
+          seen.add(key)
+          out.push({ id: `domain:${d}`, email })
+        }
+      }
+    }
+    const suggestions = out.slice(0, 7)
     res.json({ ok: true, suggestions })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to suggest members' })
