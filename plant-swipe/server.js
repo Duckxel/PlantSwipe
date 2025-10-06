@@ -35,8 +35,9 @@ const supabaseServer = (supabaseUrlEnv && supabaseAnonKey)
   : null
 
 // Admin bypass configuration
-const adminStaticToken = process.env.ADMIN_STATIC_TOKEN || ''
-const adminPublicMode = String(process.env.ADMIN_PUBLIC_MODE || '').toLowerCase() === 'true'
+// Support both server-only and Vite-style env variable names
+const adminStaticToken = process.env.ADMIN_STATIC_TOKEN || process.env.VITE_ADMIN_STATIC_TOKEN || ''
+const adminPublicMode = String(process.env.ADMIN_PUBLIC_MODE || process.env.VITE_ADMIN_PUBLIC_MODE || '').toLowerCase() === 'true'
 
 // Extract Supabase user id and email from Authorization header. Falls back to
 // decoding the JWT locally when the server anon client isn't configured.
@@ -140,8 +141,10 @@ async function isAdminFromRequest(req) {
   try {
     // 0) Explicit bypasses for bootstrap/debug
     if (adminPublicMode) return true
-    const staticToken = req.get('x-admin-token') || req.get('X-Admin-Token') || ''
-    if (adminStaticToken && staticToken && staticToken === adminStaticToken) return true
+    const staticTokenHeader = req.get('x-admin-token') || req.get('X-Admin-Token') || ''
+    const staticTokenQuery = (req.query && (req.query.token || req.query.admin_token)) ? String(req.query.token || req.query.admin_token) : ''
+    const providedToken = staticTokenHeader || staticTokenQuery
+    if (adminStaticToken && providedToken && providedToken === adminStaticToken) return true
 
     const user = await getUserFromRequest(req)
     if (!user) return false
@@ -403,7 +406,7 @@ app.get(['/api/env.js', '/env.js'], (_req, res) => {
     const env = {
       VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '',
       VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY || process.env.REACT_APP_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '',
-      VITE_ADMIN_STATIC_TOKEN: process.env.VITE_ADMIN_STATIC_TOKEN || '',
+      VITE_ADMIN_STATIC_TOKEN: process.env.VITE_ADMIN_STATIC_TOKEN || process.env.ADMIN_STATIC_TOKEN || '',
       VITE_ADMIN_PUBLIC_MODE: String(process.env.VITE_ADMIN_PUBLIC_MODE || process.env.ADMIN_PUBLIC_MODE || '').toLowerCase() === 'true',
     }
     const js = `window.__ENV__ = ${JSON.stringify(env).replace(/</g, '\\u003c')};\n`
@@ -731,16 +734,18 @@ app.get('/api/admin/member', async (req, res) => {
     // Helper: lookup via Supabase REST (fallback when SQL unavailable or fails)
     const lookupViaRest = async () => {
       const token = getBearerTokenFromRequest(req)
-      if (!token || !supabaseUrlEnv || !supabaseAnonKey) {
+      if (!supabaseUrlEnv || !supabaseAnonKey) {
         res.status(500).json({ error: 'Database not configured' })
         return
       }
+      const baseHeaders = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+      if (token) Object.assign(baseHeaders, { 'Authorization': `Bearer ${token}` })
       // Resolve user id via RPC (security definer)
       let targetId = null
       try {
         const rpc = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_user_id_by_email`, {
           method: 'POST',
-          headers: { 'apikey': supabaseAnonKey, 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          headers: { ...baseHeaders, 'Content-Type': 'application/json' },
           body: JSON.stringify({ _email: emailParam }),
         })
         if (rpc.ok) {
@@ -752,88 +757,39 @@ app.get('/api/admin/member', async (req, res) => {
         res.status(404).json({ error: 'User not found' })
         return
       }
-      // Profile
+      // Profile (best-effort; may be null without Authorization due to RLS)
       let profile = null
       try {
-        const pr = await fetch(`${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(targetId)}&select=id,display_name,avatar_url,is_admin`, {
-          headers: { 'apikey': supabaseAnonKey, 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+        const pr = await fetch(`${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(targetId)}&select=id,display_name,is_admin`, {
+          headers: baseHeaders,
         })
         if (pr.ok) {
           const arr = await pr.json().catch(() => [])
           profile = Array.isArray(arr) && arr[0] ? arr[0] : null
         }
-        // Profile
-        let profile = null
-        try {
-          const pr = await fetch(`${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(targetId)}&select=id,display_name,is_admin`, {
-            headers: { 'apikey': supabaseAnonKey, 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
-          })
-          if (pr.ok) {
-            const arr = await pr.json().catch(() => [])
-            profile = Array.isArray(arr) && arr[0] ? arr[0] : null
-          }
-        } catch {}
-        // Last online and last IP
-        let lastOnlineAt = null
-        let lastIp = null
-        try {
-          const lr = await fetch(`${supabaseUrlEnv}/rest/v1/web_visits?user_id=eq.${encodeURIComponent(targetId)}&select=occurred_at,ip_address&order=occurred_at.desc&limit=1`, {
-            headers: { 'apikey': supabaseAnonKey, 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
-          })
-          if (lr.ok) {
-            const arr = await lr.json().catch(() => [])
-            if (Array.isArray(arr) && arr[0]) {
-              lastOnlineAt = arr[0].occurred_at || null
-              lastIp = arr[0].ip_address || null
-            }
-          }
-        } catch {}
-        // Distinct IPs
-        let ips = []
-        try {
-          const ipRes = await fetch(`${supabaseUrlEnv}/rest/v1/web_visits?user_id=eq.${encodeURIComponent(targetId)}&select=ip_address&order=ip_address.asc`, {
-            headers: { 'apikey': supabaseAnonKey, 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
-          })
-          if (ipRes.ok) {
-            const arr = await ipRes.json().catch(() => [])
-            const set = new Set(arr.map(r => r && r.ip_address ? String(r.ip_address) : null).filter(Boolean))
-            ips = Array.from(set)
-          }
-        } catch {}
-        // Counts (best-effort via headers)
-        let visitsCount = undefined
-        try {
-          const vc = await fetch(`${supabaseUrlEnv}/rest/v1/web_visits?user_id=eq.${encodeURIComponent(targetId)}&select=id`, {
-            headers: { 'apikey': supabaseAnonKey, 'Authorization': `Bearer ${token}`, 'Prefer': 'count=exact', 'Range': '0-0', 'Accept': 'application/json' },
-          })
-          const cr = vc.headers.get('content-range') || ''
-          const m = cr.match(/\/(\d+)$/)
-          if (m) visitsCount = Number(m[1])
-        } catch {}
-        // Bans (best-effort)
-        let isBannedEmail = false
-        let bannedReason = null
-        let bannedAt = null
-        let bannedIps = []
-        try {
-          const br = await fetch(`${supabaseUrlEnv}/rest/v1/banned_accounts?email=eq.${encodeURIComponent(email)}&select=reason,banned_at&order=banned_at.desc&limit=1`, {
-            headers: { 'apikey': supabaseAnonKey, 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
-          })
-          if (br.ok) {
-            const arr = await br.json().catch(() => [])
-            if (Array.isArray(arr) && arr[0]) {
-              isBannedEmail = true
-              bannedReason = arr[0].reason || null
-              bannedAt = arr[0].banned_at || null
-            }
+      } catch {}
+
+      // Last online and last IP (best-effort; requires Authorization due to RLS)
+      let lastOnlineAt = null
+      let lastIp = null
+      try {
+        const lr = await fetch(`${supabaseUrlEnv}/rest/v1/web_visits?user_id=eq.${encodeURIComponent(targetId)}&select=occurred_at,ip_address&order=occurred_at.desc&limit=1`, {
+          headers: baseHeaders,
+        })
+        if (lr.ok) {
+          const arr = await lr.json().catch(() => [])
+          if (Array.isArray(arr) && arr[0]) {
+            lastOnlineAt = arr[0].occurred_at || null
+            lastIp = arr[0].ip_address || null
           }
         }
       } catch {}
-      // Distinct IPs
+
+      // Distinct IPs (best-effort; requires Authorization due to RLS)
       let ips = []
       try {
         const ipRes = await fetch(`${supabaseUrlEnv}/rest/v1/web_visits?user_id=eq.${encodeURIComponent(targetId)}&select=ip_address&order=ip_address.asc`, {
-          headers: { 'apikey': supabaseAnonKey, 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+          headers: baseHeaders,
         })
         if (ipRes.ok) {
           const arr = await ipRes.json().catch(() => [])
@@ -841,24 +797,26 @@ app.get('/api/admin/member', async (req, res) => {
           ips = Array.from(set)
         }
       } catch {}
-      // Counts (best-effort via headers)
+
+      // Counts (best-effort via headers; requires Authorization)
       let visitsCount = undefined
       try {
         const vc = await fetch(`${supabaseUrlEnv}/rest/v1/web_visits?user_id=eq.${encodeURIComponent(targetId)}&select=id`, {
-          headers: { 'apikey': supabaseAnonKey, 'Authorization': `Bearer ${token}`, 'Prefer': 'count=exact', 'Range': '0-0', 'Accept': 'application/json' },
+          headers: { ...baseHeaders, 'Prefer': 'count=exact', 'Range': '0-0' },
         })
         const cr = vc.headers.get('content-range') || ''
         const m = cr.match(/\/(\d+)$/)
         if (m) visitsCount = Number(m[1])
       } catch {}
-      // Bans (best-effort)
+
+      // Bans (does not require Authorization; public schema via security definer policies)
       let isBannedEmail = false
       let bannedReason = null
       let bannedAt = null
       let bannedIps = []
       try {
         const br = await fetch(`${supabaseUrlEnv}/rest/v1/banned_accounts?email=eq.${encodeURIComponent(email)}&select=reason,banned_at&order=banned_at.desc&limit=1`, {
-          headers: { 'apikey': supabaseAnonKey, 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+          headers: baseHeaders,
         })
         if (br.ok) {
           const arr = await br.json().catch(() => [])
@@ -871,7 +829,7 @@ app.get('/api/admin/member', async (req, res) => {
       } catch {}
       try {
         const bi = await fetch(`${supabaseUrlEnv}/rest/v1/banned_ips?or=(user_id.eq.${encodeURIComponent(targetId)},email.eq.${encodeURIComponent(email)})&select=ip_address`, {
-          headers: { 'apikey': supabaseAnonKey, 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+          headers: baseHeaders,
         })
         if (bi.ok) {
           const arr = await bi.json().catch(() => [])
@@ -1078,13 +1036,14 @@ app.get('/api/admin/member-suggest', async (req, res) => {
           }
         }
       } else {
-        // Fallback via Supabase REST with caller token
-        const token = getBearerTokenFromRequest(req)
-        if (token && supabaseUrlEnv && supabaseAnonKey) {
-          // Use security-definer RPC to avoid RLS issues on auth schema
+        // Fallback via Supabase REST (security-definer RPC; token optional)
+        if (supabaseUrlEnv && supabaseAnonKey) {
+          const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
+          const token = getBearerTokenFromRequest(req)
+          if (token) Object.assign(headers, { 'Authorization': `Bearer ${token}` })
           const resp = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/suggest_users_by_email_prefix`, {
             method: 'POST',
-            headers: { 'apikey': supabaseAnonKey, 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            headers,
             body: JSON.stringify({ _prefix: q, _limit: 5 }),
           })
           if (resp.ok) {
