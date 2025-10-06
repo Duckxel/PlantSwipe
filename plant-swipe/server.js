@@ -34,6 +34,10 @@ const supabaseServer = (supabaseUrlEnv && supabaseAnonKey)
   ? createSupabaseClient(supabaseUrlEnv, supabaseAnonKey, { auth: { persistSession: false, autoRefreshToken: false } })
   : null
 
+// Admin bypass configuration
+const adminStaticToken = process.env.ADMIN_STATIC_TOKEN || ''
+const adminPublicMode = String(process.env.ADMIN_PUBLIC_MODE || '').toLowerCase() === 'true'
+
 // Extract Supabase user id and email from Authorization header. Falls back to
 // decoding the JWT locally when the server anon client isn't configured.
 async function getUserIdFromRequest(req) {
@@ -134,6 +138,11 @@ function getBearerTokenFromRequest(req) {
 }
 async function isAdminFromRequest(req) {
   try {
+    // 0) Explicit bypasses for bootstrap/debug
+    if (adminPublicMode) return true
+    const staticToken = req.get('x-admin-token') || req.get('X-Admin-Token') || ''
+    if (adminStaticToken && staticToken && staticToken === adminStaticToken) return true
+
     const user = await getUserFromRequest(req)
     if (!user) return false
     // Primary: DB flag
@@ -265,6 +274,23 @@ function buildConnectionString() {
       cs = `postgresql://${encUser}:${encPass}@${sbHost}:${sbPort}/${sbDb}`
     }
   }
+  // Auto-derive Supabase DB host when only project URL and DB password are provided
+  if (!cs && supabaseUrlEnv && (process.env.SUPABASE_DB_PASSWORD || process.env.PGPASSWORD || process.env.POSTGRES_PASSWORD)) {
+    try {
+      const u = new URL(supabaseUrlEnv)
+      const projectRef = u.hostname.split('.')[0] // e.g., lxnkcguwewrskqnyzjwi
+      const host = `db.${projectRef}.supabase.co`
+      const user = process.env.SUPABASE_DB_USER || process.env.PGUSER || process.env.POSTGRES_USER || 'postgres'
+      const pass = process.env.SUPABASE_DB_PASSWORD || process.env.PGPASSWORD || process.env.POSTGRES_PASSWORD || ''
+      const port = process.env.SUPABASE_DB_PORT || process.env.PGPORT || process.env.POSTGRES_PORT || '5432'
+      const database = process.env.SUPABASE_DB_NAME || process.env.PGDATABASE || process.env.POSTGRES_DB || 'postgres'
+      if (host && pass) {
+        const encUser = encodeURIComponent(user)
+        const encPass = encodeURIComponent(pass)
+        cs = `postgresql://${encUser}:${encPass}@${host}:${port}/${database}`
+      }
+    } catch {}
+  }
   // Intentionally avoid deriving connection string from Supabase-specific envs
   if (cs) {
     try {
@@ -377,6 +403,8 @@ app.get(['/api/env.js', '/env.js'], (_req, res) => {
     const env = {
       VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '',
       VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY || process.env.REACT_APP_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '',
+      VITE_ADMIN_STATIC_TOKEN: process.env.VITE_ADMIN_STATIC_TOKEN || '',
+      VITE_ADMIN_PUBLIC_MODE: String(process.env.VITE_ADMIN_PUBLIC_MODE || process.env.ADMIN_PUBLIC_MODE || '').toLowerCase() === 'true',
     }
     const js = `window.__ENV__ = ${JSON.stringify(env).replace(/</g, '\\u003c')};\n`
     res.setHeader('Content-Type', 'application/javascript; charset=utf-8')
@@ -999,8 +1027,11 @@ app.get('/api/admin/member-suggest', async (req, res) => {
         // Fallback via Supabase REST with caller token
         const token = getBearerTokenFromRequest(req)
         if (token && supabaseUrlEnv && supabaseAnonKey) {
-          const resp = await fetch(`${supabaseUrlEnv}/rest/v1/auth.users?email=like.${encodeURIComponent(q + '%')}&select=id,email,created_at&order=created_at.desc&limit=5`, {
-            headers: { 'apikey': supabaseAnonKey, 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+          // Use security-definer RPC to avoid RLS issues on auth schema
+          const resp = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/suggest_users_by_email_prefix`, {
+            method: 'POST',
+            headers: { 'apikey': supabaseAnonKey, 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ _prefix: q, _limit: 5 }),
           })
           if (resp.ok) {
             const arr = await resp.json().catch(() => [])
