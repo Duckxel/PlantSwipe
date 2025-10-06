@@ -333,7 +333,7 @@ app.use((req, res, next) => {
     }
     if (req.path && req.path.startsWith('/api/')) {
       res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
-      res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+      res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
       if (req.method === 'OPTIONS') {
         res.status(204).end()
         return
@@ -346,7 +346,7 @@ app.use((req, res, next) => {
 // Catch-all OPTIONS for any /api/* route (defense-in-depth)
 app.options('/api/*', (_req, res) => {
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.status(204).end()
 })

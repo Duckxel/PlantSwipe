@@ -204,7 +204,14 @@ export const AdminPage: React.FC = () => {
   const probeEndpoint = React.useCallback(async (url: string, okCheck?: (body: any) => boolean): Promise<ProbeResult> => {
     const started = Date.now()
     try {
-      const resp = await fetch(url, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+      const headers: Record<string, string> = { 'Accept': 'application/json' }
+      try {
+        const token = (await supabase.auth.getSession()).data.session?.access_token
+        if (token) headers['Authorization'] = `Bearer ${token}`
+        const staticToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+        if (staticToken) headers['X-Admin-Token'] = staticToken
+      } catch {}
+      const resp = await fetch(url, { headers, credentials: 'same-origin' })
       const body = await safeJson(resp)
       const isOk = (typeof okCheck === 'function') ? (resp.ok && okCheck(body)) : (resp.ok && body?.ok === true)
       const latency = Date.now() - started
