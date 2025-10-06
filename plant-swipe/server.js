@@ -211,6 +211,7 @@ app.options('/api/*', (_req, res) => {
 const supabaseAdmin = null
 
 app.get('/api/health', (_req, res) => {
+  // Keep this lightweight and always-ok; error codes are surfaced on specific probes
   res.json({ ok: true })
 })
 
@@ -219,14 +220,24 @@ app.get('/api/health/db', async (_req, res) => {
   const started = Date.now()
   try {
     if (!sql) {
-      res.status(200).json({ ok: false, error: 'Database not configured', latencyMs: Date.now() - started })
+      res.status(200).json({
+        ok: false,
+        error: 'Database not configured',
+        errorCode: 'DB_NOT_CONFIGURED',
+        latencyMs: Date.now() - started,
+      })
       return
     }
     const rows = await sql`select 1 as one`
     const ok = Array.isArray(rows) && rows[0] && Number(rows[0].one) === 1
     res.status(200).json({ ok, latencyMs: Date.now() - started })
   } catch (e) {
-    res.status(200).json({ ok: false, latencyMs: Date.now() - started, error: e?.message || 'query failed' })
+    res.status(200).json({
+      ok: false,
+      latencyMs: Date.now() - started,
+      error: e?.message || 'query failed',
+      errorCode: 'DB_QUERY_FAILED',
+    })
   }
 })
 
@@ -509,7 +520,7 @@ app.get('/api/admin/stats', async (req, res) => {
     } catch {}
     res.json({ ok: true, profilesCount, authUsersCount })
   } catch (e) {
-    res.status(500).json({ error: e?.message || 'Failed to load stats' })
+    res.status(500).json({ error: e?.message || 'Failed to load stats', errorCode: 'ADMIN_STATS_ERROR' })
   }
 })
 
