@@ -466,109 +466,113 @@ export const AdminPage: React.FC = () => {
                 ) : visitorsSeries.length === 0 ? (
                   <div className="text-sm opacity-60">No data yet.</div>
                 ) : (
-                  <div className="h-64">
-                    {(() => {
-                      const values = visitorsSeries.map(d => d.uniqueVisitors)
-                      const maxVal = Math.max(...values, 1)
-                      const avgVal = Math.round(values.reduce((a, b) => a + b, 0) / values.length)
+                  (() => {
+                    const values = visitorsSeries.map(d => d.uniqueVisitors)
+                    const maxVal = Math.max(...values, 1)
+                    const totalVal = values.reduce((acc, val) => acc + val, 0)
+                    const avgVal = Math.round(totalVal / values.length)
 
-                      const formatDow = (isoDate: string) => {
-                        try {
-                          const dt = new Date(isoDate + 'T00:00:00Z')
-                          return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dt.getUTCDay()]
-                        } catch {
-                          return isoDate
-                        }
+                    const formatDow = (isoDate: string) => {
+                      try {
+                        const dt = new Date(isoDate + 'T00:00:00Z')
+                        return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dt.getUTCDay()]
+                      } catch {
+                        return isoDate
                       }
+                    }
 
-                      const formatFullDate = (isoDate: string) => {
-                        try {
-                          const dt = new Date(isoDate + 'T00:00:00Z')
-                          return new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(dt)
-                        } catch {
-                          return isoDate
-                        }
+                    const formatFullDate = (isoDate: string) => {
+                      try {
+                        const dt = new Date(isoDate + 'T00:00:00Z')
+                        return new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(dt)
+                      } catch {
+                        return isoDate
                       }
+                    }
 
-                      const TooltipContent = ({ active, payload, label }: any) => {
-                        if (!active || !payload || payload.length === 0) return null
-                        const current = payload[0]?.value as number
-                        const idx = visitorsSeries.findIndex(d => d.date === label)
-                        const prev = idx > 0 ? visitorsSeries[idx - 1]?.uniqueVisitors ?? 0 : 0
-                        const delta = current - prev
-                        const pct = prev > 0 ? Math.round((delta / prev) * 100) : null
-                        const up = delta > 0
-                        const down = delta < 0
-                        return (
-                          <div className="rounded-xl border bg-white/90 backdrop-blur p-3 shadow-lg">
-                            <div className="text-xs opacity-60">{formatFullDate(label)}</div>
-                            <div className="mt-1 text-base font-semibold tabular-nums">{current}</div>
-                            <div className="text-xs mt-0.5">
-                              <span className={up ? 'text-emerald-600' : down ? 'text-rose-600' : 'text-neutral-600'}>
-                                {delta === 0 ? 'No change' : `${up ? '+' : ''}${delta}${pct !== null ? ` (${pct}%)` : ''}`}
-                              </span>
-                              <span className="opacity-60"> vs previous day</span>
-                            </div>
-                            <div className="text-[11px] opacity-70 mt-1">7‑day avg: <span className="font-medium">{avgVal}</span></div>
-                          </div>
-                        )
-                      }
-
+                    const TooltipContent = ({ active, payload, label }: any) => {
+                      if (!active || !payload || payload.length === 0) return null
+                      const current = payload[0]?.value as number
+                      const idx = visitorsSeries.findIndex(d => d.date === label)
+                      const prev = idx > 0 ? visitorsSeries[idx - 1]?.uniqueVisitors ?? 0 : 0
+                      const delta = current - prev
+                      const pct = prev > 0 ? Math.round((delta / prev) * 100) : null
+                      const up = delta > 0
+                      const down = delta < 0
                       return (
-                        <ResponsiveContainer width="100%" height="100%">
-                          <ComposedChart
-                            data={visitorsSeries}
-                            margin={{ top: 10, right: 8, bottom: 8, left: 0 }}
-                          >
-                            <defs>
-                              <linearGradient id="visitsLineGrad" x1="0" y1="0" x2="1" y2="0">
-                                <stop offset="0%" stopColor="#111827" />
-                                <stop offset="100%" stopColor="#6b7280" />
-                              </linearGradient>
-                              <linearGradient id="visitsAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor="#111827" stopOpacity={0.35} />
-                                <stop offset="100%" stopColor="#111827" stopOpacity={0.05} />
-                              </linearGradient>
-                            </defs>
-
-                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
-                            <XAxis
-                              dataKey="date"
-                              tickFormatter={formatDow}
-                              tick={{ fontSize: 11, fill: '#525252' }}
-                              axisLine={false}
-                              tickLine={false}
-                              interval={0}
-                            />
-                            <YAxis
-                              allowDecimals={false}
-                              domain={[0, Math.max(maxVal, 5)]}
-                              tick={{ fontSize: 11, fill: '#525252' }}
-                              axisLine={false}
-                              tickLine={false}
-                            />
-                            <Tooltip content={<TooltipContent />} cursor={{ stroke: 'rgba(0,0,0,0.1)' }} />
-                            <ReferenceLine y={avgVal} stroke="#a3a3a3" strokeDasharray="4 4" ifOverflow="extendDomain" label={{ value: 'avg', position: 'right', fill: '#737373', fontSize: 11 }} />
-
-                            <Area type="monotone" dataKey="uniqueVisitors" fill="url(#visitsAreaGrad)" stroke="none" animationDuration={600} />
-                            <Line
-                              type="monotone"
-                              dataKey="uniqueVisitors"
-                              stroke="url(#visitsLineGrad)"
-                              strokeWidth={3}
-                              dot={false}
-                              activeDot={{ r: 5, strokeWidth: 2, stroke: '#111827', fill: '#ffffff' }}
-                              animationDuration={700}
-                            />
-                          </ComposedChart>
-                        </ResponsiveContainer>
+                        <div className="rounded-xl border bg-white/90 backdrop-blur p-3 shadow-lg">
+                          <div className="text-xs opacity-60">{formatFullDate(label)}</div>
+                          <div className="mt-1 text-base font-semibold tabular-nums">{current}</div>
+                          <div className="text-xs mt-0.5">
+                            <span className={up ? 'text-emerald-600' : down ? 'text-rose-600' : 'text-neutral-600'}>
+                              {delta === 0 ? 'No change' : `${up ? '+' : ''}${delta}${pct !== null ? ` (${pct}%)` : ''}`}
+                            </span>
+                            <span className="opacity-60"> vs previous day</span>
+                          </div>
+                          <div className="text-[11px] opacity-70 mt-1">7‑day avg: <span className="font-medium">{avgVal}</span></div>
+                        </div>
                       )
-                    })()}
-                  </div>
+                    }
+
+                    return (
+                      <div>
+                        <div className="text-sm font-medium mb-2">Total for the whole week: <span className="tabular-nums">{totalVal}</span></div>
+                        <div className="h-64">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <ComposedChart
+                              data={visitorsSeries}
+                              margin={{ top: 10, right: 8, bottom: 8, left: 0 }}
+                            >
+                              <defs>
+                                <linearGradient id="visitsLineGrad" x1="0" y1="0" x2="1" y2="0">
+                                  <stop offset="0%" stopColor="#111827" />
+                                  <stop offset="100%" stopColor="#6b7280" />
+                                </linearGradient>
+                                <linearGradient id="visitsAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor="#111827" stopOpacity={0.35} />
+                                  <stop offset="100%" stopColor="#111827" stopOpacity={0.05} />
+                                </linearGradient>
+                              </defs>
+
+                              <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
+                              <XAxis
+                                dataKey="date"
+                                tickFormatter={formatDow}
+                                tick={{ fontSize: 11, fill: '#525252' }}
+                                axisLine={false}
+                                tickLine={false}
+                                interval={0}
+                              />
+                              <YAxis
+                                allowDecimals={false}
+                                domain={[0, Math.max(maxVal, 5)]}
+                                tick={{ fontSize: 11, fill: '#525252' }}
+                                axisLine={false}
+                                tickLine={false}
+                              />
+                              <Tooltip content={<TooltipContent />} cursor={{ stroke: 'rgba(0,0,0,0.1)' }} />
+                              <ReferenceLine y={avgVal} stroke="#a3a3a3" strokeDasharray="4 4" ifOverflow="extendDomain" label={{ value: 'avg', position: 'right', fill: '#737373', fontSize: 11 }} />
+
+                              <Area type="monotone" dataKey="uniqueVisitors" fill="url(#visitsAreaGrad)" stroke="none" animationDuration={600} />
+                              <Line
+                                type="monotone"
+                                dataKey="uniqueVisitors"
+                                stroke="url(#visitsLineGrad)"
+                                strokeWidth={3}
+                                dot={false}
+                                activeDot={{ r: 5, strokeWidth: 2, stroke: '#111827', fill: '#ffffff' }}
+                                animationDuration={700}
+                              />
+                            </ComposedChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+                    )
+                  })()
                 )}
               </CardContent>
             </Card>
-            <div className="text-xs font-medium uppercase tracking-wide opacity-60 mb-2">Quick Links</div>
+            <div className="text-xs font-medium uppercase tracking-wide opacity-60 mt-6 mb-2">Quick Links</div>
             <div className="flex flex-wrap gap-2">
               <Button asChild variant="outline" className="rounded-2xl">
                 <a href="https://github.com/Duckxel/PlantSwipe" target="_blank" rel="noreferrer">
