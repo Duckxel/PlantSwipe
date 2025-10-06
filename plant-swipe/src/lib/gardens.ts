@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabaseClient'
-import type { Garden, GardenMember, GardenPlant, GardenPlantEvent, GardenWateringScheduleRow, WaterFreqUnit } from '@/types/garden'
+import type { Garden, GardenMember, GardenPlant } from '@/types/garden'
 import type { GardenTaskRow } from '@/types/garden'
 import type { GardenPlantTask, GardenPlantTaskOccurrence, TaskType, TaskScheduleKind, TaskUnit } from '@/types/garden'
 import type { Plant } from '@/types/plant'
@@ -162,50 +162,7 @@ export async function updateGardenPlantsOrder(params: { gardenId: string; ordere
   }
 }
 
-function addDays(date: Date, days: number): Date {
-  const d = new Date(date)
-  d.setDate(d.getDate() + days)
-  return d
-}
-
-export function computeNextWaterDate(water: Plant['care']['water']): Date {
-  const now = new Date()
-  if (water === 'High') return addDays(now, 1)
-  if (water === 'Medium') return addDays(now, 3)
-  return addDays(now, 7)
-}
-
-export async function logWaterEvent(params: { gardenPlantId: string }): Promise<GardenPlantEvent> {
-  // Determine next due from plant care
-  const { data: gp, error: gperr } = await supabase
-    .from('garden_plants')
-    .select('id, plant_id')
-    .eq('id', params.gardenPlantId)
-    .single()
-  if (gperr) throw new Error(gperr.message)
-  const plantId = String(gp.plant_id)
-  const { data: p } = await supabase
-    .from('plants')
-    .select('care_water')
-    .eq('id', plantId)
-    .single()
-  const nextDue = computeNextWaterDate((p?.care_water || 'Low') as any)
-  const nowIso = new Date().toISOString()
-  const { data, error } = await supabase
-    .from('garden_plant_events')
-    .insert({ garden_plant_id: params.gardenPlantId, event_type: 'water', occurred_at: nowIso, next_due_at: nextDue.toISOString(), notes: null })
-    .select('id, garden_plant_id, event_type, occurred_at, notes, next_due_at')
-    .single()
-  if (error) throw new Error(error.message)
-  return {
-    id: String(data.id),
-    gardenPlantId: String(data.garden_plant_id),
-    eventType: 'water',
-    occurredAt: String(data.occurred_at),
-    notes: data.notes,
-    nextDueAt: data.next_due_at,
-  }
-}
+// addDays kept previously for legacy helpers; remove unused util
 
 export async function getGardenMembers(gardenId: string): Promise<GardenMember[]> {
   const { data, error } = await supabase
@@ -271,58 +228,9 @@ export async function addMemberByEmail(params: { gardenId: string; email: string
   }
 }
 
-export async function fetchScheduleForPlants(gardenPlantIds: string[], windowDays = 30): Promise<Record<string, GardenWateringScheduleRow[]>> {
-  if (gardenPlantIds.length === 0) return {}
-  const start = new Date()
-  start.setDate(start.getDate() - windowDays)
-  const startStr = start.toISOString().slice(0,10)
-  const end = new Date()
-  end.setDate(end.getDate() + windowDays)
-  const endStr = end.toISOString().slice(0,10)
-  const { data, error } = await supabase
-    .from('garden_watering_schedule')
-    .select('id, garden_plant_id, due_date, completed_at')
-    .gte('due_date', startStr)
-    .lte('due_date', endStr)
-    .in('garden_plant_id', gardenPlantIds)
-  if (error) throw new Error(error.message)
-  const acc: Record<string, GardenWateringScheduleRow[]> = {}
-  for (const r of data || []) {
-    const key = String((r as any).garden_plant_id)
-    if (!acc[key]) acc[key] = []
-    acc[key].push({
-      id: String((r as any).id),
-      gardenPlantId: key,
-      dueDate: String((r as any).due_date),
-      completedAt: (r as any).completed_at || null,
-    })
-  }
-  // Sort by dueDate
-  for (const k of Object.keys(acc)) {
-    acc[k].sort((a, b) => a.dueDate.localeCompare(b.dueDate))
-  }
-  return acc
-}
+// Legacy watering schedule helpers removed in favor of Tasks v2 occurrences
 
-export async function reseedSchedule(gardenPlantId: string, daysAhead = 60): Promise<void> {
-  const { error } = await supabase.rpc('reseed_watering_schedule', { _garden_plant_id: gardenPlantId, _days_ahead: daysAhead })
-  if (error) throw new Error(error.message)
-}
-
-export async function markGardenPlantWatered(gardenPlantId: string): Promise<void> {
-  const nowIso = new Date().toISOString()
-  const { error } = await supabase.rpc('mark_garden_plant_watered', { _garden_plant_id: gardenPlantId, _at: nowIso })
-  if (error) throw new Error(error.message)
-}
-
-export async function updateGardenPlantFrequency(params: { gardenPlantId: string; unit: WaterFreqUnit; value: number }): Promise<void> {
-  const { gardenPlantId, unit, value } = params
-  const { error } = await supabase
-    .from('garden_plants')
-    .update({ override_water_freq_unit: unit, override_water_freq_value: value })
-    .eq('id', gardenPlantId)
-  if (error) throw new Error(error.message)
-}
+// Legacy watering schedule helpers removed
 
 export async function deleteGardenPlant(gardenPlantId: string): Promise<void> {
   const { error } = await supabase
@@ -380,23 +288,21 @@ export async function computeGardenTaskForDay(params: { gardenId: string; dayIso
 }
 
 export async function getGardenTodayProgress(gardenId: string, dayIso: string): Promise<{ due: number; completed: number }> {
-  // Fetch garden plant ids
-  const { data: plantRows, error: plantErr } = await supabase
-    .from('garden_plants')
-    .select('id')
-    .eq('garden_id', gardenId)
-  if (plantErr) throw new Error(plantErr.message)
-  const gardenPlantIds = (plantRows || []).map((r: any) => String(r.id))
-  if (gardenPlantIds.length === 0) return { due: 0, completed: 0 }
-  // Count today's due and completed from schedule
-  const { data: schedRows, error: schedErr } = await supabase
-    .from('garden_watering_schedule')
-    .select('id, completed_at, garden_plant_id, due_date')
-    .in('garden_plant_id', gardenPlantIds)
-    .eq('due_date', dayIso)
-  if (schedErr) throw new Error(schedErr.message)
-  const due = (schedRows || []).length
-  const completed = (schedRows || []).filter((r: any) => Boolean(r.completed_at)).length
+  // Tasks v2 only: compute from occurrences for the given day
+  const tasks = await listGardenTasks(gardenId)
+  if (tasks.length === 0) return { due: 0, completed: 0 }
+  const start = `${dayIso}T00:00:00.000Z`
+  const end = `${dayIso}T23:59:59.999Z`
+  await syncTaskOccurrencesForGarden(gardenId, start, end)
+  const occs = await listOccurrencesForTasks(tasks.map(t => t.id), start, end)
+  let due = 0
+  let completed = 0
+  for (const o of occs) {
+    const req = Math.max(1, Number(o.requiredCount || 1))
+    const comp = Math.min(req, Number(o.completedCount || 0))
+    due += req
+    completed += comp
+  }
   return { due, completed }
 }
 
