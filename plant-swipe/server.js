@@ -241,14 +241,14 @@ app.get('/api/health/db', async (_req, res) => {
           return
         } catch {}
       }
-      res.status(200).json({ ok: false, error: 'Database not configured', latencyMs: Date.now() - started })
+      res.status(200).json({ ok: false, error: 'Database not configured', errorCode: 'DB_NOT_CONFIGURED', latencyMs: Date.now() - started })
       return
     }
     const rows = await sql`select 1 as one`
     const ok = Array.isArray(rows) && rows[0] && Number(rows[0].one) === 1
     res.status(200).json({ ok, latencyMs: Date.now() - started })
   } catch (e) {
-    res.status(200).json({ ok: false, latencyMs: Date.now() - started, error: e?.message || 'query failed' })
+    res.status(200).json({ ok: false, latencyMs: Date.now() - started, error: e?.message || 'query failed', errorCode: 'DB_QUERY_FAILED' })
   }
 })
 
