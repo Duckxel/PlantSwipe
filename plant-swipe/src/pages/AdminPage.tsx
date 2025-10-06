@@ -14,6 +14,16 @@ import {
 } from 'recharts'
 import { RefreshCw, Server, Database, Github, ExternalLink, ShieldCheck, Mail, Ban, UserSearch, AlertTriangle } from "lucide-react"
 import { supabase } from '@/lib/supabaseClient'
+import {
+  Dialog,
+  DialogTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from '@/components/ui/dialog'
 
 export const AdminPage: React.FC = () => {
 
@@ -543,6 +553,13 @@ export const AdminPage: React.FC = () => {
   const [memberData, setMemberData] = React.useState<{ user: { id: string; email: string; created_at?: string } | null; profile: any; ips: string[] } | null>(null)
   const [banReason, setBanReason] = React.useState('')
   const [banSubmitting, setBanSubmitting] = React.useState(false)
+  const [banOpen, setBanOpen] = React.useState(false)
+
+  // Email autocomplete state
+  const [emailSuggestions, setEmailSuggestions] = React.useState<Array<{ id: string; email: string }>>([])
+  const [suggestionsOpen, setSuggestionsOpen] = React.useState(false)
+  const [suggestLoading, setSuggestLoading] = React.useState(false)
+  const [highlightIndex, setHighlightIndex] = React.useState<number>(-1)
 
   const lookupMember = React.useCallback(async () => {
     if (!lookupEmail || memberLoading) return
@@ -569,8 +586,6 @@ export const AdminPage: React.FC = () => {
 
   const performBan = React.useCallback(async () => {
     if (!lookupEmail || banSubmitting) return
-    const confirmTxt = `Ban ${lookupEmail}? This will delete their account and ban all known IPs.`
-    if (!window.confirm(confirmTxt)) return
     setBanSubmitting(true)
     try {
       const session = (await supabase.auth.getSession()).data.session
@@ -587,6 +602,7 @@ export const AdminPage: React.FC = () => {
       if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`)
       alert('User banned successfully')
       setBanReason('')
+      setBanOpen(false)
       // Refresh lookup data to reflect deletion
       setMemberData(null)
     } catch (e: unknown) {
@@ -596,6 +612,52 @@ export const AdminPage: React.FC = () => {
       setBanSubmitting(false)
     }
   }, [lookupEmail, banReason, banSubmitting, safeJson])
+
+  // Debounced email suggestions fetch
+  React.useEffect(() => {
+    let cancelled = false
+    let timer: any = null
+    const run = async () => {
+      const q = lookupEmail.trim()
+      if (q.length < 2) {
+        setEmailSuggestions([])
+        setSuggestionsOpen(false)
+        setHighlightIndex(-1)
+        return
+      }
+      setSuggestLoading(true)
+      try {
+        const token = (await supabase.auth.getSession()).data.session?.access_token
+        const headers: Record<string,string> = { 'Accept': 'application/json' }
+        if (token) headers['Authorization'] = `Bearer ${token}`
+        const resp = await fetch(`/api/admin/member-suggest?q=${encodeURIComponent(q)}`, {
+          headers,
+          credentials: 'same-origin',
+        })
+        const data = await safeJson(resp)
+        if (cancelled) return
+        if (resp.ok && Array.isArray(data?.suggestions)) {
+          setEmailSuggestions(data.suggestions.map((s: any) => ({ id: String(s.id), email: String(s.email) })))
+          setSuggestionsOpen(true)
+          setHighlightIndex(-1)
+        } else {
+          setEmailSuggestions([])
+          setSuggestionsOpen(false)
+          setHighlightIndex(-1)
+        }
+      } catch {
+        if (!cancelled) {
+          setEmailSuggestions([])
+          setSuggestionsOpen(false)
+          setHighlightIndex(-1)
+        }
+      } finally {
+        if (!cancelled) setSuggestLoading(false)
+      }
+    }
+    timer = setTimeout(run, 200)
+    return () => { cancelled = true; if (timer) clearTimeout(timer) }
+  }, [lookupEmail, safeJson])
 
   return (
     <div className="max-w-3xl mx-auto mt-8 px-4 md:px-0">
@@ -910,13 +972,62 @@ export const AdminPage: React.FC = () => {
               <Card className="rounded-2xl">
                 <CardContent className="p-4 space-y-3">
                   <div className="text-sm font-medium flex items-center gap-2"><UserSearch className="h-4 w-4" /> Find member by email</div>
-                  <div className="flex gap-2">
-                    <input
-                      className="flex-1 px-3 py-2 rounded-xl border"
-                      placeholder="user@example.com"
-                      value={lookupEmail}
-                      onChange={(e) => setLookupEmail(e.target.value)}
-                    />
+                  <div className="flex gap-2 relative">
+                    <div className="flex-1 relative">
+                      <input
+                        className="w-full px-3 py-2 rounded-xl border"
+                        placeholder="user@example.com"
+                        value={lookupEmail}
+                        onChange={(e) => setLookupEmail(e.target.value)}
+                        onFocus={() => { if (emailSuggestions.length > 0) setSuggestionsOpen(true) }}
+                        onBlur={() => setTimeout(() => setSuggestionsOpen(false), 120)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            if (suggestionsOpen && emailSuggestions.length > 0 && highlightIndex >= 0 && highlightIndex < emailSuggestions.length) {
+                              e.preventDefault()
+                              const chosen = emailSuggestions[highlightIndex]
+                              setLookupEmail(chosen.email)
+                              setSuggestionsOpen(false)
+                            } else {
+                              // Trigger lookup when pressing Enter with no suggestion selected
+                              e.preventDefault()
+                              lookupMember()
+                            }
+                            return
+                          }
+                          if (!suggestionsOpen || emailSuggestions.length === 0) return
+                          if (e.key === 'ArrowDown') {
+                            e.preventDefault()
+                            setHighlightIndex((prev) => (prev + 1) % emailSuggestions.length)
+                          } else if (e.key === 'ArrowUp') {
+                            e.preventDefault()
+                            setHighlightIndex((prev) => (prev - 1 + emailSuggestions.length) % emailSuggestions.length)
+                          }
+                        }}
+                      />
+                      {suggestionsOpen && emailSuggestions.length > 0 && (
+                        <div className="absolute z-10 mt-1 w-full rounded-xl border bg-white shadow">
+                          {emailSuggestions.map((s, idx) => (
+                            <button
+                              key={s.id}
+                              type="button"
+                              className={`w-full text-left px-3 py-2 text-sm rounded-xl ${idx === highlightIndex ? 'bg-neutral-100' : ''}`}
+                              onMouseEnter={() => setHighlightIndex(idx)}
+                              onMouseDown={(e) => {
+                                e.preventDefault()
+                                setLookupEmail(s.email)
+                                setSuggestionsOpen(false)
+                              }}
+                            >
+                              {s.email}
+                            </button>
+                          ))}
+                          {suggestLoading && (
+                            <div className="px-3 py-2 text-xs opacity-60">Loading…</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                     <Button className="rounded-2xl" onClick={lookupMember} disabled={memberLoading || !lookupEmail}>
                       <Mail className="h-4 w-4" /> Lookup
                     </Button>
@@ -944,23 +1055,47 @@ export const AdminPage: React.FC = () => {
                 <CardContent className="p-4 space-y-3">
                   <div className="flex items-center gap-2 text-sm font-medium text-rose-700"><AlertTriangle className="h-4 w-4" /> Ban account</div>
                   <div className="text-xs opacity-70">This deletes the account and bans all known IPs. Provide a reason for audit.</div>
-                  <div className="grid gap-2">
-                    <label className="text-xs opacity-60">Reason</label>
-                    <textarea
-                      className="min-h-[80px] px-3 py-2 rounded-xl border"
-                      placeholder="Reason for ban"
-                      value={banReason}
-                      onChange={(e) => setBanReason(e.target.value)}
-                    />
-                  </div>
-                  <Button
-                    variant="destructive"
-                    className="rounded-2xl"
-                    onClick={performBan}
-                    disabled={!lookupEmail || banSubmitting}
-                  >
-                    <Ban className="h-4 w-4" /> {banSubmitting ? 'Banning…' : 'Ban user'}
-                  </Button>
+
+                  <Dialog open={banOpen} onOpenChange={setBanOpen}>
+                    <DialogTrigger asChild>
+                      <Button
+                        variant="destructive"
+                        className="rounded-2xl"
+                        disabled={!lookupEmail}
+                      >
+                        <Ban className="h-4 w-4" /> Ban user
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Ban {lookupEmail || 'user'}</DialogTitle>
+                        <DialogDescription>
+                          This will delete the account and ban all known IPs for this user.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="grid gap-2 mt-2">
+                        <label className="text-xs opacity-60">Reason</label>
+                        <textarea
+                          className="min-h-[80px] px-3 py-2 rounded-xl border"
+                          placeholder="Reason for ban"
+                          value={banReason}
+                          onChange={(e) => setBanReason(e.target.value)}
+                        />
+                      </div>
+                      <DialogFooter>
+                        <DialogClose asChild>
+                          <Button variant="secondary">Cancel</Button>
+                        </DialogClose>
+                        <Button
+                          variant="destructive"
+                          onClick={performBan}
+                          disabled={!lookupEmail || banSubmitting}
+                        >
+                          {banSubmitting ? 'Banning…' : 'Confirm ban'}
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
                 </CardContent>
               </Card>
             </div>
