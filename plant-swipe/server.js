@@ -27,8 +27,8 @@ const __dirname = path.dirname(__filename)
 const exec = promisify(execCb)
 
 // Supabase client (server-side) for auth verification
-const supabaseUrlEnv = process.env.VITE_SUPABASE_URL
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
+const supabaseUrlEnv = process.env.VITE_SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.REACT_APP_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 const supabaseServer = (supabaseUrlEnv && supabaseAnonKey)
   ? createSupabaseClient(supabaseUrlEnv, supabaseAnonKey, { auth: { persistSession: false, autoRefreshToken: false } })
   : null
@@ -133,7 +133,7 @@ async function ensureAdmin(req, res) {
 }
 
 function buildConnectionString() {
-  let cs = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.POSTGRES_PRISMA_URL
+  let cs = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.POSTGRES_PRISMA_URL || process.env.SUPABASE_DB_URL
   if (!cs) {
     const host = process.env.PGHOST || process.env.POSTGRES_HOST
     const user = process.env.PGUSER || process.env.POSTGRES_USER
@@ -145,6 +145,19 @@ function buildConnectionString() {
       const encPass = password ? encodeURIComponent(password) : ''
       const auth = encPass ? `${encUser}:${encPass}` : encUser
       cs = `postgresql://${auth}@${host}:${port}/${database}`
+    }
+  }
+  // Fallback: support explicit Supabase DB host credentials if provided
+  if (!cs) {
+    const sbHost = process.env.SUPABASE_DB_HOST
+    const sbUser = process.env.SUPABASE_DB_USER || process.env.PGUSER || process.env.POSTGRES_USER || 'postgres'
+    const sbPass = process.env.SUPABASE_DB_PASSWORD || process.env.PGPASSWORD || process.env.POSTGRES_PASSWORD
+    const sbPort = process.env.SUPABASE_DB_PORT || process.env.PGPORT || process.env.POSTGRES_PORT || '5432'
+    const sbDb = process.env.SUPABASE_DB_NAME || process.env.PGDATABASE || process.env.POSTGRES_DB || 'postgres'
+    if (sbHost && sbPass) {
+      const encUser = encodeURIComponent(sbUser)
+      const encPass = encodeURIComponent(sbPass)
+      cs = `postgresql://${encUser}:${encPass}@${sbHost}:${sbPort}/${sbDb}`
     }
   }
   // Intentionally avoid deriving connection string from Supabase-specific envs
@@ -219,6 +232,15 @@ app.get('/api/health/db', async (_req, res) => {
   const started = Date.now()
   try {
     if (!sql) {
+      // Fallback: try Supabase reachability via anon client
+      if (supabaseServer) {
+        try {
+          const { error } = await supabaseServer.from('plants').select('id', { head: true, count: 'exact' }).limit(1)
+          const ok = !error
+          res.status(200).json({ ok, latencyMs: Date.now() - started, via: 'supabase' })
+          return
+        } catch {}
+      }
       res.status(200).json({ ok: false, error: 'Database not configured', latencyMs: Date.now() - started })
       return
     }
@@ -236,8 +258,8 @@ app.get('/api/health/db', async (_req, res) => {
 app.get(['/api/env.js', '/env.js'], (_req, res) => {
   try {
     const env = {
-      VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL || '',
-      VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '',
+      VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+      VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY || process.env.REACT_APP_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '',
     }
     const js = `window.__ENV__ = ${JSON.stringify(env).replace(/</g, '\\u003c')};\n`
     res.setHeader('Content-Type', 'application/javascript; charset=utf-8')
