@@ -160,11 +160,18 @@ export const AdminPage: React.FC = () => {
     return `${d}d ago`
   }
 
-  // --- Health monitor: ping API, Admin, DB every second ---
+  // --- Health monitor: ping API, Admin, DB ---
   type ProbeResult = { ok: boolean | null; latencyMs: number | null; updatedAt: number | null }
   const [apiProbe, setApiProbe] = React.useState<ProbeResult>({ ok: null, latencyMs: null, updatedAt: null })
   const [adminProbe, setAdminProbe] = React.useState<ProbeResult>({ ok: null, latencyMs: null, updatedAt: null })
   const [dbProbe, setDbProbe] = React.useState<ProbeResult>({ ok: null, latencyMs: null, updatedAt: null })
+  const [healthRefreshing, setHealthRefreshing] = React.useState<boolean>(false)
+
+  // Track mount state to avoid setState on unmounted component during async probes
+  const isMountedRef = React.useRef(true)
+  React.useEffect(() => {
+    return () => { isMountedRef.current = false }
+  }, [])
 
   const probeEndpoint = React.useCallback(async (url: string, okCheck?: (body: any) => boolean): Promise<ProbeResult> => {
     const started = Date.now()
@@ -181,25 +188,33 @@ export const AdminPage: React.FC = () => {
     }
   }, [safeJson])
 
-  React.useEffect(() => {
-    let cancelled = false
-    const run = async () => {
-      const [apiRes, adminRes, dbRes] = await Promise.all([
-        probeEndpoint('/api/health', (b) => b?.ok === true),
-        probeEndpoint('/api/admin/stats', (b) => b?.ok === true && typeof b?.profilesCount === 'number'),
-        probeEndpoint('/api/health/db', (b) => b?.ok === true),
-      ])
-      if (!cancelled) {
-        setApiProbe(apiRes)
-        setAdminProbe(adminRes)
-        setDbProbe(dbRes)
-      }
-    }
-    // initial
-    run()
-    const id = setInterval(run, 1000)
-    return () => { cancelled = true; clearInterval(id) }
+  const runHealthProbes = React.useCallback(async () => {
+    const [apiRes, adminRes, dbRes] = await Promise.all([
+      probeEndpoint('/api/health', (b) => b?.ok === true),
+      probeEndpoint('/api/admin/stats', (b) => b?.ok === true && typeof b?.profilesCount === 'number'),
+      probeEndpoint('/api/health/db', (b) => b?.ok === true),
+    ])
+    if (!isMountedRef.current) return
+    setApiProbe(apiRes)
+    setAdminProbe(adminRes)
+    setDbProbe(dbRes)
   }, [probeEndpoint])
+
+  const refreshHealth = React.useCallback(async () => {
+    setHealthRefreshing(true)
+    try {
+      await runHealthProbes()
+    } finally {
+      setHealthRefreshing(false)
+    }
+  }, [runHealthProbes])
+
+  React.useEffect(() => {
+    // initial
+    runHealthProbes()
+    const id = setInterval(runHealthProbes, 60_000)
+    return () => { clearInterval(id) }
+  }, [runHealthProbes])
 
   const StatusDot: React.FC<{ ok: boolean | null }> = ({ ok }) => (
     <span
@@ -453,8 +468,18 @@ export const AdminPage: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-sm font-medium">Health monitor</div>
-                  <div className="text-xs opacity-60">Pinging every second</div>
+                  <div className="text-xs opacity-60">Auto‑ping every 60s</div>
                 </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Refresh health"
+                  onClick={refreshHealth}
+                  disabled={healthRefreshing}
+                  className="h-8 w-8"
+                >
+                  <RefreshCw className={`h-4 w-4 ${healthRefreshing ? 'animate-spin' : ''}`} />
+                </Button>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
                 <div className="flex items-center justify-between rounded-xl border p-3">
