@@ -2,8 +2,9 @@ import React, { useMemo, useState } from "react";
 import { Routes, Route, NavLink, useLocation, useNavigate, Navigate } from "react-router-dom";
 import { useMotionValue } from "framer-motion";
 import { Search, Sparkles } from "lucide-react";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+// Sheet is used for plant info overlay
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -17,9 +18,11 @@ import { SearchPage } from "@/pages/SearchPage";
 import { CreatePlantPage } from "@/pages/CreatePlantPage";
 import { EditPlantPage } from "@/pages/EditPlantPage";
 import type { Plant } from "@/types/plant";
-import { PlantDetails } from "@/components/plant/PlantDetails";
+// PlantDetails imported in PlantInfoPage route component
+import PlantInfoPage from "@/pages/PlantInfoPage";
 import { useAuth } from "@/context/AuthContext";
 import { ProfilePage } from "@/pages/ProfilePage";
+import { AdminPage } from "@/pages/AdminPage";
 import { supabase } from "@/lib/supabaseClient";
 
 // --- Main Component ---
@@ -33,10 +36,11 @@ export default function PlantSwipe() {
   const [favoritesFirst, setFavoritesFirst] = useState(false)
 
   const [index, setIndex] = useState(0)
-  const [openInfo, setOpenInfo] = useState<Plant | null>(null)
   const [likedIds, setLikedIds] = useState<string[]>([])
 
   const location = useLocation()
+  const state = location.state as { backgroundLocation?: any } | null
+  const backgroundLocation = state?.backgroundLocation
   const navigate = useNavigate()
   const currentView: "discovery" | "gardens" | "search" | "profile" | "create" =
     location.pathname === "/" ? "discovery" :
@@ -66,66 +70,234 @@ export default function PlantSwipe() {
   const loadPlants = React.useCallback(async () => {
     setLoading(true)
     setLoadError(null)
+    let ok = false
     try {
-      const { data, error } = await supabase
-        .from('plants')
-        .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount')
-        .order('name', { ascending: true })
-      if (error) throw error
-      type PlantRow = {
-        id: string | number
-        name: string
-        scientific_name?: string | null
-        colors?: unknown
-        seasons?: unknown
-        rarity: Plant['rarity']
-        meaning?: string | null
-        description?: string | null
-        image_url?: string | null
-        care_sunlight?: Plant['care']['sunlight'] | null
-        care_water?: Plant['care']['water'] | null
-        care_soil?: string | null
-        care_difficulty?: Plant['care']['difficulty'] | null
-        seeds_available?: boolean | null
-        water_freq_unit?: Plant['waterFreqUnit'] | null
-        water_freq_value?: number | null
-        water_freq_period?: Plant['waterFreqPeriod'] | null
-        water_freq_amount?: number | null
+      // Prefer public API first to ensure anonymous browsing works even without Supabase
+      const resp = await fetch('/api/plants', {
+        credentials: 'same-origin',
+        headers: { 'Accept': 'application/json' },
+      })
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+      const ct = (resp.headers.get('content-type') || '').toLowerCase()
+      const text = await resp.text()
+      if (ct.includes('application/json') || /^[\s\n]*[\[{]/.test(text)) {
+        let arr: unknown = []
+        try { arr = JSON.parse(text) } catch { arr = [] }
+        const parsedFromApi: Plant[] = (Array.isArray(arr) ? arr : []).map((p: any) => ({
+          id: String(p.id),
+          name: String(p.name),
+          scientificName: String(p.scientificName || p.scientific_name || ''),
+          colors: Array.isArray(p.colors) ? p.colors.map((c: unknown) => String(c)) : [],
+          seasons: Array.isArray(p.seasons) ? (p.seasons as unknown[]).map((s) => String(s)) as Plant['seasons'] : [],
+          rarity: (p.rarity || 'Common') as Plant['rarity'],
+          meaning: p.meaning ? String(p.meaning) : '',
+          description: p.description ? String(p.description) : '',
+          image: String(p.image || p.image_url || ''),
+          care: {
+            sunlight: ((p.care && p.care.sunlight) || p.care_sunlight || 'Low') as Plant['care']['sunlight'],
+            water: ((p.care && p.care.water) || p.care_water || 'Low') as Plant['care']['water'],
+            soil: String((p.care && p.care.soil) || p.care_soil || ''),
+            difficulty: ((p.care && p.care.difficulty) || p.care_difficulty || 'Easy') as Plant['care']['difficulty']
+          },
+          seedsAvailable: Boolean((p.seedsAvailable ?? p.seeds_available) ?? false),
+          waterFreqUnit: (p.waterFreqUnit || p.water_freq_unit) || undefined,
+          waterFreqValue: (p.waterFreqValue ?? p.water_freq_value) ?? null,
+          waterFreqPeriod: (p.waterFreqPeriod || p.water_freq_period) || undefined,
+          waterFreqAmount: (p.waterFreqAmount ?? p.water_freq_amount) ?? null
+        }))
+        setPlants(parsedFromApi)
+        ok = true
+      } else {
+        throw new Error('Non-JSON response from /api/plants')
       }
-      const parsed: Plant[] = (Array.isArray(data) ? data : []).map((p: PlantRow) => ({
-        id: String(p.id),
-        name: String(p.name),
-        scientificName: String(p.scientific_name || ''),
-        colors: Array.isArray(p.colors as string[] | unknown[]) ? (p.colors as unknown[]).map((c) => String(c)) : [],
-        seasons: Array.isArray(p.seasons as string[] | unknown[]) ? (p.seasons as unknown[]).map((s) => String(s)) as Plant['seasons'] : [],
-        rarity: p.rarity as Plant['rarity'],
-        meaning: p.meaning ? String(p.meaning) : '',
-        description: p.description ? String(p.description) : '',
-        image: p.image_url || '',
-        care: {
-          sunlight: (p.care_sunlight || 'Low') as Plant['care']['sunlight'],
-          water: (p.care_water || 'Low') as Plant['care']['water'],
-          soil: String(p.care_soil || ''),
-          difficulty: (p.care_difficulty || 'Easy') as Plant['care']['difficulty']
-        },
-        seedsAvailable: Boolean(p.seeds_available ?? false),
-        waterFreqUnit: p.water_freq_unit || undefined,
-        waterFreqValue: p.water_freq_value ?? null,
-        waterFreqPeriod: p.water_freq_period || undefined,
-        waterFreqAmount: p.water_freq_amount ?? null
-      }))
-      setPlants(parsed)
-    } catch (e: unknown) {
-      const msg = e && typeof e === 'object' && 'message' in e ? String((e as { message?: unknown }).message || '') : ''
-      setLoadError(msg || 'Failed to load plants')
+    } catch (_apiErr: unknown) {
+      // Fallback to Supabase client if API unavailable
+      try {
+        const { data, error } = await supabase
+          .from('plants')
+          .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount')
+          .order('name', { ascending: true })
+        if (error) throw error
+        type PlantRow = {
+          id: string | number
+          name: string
+          scientific_name?: string | null
+          colors?: unknown
+          seasons?: unknown
+          rarity: Plant['rarity']
+          meaning?: string | null
+          description?: string | null
+          image_url?: string | null
+          care_sunlight?: Plant['care']['sunlight'] | null
+          care_water?: Plant['care']['water'] | null
+          care_soil?: string | null
+          care_difficulty?: Plant['care']['difficulty'] | null
+          seeds_available?: boolean | null
+          water_freq_unit?: Plant['waterFreqUnit'] | null
+          water_freq_value?: number | null
+          water_freq_period?: Plant['waterFreqPeriod'] | null
+          water_freq_amount?: number | null
+        }
+        const parsed: Plant[] = (Array.isArray(data) ? data : []).map((p: PlantRow) => ({
+          id: String(p.id),
+          name: String(p.name),
+          scientificName: String(p.scientific_name || ''),
+          colors: Array.isArray(p.colors as string[] | unknown[]) ? (p.colors as unknown[]).map((c) => String(c)) : [],
+          seasons: Array.isArray(p.seasons as string[] | unknown[]) ? (p.seasons as unknown[]).map((s) => String(s)) as Plant['seasons'] : [],
+          rarity: p.rarity as Plant['rarity'],
+          meaning: p.meaning ? String(p.meaning) : '',
+          description: p.description ? String(p.description) : '',
+          image: p.image_url || '',
+          care: {
+            sunlight: (p.care_sunlight || 'Low') as Plant['care']['sunlight'],
+            water: (p.care_water || 'Low') as Plant['care']['water'],
+            soil: String(p.care_soil || ''),
+            difficulty: (p.care_difficulty || 'Easy') as Plant['care']['difficulty']
+          },
+          seedsAvailable: Boolean(p.seeds_available ?? false),
+          waterFreqUnit: p.water_freq_unit || undefined,
+          waterFreqValue: p.water_freq_value ?? null,
+          waterFreqPeriod: p.water_freq_period || undefined,
+          waterFreqAmount: p.water_freq_amount ?? null
+        }))
+        setPlants(parsed)
+        ok = true
+      } catch (e2: unknown) {
+        const msg = e2 && typeof e2 === 'object' && 'message' in e2 ? String((e2 as { message?: unknown }).message || '') : ''
+        setLoadError(msg || 'Failed to load plants')
+      }
     } finally {
       setLoading(false)
     }
+    return ok
   }, [])
 
   React.useEffect(() => {
     loadPlants()
   }, [loadPlants])
+
+  // Global presence tracking so Admin can see "currently online" users
+  const presenceRef = React.useRef<ReturnType<typeof supabase.channel> | null>(null)
+  React.useEffect(() => {
+    // Track SPA route changes to server for visit analytics
+    const sendVisit = async (path: string) => {
+      try {
+        const base: string = ''
+        const session = (await supabase.auth.getSession()).data.session
+        const token = session?.access_token
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+        if (token) headers.Authorization = `Bearer ${token}`
+        const ref = document.referrer || ''
+        const extra = {
+          viewport: { w: window.innerWidth, h: window.innerHeight, dpr: window.devicePixelRatio || 1 },
+          screen: { w: window.screen?.width || null, h: window.screen?.height || null, colorDepth: (window.screen as any)?.colorDepth || null },
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || null,
+          platform: navigator.platform || null,
+          vendor: navigator.vendor || null,
+          hardwareConcurrency: (navigator as any).hardwareConcurrency || null,
+          memoryGB: (navigator as any).deviceMemory || null,
+          webgl: (() => {
+            try {
+              const c = document.createElement('canvas')
+              const gl = (c.getContext('webgl2') || c.getContext('webgl')) as WebGLRenderingContext | WebGL2RenderingContext | null
+              if (!gl) return null
+              const vendor = (gl as any).getParameter?.((gl as any).VENDOR)
+              const renderer = (gl as any).getParameter?.((gl as any).RENDERER)
+              return { vendor: vendor ?? null, renderer: renderer ?? null }
+            } catch { return null }
+          })(),
+        }
+        await fetch(`${base}/api/track-visit`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            pagePath: path,
+            referrer: ref,
+            userId: user?.id || null,
+            pageTitle: document.title || null,
+            language: navigator.language || (navigator as any).languages?.[0] || null,
+            utm: null,
+            extra,
+          }),
+          keepalive: true,
+        })
+      } catch {}
+    }
+
+    // Initial on mount and on subsequent route changes
+    sendVisit(location.pathname + location.search).catch(() => {})
+    const unlisten = () => {
+      // react-router v6 provides useLocation, so listen via effect dependency
+    }
+    return () => { unlisten() }
+  }, [location.pathname, location.search, user?.id])
+
+  // Heartbeat: periodically record a lightweight visit so Admin "online" stays fresh
+  React.useEffect(() => {
+    const HEARTBEAT_MS = 60_000
+    let timer: ReturnType<typeof setInterval> | null = null
+    const sendHeartbeat = async () => {
+      try {
+        const session = (await supabase.auth.getSession()).data.session
+        const token = session?.access_token
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+        if (token) headers.Authorization = `Bearer ${token}`
+        await fetch('/api/track-visit', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            pagePath: location.pathname + location.search,
+            referrer: document.referrer || '',
+            userId: user?.id || null,
+            pageTitle: document.title || null,
+            language: navigator.language || (navigator as any).languages?.[0] || null,
+            utm: null,
+            extra: { source: 'heartbeat' },
+          }),
+          keepalive: true,
+        })
+      } catch {}
+    }
+    timer = setInterval(() => { sendHeartbeat().catch(() => {}) }, HEARTBEAT_MS)
+    return () => { if (timer) clearInterval(timer) }
+  }, [location.pathname, location.search, user?.id])
+
+  React.useEffect(() => {
+    // Stable anonymous id for non-authenticated visitors
+    let anonId: string | null = null
+    try {
+      anonId = localStorage.getItem('plantswipe.anon_id')
+      if (!anonId) {
+        anonId = `anon_${Math.random().toString(36).slice(2, 10)}`
+        localStorage.setItem('plantswipe.anon_id', anonId)
+      }
+    } catch {}
+
+    const key = user?.id || anonId || `anon_${Math.random().toString(36).slice(2, 10)}`
+    const channel = supabase.channel('global-presence', { config: { presence: { key } } })
+
+    channel
+      .on('presence', { event: 'sync' }, () => {
+        // no-op: can be used for debugging presence state
+      })
+      .subscribe((status: unknown) => {
+        if (status === 'SUBSCRIBED') {
+          try {
+            channel.track({
+              user_id: user?.id || null,
+              display_name: profile?.display_name || null,
+              online_at: new Date().toISOString(),
+            })
+          } catch {}
+        }
+      })
+
+    presenceRef.current = channel
+    return () => {
+      try { channel.untrack() } catch {}
+      supabase.removeChannel(channel)
+    }
+  }, [user?.id, profile?.display_name])
 
   const filtered = useMemo(() => {
     const likedSet = new Set(likedIds)
@@ -180,7 +352,7 @@ export default function PlantSwipe() {
   }
 
   const handleInfo = () => {
-    if (current) setOpenInfo(current)
+    if (current) navigate(`/plants/${current.id}`, { state: { backgroundLocation: location } })
   }
 
   // Swipe logic
@@ -434,7 +606,8 @@ export default function PlantSwipe() {
                   No plants found. Insert rows into table "plants" (columns: id, name, scientific_name, colors[], seasons[], rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available) then refresh.
                 </div>
               )}
-              <Routes>
+              {/* Use background location for primary routes so overlays render on top */}
+              <Routes location={(backgroundLocation as any) || location}>
                 <Route
                   path="/"
                   element={plants.length > 0 ? (
@@ -460,12 +633,13 @@ export default function PlantSwipe() {
                   element={
                     <SearchPage
                       plants={filtered}
-                      openInfo={(p) => setOpenInfo(p)}
+                      openInfo={(p) => navigate(`/plants/${p.id}`, { state: { backgroundLocation: location } })}
                       likedIds={likedIds}
                     />
                   }
                 />
                 <Route path="/profile" element={user ? <ProfilePage /> : <Navigate to="/" replace />} />
+                <Route path="/admin" element={profile?.is_admin ? <AdminPage /> : <Navigate to="/" replace />} />
                 <Route path="/create" element={user ? (
                   <CreatePlantPage
                     onCancel={() => navigate('/')}
@@ -482,26 +656,23 @@ export default function PlantSwipe() {
                 ) : (
                   <Navigate to="/" replace />
                 )} />
+                <Route path="/plants/:id" element={<PlantInfoPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
+              {/* When a background location is set, also render the overlay route on top */}
+              {backgroundLocation && (
+                <Routes>
+                  <Route
+                    path="/plants/:id"
+                    element={<PlantInfoOverlay />}
+                  />
+                </Routes>
+              )}
             </>
           )}
         </main>
       </div>
 
-      {/* Info Sheet */}
-      <Sheet open={!!openInfo} onOpenChange={(o: boolean) => !o && setOpenInfo(null)}>
-        <SheetContent side="bottom" className="max-h-[90vh] overflow-y-auto rounded-t-3xl">
-          {openInfo && (
-            <PlantDetails
-              plant={openInfo}
-              onClose={() => setOpenInfo(null)}
-              liked={likedIds.includes(openInfo.id)}
-              onToggleLike={() => toggleLiked(openInfo.id)}
-            />
-          )}
-        </SheetContent>
-      </Sheet>
 
       {/* Auth Dialog (Login / Sign up) */}
       <Dialog open={authOpen && !user} onOpenChange={setAuthOpen}>
@@ -551,6 +722,22 @@ export default function PlantSwipe() {
 
       <BottomBar />
     </div>
+  )
+}
+
+function PlantInfoOverlay() {
+  const navigate = useNavigate()
+  return (
+    <Sheet open onOpenChange={(o) => { if (!o) navigate(-1) }}>
+      <SheetContent
+        side="bottom"
+        className="rounded-t-2xl max-h-[85vh] overflow-y-auto p-4 md:p-6"
+      >
+        <div className="max-w-4xl mx-auto w-full">
+          <PlantInfoPage />
+        </div>
+      </SheetContent>
+    </Sheet>
   )
 }
 

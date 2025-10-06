@@ -27,7 +27,7 @@ const __dirname = path.dirname(__filename)
 const exec = promisify(execCb)
 
 // Supabase client (server-side) for auth verification
-const supabaseUrlEnv = process.env.VITE_SUPABASE_URL
+const supabaseUrlEnv = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
 const supabaseServer = (supabaseUrlEnv && supabaseAnonKey)
   ? createSupabaseClient(supabaseUrlEnv, supabaseAnonKey, { auth: { persistSession: false, autoRefreshToken: false } })
@@ -63,8 +63,6 @@ async function isAdminUserId(userId) {
 }
 
 async function ensureAdmin(req, res) {
-  return "public";
-
   try {
     const header = req.get('authorization') || req.get('Authorization') || ''
     const token = header && header.startsWith('Bearer ') ? header.slice(7).trim() : null
@@ -147,7 +145,27 @@ function buildConnectionString() {
       cs = `postgresql://${auth}@${host}:${port}/${database}`
     }
   }
-  // Intentionally avoid deriving connection string from Supabase-specific envs
+  if (!cs && process.env.SUPABASE_URL && process.env.SUPABASE_DB_PASSWORD) {
+    try {
+      const host = new URL(process.env.SUPABASE_URL).host
+      let pgHost
+      if (host.endsWith('.supabase.co')) {
+        const parts = host.split('.')
+        const isProjectHost = parts.length === 3 && parts[1] === 'supabase' && parts[2] === 'co' && !!parts[0]
+        const isDbHost = parts.length === 4 && parts[0] === 'db' && !!parts[1] && parts[2] === 'supabase' && parts[3] === 'co'
+        if (isDbHost) {
+          pgHost = host
+        } else if (isProjectHost) {
+          const project = parts[0]
+          pgHost = `db.${project}.supabase.co`
+        }
+      }
+      if (pgHost) {
+        const database = process.env.PGDATABASE || 'postgres'
+        cs = `postgresql://postgres:${encodeURIComponent(process.env.SUPABASE_DB_PASSWORD)}@${pgHost}:5432/${database}`
+      }
+    } catch {}
+  }
   if (cs) {
     try {
       const url = new URL(cs)
@@ -169,8 +187,6 @@ if (!connectionString) {
 const sql = connectionString ? postgres(connectionString) : null
 
 const app = express()
-// Trust proxy headers so req.secure and x-forwarded-proto reflect real scheme
-try { app.set('trust proxy', true) } catch {}
 app.use(express.json())
 
 // Global CORS and preflight handling for API routes
@@ -207,31 +223,12 @@ app.options('/api/*', (_req, res) => {
   res.status(204).end()
 })
 
-// Supabase service client disabled to avoid using service-role env vars
-const supabaseAdmin = null
+// Supabase service client for admin verification
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_ROLE_TOKEN
+const supabaseAdmin = (supabaseUrlEnv && supabaseServiceKey) ? createSupabaseClient(supabaseUrlEnv, supabaseServiceKey) : null
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true })
-})
-
-// Runtime environment injector for client (exposes safe VITE_* only)
-// Serve on both /api/env.js and /env.js to be resilient to proxy rules.
-// Some static hosts might hijack /env.js and serve index.html; prefer /api/env.js in index.html.
-app.get(['/api/env.js', '/env.js'], (_req, res) => {
-  try {
-    const env = {
-      VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL || '',
-      VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '',
-    }
-    const js = `window.__ENV__ = ${JSON.stringify(env).replace(/</g, '\\u003c')};\n`
-    res.setHeader('Content-Type', 'application/javascript; charset=utf-8')
-    res.setHeader('Cache-Control', 'no-store')
-    res.send(js)
-  } catch (e) {
-    res.setHeader('Content-Type', 'application/javascript; charset=utf-8')
-    res.setHeader('Cache-Control', 'no-store')
-    res.send('window.__ENV__ = {}')
-  }
 })
 
 // ==== Helpers: cookie/session/ip/geo ====
@@ -256,11 +253,7 @@ function getOrSetSessionId(req, res) {
   let sid = cookies[COOKIE_NAME]
   if (!sid || sid.length < 8) {
     sid = crypto.randomBytes(16).toString('hex')
-    // Mark cookie Secure only when the original request is HTTPS
-    const xfProto = (req.headers['x-forwarded-proto'] || '').toString().toLowerCase()
-    const isHttps = xfProto.includes('https') || (req.secure === true) || (req.protocol === 'https')
-    const forceSecure = String(process.env.FORCE_SECURE_COOKIES || '').toLowerCase() === 'true'
-    const secure = forceSecure || isHttps
+    const secure = Boolean((req.headers['x-forwarded-proto'] || '').toString().includes('https')) || process.env.NODE_ENV === 'production'
     const attrs = [
       `${COOKIE_NAME}=${encodeURIComponent(sid)}`,
       'Path=/',
@@ -273,44 +266,15 @@ function getOrSetSessionId(req, res) {
   return sid
 }
 
-// Normalize various proxy/IP header formats into a canonical representation
-function normalizeIp(ip) {
-  try {
-    if (!ip) return ''
-    let out = String(ip).trim()
-    // Remove square brackets around IPv6 literals if present
-    if (out.startsWith('[') && out.endsWith(']')) {
-      out = out.slice(1, -1)
-    }
-    // Strip port suffix from IPv4 "a.b.c.d:port" or IPv6 ":port"
-    // Do not naively split on ':' because IPv6 uses ':' as part of the address
-    const lastColon = out.lastIndexOf(':')
-    const lastRightBracket = out.lastIndexOf(']')
-    if (lastColon > -1 && lastRightBracket === -1 && out.indexOf('.') > -1) {
-      // Looks like IPv4 with port
-      const maybePort = out.slice(lastColon + 1)
-      if (/^\d{1,5}$/.test(maybePort)) {
-        out = out.slice(0, lastColon)
-      }
-    }
-    // Handle IPv6-mapped IPv4 addresses like ::ffff:127.0.0.1
-    const v4mapped = out.match(/::ffff:(\d{1,3}(?:\.\d{1,3}){3})/i)
-    if (v4mapped) return v4mapped[1]
-    return out.toLowerCase()
-  } catch {
-    return typeof ip === 'string' ? ip : ''
-  }
-}
-
 function getClientIp(req) {
   const h = req.headers
   const xff = (h['x-forwarded-for'] || h['X-Forwarded-For'] || '').toString()
-  if (xff) return normalizeIp(xff.split(',')[0].trim())
+  if (xff) return xff.split(',')[0].trim()
   const cf = (h['cf-connecting-ip'] || h['CF-Connecting-IP'] || '').toString()
-  if (cf) return normalizeIp(cf)
+  if (cf) return cf
   const real = (h['x-real-ip'] || h['X-Real-IP'] || '').toString()
-  if (real) return normalizeIp(real)
-  return normalizeIp(req.ip || req.connection?.remoteAddress || '')
+  if (real) return real
+  return req.ip || req.connection?.remoteAddress || ''
 }
 
 function getGeoFromHeaders(req) {
@@ -380,7 +344,7 @@ async function insertWebVisit({ sessionId, userId, pagePath, referrer, userAgent
 // Admin: restart server (detached self-reexec)
 async function handleRestartServer(req, res) {
   try {
-    const uid = "public"
+    const uid = await ensureAdmin(req, res)
     if (!uid) return
 
     res.json({ ok: true, message: 'Restarting server' })
@@ -476,7 +440,7 @@ app.options('/api/admin/sync-schema', (_req, res) => {
 
 // Admin: global stats (bypass RLS via server connection)
 app.get('/api/admin/stats', async (req, res) => {
-  const uid = "public"
+  const uid = await ensureAdmin(req, res)
   if (!uid) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
@@ -533,7 +497,7 @@ const backupTokenStore = new Map()
 // Admin: create a gzip'ed pg_dump and return a one-time download token
 app.post('/api/admin/backup-db', async (req, res) => {
   try {
-    const uid = "public"
+    const uid = await ensureAdmin(req, res)
     if (!uid) return
 
     if (!connectionString) {
@@ -611,7 +575,7 @@ app.post('/api/admin/backup-db', async (req, res) => {
 
 // Admin: download a previously created backup (one-time token + admin auth)
 app.get('/api/admin/download-backup', async (req, res) => {
-  const uid = "public"
+  const uid = await ensureAdmin(req, res)
   if (!uid) return
 
   const token = (req.query.token || '').toString().trim()
@@ -655,7 +619,7 @@ app.get('/api/admin/download-backup', async (req, res) => {
 // Admin: pull latest code from git repository and rebuild the frontend
 async function handlePullCode(req, res) {
   try {
-    const uid = "public"
+    const uid = await ensureAdmin(req, res)
     if (!uid) return
 
     const branch = (req.query.branch || '').toString().trim()
@@ -698,7 +662,7 @@ app.options('/api/admin/pull-code', (_req, res) => {
 // Admin: list remote branches and current branch
 app.get('/api/admin/branches', async (req, res) => {
   try {
-    const uid = "public"
+    const uid = await ensureAdmin(req, res)
     if (!uid) return
 
     const repoDir = path.resolve(__dirname)
@@ -764,64 +728,30 @@ app.post('/api/track-visit', async (req, res) => {
 
 // Admin: unique visitors stats (past 10m and 7 days)
 app.get('/api/admin/visitors-stats', async (req, res) => {
-  const uid = "public"
+  const uid = await ensureAdmin(req, res)
   if (!uid) return
   if (!sql) {
     res.status(500).json({ error: 'Database not configured' })
     return
   }
   try {
-    // Unique IPs in recent windows (treat inet canonically; avoid tz casts)
-    const [rows10m, rows30m, rows60mUnique, rows60mRaw] = await Promise.all([
-      sql`select count(distinct v.ip_address)::int as c from public.web_visits v where v.ip_address is not null and v.occurred_at >= now() - interval '10 minutes'`,
-      sql`select count(distinct v.ip_address)::int as c from public.web_visits v where v.ip_address is not null and v.occurred_at >= now() - interval '30 minutes'`,
-      sql`select count(distinct v.ip_address)::int as c from public.web_visits v where v.ip_address is not null and v.occurred_at >= now() - interval '60 minutes'`,
-      sql`select count(*)::int as c from public.web_visits where occurred_at >= now() - interval '60 minutes'`,
-    ])
+    const rows10m = await sql`select count(distinct session_id)::int as c from public.web_visits where occurred_at >= now() - interval '10 minutes'`
     const currentUniqueVisitors10m = rows10m?.[0]?.c ?? 0
-    const uniqueIpsLast30m = rows30m?.[0]?.c ?? 0
-    const uniqueIpsLast60m = rows60mUnique?.[0]?.c ?? 0
-    const visitsLast60m = rows60mRaw?.[0]?.c ?? 0
-
-    // Unique IPs by day (UTC) for last 7 days
     const rows7 = await sql`
       with days as (
         select generate_series((now()::date - 6), now()::date, interval '1 day')::date as d
       )
       select d as day,
-             coalesce((select count(distinct v.ip_address)
+             coalesce((select count(distinct session_id)
                        from public.web_visits v
-                       where v.occurred_at::date = d
-                         and v.ip_address is not null), 0)::int as unique_visitors
+                       where (v.occurred_at at time zone 'utc')::date = d), 0)::int as unique_visitors
       from days
       order by d asc
     `
     const series7d = (rows7 || []).map(r => ({ date: new Date(r.day).toISOString().slice(0,10), uniqueVisitors: Number(r.unique_visitors || 0) }))
-    res.json({ ok: true, currentUniqueVisitors10m, uniqueIpsLast30m, uniqueIpsLast60m, visitsLast60m, series7d })
+    res.json({ ok: true, currentUniqueVisitors10m, series7d })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to load visitors stats' })
-  }
-})
-
-// Admin: simple online users count (unique IPs past 60 minutes)
-app.get('/api/admin/online-users', async (req, res) => {
-  const uid = "public"
-  if (!uid) return
-  if (!sql) {
-    res.status(500).json({ error: 'Database not configured' })
-    return
-  }
-  try {
-    const rows = await sql`
-      select count(distinct v.ip_address)::int as c
-      from public.web_visits v
-      where v.ip_address is not null
-        and v.occurred_at >= now() - interval '60 minutes'
-    `
-    const onlineUsers = rows?.[0]?.c ?? 0
-    res.json({ onlineUsers })
-  } catch (e) {
-    res.status(500).json({ error: e?.message || 'Failed to load online users' })
   }
 })
 

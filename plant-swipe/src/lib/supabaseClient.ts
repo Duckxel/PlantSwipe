@@ -1,9 +1,9 @@
 import { createClient } from '@supabase/supabase-js'
 import { getEnvAny } from '@/lib/utils'
 
-// Allow the same values to drive both frontend and dev API
-const supabaseUrl = getEnvAny(['VITE_SUPABASE_URL', 'SUPABASE_URL'])
-const supabaseAnonKey = getEnvAny(['VITE_SUPABASE_ANON_KEY', 'SUPABASE_ANON_KEY'])
+// Frontend should only consume VITE_ variables (never server secrets)
+const supabaseUrl = getEnvAny(['VITE_SUPABASE_URL'])
+const supabaseAnonKey = getEnvAny(['VITE_SUPABASE_ANON_KEY'])
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
@@ -20,6 +20,7 @@ export type ProfileRow = {
   display_name: string | null
   avatar_url: string | null
   liked_plant_ids: string[] | null
+  is_admin?: boolean | null
 }
 
 // Garden-related table row types matching Supabase schema expectations

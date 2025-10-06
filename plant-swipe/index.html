@@ -5,9 +5,12 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PLANT SWIPE</title>
+    <!-- Load runtime environment safely (tries /api/env.js then /env.js) -->
+    <script src="/env-loader.js"></script>
   </head>
   <body>
     <div id="root"></div>
+    <!-- Defer app module so env loader runs first -->
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

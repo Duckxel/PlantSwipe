@@ -38,7 +38,33 @@ export function SchedulePickerDialog(props: {
     if (open) {
       setWeeklyDays(initialSelection?.weeklyDays ? [...initialSelection.weeklyDays] : [])
       setMonthlyDays(initialSelection?.monthlyDays ? [...initialSelection.monthlyDays] : [])
-      setYearlyDays(initialSelection?.yearlyDays ? [...initialSelection.yearlyDays] : [])
+      // Convert legacy MM-DD yearly picks to MM-weekIndex-weekday (1..4, 0=Sun..6=Sat)
+      if (initialSelection?.yearlyDays && initialSelection.yearlyDays.length > 0) {
+        const out: string[] = []
+        for (const v of initialSelection.yearlyDays) {
+          if (typeof v !== 'string') continue
+          const parts = v.split('-')
+          if (parts.length === 2) {
+            const [mm, dd] = parts
+            const m = Math.max(1, Math.min(12, Number(mm)))
+            const d = Math.max(1, Math.min(31, Number(dd)))
+            const sampleYear = 2024 // leap-year safe for Feb 29 display
+            const dt = new Date(Date.UTC(sampleYear, m - 1, d))
+            if (!isNaN(dt.getTime())) {
+              const weekday = dt.getUTCDay() // 0=Sun..6=Sat
+              const weekIndexRaw = Math.floor((d - 1) / 7) + 1 // 1..5
+              const weekIndex = Math.max(1, Math.min(4, weekIndexRaw)) // clamp to 1..4
+              const mmStr = String(m).padStart(2, '0')
+              out.push(`${mmStr}-${weekIndex}-${weekday}`)
+            }
+          } else if (parts.length === 3) {
+            out.push(v)
+          }
+        }
+        setYearlyDays(out)
+      } else {
+        setYearlyDays([])
+      }
       setMonthlyNthWeekdays(initialSelection?.monthlyNthWeekdays ? [...initialSelection.monthlyNthWeekdays] : [])
       setError(null)
     }
@@ -88,11 +114,38 @@ export function SchedulePickerDialog(props: {
     })
   }
 
-  const toggleYearDay = (mmdd: string) => {
+  // Yearly selection now mirrors Monthly's Nth-weekday picker, per month
+  const toggleYearNthWeekday = (monthIdx: number, weekIndex: number, uiIndex: number) => {
+    const mondayFirstMap = [1,2,3,4,5,6,0]
+    const weekday = mondayFirstMap[uiIndex]
+    const mm = String(monthIdx + 1).padStart(2, '0')
+    const key = `${mm}-${weekIndex}-${weekday}`
     setYearlyDays((cur) => {
-      if (cur.includes(mmdd)) return cur.filter((x) => x !== mmdd)
+      const has = cur.includes(key)
+      if (has) return cur.filter((x) => x !== key)
       if (disabledMore) return cur
-      return [...cur, mmdd]
+      return [...cur, key]
+    })
+  }
+
+  const toggleYearMonthHeader = (monthIdx: number, uiIndex: number) => {
+    const mondayFirstMap = [1,2,3,4,5,6,0]
+    const weekday = mondayFirstMap[uiIndex]
+    const mm = String(monthIdx + 1).padStart(2, '0')
+    const keys = [1,2,3,4].map(w => `${mm}-${w}-${weekday}`)
+    setYearlyDays((cur) => {
+      const allSelected = keys.every(k => cur.includes(k))
+      if (allSelected) {
+        return cur.filter(k => !keys.includes(k))
+      }
+      const result = [...cur]
+      for (const k of keys) {
+        if (result.includes(k)) continue
+        if (disabledMore) break
+        if (result.length >= amount) break
+        result.push(k)
+      }
+      return result
     })
   }
 
@@ -132,7 +185,7 @@ export function SchedulePickerDialog(props: {
   const save = async () => {
     setError(null)
     if (countSelected !== amount) {
-      setError(`Select exactly ${amount} ${period === 'week' ? 'day(s) per week' : period === 'month' ? 'day(s) per month' : 'date(s) per year'}`)
+      setError(`Select exactly ${amount} ${period === 'week' ? 'day(s) per week' : period === 'month' ? 'day(s) per month' : 'time(s) per year'}`)
       return
     }
     setSaving(true)
@@ -205,7 +258,10 @@ export function SchedulePickerDialog(props: {
           )}
 
           {(lockToYear || period === 'year') && (
-            <YearPicker selected={yearlyDays} onToggle={toggleYearDay} disabledMore={disabledMore} />
+            <>
+              <div className="text-xs opacity-70">Pick weeks (1–4) and weekdays per month. Example: Jan 1st Mon.</div>
+              <YearMonthNthWeekdayPicker selected={yearlyDays} onToggle={toggleYearNthWeekday} onToggleHeader={toggleYearMonthHeader} disabledMore={disabledMore} />
+            </>
           )}
 
           {error && <div className="text-sm text-red-600">{error}</div>}
@@ -318,34 +374,53 @@ function MonthNthWeekdayPicker({ selected, onToggle, onToggleHeader, disabledMor
   )
 }
 
-function YearPicker({ selected, onToggle, disabledMore }: { selected: string[]; onToggle: (mmdd: string) => void; disabledMore: boolean }) {
+function YearMonthNthWeekdayPicker({ selected, onToggle, onToggleHeader, disabledMore }: { selected: string[]; onToggle: (monthIdx: number, weekIndex: number, uiIndex: number) => void; onToggleHeader: (monthIdx: number, uiIndex: number) => void; disabledMore: boolean }) {
   const months = [
-    ['Jan', 31], ['Feb', 29], ['Mar', 31], ['Apr', 30], ['May', 31], ['Jun', 30],
-    ['Jul', 31], ['Aug', 31], ['Sep', 30], ['Oct', 31], ['Nov', 30], ['Dec', 31],
-  ] as Array<[string, number]>
+    'Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'
+  ]
+  const labels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+  const weekNames = ['1st','2nd','3rd','4th']
+  const mondayFirstMap = [1,2,3,4,5,6,0]
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 max-h-[60vh] overflow-auto pr-1">
-      {months.map(([label, count], monthIdx) => (
+    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 max-h-[60vh] overflow-auto pr-1">
+      {months.map((label, monthIdx) => (
         <div key={label} className="rounded-xl border p-2">
           <div className="text-xs opacity-70 mb-2">{label}</div>
-          <div className="grid grid-cols-7 gap-1">
-            {Array.from({ length: count }, (_, i) => i + 1).map((d) => {
-              const mm = String(monthIdx + 1).padStart(2, '0')
-              const dd = String(d).padStart(2, '0')
-              const mmdd = `${mm}-${dd}`
-              const isOn = selected.includes(mmdd)
-              return (
+          <div className="space-y-2">
+            <div className="grid grid-cols-[60px_repeat(7,minmax(0,1fr))] gap-2 items-center">
+              <div className="text-xs opacity-70 text-center">WEEK</div>
+              {labels.map((l, uiIndex) => (
                 <button
-                  key={mmdd}
+                  key={l}
                   type="button"
-                  onClick={() => onToggle(mmdd)}
-                  className={`h-9 rounded-lg border text-[11px] ${isOn ? 'bg-black text-white' : 'bg-white hover:bg-stone-50'} ${!isOn && disabledMore ? 'opacity-60 cursor-not-allowed' : ''}`}
-                  disabled={!isOn && disabledMore}
+                  onClick={() => onToggleHeader(monthIdx, uiIndex)}
+                  className={`h-8 rounded-lg border text-[11px] ${'bg-white hover:bg-stone-50'}`}
                 >
-                  {d}
+                  {l}
                 </button>
-              )
-            })}
+              ))}
+            </div>
+            {weekNames.map((wn, rowIdx) => (
+              <div key={wn} className="grid grid-cols-[60px_repeat(7,minmax(0,1fr))] gap-2 items-center">
+                <div className="text-xs opacity-70 text-center">{rowIdx + 1}</div>
+                {labels.map((_, uiIndex) => {
+                  const weekday = mondayFirstMap[uiIndex]
+                  const mm = String(monthIdx + 1).padStart(2, '0')
+                  const key = `${mm}-${rowIdx + 1}-${weekday}`
+                  const isOn = selected.includes(key)
+                  return (
+                    <button
+                      key={uiIndex}
+                      type="button"
+                      onClick={() => onToggle(monthIdx, rowIdx + 1, uiIndex)}
+                      className={`h-10 rounded-xl border text-sm ${isOn ? 'bg-black text-white' : 'bg-white hover:bg-stone-50'} ${!isOn && disabledMore ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      disabled={!isOn && disabledMore}
+                      aria-label={`${label} ${wn} ${labels[uiIndex]}`}
+                    />
+                  )
+                })}
+              </div>
+            ))}
           </div>
         </div>
       ))}

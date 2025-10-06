@@ -39,8 +39,8 @@ export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, 
             >
               <Card className="h-full rounded-3xl overflow-hidden shadow-xl">
                 <div className="h-2/3 relative">
-                  <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${current.image})` }} />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
+                  <div className="absolute inset-0 bg-cover bg-center rounded-t-3xl" style={{ backgroundImage: `url(${current.image})` }} />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent rounded-t-3xl" />
                   <div className="absolute top-2 right-2 z-10">
                     <button
                       onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); onToggleLike && onToggleLike() }}
@@ -73,7 +73,6 @@ export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, 
                     <Button variant="secondary" className="rounded-2xl" onClick={handlePass}>
                       <ChevronLeft className="h-4 w-4 mr-1" /> Pass
                     </Button>
-                    <div className="text-xs opacity-60 select-none">Swipe: left = pass, right = info</div>
                     <Button className="rounded-2xl" onClick={handleInfo}>
                       More info <ChevronRight className="h-4 w-4 ml-1" />
                     </Button>

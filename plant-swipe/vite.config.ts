@@ -15,9 +15,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export default defineConfig({
   base: '/',
   plugins: [react()],
-  envPrefix: ['VITE_', 'SUPABASE_'],
+  envPrefix: ['VITE_'],
   resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
   server: {
+    host: process.env.VITE_DEV_HOST || '127.0.0.1',
+    port: Number(process.env.VITE_DEV_PORT || 5173),
     proxy: {
       '/api': {
         target: 'http://localhost:3000',
