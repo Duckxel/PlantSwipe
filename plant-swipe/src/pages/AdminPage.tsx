@@ -161,10 +161,18 @@ export const AdminPage: React.FC = () => {
   }
 
   // --- Health monitor: ping API, Admin, DB ---
-  type ProbeResult = { ok: boolean | null; latencyMs: number | null; updatedAt: number | null }
-  const [apiProbe, setApiProbe] = React.useState<ProbeResult>({ ok: null, latencyMs: null, updatedAt: null })
-  const [adminProbe, setAdminProbe] = React.useState<ProbeResult>({ ok: null, latencyMs: null, updatedAt: null })
-  const [dbProbe, setDbProbe] = React.useState<ProbeResult>({ ok: null, latencyMs: null, updatedAt: null })
+  type ProbeResult = {
+    ok: boolean | null
+    latencyMs: number | null
+    updatedAt: number | null
+    status: number | null
+    errorCode: string | null
+    errorMessage: string | null
+  }
+  const emptyProbe: ProbeResult = { ok: null, latencyMs: null, updatedAt: null, status: null, errorCode: null, errorMessage: null }
+  const [apiProbe, setApiProbe] = React.useState<ProbeResult>(emptyProbe)
+  const [adminProbe, setAdminProbe] = React.useState<ProbeResult>(emptyProbe)
+  const [dbProbe, setDbProbe] = React.useState<ProbeResult>(emptyProbe)
   const [healthRefreshing, setHealthRefreshing] = React.useState<boolean>(false)
 
   // Track mount state to avoid setState on unmounted component during async probes
@@ -180,11 +188,25 @@ export const AdminPage: React.FC = () => {
       const body = await safeJson(resp)
       const ok = (typeof okCheck === 'function') ? okCheck(body) && resp.ok : (resp.ok && body?.ok === true)
       const latency = Date.now() - started
-      // Only show latency when the probe is actually healthy to avoid confusion
-      return { ok, latencyMs: ok ? latency : null, updatedAt: Date.now() }
-    } catch {
-      // On failures, hide latency (show "—") but still update timestamp
-      return { ok: false, latencyMs: null, updatedAt: Date.now() }
+      const errCode = ok ? null : (body?.error_code || body?.code || null)
+      const errMsg = ok ? null : (body?.error || body?.message || body?.error_description || (resp.ok ? null : `Request failed (${resp.status})`))
+      return {
+        ok,
+        latencyMs: ok ? latency : null,
+        updatedAt: Date.now(),
+        status: resp.status ?? null,
+        errorCode: typeof errCode === 'string' ? errCode : null,
+        errorMessage: typeof errMsg === 'string' ? errMsg : (errMsg ? String(errMsg) : null),
+      }
+    } catch (e: unknown) {
+      return {
+        ok: false,
+        latencyMs: null,
+        updatedAt: Date.now(),
+        status: null,
+        errorCode: 'NETWORK_ERROR',
+        errorMessage: e instanceof Error ? e.message : 'Network error',
+      }
     }
   }, [safeJson])
 
