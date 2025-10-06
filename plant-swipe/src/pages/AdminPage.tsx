@@ -125,6 +125,10 @@ export const AdminPage: React.FC = () => {
   const [onlineLoading, setOnlineLoading] = React.useState<boolean>(true)
   const [onlineRefreshing, setOnlineRefreshing] = React.useState<boolean>(false)
   const [onlineUpdatedAt, setOnlineUpdatedAt] = React.useState<number | null>(null)
+  const [visitorsLoading, setVisitorsLoading] = React.useState<boolean>(true)
+  const [visitorsRefreshing, setVisitorsRefreshing] = React.useState<boolean>(false)
+  const [visitorsUpdatedAt, setVisitorsUpdatedAt] = React.useState<number | null>(null)
+  const [visitorsSeries, setVisitorsSeries] = React.useState<Array<{ date: string; uniqueVisitors: number }>>([])
   // Tick every minute to update the "Updated X ago" label without refetching
   const [nowMs, setNowMs] = React.useState<number>(() => Date.now())
   React.useEffect(() => {
@@ -144,6 +148,43 @@ export const AdminPage: React.FC = () => {
     const d = Math.floor(h / 24)
     return `${d}d ago`
   }
+
+  // Fallback to Supabase Realtime presence if API is unavailable
+  const getPresenceCountOnce = React.useCallback(async (): Promise<number | null> => {
+    try {
+      const key = `admin_${Math.random().toString(36).slice(2, 10)}`
+      const channel: any = (supabase as any).channel('global-presence', { config: { presence: { key } } })
+      return await new Promise<number | null>((resolve) => {
+        let settled = false
+        const finish = (val: number | null) => {
+          if (settled) return
+          settled = true
+          try { channel.untrack?.() } catch {}
+          try { (supabase as any).removeChannel(channel) } catch {}
+          resolve(val)
+        }
+        const timer = setTimeout(() => finish(null), 2000)
+        channel.on('presence', { event: 'sync' }, () => {
+          try {
+            const state = channel.presenceState?.() || {}
+            const count = Object.values(state as Record<string, any[]>).reduce((acc, arr) => acc + (Array.isArray(arr) ? arr.length : 0), 0)
+            clearTimeout(timer)
+            finish(Number.isFinite(count) ? count : 0)
+          } catch {
+            clearTimeout(timer)
+            finish(null)
+          }
+        })
+        channel.subscribe((status: any) => {
+          if (status === 'SUBSCRIBED') {
+            try { channel.track({ admin_probe: true, at: new Date().toISOString() }) } catch {}
+          }
+        })
+      })
+    } catch {
+      return null
+    }
+  }, [])
 
   const pullLatest = async () => {
     if (pulling) return
@@ -280,7 +321,14 @@ export const AdminPage: React.FC = () => {
       setOnlineUsers(Number.isFinite(num) ? num : 0)
       setOnlineUpdatedAt(Date.now())
     } catch {
-      // Keep last known value on error
+      // Fallback to presence count
+      try {
+        const pc = await getPresenceCountOnce()
+        if (pc !== null) {
+          setOnlineUsers(Math.max(0, pc))
+          setOnlineUpdatedAt(Date.now())
+        }
+      } catch {}
     } finally {
       if (isInitial) setOnlineLoading(false)
       else setOnlineRefreshing(false)
@@ -292,7 +340,34 @@ export const AdminPage: React.FC = () => {
     loadOnlineUsers({ initial: true })
   }, [loadOnlineUsers])
 
-  // Visitors chart and complex stats removed for simplicity
+  // Load visitors stats (last 7 days)
+  const loadVisitorsStats = React.useCallback(async (opts?: { initial?: boolean }) => {
+    const isInitial = !!opts?.initial
+    if (isInitial) setVisitorsLoading(true)
+    else setVisitorsRefreshing(true)
+    try {
+      const resp = await fetch('/api/admin/visitors-stats', {
+        headers: { 'Accept': 'application/json' },
+        credentials: 'same-origin',
+      })
+      const data = await safeJson(resp)
+      if (!resp.ok) throw new Error(data?.error || `Request failed (${resp.status})`)
+      const series: Array<{ date: string; uniqueVisitors: number }> = Array.isArray(data?.series7d)
+        ? data.series7d.map((d: any) => ({ date: String(d.date), uniqueVisitors: Number(d.uniqueVisitors ?? d.unique_visitors ?? 0) }))
+        : []
+      setVisitorsSeries(series)
+      setVisitorsUpdatedAt(Date.now())
+    } catch {
+      // keep last known
+    } finally {
+      if (isInitial) setVisitorsLoading(false)
+      else setVisitorsRefreshing(false)
+    }
+  }, [])
+
+  React.useEffect(() => {
+    loadVisitorsStats({ initial: true })
+  }, [loadVisitorsStats])
 
   return (
     <div className="max-w-3xl mx-auto mt-8 px-4 md:px-0">
@@ -356,7 +431,53 @@ export const AdminPage: React.FC = () => {
                 </CardContent>
               </Card>
             </div>
-            {/* Visitors chart removed for simplification */}
+            <Card className="rounded-2xl">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <div>
+                    <div className="text-sm font-medium">Unique visitors — last 7 days</div>
+                    <div className="text-xs opacity-60">{visitorsUpdatedAt ? `Updated ${formatTimeAgo(visitorsUpdatedAt)}` : 'Updated —'}</div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Refresh visitors"
+                    onClick={() => loadVisitorsStats({ initial: false })}
+                    disabled={visitorsLoading || visitorsRefreshing}
+                    className="h-8 w-8"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${visitorsLoading || visitorsRefreshing ? 'animate-spin' : ''}`} />
+                  </Button>
+                </div>
+                {visitorsLoading ? (
+                  <div className="text-sm opacity-60">Loading…</div>
+                ) : (
+                  <div className="grid grid-cols-7 gap-2">
+                    {(() => {
+                      const max = Math.max(1, ...visitorsSeries.map((d) => d.uniqueVisitors))
+                      return visitorsSeries.map((d) => {
+                        const pct = d.uniqueVisitors === 0 ? 0 : Math.round((d.uniqueVisitors / max) * 100)
+                        let label = '—'
+                        try {
+                          const dt = new Date(d.date + 'T00:00:00Z')
+                          const dow = dt.getUTCDay()
+                          label = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dow]
+                        } catch {}
+                        return (
+                          <div key={d.date} className="flex flex-col items-center justify-end gap-1 h-32">
+                            <div className="w-7 h-full bg-stone-300 rounded-md overflow-hidden flex items-end">
+                              <div className="w-full bg-black" style={{ height: `${pct}%` }} />
+                            </div>
+                            <div className="text-[11px] opacity-70">{label}</div>
+                            <div className="text-[10px] opacity-60">{d.uniqueVisitors}</div>
+                          </div>
+                        )
+                      })
+                    })()}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
             <div className="text-xs font-medium uppercase tracking-wide opacity-60 mb-2">Quick Links</div>
             <div className="flex flex-wrap gap-2">
               <Button asChild variant="outline" className="rounded-2xl">
