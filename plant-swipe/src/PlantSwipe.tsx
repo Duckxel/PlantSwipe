@@ -27,7 +27,7 @@ import { supabase } from "@/lib/supabaseClient";
 
 // --- Main Component ---
 export default function PlantSwipe() {
-  const { user, signIn, signUp, signOut, profile, refreshProfile } = useAuth()
+  const { user, signIn, signUp, signOut, profile, refreshProfile, loading } = useAuth()
   const [query, setQuery] = useState("")
   const [seasonFilter, setSeasonFilter] = useState<string | null>(null)
   const [colorFilter, setColorFilter] = useState<string | null>(null)
@@ -639,7 +639,18 @@ export default function PlantSwipe() {
                   }
                 />
                 <Route path="/profile" element={user ? <ProfilePage /> : <Navigate to="/" replace />} />
-                <Route path="/admin" element={profile?.is_admin ? <AdminPage /> : <Navigate to="/" replace />} />
+                <Route
+                  path="/admin"
+                  element={
+                    loading
+                      ? (
+                        <div className="p-8 text-center text-sm opacity-60">Checking admin access…</div>
+                      )
+                      : profile?.is_admin
+                        ? <AdminPage />
+                        : <Navigate to="/" replace />
+                  }
+                />
                 <Route path="/create" element={user ? (
                   <CreatePlantPage
                     onCancel={() => navigate('/')}

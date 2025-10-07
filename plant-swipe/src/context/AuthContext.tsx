@@ -53,6 +53,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     ;(async () => {
       // Before first paint: load session then profile (if any) and only then render
       await loadSession()
+      // Hydrate profile from localStorage immediately if it matches current user
+      try {
+        const uid = (await supabase.auth.getUser()).data.user?.id
+        if (uid) {
+          const raw = localStorage.getItem('plantswipe.profile')
+          if (raw) {
+            try {
+              const cached = JSON.parse(raw)
+              if (cached && typeof cached === 'object' && cached.id === uid) {
+                setProfile(cached as any)
+              }
+            } catch {}
+          }
+        }
+      } catch {}
       // Profile in background to reduce chances of startup stalls
       refreshProfile().catch(() => {})
       setLoading(false)

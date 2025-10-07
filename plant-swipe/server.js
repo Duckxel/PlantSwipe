@@ -968,6 +968,16 @@ app.get('/api/admin/member', async (req, res) => {
   }
 })
 
+// Admin: whoami — lightweight check if current request has admin privileges
+app.get('/api/admin/whoami', async (req, res) => {
+  try {
+    const isAdmin = await isAdminFromRequest(req)
+    res.json({ ok: true, isAdmin })
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e?.message || 'whoami failed' })
+  }
+})
+
 // Admin: suggest emails by prefix for autocomplete (top 3)
 app.get('/api/admin/member-suggest', async (req, res) => {
   try {
