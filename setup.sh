@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# One-shot provisioning for PlantSwipe on a fresh server.
+# Idempotent provisioning for PlantSwipe on fresh or existing servers.
+# - Reconciles and REPLACES nginx, systemd, and sudoers to a canonical setup
 # - Installs system packages (nginx, python venv, nodejs)
 # - Builds Node app
 # - Installs/links nginx site and admin snippet
@@ -55,15 +56,26 @@ fi
 
 log "Installing base packages…"
 $PM_UPDATE
-$PM_INSTALL nginx python3 python3-venv python3-pip git curl ca-certificates gnupg
+$PM_INSTALL nginx python3 python3-venv python3-pip git curl ca-certificates gnupg postgresql-client
 
-# Install Node.js (prefer Node 22 LTS) if missing
+# Install/upgrade Node.js (ensure >= 20; prefer Node 22 LTS)
+need_node_install=false
 if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
-  log "Installing Node.js 22.x…"
+  need_node_install=true
+else
+  node_ver_raw="$(node -v 2>/dev/null || echo v0.0.0)"
+  node_major="${node_ver_raw#v}"
+  node_major="${node_major%%.*}"
+  if [[ -z "$node_major" || "$node_major" -lt 20 ]]; then
+    need_node_install=true
+  fi
+fi
+if $need_node_install; then
+  log "Installing/upgrading Node.js to 22.x…"
   curl -fsSL https://deb.nodesource.com/setup_22.x | $SUDO -E bash -
   $PM_INSTALL nodejs
 else
-  log "Node.js already installed ($(node -v)), skipping."
+  log "Node.js is sufficiently new ($(node -v))."
 fi
 
 # Build frontend and API bundle
@@ -81,9 +93,13 @@ else
   bash -lc "cd '$NODE_DIR' && CI=${CI:-true} npm run build"
 fi
 
-# Link web root expected by nginx config to the repo copy
+# Link web root expected by nginx config to the repo copy (replace any dir with symlink)
 log "Linking web root to repo: $WEB_ROOT_LINK -> $NODE_DIR"
 $SUDO mkdir -p "$(dirname "$WEB_ROOT_LINK")"
+if [[ -e "$WEB_ROOT_LINK" && ! -L "$WEB_ROOT_LINK" ]]; then
+  log "Removing existing non-symlink at $WEB_ROOT_LINK"
+  $SUDO rm -rf "$WEB_ROOT_LINK"
+fi
 $SUDO ln -sfn "$NODE_DIR" "$WEB_ROOT_LINK"
 
 # Install nginx site and admin snippet
@@ -96,6 +112,9 @@ $SUDO ln -sfn "$NGINX_SITE_AVAIL" "$NGINX_SITE_ENABL"
 if [[ -e /etc/nginx/sites-enabled/default ]]; then
   $SUDO rm -f /etc/nginx/sites-enabled/default || true
 fi
+# Remove legacy site filenames if present
+$SUDO rm -f /etc/nginx/sites-available/plant-swipe || true
+$SUDO rm -f /etc/nginx/sites-enabled/plant-swipe || true
 
 log "Testing nginx configuration…"
 $SUDO nginx -t
@@ -179,10 +198,11 @@ if ! $SUDO visudo -cf "$SUDOERS_FILE" >/dev/null; then
   $SUDO rm -f "$SUDOERS_FILE" || true
 fi
 
-# Enable and start services
-log "Enabling and starting services…"
+# Enable and restart services to pick up updated unit files
+log "Enabling and restarting services…"
 $SUDO systemctl daemon-reload
-$SUDO systemctl enable --now "$SERVICE_ADMIN" "$SERVICE_NODE" "$SERVICE_NGINX"
+$SUDO systemctl enable "$SERVICE_ADMIN" "$SERVICE_NODE" "$SERVICE_NGINX"
+$SUDO systemctl restart "$SERVICE_ADMIN" "$SERVICE_NODE"
 
 # Final nginx reload to apply site links
 log "Reloading nginx…"
