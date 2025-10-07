@@ -186,6 +186,8 @@ export const AdminPage: React.FC = () => {
     return `${d}d ago`
   }
 
+  // Presence fallback removed by request: rely on DB-backed API only
+
   // --- Health monitor: ping API, Admin, DB every minute ---
   type ProbeResult = {
     ok: boolean | null
