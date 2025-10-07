@@ -644,21 +644,84 @@ async function computeNextVisitNum(sessionId) {
   }
 }
 
-async function insertWebVisit({ sessionId, userId, pagePath, referrer, userAgent, ipAddress, geo, extra, pageTitle, language, utm, visitNum }) {
-  // Always record into in-memory analytics, regardless of DB availability
+async function insertWebVisitViaSupabaseRest(payload, req) {
   try {
-    memAnalytics.recordVisit(String(ipAddress || ''), Date.now())
-  } catch {}
-  if (!sql) return
+    if (!supabaseUrlEnv || !supabaseAnonKey) return false
+    const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json', 'Content-Type': 'application/json', 'Prefer': 'return=minimal' }
+    const token = getBearerTokenFromRequest(req)
+    if (token) Object.assign(headers, { 'Authorization': `Bearer ${token}` })
+    // First try full payload (new schema)
+    const fullResp = await fetch(`${supabaseUrlEnv}/rest/v1/web_visits`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+    })
+    if (fullResp.ok) return true
+    // Retry with minimal legacy-compatible columns if schema is older
+    const minimal = {
+      session_id: payload.session_id,
+      user_id: payload.user_id ?? null,
+      page_path: payload.page_path,
+      referrer: payload.referrer ?? null,
+      user_agent: payload.user_agent ?? null,
+      ip_address: payload.ip_address ?? null,
+      geo_country: payload.geo_country ?? null,
+      geo_region: payload.geo_region ?? null,
+      geo_city: payload.geo_city ?? null,
+      latitude: payload.latitude ?? null,
+      longitude: payload.longitude ?? null,
+      extra: payload.extra ?? {},
+    }
+    const minResp = await fetch(`${supabaseUrlEnv}/rest/v1/web_visits`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(minimal),
+    })
+    return minResp.ok
+  } catch {
+    return false
+  }
+}
+
+async function insertWebVisit({ sessionId, userId, pagePath, referrer, userAgent, ipAddress, geo, extra, pageTitle, language, utm, visitNum }, req) {
+  // Always record into in-memory analytics, regardless of DB availability
+  try { memAnalytics.recordVisit(String(ipAddress || ''), Date.now()) } catch {}
+
+  // Prepare common fields
+  const parsedUtm = utm || parseUtmFromUrl(pagePath || '/')
+  const utm_source = parsedUtm?.utm_source || parsedUtm?.source || null
+  const utm_medium = parsedUtm?.utm_medium || parsedUtm?.medium || null
+  const utm_campaign = parsedUtm?.utm_campaign || parsedUtm?.campaign || null
+  const utm_term = parsedUtm?.utm_term || parsedUtm?.term || null
+  const utm_content = parsedUtm?.utm_content || parsedUtm?.content || null
+  const lang = language || null
+
+  // If no direct DB, try Supabase REST immediately
+  if (!sql) {
+    const restPayload = {
+      session_id: sessionId,
+      user_id: userId || null,
+      page_path: pagePath,
+      referrer: referrer || null,
+      user_agent: userAgent || null,
+      ip_address: ipAddress || null,
+      geo_country: geo?.geo_country || null,
+      geo_region: geo?.geo_region || null,
+      geo_city: geo?.geo_city || null,
+      latitude: geo?.latitude ?? null,
+      longitude: geo?.longitude ?? null,
+      extra: extra || {},
+      visit_num: null,
+      page_title: pageTitle || null,
+      language: lang,
+      utm_source, utm_medium, utm_campaign, utm_term, utm_content,
+    }
+    await insertWebVisitViaSupabaseRest(restPayload, req)
+    return
+  }
+
   try {
     const computedVisitNum = Number.isFinite(visitNum) ? visitNum : await computeNextVisitNum(sessionId)
-    const parsedUtm = utm || parseUtmFromUrl(pagePath || '/')
-    const utm_source = parsedUtm?.utm_source || parsedUtm?.source || null
-    const utm_medium = parsedUtm?.utm_medium || parsedUtm?.medium || null
-    const utm_campaign = parsedUtm?.utm_campaign || parsedUtm?.campaign || null
-    const utm_term = parsedUtm?.utm_term || parsedUtm?.term || null
-    const utm_content = parsedUtm?.utm_content || parsedUtm?.content || null
-    const lang = language || null
     await sql`
       insert into public.web_visits
         (session_id, user_id, page_path, referrer, user_agent, ip_address, geo_country, geo_region, geo_city, latitude, longitude, extra, visit_num, page_title, language, utm_source, utm_medium, utm_campaign, utm_term, utm_content)
@@ -666,7 +729,27 @@ async function insertWebVisit({ sessionId, userId, pagePath, referrer, userAgent
         (${sessionId}, ${userId || null}, ${pagePath}, ${referrer || null}, ${userAgent || null}, ${ipAddress || null}, ${geo?.geo_country || null}, ${geo?.geo_region || null}, ${geo?.geo_city || null}, ${geo?.latitude || null}, ${geo?.longitude || null}, ${extra ? sql.json(extra) : sql.json({})}, ${computedVisitNum}, ${pageTitle || null}, ${lang}, ${utm_source}, ${utm_medium}, ${utm_campaign}, ${utm_term}, ${utm_content})
     `
   } catch (e) {
-    // Swallow logging errors
+    // On DB failure, attempt Supabase REST fallback (handles older schemas too)
+    const restPayload = {
+      session_id: sessionId,
+      user_id: userId || null,
+      page_path: pagePath,
+      referrer: referrer || null,
+      user_agent: userAgent || null,
+      ip_address: ipAddress || null,
+      geo_country: geo?.geo_country || null,
+      geo_region: geo?.geo_region || null,
+      geo_city: geo?.geo_city || null,
+      latitude: geo?.latitude ?? null,
+      longitude: geo?.longitude ?? null,
+      extra: extra || {},
+      // Avoid computing visit_num via REST; leave null when falling back
+      visit_num: null,
+      page_title: pageTitle || null,
+      language: lang,
+      utm_source, utm_medium, utm_campaign, utm_term, utm_content,
+    }
+    await insertWebVisitViaSupabaseRest(restPayload, req)
   }
 }
 
@@ -1758,7 +1841,7 @@ app.post('/api/track-visit', async (req, res) => {
     }
     const acceptLanguage = (req.get('accept-language') || '').split(',')[0] || null
     const lang = language || acceptLanguage
-    await insertWebVisit({ sessionId, userId: effectiveUserId, pagePath, referrer, userAgent, ipAddress, geo, extra, pageTitle, language: lang, utm })
+    await insertWebVisit({ sessionId, userId: effectiveUserId, pagePath, referrer, userAgent, ipAddress, geo, extra, pageTitle, language: lang, utm }, req)
     res.status(204).end()
   } catch (e) {
     res.status(500).json({ error: 'Failed to record visit' })
@@ -1879,7 +1962,7 @@ app.get('*', (req, res) => {
     const userAgent = req.get('user-agent') || ''
     const acceptLanguage = (req.get('accept-language') || '').split(',')[0] || null
     getUserIdFromRequest(req)
-      .then((uid) => insertWebVisit({ sessionId, userId: uid || null, pagePath, referrer, userAgent, ipAddress, geo, extra: { source: 'initial_load' }, language: acceptLanguage }))
+      .then((uid) => insertWebVisit({ sessionId, userId: uid || null, pagePath, referrer, userAgent, ipAddress, geo, extra: { source: 'initial_load' }, language: acceptLanguage }, req))
       .catch(() => {})
   } catch {}
   res.sendFile(path.join(distDir, 'index.html'))
