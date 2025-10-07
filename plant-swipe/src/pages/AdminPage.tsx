@@ -139,30 +139,35 @@ export const AdminPage: React.FC = () => {
       }
 
       let ok = false
+      let nodeErrorMsg = 'Restart request failed'
       if (nodeResp) {
         const b = await safeJson(nodeResp)
         ok = nodeResp.ok && (b?.ok === true)
+        if (!ok) nodeErrorMsg = b?.error || `Request failed (${nodeResp.status})`
       }
 
       // Fallback: call local Admin API via nginx if Node endpoint not reachable/forbidden
       if (!ok) {
         const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
-        if (!adminToken) throw new Error('Restart failed and admin token not configured')
-        const adminHeaders: Record<string, string> = {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'X-Admin-Token': String(adminToken),
-        }
-        // Service name defaults server-side; send explicit as a hint
-        const adminResp = await fetch('/admin/restart-app', {
-          method: 'POST',
-          headers: adminHeaders,
-          credentials: 'same-origin',
-          body: JSON.stringify({ service: 'plant-swipe-node' }),
-        })
-        const ab = await safeJson(adminResp)
-        if (!adminResp.ok || ab?.ok !== true) {
-          throw new Error(ab?.error || `Admin restart failed (${adminResp.status})`)
+        if (adminToken) {
+          const adminHeaders: Record<string, string> = {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-Admin-Token': String(adminToken),
+          }
+          // Service name defaults server-side; send explicit as a hint
+          const adminResp = await fetch('/admin/restart-app', {
+            method: 'POST',
+            headers: adminHeaders,
+            credentials: 'same-origin',
+            body: JSON.stringify({ service: 'plant-swipe-node' }),
+          })
+          const ab = await safeJson(adminResp)
+          if (!adminResp.ok || ab?.ok !== true) {
+            throw new Error(ab?.error || `Admin restart failed (${adminResp.status})`)
+          }
+        } else {
+          throw new Error(nodeErrorMsg)
         }
       }
 
