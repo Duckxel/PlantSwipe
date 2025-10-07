@@ -625,6 +625,9 @@ export const AdminPage: React.FC = () => {
   const [demoteOpen, setDemoteOpen] = React.useState(false)
   const [demoteSubmitting, setDemoteSubmitting] = React.useState(false)
 
+  // Container ref for Members tab to run form-field validation logs
+  const membersContainerRef = React.useRef<HTMLDivElement | null>(null)
+
   // Email autocomplete state
   const [emailSuggestions, setEmailSuggestions] = React.useState<Array<{ id: string; email: string }>>([])
   const [suggestionsOpen, setSuggestionsOpen] = React.useState(false)
@@ -820,6 +823,25 @@ export const AdminPage: React.FC = () => {
     timer = setTimeout(run, 200)
     return () => { cancelled = true; if (timer) clearTimeout(timer) }
   }, [lookupEmail, safeJson])
+
+  // Console diagnostic: log any form fields missing both id and name within Members tab
+  React.useEffect(() => {
+    if (activeTab !== 'members') return
+    const container = membersContainerRef.current
+    if (!container) return
+    const t = setTimeout(() => {
+      const fields = Array.from(container.querySelectorAll('input, textarea, select')) as Array<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+      const violations = fields.filter(el => !(el.getAttribute('id') || el.getAttribute('name')))
+      if (violations.length > 0) {
+        violations.forEach(el => {
+          console.warn('A form field element has neither an id nor a name attribute:', el)
+        })
+      } else {
+        console.info('Member Lookup: all form fields have an id or a name.')
+      }
+    }, 0)
+    return () => clearTimeout(t)
+  }, [activeTab])
 
   return (
     <div className="max-w-3xl mx-auto mt-8 px-4 md:px-0">
@@ -1150,13 +1172,16 @@ export const AdminPage: React.FC = () => {
 
           {/* Members Tab */}
           {activeTab === 'members' && (
-            <div className="space-y-4">
+            <div className="space-y-4" ref={membersContainerRef}>
           <Card className="rounded-2xl">
                 <CardContent className="p-4 space-y-3">
                   <div className="text-sm font-medium flex items-center gap-2"><UserSearch className="h-4 w-4" /> Find member by email</div>
                   <div className="flex gap-2 relative">
                     <div className="flex-1 relative">
                   <Input
+                    id="member-email"
+                    name="member-email"
+                    autoComplete="email"
                     aria-label="Member email"
                     className="rounded-xl"
                     placeholder="user@example.com"
@@ -1364,8 +1389,10 @@ export const AdminPage: React.FC = () => {
                                 </DialogDescription>
                               </DialogHeader>
                               <div className="grid gap-2 mt-2">
-                                <label className="text-xs opacity-60">Reason</label>
+                                <label htmlFor="ban-reason" className="text-xs opacity-60">Reason</label>
                                 <textarea
+                                  id="ban-reason"
+                                  name="ban-reason"
                                   className="min-h-[80px] px-3 py-2 rounded-xl border"
                                   placeholder="Reason for ban"
                                   value={banReason}
