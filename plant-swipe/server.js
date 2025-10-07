@@ -1081,10 +1081,27 @@ app.get('/api/admin/member', async (req, res) => {
     } catch {}
     // Load admin user note (if any)
     let adminNote = ''
+  let adminNoteEntries = []
     try {
       const nr = await sql`select note from public.admin_user_notes where user_id = ${user.id} limit 1`
       adminNote = (Array.isArray(nr) && nr[0]?.note) ? String(nr[0].note) : ''
     } catch {}
+  try {
+    const rows = await sql`
+      select e.note, e.created_at, e.created_by, u.email as created_by_email
+      from public.admin_user_note_entries e
+      left join auth.users u on u.id = e.created_by
+      where e.user_id = ${user.id}
+      order by e.created_at desc
+      limit 50
+    `
+    adminNoteEntries = Array.isArray(rows) ? rows.map(r => ({
+      note: String(r.note || ''),
+      createdAt: r.created_at || null,
+      createdBy: r.created_by || null,
+      createdByEmail: r.created_by_email || null,
+    })) : []
+  } catch {}
 
     res.json({
       ok: true,
@@ -1106,6 +1123,7 @@ app.get('/api/admin/member', async (req, res) => {
       flaggedIps,
       flaggedEventsCount,
       adminNote,
+      adminNoteEntries,
     })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to lookup member' })
@@ -1472,7 +1490,7 @@ app.post('/api/admin/user-note', async (req, res) => {
       const tokenUser = await getUserFromRequest(req)
       adminId = tokenUser?.id || null
     } catch {}
-    // Upsert note
+    // Upsert note (current snapshot)
     try {
       await sql`
         insert into public.admin_user_notes (user_id, note, updated_at, updated_by)
@@ -1486,6 +1504,13 @@ app.post('/api/admin/user-note', async (req, res) => {
       res.status(500).json({ error: e?.message || 'Failed to save note' })
       return
     }
+    // Append to note entries history
+    try {
+      await sql`
+        insert into public.admin_user_note_entries (user_id, note, created_at, created_by, updated_at, updated_by)
+        values (${targetId}, ${note}, now(), ${adminId}, now(), ${adminId})
+      `
+    } catch {}
     res.json({ ok: true })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to save note' })

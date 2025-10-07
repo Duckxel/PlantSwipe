@@ -592,6 +592,7 @@ export const AdminPage: React.FC = () => {
     flaggedIps?: string[]
     flaggedEventsCount?: number
     adminNote?: string
+    adminNoteEntries?: Array<{ note: string; createdAt?: string; createdBy?: string; createdByEmail?: string | null }>
   } | null>(null)
   const [banReason, setBanReason] = React.useState('')
   const [banSubmitting, setBanSubmitting] = React.useState(false)
@@ -642,6 +643,7 @@ export const AdminPage: React.FC = () => {
         flaggedIps: Array.isArray(data?.flaggedIps) ? data.flaggedIps : [],
         flaggedEventsCount: typeof data?.flaggedEventsCount === 'number' ? data.flaggedEventsCount : undefined,
         adminNote: typeof data?.adminNote === 'string' ? data.adminNote : '',
+        adminNoteEntries: Array.isArray(data?.adminNoteEntries) ? data.adminNoteEntries : [],
       })
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -1302,6 +1304,22 @@ export const AdminPage: React.FC = () => {
                             {noteSaving ? 'Saving…' : 'Save note'}
                           </Button>
                         </div>
+                        {memberData.adminNoteEntries && memberData.adminNoteEntries.length > 0 && (
+                          <div className="rounded-xl border p-2 bg-white">
+                            <div className="text-xs font-medium opacity-70 mb-1">Recent notes</div>
+                            <div className="max-h-40 overflow-auto divide-y">
+                              {memberData.adminNoteEntries.map((e, idx) => (
+                                <div key={idx} className="py-2 text-sm">
+                                  <div className="text-xs opacity-60 mb-1">
+                                    {(e.createdAt ? new Date(e.createdAt).toLocaleString() : '—')}
+                                    {e.createdByEmail ? ` · ${e.createdByEmail}` : ''}
+                                  </div>
+                                  <div className="whitespace-pre-wrap break-words">{e.note || ''}</div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <div className="text-sm">Last online: <span className="font-medium">{memberData.lastOnlineAt ? new Date(memberData.lastOnlineAt).toLocaleString() : '—'}</span></div>

@@ -1287,6 +1287,41 @@ do $$ begin
     using (true) with check (true);
 end $$;
 
+-- Notes history entries (preferred model: append-only with edits tracked)
+create table if not exists public.admin_user_note_entries (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  note text not null,
+  created_at timestamptz not null default now(),
+  created_by uuid references auth.users(id) on delete set null,
+  updated_at timestamptz not null default now(),
+  updated_by uuid references auth.users(id) on delete set null
+);
+create index if not exists admin_user_note_entries_user_id_created_idx on public.admin_user_note_entries (user_id, created_at desc);
+
+alter table public.admin_user_note_entries enable row level security;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='admin_user_note_entries' and policyname='admin_user_note_entries_admin_select') then
+    drop policy admin_user_note_entries_admin_select on public.admin_user_note_entries;
+  end if;
+  create policy admin_user_note_entries_admin_select on public.admin_user_note_entries for select to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='admin_user_note_entries' and policyname='admin_user_note_entries_insert_all') then
+    drop policy admin_user_note_entries_insert_all on public.admin_user_note_entries;
+  end if;
+  create policy admin_user_note_entries_insert_all on public.admin_user_note_entries for insert to public
+    with check (true);
+end $$;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='admin_user_note_entries' and policyname='admin_user_note_entries_update_all') then
+    drop policy admin_user_note_entries_update_all on public.admin_user_note_entries;
+  end if;
+  create policy admin_user_note_entries_update_all on public.admin_user_note_entries for update to public
+    using (true) with check (true);
+end $$;
+
 -- The app does not use these legacy functions; drop if present to declutter.
 -- Safe: functions only (no data rows dropped)
 drop view if exists public.garden_plants_with_water_eval;
