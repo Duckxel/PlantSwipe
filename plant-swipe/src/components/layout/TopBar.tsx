@@ -1,4 +1,5 @@
 import React from "react"
+import { createPortal } from "react-dom"
 import { useNavigate, Link, useLocation } from "react-router-dom"
 import { Leaf, Sprout, Sparkles, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Plus, Shield } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -19,16 +20,44 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
   const location = useLocation()
   const { profile } = useAuth()
   const [menuOpen, setMenuOpen] = React.useState(false)
+  const anchorRef = React.useRef<HTMLDivElement | null>(null)
   const menuRef = React.useRef<HTMLDivElement | null>(null)
+  const [menuPosition, setMenuPosition] = React.useState<{ top: number; right: number } | null>(null)
+
+  const recomputeMenuPosition = React.useCallback(() => {
+    const anchor = anchorRef.current
+    if (!anchor) return
+    const rect = anchor.getBoundingClientRect()
+    const top = rect.bottom + 8 // align below trigger with small gap
+    const right = Math.max(0, window.innerWidth - rect.right)
+    setMenuPosition({ top, right })
+  }, [])
+
   React.useEffect(() => {
     if (!menuOpen) return
     const onDocClick = (e: MouseEvent) => {
-      if (!menuRef.current) return
-      if (!menuRef.current.contains(e.target as Node)) setMenuOpen(false)
+      const target = e.target as Node
+      if (menuRef.current && menuRef.current.contains(target)) return
+      if (anchorRef.current && anchorRef.current.contains(target)) return
+      setMenuOpen(false)
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false)
     }
     document.addEventListener('click', onDocClick)
-    return () => document.removeEventListener('click', onDocClick)
-  }, [menuOpen])
+    document.addEventListener('keydown', onKeyDown)
+    // keep menu aligned to trigger on resize/scroll
+    const onReposition = () => recomputeMenuPosition()
+    recomputeMenuPosition()
+    window.addEventListener('resize', onReposition)
+    window.addEventListener('scroll', onReposition, true)
+    return () => {
+      document.removeEventListener('click', onDocClick)
+      document.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('resize', onReposition)
+      window.removeEventListener('scroll', onReposition, true)
+    }
+  }, [menuOpen, recomputeMenuPosition])
   const label = displayName && displayName.trim().length > 0 ? displayName : 'Profile'
   return (
     <header className="max-w-5xl mx-auto w-full flex items-center gap-3 px-2 overflow-x-hidden">
@@ -63,26 +92,32 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
             </Button>
           </>
         ) : (
-          <div className="relative" ref={menuRef}>
-            <Button className="rounded-2xl" variant="secondary" onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); setMenuOpen((o) => !o) }} aria-label="Profile menu">
+          <div className="relative" ref={anchorRef}>
+            <Button className="rounded-2xl" variant="secondary" onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); setMenuOpen((o) => !o); }} aria-label="Profile menu" aria-haspopup="menu" aria-expanded={menuOpen}>
               <User className="h-4 w-4 mr-2 shrink-0" />
               <span className="hidden sm:inline max-w-[40vw] truncate min-w-0">{label}</span>
               <ChevronDown className="h-4 w-4 ml-2 opacity-70" />
             </Button>
-            {menuOpen && (
-              <div className="absolute right-0 mt-2 w-40 rounded-xl border bg-white shadow z-20 p-1">
+            {menuOpen && menuPosition && createPortal(
+              <div
+                ref={menuRef}
+                className="w-40 rounded-xl border bg-white shadow z-[60] p-1"
+                style={{ position: 'fixed', top: menuPosition.top, right: menuPosition.right }}
+                role="menu"
+              >
                 {profile?.is_admin && (
-                  <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/admin') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 flex items-center gap-2">
+                  <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/admin') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 flex items-center gap-2" role="menuitem">
                     <Shield className="h-4 w-4" /> Admin
                   </button>
                 )}
-                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); (onProfile ? onProfile : () => navigate('/profile'))() }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 flex items-center gap-2">
+                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); (onProfile ? onProfile : () => navigate('/profile'))() }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 flex items-center gap-2" role="menuitem">
                   <User className="h-4 w-4" /> Profile
                 </button>
-                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); if (onLogout) { onLogout() } }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 text-red-600 flex items-center gap-2">
+                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); if (onLogout) { onLogout() } }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 text-red-600 flex items-center gap-2" role="menuitem">
                   <LogOut className="h-4 w-4" /> Logout
                 </button>
-              </div>
+              </div>,
+              document.body
             )}
           </div>
         )}
