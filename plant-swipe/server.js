@@ -1940,15 +1940,32 @@ app.get('/api/admin/online-users', async (req, res) => {
     }
   }
   try {
-    if (!sql) {
-      respondFromMemory()
+    if (sql) {
+      const [ipRows] = await Promise.all([
+        sql`select count(distinct v.ip_address)::int as c from public.web_visits v where v.ip_address is not null and v.occurred_at >= now() - interval '60 minutes'`,
+      ])
+      const ipCount = ipRows?.[0]?.c ?? 0
+      res.json({ ok: true, onlineUsers: ipCount, via: 'database' })
       return
     }
-    const [ipRows] = await Promise.all([
-      sql`select count(distinct v.ip_address)::int as c from public.web_visits v where v.ip_address is not null and v.occurred_at >= now() - interval '60 minutes'`,
-    ])
-    const ipCount = ipRows?.[0]?.c ?? 0
-    res.json({ ok: true, onlineUsers: ipCount, via: 'database' })
+
+    // No direct DB connection: attempt Supabase REST fallback against web_visits
+    if (supabaseUrlEnv && supabaseAnonKey) {
+      const sinceIso = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+      const token = getBearerTokenFromRequest(req)
+      if (token) headers.Authorization = `Bearer ${token}`
+      const url = `${supabaseUrlEnv}/rest/v1/web_visits?select=ip_address&ip_address=not.is.null&occurred_at=gte.${encodeURIComponent(sinceIso)}&distinct`
+      const resp = await fetch(url, { headers: { ...headers, Prefer: 'count=exact', Range: '0-0' } })
+      if (resp.ok) {
+        const cr = resp.headers.get('content-range') || ''
+        const m = cr.match(/\/(\d+)$/)
+        const ipCount = m ? Number(m[1]) : 0
+        res.json({ ok: true, onlineUsers: Number.isFinite(ipCount) ? ipCount : 0, via: 'supabase-rest' })
+        return
+      }
+    }
+    respondFromMemory()
   } catch (e) {
     if (!respondFromMemory({ error: e?.message || 'DB query failed' })) {
       res.status(500).json({ ok: false, error: e?.message || 'DB query failed' })
