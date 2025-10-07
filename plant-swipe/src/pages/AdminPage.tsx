@@ -714,7 +714,7 @@ export const AdminPage: React.FC = () => {
     let timer: any = null
     const run = async () => {
       const q = lookupEmail.trim()
-      if (q.length < 2) {
+      if (q.length < 1) {
         setEmailSuggestions([])
         setSuggestionsOpen(false)
         setHighlightIndex(-1)

@@ -639,7 +639,7 @@ export default function PlantSwipe() {
                   }
                 />
                 <Route path="/profile" element={user ? <ProfilePage /> : <Navigate to="/" replace />} />
-                <Route path="/admin" element={profile?.is_admin ? <AdminPage /> : <Navigate to="/" replace />} />
+                <Route path="/admin" element={<AdminPage />} />
                 <Route path="/create" element={user ? (
                   <CreatePlantPage
                     onCancel={() => navigate('/')}
