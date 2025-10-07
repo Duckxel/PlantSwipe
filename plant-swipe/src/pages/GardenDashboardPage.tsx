@@ -87,10 +87,12 @@ export const GardenDashboardPage: React.FC = () => {
 
   const currentUserId = user?.id || null
   const isOwner = React.useMemo(() => {
+    // Admins have full owner-level access across all gardens
+    if (profile?.is_admin) return true
     if (!currentUserId) return false
     const self = members.find(m => m.userId === currentUserId)
     return self?.role === 'owner'
-  }, [members, currentUserId])
+  }, [members, currentUserId, profile?.is_admin])
 
   const load = React.useCallback(async () => {
     if (!id) return
@@ -280,9 +282,11 @@ export const GardenDashboardPage: React.FC = () => {
   React.useEffect(() => { load() }, [load])
 
   const viewerIsOwner = React.useMemo(() => {
+    // Admins can manage any garden
+    if (profile?.is_admin) return true
     if (!user?.id) return false
     return members.some(m => m.userId === user.id && m.role === 'owner')
-  }, [members, user?.id])
+  }, [members, user?.id, profile?.is_admin])
 
   React.useEffect(() => {
     let ignore = false
