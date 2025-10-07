@@ -17,6 +17,20 @@ create table if not exists public.profiles (
 -- Remove legacy avatar_url column if present
 alter table if exists public.profiles drop column if exists avatar_url;
 alter table public.profiles enable row level security;
+-- Helper to avoid RLS self-recursion when checking admin
+-- Uses SECURITY DEFINER to bypass RLS on public.profiles
+create or replace function public.is_admin_user(_user_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.profiles
+    where id = _user_id and is_admin = true
+  );
+$$;
+grant execute on function public.is_admin_user(uuid) to anon, authenticated;
 do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='profiles' and policyname='profiles_select_self') then
     drop policy profiles_select_self on public.profiles;
@@ -24,10 +38,7 @@ do $$ begin
   create policy profiles_select_self on public.profiles for select to authenticated
     using (
       id = (select auth.uid())
-      or exists (
-        select 1 from public.profiles p
-        where p.id = (select auth.uid()) and p.is_admin = true
-      )
+      or public.is_admin_user((select auth.uid()))
     );
 end $$;
 do $$ begin
@@ -37,10 +48,7 @@ do $$ begin
   create policy profiles_insert_self on public.profiles for insert to authenticated
     with check (
       id = (select auth.uid())
-      or exists (
-        select 1 from public.profiles p
-        where p.id = (select auth.uid()) and p.is_admin = true
-      )
+      or public.is_admin_user((select auth.uid()))
     );
 end $$;
 do $$ begin
@@ -50,17 +58,11 @@ do $$ begin
   create policy profiles_update_self on public.profiles for update to authenticated
     using (
       id = (select auth.uid())
-      or exists (
-        select 1 from public.profiles p
-        where p.id = (select auth.uid()) and p.is_admin = true
-      )
+      or public.is_admin_user((select auth.uid()))
     )
     with check (
       id = (select auth.uid())
-      or exists (
-        select 1 from public.profiles p
-        where p.id = (select auth.uid()) and p.is_admin = true
-      )
+      or public.is_admin_user((select auth.uid()))
     );
 end $$;
 do $$ begin
@@ -70,10 +72,7 @@ do $$ begin
   create policy profiles_delete_self on public.profiles for delete to authenticated
     using (
       id = (select auth.uid())
-      or exists (
-        select 1 from public.profiles p
-        where p.id = (select auth.uid()) and p.is_admin = true
-      )
+      or public.is_admin_user((select auth.uid()))
     );
 end $$;
 
