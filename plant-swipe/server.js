@@ -940,41 +940,9 @@ app.get('/api/admin/member-suggest', async (req, res) => {
       res.json({ ok: true, suggestions: [] })
       return
     }
+    // Only suggest existing users from the database (or Supabase RPC fallback)
     const out = []
     const seen = new Set()
-    // Domain completions using the same base the admin is typing
-    const commonDomains = ['gmail.com','outlook.com','icloud.com','yahoo.com','hotmail.com','proton.me','protonmail.com','live.com','aol.com','mail.com']
-    const atIdx = q.indexOf('@')
-    if (atIdx > -1) {
-      const local = q.slice(0, atIdx)
-      const domPart = q.slice(atIdx + 1)
-      if (local.length >= 1) {
-        const domainMatches = commonDomains
-          .filter(d => domPart ? d.startsWith(domPart) : true)
-          .slice(0, 5)
-        for (const d of domainMatches) {
-          const email = `${local}@${d}`
-          const key = email.toLowerCase()
-          if (seen.has(key)) continue
-          seen.add(key)
-          out.push({ id: `domain:${d}`, email })
-          if (out.length >= 7) break
-        }
-      }
-    } else {
-      // No @ yet: propose popular domains with the typed local part
-      if (q.length >= 2) {
-        const local = q
-        for (const d of commonDomains.slice(0, 3)) {
-          const email = `${local}@${d}`
-          const key = email.toLowerCase()
-          if (seen.has(key)) continue
-          seen.add(key)
-          out.push({ id: `domain:${d}`, email })
-        }
-      }
-    }
-    // DB suggestions by prefix (append after domain hints)
     try {
       if (sql) {
         const rows = await sql`
@@ -982,7 +950,7 @@ app.get('/api/admin/member-suggest', async (req, res) => {
           from auth.users
           where lower(email) like ${q + '%'}
           order by created_at desc
-          limit 5
+          limit 7
         `
         if (Array.isArray(rows)) {
           for (const r of rows) {
@@ -1001,7 +969,7 @@ app.get('/api/admin/member-suggest', async (req, res) => {
           const resp = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/suggest_users_by_email_prefix`, {
             method: 'POST',
             headers,
-            body: JSON.stringify({ _prefix: q, _limit: 5 }),
+            body: JSON.stringify({ _prefix: q, _limit: 7 }),
           })
           if (resp.ok) {
             const arr = await resp.json().catch(() => [])
@@ -1015,7 +983,6 @@ app.get('/api/admin/member-suggest', async (req, res) => {
         }
       }
     } catch {}
-
     const suggestions = out.slice(0, 7)
     res.json({ ok: true, suggestions })
   } catch (e) {
