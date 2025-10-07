@@ -153,6 +153,9 @@ export const AdminPage: React.FC = () => {
 
   const [onlineUsers, setOnlineUsers] = React.useState<number>(0)
   const [registeredCount, setRegisteredCount] = React.useState<number | null>(null)
+  const [registeredLoading, setRegisteredLoading] = React.useState<boolean>(true)
+  const [registeredRefreshing, setRegisteredRefreshing] = React.useState<boolean>(false)
+  const [registeredUpdatedAt, setRegisteredUpdatedAt] = React.useState<number | null>(null)
   const [onlineLoading, setOnlineLoading] = React.useState<boolean>(true)
   const [onlineRefreshing, setOnlineRefreshing] = React.useState<boolean>(false)
   const [onlineUpdatedAt, setOnlineUpdatedAt] = React.useState<number | null>(null)
@@ -451,33 +454,52 @@ export const AdminPage: React.FC = () => {
   }
 
 
-  // Fetch total registered accounts (admin API first to bypass RLS; fallback to client count)
-  React.useEffect(() => {
-    let cancelled = false
-    ;(async () => {
+  // Loader for total registered accounts (DB first via admin API; fallback to client count)
+  const loadRegisteredCount = React.useCallback(async (opts?: { initial?: boolean }) => {
+    const isInitial = !!opts?.initial
+    if (isInitial) setRegisteredLoading(true)
+    else setRegisteredRefreshing(true)
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      const headers: Record<string, string> = { 'Accept': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
       try {
-        const token = (await supabase.auth.getSession()).data.session?.access_token
-        if (token) {
-          const resp = await fetch('/api/admin/stats', { headers: (() => {
-            const h: Record<string, string> = {}
-            if (token) h['Authorization'] = `Bearer ${token}`
-            const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
-            if (adminToken) h['X-Admin-Token'] = String(adminToken)
-            return h
-          })() })
-          if (resp.ok) {
-            const data = await resp.json().catch(() => ({}))
-            const val = typeof data?.profilesCount === 'number' ? data.profilesCount : null
-            if (!cancelled && val !== null) { setRegisteredCount(val); return }
-          }
-        }
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+        if (adminToken) headers['X-Admin-Token'] = String(adminToken)
       } catch {}
-      // Fallback: client-side count (will be limited by RLS to own row)
+      const resp = await fetch('/api/admin/stats', { headers, credentials: 'same-origin' })
+      const data = await safeJson(resp)
+      if (resp.ok && typeof data?.profilesCount === 'number') {
+        setRegisteredCount(data.profilesCount)
+        setRegisteredUpdatedAt(Date.now())
+        return
+      }
+      // Fallback: client-side count (may be limited by RLS)
       const { count, error } = await supabase.from('profiles').select('id', { count: 'exact', head: true })
-      if (!cancelled) setRegisteredCount(error ? null : (count ?? 0))
-    })()
-    return () => { cancelled = true }
-  }, [])
+      setRegisteredCount(error ? null : (count ?? 0))
+      setRegisteredUpdatedAt(Date.now())
+    } catch {
+      try {
+        const { count, error } = await supabase.from('profiles').select('id', { count: 'exact', head: true })
+        setRegisteredCount(error ? null : (count ?? 0))
+        setRegisteredUpdatedAt(Date.now())
+      } catch {}
+    } finally {
+      if (isInitial) setRegisteredLoading(false)
+      else setRegisteredRefreshing(false)
+    }
+  }, [safeJson])
+
+  React.useEffect(() => {
+    loadRegisteredCount({ initial: true })
+  }, [loadRegisteredCount])
+
+  // Auto-refresh registered accounts every 60 seconds
+  React.useEffect(() => {
+    const id = setInterval(() => { loadRegisteredCount({ initial: false }) }, 60_000)
+    return () => clearInterval(id)
+  }, [loadRegisteredCount])
 
 
   // Shared loader for visitors stats (used on initial load and manual refresh)
@@ -895,8 +917,25 @@ export const AdminPage: React.FC = () => {
               </Card>
               <Card className="rounded-2xl">
                 <CardContent className="p-4">
-                  <div className="text-sm opacity-60">Registered accounts</div>
-                  <div className="text-2xl font-semibold">{registeredCount ?? '—'}</div>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-sm opacity-60">Registered accounts</div>
+                      <div className="text-xs opacity-60">{registeredUpdatedAt ? `Updated ${formatTimeAgo(registeredUpdatedAt)}` : 'Updated —'}</div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Refresh registered accounts"
+                      onClick={() => loadRegisteredCount({ initial: false })}
+                      disabled={registeredLoading || registeredRefreshing}
+                      className="h-8 w-8"
+                    >
+                      <RefreshCw className={`h-4 w-4 ${registeredLoading || registeredRefreshing ? 'animate-spin' : ''}`} />
+                    </Button>
+                  </div>
+                  <div className="text-2xl font-semibold tabular-nums mt-1">
+                    {registeredLoading ? '—' : (registeredCount ?? '—')}
+                  </div>
                 </CardContent>
               </Card>
             </div>
