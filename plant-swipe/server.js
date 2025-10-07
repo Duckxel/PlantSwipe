@@ -1825,16 +1825,14 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
   if (!uid) return
   try {
     if (!sql) {
-      // Graceful fallback when DB isn't configured
-      res.json({
-        ok: true,
-        currentUniqueVisitors10m: 0,
-        uniqueIpsLast30m: 0,
-        uniqueIpsLast60m: 0,
-        visitsLast60m: 0,
-        uniqueIps7d: 0,
-        series7d: [],
-      })
+      // Fallback to in-memory analytics when DB isn't configured
+      const currentUniqueVisitors10m = memAnalytics.getUniqueIpCountInLastMinutes(10)
+      const uniqueIpsLast30m = memAnalytics.getUniqueIpCountInLastMinutes(30)
+      const uniqueIpsLast60m = memAnalytics.getUniqueIpCountInLastMinutes(60)
+      const visitsLast60m = memAnalytics.getVisitCountInLastMinutes(60)
+      const uniqueIps7d = memAnalytics.getUniqueIpCountInLastDays(7)
+      const series7d = memAnalytics.getDailySeries(7)
+      res.json({ ok: true, currentUniqueVisitors10m, uniqueIpsLast30m, uniqueIpsLast60m, visitsLast60m, uniqueIps7d, series7d })
       return
     }
 
@@ -1872,16 +1870,18 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
 
     res.json({ ok: true, currentUniqueVisitors10m, uniqueIpsLast30m, uniqueIpsLast60m, visitsLast60m, uniqueIps7d, series7d })
   } catch (e) {
-    // Graceful fallback on error to avoid noisy 5xx in the UI
-    res.json({
-      ok: true,
-      currentUniqueVisitors10m: 0,
-      uniqueIpsLast30m: 0,
-      uniqueIpsLast60m: 0,
-      visitsLast60m: 0,
-      uniqueIps7d: 0,
-      series7d: [],
-    })
+    // Fallback to in-memory analytics on error to avoid noisy 5xx in the UI
+    try {
+      const currentUniqueVisitors10m = memAnalytics.getUniqueIpCountInLastMinutes(10)
+      const uniqueIpsLast30m = memAnalytics.getUniqueIpCountInLastMinutes(30)
+      const uniqueIpsLast60m = memAnalytics.getUniqueIpCountInLastMinutes(60)
+      const visitsLast60m = memAnalytics.getVisitCountInLastMinutes(60)
+      const uniqueIps7d = memAnalytics.getUniqueIpCountInLastDays(7)
+      const series7d = memAnalytics.getDailySeries(7)
+      res.json({ ok: true, currentUniqueVisitors10m, uniqueIpsLast30m, uniqueIpsLast60m, visitsLast60m, uniqueIps7d, series7d })
+    } catch {
+      res.json({ ok: true, currentUniqueVisitors10m: 0, uniqueIpsLast30m: 0, uniqueIpsLast60m: 0, visitsLast60m: 0, uniqueIps7d: 0, series7d: [] })
+    }
   }
 })
 
@@ -1891,19 +1891,23 @@ app.get('/api/admin/online-users', async (req, res) => {
   if (!uid) return
   try {
     if (!sql) {
-      // Graceful fallback when DB isn't configured
-      res.json({ onlineUsers: 0 })
+      // Fallback to in-memory analytics when DB isn't configured
+      const ipCount = memAnalytics.getUniqueIpCountInLastMinutes(60)
+      res.json({ onlineUsers: ipCount })
       return
     }
     const [ipRows] = await Promise.all([
       sql`select count(distinct v.ip_address)::int as c from public.web_visits v where v.ip_address is not null and v.occurred_at >= now() - interval '60 minutes'`,
     ])
     const ipCount = ipRows?.[0]?.c ?? 0
-    // Define "online" strictly as unique IPs in the last 60 minutes (DB-only)
     res.json({ onlineUsers: ipCount })
   } catch (e) {
-    // Graceful fallback on error to avoid noisy 5xx in the UI
-    res.json({ onlineUsers: 0 })
+    try {
+      const ipCount = memAnalytics.getUniqueIpCountInLastMinutes(60)
+      res.json({ onlineUsers: ipCount })
+    } catch {
+      res.json({ onlineUsers: 0 })
+    }
   }
 })
 

@@ -186,6 +186,43 @@ export const AdminPage: React.FC = () => {
     return `${d}d ago`
   }
 
+  // Fallback to Supabase Realtime presence if API is unavailable
+  const getPresenceCountOnce = React.useCallback(async (): Promise<number | null> => {
+    try {
+      const key = `admin_${Math.random().toString(36).slice(2, 10)}`
+      const channel: any = (supabase as any).channel('global-presence', { config: { presence: { key } } })
+      return await new Promise<number | null>((resolve) => {
+        let settled = false
+        const finish = (val: number | null) => {
+          if (settled) return
+          settled = true
+          try { channel.untrack?.() } catch {}
+          try { (supabase as any).removeChannel(channel) } catch {}
+          resolve(val)
+        }
+        const timer = setTimeout(() => finish(null), 2000)
+        channel.on('presence', { event: 'sync' }, () => {
+          try {
+            const state = channel.presenceState?.() || {}
+            const count = Object.values(state as Record<string, any[]>).reduce((acc, arr) => acc + (Array.isArray(arr) ? arr.length : 0), 0)
+            clearTimeout(timer)
+            finish(Number.isFinite(count) ? count : 0)
+          } catch {
+            clearTimeout(timer)
+            finish(null)
+          }
+        })
+        channel.subscribe((status: any) => {
+          if (status === 'SUBSCRIBED') {
+            try { channel.track({ admin_probe: true, at: new Date().toISOString() }) } catch {}
+          }
+        })
+      })
+    } catch {
+      return null
+    }
+  }, [])
+
   // --- Health monitor: ping API, Admin, DB every minute ---
   type ProbeResult = {
     ok: boolean | null
@@ -489,7 +526,14 @@ export const AdminPage: React.FC = () => {
       setOnlineUsers(Number.isFinite(num) ? num : 0)
       setOnlineUpdatedAt(Date.now())
     } catch {
-      // Keep last known value on error
+      // Fallback to presence count
+      try {
+        const pc = await getPresenceCountOnce()
+        if (pc !== null) {
+          setOnlineUsers(Math.max(0, pc))
+          setOnlineUpdatedAt(Date.now())
+        }
+      } catch {}
     } finally {
       if (isInitial) setOnlineLoading(false)
       else setOnlineRefreshing(false)
