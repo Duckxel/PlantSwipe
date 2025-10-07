@@ -1655,38 +1655,41 @@ app.get('/api/admin/download-backup', async (req, res) => {
   res.on('close', cleanup)
 })
 
-// Admin: pull latest code from git repository and rebuild the frontend
+// Admin: refresh website by invoking scripts/refresh-plant-swipe.sh from repo root
 async function handlePullCode(req, res) {
   try {
     const uid = "public"
     if (!uid) return
 
-    const branch = (req.query.branch || '').toString().trim()
-    const repoDir = path.resolve(__dirname)
-    // Fetch all, prune stale remotes, delete local branches that have no remote (excluding current), checkout selected, and fast-forward pull
-    const deleteStaleLocalsPre = `current=$(git -C "${repoDir}" rev-parse --abbrev-ref HEAD); git -C "${repoDir}" for-each-ref --format='%(refname:short)' refs/heads | while read b; do if [ "$b" = "$current" ]; then continue; fi; git -C "${repoDir}" show-ref --verify --quiet refs/remotes/origin/$b || git -C "${repoDir}" branch -D "$b"; done`
-    const checkoutCmd = branch ? `git -C "${repoDir}" checkout "${branch}"` : ''
-    const deleteStaleLocalsPost = `git -C "${repoDir}" for-each-ref --format='%(refname:short)' refs/heads | while read b; do git -C "${repoDir}" show-ref --verify --quiet refs/remotes/origin/$b || git -C "${repoDir}" branch -D "$b"; done`
-    const parts = [
-      `set -euo pipefail`,
-      `git -C "${repoDir}" remote update --prune`,
-      `git -C "${repoDir}" fetch --all --prune`,
-      deleteStaleLocalsPre,
-      checkoutCmd,
-      deleteStaleLocalsPost,
-      `git -C "${repoDir}" pull --ff-only`,
-    ].filter(Boolean)
-    const pullCmd = parts.join(' && ')
+    const branch = (req.query.branch || '').toString().trim() || undefined
+    const repoRoot = path.resolve(__dirname, '..')
+    const scriptPath = path.resolve(repoRoot, 'scripts', 'refresh-plant-swipe.sh')
 
-    const { stdout: pullStdout, stderr: pullStderr } = await exec(pullCmd, { timeout: 300000, shell: '/bin/bash' })
+    // Verify the refresh script exists
+    try {
+      await fs.access(scriptPath)
+    } catch {
+      res.status(500).json({ ok: false, error: `refresh script not found at ${scriptPath}` })
+      return
+    }
+    // Ensure it is executable (best-effort)
+    try { await fs.chmod(scriptPath, 0o755) } catch {}
 
-    // Rebuild the frontend to reflect the latest changes
-    const buildEnv = { ...process.env, CI: process.env.CI || 'true' }
-    const { stdout: buildStdout, stderr: buildStderr } = await exec('npm run build', { cwd: repoDir, timeout: 900000, shell: '/bin/bash', env: buildEnv })
+    // Execute the script from repository root so it updates current branch and builds
+    // Run detached so we can return a response before the service restarts
+    const execEnv = { ...process.env, CI: process.env.CI || 'true', SUDO_ASKPASS: process.env.SUDO_ASKPASS || '' }
+    const child = spawnChild(scriptPath, {
+      cwd: repoRoot,
+      detached: true,
+      stdio: 'ignore',
+      env: execEnv,
+      shell: false,
+    })
+    try { child.unref() } catch {}
 
-    res.json({ ok: true, branch: branch || undefined, pullStdout, pullStderr, buildStdout, buildStderr })
+    res.json({ ok: true, branch, started: true })
   } catch (e) {
-    res.status(500).json({ ok: false, error: e?.message || 'git pull/build failed' })
+    res.status(500).json({ ok: false, error: e?.message || 'refresh failed' })
   }
 }
 
