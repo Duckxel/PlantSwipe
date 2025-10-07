@@ -140,77 +140,60 @@ function getBearerTokenFromRequest(req) {
 }
 async function isAdminFromRequest(req) {
   try {
-    // Force allow to unblock admin views while debugging
-    return true
+    // Allow explicit public mode for maintenance
+    if (adminPublicMode === true) return true
+    // Static header token support for non-authenticated admin actions (CI/ops)
+    const headerToken = req.get('X-Admin-Token') || req.get('x-admin-token') || ''
+    if (adminStaticToken && headerToken && headerToken === adminStaticToken) return true
+
+    // Bearer token path: resolve user and check admin
+    const user = await getUserFromRequest(req)
+    if (!user?.id) return false
+    let isAdmin = false
+    // Prefer DB flag
+    if (sql) {
+      try {
+        const exists = await sql`select 1 from information_schema.tables where table_schema='public' and table_name='profiles'`
+        if (exists?.length) {
+          const rows = await sql`select is_admin from public.profiles where id = ${user.id} limit 1`
+          isAdmin = !!(rows?.[0]?.is_admin)
+        }
+      } catch {}
+    }
+    // Environment allowlists as fallback
+    if (!isAdmin) {
+      const allowedEmails = (process.env.ADMIN_EMAILS || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+      const allowedUserIds = (process.env.ADMIN_USER_IDS || '').split(',').map(s => s.trim()).filter(Boolean)
+      const email = (user.email || '').toLowerCase()
+      if ((email && allowedEmails.includes(email)) || allowedUserIds.includes(user.id)) {
+        isAdmin = true
+      }
+    }
+    return isAdmin
   } catch {
     return false
   }
 }
 
 async function ensureAdmin(req, res) {
-  return "public";
-
   try {
-    const header = req.get('authorization') || req.get('Authorization') || ''
-    const token = header && header.startsWith('Bearer ') ? header.slice(7).trim() : null
-    if (!token) {
+    // Public mode or static token
+    if (adminPublicMode === true) return 'public'
+    const headerToken = req.get('X-Admin-Token') || req.get('x-admin-token') || ''
+    if (adminStaticToken && headerToken && headerToken === adminStaticToken) return 'static-admin'
+
+    // Bearer token path
+    const user = await getUserFromRequest(req)
+    if (!user?.id) {
       res.status(401).json({ error: 'Unauthorized' })
       return null
     }
-
-    // Resolve user via service key (preferred) or anon key as fallback
-    let user = null
-    if (supabaseAdmin) {
-      try {
-        const { data, error } = await supabaseAdmin.auth.getUser(token)
-        if (!error && data?.user) user = data.user
-      } catch {}
-    }
-    if (!user && supabaseServer) {
-      try {
-        const { data, error } = await supabaseServer.auth.getUser(token)
-        if (!error && data?.user) user = data.user
-      } catch {}
-    }
-    if (!user?.id) {
-      res.status(401).json({ error: 'Invalid or expired token' })
-      return null
-    }
-
-    const userId = user.id
-
-    // Determine admin status: DB flag first, then environment fallbacks
-    let isAdmin = false
-    if (sql) {
-      try {
-        const exists = await sql`select 1 from information_schema.tables where table_schema = 'public' and table_name = 'profiles'`
-        if (exists?.length) {
-          const rows = await sql`select is_admin from public.profiles where id = ${userId} limit 1`
-          isAdmin = !!(rows?.[0]?.is_admin)
-        }
-      } catch {}
-    }
-    if (!isAdmin) {
-      const allowedEmails = (process.env.ADMIN_EMAILS || '')
-        .split(',')
-        .map(s => s.trim().toLowerCase())
-        .filter(Boolean)
-      const allowedUserIds = (process.env.ADMIN_USER_IDS || '')
-        .split(',')
-        .map(s => s.trim())
-        .filter(Boolean)
-      const email = (user.email || '').toLowerCase()
-      if ((email && allowedEmails.includes(email)) || allowedUserIds.includes(userId)) {
-        isAdmin = true
-      }
-    }
-
+    const isAdmin = await isAdminFromRequest(req)
     if (!isAdmin) {
       res.status(403).json({ error: 'Admin privileges required' })
       return null
     }
-
-    return userId
+    return user.id
   } catch {
     res.status(500).json({ error: 'Failed to authorize request' })
     return null
@@ -340,32 +323,19 @@ const supabaseAdmin = null
 app.get('/api/health', async (_req, res) => {
   const started = Date.now()
   try {
-    // Prefer direct SQL ping; fallback to Supabase anon client when available
     let dbOk = false
-    let via = 'none'
     let err = null
     if (sql) {
       try {
         const rows = await sql`select 1 as one`
         dbOk = Array.isArray(rows) && rows[0] && Number(rows[0].one) === 1
-        via = 'sql'
       } catch (e) {
         err = e?.message || 'query failed'
       }
     }
-    if (!dbOk && supabaseServer) {
-      try {
-        const { error } = await supabaseServer.from('plants').select('id', { head: true, count: 'exact' }).limit(1)
-        dbOk = !error
-        via = 'supabase'
-        if (error) err = error?.message || err
-      } catch (e) {
-        err = e?.message || err
-      }
-    }
-    res.status(200).json({ ok: dbOk, db: { ok: dbOk, via, latencyMs: Date.now() - started, error: dbOk ? null : (err || (sql ? 'DB_QUERY_FAILED' : 'DB_NOT_CONFIGURED')) } })
+    res.status(200).json({ ok: dbOk, db: { ok: dbOk, latencyMs: Date.now() - started, error: dbOk ? null : (err || (connectionString ? 'DB_QUERY_FAILED' : 'DB_NOT_CONFIGURED')) } })
   } catch {
-    res.status(200).json({ ok: false, db: { ok: false, via: 'none', latencyMs: Date.now() - started, error: 'HEALTH_CHECK_FAILED' } })
+    res.status(200).json({ ok: false, db: { ok: false, latencyMs: Date.now() - started, error: 'HEALTH_CHECK_FAILED' } })
   }
 })
 
