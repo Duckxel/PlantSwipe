@@ -20,8 +20,39 @@ trap 'echo "[ERROR] Command failed at line $LINENO" >&2' ERR
 if [[ $EUID -ne 0 ]]; then SUDO="sudo"; else SUDO=""; fi
 log() { printf "[%s] %s\n" "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*"; }
 
-# Resolve repo and app directories based on where this script is run
-REPO_DIR="$(pwd -P)"
+# Resolve repo root robustly (works if script is in repo root or in scripts/)
+SCRIPT_PATH="${BASH_SOURCE[0]:-$0}"
+SCRIPT_DIR="$(cd -- "$(dirname "$SCRIPT_PATH")" >/dev/null 2>&1 && pwd -P)"
+CWD="$(pwd -P)"
+
+resolve_repo_dir() {
+  local candidates=()
+  candidates+=("$SCRIPT_DIR")
+  candidates+=("$(dirname "$SCRIPT_DIR")")
+  candidates+=("$CWD")
+  # Git toplevels if available
+  local gt
+  gt="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || true)"; [[ -n "$gt" ]] && candidates+=("$gt")
+  gt="$(git -C "$CWD" rev-parse --show-toplevel 2>/dev/null || true)"; [[ -n "$gt" ]] && candidates+=("$gt")
+  # Deduplicate
+  local seen=""
+  local out=""
+  for d in "${candidates[@]}"; do
+    [[ -z "$d" ]] && continue
+    if [[ ":$seen:" != *":$d:"* ]]; then
+      seen+=":$d"
+      # Prefer directories that contain our known files
+      if [[ -f "$d/plant-swipe.conf" && -d "$d/admin_api" ]]; then
+        echo "$d"; return 0
+      fi
+      out="$d"
+    fi
+  done
+  echo "$out"
+}
+
+REPO_DIR="$(resolve_repo_dir)"
+
 if [[ -f "$REPO_DIR/plant-swipe/package.json" ]]; then
   NODE_DIR="$REPO_DIR/plant-swipe"
 else
