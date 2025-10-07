@@ -511,9 +511,16 @@ export const AdminPage: React.FC = () => {
     if (isInitial) setOnlineLoading(true)
     else setOnlineRefreshing(true)
     try {
-      // Use dedicated endpoint backed by DB-only counts
+      // Use dedicated endpoint backed by DB counts; forward Authorization so REST fallback can pass RLS
+      const token = (await supabase.auth.getSession()).data.session?.access_token
       const resp = await fetch('/api/admin/online-users', {
-        headers: { 'Accept': 'application/json' },
+        headers: (() => {
+          const h: Record<string, string> = { 'Accept': 'application/json' }
+          if (token) h['Authorization'] = `Bearer ${token}`
+          const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+          if (adminToken) h['X-Admin-Token'] = String(adminToken)
+          return h
+        })(),
         credentials: 'same-origin',
       })
       const data = await safeJson(resp)
