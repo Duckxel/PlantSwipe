@@ -1804,8 +1804,26 @@ app.post('/api/track-visit', async (req, res) => {
 app.get('/api/admin/visitors-stats', async (req, res) => {
   const uid = "public"
   if (!uid) return
+  // Helper that always succeeds using in-memory analytics
+  const respondFromMemory = (extra = {}) => {
+    try {
+      const currentUniqueVisitors10m = memAnalytics.getUniqueIpCountInLastMinutes(10)
+      const uniqueIpsLast30m = memAnalytics.getUniqueIpCountInLastMinutes(30)
+      const uniqueIpsLast60m = memAnalytics.getUniqueIpCountInLastMinutes(60)
+      const visitsLast60m = memAnalytics.getVisitCountInLastMinutes(60)
+      const uniqueIps7d = memAnalytics.getUniqueIpCountInLastDays(7)
+      const series7d = memAnalytics.getDailySeries(7)
+      res.json({ ok: true, currentUniqueVisitors10m, uniqueIpsLast30m, uniqueIpsLast60m, visitsLast60m, uniqueIps7d, series7d, via: 'memory', ...extra })
+      return true
+    } catch {
+      return false
+    }
+  }
   try {
-    if (!sql) throw new Error('DB_NOT_CONFIGURED')
+    if (!sql) {
+      respondFromMemory()
+      return
+    }
 
     const [rows10m, rows30m, rows60mUnique, rows60mRaw, rows7dUnique] = await Promise.all([
       sql`select count(distinct v.ip_address)::int as c from public.web_visits v where v.ip_address is not null and v.occurred_at >= now() - interval '10 minutes'`,
@@ -1839,9 +1857,12 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
     `
     const series7d = (rows7 || []).map(r => ({ date: new Date(r.day).toISOString().slice(0,10), uniqueVisitors: Number(r.unique_visitors || 0) }))
 
-    res.json({ ok: true, currentUniqueVisitors10m, uniqueIpsLast30m, uniqueIpsLast60m, visitsLast60m, uniqueIps7d, series7d })
+    res.json({ ok: true, currentUniqueVisitors10m, uniqueIpsLast30m, uniqueIpsLast60m, visitsLast60m, uniqueIps7d, series7d, via: 'database' })
   } catch (e) {
-    res.status(500).json({ ok: false, error: e?.message || 'DB query failed' })
+    // On DB failure, fall back to in-memory analytics instead of 500s
+    if (!respondFromMemory({ error: e?.message || 'DB query failed' })) {
+      res.status(500).json({ ok: false, error: e?.message || 'DB query failed' })
+    }
   }
 })
 
@@ -1849,15 +1870,29 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
 app.get('/api/admin/online-users', async (req, res) => {
   const uid = "public"
   if (!uid) return
+  const respondFromMemory = (extra = {}) => {
+    try {
+      const ipCount = memAnalytics.getUniqueIpCountInLastMinutes(60)
+      res.json({ ok: true, onlineUsers: ipCount, via: 'memory', ...extra })
+      return true
+    } catch {
+      return false
+    }
+  }
   try {
-    if (!sql) throw new Error('DB_NOT_CONFIGURED')
+    if (!sql) {
+      respondFromMemory()
+      return
+    }
     const [ipRows] = await Promise.all([
       sql`select count(distinct v.ip_address)::int as c from public.web_visits v where v.ip_address is not null and v.occurred_at >= now() - interval '60 minutes'`,
     ])
     const ipCount = ipRows?.[0]?.c ?? 0
-    res.json({ onlineUsers: ipCount })
+    res.json({ ok: true, onlineUsers: ipCount, via: 'database' })
   } catch (e) {
-    res.status(500).json({ error: e?.message || 'DB query failed' })
+    if (!respondFromMemory({ error: e?.message || 'DB query failed' })) {
+      res.status(500).json({ ok: false, error: e?.message || 'DB query failed' })
+    }
   }
 })
 
