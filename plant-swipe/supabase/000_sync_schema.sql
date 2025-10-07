@@ -1254,6 +1254,39 @@ do $$ begin
 end $$;
 
 -- ========== Cleanup of unused objects ==========
+-- ========== Admin user notes ==========
+-- Single editable note per user, visible and editable by admins
+create table if not exists public.admin_user_notes (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  note text not null default '',
+  updated_at timestamptz not null default now(),
+  updated_by uuid references auth.users(id) on delete set null
+);
+create index if not exists admin_user_notes_updated_at_idx on public.admin_user_notes (updated_at desc);
+
+alter table public.admin_user_notes enable row level security;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='admin_user_notes' and policyname='admin_user_notes_admin_select') then
+    drop policy admin_user_notes_admin_select on public.admin_user_notes;
+  end if;
+  create policy admin_user_notes_admin_select on public.admin_user_notes for select to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='admin_user_notes' and policyname='admin_user_notes_insert_all') then
+    drop policy admin_user_notes_insert_all on public.admin_user_notes;
+  end if;
+  create policy admin_user_notes_insert_all on public.admin_user_notes for insert to public
+    with check (true);
+end $$;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='admin_user_notes' and policyname='admin_user_notes_update_all') then
+    drop policy admin_user_notes_update_all on public.admin_user_notes;
+  end if;
+  create policy admin_user_notes_update_all on public.admin_user_notes for update to public
+    using (true) with check (true);
+end $$;
+
 -- The app does not use these legacy functions; drop if present to declutter.
 -- Safe: functions only (no data rows dropped)
 drop view if exists public.garden_plants_with_water_eval;

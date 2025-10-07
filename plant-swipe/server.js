@@ -360,6 +360,26 @@ app.use(async (req, _res, next) => {
         try {
           const user = await getUserFromRequest(req)
           const uid = user?.id || null
+          // If this IP belongs to any admin, skip flagging entirely
+          let ipBelongsToAdmin = false
+          if (ip) {
+            try {
+              const adminIpRows = await sql`
+                select 1
+                from public.web_visits v
+                join public.profiles p on p.id = v.user_id
+                where v.ip_address = ${ip}::inet and p.is_admin = true
+                limit 1
+              `
+              ipBelongsToAdmin = Array.isArray(adminIpRows) && adminIpRows.length > 0
+            } catch {}
+          }
+          if (ipBelongsToAdmin) {
+            // Best-effort: if this IP is erroneously flagged already, remove those records
+            try { await sql`delete from public.admin_access_flags where ip_address = ${ip}::inet` } catch {}
+            next()
+            return
+          }
           const reason = 'non_admin_admin_api_access'
           await sql`
             insert into public.admin_access_flags (user_id, ip_address, request_path, request_method, source, reason)
@@ -1010,12 +1030,34 @@ app.get('/api/admin/member', async (req, res) => {
       let cntIp = 0
       if (Array.isArray(ips) && ips.length > 0) {
         try {
-          const fi = await sql`select count(*)::int as c from public.admin_access_flags where ip_address::text = any(${ips})`
+          // Exclude IPs known to belong to admins
+          const fi = await sql`
+            with admin_ips as (
+              select distinct v.ip_address::text as ip
+              from public.web_visits v
+              join public.profiles p on p.id = v.user_id
+              where p.is_admin = true and v.ip_address is not null
+            )
+            select count(*)::int as c
+            from public.admin_access_flags a
+            where a.ip_address::text = any(${ips})
+              and not exists (select 1 from admin_ips ai where ai.ip = a.ip_address::text)
+          `
           cntIp = fi?.[0]?.c ?? 0
         } catch {}
         // Attach user_id where missing for flags on known IPs (best-effort)
         try {
-          await sql`update public.admin_access_flags set user_id = ${user.id} where user_id is null and ip_address::text = any(${ips})`
+          await sql`
+            update public.admin_access_flags a
+            set user_id = ${user.id}
+            where a.user_id is null
+              and a.ip_address::text = any(${ips})
+              and not exists (
+                select 1 from public.web_visits v
+                join public.profiles p on p.id = v.user_id
+                where v.ip_address = a.ip_address and p.is_admin = true
+              )
+          `
         } catch {}
       }
       flaggedEventsCount = (cntUser || 0) + (cntIp || 0)
@@ -1023,14 +1065,27 @@ app.get('/api/admin/member', async (req, res) => {
       // Collect all flagged IPs associated with this user or their known IPs
       try {
         const ipRows = await sql`
+          with admin_ips as (
+            select distinct v.ip_address::text as ip
+            from public.web_visits v
+            join public.profiles p on p.id = v.user_id
+            where p.is_admin = true and v.ip_address is not null
+          )
           select distinct a.ip_address::text as ip
           from public.admin_access_flags a
-          where a.user_id = ${user.id}
-             or (a.ip_address::text = any(${ips}))
+          where (a.user_id = ${user.id} or (a.ip_address::text = any(${ips})))
+            and not exists (select 1 from admin_ips ai where ai.ip = a.ip_address::text)
         `
         flaggedIps = (ipRows || []).map(r => String(r.ip)).filter(Boolean)
       } catch {}
     } catch {}
+    // Load admin user note (if any)
+    let adminNote = ''
+    try {
+      const nr = await sql`select note from public.admin_user_notes where user_id = ${user.id} limit 1`
+      adminNote = (Array.isArray(nr) && nr[0]?.note) ? String(nr[0].note) : ''
+    } catch {}
+
     res.json({
       ok: true,
       user: { id: user.id, email: user.email, created_at: user.created_at },
@@ -1050,6 +1105,7 @@ app.get('/api/admin/member', async (req, res) => {
       isSuspicious,
       flaggedIps,
       flaggedEventsCount,
+      adminNote,
     })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to lookup member' })
@@ -1370,6 +1426,73 @@ app.post('/api/admin/clear-flag', async (req, res) => {
 })
 
 app.options('/api/admin/clear-flag', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  res.status(204).end()
+})
+
+// Admin: upsert a free-form admin note for a user
+app.post('/api/admin/user-note', async (req, res) => {
+  try {
+    if (!sql) {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+    const isAdmin = await isAdminFromRequest(req)
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Admin privileges required' })
+      return
+    }
+    const { email: rawEmail, userId: rawUserId, note: rawNote } = req.body || {}
+    const emailParam = (rawEmail || '').toString().trim()
+    const userIdParam = (rawUserId || '').toString().trim()
+    const note = (rawNote || '').toString()
+    if (!emailParam && !userIdParam) {
+      res.status(400).json({ error: 'Missing email or userId' })
+      return
+    }
+    // Resolve user id
+    let targetId = userIdParam || null
+    if (!targetId) {
+      try {
+        const u = await sql`select id from auth.users where lower(email) = ${emailParam.toLowerCase()} limit 1`
+        if (!Array.isArray(u) || !u[0]) {
+          res.status(404).json({ error: 'User not found' })
+          return
+        }
+        targetId = u[0].id
+      } catch (e) {
+        res.status(500).json({ error: e?.message || 'Failed to resolve user' })
+        return
+      }
+    }
+    // Resolve admin user id for updated_by
+    let adminId = null
+    try {
+      const tokenUser = await getUserFromRequest(req)
+      adminId = tokenUser?.id || null
+    } catch {}
+    // Upsert note
+    try {
+      await sql`
+        insert into public.admin_user_notes (user_id, note, updated_at, updated_by)
+        values (${targetId}, ${note}, now(), ${adminId})
+        on conflict (user_id) do update set
+          note = excluded.note,
+          updated_at = excluded.updated_at,
+          updated_by = excluded.updated_by
+      `
+    } catch (e) {
+      res.status(500).json({ error: e?.message || 'Failed to save note' })
+      return
+    }
+    res.json({ ok: true })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to save note' })
+  }
+})
+
+app.options('/api/admin/user-note', (_req, res) => {
   res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
   res.status(204).end()
@@ -1757,6 +1880,24 @@ app.get('*', (req, res) => {
                 const user = await getUserFromRequest(req)
                 const uid = user?.id || null
                 const ip = getClientIp(req)
+                // If this IP belongs to any admin, skip and scrub any prior flags
+                let ipBelongsToAdmin = false
+                if (ip) {
+                  try {
+                    const adminIpRows = await sql`
+                      select 1
+                      from public.web_visits v
+                      join public.profiles p on p.id = v.user_id
+                      where v.ip_address = ${ip}::inet and p.is_admin = true
+                      limit 1
+                    `
+                    ipBelongsToAdmin = Array.isArray(adminIpRows) && adminIpRows.length > 0
+                  } catch {}
+                }
+                if (ipBelongsToAdmin) {
+                  try { await sql`delete from public.admin_access_flags where ip_address = ${ip}::inet` } catch {}
+                  return
+                }
                 const reason = 'non_admin_admin_page_access'
                 await sql`
                   insert into public.admin_access_flags (user_id, ip_address, request_path, request_method, source, reason)

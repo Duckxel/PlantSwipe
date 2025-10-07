@@ -591,6 +591,7 @@ export const AdminPage: React.FC = () => {
     isSuspicious?: boolean
     flaggedIps?: string[]
     flaggedEventsCount?: number
+    adminNote?: string
   } | null>(null)
   const [banReason, setBanReason] = React.useState('')
   const [banSubmitting, setBanSubmitting] = React.useState(false)
@@ -640,6 +641,7 @@ export const AdminPage: React.FC = () => {
         isSuspicious: !!data?.isSuspicious,
         flaggedIps: Array.isArray(data?.flaggedIps) ? data.flaggedIps : [],
         flaggedEventsCount: typeof data?.flaggedEventsCount === 'number' ? data.flaggedEventsCount : undefined,
+        adminNote: typeof data?.adminNote === 'string' ? data.adminNote : '',
       })
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -736,6 +738,31 @@ export const AdminPage: React.FC = () => {
       alert(`Clear flag failed: ${msg}`)
     }
   }, [lookupEmail, safeJson])
+
+  const [noteSaving, setNoteSaving] = React.useState(false)
+  const saveAdminNote = React.useCallback(async () => {
+    if (!lookupEmail) return
+    try {
+      setNoteSaving(true)
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      const headers: Record<string,string> = { 'Content-Type': 'application/json', 'Accept': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      const resp = await fetch('/api/admin/user-note', {
+        method: 'POST',
+        headers,
+        credentials: 'same-origin',
+        body: JSON.stringify({ email: lookupEmail, note: memberData?.adminNote || '' })
+      })
+      const body = await safeJson(resp)
+      if (!resp.ok) throw new Error(body?.error || `HTTP ${resp.status}`)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      alert(`Save note failed: ${msg}`)
+    } finally {
+      setNoteSaving(false)
+    }
+  }, [lookupEmail, memberData?.adminNote, safeJson])
 
   // Debounced email suggestions fetch
   React.useEffect(() => {
@@ -1262,6 +1289,20 @@ export const AdminPage: React.FC = () => {
                       <div className="text-sm">User: <span className="font-medium">{memberData.user?.email || '—'}</span>{memberData.user?.id ? (<span className="opacity-60"> · id {memberData.user.id}</span>) : null}</div>
                       <div className="text-sm">Admin: <span className="font-medium">{memberData.profile?.is_admin ? 'Yes' : 'No'}</span></div>
                       <div className="text-sm">Display name: <span className="font-medium inline-block max-w-full truncate align-bottom">{memberData.profile?.display_name || '—'}</span></div>
+                      <div className="grid gap-2">
+                        <label className="text-xs opacity-60">Admin notes</label>
+                        <textarea
+                          className="min-h-[120px] px-3 py-2 rounded-xl border"
+                          placeholder="Write anything relevant for admins…"
+                          value={memberData.adminNote || ''}
+                          onChange={(e) => setMemberData(prev => prev ? { ...prev, adminNote: e.target.value } : prev)}
+                        />
+                        <div className="flex justify-end">
+                          <Button className="rounded-xl" variant="secondary" onClick={saveAdminNote} disabled={noteSaving}>
+                            {noteSaving ? 'Saving…' : 'Save note'}
+                          </Button>
+                        </div>
+                      </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <div className="text-sm">Last online: <span className="font-medium">{memberData.lastOnlineAt ? new Date(memberData.lastOnlineAt).toLocaleString() : '—'}</span></div>
                         <div className="text-sm">Last IP: <span className="font-medium">{memberData.lastIp || '—'}</span></div>
