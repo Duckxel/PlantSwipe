@@ -21,7 +21,14 @@ const AuthContext = React.createContext<AuthContextValue | undefined>(undefined)
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = React.useState<AuthUser | null>(null)
-  const [profile, setProfile] = React.useState<ProfileRow | null>(null)
+  const [profile, setProfile] = React.useState<ProfileRow | null>(() => {
+    try {
+      const cached = localStorage.getItem('plantswipe.profile')
+      return cached ? (JSON.parse(cached) as ProfileRow) : null
+    } catch {
+      return null
+    }
+  })
   const [loading, setLoading] = React.useState(true)
 
   const loadSession = React.useCallback(async () => {
