@@ -586,6 +586,7 @@ export const AdminPage: React.FC = () => {
     gardensOwned?: number
     gardensMember?: number
     gardensTotal?: number
+    plantsTotal?: number
     isBannedEmail?: boolean
     bannedReason?: string | null
     bannedAt?: string | null
@@ -632,6 +633,7 @@ export const AdminPage: React.FC = () => {
         gardensOwned: typeof data?.gardensOwned === 'number' ? data.gardensOwned : undefined,
         gardensMember: typeof data?.gardensMember === 'number' ? data.gardensMember : undefined,
         gardensTotal: typeof data?.gardensTotal === 'number' ? data.gardensTotal : undefined,
+        plantsTotal: typeof data?.plantsTotal === 'number' ? data.plantsTotal : undefined,
         isBannedEmail: !!data?.isBannedEmail,
         bannedReason: data?.bannedReason ?? null,
         bannedAt: data?.bannedAt ?? null,
@@ -1181,6 +1183,9 @@ export const AdminPage: React.FC = () => {
                               {memberData.lastOnlineAt && (
                                 <Badge variant="outline" className="rounded-full px-2 py-0.5">Last online {new Date(memberData.lastOnlineAt).toLocaleString()}</Badge>
                               )}
+                              {memberData.user?.created_at && (
+                                <Badge variant="outline" className="rounded-full px-2 py-0.5">Joined {new Date(memberData.user.created_at).toLocaleDateString()}</Badge>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -1286,6 +1291,10 @@ export const AdminPage: React.FC = () => {
                     <div className="rounded-xl border p-3 text-center">
                       <div className="text-[11px] opacity-60">Total gardens</div>
                       <div className="text-base font-semibold tabular-nums">{memberData.gardensTotal ?? '—'}</div>
+                    </div>
+                    <div className="rounded-xl border p-3 text-center">
+                      <div className="text-[11px] opacity-60">Total plants</div>
+                      <div className="text-base font-semibold tabular-nums">{memberData.plantsTotal ?? '—'}</div>
                     </div>
                     <div className="rounded-xl border p-3 text-center">
                       <div className="text-[11px] opacity-60">Last IP</div>

@@ -799,18 +799,72 @@ app.get('/api/admin/member', async (req, res) => {
         }
       } catch {}
 
+      // Gardens and plants counts (best-effort; requires Authorization due to RLS)
+      let gardensOwned = undefined
+      let gardensMember = undefined
+      let gardensTotal = undefined
+      let plantsTotal = undefined
+      try {
+        // Owned count (fast count via headers)
+        const ownCountResp = await fetch(`${supabaseUrlEnv}/rest/v1/gardens?created_by=eq.${encodeURIComponent(targetId)}&select=id`, {
+          headers: { ...baseHeaders, 'Prefer': 'count=exact', 'Range': '0-0' },
+        })
+        if (ownCountResp.ok) {
+          const cr = ownCountResp.headers.get('content-range') || ''
+          const m = cr.match(/\/(\d+)$/)
+          gardensOwned = m ? Number(m[1]) : undefined
+        }
+        // Member list and count
+        let memberGardenIds = []
+        const memResp = await fetch(`${supabaseUrlEnv}/rest/v1/garden_members?user_id=eq.${encodeURIComponent(targetId)}&select=garden_id`, {
+          headers: baseHeaders,
+        })
+        if (memResp.ok) {
+          const arr = await memResp.json().catch(() => [])
+          memberGardenIds = Array.isArray(arr) ? arr.map(r => String(r.garden_id)).filter(Boolean) : []
+          gardensMember = memberGardenIds.length
+        }
+        // Owned list
+        let ownedGardenIds = []
+        const ownListResp = await fetch(`${supabaseUrlEnv}/rest/v1/gardens?created_by=eq.${encodeURIComponent(targetId)}&select=id`, {
+          headers: baseHeaders,
+        })
+        if (ownListResp.ok) {
+          const arr = await ownListResp.json().catch(() => [])
+          ownedGardenIds = Array.isArray(arr) ? arr.map(r => String(r.id)).filter(Boolean) : []
+        }
+        // Unique garden ids for totals
+        const gidSet = new Set([ ...ownedGardenIds, ...memberGardenIds ])
+        const gardenIds = Array.from(gidSet)
+        if (typeof gardensOwned === 'number' && typeof gardensMember === 'number') {
+          gardensTotal = gardenIds.length
+        }
+        // Plants total across all user's gardens (sum plants_on_hand)
+        if (gardenIds.length > 0) {
+          const idsParam = gardenIds.join(',')
+          const gpResp = await fetch(`${supabaseUrlEnv}/rest/v1/garden_plants?garden_id=in.(${idsParam})&select=plants_on_hand`, {
+            headers: baseHeaders,
+          })
+          if (gpResp.ok) {
+            const arr = await gpResp.json().catch(() => [])
+            plantsTotal = Array.isArray(arr) ? arr.reduce((acc, r) => acc + Number(r?.plants_on_hand ?? 0), 0) : undefined
+          }
+        }
+      } catch {}
+
       res.json({
         ok: true,
-        user: { id: targetId, email: emailParam, created_at: null },
+        user: { id: targetId, email: emailParam, created_at: null, email_confirmed_at: null, last_sign_in_at: null },
         profile,
         ips,
         lastOnlineAt,
         lastIp,
         visitsCount,
         uniqueIpsCount: undefined,
-        gardensOwned: undefined,
-        gardensMember: undefined,
-        gardensTotal: undefined,
+        gardensOwned,
+        gardensMember,
+        gardensTotal,
+        plantsTotal,
         isBannedEmail,
         bannedReason,
         bannedAt,
@@ -824,7 +878,7 @@ app.get('/api/admin/member', async (req, res) => {
     // SQL path (preferred when server DB connection is configured)
     let user
     try {
-      const users = await sql`select id, email, created_at from auth.users where lower(email) = ${email} limit 1`
+      const users = await sql`select id, email, created_at, email_confirmed_at, last_sign_in_at from auth.users where lower(email) = ${email} limit 1`
       if (!Array.isArray(users) || users.length === 0) {
         // Try REST fallback if not found in DB
         return await lookupViaRest()
@@ -851,6 +905,7 @@ app.get('/api/admin/member', async (req, res) => {
     let bannedReason = null
     let bannedAt = null
     let bannedIps = []
+    let plantsTotal = 0
     try {
       const ipRows = await sql`select distinct ip_address::text as ip from public.web_visits where user_id = ${user.id} and ip_address is not null order by ip asc`
       ips = (ipRows || []).map(r => String(r.ip)).filter(Boolean)
@@ -887,6 +942,18 @@ app.get('/api/admin/member', async (req, res) => {
       gardensTotal = totalRows?.[0]?.c ?? (gardensOwned + gardensMember)
     } catch {}
     try {
+      const rows = await sql`
+        select coalesce(sum(gp.plants_on_hand), 0)::int as c
+        from public.garden_plants gp
+        where gp.garden_id in (
+          select id from public.gardens where created_by = ${user.id}
+          union
+          select garden_id from public.garden_members where user_id = ${user.id}
+        )
+      `
+      plantsTotal = rows?.[0]?.c ?? 0
+    } catch {}
+    try {
       const br = await sql`
         select reason, banned_at
         from public.banned_accounts
@@ -910,7 +977,7 @@ app.get('/api/admin/member', async (req, res) => {
     } catch {}
     res.json({
       ok: true,
-      user: { id: user.id, email: user.email, created_at: user.created_at },
+      user: { id: user.id, email: user.email, created_at: user.created_at, email_confirmed_at: user.email_confirmed_at || null, last_sign_in_at: user.last_sign_in_at || null },
       profile,
       ips,
       lastOnlineAt,
@@ -920,6 +987,7 @@ app.get('/api/admin/member', async (req, res) => {
       gardensOwned,
       gardensMember,
       gardensTotal,
+      plantsTotal,
       isBannedEmail,
       bannedReason,
       bannedAt,
