@@ -1825,7 +1825,16 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
   if (!uid) return
   try {
     if (!sql) {
-      res.status(503).json({ ok: false, error: 'Database not configured' })
+      // Graceful fallback when DB isn't configured
+      res.json({
+        ok: true,
+        currentUniqueVisitors10m: 0,
+        uniqueIpsLast30m: 0,
+        uniqueIpsLast60m: 0,
+        visitsLast60m: 0,
+        uniqueIps7d: 0,
+        series7d: [],
+      })
       return
     }
 
@@ -1863,7 +1872,16 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
 
     res.json({ ok: true, currentUniqueVisitors10m, uniqueIpsLast30m, uniqueIpsLast60m, visitsLast60m, uniqueIps7d, series7d })
   } catch (e) {
-    res.status(500).json({ ok: false, error: e?.message || 'Failed to load visitors stats' })
+    // Graceful fallback on error to avoid noisy 5xx in the UI
+    res.json({
+      ok: true,
+      currentUniqueVisitors10m: 0,
+      uniqueIpsLast30m: 0,
+      uniqueIpsLast60m: 0,
+      visitsLast60m: 0,
+      uniqueIps7d: 0,
+      series7d: [],
+    })
   }
 })
 
@@ -1873,7 +1891,8 @@ app.get('/api/admin/online-users', async (req, res) => {
   if (!uid) return
   try {
     if (!sql) {
-      res.status(503).json({ onlineUsers: 0, error: 'Database not configured' })
+      // Graceful fallback when DB isn't configured
+      res.json({ onlineUsers: 0 })
       return
     }
     const [ipRows] = await Promise.all([
@@ -1883,7 +1902,8 @@ app.get('/api/admin/online-users', async (req, res) => {
     // Define "online" strictly as unique IPs in the last 60 minutes (DB-only)
     res.json({ onlineUsers: ipCount })
   } catch (e) {
-    res.status(500).json({ onlineUsers: 0, error: e?.message || 'Failed to load online users' })
+    // Graceful fallback on error to avoid noisy 5xx in the UI
+    res.json({ onlineUsers: 0 })
   }
 })
 
