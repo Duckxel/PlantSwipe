@@ -165,6 +165,7 @@ export const AdminPage: React.FC = () => {
   const [visitorsRefreshing, setVisitorsRefreshing] = React.useState<boolean>(false)
   const [visitorsUpdatedAt, setVisitorsUpdatedAt] = React.useState<number | null>(null)
   const [visitorsSeries, setVisitorsSeries] = React.useState<Array<{ date: string; uniqueVisitors: number }>>([])
+  const [visitorsTotalUnique7d, setVisitorsTotalUnique7d] = React.useState<number>(0)
   // Tick every minute to update the "Updated X ago" label without refetching
   const [nowMs, setNowMs] = React.useState<number>(() => Date.now())
   React.useEffect(() => {
@@ -520,10 +521,10 @@ export const AdminPage: React.FC = () => {
         throw new Error(data?.error || `Request failed (${resp.status})`)
       }
       const num = Number(
-        (data?.currentUniqueVisitors10m ??
-        data?.uniqueIpsLast30m ??
-        data?.uniqueIpsLast60m ??
-        data?.onlineUsers)
+        (data?.uniqueIpsLast60m ??
+         data?.currentUniqueVisitors10m ??
+         data?.uniqueIpsLast30m ??
+         data?.onlineUsers)
       )
       setOnlineUsers(Number.isFinite(num) ? num : 0)
       setOnlineUpdatedAt(Date.now())
@@ -571,6 +572,8 @@ export const AdminPage: React.FC = () => {
         ? data.series7d.map((d: any) => ({ date: String(d.date), uniqueVisitors: Number(d.uniqueVisitors ?? d.unique_visitors ?? 0) }))
         : []
       setVisitorsSeries(series)
+      const total7d = Number(data?.uniqueIps7d ?? data?.weeklyUniqueIps7d ?? 0)
+      setVisitorsTotalUnique7d(Number.isFinite(total7d) ? total7d : 0)
       setVisitorsUpdatedAt(Date.now())
     } catch {
       // keep last known
@@ -1004,7 +1007,10 @@ export const AdminPage: React.FC = () => {
                   (() => {
                     const values = visitorsSeries.map(d => d.uniqueVisitors)
                     const maxVal = Math.max(...values, 1)
-                    const totalVal = values.reduce((acc, val) => acc + val, 0)
+                    // Prefer unique total across the full week from API; fallback to sum
+                    const totalVal = (visitorsTotalUnique7d && Number.isFinite(visitorsTotalUnique7d))
+                      ? visitorsTotalUnique7d
+                      : values.reduce((acc, val) => acc + val, 0)
                     const avgVal = Math.round(totalVal / values.length)
 
                     const formatDow = (isoDate: string) => {
