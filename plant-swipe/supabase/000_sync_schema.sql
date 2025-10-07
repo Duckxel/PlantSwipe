@@ -909,6 +909,25 @@ as $$
   limit greatest(1, coalesce(_limit, 5));
 $$;
 
+-- Count helpers for Admin API fallbacks via Supabase REST RPC
+create or replace function public.count_profiles_total()
+returns integer
+language sql
+security definer
+set search_path = public
+as $$
+  select count(*)::int from public.profiles;
+$$;
+
+create or replace function public.count_auth_users_total()
+returns integer
+language sql
+security definer
+set search_path = public
+as $$
+  select count(*)::int from auth.users;
+$$;
+
 -- Ensure we can change the return table shape if it evolved
 drop function if exists public.get_profiles_for_garden(uuid);
 create or replace function public.get_profiles_for_garden(_garden_id uuid)
