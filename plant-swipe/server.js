@@ -1926,6 +1926,59 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
   }
 })
 
+// Admin: total unique visitors across last 7 days (distinct IPs, UTC calendar days)
+app.get('/api/admin/visitors-unique-7d', async (req, res) => {
+  const uid = "public"
+  if (!uid) return
+  const respondFromMemory = (extra = {}) => {
+    try {
+      const uniqueIps7d = memAnalytics.getUniqueIpCountInLastDays(7)
+      res.json({ ok: true, uniqueIps7d, via: 'memory', ...extra })
+      return true
+    } catch {
+      return false
+    }
+  }
+  try {
+    if (sql) {
+      const rows = await sql`
+        select count(distinct v.ip_address)::int as c
+        from public.web_visits v
+        where v.ip_address is not null
+          and timezone('utc', v.occurred_at) >= ((now() at time zone 'utc')::date - interval '6 days')
+      `
+      const uniqueIps7d = rows?.[0]?.c ?? 0
+      res.json({ ok: true, uniqueIps7d, via: 'database' })
+      return
+    }
+
+    // Supabase REST fallback using security-definer RPC
+    if (supabaseUrlEnv && supabaseAnonKey) {
+      const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
+      const token = getBearerTokenFromRequest(req)
+      if (token) Object.assign(headers, { 'Authorization': `Bearer ${token}` })
+      const r = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_unique_ips_last_days`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ _days: 7 }),
+      })
+      if (r.ok) {
+        const val = await r.json().catch(() => 0)
+        const uniqueIps7d = Number(val) || 0
+        res.json({ ok: true, uniqueIps7d, via: 'supabase' })
+        return
+      }
+    }
+
+    // Memory fallback
+    respondFromMemory()
+  } catch (e) {
+    if (!respondFromMemory({ error: e?.message || 'DB query failed' })) {
+      res.status(500).json({ ok: false, error: e?.message || 'DB query failed' })
+    }
+  }
+})
+
 // Admin: simple online users count (unique IPs past 60 minutes)
 app.get('/api/admin/online-users', async (req, res) => {
   const uid = "public"
