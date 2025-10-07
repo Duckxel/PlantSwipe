@@ -1824,72 +1824,46 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
   const uid = "public"
   if (!uid) return
   try {
-    // Compute DB-backed stats when available
-    let db10 = 0, db30 = 0, db60 = 0, dbVisits60 = 0, dbSeries = [], dbWeeklyUnique = 0
-    if (sql) {
-      try {
-        const [rows10m, rows30m, rows60mUnique, rows60mRaw, rows7dUnique] = await Promise.all([
-          sql`select count(distinct v.ip_address)::int as c from public.web_visits v where v.ip_address is not null and v.occurred_at >= now() - interval '10 minutes'`,
-          sql`select count(distinct v.ip_address)::int as c from public.web_visits v where v.ip_address is not null and v.occurred_at >= now() - interval '30 minutes'`,
-          sql`select count(distinct v.ip_address)::int as c from public.web_visits v where v.ip_address is not null and v.occurred_at >= now() - interval '60 minutes'`,
-          sql`select count(*)::int as c from public.web_visits where occurred_at >= now() - interval '60 minutes'`,
-          // Unique IPs across the last 7 calendar days in UTC
-          sql`select count(distinct v.ip_address)::int as c
-               from public.web_visits v
-               where v.ip_address is not null
-                 and timezone('utc', v.occurred_at) >= ((now() at time zone 'utc')::date - interval '6 days')`
-        ])
-        db10 = rows10m?.[0]?.c ?? 0
-        db30 = rows30m?.[0]?.c ?? 0
-        db60 = rows60mUnique?.[0]?.c ?? 0
-        dbVisits60 = rows60mRaw?.[0]?.c ?? 0
-        dbWeeklyUnique = rows7dUnique?.[0]?.c ?? 0
-      } catch {}
-      try {
-        const rows7 = await sql`
-          with days as (
-            select generate_series(((now() at time zone 'utc')::date - interval '6 days'), (now() at time zone 'utc')::date, interval '1 day')::date as d
-          )
-          select d as day,
-                 coalesce((select count(distinct v.ip_address)
-                           from public.web_visits v
-                           where timezone('utc', v.occurred_at)::date = d
-                             and v.ip_address is not null), 0)::int as unique_visitors
-          from days
-          order by d asc
-        `
-        dbSeries = (rows7 || []).map(r => ({ date: new Date(r.day).toISOString().slice(0,10), uniqueVisitors: Number(r.unique_visitors || 0) }))
-      } catch {}
+    if (!sql) {
+      res.status(503).json({ ok: false, error: 'Database not configured' })
+      return
     }
 
-    // Memory fallback stats
-    const mem10 = memAnalytics.getUniqueIpCountInLastMinutes(10)
-    const mem30 = memAnalytics.getUniqueIpCountInLastMinutes(30)
-    const mem60 = memAnalytics.getUniqueIpCountInLastMinutes(60)
-    const memVisits60 = memAnalytics.getVisitCountInLastMinutes(60)
-    const memSeries = memAnalytics.getDailySeries(7)
-    const memUnique7d = memAnalytics.getUniqueIpCountInLastDays(7)
+    const [rows10m, rows30m, rows60mUnique, rows60mRaw, rows7dUnique] = await Promise.all([
+      sql`select count(distinct v.ip_address)::int as c from public.web_visits v where v.ip_address is not null and v.occurred_at >= now() - interval '10 minutes'`,
+      sql`select count(distinct v.ip_address)::int as c from public.web_visits v where v.ip_address is not null and v.occurred_at >= now() - interval '30 minutes'`,
+      sql`select count(distinct v.ip_address)::int as c from public.web_visits v where v.ip_address is not null and v.occurred_at >= now() - interval '60 minutes'`,
+      sql`select count(*)::int as c from public.web_visits where occurred_at >= now() - interval '60 minutes'`,
+      // Unique IPs across the last 7 calendar days in UTC
+      sql`select count(distinct v.ip_address)::int as c
+           from public.web_visits v
+           where v.ip_address is not null
+             and timezone('utc', v.occurred_at) >= ((now() at time zone 'utc')::date - interval '6 days')`
+    ])
 
-    // Merge (prefer DB when present, but never below memory counts)
-    const currentUniqueVisitors10m = Math.max(db10, mem10)
-    const uniqueIpsLast30m = Math.max(db30, mem30)
-    const uniqueIpsLast60m = Math.max(db60, mem60)
-    const visitsLast60m = Math.max(dbVisits60, memVisits60)
-    const uniqueIps7d = Math.max(dbWeeklyUnique, memUnique7d)
+    const currentUniqueVisitors10m = rows10m?.[0]?.c ?? 0
+    const uniqueIpsLast30m = rows30m?.[0]?.c ?? 0
+    const uniqueIpsLast60m = rows60mUnique?.[0]?.c ?? 0
+    const visitsLast60m = rows60mRaw?.[0]?.c ?? 0
+    const uniqueIps7d = rows7dUnique?.[0]?.c ?? 0
 
-    // Merge series day-by-day by max
-    const byDate = new Map()
-    for (const row of dbSeries) byDate.set(row.date, row.uniqueVisitors)
-    for (const row of memSeries) {
-      const prev = byDate.get(row.date) || 0
-      if (row.uniqueVisitors > prev) byDate.set(row.date, row.uniqueVisitors)
-    }
-    const series7d = (memSeries.length ? memSeries : dbSeries).map(d => ({ date: d.date, uniqueVisitors: byDate.get(d.date) || 0 }))
+    const rows7 = await sql`
+      with days as (
+        select generate_series(((now() at time zone 'utc')::date - interval '6 days'), (now() at time zone 'utc')::date, interval '1 day')::date as d
+      )
+      select d as day,
+             coalesce((select count(distinct v.ip_address)
+                       from public.web_visits v
+                       where timezone('utc', v.occurred_at)::date = d
+                         and v.ip_address is not null), 0)::int as unique_visitors
+      from days
+      order by d asc
+    `
+    const series7d = (rows7 || []).map(r => ({ date: new Date(r.day).toISOString().slice(0,10), uniqueVisitors: Number(r.unique_visitors || 0) }))
 
     res.json({ ok: true, currentUniqueVisitors10m, uniqueIpsLast30m, uniqueIpsLast60m, visitsLast60m, uniqueIps7d, series7d })
   } catch (e) {
-    const series7d = memAnalytics.getDailySeries(7)
-    res.status(200).json({ ok: true, currentUniqueVisitors10m: memAnalytics.getUniqueIpCountInLastMinutes(10), uniqueIpsLast30m: memAnalytics.getUniqueIpCountInLastMinutes(30), uniqueIpsLast60m: memAnalytics.getUniqueIpCountInLastMinutes(60), visitsLast60m: memAnalytics.getVisitCountInLastMinutes(60), uniqueIps7d: memAnalytics.getUniqueIpCountInLastDays(7), series7d, error: e?.message || 'Failed to load visitors stats' })
+    res.status(500).json({ ok: false, error: e?.message || 'Failed to load visitors stats' })
   }
 })
 
@@ -1898,24 +1872,18 @@ app.get('/api/admin/online-users', async (req, res) => {
   const uid = "public"
   if (!uid) return
   try {
-    let ipCount = 0
-    let sessionCount = 0
-    if (sql) {
-      try {
-        const [ipRows, sessionRows] = await Promise.all([
-          sql`select count(distinct v.ip_address)::int as c from public.web_visits v where v.ip_address is not null and v.occurred_at >= now() - interval '60 minutes'`,
-          sql`select count(distinct v.session_id)::int as c from public.web_visits v where v.occurred_at >= now() - interval '60 minutes'`,
-        ])
-        ipCount = ipRows?.[0]?.c ?? 0
-        sessionCount = sessionRows?.[0]?.c ?? 0
-      } catch {}
+    if (!sql) {
+      res.status(503).json({ onlineUsers: 0, error: 'Database not configured' })
+      return
     }
-    const memIpCount = memAnalytics.getUniqueIpCountInLastMinutes(60)
-    // Define "online" strictly as unique IPs in the last 60 minutes
-    const onlineUsers = Math.max(ipCount, memIpCount)
-    res.json({ onlineUsers })
+    const [ipRows] = await Promise.all([
+      sql`select count(distinct v.ip_address)::int as c from public.web_visits v where v.ip_address is not null and v.occurred_at >= now() - interval '60 minutes'`,
+    ])
+    const ipCount = ipRows?.[0]?.c ?? 0
+    // Define "online" strictly as unique IPs in the last 60 minutes (DB-only)
+    res.json({ onlineUsers: ipCount })
   } catch (e) {
-    res.status(200).json({ onlineUsers: Math.max(0, memAnalytics.getUniqueIpCountInLastMinutes(60)) })
+    res.status(500).json({ onlineUsers: 0, error: e?.message || 'Failed to load online users' })
   }
 })
 
