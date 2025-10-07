@@ -544,9 +544,9 @@ as $$
   select id from auth.users where email ilike _email limit 1;
 $$;
 
--- Ensure we can change the return table shape if it evolved
-drop function if exists public.get_profiles_for_garden(uuid);
-create or replace function public.get_profiles_for_garden(_garden_id uuid)
+-- Drop and recreate to allow return type changes
+drop function if exists public.get_profiles_for_garden(uuid) cascade;
+create function public.get_profiles_for_garden(_garden_id uuid)
 returns table(user_id uuid, display_name text, email text)
 language sql
 security definer
