@@ -5,45 +5,57 @@ set -euo pipefail
 
 trap 'echo "[ERROR] Command failed at line $LINENO" >&2' ERR
 
-# Determine repo and node app directories
-REPO_DIR="${REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
-NODE_DIR="${NODE_DIR:-$REPO_DIR/plant-swipe}"
+# Determine working directories based on where the command is RUN (caller cwd)
+WORK_DIR="$(pwd -P)"
+# Prefer nested plant-swipe app if present; otherwise use current dir as Node app
+if [[ -f "$WORK_DIR/plant-swipe/package.json" ]]; then
+  NODE_DIR="$WORK_DIR/plant-swipe"
+else
+  NODE_DIR="$WORK_DIR"
+fi
 
-# Branch and services (override via environment)
-BRANCH="${BRANCH:-}"
-SERVICE_NODE="${SERVICE_NODE:-plant-swipe-node}"
-SERVICE_ADMIN="${SERVICE_ADMIN:-admin-api}"
-SERVICE_NGINX="${SERVICE_NGINX:-nginx}"
+# Fixed service names
+SERVICE_NODE="plant-swipe-node"
+SERVICE_ADMIN="admin-api"
+SERVICE_NGINX="nginx"
 
 if [[ $EUID -ne 0 ]]; then SUDO="sudo"; else SUDO=""; fi
 log() { printf "[%s] %s\n" "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*"; }
 
-log "Repo: $REPO_DIR"
+log "Repo (cwd): $WORK_DIR"
 log "Node app: $NODE_DIR"
 
-# Resolve branch to current if not provided
-if [[ -z "$BRANCH" ]]; then
-  BRANCH="$(git -C "$REPO_DIR" rev-parse --abbrev-ref HEAD)"
+# Verify we're inside a git repository
+if ! git -C "$WORK_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo "[ERROR] Current directory is not inside a git repository: $WORK_DIR" >&2
+  exit 1
 fi
-log "Branch: $BRANCH"
+BRANCH_NAME="$(git -C "$WORK_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
+log "Branch: $BRANCH_NAME"
 
 # Fetch and update code
 log "Fetching/pruning remotes…"
-git -C "$REPO_DIR" fetch --all --prune
+git -C "$WORK_DIR" fetch --all --prune
 
-log "Checking out branch…"
-git -C "$REPO_DIR" checkout "$BRANCH"
-
-log "Pulling latest (fast-forward only)…"
-git -C "$REPO_DIR" pull --ff-only origin "$BRANCH"
+log "Pulling latest (fast-forward only) on current branch…"
+git -C "$WORK_DIR" pull --ff-only
 
 # Install and build Node app
 log "Installing Node dependencies…"
 cd "$NODE_DIR"
-npm ci --no-audit --no-fund
+# Run npm as the invoking user if script is run with sudo, to avoid root-owned files
+if [[ -n "${SUDO_USER:-}" && "${EUID}" -eq 0 ]]; then
+  sudo -u "$SUDO_USER" -H npm ci --no-audit --no-fund
+else
+  npm ci --no-audit --no-fund
+fi
 
 log "Building application…"
-CI=${CI:-true} npm run build
+if [[ -n "${SUDO_USER:-}" && "${EUID}" -eq 0 ]]; then
+  sudo -u "$SUDO_USER" -H env CI=${CI:-true} npm run build
+else
+  CI=${CI:-true} npm run build
+fi
 
 # Validate and reload nginx
 log "Testing nginx configuration…"
