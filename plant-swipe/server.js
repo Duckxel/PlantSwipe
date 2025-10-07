@@ -1837,6 +1837,50 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
   }
   try {
     if (!sql) {
+      // Supabase REST fallback using security-definer RPCs
+      if (supabaseUrlEnv && supabaseAnonKey) {
+        try {
+          const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
+          // Attempt to use caller token when present (not required for definer functions)
+          const token = getBearerTokenFromRequest(req)
+          if (token) Object.assign(headers, { 'Authorization': `Bearer ${token}` })
+
+          const [c10, c30, c60u, c60v, u7, s7] = await Promise.all([
+            fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_unique_ips_last_minutes`, { method: 'POST', headers, body: JSON.stringify({ _minutes: 10 }) }),
+            fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_unique_ips_last_minutes`, { method: 'POST', headers, body: JSON.stringify({ _minutes: 30 }) }),
+            fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_unique_ips_last_minutes`, { method: 'POST', headers, body: JSON.stringify({ _minutes: 60 }) }),
+            fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_visits_last_minutes`, { method: 'POST', headers, body: JSON.stringify({ _minutes: 60 }) }),
+            fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_unique_ips_last_days`, { method: 'POST', headers, body: JSON.stringify({ _days: 7 }) }),
+            fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_visitors_series_days`, { method: 'POST', headers, body: JSON.stringify({ _days: 7 }) }),
+          ])
+
+          const [c10v, c30v, c60uv, c60vv, u7v, s7v] = await Promise.all([
+            c10.ok ? c10.json().catch(() => 0) : Promise.resolve(0),
+            c30.ok ? c30.json().catch(() => 0) : Promise.resolve(0),
+            c60u.ok ? c60u.json().catch(() => 0) : Promise.resolve(0),
+            c60v.ok ? c60v.json().catch(() => 0) : Promise.resolve(0),
+            u7.ok ? u7.json().catch(() => 0) : Promise.resolve(0),
+            s7.ok ? s7.json().catch(() => []) : Promise.resolve([]),
+          ])
+
+          const series7d = Array.isArray(s7v)
+            ? s7v.map((r) => ({ date: String(r.date), uniqueVisitors: Number(r.unique_visitors ?? 0) }))
+            : []
+
+          res.json({
+            ok: true,
+            currentUniqueVisitors10m: Number(c10v) || 0,
+            uniqueIpsLast30m: Number(c30v) || 0,
+            uniqueIpsLast60m: Number(c60uv) || 0,
+            visitsLast60m: Number(c60vv) || 0,
+            uniqueIps7d: Number(u7v) || 0,
+            series7d,
+            via: 'supabase',
+          })
+          return
+        } catch {}
+      }
+      // Fallback to memory-only if Supabase REST isn't configured or failed
       respondFromMemory()
       return
     }
