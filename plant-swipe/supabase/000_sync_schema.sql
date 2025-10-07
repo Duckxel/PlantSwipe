@@ -1432,6 +1432,93 @@ do $$ begin
     with check (true);
 end $$;
 
+-- Aggregation RPCs for visitor analytics (used by server REST fallback)
+-- Count unique IPs in the last N minutes
+create or replace function public.count_unique_ips_last_minutes(_minutes integer default 60)
+returns integer
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce(
+    (
+      select count(distinct v.ip_address)::int
+      from public.web_visits v
+      where v.ip_address is not null
+        and v.occurred_at >= (now() - make_interval(mins => greatest(0, coalesce(_minutes, 0))))
+    ),
+    0
+  );
+$$;
+grant execute on function public.count_unique_ips_last_minutes(integer) to anon, authenticated;
+
+-- Count total visits (rows) in the last N minutes
+create or replace function public.count_visits_last_minutes(_minutes integer default 60)
+returns integer
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce(
+    (
+      select count(*)::int
+      from public.web_visits v
+      where v.occurred_at >= (now() - make_interval(mins => greatest(0, coalesce(_minutes, 0))))
+    ),
+    0
+  );
+$$;
+grant execute on function public.count_visits_last_minutes(integer) to anon, authenticated;
+
+-- Count unique IPs across the last N calendar days in UTC (default 7)
+create or replace function public.count_unique_ips_last_days(_days integer default 7)
+returns integer
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce(
+    (
+      select count(distinct v.ip_address)::int
+      from public.web_visits v
+      where v.ip_address is not null
+        and timezone('utc', v.occurred_at) >= ((now() at time zone 'utc')::date - make_interval(days => greatest(0, coalesce(_days, 0) - 1)))
+    ),
+    0
+  );
+$$;
+grant execute on function public.count_unique_ips_last_days(integer) to anon, authenticated;
+
+-- Daily unique visitors series for the last N days in UTC (default 7)
+create or replace function public.get_visitors_series_days(_days integer default 7)
+returns table(date text, unique_visitors integer)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with days as (
+    select generate_series(
+      (now() at time zone 'utc')::date - make_interval(days => greatest(0, coalesce(_days, 7) - 1)),
+      (now() at time zone 'utc')::date,
+      interval '1 day'
+    )::date as d
+  )
+  select to_char(d, 'YYYY-MM-DD') as date,
+         coalesce((
+           select count(distinct v.ip_address)
+           from public.web_visits v
+           where v.ip_address is not null
+             and timezone('utc', v.occurred_at)::date = d
+         ), 0)::int as unique_visitors
+  from days
+  order by d asc;
+$$;
+grant execute on function public.get_visitors_series_days(integer) to anon, authenticated;
+
 -- ========== Ban system ==========
 -- Records account-level bans and IP-level bans, including metadata for auditing
 create table if not exists public.banned_accounts (
