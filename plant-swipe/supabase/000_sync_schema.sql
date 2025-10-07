@@ -1220,6 +1220,39 @@ do $$ begin
     using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
 end $$;
 
+-- ========== Admin access flags (unauthorized admin access attempts) ==========
+-- Records non-admin attempts to access Admin page or Admin API endpoints
+create table if not exists public.admin_access_flags (
+  id uuid primary key default gen_random_uuid(),
+  occurred_at timestamptz not null default now(),
+  user_id uuid references auth.users(id) on delete set null,
+  ip_address inet,
+  request_path text not null,
+  request_method text not null,
+  source text not null default 'api' check (source in ('api','page')),
+  reason text
+);
+create index if not exists admin_access_flags_time_idx on public.admin_access_flags (occurred_at desc);
+create index if not exists admin_access_flags_user_idx on public.admin_access_flags (user_id);
+create index if not exists admin_access_flags_ip_idx on public.admin_access_flags (ip_address);
+
+-- RLS: admins can read; inserts are performed by server/API with a generic role
+alter table public.admin_access_flags enable row level security;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='admin_access_flags' and policyname='admin_access_flags_admin_select') then
+    drop policy admin_access_flags_admin_select on public.admin_access_flags;
+  end if;
+  create policy admin_access_flags_admin_select on public.admin_access_flags for select to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='admin_access_flags' and policyname='admin_access_flags_insert_all') then
+    drop policy admin_access_flags_insert_all on public.admin_access_flags;
+  end if;
+  create policy admin_access_flags_insert_all on public.admin_access_flags for insert to public
+    with check (true);
+end $$;
+
 -- ========== Cleanup of unused objects ==========
 -- The app does not use these legacy functions; drop if present to declutter.
 -- Safe: functions only (no data rows dropped)

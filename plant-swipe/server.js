@@ -146,6 +146,42 @@ async function isAdminFromRequest(req) {
   }
 }
 
+// Strict admin detection used for logging unauthorized admin access attempts.
+// Honors DB flag, environment allowlists, and optional static admin token.
+async function isAdminStrict(req) {
+  try {
+    if (adminPublicMode) return true
+    const staticHeader = req.get('x-admin-token') || req.get('X-Admin-Token') || ''
+    if (adminStaticToken && staticHeader && staticHeader === adminStaticToken) {
+      return true
+    }
+    const user = await getUserFromRequest(req)
+    const userId = user?.id || null
+    const userEmail = (user?.email || '').toLowerCase()
+    // DB check when available
+    if (userId && sql) {
+      try {
+        const exists = await sql`select 1 from information_schema.tables where table_schema = 'public' and table_name = 'profiles'`
+        if (exists?.length) {
+          const rows = await sql`select is_admin from public.profiles where id = ${userId} limit 1`
+          if (Array.isArray(rows) && rows[0]?.is_admin === true) return true
+        }
+      } catch {}
+    }
+    // Environment allowlists
+    const allowedEmails = (process.env.ADMIN_EMAILS || '')
+      .split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+    const allowedUserIds = (process.env.ADMIN_USER_IDS || '')
+      .split(',').map(s => s.trim()).filter(Boolean)
+    if ((userEmail && allowedEmails.includes(userEmail)) || (userId && allowedUserIds.includes(userId))) {
+      return true
+    }
+    return false
+  } catch {
+    return false
+  }
+}
+
 async function ensureAdmin(req, res) {
   return "public";
 
@@ -307,6 +343,29 @@ app.use((req, res, next) => {
       if (req.method === 'OPTIONS') {
         res.status(204).end()
         return
+      }
+    }
+  } catch {}
+  next()
+})
+
+// Middleware to flag non-admin attempts to access /api/admin endpoints
+app.use(async (req, _res, next) => {
+  try {
+    const p = req.path || req.originalUrl || ''
+    if (p === '/api/admin' || p.startsWith('/api/admin/')) {
+      const isAdmin = await isAdminStrict(req)
+      if (!isAdmin && sql) {
+        const ip = getClientIp(req)
+        try {
+          const user = await getUserFromRequest(req)
+          const uid = user?.id || null
+          const reason = 'non_admin_admin_api_access'
+          await sql`
+            insert into public.admin_access_flags (user_id, ip_address, request_path, request_method, source, reason)
+            values (${uid}, ${ip || null}, ${p}, ${req.method || ''}, 'api', ${reason})
+          `
+        } catch {}
       }
     }
   } catch {}
@@ -589,6 +648,28 @@ async function ensureBanTables() {
       );
     `
     await sql`create index if not exists banned_ips_banned_at_idx on public.banned_ips (banned_at desc);`
+  } catch {}
+}
+
+// Ensure admin access flags table exists (idempotent)
+async function ensureAdminAccessFlags() {
+  if (!sql) return
+  try {
+    await sql`
+      create table if not exists public.admin_access_flags (
+        id uuid primary key default gen_random_uuid(),
+        occurred_at timestamptz not null default now(),
+        user_id uuid references auth.users(id) on delete set null,
+        ip_address inet,
+        request_path text not null,
+        request_method text not null,
+        source text not null default 'api' check (source in ('api','page')),
+        reason text
+      );
+    `
+    await sql`create index if not exists admin_access_flags_time_idx on public.admin_access_flags (occurred_at desc);`
+    await sql`create index if not exists admin_access_flags_user_idx on public.admin_access_flags (user_id);`
+    await sql`create index if not exists admin_access_flags_ip_idx on public.admin_access_flags (ip_address);`
   } catch {}
 }
 
@@ -1532,6 +1613,28 @@ app.get('*', (req, res) => {
     getUserIdFromRequest(req)
       .then((uid) => insertWebVisit({ sessionId, userId: uid || null, pagePath, referrer, userAgent, ipAddress, geo, extra: { source: 'initial_load' }, language: acceptLanguage }))
       .catch(() => {})
+    // Flag non-admin visits to /admin page
+    try {
+      const cleanPath = (req.path || '').toString()
+      if (cleanPath === '/admin') {
+        isAdminStrict(req)
+          .then(async (isAdmin) => {
+            if (!isAdmin && sql) {
+              try {
+                const user = await getUserFromRequest(req)
+                const uid = user?.id || null
+                const ip = getClientIp(req)
+                const reason = 'non_admin_admin_page_access'
+                await sql`
+                  insert into public.admin_access_flags (user_id, ip_address, request_path, request_method, source, reason)
+                  values (${uid}, ${ip || null}, ${pagePath}, ${req.method || ''}, 'page', ${reason})
+                `
+              } catch {}
+            }
+          })
+          .catch(() => {})
+      }
+    } catch {}
   } catch {}
   res.sendFile(path.join(distDir, 'index.html'))
 })
@@ -1541,5 +1644,7 @@ app.listen(port, () => {
   console.log(`[server] listening on http://localhost:${port}`)
   // Best-effort ensure ban tables are present at startup
   ensureBanTables().catch(() => {})
+  // Best-effort ensure admin access flags table is present at startup
+  ensureAdminAccessFlags().catch(() => {})
 })
 
