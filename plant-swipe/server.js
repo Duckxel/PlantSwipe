@@ -1949,19 +1949,20 @@ app.get('/api/admin/online-users', async (req, res) => {
       return
     }
 
-    // No direct DB connection: attempt Supabase REST fallback against web_visits
+    // No direct DB connection: attempt Supabase REST fallback using RPC for unique IPs
     if (supabaseUrlEnv && supabaseAnonKey) {
-      const sinceIso = new Date(Date.now() - 60 * 60 * 1000).toISOString()
-      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+      const headers = { apikey: supabaseAnonKey, Accept: 'application/json', 'Content-Type': 'application/json' }
       const token = getBearerTokenFromRequest(req)
       if (token) headers.Authorization = `Bearer ${token}`
-      const url = `${supabaseUrlEnv}/rest/v1/web_visits?select=ip_address&ip_address=not.is.null&occurred_at=gte.${encodeURIComponent(sinceIso)}&distinct`
-      const resp = await fetch(url, { headers: { ...headers, Prefer: 'count=exact', Range: '0-0' } })
+      const resp = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_unique_ips_last_minutes`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ _minutes: 60 }),
+      })
       if (resp.ok) {
-        const cr = resp.headers.get('content-range') || ''
-        const m = cr.match(/\/(\d+)$/)
-        const ipCount = m ? Number(m[1]) : 0
-        res.json({ ok: true, onlineUsers: Number.isFinite(ipCount) ? ipCount : 0, via: 'supabase-rest' })
+        const val = await resp.json().catch(() => 0)
+        const ipCount = Number(val) || 0
+        res.json({ ok: true, onlineUsers: ipCount, via: 'supabase' })
         return
       }
     }
