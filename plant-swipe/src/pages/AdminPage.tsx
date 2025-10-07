@@ -1,6 +1,8 @@
 import React from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -1068,49 +1070,51 @@ export const AdminPage: React.FC = () => {
           {/* Members Tab */}
           {activeTab === 'members' && (
             <div className="space-y-4">
-              <Card className="rounded-2xl">
+          <Card className="rounded-2xl">
                 <CardContent className="p-4 space-y-3">
                   <div className="text-sm font-medium flex items-center gap-2"><UserSearch className="h-4 w-4" /> Find member by email</div>
                   <div className="flex gap-2 relative">
                     <div className="flex-1 relative">
-                      <input
-                        className="w-full px-3 py-2 rounded-xl border"
-                        placeholder="user@example.com"
-                        value={lookupEmail}
-                        onChange={(e) => setLookupEmail(e.target.value)}
-                        onFocus={() => { if (emailSuggestions.length > 0) setSuggestionsOpen(true) }}
-                        onBlur={() => setTimeout(() => setSuggestionsOpen(false), 120)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            if (suggestionsOpen && emailSuggestions.length > 0 && highlightIndex >= 0 && highlightIndex < emailSuggestions.length) {
-                              e.preventDefault()
-                              const chosen = emailSuggestions[highlightIndex]
-                              setLookupEmail(chosen.email)
-                              setSuggestionsOpen(false)
-                            } else {
-                              // Trigger lookup when pressing Enter with no suggestion selected
-                              e.preventDefault()
-                              lookupMember()
-                            }
-                            return
-                          }
-                          if (!suggestionsOpen || emailSuggestions.length === 0) return
-                          if (e.key === 'ArrowDown') {
-                            e.preventDefault()
-                            setHighlightIndex((prev) => (prev + 1) % emailSuggestions.length)
-                          } else if (e.key === 'ArrowUp') {
-                            e.preventDefault()
-                            setHighlightIndex((prev) => (prev - 1 + emailSuggestions.length) % emailSuggestions.length)
-                          }
-                        }}
-                      />
-                      {suggestionsOpen && emailSuggestions.length > 0 && (
-                        <div className="absolute z-10 mt-1 w-full rounded-xl border bg-white shadow">
+                  <Input
+                    aria-label="Member email"
+                    className="rounded-xl"
+                    placeholder="user@example.com"
+                    value={lookupEmail}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setLookupEmail(e.target.value)}
+                    onFocus={() => { if (emailSuggestions.length > 0) setSuggestionsOpen(true) }}
+                    onBlur={() => setTimeout(() => setSuggestionsOpen(false), 120)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        if (suggestionsOpen && emailSuggestions.length > 0 && highlightIndex >= 0 && highlightIndex < emailSuggestions.length) {
+                          e.preventDefault()
+                          const chosen = emailSuggestions[highlightIndex]
+                          setLookupEmail(chosen.email)
+                          setSuggestionsOpen(false)
+                        } else {
+                          e.preventDefault()
+                          lookupMember()
+                        }
+                        return
+                      }
+                      if (!suggestionsOpen || emailSuggestions.length === 0) return
+                      if (e.key === 'ArrowDown') {
+                        e.preventDefault()
+                        setHighlightIndex((prev) => (prev + 1) % emailSuggestions.length)
+                      } else if (e.key === 'ArrowUp') {
+                        e.preventDefault()
+                        setHighlightIndex((prev) => (prev - 1 + emailSuggestions.length) % emailSuggestions.length)
+                      }
+                    }}
+                  />
+                  {suggestionsOpen && emailSuggestions.length > 0 && (
+                    <div className="absolute z-10 mt-1 w-full rounded-xl border bg-white shadow-md max-h-60 overflow-auto" role="listbox">
                           {emailSuggestions.map((s, idx) => (
                             <button
                               key={s.id}
                               type="button"
-                              className={`w-full text-left px-3 py-2 text-sm rounded-xl ${idx === highlightIndex ? 'bg-neutral-100' : ''}`}
+                          className={`w-full text-left px-3 py-2 text-sm rounded-xl ${idx === highlightIndex ? 'bg-neutral-100' : ''}`}
+                          role="option"
+                          aria-selected={idx === highlightIndex}
                               onMouseEnter={() => setHighlightIndex(idx)}
                               onMouseDown={(e) => {
                                 e.preventDefault()
@@ -1131,128 +1135,193 @@ export const AdminPage: React.FC = () => {
                       <Mail className="h-4 w-4" /> Lookup
                     </Button>
                   </div>
-                  {memberError && <div className="text-sm text-rose-600">{memberError}</div>}
-                  {memberLoading && <div className="text-sm opacity-60">Looking up…</div>}
-                  {memberData && (
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="text-sm font-medium opacity-70">Member profile</div>
-                        <Dialog open={banOpen} onOpenChange={setBanOpen}>
-                          <DialogTrigger asChild>
-                            <Button
-                              variant="destructive"
-                              size="icon"
-                              className="rounded-xl"
-                              title="Ban user"
-                              aria-label="Ban user"
-                              disabled={!lookupEmail}
-                            >
-                              <Gavel className="h-4 w-4" />
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent>
-                            <DialogHeader>
-                              <DialogTitle>Ban {lookupEmail || 'user'}</DialogTitle>
-                              <DialogDescription>
-                                This will delete the account and ban all known IPs for this user.
-                              </DialogDescription>
-                            </DialogHeader>
-                            <div className="grid gap-2 mt-2">
-                              <label className="text-xs opacity-60">Reason</label>
-                              <textarea
-                                className="min-h-[80px] px-3 py-2 rounded-xl border"
-                                placeholder="Reason for ban"
-                                value={banReason}
-                                onChange={(e) => setBanReason(e.target.value)}
-                              />
+              {memberError && <div className="text-sm text-rose-600">{memberError}</div>}
+              {memberLoading && (
+                <div className="space-y-3" aria-live="polite">
+                  <div className="flex items-center gap-3">
+                    <div className="h-12 w-12 rounded-full bg-neutral-200 animate-pulse" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-4 bg-neutral-200 rounded w-40 animate-pulse" />
+                      <div className="h-3 bg-neutral-200 rounded w-60 animate-pulse" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <div key={i} className="h-16 rounded-xl border bg-white animate-pulse" />
+                    ))}
+                  </div>
+                </div>
+              )}
+              {!memberLoading && !memberError && !memberData && (
+                <div className="text-sm opacity-60">Search for a member to see details.</div>
+              )}
+              {memberData && (
+                <div className="space-y-4">
+                  {(() => {
+                    const nameOrEmail = (memberData.profile?.display_name || memberData.user?.email || '').trim()
+                    const initial = (nameOrEmail[0] || '?').toUpperCase()
+                    return (
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="h-14 w-14 rounded-full bg-gradient-to-br from-emerald-200 to-green-300 text-emerald-900 flex items-center justify-center font-semibold shadow-inner">
+                            {initial}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-base md:text-lg font-semibold truncate">
+                              {memberData.profile?.display_name || memberData.user?.email || '—'}
                             </div>
-                            <DialogFooter>
-                              <DialogClose asChild>
-                                <Button variant="secondary">Cancel</Button>
-                              </DialogClose>
+                            <div className="text-xs opacity-70 truncate">
+                              {memberData.user?.email || '—'}{memberData.user?.id ? (<span className="opacity-60"> · id {memberData.user.id}</span>) : null}
+                            </div>
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              <Badge variant="secondary" className="rounded-full px-2 py-0.5">{memberData.profile?.is_admin ? 'Admin' : 'Member'}</Badge>
+                              {memberData.isBannedEmail && (
+                                <Badge variant="destructive" className="rounded-full px-2 py-0.5">Banned</Badge>
+                              )}
+                              {memberData.lastOnlineAt && (
+                                <Badge variant="outline" className="rounded-full px-2 py-0.5">Last online {new Date(memberData.lastOnlineAt).toLocaleString()}</Badge>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Dialog open={promoteOpen} onOpenChange={setPromoteOpen}>
+                            <DialogTrigger asChild>
+                              <Button
+                                variant="secondary"
+                                size="icon"
+                                className="rounded-xl"
+                                title="Promote to admin"
+                                aria-label="Promote to admin"
+                                disabled={!lookupEmail}
+                              >
+                                <ShieldCheck className="h-4 w-4" />
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle>Promote {lookupEmail || 'user'} to Admin</DialogTitle>
+                                <DialogDescription>
+                                  This grants full administrative privileges. Are you sure?
+                                </DialogDescription>
+                              </DialogHeader>
+                              <DialogFooter>
+                                <DialogClose asChild>
+                                  <Button variant="secondary">Cancel</Button>
+                                </DialogClose>
+                                <Button
+                                  onClick={performPromote}
+                                  disabled={!lookupEmail || promoteSubmitting}
+                                >
+                                  {promoteSubmitting ? 'Promoting…' : 'Confirm promote'}
+                                </Button>
+                              </DialogFooter>
+                            </DialogContent>
+                          </Dialog>
+                          <Dialog open={banOpen} onOpenChange={setBanOpen}>
+                            <DialogTrigger asChild>
                               <Button
                                 variant="destructive"
-                                onClick={performBan}
-                                disabled={!lookupEmail || banSubmitting}
+                                size="icon"
+                                className="rounded-xl"
+                                title="Ban user"
+                                aria-label="Ban user"
+                                disabled={!lookupEmail}
                               >
-                                {banSubmitting ? 'Banning…' : 'Confirm ban'}
+                                <Gavel className="h-4 w-4" />
                               </Button>
-                            </DialogFooter>
-                          </DialogContent>
-                        </Dialog>
-                        <Dialog open={promoteOpen} onOpenChange={setPromoteOpen}>
-                          <DialogTrigger asChild>
-                            <Button
-                              variant="secondary"
-                              size="icon"
-                              className="rounded-xl ml-2"
-                              title="Promote to admin"
-                              aria-label="Promote to admin"
-                              disabled={!lookupEmail}
-                            >
-                              <ShieldCheck className="h-4 w-4" />
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent>
-                            <DialogHeader>
-                              <DialogTitle>Promote {lookupEmail || 'user'} to Admin</DialogTitle>
-                              <DialogDescription>
-                                This grants full administrative privileges. Are you sure?
-                              </DialogDescription>
-                            </DialogHeader>
-                            <DialogFooter>
-                              <DialogClose asChild>
-                                <Button variant="secondary">Cancel</Button>
-                              </DialogClose>
-                              <Button
-                                onClick={performPromote}
-                                disabled={!lookupEmail || promoteSubmitting}
-                              >
-                                {promoteSubmitting ? 'Promoting…' : 'Confirm promote'}
-                              </Button>
-                            </DialogFooter>
-                          </DialogContent>
-                        </Dialog>
-                      </div>
-                      <div className="text-sm">User: <span className="font-medium">{memberData.user?.email || '—'}</span>{memberData.user?.id ? (<span className="opacity-60"> · id {memberData.user.id}</span>) : null}</div>
-                      <div className="text-sm">Admin: <span className="font-medium">{memberData.profile?.is_admin ? 'Yes' : 'No'}</span></div>
-                      <div className="text-sm">Display name: <span className="font-medium inline-block max-w-full truncate align-bottom">{memberData.profile?.display_name || '—'}</span></div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <div className="text-sm">Last online: <span className="font-medium">{memberData.lastOnlineAt ? new Date(memberData.lastOnlineAt).toLocaleString() : '—'}</span></div>
-                        <div className="text-sm">Last IP: <span className="font-medium">{memberData.lastIp || '—'}</span></div>
-                        <div className="text-sm">Visits: <span className="font-medium tabular-nums">{memberData.visitsCount ?? '—'}</span></div>
-                        <div className="text-sm">Unique IPs: <span className="font-medium tabular-nums">{memberData.uniqueIpsCount ?? '—'}</span></div>
-                        <div className="text-sm">Gardens owned: <span className="font-medium tabular-nums">{memberData.gardensOwned ?? '—'}</span></div>
-                        <div className="text-sm">Member of gardens: <span className="font-medium tabular-nums">{memberData.gardensMember ?? '—'}</span></div>
-                        <div className="text-sm">Total gardens: <span className="font-medium tabular-nums">{memberData.gardensTotal ?? '—'}</span></div>
-                      </div>
-                      <div className="text-sm">Known IPs ({memberData.ips.length}):
-                        <div className="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-1">
-                          {memberData.ips.map((ip) => (
-                            <div key={ip} className="text-xs px-2 py-1 rounded-lg border bg-white">{ip}</div>
-                          ))}
-                          {memberData.ips.length === 0 && <div className="text-xs opacity-60">No IPs recorded</div>}
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle>Ban {lookupEmail || 'user'}</DialogTitle>
+                                <DialogDescription>
+                                  This will delete the account and ban all known IPs for this user.
+                                </DialogDescription>
+                              </DialogHeader>
+                              <div className="grid gap-2 mt-2">
+                                <label className="text-xs opacity-60">Reason</label>
+                                <textarea
+                                  className="min-h-[80px] px-3 py-2 rounded-xl border"
+                                  placeholder="Reason for ban"
+                                  value={banReason}
+                                  onChange={(e) => setBanReason(e.target.value)}
+                                />
+                              </div>
+                              <DialogFooter>
+                                <DialogClose asChild>
+                                  <Button variant="secondary">Cancel</Button>
+                                </DialogClose>
+                                <Button
+                                  variant="destructive"
+                                  onClick={performBan}
+                                  disabled={!lookupEmail || banSubmitting}
+                                >
+                                  {banSubmitting ? 'Banning…' : 'Confirm ban'}
+                                </Button>
+                              </DialogFooter>
+                            </DialogContent>
+                          </Dialog>
                         </div>
                       </div>
-                      {(memberData.isBannedEmail || (memberData.bannedIps && memberData.bannedIps.length > 0)) && (
-                        <div className="rounded-xl border p-3 bg-rose-50/60">
-                          <div className="text-sm font-medium text-rose-700 flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Banned</div>
-                          {memberData.isBannedEmail && (
-                            <div className="text-sm mt-1">Email banned {memberData.bannedAt ? `on ${new Date(memberData.bannedAt).toLocaleString()}` : ''}{memberData.bannedReason ? ` — ${memberData.bannedReason}` : ''}</div>
-                          )}
-                          {memberData.bannedIps && memberData.bannedIps.length > 0 && (
-                            <div className="text-sm mt-1">Blocked IPs:
-                              <div className="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-1">
-                                {memberData.bannedIps.map(ip => (
-                                  <div key={ip} className="text-xs px-2 py-1 rounded-lg border bg-white">{ip}</div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
+                    )
+                  })()}
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    <div className="rounded-xl border p-3 text-center">
+                      <div className="text-[11px] opacity-60">Visits</div>
+                      <div className="text-base font-semibold tabular-nums">{memberData.visitsCount ?? '—'}</div>
+                    </div>
+                    <div className="rounded-xl border p-3 text-center">
+                      <div className="text-[11px] opacity-60">Unique IPs</div>
+                      <div className="text-base font-semibold tabular-nums">{memberData.uniqueIpsCount ?? '—'}</div>
+                    </div>
+                    <div className="rounded-xl border p-3 text-center">
+                      <div className="text-[11px] opacity-60">Gardens owned</div>
+                      <div className="text-base font-semibold tabular-nums">{memberData.gardensOwned ?? '—'}</div>
+                    </div>
+                    <div className="rounded-xl border p-3 text-center">
+                      <div className="text-[11px] opacity-60">Member of</div>
+                      <div className="text-base font-semibold tabular-nums">{memberData.gardensMember ?? '—'}</div>
+                    </div>
+                    <div className="rounded-xl border p-3 text-center">
+                      <div className="text-[11px] opacity-60">Total gardens</div>
+                      <div className="text-base font-semibold tabular-nums">{memberData.gardensTotal ?? '—'}</div>
+                    </div>
+                    <div className="rounded-xl border p-3 text-center">
+                      <div className="text-[11px] opacity-60">Last IP</div>
+                      <div className="text-base font-semibold tabular-nums truncate" title={memberData.lastIp || undefined}>{memberData.lastIp || '—'}</div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="text-xs font-medium uppercase tracking-wide opacity-60">Known IPs ({memberData.ips.length})</div>
+                    <div className="flex flex-wrap gap-1">
+                      {memberData.ips.map((ip) => (
+                        <Badge key={ip} variant="outline" className="rounded-full">{ip}</Badge>
+                      ))}
+                      {memberData.ips.length === 0 && <div className="text-xs opacity-60">No IPs recorded</div>}
+                    </div>
+                  </div>
+
+                  {(memberData.isBannedEmail || (memberData.bannedIps && memberData.bannedIps.length > 0)) && (
+                    <div className="rounded-xl border p-3 bg-rose-50/60">
+                      <div className="text-sm font-medium text-rose-700 flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Banned details</div>
+                      {memberData.isBannedEmail && (
+                        <div className="text-sm mt-1">Email banned {memberData.bannedAt ? `on ${new Date(memberData.bannedAt).toLocaleString()}` : ''}{memberData.bannedReason ? ` — ${memberData.bannedReason}` : ''}</div>
+                      )}
+                      {memberData.bannedIps && memberData.bannedIps.length > 0 && (
+                        <div className="text-sm mt-1">Blocked IPs:
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {memberData.bannedIps.map(ip => (
+                              <Badge key={ip} variant="outline" className="rounded-full bg-white">{ip}</Badge>
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>
                   )}
+                </div>
+              )}
                 </CardContent>
               </Card>
 
