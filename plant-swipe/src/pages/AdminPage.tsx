@@ -12,7 +12,7 @@ import {
   Tooltip,
   ReferenceLine,
 } from 'recharts'
-import { RefreshCw, Server, Database, Github, ExternalLink, ShieldCheck, Mail, UserSearch, AlertTriangle, Gavel } from "lucide-react"
+import { RefreshCw, Server, Database, Github, ExternalLink, ShieldCheck, Mail, UserSearch, AlertTriangle, Gavel, MoreHorizontal } from "lucide-react"
 import { supabase } from '@/lib/supabaseClient'
 import {
   Dialog,
@@ -588,6 +588,9 @@ export const AdminPage: React.FC = () => {
     bannedReason?: string | null
     bannedAt?: string | null
     bannedIps?: string[]
+    isSuspicious?: boolean
+    flaggedIps?: string[]
+    flaggedEventsCount?: number
   } | null>(null)
   const [banReason, setBanReason] = React.useState('')
   const [banSubmitting, setBanSubmitting] = React.useState(false)
@@ -634,6 +637,9 @@ export const AdminPage: React.FC = () => {
         bannedReason: data?.bannedReason ?? null,
         bannedAt: data?.bannedAt ?? null,
         bannedIps: Array.isArray(data?.bannedIps) ? data.bannedIps : [],
+        isSuspicious: !!data?.isSuspicious,
+        flaggedIps: Array.isArray(data?.flaggedIps) ? data.flaggedIps : [],
+        flaggedEventsCount: typeof data?.flaggedEventsCount === 'number' ? data.flaggedEventsCount : undefined,
       })
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -707,6 +713,29 @@ export const AdminPage: React.FC = () => {
       setPromoteSubmitting(false)
     }
   }, [lookupEmail, promoteSubmitting, safeJson])
+
+  const performClearFlag = React.useCallback(async (opts: { clearIps: boolean }) => {
+    if (!lookupEmail) return
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      const headers: Record<string,string> = { 'Content-Type': 'application/json', 'Accept': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      const resp = await fetch('/api/admin/clear-flag', {
+        method: 'POST',
+        headers,
+        credentials: 'same-origin',
+        body: JSON.stringify({ email: lookupEmail, clearIps: !!opts.clearIps })
+      })
+      const data = await safeJson(resp)
+      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`)
+      alert('Suspicious flags cleared')
+      setMemberData((prev) => prev ? { ...prev, isSuspicious: false, flaggedIps: [], flaggedEventsCount: 0 } : prev)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      alert(`Clear flag failed: ${msg}`)
+    }
+  }, [lookupEmail, safeJson])
 
   // Debounced email suggestions fetch
   React.useEffect(() => {
@@ -1136,7 +1165,17 @@ export const AdminPage: React.FC = () => {
                   {memberData && (
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
-                        <div className="text-sm font-medium opacity-70">Member profile</div>
+                        <div className="text-sm font-medium opacity-70 flex items-center gap-2">
+                          Member profile
+                          {memberData?.isSuspicious && (
+                            <span className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 border border-rose-200">
+                              <span className="inline-block h-2 w-2 rounded-full bg-rose-500" /> Suspicious
+                              {typeof memberData?.flaggedEventsCount === 'number' && memberData.flaggedEventsCount > 0 && (
+                                <span className="ml-1 tabular-nums">({memberData.flaggedEventsCount})</span>
+                              )}
+                            </span>
+                          )}
+                        </div>
                         <Dialog open={banOpen} onOpenChange={setBanOpen}>
                           <DialogTrigger asChild>
                             <Button
@@ -1213,6 +1252,12 @@ export const AdminPage: React.FC = () => {
                             </DialogFooter>
                           </DialogContent>
                         </Dialog>
+                        {/* 3-dot flag menu */}
+                        <FlagMenu
+                          onClear={() => performClearFlag({ clearIps: false })}
+                          onClearWithIps={() => performClearFlag({ clearIps: true })}
+                          disabled={!memberData?.isSuspicious && !(memberData?.flaggedIps && memberData.flaggedIps.length > 0)}
+                        />
                       </div>
                       <div className="text-sm">User: <span className="font-medium">{memberData.user?.email || '—'}</span>{memberData.user?.id ? (<span className="opacity-60"> · id {memberData.user.id}</span>) : null}</div>
                       <div className="text-sm">Admin: <span className="font-medium">{memberData.profile?.is_admin ? 'Yes' : 'No'}</span></div>
@@ -1234,7 +1279,7 @@ export const AdminPage: React.FC = () => {
                           {memberData.ips.length === 0 && <div className="text-xs opacity-60">No IPs recorded</div>}
                         </div>
                       </div>
-                      {(memberData.isBannedEmail || (memberData.bannedIps && memberData.bannedIps.length > 0)) && (
+                      {(memberData.isBannedEmail || (memberData.bannedIps && memberData.bannedIps.length > 0) || (memberData.isSuspicious || (memberData.flaggedIps && memberData.flaggedIps.length > 0))) && (
                         <div className="rounded-xl border p-3 bg-rose-50/60">
                           <div className="text-sm font-medium text-rose-700 flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Banned</div>
                           {memberData.isBannedEmail && (
@@ -1247,6 +1292,23 @@ export const AdminPage: React.FC = () => {
                                   <div key={ip} className="text-xs px-2 py-1 rounded-lg border bg-white">{ip}</div>
                                 ))}
                               </div>
+                            </div>
+                          )}
+                          {(memberData.isSuspicious || (memberData.flaggedIps && memberData.flaggedIps.length > 0)) && (
+                            <div className="text-sm mt-2">
+                              <div className="font-medium text-rose-700 flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Suspicious signals</div>
+                              {typeof memberData.flaggedEventsCount === 'number' && (
+                                <div className="text-xs opacity-70 mt-0.5">Events: <span className="tabular-nums font-medium">{memberData.flaggedEventsCount}</span></div>
+                              )}
+                              {memberData.flaggedIps && memberData.flaggedIps.length > 0 && (
+                                <div className="text-sm mt-1">Flagged IPs:
+                                  <div className="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-1">
+                                    {memberData.flaggedIps.map(ip => (
+                                      <div key={ip} className="text-xs px-2 py-1 rounded-lg border bg-white">{ip}</div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
@@ -1267,4 +1329,54 @@ export const AdminPage: React.FC = () => {
 }
 
 export default AdminPage
+
+function FlagMenu({ onClear, onClearWithIps, disabled }: { onClear: () => void; onClearWithIps: () => void; disabled?: boolean }) {
+  const [open, setOpen] = React.useState(false)
+  const btnRef = React.useRef<HTMLButtonElement | null>(null)
+  const menuRef = React.useRef<HTMLDivElement | null>(null)
+  const [pos, setPos] = React.useState<{ top: number; right: number }>({ top: 0, right: 0 })
+  const compute = React.useCallback(() => {
+    const b = btnRef.current
+    if (!b) return
+    const r = b.getBoundingClientRect()
+    const top = r.bottom + 8
+    const right = Math.max(0, window.innerWidth - r.right)
+    setPos({ top, right })
+  }, [])
+  React.useEffect(() => {
+    if (!open) return
+    compute()
+    const onDoc = (e: MouseEvent) => {
+      const t = e.target as Node
+      if (menuRef.current && menuRef.current.contains(t)) return
+      if (btnRef.current && btnRef.current.contains(t)) return
+      setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    const onWin = () => compute()
+    document.addEventListener('mousedown', onDoc, true)
+    document.addEventListener('keydown', onKey)
+    window.addEventListener('resize', onWin)
+    window.addEventListener('scroll', onWin, true)
+    return () => {
+      document.removeEventListener('mousedown', onDoc, true)
+      document.removeEventListener('keydown', onKey)
+      window.removeEventListener('resize', onWin)
+      window.removeEventListener('scroll', onWin, true)
+    }
+  }, [open, compute])
+  return (
+    <div className="relative ml-2">
+      <Button ref={btnRef as any} variant="secondary" size="icon" className="rounded-xl" onClick={(e: any) => { e.stopPropagation(); setOpen(o => !o) }} disabled={disabled} title="Flag options" aria-label="Flag options">
+        <MoreHorizontal className="h-4 w-4" />
+      </Button>
+      {open && (
+        <div ref={menuRef as any} style={{ position: 'fixed', top: pos.top, right: pos.right }} className="w-56 rounded-xl border bg-white shadow z-[60] p-1">
+          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50" onMouseDown={(e) => { e.preventDefault(); setOpen(false); onClear() }}>Clear user flags</button>
+          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50" onMouseDown={(e) => { e.preventDefault(); setOpen(false); onClearWithIps() }}>Clear user & attached IP flags</button>
+        </div>
+      )}
+    </div>
+  )
+}
 

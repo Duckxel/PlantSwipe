@@ -897,6 +897,10 @@ app.get('/api/admin/member', async (req, res) => {
         bannedReason,
         bannedAt,
         bannedIps,
+        // Suspicious flags are only available via server SQL; REST fallback returns safe defaults
+        isSuspicious: false,
+        flaggedIps: [],
+        flaggedEventsCount: 0,
       })
     }
 
@@ -933,6 +937,9 @@ app.get('/api/admin/member', async (req, res) => {
     let bannedReason = null
     let bannedAt = null
     let bannedIps = []
+    let isSuspicious = false
+    let flaggedIps = []
+    let flaggedEventsCount = 0
     try {
       const ipRows = await sql`select distinct ip_address::text as ip from public.web_visits where user_id = ${user.id} and ip_address is not null order by ip asc`
       ips = (ipRows || []).map(r => String(r.ip)).filter(Boolean)
@@ -990,6 +997,40 @@ app.get('/api/admin/member', async (req, res) => {
       `
       bannedIps = Array.isArray(bi) ? bi.map(r => String(r.ip)).filter(Boolean) : []
     } catch {}
+    // Suspicious flags: user-level and by-known IPs
+    try {
+      // Count flags directly tied to user
+      let cntUser = 0
+      try {
+        const fu = await sql`select count(*)::int as c from public.admin_access_flags where user_id = ${user.id}`
+        cntUser = fu?.[0]?.c ?? 0
+      } catch {}
+
+      // Gather flags by known IPs and attach missing user_id for those IPs
+      let cntIp = 0
+      if (Array.isArray(ips) && ips.length > 0) {
+        try {
+          const fi = await sql`select count(*)::int as c from public.admin_access_flags where ip_address::text = any(${ips})`
+          cntIp = fi?.[0]?.c ?? 0
+        } catch {}
+        // Attach user_id where missing for flags on known IPs (best-effort)
+        try {
+          await sql`update public.admin_access_flags set user_id = ${user.id} where user_id is null and ip_address::text = any(${ips})`
+        } catch {}
+      }
+      flaggedEventsCount = (cntUser || 0) + (cntIp || 0)
+      isSuspicious = flaggedEventsCount > 0
+      // Collect all flagged IPs associated with this user or their known IPs
+      try {
+        const ipRows = await sql`
+          select distinct a.ip_address::text as ip
+          from public.admin_access_flags a
+          where a.user_id = ${user.id}
+             or (a.ip_address::text = any(${ips}))
+        `
+        flaggedIps = (ipRows || []).map(r => String(r.ip)).filter(Boolean)
+      } catch {}
+    } catch {}
     res.json({
       ok: true,
       user: { id: user.id, email: user.email, created_at: user.created_at },
@@ -1006,6 +1047,9 @@ app.get('/api/admin/member', async (req, res) => {
       bannedReason,
       bannedAt,
       bannedIps,
+      isSuspicious,
+      flaggedIps,
+      flaggedEventsCount,
     })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to lookup member' })
@@ -1240,6 +1284,95 @@ app.post('/api/admin/ban', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to ban user' })
   }
+})
+
+// Admin: clear suspicious flags for a user, optionally clearing flags by their IPs
+app.post('/api/admin/clear-flag', async (req, res) => {
+  try {
+    if (!sql) {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+    // Require admin (robust detection). If your isAdminFromRequest is permissive in dev, this still works.
+    const isAdmin = await isAdminFromRequest(req)
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Admin privileges required' })
+      return
+    }
+    const { email: rawEmail, userId: rawUserId, clearIps: rawClearIps } = req.body || {}
+    const emailParam = (rawEmail || '').toString().trim()
+    const userIdParam = (rawUserId || '').toString().trim()
+    const clearIps = String(rawClearIps) === 'true' || rawClearIps === true
+    if (!emailParam && !userIdParam) {
+      res.status(400).json({ error: 'Missing email or userId' })
+      return
+    }
+    // Resolve target user id and email
+    let targetId = userIdParam || null
+    let targetEmail = emailParam || null
+    if (!targetId) {
+      try {
+        const u = await sql`select id, email from auth.users where lower(email) = ${emailParam.toLowerCase()} limit 1`
+        if (!Array.isArray(u) || !u[0]) {
+          res.status(404).json({ error: 'User not found' })
+          return
+        }
+        targetId = u[0].id
+        targetEmail = u[0].email || emailParam
+      } catch (e) {
+        res.status(500).json({ error: e?.message || 'Failed to resolve user' })
+        return
+      }
+    }
+
+    // Collect known IPs for the user
+    let knownIps = []
+    try {
+      const ipRows = await sql`select distinct ip_address::text as ip from public.web_visits where user_id = ${targetId} and ip_address is not null`
+      knownIps = (ipRows || []).map(r => String(r.ip)).filter(Boolean)
+    } catch {}
+    try {
+      const fi = await sql`select distinct ip_address::text as ip from public.admin_access_flags where user_id = ${targetId} and ip_address is not null`
+      const extra = (fi || []).map(r => String(r.ip)).filter(Boolean)
+      for (const ip of extra) { if (!knownIps.includes(ip)) knownIps.push(ip) }
+    } catch {}
+
+    // Delete flags for this user; count deletions
+    let userDeleted = 0
+    try {
+      const rows = await sql`
+        with del as (
+          delete from public.admin_access_flags where user_id = ${targetId} returning 1
+        )
+        select count(*)::int as c from del
+      `
+      userDeleted = rows?.[0]?.c ?? 0
+    } catch {}
+
+    // Optionally delete by IPs (best-effort)
+    let ipDeleted = 0
+    if (clearIps && knownIps.length > 0) {
+      try {
+        const rows = await sql`
+          with del as (
+            delete from public.admin_access_flags where ip_address::text = any(${knownIps}) returning 1
+          )
+          select count(*)::int as c from del
+        `
+        ipDeleted = rows?.[0]?.c ?? 0
+      } catch {}
+    }
+
+    res.json({ ok: true, userId: targetId, email: targetEmail, userDeleted, ipDeleted, clearedIps: clearIps ? knownIps : [] })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to clear flags' })
+  }
+})
+
+app.options('/api/admin/clear-flag', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  res.status(204).end()
 })
 
 app.get('/api/plants', async (_req, res) => {
