@@ -505,14 +505,14 @@ export const AdminPage: React.FC = () => {
   }, [loadRegisteredCount])
 
 
-  // Shared loader for visitors stats (used on initial load and manual refresh)
+  // Loader for "Currently online" (unique IPs in the last 60 minutes, DB-only)
   const loadOnlineUsers = React.useCallback(async (opts?: { initial?: boolean }) => {
     const isInitial = !!opts?.initial
     if (isInitial) setOnlineLoading(true)
     else setOnlineRefreshing(true)
     try {
-      // Use visitors-stats endpoint to reflect "currently online" via recent uniques
-      const resp = await fetch('/api/admin/visitors-stats', {
+      // Use dedicated endpoint backed by DB-only counts
+      const resp = await fetch('/api/admin/online-users', {
         headers: { 'Accept': 'application/json' },
         credentials: 'same-origin',
       })
@@ -520,23 +520,11 @@ export const AdminPage: React.FC = () => {
       if (!resp.ok) {
         throw new Error(data?.error || `Request failed (${resp.status})`)
       }
-      const num = Number(
-        (data?.uniqueIpsLast60m ??
-         data?.currentUniqueVisitors10m ??
-         data?.uniqueIpsLast30m ??
-         data?.onlineUsers)
-      )
+      const num = Number(data?.onlineUsers)
       setOnlineUsers(Number.isFinite(num) ? num : 0)
       setOnlineUpdatedAt(Date.now())
     } catch {
-      // Fallback to presence count
-      try {
-        const pc = await getPresenceCountOnce()
-        if (pc !== null) {
-          setOnlineUsers(Math.max(0, pc))
-          setOnlineUpdatedAt(Date.now())
-        }
-      } catch {}
+      // Keep last known value on error
     } finally {
       if (isInitial) setOnlineLoading(false)
       else setOnlineRefreshing(false)
