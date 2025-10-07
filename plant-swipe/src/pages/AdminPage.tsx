@@ -572,8 +572,18 @@ export const AdminPage: React.FC = () => {
         ? data.series7d.map((d: any) => ({ date: String(d.date), uniqueVisitors: Number(d.uniqueVisitors ?? d.unique_visitors ?? 0) }))
         : []
       setVisitorsSeries(series)
-      const total7d = Number(data?.uniqueIps7d ?? data?.weeklyUniqueIps7d ?? 0)
-      setVisitorsTotalUnique7d(Number.isFinite(total7d) ? total7d : 0)
+      // Fetch weekly unique total from dedicated endpoint to keep requests separate
+      try {
+        const totalResp = await fetch('/api/admin/visitors-unique-7d', {
+          headers: { 'Accept': 'application/json' },
+          credentials: 'same-origin',
+        })
+        const totalData = await safeJson(totalResp)
+        if (totalResp.ok) {
+          const total7d = Number(totalData?.uniqueIps7d ?? totalData?.weeklyUniqueIps7d ?? 0)
+          setVisitorsTotalUnique7d(Number.isFinite(total7d) ? total7d : 0)
+        }
+      } catch {}
       setVisitorsUpdatedAt(Date.now())
     } catch {
       // keep last known
