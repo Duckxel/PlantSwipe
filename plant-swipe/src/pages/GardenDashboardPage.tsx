@@ -1055,7 +1055,7 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner }: { member: { 
     <Card className="rounded-2xl p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="font-medium">{member.displayName || member.userId}</div>
+          <div className="font-medium max-w-[60vw] truncate">{member.displayName || member.userId}</div>
           {member.email && <div className="text-xs opacity-60">{member.email}</div>}
           <div className="text-xs opacity-60">{member.role}{member.joinedAt ? ` • Joined ${new Date(member.joinedAt).toLocaleString()}` : ''}</div>
         </div>

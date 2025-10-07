@@ -45,8 +45,8 @@ export const SearchPage: React.FC<SearchPageProps> = ({ plants, openInfo, likedI
                   <Badge className="rounded-xl bg-rose-600 text-white">Liked</Badge>
                 )}
               </div>
-              <div className="font-medium">{p.name}</div>
-              <div className="text-xs italic opacity-60">{p.scientificName}</div>
+              <div className="font-medium truncate">{p.name}</div>
+              <div className="text-xs italic opacity-60 truncate">{p.scientificName}</div>
               <p className="text-sm mt-1 line-clamp-2">{p.description}</p>
               <div className="mt-2 flex flex-wrap gap-1">
                 {p.colors.map((c) => (
