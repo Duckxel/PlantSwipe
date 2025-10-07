@@ -734,7 +734,7 @@ async function insertWebVisit({ sessionId, userId, pagePath, referrer, userAgent
   }
 }
 
-// Admin: restart server via systemd; fallback to exit non-zero to trigger restart
+// Admin: restart server via systemd; always exit so systemd restarts us
 async function handleRestartServer(req, res) {
   try {
     const isAdmin = await isAdminFromRequest(req)
@@ -746,17 +746,16 @@ async function handleRestartServer(req, res) {
     res.json({ ok: true, message: 'Restarting server' })
     // Give time for response to flush, then request systemd to restart the service.
     setTimeout(() => {
-      let restarted = false
+      let restartedViaSystemd = false
       try {
         const serviceName = process.env.NODE_SYSTEMD_SERVICE || process.env.SELF_SYSTEMD_SERVICE || 'plant-swipe-node'
         const child = spawnChild('sudo', ['-n', 'systemctl', 'restart', serviceName], { detached: true, stdio: 'ignore' })
         try { child.unref() } catch {}
-        restarted = true
+        restartedViaSystemd = true
       } catch {}
-      // Fallback: exit with non-zero to trigger Restart=on-failure
-      if (!restarted) {
-        try { process.exit(1) } catch {}
-      }
+      // Exit in all cases so the systemd unit can take over.
+      // If systemd call failed to spawn, exit non-zero to trigger Restart=on-failure.
+      try { process.exit(restartedViaSystemd ? 0 : 1) } catch {}
     }, 150)
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to restart server' })

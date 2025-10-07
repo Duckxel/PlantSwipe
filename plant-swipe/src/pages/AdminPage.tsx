@@ -109,41 +109,74 @@ export const AdminPage: React.FC = () => {
         alert('You must be signed in to restart the server')
         return
       }
-      // Try POST first to ensure Authorization header is preserved across proxies
-      let resp = await fetch('/api/admin/restart-server', {
-        method: 'POST',
-        headers: (() => {
-          const h: Record<string, string> = { 'Content-Type': 'application/json', 'Accept': 'application/json' }
-          if (token) h['Authorization'] = `Bearer ${token}`
-          const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
-          if (adminToken) h['X-Admin-Token'] = String(adminToken)
-          return h
-        })(),
-        credentials: 'same-origin',
-        body: '{}',
-      })
-      if (resp.status === 405) {
-        // Fallback to GET if POST is blocked
-        resp = await fetch('/api/admin/restart-server', {
-          method: 'GET',
-          headers: (() => {
-            const h: Record<string, string> = { 'Accept': 'application/json' }
-            if (token) h['Authorization'] = `Bearer ${token}`
-            const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
-            if (adminToken) h['X-Admin-Token'] = String(adminToken)
-            return h
-          })(),
+      // First attempt: restart via Node API (preserves Authorization)
+      const nodeHeaders = (() => {
+        const h: Record<string, string> = { 'Accept': 'application/json' }
+        if (token) h['Authorization'] = `Bearer ${token}`
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+        if (adminToken) h['X-Admin-Token'] = String(adminToken)
+        return h
+      })()
+      const nodePostHeaders = { ...nodeHeaders, 'Content-Type': 'application/json' }
+
+      let nodeResp: Response | null = null
+      try {
+        nodeResp = await fetch('/api/admin/restart-server', {
+          method: 'POST',
+          headers: nodePostHeaders,
           credentials: 'same-origin',
+          body: '{}',
         })
+      } catch {}
+      if (nodeResp && nodeResp.status === 405) {
+        try {
+          nodeResp = await fetch('/api/admin/restart-server', {
+            method: 'GET',
+            headers: nodeHeaders,
+            credentials: 'same-origin',
+          })
+        } catch {}
       }
-      const body = await safeJson(resp)
-      if (!resp.ok) {
-        throw new Error(body?.error || `Request failed (${resp.status})`)
+
+      let ok = false
+      if (nodeResp) {
+        const b = await safeJson(nodeResp)
+        ok = nodeResp.ok && (b?.ok === true)
       }
-      // Give the server a moment to restart, then reload client
-      setTimeout(() => {
-        window.location.reload()
-      }, 1000)
+
+      // Fallback: call local Admin API via nginx if Node endpoint not reachable/forbidden
+      if (!ok) {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+        if (!adminToken) throw new Error('Restart failed and admin token not configured')
+        const adminHeaders: Record<string, string> = {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-Admin-Token': String(adminToken),
+        }
+        // Service name defaults server-side; send explicit as a hint
+        const adminResp = await fetch('/admin/restart-app', {
+          method: 'POST',
+          headers: adminHeaders,
+          credentials: 'same-origin',
+          body: JSON.stringify({ service: 'plant-swipe-node' }),
+        })
+        const ab = await safeJson(adminResp)
+        if (!adminResp.ok || ab?.ok !== true) {
+          throw new Error(ab?.error || `Admin restart failed (${adminResp.status})`)
+        }
+      }
+
+      // Wait for API to come back healthy to avoid 502s, then reload
+      const deadline = Date.now() + 30_000
+      while (Date.now() < deadline) {
+        try {
+          const r = await fetch('/api/health', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+          const b = await safeJson(r)
+          if (r.ok && (b?.ok === true)) break
+        } catch {}
+        await new Promise(res => setTimeout(res, 1000))
+      }
+      window.location.reload()
 
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e)
