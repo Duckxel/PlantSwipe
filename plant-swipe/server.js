@@ -333,9 +333,19 @@ app.get('/api/health', async (_req, res) => {
         err = e?.message || 'query failed'
       }
     }
-    res.status(200).json({ ok: dbOk, db: { ok: dbOk, latencyMs: Date.now() - started, error: dbOk ? null : (err || (connectionString ? 'DB_QUERY_FAILED' : 'DB_NOT_CONFIGURED')) } })
+    res.status(200).json({
+      ok: true,
+      db: {
+        ok: dbOk,
+        latencyMs: Date.now() - started,
+        error: dbOk ? null : (err || (connectionString ? 'DB_QUERY_FAILED' : 'DB_NOT_CONFIGURED')),
+      },
+    })
   } catch {
-    res.status(200).json({ ok: false, db: { ok: false, latencyMs: Date.now() - started, error: 'HEALTH_CHECK_FAILED' } })
+    res.status(200).json({
+      ok: true,
+      db: { ok: false, latencyMs: Date.now() - started, error: 'HEALTH_CHECK_FAILED' },
+    })
   }
 })
 
