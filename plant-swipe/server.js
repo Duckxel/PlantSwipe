@@ -744,22 +744,28 @@ async function insertWebVisit({ sessionId, userId, pagePath, referrer, userAgent
   }
 }
 
-// Admin: restart server (detached self-reexec)
+// Admin: restart server via systemd; always exit so systemd restarts us
 async function handleRestartServer(req, res) {
   try {
-    const uid = "public"
-    if (!uid) return
+    const isAdmin = await isAdminFromRequest(req)
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Admin privileges required' })
+      return
+    }
 
     res.json({ ok: true, message: 'Restarting server' })
-    // Give time for response to flush, then spawn a detached replacement and exit
+    // Give time for response to flush, then request systemd to restart the service.
     setTimeout(() => {
+      let restartedViaSystemd = false
       try {
-        const node = process.argv[0]
-        const args = process.argv.slice(1)
-        const child = spawnChild(node, args, { detached: true, stdio: 'ignore' })
-        child.unref()
+        const serviceName = process.env.NODE_SYSTEMD_SERVICE || process.env.SELF_SYSTEMD_SERVICE || 'plant-swipe-node'
+        const child = spawnChild('sudo', ['-n', 'systemctl', 'restart', serviceName], { detached: true, stdio: 'ignore' })
+        try { child.unref() } catch {}
+        restartedViaSystemd = true
       } catch {}
-      process.exit(0)
+      // Exit in all cases so the systemd unit can take over.
+      // If systemd call failed to spawn, exit non-zero to trigger Restart=on-failure.
+      try { process.exit(restartedViaSystemd ? 0 : 1) } catch {}
     }, 150)
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to restart server' })
@@ -770,7 +776,7 @@ app.post('/api/admin/restart-server', handleRestartServer)
 app.get('/api/admin/restart-server', handleRestartServer)
 app.options('/api/admin/restart-server', (_req, res) => {
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
   res.status(204).end()
 })
 
