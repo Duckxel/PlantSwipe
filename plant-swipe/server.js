@@ -28,7 +28,8 @@ const __dirname = path.dirname(__filename)
 const exec = promisify(execCb)
 
 // Supabase client (server-side) for auth verification
-const supabaseUrlEnv = process.env.VITE_SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
+// Support both runtime server env and Vite-style public envs
+const supabaseUrlEnv = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.REACT_APP_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 const supabaseServer = (supabaseUrlEnv && supabaseAnonKey)
   ? createSupabaseClient(supabaseUrlEnv, supabaseAnonKey, { auth: { persistSession: false, autoRefreshToken: false } })
@@ -324,9 +325,37 @@ app.options('/api/*', (_req, res) => {
 // Supabase service client disabled to avoid using service-role env vars
 const supabaseAdmin = null
 
-app.get('/api/health', (_req, res) => {
-  // Keep this lightweight and always-ok; error codes are surfaced on specific probes
-  res.json({ ok: true })
+// Composite health: reflect DB status so UI doesn't show green on failures
+app.get('/api/health', async (_req, res) => {
+  const started = Date.now()
+  try {
+    // Prefer direct SQL ping; fallback to Supabase anon client when available
+    let dbOk = false
+    let via = 'none'
+    let err = null
+    if (sql) {
+      try {
+        const rows = await sql`select 1 as one`
+        dbOk = Array.isArray(rows) && rows[0] && Number(rows[0].one) === 1
+        via = 'sql'
+      } catch (e) {
+        err = e?.message || 'query failed'
+      }
+    }
+    if (!dbOk && supabaseServer) {
+      try {
+        const { error } = await supabaseServer.from('plants').select('id', { head: true, count: 'exact' }).limit(1)
+        dbOk = !error
+        via = 'supabase'
+        if (error) err = error?.message || err
+      } catch (e) {
+        err = e?.message || err
+      }
+    }
+    res.status(200).json({ ok: dbOk, db: { ok: dbOk, via, latencyMs: Date.now() - started, error: dbOk ? null : (err || (sql ? 'DB_QUERY_FAILED' : 'DB_NOT_CONFIGURED')) } })
+  } catch {
+    res.status(200).json({ ok: false, db: { ok: false, via: 'none', latencyMs: Date.now() - started, error: 'HEALTH_CHECK_FAILED' } })
+  }
 })
 
 // Database health: returns ok along with latency; always 200 for easier probes
@@ -1401,14 +1430,16 @@ app.post('/api/admin/ban', async (req, res) => {
   }
 })
 
-app.get('/api/plants', async (_req, res) => {
-  if (!sql) {
-    res.status(500).json({ error: 'Database not configured' })
-    return
-  }
+// Helper: load plants via Supabase anon client when SQL is unavailable
+async function loadPlantsViaSupabase() {
+  if (!supabaseServer) return null
   try {
-    const rows = await sql`select * from plants order by name asc`
-    const mapped = rows.map(r => ({
+    const { data, error } = await supabaseServer
+      .from('plants')
+      .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount')
+      .order('name', { ascending: true })
+    if (error) return null
+    return (Array.isArray(data) ? data : []).map((r) => ({
       id: r.id,
       name: r.name,
       scientificName: r.scientific_name,
@@ -1425,8 +1456,52 @@ app.get('/api/plants', async (_req, res) => {
         difficulty: r.care_difficulty,
       },
       seedsAvailable: r.seeds_available === true,
+      // Optional frequency fields (tolerated by client)
+      waterFreqUnit: r.water_freq_unit ?? undefined,
+      waterFreqValue: r.water_freq_value ?? null,
+      waterFreqPeriod: r.water_freq_period ?? undefined,
+      waterFreqAmount: r.water_freq_amount ?? null,
     }))
-    res.json(mapped)
+  } catch {
+    return null
+  }
+}
+
+app.get('/api/plants', async (_req, res) => {
+  try {
+    if (sql) {
+      try {
+        const rows = await sql`select * from plants order by name asc`
+        const mapped = rows.map(r => ({
+          id: r.id,
+          name: r.name,
+          scientificName: r.scientific_name,
+          colors: r.colors ?? [],
+          seasons: r.seasons ?? [],
+          rarity: r.rarity,
+          meaning: r.meaning ?? '',
+          description: r.description ?? '',
+          image: r.image_url ?? '',
+          care: {
+            sunlight: r.care_sunlight,
+            water: r.care_water,
+            soil: r.care_soil,
+            difficulty: r.care_difficulty,
+          },
+          seedsAvailable: r.seeds_available === true,
+        }))
+        res.json(mapped)
+        return
+      } catch (e) {
+        // Fall through to Supabase fallback on SQL query failure
+      }
+    }
+    const fallback = await loadPlantsViaSupabase()
+    if (fallback) {
+      res.json(fallback)
+      return
+    }
+    res.status(500).json({ error: 'Database not configured' })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Query failed' })
   }
