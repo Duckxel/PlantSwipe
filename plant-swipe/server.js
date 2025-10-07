@@ -1825,7 +1825,18 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
   if (!uid) return
   try {
     if (!sql) {
-      res.status(503).json({ ok: false, error: 'Database not configured' })
+      // Fallback to in-memory analytics when DB is not configured
+      try {
+        const currentUniqueVisitors10m = memAnalytics.getUniqueIpCountInLastMinutes(10)
+        const uniqueIpsLast30m = memAnalytics.getUniqueIpCountInLastMinutes(30)
+        const uniqueIpsLast60m = memAnalytics.getUniqueIpCountInLastMinutes(60)
+        const visitsLast60m = memAnalytics.getVisitCountInLastMinutes(60)
+        const uniqueIps7d = memAnalytics.getUniqueIpCountInLastDays(7)
+        const series7d = memAnalytics.getDailySeries(7)
+        res.json({ ok: true, currentUniqueVisitors10m, uniqueIpsLast30m, uniqueIpsLast60m, visitsLast60m, uniqueIps7d, series7d, via: 'memory' })
+      } catch {
+        res.status(503).json({ ok: false, error: 'Database not configured', via: 'memory' })
+      }
       return
     }
 
@@ -1873,7 +1884,13 @@ app.get('/api/admin/online-users', async (req, res) => {
   if (!uid) return
   try {
     if (!sql) {
-      res.status(503).json({ onlineUsers: 0, error: 'Database not configured' })
+      // Fallback to in-memory analytics when DB is not configured
+      try {
+        const ipCount = memAnalytics.getUniqueIpCountInLastMinutes(60)
+        res.json({ onlineUsers: ipCount, via: 'memory' })
+      } catch {
+        res.json({ onlineUsers: 0, via: 'memory' })
+      }
       return
     }
     const [ipRows] = await Promise.all([
