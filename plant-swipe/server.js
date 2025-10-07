@@ -1152,6 +1152,63 @@ app.options('/api/admin/promote-admin', (_req, res) => {
   res.status(204).end()
 })
 
+// Admin: demote a user from admin by email or user_id
+app.post('/api/admin/demote-admin', async (req, res) => {
+  try {
+    if (!sql) {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+    const isAdmin = await isAdminFromRequest(req)
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Admin privileges required' })
+      return
+    }
+    const { email: rawEmail, userId: rawUserId } = req.body || {}
+    const emailParam = (rawEmail || '').toString().trim()
+    const userIdParam = (rawUserId || '').toString().trim()
+    if (!emailParam && !userIdParam) {
+      res.status(400).json({ error: 'Missing email or userId' })
+      return
+    }
+    let targetId = userIdParam || null
+    let targetEmail = emailParam || null
+    if (!targetId) {
+      const email = emailParam.toLowerCase()
+      const userRows = await sql`select id, email from auth.users where lower(email) = ${email} limit 1`
+      if (!Array.isArray(userRows) || !userRows[0]) {
+        res.status(404).json({ error: 'User not found' })
+        return
+      }
+      targetId = userRows[0].id
+      targetEmail = userRows[0].email || emailParam
+    }
+    // Ensure profiles table exists, then set is_admin = false
+    try {
+      const exists = await sql`select 1 from information_schema.tables where table_schema = 'public' and table_name = 'profiles'`
+      if (!exists || exists.length === 0) {
+        res.status(500).json({ error: 'Profiles table not found' })
+        return
+      }
+    } catch {}
+    try {
+      await sql`insert into public.profiles (id, is_admin) values (${targetId}, false) on conflict (id) do update set is_admin = false`
+    } catch (e) {
+      res.status(500).json({ error: e?.message || 'Failed to demote user' })
+      return
+    }
+    res.json({ ok: true, userId: targetId, email: targetEmail, isAdmin: false })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to demote user' })
+  }
+})
+
+app.options('/api/admin/demote-admin', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  res.status(204).end()
+})
+
 // Public: check if an email or current IP is banned
 app.get('/api/banned/check', async (req, res) => {
   try {
