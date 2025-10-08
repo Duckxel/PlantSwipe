@@ -168,9 +168,9 @@ export default function PublicProfilePage() {
     }
   }, [menuOpen])
 
-  const rows = React.useMemo(() => {
-    // Build a fixed 28-day window (UTC) shown as 4 rows x 7 columns
-    // Always render all 28 days, even if there is no activity
+  const daysFlat = React.useMemo(() => {
+    // Build a fixed 28-day window (UTC)
+    // Render as GitHub-style: 7 rows (days), columns are weeks
     const end = new Date(Date.UTC(
       new Date().getUTCFullYear(),
       new Date().getUTCMonth(),
@@ -179,21 +179,18 @@ export default function PublicProfilePage() {
     const start = new Date(end)
     start.setUTCDate(end.getUTCDate() - 27)
 
-    const map = new Map<string, DayAgg>()
-    for (const d of monthDays) map.set(d.day, d)
+    const dayToAgg = new Map<string, DayAgg>()
+    for (const d of monthDays) dayToAgg.set(d.day, d)
 
-    const days: Array<{ date: string; value: number; success: boolean }> = []
+    const items: Array<{ date: string; value: number; success: boolean }> = []
     for (let i = 0; i < 28; i++) {
       const cur = new Date(start)
       cur.setUTCDate(start.getUTCDate() + i)
       const ymd = cur.toISOString().slice(0, 10)
-      const r = map.get(ymd)
-      days.push(r ? { date: ymd, value: r.completed, success: r.any_success } : { date: ymd, value: 0, success: false })
+      const agg = dayToAgg.get(ymd)
+      items.push(agg ? { date: ymd, value: agg.completed, success: agg.any_success } : { date: ymd, value: 0, success: false })
     }
-
-    const r: Array<Array<{ date: string; value: number; success: boolean }>> = []
-    for (let i = 0; i < days.length; i += 7) r.push(days.slice(i, i + 7))
-    return r
+    return items
   }, [monthDays])
 
   // Compute max value to scale color intensity like GitHub contributions
@@ -304,24 +301,22 @@ export default function PublicProfilePage() {
             <Card className="rounded-3xl">
               <CardContent className="p-6 md:p-8 space-y-4">
                 <div className="text-lg font-semibold">Past 28 days</div>
-                <div className="flex flex-col gap-[3px]">
-                  {rows.map((row: Array<{ date: string; value: number; success: boolean }>, ridx: number) => (
-                    <div key={ridx} className="grid grid-cols-7 gap-[3px]">
-                      {row.map((item: { date: string; value: number; success: boolean }, cidx: number) => (
-                        <button
-                          key={cidx}
-                          type="button"
-                          className={`h-3.5 w-3.5 sm:h-4 sm:w-4 rounded-[3px] ${colorFor(item)}`}
-                          onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => item && showTooltip(e.currentTarget as HTMLButtonElement, item)}
-                          onMouseLeave={hideTooltip}
-                          onFocus={(e: React.FocusEvent<HTMLButtonElement>) => item && showTooltip(e.currentTarget as HTMLButtonElement, item)}
-                          onBlur={hideTooltip}
-                          title={item ? `${item.value} tasks on ${new Date(item.date).toLocaleDateString()}` : ''}
-                          aria-label={item ? `${new Date(item.date).toLocaleDateString()}: ${item.value} tasks${item.success ? ', completed day' : ''}` : ''}
-                        />
-                      ))}
-                    </div>
-                  ))}
+                <div className="overflow-x-auto">
+                  <div className="grid grid-rows-7 grid-flow-col auto-cols-max gap-[2px]">
+                    {daysFlat.map((item: { date: string; value: number; success: boolean }, idx: number) => (
+                      <div
+                        key={idx}
+                        tabIndex={0}
+                        className={`h-3.5 w-3.5 sm:h-4 sm:w-4 rounded-[2px] ${colorFor(item)}`}
+                        onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => showTooltip(e.currentTarget as HTMLDivElement, item)}
+                        onMouseLeave={hideTooltip}
+                        onFocus={(e: React.FocusEvent<HTMLDivElement>) => showTooltip(e.currentTarget as HTMLDivElement, item)}
+                        onBlur={hideTooltip}
+                        title={`${item.value} tasks on ${new Date(item.date).toLocaleDateString()}`}
+                        aria-label={`${new Date(item.date).toLocaleDateString()}: ${item.value} tasks${item.success ? ', completed day' : ''}`}
+                      />
+                    ))}
+                  </div>
                 </div>
                 
                 {tooltip && createPortal(
