@@ -57,7 +57,7 @@ export default function PlantSwipe() {
   const [authPassword, setAuthPassword] = useState("")
   const [authPassword2, setAuthPassword2] = useState("")
   const [authDisplayName, setAuthDisplayName] = useState("")
-  // username removed; display name is the public handle
+  
   const [authSubmitting, setAuthSubmitting] = useState(false)
 
   const [plants, setPlants] = useState<Plant[]>([])
@@ -694,7 +694,7 @@ export default function PlantSwipe() {
                 <Input id="name" type="text" placeholder="Your name" value={authDisplayName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthDisplayName(e.target.value)} />
               </div>
             )}
-            {/* Username removed */}
+            
             <div className="grid gap-2">
               <Label htmlFor="email">Email</Label>
               <Input id="email" type="email" placeholder="you@example.com" value={authEmail} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthEmail(e.target.value)} disabled={authSubmitting} />

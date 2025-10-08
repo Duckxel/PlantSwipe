@@ -24,7 +24,6 @@ export const ProfilePage: React.FC = () => {
   const { user, profile, refreshProfile, signOut, deleteAccount } = useAuth()
   const navigate = useNavigate()
   const [displayName, setDisplayName] = React.useState(profile?.display_name || "")
-  const [username, setUsername] = React.useState<string>(profile?.username || "")
   const [country, setCountry] = React.useState<string>(profile?.country || "")
   const [bio, setBio] = React.useState<string>(profile?.bio || "")
   const [favoritePlant, setFavoritePlant] = React.useState<string>(profile?.favorite_plant || "")
@@ -48,7 +47,6 @@ export const ProfilePage: React.FC = () => {
 
   React.useEffect(() => {
     setDisplayName(profile?.display_name || "")
-    setUsername(profile?.username || "")
     setCountry(profile?.country || "")
     setBio(profile?.bio || "")
     setFavoritePlant(profile?.favorite_plant || "")
@@ -202,7 +200,7 @@ export const ProfilePage: React.FC = () => {
     <div className="max-w-3xl mx-auto mt-8 px-4 md:px-0">
       <Card className="rounded-3xl">
         <CardContent className="p-6 md:p-8 space-y-4">
-          {/* Removed User ID from UI */}
+          
           <div className="grid gap-2">
             <Label htmlFor="profile-email">Email</Label>
             <Input id="profile-email" name="email" value={(user as any)?.email || ''} disabled />
@@ -211,7 +209,7 @@ export const ProfilePage: React.FC = () => {
             <Label htmlFor="profile-display-name">Display name</Label>
             <Input id="profile-display-name" name="displayName" value={displayName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDisplayName(e.target.value)} />
           </div>
-          {/* Username removed */}
+          
           <div className="grid gap-2">
             <Label htmlFor="profile-country">Country</Label>
             <Input id="profile-country" name="country" value={country || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCountry(e.target.value)} />

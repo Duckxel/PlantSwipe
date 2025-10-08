@@ -764,7 +764,7 @@ export const GardenDashboardPage: React.FC = () => {
             }}
           />
 
-          {/* Info Sheet removed; using dedicated route /plants/:id */}
+          
 
           {/* Invite Dialog */}
           <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
