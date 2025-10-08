@@ -106,7 +106,7 @@ export default function PublicProfilePage() {
           })
         }
 
-        // Heatmap: last 28 days (7x4 grid)
+        // Heatmap: last 28 days (4 rows × 7 columns)
         const today = new Date()
         const end = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()))
         const start = new Date(end)
@@ -170,7 +170,7 @@ export default function PublicProfilePage() {
 
   const daysFlat = React.useMemo(() => {
     // Build a fixed 28-day window (UTC)
-    // Render as GitHub-style: 7 rows (days), columns are weeks
+    // Render as GitHub-like packed columns: 4 rows, 7 columns (top→bottom flow)
     const end = new Date(Date.UTC(
       new Date().getUTCFullYear(),
       new Date().getUTCMonth(),
@@ -216,7 +216,7 @@ export default function PublicProfilePage() {
   const hideTooltip = () => setTooltip(null)
 
   return (
-    <div className="max-w-3xl mx-auto mt-8 px-4 md:px-0">
+    <div className="max-w-5xl mx-auto mt-8 px-4 md:px-0">
       {loading && <div className="p-8 text-center text-sm opacity-60">Loading profile…</div>}
       {error && !loading && (
         <div className="p-8 text-center">
@@ -302,12 +302,12 @@ export default function PublicProfilePage() {
               <CardContent className="p-6 md:p-8 space-y-4">
                 <div className="text-lg font-semibold">Past 28 days</div>
                 <div className="overflow-x-auto">
-                  <div className="grid grid-rows-7 grid-flow-col auto-cols-max gap-[2px]">
+                  <div className="grid grid-rows-4 grid-flow-col auto-cols-max gap-[2px]">
                     {daysFlat.map((item: { date: string; value: number; success: boolean }, idx: number) => (
                       <div
                         key={idx}
                         tabIndex={0}
-                        className={`h-3.5 w-3.5 sm:h-4 sm:w-4 rounded-[2px] ${colorFor(item)}`}
+                        className={`h-5 w-5 sm:h-6 sm:w-6 rounded-[2px] ${colorFor(item)}`}
                         onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => showTooltip(e.currentTarget as HTMLDivElement, item)}
                         onMouseLeave={hideTooltip}
                         onFocus={(e: React.FocusEvent<HTMLDivElement>) => showTooltip(e.currentTarget as HTMLDivElement, item)}
