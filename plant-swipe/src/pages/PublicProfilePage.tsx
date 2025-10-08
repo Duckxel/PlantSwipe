@@ -307,7 +307,6 @@ export default function PublicProfilePage() {
             </Card>
           </div>
 
-          <div className="mt-4 text-center text-sm opacity-60">Public profile • Visible to everyone</div>
 
           {isOwner && (
             <EditProfileDialog
