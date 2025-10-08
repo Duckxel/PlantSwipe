@@ -846,3 +846,57 @@ export async function listOccurrencesForTasks(taskIds: string[], startIso: strin
 }
 
 
+// ===== Activity logs =====
+export type GardenActivityKind = 'plant_added' | 'plant_updated' | 'plant_deleted' | 'task_completed' | 'task_progressed' | 'note'
+export type GardenActivity = {
+  id: string
+  gardenId: string
+  actorId: string | null
+  actorName: string | null
+  actorColor: string | null
+  kind: GardenActivityKind
+  message: string
+  plantName?: string | null
+  taskName?: string | null
+  occurredAt: string
+}
+
+export async function listGardenActivityToday(gardenId: string, todayIso?: string | null): Promise<GardenActivity[]> {
+  const today = todayIso || new Date().toISOString().slice(0,10)
+  const start = `${today}T00:00:00.000Z`
+  const end = `${today}T23:59:59.999Z`
+  const { data, error } = await supabase
+    .from('garden_activity_logs')
+    .select('id, garden_id, actor_id, actor_name, actor_color, kind, message, plant_name, task_name, occurred_at')
+    .eq('garden_id', gardenId)
+    .gte('occurred_at', start)
+    .lte('occurred_at', end)
+    .order('occurred_at', { ascending: false })
+  if (error) throw new Error(error.message)
+  return (data || []).map((r: any) => ({
+    id: String(r.id),
+    gardenId: String(r.garden_id),
+    actorId: r.actor_id ? String(r.actor_id) : null,
+    actorName: r.actor_name || null,
+    actorColor: r.actor_color || null,
+    kind: r.kind,
+    message: r.message,
+    plantName: r.plant_name || null,
+    taskName: r.task_name || null,
+    occurredAt: String(r.occurred_at),
+  }))
+}
+
+export async function logGardenActivity(params: { gardenId: string; kind: GardenActivityKind; message: string; plantName?: string | null; taskName?: string | null; actorColor?: string | null }): Promise<void> {
+  const { gardenId, kind, message, plantName = null, taskName = null, actorColor = null } = params
+  const { error } = await supabase.rpc('log_garden_activity', {
+    _garden_id: gardenId,
+    _kind: kind,
+    _message: message,
+    _plant_name: plantName,
+    _task_name: taskName,
+    _actor_color: actorColor,
+  })
+  if (error) throw new Error(error.message)
+}
+
