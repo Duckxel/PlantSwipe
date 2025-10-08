@@ -104,7 +104,7 @@ end $$;
 create table if not exists public.plants (
   id text primary key,
   name text not null,
-  scientific_name text not null,
+  scientific_name text,
   colors text[] not null default '{}',
   seasons text[] not null default '{}',
   rarity text not null default 'Common' check (rarity in ('Common','Uncommon','Rare','Legendary')),
@@ -113,7 +113,7 @@ create table if not exists public.plants (
   image_url text,
   care_sunlight text not null default 'Low' check (care_sunlight in ('Low','Medium','High')),
   care_water text not null default 'Low' check (care_water in ('Low','Medium','High')),
-  care_soil text not null,
+  care_soil text,
   care_difficulty text not null default 'Easy' check (care_difficulty in ('Easy','Moderate','Hard')),
   seeds_available boolean not null default false,
   created_at timestamptz not null default now(),
@@ -132,6 +132,9 @@ alter table if exists public.plants add column if not exists water_freq_amount i
 alter table if exists public.plants add column if not exists water_freq_unit text;
 alter table if exists public.plants add column if not exists water_freq_value integer;
 alter table if exists public.plants add column if not exists updated_at timestamptz not null default now();
+-- Relax NOT NULL constraints to support Simplified Add Plant flow
+alter table if exists public.plants alter column scientific_name drop not null;
+alter table if exists public.plants alter column care_soil drop not null;
 alter table public.plants enable row level security;
 -- Clean up legacy duplicate read policies if present
 do $$ begin
