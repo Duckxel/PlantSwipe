@@ -1213,39 +1213,51 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner, ownerCount, cu
   }
   return (
     <Card className="rounded-2xl p-4 relative">
-      {/* Up-right arrow to view public profile */}
-      {member.displayName && (
-        <button
-          className="absolute bottom-2 right-2 h-8 w-8 rounded-full flex items-center justify-center border bg-white/90 text-black hover:bg-white shadow"
-          aria-label="View profile"
-          onClick={(e) => { e.stopPropagation(); navigate(`/u/${encodeURIComponent(member.displayName!)}`) }}
-        >
-          <ArrowUpRight className="h-4 w-4" />
-        </button>
-      )}
-      <div className="flex items-start justify-between gap-3">
+      {/* Top-right actions: profile arrow + menu, same size and alignment */}
+      <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
+        {member.displayName && (
+          <Button
+            variant="secondary"
+            size="icon"
+            className="rounded-full h-8 w-8"
+            aria-label="View profile"
+            onClick={(e) => { e.stopPropagation(); navigate(`/u/${encodeURIComponent(member.displayName!)}`) }}
+          >
+            <ArrowUpRight className="h-4 w-4" />
+          </Button>
+        )}
+        {viewerIsOwner && !isSelf && (
+          <div className="relative">
+            <Button
+              variant="secondary"
+              size="icon"
+              className="rounded-full h-8 w-8"
+              onClick={(e: any) => { e.stopPropagation(); setOpen((o) => !o) }}
+              aria-label="Open member actions"
+            >
+              ⋯
+            </Button>
+            {open && (
+              <div className="absolute right-0 mt-2 w-48 bg-white border rounded-xl shadow-lg z-10">
+                {member.role !== 'owner' && (
+                  <button disabled={!canPromote || busy} onClick={(e) => { e.stopPropagation(); doPromote() }} className={`w-full text-left px-3 py-2 hover:bg-stone-50 ${!canPromote ? 'opacity-60 cursor-not-allowed' : ''}`}>Promote to owner</button>
+                )}
+                {member.role === 'owner' && (
+                  <button disabled={!canDemoteOwner || busy} onClick={(e) => { e.stopPropagation(); doDemote() }} className={`w-full text-left px-3 py-2 hover:bg-stone-50 ${!canDemoteOwner ? 'opacity-60 cursor-not-allowed' : ''}`}>Demote to member</button>
+                )}
+                {member.role !== 'owner' && (
+                  <button disabled={!canRemove || busy} onClick={(e) => { e.stopPropagation(); doRemove() }} className="w-full text-left px-3 py-2 hover:bg-stone-50 text-red-600">Remove member</button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+      <div className="flex items-start gap-3">
         <div>
           <div className="font-medium max-w-[60vw] truncate">{member.displayName || member.userId}</div>
           {member.email && <div className="text-xs opacity-60">{member.email}</div>}
           <div className="text-xs opacity-60">{member.role}{member.joinedAt ? ` • Joined ${new Date(member.joinedAt).toLocaleString()}` : ''}</div>
-        </div>
-        <div className="relative">
-          {viewerIsOwner && !isSelf && (
-            <Button variant="secondary" className="rounded-xl px-2" onClick={(e: any) => { e.stopPropagation(); setOpen((o) => !o) }}>⋯</Button>
-          )}
-          {open && (
-            <div className="absolute right-0 mt-2 w-48 bg-white border rounded-xl shadow-lg z-10">
-              {member.role !== 'owner' && (
-                <button disabled={!canPromote || busy} onClick={(e) => { e.stopPropagation(); doPromote() }} className={`w-full text-left px-3 py-2 hover:bg-stone-50 ${!canPromote ? 'opacity-60 cursor-not-allowed' : ''}`}>Promote to owner</button>
-              )}
-              {member.role === 'owner' && (
-                <button disabled={!canDemoteOwner || busy} onClick={(e) => { e.stopPropagation(); doDemote() }} className={`w-full text-left px-3 py-2 hover:bg-stone-50 ${!canDemoteOwner ? 'opacity-60 cursor-not-allowed' : ''}`}>Demote to member</button>
-              )}
-              {member.role !== 'owner' && (
-                <button disabled={!canRemove || busy} onClick={(e) => { e.stopPropagation(); doRemove() }} className="w-full text-left px-3 py-2 hover:bg-stone-50 text-red-600">Remove member</button>
-              )}
-            </div>
-          )}
         </div>
       </div>
       {/* Self actions for non-owners: Quit button */}
