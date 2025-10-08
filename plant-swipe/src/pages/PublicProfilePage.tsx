@@ -15,8 +15,11 @@ type PublicProfile = {
   display_name: string | null
   country: string | null
   bio: string | null
-  favorite_plant: string | null
   avatar_url: string | null
+  is_admin?: boolean | null
+  joined_at?: string | null
+  last_seen_at?: string | null
+  is_online?: boolean | null
 }
 
 type PublicStats = {
@@ -40,6 +43,25 @@ export default function PublicProfilePage() {
   const [stats, setStats] = React.useState<PublicStats | null>(null)
   const [monthDays, setMonthDays] = React.useState<DayAgg[]>([])
 
+  const formatLastSeen = React.useCallback((iso: string | null | undefined) => {
+    if (!iso) return 'A long time ago'
+    const last = new Date(iso)
+    const now = new Date()
+    const diffMs = Math.max(0, now.getTime() - last.getTime())
+    const diffMin = Math.floor(diffMs / (60 * 1000))
+    const diffHours = Math.floor(diffMin / 60)
+    const diffDays = Math.floor(diffHours / 24)
+    const diffWeeks = Math.floor(diffDays / 7)
+    if (diffMin <= 10) return 'Online'
+    if (diffHours < 1) return 'Online'
+    if (diffHours === 1) return '1 hour ago'
+    if (diffHours < 6) return 'Few hours ago'
+    if (diffDays === 1) return '1 day ago'
+    if (diffDays <= 6) return 'Few days ago'
+    if (diffWeeks <= 3) return 'Few weeks ago'
+    return 'A long time ago'
+  }, [])
+
   React.useEffect(() => {
     let cancelled = false
     const run = async () => {
@@ -62,8 +84,11 @@ export default function PublicProfilePage() {
           display_name: row.display_name || null,
           country: row.country || null,
           bio: row.bio || null,
-          favorite_plant: row.favorite_plant || null,
           avatar_url: row.avatar_url || null,
+          is_admin: Boolean(row.is_admin || false),
+          joined_at: row.joined_at ? String(row.joined_at) : null,
+          last_seen_at: row.last_seen_at ? String(row.last_seen_at) : null,
+          is_online: Boolean(row.is_online || false),
         })
 
         // Stats (plants total, gardens count, current and best streak)
@@ -190,9 +215,19 @@ export default function PublicProfilePage() {
                   {/* avatar placeholder */}
                 </div>
                 <div className="min-w-0">
-                  <div className="text-2xl font-semibold truncate">{pp.display_name || pp.username || 'Member'}</div>
-                  <div className="text-sm opacity-70">{pp.display_name}</div>
-                <div className="text-sm opacity-70 mt-1 flex items-center gap-1">{pp.country ? (<><MapPin className="h-4 w-4" />{pp.country}</>) : ''}</div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-2xl font-semibold truncate">{pp.display_name || pp.username || 'Member'}</div>
+                    <span className={`text-[11px] px-2 py-0.5 rounded-full border ${pp.is_admin ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-stone-50 text-stone-700 border-stone-200'}`}>{pp.is_admin ? 'Admin' : 'Member'}</span>
+                  </div>
+                  <div className="text-sm opacity-70 mt-1 flex items-center gap-1">{pp.country ? (<><MapPin className="h-4 w-4" />{pp.country}</>) : ''}</div>
+                  <div className="text-xs opacity-70 mt-1 flex items-center gap-2">
+                    {pp.is_online ? (
+                      <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" />Currently online</span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-stone-300" />{formatLastSeen(pp.last_seen_at)}</span>
+                    )}
+                    {pp.joined_at && <span>• Joined {new Date(pp.joined_at).toLocaleDateString()}</span>}
+                  </div>
                 </div>
                 <div className="ml-auto flex items-center" ref={anchorRef}>
                   {isOwner ? (
@@ -212,9 +247,6 @@ export default function PublicProfilePage() {
               </div>
               {pp.bio && (
                 <div className="text-sm opacity-90">{pp.bio}</div>
-              )}
-              {pp.favorite_plant && (
-                <div className="text-sm"><span className="opacity-60">Favorite plant:</span> {pp.favorite_plant}</div>
               )}
             </CardContent>
           </Card>

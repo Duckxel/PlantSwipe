@@ -1031,18 +1031,54 @@ do $$ begin
 end $$;
 
 -- ========== RPCs used by the app ==========
--- Public profile fetch by display name (safe columns only)
+-- Public profile fetch by display name (safe columns only) with admin flag, joined_at, and presence
 drop function if exists public.get_profile_public_by_username(text);
 create or replace function public.get_profile_public_by_display_name(_name text)
-returns table(id uuid, display_name text, country text, bio text, favorite_plant text, avatar_url text)
+returns table(
+  id uuid,
+  display_name text,
+  country text,
+  bio text,
+  avatar_url text,
+  is_admin boolean,
+  joined_at timestamptz,
+  last_seen_at timestamptz,
+  is_online boolean
+)
 language sql
 stable
 security definer
 set search_path = public
 as $$
-  select p.id, p.display_name, p.country, p.bio, p.favorite_plant, p.avatar_url
-  from public.profiles p
-  where lower(p.display_name) = lower(_name)
+  with base as (
+    select p.id, p.display_name, p.country, p.bio, p.avatar_url, p.is_admin
+    from public.profiles p
+    where lower(p.display_name) = lower(_name)
+    limit 1
+  ),
+  auth_meta as (
+    select u.id, u.created_at as joined_at
+    from auth.users u
+    where exists (select 1 from base b where b.id = u.id)
+  ),
+  ls as (
+    select v.user_id, max(v.occurred_at) as last_seen_at
+    from public.web_visits v
+    where exists (select 1 from base b where b.id = v.user_id)
+    group by v.user_id
+  )
+  select b.id,
+         b.display_name,
+         b.country,
+         b.bio,
+         b.avatar_url,
+         b.is_admin,
+         a.joined_at,
+         l.last_seen_at,
+         coalesce((l.last_seen_at is not null and (now() - l.last_seen_at) <= make_interval(mins => 10)), false) as is_online
+  from base b
+  left join auth_meta a on a.id = b.id
+  left join ls l on l.user_id = b.id
   limit 1;
 $$;
 grant execute on function public.get_profile_public_by_display_name(text) to anon, authenticated;
