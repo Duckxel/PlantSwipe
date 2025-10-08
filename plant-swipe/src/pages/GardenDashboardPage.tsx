@@ -727,9 +727,9 @@ export const GardenDashboardPage: React.FC = () => {
                   </div>
                   <div className="pt-2">
                     {isOwner ? (
-                      <Button variant="destructive" className="rounded-2xl" onClick={async () => { if (!id) return; if (!confirm('Delete this garden? This cannot be undone.')) return; try { await supabase.from('gardens').delete().eq('id', id); window.location.href = '/gardens' } catch (e) { alert('Failed to delete garden') } }}>Delete garden</Button>
+                      <Button variant="destructive" className="rounded-2xl" onClick={async () => { if (!id) return; if (!confirm('Delete this garden? This cannot be undone.')) return; try { await supabase.from('gardens').delete().eq('id', id); navigate('/gardens') } catch (e) { alert('Failed to delete garden') } }}>Delete garden</Button>
                     ) : (
-                      <Button variant="destructive" className="rounded-2xl" onClick={async () => { if (!id || !currentUserId) return; if (!confirm('Quit this garden? You will be removed as a member.')) return; try { await removeGardenMember({ gardenId: id, userId: currentUserId }); window.location.href = '/gardens' } catch (e) { alert('Failed to quit garden') } }}>Quit garden</Button>
+                      <Button variant="destructive" className="rounded-2xl" onClick={async () => { if (!id || !currentUserId) return; if (!confirm('Quit this garden? You will be removed as a member.')) return; try { await removeGardenMember({ gardenId: id, userId: currentUserId }); navigate('/gardens') } catch (e) { alert('Failed to quit garden') } }}>Quit garden</Button>
                     )}
                   </div>
                 </div>
@@ -1271,7 +1271,7 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner, ownerCount, cu
               if (!confirm('Quit this garden? You will be removed as a member.')) return
               try {
                 await removeGardenMember({ gardenId, userId: member.userId })
-                window.location.href = '/gardens'
+                navigate('/gardens')
               } catch {}
             }}
           >Quit</Button>

@@ -101,7 +101,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
             const { error } = await supabase.from('plants').delete().eq('id', plant.id)
             if (error) { alert(error.message); return }
             onClose()
-            window.location.reload()
+            try { window.dispatchEvent(new CustomEvent('plants:refresh')) } catch {}
           }}>Delete</Button>
         )}
         <div className="flex gap-2 ml-auto">
