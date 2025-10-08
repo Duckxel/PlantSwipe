@@ -644,6 +644,40 @@ export const AdminPage: React.FC = () => {
   const [suggestLoading, setSuggestLoading] = React.useState(false)
   const [highlightIndex, setHighlightIndex] = React.useState<number>(-1)
 
+  // Member visits (last 30 days)
+  const [memberVisitsLoading, setMemberVisitsLoading] = React.useState<boolean>(false)
+  const [memberVisitsSeries, setMemberVisitsSeries] = React.useState<Array<{ date: string; visits: number }>>([])
+  const [memberVisitsTotal30d, setMemberVisitsTotal30d] = React.useState<number>(0)
+  const [memberVisitsUpdatedAt, setMemberVisitsUpdatedAt] = React.useState<number | null>(null)
+
+  const loadMemberVisitsSeries = React.useCallback(async (userId: string, opts?: { initial?: boolean }) => {
+    if (!userId) return
+    const isInitial = !!opts?.initial
+    if (isInitial) setMemberVisitsLoading(true)
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      const headers: Record<string, string> = { 'Accept': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+        if (adminToken) headers['X-Admin-Token'] = String(adminToken)
+      } catch {}
+      const resp = await fetch(`/api/admin/member-visits-series?userId=${encodeURIComponent(userId)}`, { headers, credentials: 'same-origin' })
+      const data = await safeJson(resp)
+      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`)
+      const series = Array.isArray(data?.series30d) ? data.series30d.map((d: any) => ({ date: String(d.date), visits: Number(d.visits || 0) })) : []
+      setMemberVisitsSeries(series)
+      const total = Number(data?.total30d || 0)
+      setMemberVisitsTotal30d(Number.isFinite(total) ? total : 0)
+      setMemberVisitsUpdatedAt(Date.now())
+    } catch {
+      // keep last
+    } finally {
+      if (isInitial) setMemberVisitsLoading(false)
+    }
+  }, [safeJson])
+
   const lookupMember = React.useCallback(async () => {
     if (!lookupEmail || memberLoading) return
     setMemberLoading(true)
@@ -686,6 +720,18 @@ export const AdminPage: React.FC = () => {
       setMemberLoading(false)
     }
   }, [lookupEmail, memberLoading, safeJson])
+
+  // Auto-load visits series when a member is selected
+  React.useEffect(() => {
+    const uid = memberData?.user?.id
+    if (uid) {
+      loadMemberVisitsSeries(uid, { initial: true })
+    } else {
+      setMemberVisitsSeries([])
+      setMemberVisitsTotal30d(0)
+      setMemberVisitsUpdatedAt(null)
+    }
+  }, [memberData?.user?.id, loadMemberVisitsSeries])
 
   const performBan = React.useCallback(async () => {
     if (!lookupEmail || banSubmitting) return
@@ -1468,6 +1514,89 @@ export const AdminPage: React.FC = () => {
                       {memberData.ips.length === 0 && <div className="text-xs opacity-60">No IPs recorded</div>}
                     </div>
                   </div>
+
+                  <Card className="rounded-2xl">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <div>
+                          <div className="text-sm font-medium">Visits — last 30 days</div>
+                          <div className="text-xs opacity-60">{memberVisitsUpdatedAt ? `Updated ${formatTimeAgo(memberVisitsUpdatedAt)}` : 'Updated —'}</div>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label="Refresh visits"
+                          onClick={() => { if (memberData?.user?.id) loadMemberVisitsSeries(memberData.user.id, { initial: true }) }}
+                          disabled={memberVisitsLoading || !memberData?.user?.id}
+                          className="h-8 w-8"
+                        >
+                          <RefreshCw className={`h-4 w-4 ${memberVisitsLoading ? 'animate-spin' : ''}`} />
+                        </Button>
+                      </div>
+
+                      {memberVisitsLoading ? (
+                        <div className="text-sm opacity-60">Loading…</div>
+                      ) : memberVisitsSeries.length === 0 ? (
+                        <div className="text-sm opacity-60">No data yet.</div>
+                      ) : (
+                        (() => {
+                          const values = memberVisitsSeries.map(d => d.visits)
+                          const maxVal = Math.max(...values, 1)
+                          const avgVal = Math.round((values.reduce((a, b) => a + b, 0)) / values.length)
+                          const formatShort = (iso: string) => {
+                            try {
+                              const dt = new Date(iso + 'T00:00:00Z')
+                              return new Intl.DateTimeFormat(undefined, { month: 'numeric', day: 'numeric', timeZone: 'UTC' }).format(dt)
+                            } catch { return iso }
+                          }
+                          const formatFull = (iso: string) => {
+                            try {
+                              const dt = new Date(iso + 'T00:00:00Z')
+                              return new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(dt)
+                            } catch { return iso }
+                          }
+                          const TooltipContent = ({ active, payload, label }: any) => {
+                            if (!active || !payload || payload.length === 0) return null
+                            const current = payload[0]?.value as number
+                            return (
+                              <div className="rounded-xl border bg-white/90 backdrop-blur p-3 shadow-lg">
+                                <div className="text-xs opacity-60">{formatFull(label)}</div>
+                                <div className="mt-1 text-base font-semibold tabular-nums">{current}</div>
+                              </div>
+                            )
+                          }
+                          return (
+                            <div>
+                              <div className="text-sm font-medium mb-2">Total last 30 days: <span className="tabular-nums">{memberVisitsTotal30d}</span></div>
+                              <div className="h-64">
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <ComposedChart data={memberVisitsSeries} margin={{ top: 10, right: 16, bottom: 14, left: 16 }}>
+                                    <defs>
+                                      <linearGradient id="mVisitsLine" x1="0" y1="0" x2="1" y2="0">
+                                        <stop offset="0%" stopColor="#065f46" />
+                                        <stop offset="100%" stopColor="#10b981" />
+                                      </linearGradient>
+                                      <linearGradient id="mVisitsArea" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stopColor="#10b981" stopOpacity={0.3} />
+                                        <stop offset="100%" stopColor="#10b981" stopOpacity={0.06} />
+                                      </linearGradient>
+                                    </defs>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
+                                    <XAxis dataKey="date" tickFormatter={formatShort} tick={{ fontSize: 11, fill: '#525252' }} axisLine={false} tickLine={false} interval={4} padding={{ left: 12, right: 12 }} />
+                                    <YAxis allowDecimals={false} domain={[0, Math.max(maxVal, 5)]} tick={{ fontSize: 11, fill: '#525252' }} axisLine={false} tickLine={false} />
+                                    <Tooltip content={<TooltipContent />} cursor={{ stroke: 'rgba(0,0,0,0.1)' }} />
+                                    <ReferenceLine y={avgVal} stroke="#a3a3a3" strokeDasharray="4 4" ifOverflow="extendDomain" label={{ value: 'avg', position: 'insideRight', fill: '#737373', fontSize: 11, dx: -6 }} />
+                                    <Area type="monotone" dataKey="visits" fill="url(#mVisitsArea)" stroke="none" animationDuration={600} />
+                                    <Line type="monotone" dataKey="visits" stroke="url(#mVisitsLine)" strokeWidth={3} dot={false} activeDot={{ r: 5, strokeWidth: 2, stroke: '#065f46', fill: '#ffffff' }} animationDuration={700} />
+                                  </ComposedChart>
+                                </ResponsiveContainer>
+                              </div>
+                            </div>
+                          )
+                        })()
+                      )}
+                    </CardContent>
+                  </Card>
 
                   {(memberData.isBannedEmail || (memberData.bannedIps && memberData.bannedIps.length > 0)) && (
                     <div className="rounded-xl border p-3 bg-rose-50/60">
