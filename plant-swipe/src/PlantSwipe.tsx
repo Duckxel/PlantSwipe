@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
-import { Routes, Route, NavLink, useLocation, useNavigate, Navigate } from "react-router-dom";
+import { Routes, Route, useLocation, useNavigate, Navigate } from "react-router-dom";
 import { useMotionValue } from "framer-motion";
-import { Search, Sparkles } from "lucide-react";
+import { Search } from "lucide-react";
 // Sheet is used for plant info overlay
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { TopBar } from "@/components/layout/TopBar";
 import { BottomBar } from "@/components/layout/BottomBar";
+import MobileNavBar from "@/components/layout/MobileNavBar";
 import { SwipePage } from "@/pages/SwipePage";
 import { GardenListPage } from "@/pages/GardenListPage";
 import { GardenDashboardPage } from "@/pages/GardenDashboardPage";
@@ -458,7 +459,7 @@ export default function PlantSwipe() {
   }, [user])
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-b from-stone-50 to-stone-100 p-4 md:p-8 overflow-x-hidden">
+    <div className="min-h-screen w-full bg-gradient-to-b from-stone-50 to-stone-100 p-4 pb-24 md:p-8 md:pb-8 overflow-x-hidden">
   <TopBar
     openLogin={openLogin}
     openSignup={openSignup}
@@ -468,18 +469,8 @@ export default function PlantSwipe() {
     onLogout={async () => { await signOut(); navigate('/') }}
   />
 
-      {/* Mobile nav */}
-      <div className="max-w-5xl mx-auto mt-4 md:hidden grid grid-cols-3 gap-2">
-        <Button asChild variant={'secondary'} className={currentView === 'discovery' ? "rounded-2xl bg-black text-white hover:bg-black/90 hover:text-white" : "rounded-2xl bg-white text-black hover:bg-stone-100 hover:text-black"}>
-          <NavLink to="/" end className="no-underline flex items-center gap-2"><Sparkles className="h-4 w-4" /> Discovery</NavLink>
-        </Button>
-        <Button asChild variant={'secondary'} className={currentView === 'gardens' ? "rounded-2xl bg-black text-white hover:bg-black/90 hover:text-white" : "rounded-2xl bg-white text-black hover:bg-stone-100 hover:text-black"}>
-          <NavLink to="/gardens" className="no-underline">Garden</NavLink>
-        </Button>
-        <Button asChild variant={'secondary'} className={currentView === 'search' ? "rounded-2xl bg-black text-white hover:bg-black/90 hover:text-white" : "rounded-2xl bg-white text-black hover:bg-stone-100 hover:text-black"}>
-          <NavLink to="/search" className="no-underline">Search</NavLink>
-        </Button>
-      </div>
+      {/* Mobile bottom nav */}
+      <MobileNavBar canCreate={Boolean(user)} />
 
       {/* Layout: grid only when search view (to avoid narrow column in other views) */}
       <div className={`max-w-6xl mx-auto mt-6 ${currentView === 'search' ? 'lg:grid lg:grid-cols-[260px_1fr] lg:gap-10' : ''}`}>
