@@ -189,15 +189,7 @@ export default function PublicProfilePage() {
 
   const colorFor = (cell: { value: number; success: boolean } | null) => {
     if (!cell) return 'bg-stone-300'
-    if (!cell.success && (cell.value || 0) <= 0) return 'bg-stone-300'
-    const v = Math.max(0, Math.min(4, cell.value))
-    return [
-      'bg-emerald-300',
-      'bg-emerald-400',
-      'bg-emerald-500',
-      'bg-emerald-600',
-      'bg-emerald-700',
-    ][v]
+    return cell.success ? 'bg-emerald-600' : 'bg-stone-300'
   }
 
   const [tooltip, setTooltip] = React.useState<{ top: number; left: number; date: string; value: number; success: boolean } | null>(null)
@@ -313,7 +305,7 @@ export default function PublicProfilePage() {
                     </div>
                   ))}
                 </div>
-                <div className="text-xs opacity-60">Gray = no activity • Green = completed days (darker = more tasks)</div>
+                
                 {tooltip && createPortal(
                   <div
                     className="fixed z-[70] pointer-events-none"
