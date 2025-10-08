@@ -15,6 +15,7 @@ import { TaskEditorDialog } from '@/components/plant/TaskEditorDialog'
 import type { Garden } from '@/types/garden'
 import type { Plant } from '@/types/plant'
 import { getGarden, getGardenPlants, getGardenMembers, addMemberByEmail, addMemberByNameOrEmail, deleteGardenPlant, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, getGardenInventory, adjustInventoryAndLogTransaction, updateGardenMemberRole, removeGardenMember, listGardenTasks, syncTaskOccurrencesForGarden, listOccurrencesForTasks, progressTaskOccurrence, updateGardenPlantsOrder, refreshGardenStreak } from '@/lib/gardens'
+import { getGarden, getGardenPlants, getGardenMembers, addMemberByEmail, deleteGardenPlant, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, getGardenInventory, adjustInventoryAndLogTransaction, updateGardenMemberRole, removeGardenMember, listGardenTasks, syncTaskOccurrencesForGarden, listOccurrencesForTasks, progressTaskOccurrence, updateGardenPlantsOrder, refreshGardenStreak, listGardenActivityToday, logGardenActivity } from '@/lib/gardens'
 import { supabase } from '@/lib/supabaseClient'
  
 
@@ -70,6 +71,8 @@ export const GardenDashboardPage: React.FC = () => {
   const [scheduleLockYear, setScheduleLockYear] = React.useState<boolean>(false)
   const [scheduleAllowedPeriods, setScheduleAllowedPeriods] = React.useState<Array<'week'|'month'|'year'> | undefined>(undefined)
   const [dragIdx, setDragIdx] = React.useState<number | null>(null)
+
+  const [activityRev, setActivityRev] = React.useState(0)
 
   const [infoPlant, setInfoPlant] = React.useState<Plant | null>(null)
   // Favorites (liked plants)
@@ -388,6 +391,16 @@ export const GardenDashboardPage: React.FC = () => {
       if (qty > 0) {
         await supabase.from('garden_plants').update({ plants_on_hand: qty }).eq('id', gp.id)
       }
+      // Log activity: plant added
+      try {
+        await logGardenActivity({
+          gardenId: id,
+          kind: 'plant_added' as any,
+          message: `added "${nicknameVal || selectedPlant.name}"${qty > 0 ? ` x${qty}` : ''}`,
+          plantName: nicknameVal || selectedPlant.name,
+        })
+        setActivityRev((r) => r + 1)
+      } catch {}
       setAddDetailsOpen(false)
       setAddNickname('')
       setAddCount(1)
@@ -502,6 +515,15 @@ export const GardenDashboardPage: React.FC = () => {
         if (remaining > 0) ops.push(progressTaskOccurrence(o.id, remaining))
       }
       if (ops.length > 0) await Promise.all(ops)
+      // Log summary activity for this plant
+      try {
+        if (id) {
+          const gp = (plants as any[]).find((p: any) => p.id === gardenPlantId)
+          const plantName = gp?.nickname || gp?.plant?.name || 'Plant'
+          await logGardenActivity({ gardenId: id, kind: 'task_completed' as any, message: `completed all due tasks on "${plantName}"`, plantName })
+          setActivityRev((r) => r + 1)
+        }
+      } catch {}
       await load()
     } catch (e) {
       // swallow; global error display exists
@@ -558,7 +580,7 @@ export const GardenDashboardPage: React.FC = () => {
           </aside>
           <main className="min-h-[60vh]">
             <Routes>
-              <Route path="overview" element={<OverviewSection plants={plants} membersCount={members.length} serverToday={serverToday} dailyStats={dailyStats} totalOnHand={totalOnHand} speciesOnHand={speciesOnHand} baseStreak={garden.streak || 0} />} />
+              <Route path="overview" element={<OverviewSection gardenId={id!} activityRev={activityRev} plants={plants} membersCount={members.length} serverToday={serverToday} dailyStats={dailyStats} totalOnHand={totalOnHand} speciesOnHand={speciesOnHand} baseStreak={garden.streak || 0} />} />
               <Route path="plants" element={(
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
@@ -639,6 +661,10 @@ export const GardenDashboardPage: React.FC = () => {
                                     await upsertGardenTask({ gardenId: id, day: today, gardenPlantId: null, success })
                                   } catch {}
                                 }
+                                try {
+                                  await logGardenActivity({ gardenId: id!, kind: 'plant_deleted' as any, message: `deleted "${gp.nickname || gp.plant?.name || 'Plant'}"`, plantName: gp.nickname || gp.plant?.name || null })
+                                  setActivityRev((r) => r + 1)
+                                } catch {}
                                 await load()
                               }}>Delete</Button>
                             </div>
@@ -654,7 +680,29 @@ export const GardenDashboardPage: React.FC = () => {
                   )}
                 </div>
               )} />
-              <Route path="routine" element={<RoutineSection plants={plants} duePlantIds={dueToday} onLogWater={logWater} weekDays={weekDays} weekCounts={weekCounts} weekCountsByType={weekCountsByType} serverToday={serverToday} dueThisWeekByPlant={dueThisWeekByPlant} todayTaskOccurrences={todayTaskOccurrences} onProgressOccurrence={async (occId: string, inc: number) => { await progressTaskOccurrence(occId, inc); await load() }} />} />
+              <Route path="routine" element={<RoutineSection plants={plants} duePlantIds={dueToday} onLogWater={logWater} weekDays={weekDays} weekCounts={weekCounts} weekCountsByType={weekCountsByType} serverToday={serverToday} dueThisWeekByPlant={dueThisWeekByPlant} todayTaskOccurrences={todayTaskOccurrences} onProgressOccurrence={async (occId: string, inc: number) => {
+                try {
+                  await progressTaskOccurrence(occId, inc)
+                  const o = todayTaskOccurrences.find((x: any) => x.id === occId)
+                  if (o && id) {
+                    const gp = (plants as any[]).find((p: any) => p.id === o.gardenPlantId)
+                    const type = (o as any).taskType || 'custom'
+                    const label = String(type).toUpperCase()
+                    const plantName = gp?.nickname || gp?.plant?.name || null
+                    const newCount = Number(o.completedCount || 0) + inc
+                    const required = Number(o.requiredCount || 1)
+                    const done = newCount >= required
+                    const kind = done ? 'task_completed' : 'task_progressed'
+                    const msg = done
+                      ? `has completed "${label}" Task on "${plantName || 'Plant'}"`
+                      : `has progressed "${label}" Task on "${plantName || 'Plant'}" (${Math.min(newCount, required)}/${required})`
+                    await logGardenActivity({ gardenId: id, kind: kind as any, message: msg, plantName: plantName || null, taskName: label })
+                    setActivityRev((r) => r + 1)
+                  }
+                } finally {
+                  await load()
+                }
+              }} />} />
               <Route path="settings" element={(
                 <div className="space-y-6">
                   <div className="space-y-3">
@@ -793,6 +841,25 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
     if (!duePlantIds) return []
     return plants.filter((gp: any) => duePlantIds.has(gp.id))
   }, [plants, duePlantIds])
+  const hasTodayTasks = (todayTaskOccurrences || []).length > 0
+  const emptyPhrases = React.useMemo(() => [
+    'Bored? Maybe it\'s time to get more plants… 🪴',
+    'All quiet in the garden today. Enjoy the calm! 🌿',
+    'Nothing due today — your plants salute you. 🫡',
+    'Free day! Maybe browse for a new leafy friend? 🌱',
+    'Rest day. Hydrate yourself instead of the plants. 💧',
+    'No tasks now. Perfect time to plan your next bloom. 🌼',
+    'Garden\'s on cruise control. You earned it. 😌',
+    'No chores today — maybe prune your playlist? 🎧',
+    'Nothing to do! Consider a new herb for the kitchen. 🌿🍃',
+    'Feet up, gloves off. Tomorrow\'s another grow day. 🧤',
+    'Zero tasks. Maximum vibes. ✨',
+    'Your routine is empty — your cart doesn\'t have to be. 🛒🪴',
+  ], [])
+  const randomEmptyPhrase = React.useMemo(() => {
+    const idx = Math.floor(Math.random() * emptyPhrases.length)
+    return emptyPhrases[idx]
+  }, [emptyPhrases])
   const maxCount = Math.max(1, ...weekCounts)
   const occsByPlant: Record<string, typeof todayTaskOccurrences> = {}
   for (const o of todayTaskOccurrences) {
@@ -847,40 +914,46 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
       <div className="flex justify-between items-center">
         <div className="text-base font-medium">Today</div>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {plants.map((gp: any) => {
-          const occs = occsByPlant[gp.id] || []
-          const totalReq = occs.reduce((a, o) => a + Math.max(1, o.requiredCount || 1), 0)
-          const totalDone = occs.reduce((a, o) => a + Math.min(Math.max(1, o.requiredCount || 1), o.completedCount || 0), 0)
-          if (occs.length === 0) return null
-          return (
-            <Card key={gp.id} className="rounded-2xl p-4">
-              <div className="font-medium">{gp.nickname || gp.plant?.name}</div>
-              {gp.nickname && <div className="text-xs opacity-60">{gp.plant?.name}</div>}
-              <div className="text-sm opacity-70">Tasks due: {totalDone} / {totalReq}</div>
-              <div className="mt-2 flex flex-col gap-2">
-                {occs.map((o) => {
-                  const tt = (o as any).taskType || 'custom'
-                  const badgeClass = `${typeToColor[tt]} ${tt === 'harvest' ? 'text-black' : 'text-white'}`
-                  const customEmoji = (o as any).taskEmoji || null
-                  const icon = customEmoji || (tt === 'water' ? '💧' : tt === 'fertilize' ? '🍽️' : tt === 'harvest' ? '🌾' : tt === 'cut' ? '✂️' : '🪴')
-                  return (
-                    <div key={o.id} className="flex items-center justify-between gap-3 text-sm rounded-xl border p-2">
-                      <div className="flex items-center gap-2">
-                        <span className={`h-6 w-6 flex items-center justify-center rounded-md border`}>{icon}</span>
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full ${badgeClass}`}>{String(tt).toUpperCase()}</span>
-                        {/* Time removed per request */}
+      {hasTodayTasks ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {plants.map((gp: any) => {
+            const occs = occsByPlant[gp.id] || []
+            const totalReq = occs.reduce((a, o) => a + Math.max(1, o.requiredCount || 1), 0)
+            const totalDone = occs.reduce((a, o) => a + Math.min(Math.max(1, o.requiredCount || 1), o.completedCount || 0), 0)
+            if (occs.length === 0) return null
+            return (
+              <Card key={gp.id} className="rounded-2xl p-4">
+                <div className="font-medium">{gp.nickname || gp.plant?.name}</div>
+                {gp.nickname && <div className="text-xs opacity-60">{gp.plant?.name}</div>}
+                <div className="text-sm opacity-70">Tasks due: {totalDone} / {totalReq}</div>
+                <div className="mt-2 flex flex-col gap-2">
+                  {occs.map((o) => {
+                    const tt = (o as any).taskType || 'custom'
+                    const badgeClass = `${typeToColor[tt]} ${tt === 'harvest' ? 'text-black' : 'text-white'}`
+                    const customEmoji = (o as any).taskEmoji || null
+                    const icon = customEmoji || (tt === 'water' ? '💧' : tt === 'fertilize' ? '🍽️' : tt === 'harvest' ? '🌾' : tt === 'cut' ? '✂️' : '🪴')
+                    return (
+                      <div key={o.id} className="flex items-center justify-between gap-3 text-sm rounded-xl border p-2">
+                        <div className="flex items-center gap-2">
+                          <span className={`h-6 w-6 flex items-center justify-center rounded-md border`}>{icon}</span>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full ${badgeClass}`}>{String(tt).toUpperCase()}</span>
+                          {/* Time removed per request */}
+                        </div>
+                        <div className="opacity-80">{o.completedCount} / {o.requiredCount}</div>
+                        <Button className="rounded-xl" size="sm" onClick={() => onProgressOccurrence(o.id, 1)} disabled={(o.completedCount || 0) >= (o.requiredCount || 1)}>Complete +1</Button>
                       </div>
-                      <div className="opacity-80">{o.completedCount} / {o.requiredCount}</div>
-                      <Button className="rounded-xl" size="sm" onClick={() => onProgressOccurrence(o.id, 1)} disabled={(o.completedCount || 0) >= (o.requiredCount || 1)}>Complete +1</Button>
-                    </div>
-                  )
-                })}
-              </div>
-            </Card>
-          )
-        })}
-      </div>
+                    )
+                  })}
+                </div>
+              </Card>
+            )
+          })}
+        </div>
+      ) : (
+        <Card className="rounded-2xl p-6 text-center">
+          <div className="text-base">{randomEmptyPhrase}</div>
+        </Card>
+      )}
       <div className="pt-2">
         <div className="text-base font-medium">Due this week</div>
       </div>
@@ -902,7 +975,27 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
 }
 
 
-function OverviewSection({ plants, membersCount, serverToday, dailyStats, totalOnHand, speciesOnHand, baseStreak }: { plants: any[]; membersCount: number; serverToday: string | null; dailyStats: Array<{ date: string; due: number; completed: number; success: boolean }>; totalOnHand: number; speciesOnHand: number; baseStreak: number }) {
+function OverviewSection({ gardenId, activityRev, plants, membersCount, serverToday, dailyStats, totalOnHand, speciesOnHand, baseStreak }: { gardenId: string; activityRev?: number; plants: any[]; membersCount: number; serverToday: string | null; dailyStats: Array<{ date: string; due: number; completed: number; success: boolean }>; totalOnHand: number; speciesOnHand: number; baseStreak: number }) {
+  const [activity, setActivity] = React.useState<Array<{ id: string; actorName?: string | null; actorColor?: string | null; kind: string; message: string; plantName?: string | null; taskName?: string | null; occurredAt: string }>>([])
+  const [loadingAct, setLoadingAct] = React.useState(false)
+  const [errAct, setErrAct] = React.useState<string | null>(null)
+  React.useEffect(() => {
+    let ignore = false
+    ;(async () => {
+      if (!gardenId || !serverToday) return
+      setLoadingAct(true)
+      setErrAct(null)
+      try {
+        const rows = await listGardenActivityToday(gardenId, serverToday)
+        if (!ignore) setActivity(rows)
+      } catch (e: any) {
+        if (!ignore) setErrAct(e?.message || 'Failed to load activity')
+      } finally {
+        if (!ignore) setLoadingAct(false)
+      }
+    })()
+    return () => { ignore = true }
+  }, [gardenId, serverToday, activityRev])
   const totalToDoToday = dailyStats.find(d => d.date === (serverToday || ''))?.due ?? 0
   const completedToday = dailyStats.find(d => d.date === (serverToday || ''))?.completed ?? 0
   const progressPct = totalToDoToday === 0 ? 100 : Math.min(100, Math.round((completedToday / totalToDoToday) * 100))
@@ -965,8 +1058,33 @@ function OverviewSection({ plants, membersCount, serverToday, dailyStats, totalO
           ))}
         </div>
       </Card>
+
+      {/* Activity (today) */}
+      <Card className="rounded-2xl p-4">
+        <div className="font-medium mb-2">Activity (today)</div>
+        {loadingAct && <div className="text-sm opacity-60">Loading…</div>}
+        {errAct && <div className="text-sm text-red-600">{errAct}</div>}
+        {!loadingAct && activity.length === 0 && <div className="text-sm opacity-60">No activity yet today.</div>}
+        <div className="space-y-2">
+          {activity.map((a) => (
+            <div key={a.id} className="text-sm flex items-start gap-2">
+              <span className={`font-medium ${colorForName(a.actorName, a.actorColor)}`}>{a.actorName || 'Someone'}</span>
+              <span className="opacity-80">{a.message}</span>
+            </div>
+          ))}
+        </div>
+      </Card>
     </div>
   )
+}
+
+function colorForName(name?: string | null, colorToken?: string | null): string {
+  if (colorToken && /^text-/.test(colorToken)) return colorToken
+  const colors = ['text-emerald-700','text-blue-700','text-indigo-700','text-rose-700','text-amber-700','text-purple-700','text-teal-700']
+  if (!name || name.length === 0) return colors[0]
+  let hash = 0
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0
+  return colors[hash % colors.length]
 }
 
 function EditPlantButton({ gp, gardenId, onChanged, serverToday }: { gp: any; gardenId: string; onChanged: () => Promise<void>; serverToday: string | null }) {
@@ -990,7 +1108,22 @@ function EditPlantButton({ gp, gardenId, onChanged, serverToday }: { gp: any; ga
       if (count <= 0) {
         await supabase.from('garden_plants').delete().eq('id', gp.id)
         if (serverToday) await ensureDailyTasksForGardens(serverToday)
+        try {
+          await logGardenActivity({ gardenId, kind: 'plant_deleted' as any, message: `deleted "${gp.nickname || gp.plant?.name || 'Plant'}"`, plantName: gp.nickname || gp.plant?.name || null })
+        } catch {}
       }
+      // If name or count changed, log update
+      try {
+        const changedName = (gp.nickname || '') !== (nickname.trim() || '')
+        const changedCount = Number(gp.plantsOnHand || 0) !== Math.max(0, Number(count || 0))
+        if (changedName || changedCount) {
+          const parts: string[] = []
+          if (changedName) parts.push(`name → "${nickname.trim() || '—'}"`)
+          if (changedCount) parts.push(`count → ${Math.max(0, Number(count || 0))}`)
+          const plantName = nickname.trim() || gp.nickname || gp.plant?.name || 'Plant'
+          await logGardenActivity({ gardenId, kind: 'plant_updated' as any, message: `updated ${plantName}: ${parts.join(', ')}`, plantName })
+        }
+      } catch {}
       await onChanged()
       setOpen(false)
     } catch (e) {
