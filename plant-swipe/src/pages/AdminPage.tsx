@@ -45,6 +45,39 @@ export const AdminPage: React.FC = () => {
     el.scrollTop = el.scrollHeight
   }, [logLines, logOpen])
 
+  const copyTextToClipboard = React.useCallback(async (text: string): Promise<boolean> => {
+    try {
+      if (navigator && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        await navigator.clipboard.writeText(text)
+        return true
+      }
+    } catch {}
+    try {
+      const ta = document.createElement('textarea')
+      ta.value = text
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.focus()
+      ta.select()
+      const ok = document.execCommand('copy')
+      document.body.removeChild(ta)
+      return ok
+    } catch {
+      return false
+    }
+  }, [])
+
+  const getAllLogsText = React.useCallback((): string => {
+    return logLines.join('\n')
+  }, [logLines])
+
+  const getErrorLinesText = React.useCallback((): string => {
+    const rx = /(^|\b)(err|error|failed|failure|exception|traceback|fatal|npm\s+err!|^npm\s+err)/i
+    const lines = logLines.filter(l => rx.test(l))
+    return lines.length > 0 ? lines.join('\n') : 'No error-like lines detected.'
+  }, [logLines])
+
   // Safely parse response body into JSON, tolerating HTML/error pages
   const safeJson = React.useCallback(async (resp: Response): Promise<any> => {
     try {
@@ -405,7 +438,6 @@ export const AdminPage: React.FC = () => {
       const decoder = new TextDecoder()
       let buf = ''
       const append = (line: string) => setLogLines(prev => [...prev, line])
-      let sawDoneOk = false
       // Minimal SSE parser: handle lines starting with 'data:' and emit
       while (true) {
         const { done, value } = await reader.read()
@@ -420,12 +452,7 @@ export const AdminPage: React.FC = () => {
           if (line.startsWith('data:')) {
             const payload = line.slice(5).trimStart()
             // Try to detect done events to know success
-            try {
-              const obj = JSON.parse(payload)
-              if (obj && typeof obj === 'object' && Object.prototype.hasOwnProperty.call(obj, 'ok')) {
-                if (obj.ok === true) sawDoneOk = true
-              }
-            } catch {}
+            // no-op: payload may be JSON or plain text; still append for visibility
             append(payload)
           } else if (!/^(:|event:|id:|retry:)/.test(line)) {
             append(line)
@@ -1059,9 +1086,40 @@ export const AdminPage: React.FC = () => {
                     >
                       {logLines.length === 0 ? 'Starting…' : logLines.join('\n')}
                     </div>
-                    <div className="mt-2 flex gap-2">
-                      <Button size="sm" variant="secondary" className="rounded-xl" onClick={() => setLogOpen(false)}>Hide</Button>
-                      <Button size="sm" className="rounded-xl" onClick={() => { setLogLines([]); setLogOpen(true) }}>Clear</Button>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="rounded-xl"
+                        onClick={() => setLogOpen(false)}
+                        title="Hide logs"
+                      >Hide</Button>
+                      <Button
+                        size="sm"
+                        className="rounded-xl"
+                        onClick={() => { setLogLines([]); setLogOpen(true) }}
+                        title="Clear logs from the panel"
+                      >Clear</Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="rounded-xl"
+                        onClick={async () => {
+                          const ok = await copyTextToClipboard(getAllLogsText())
+                          if (!ok) alert('Copy failed. You can still select and copy manually.')
+                        }}
+                        title="Copy all log lines to clipboard"
+                      >Copy all</Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="rounded-xl"
+                        onClick={async () => {
+                          const ok = await copyTextToClipboard(getErrorLinesText())
+                          if (!ok) alert('Copy failed. You can still select and copy manually.')
+                        }}
+                        title="Copy only error-like lines to clipboard"
+                      >Copy errors</Button>
                     </div>
                   </div>
                 )}
