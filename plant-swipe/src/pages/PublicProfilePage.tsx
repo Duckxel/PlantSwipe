@@ -169,27 +169,44 @@ export default function PublicProfilePage() {
   }, [menuOpen])
 
   const rows = React.useMemo(() => {
-    // Build fixed 28-day window displayed as 4 rows x 7 columns (horizontal weeks)
-    if (monthDays.length === 0) return [] as Array<Array<{ date: string; value: number; success: boolean }>>
+    // Build a fixed 28-day window (UTC) shown as 4 rows x 7 columns
+    // Always render all 28 days, even if there is no activity
+    const end = new Date(Date.UTC(
+      new Date().getUTCFullYear(),
+      new Date().getUTCMonth(),
+      new Date().getUTCDate()
+    ))
+    const start = new Date(end)
+    start.setUTCDate(end.getUTCDate() - 27)
+
     const map = new Map<string, DayAgg>()
     for (const d of monthDays) map.set(d.day, d)
-    const first = new Date(monthDays[0].day + 'T00:00:00Z')
+
     const days: Array<{ date: string; value: number; success: boolean }> = []
     for (let i = 0; i < 28; i++) {
-      const cur = new Date(first)
-      cur.setUTCDate(first.getUTCDate() + i)
-      const ymd = cur.toISOString().slice(0,10)
+      const cur = new Date(start)
+      cur.setUTCDate(start.getUTCDate() + i)
+      const ymd = cur.toISOString().slice(0, 10)
       const r = map.get(ymd)
       days.push(r ? { date: ymd, value: r.completed, success: r.any_success } : { date: ymd, value: 0, success: false })
     }
-    const rows: Array<Array<{ date: string; value: number; success: boolean }>> = []
-    for (let i = 0; i < days.length; i += 7) rows.push(days.slice(i, i + 7))
-    return rows
+
+    const r: Array<Array<{ date: string; value: number; success: boolean }>> = []
+    for (let i = 0; i < days.length; i += 7) r.push(days.slice(i, i + 7))
+    return r
   }, [monthDays])
 
+  // Compute max value to scale color intensity like GitHub contributions
+  const maxCount = React.useMemo(() => monthDays.reduce((m, d) => Math.max(m, d.completed || 0), 0), [monthDays])
+
   const colorFor = (cell: { value: number; success: boolean } | null) => {
-    if (!cell) return 'bg-stone-300'
-    return cell.success ? 'bg-emerald-600' : 'bg-stone-300'
+    if (!cell || cell.value <= 0) return 'bg-stone-200'
+    if (maxCount <= 0) return 'bg-stone-200'
+    const ratio = cell.value / maxCount
+    if (ratio <= 0.25) return 'bg-emerald-100'
+    if (ratio <= 0.5) return 'bg-emerald-300'
+    if (ratio <= 0.75) return 'bg-emerald-500'
+    return 'bg-emerald-700'
   }
 
   const [tooltip, setTooltip] = React.useState<{ top: number; left: number; date: string; value: number; success: boolean } | null>(null)
@@ -287,18 +304,19 @@ export default function PublicProfilePage() {
             <Card className="rounded-3xl">
               <CardContent className="p-6 md:p-8 space-y-4">
                 <div className="text-lg font-semibold">Past 28 days</div>
-                <div className="flex flex-col gap-px">
+                <div className="flex flex-col gap-[3px]">
                   {rows.map((row: Array<{ date: string; value: number; success: boolean }>, ridx: number) => (
-                    <div key={ridx} className="grid grid-cols-7 gap-px">
+                    <div key={ridx} className="grid grid-cols-7 gap-[3px]">
                       {row.map((item: { date: string; value: number; success: boolean }, cidx: number) => (
                         <button
                           key={cidx}
                           type="button"
-                          className={`h-6 w-6 rounded-sm ${colorFor(item)}`}
+                          className={`h-3.5 w-3.5 sm:h-4 sm:w-4 rounded-[3px] ${colorFor(item)}`}
                           onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => item && showTooltip(e.currentTarget as HTMLButtonElement, item)}
                           onMouseLeave={hideTooltip}
                           onFocus={(e: React.FocusEvent<HTMLButtonElement>) => item && showTooltip(e.currentTarget as HTMLButtonElement, item)}
                           onBlur={hideTooltip}
+                          title={item ? `${item.value} tasks on ${new Date(item.date).toLocaleDateString()}` : ''}
                           aria-label={item ? `${new Date(item.date).toLocaleDateString()}: ${item.value} tasks${item.success ? ', completed day' : ''}` : ''}
                         />
                       ))}
