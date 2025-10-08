@@ -197,12 +197,16 @@ export default function PublicProfilePage() {
   const maxCount = React.useMemo(() => monthDays.reduce((m, d) => Math.max(m, d.completed || 0), 0), [monthDays])
 
   const colorFor = (cell: { value: number; success: boolean } | null) => {
-    if (!cell || cell.value <= 0) return 'bg-stone-200'
-    if (maxCount <= 0) return 'bg-stone-200'
-    const ratio = cell.value / maxCount
-    if (ratio <= 0.25) return 'bg-emerald-100'
-    if (ratio <= 0.5) return 'bg-emerald-300'
-    if (ratio <= 0.75) return 'bg-emerald-500'
+    if (!cell) return 'bg-stone-200'
+    // If the day wasn't successful, render as neutral gray
+    if (!cell.success) return 'bg-stone-200'
+    // Successful day with no counts (e.g., no tasks due) should still be green
+    if (maxCount <= 0) return 'bg-emerald-400'
+    const ratio = (cell.value || 0) / maxCount
+    if (ratio <= 0) return 'bg-emerald-300'
+    if (ratio <= 0.25) return 'bg-emerald-400'
+    if (ratio <= 0.5) return 'bg-emerald-500'
+    if (ratio <= 0.75) return 'bg-emerald-600'
     return 'bg-emerald-700'
   }
 
@@ -301,13 +305,14 @@ export default function PublicProfilePage() {
             <Card className="rounded-3xl">
               <CardContent className="p-6 md:p-8 space-y-4">
                 <div className="text-lg font-semibold">Past 28 days</div>
-                <div className="overflow-x-auto">
-                  <div className="grid grid-rows-4 grid-flow-col auto-cols-max gap-[2px]">
+                <div className="w-full">
+                  <div className="flex justify-center">
+                    <div className="grid grid-rows-4 grid-flow-col auto-cols-max gap-1 sm:gap-1.5">
                     {daysFlat.map((item: { date: string; value: number; success: boolean }, idx: number) => (
                       <div
                         key={idx}
                         tabIndex={0}
-                        className={`h-5 w-5 sm:h-6 sm:w-6 rounded-[2px] ${colorFor(item)}`}
+                        className={`h-6 w-6 sm:h-8 sm:w-8 rounded-[4px] ${colorFor(item)}`}
                         onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => showTooltip(e.currentTarget as HTMLDivElement, item)}
                         onMouseLeave={hideTooltip}
                         onFocus={(e: React.FocusEvent<HTMLDivElement>) => showTooltip(e.currentTarget as HTMLDivElement, item)}
@@ -316,6 +321,7 @@ export default function PublicProfilePage() {
                         aria-label={`${new Date(item.date).toLocaleDateString()}: ${item.value} tasks${item.success ? ', completed day' : ''}`}
                       />
                     ))}
+                    </div>
                   </div>
                 </div>
                 
