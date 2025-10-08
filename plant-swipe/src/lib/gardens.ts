@@ -188,10 +188,12 @@ export async function getGardenMembers(gardenId: string): Promise<GardenMember[]
   if (pErr) throw new Error(pErr.message)
   const idToName: Record<string, string | null> = {}
   const idToEmail: Record<string, string | null> = {}
+  const idToAccent: Record<string, string | null> = {}
   for (const r of (profilesData as any[]) || []) {
     const uid = String((r as any).user_id)
     idToName[uid] = (r as any).display_name || null
     idToEmail[uid] = (r as any).email || null
+    idToAccent[uid] = (r as any).accent_key || null
   }
   return rows.map((r: any) => ({
     gardenId: String(r.garden_id),
@@ -200,6 +202,7 @@ export async function getGardenMembers(gardenId: string): Promise<GardenMember[]
     joinedAt: String(r.joined_at),
     displayName: idToName[String(r.user_id)] ?? null,
     email: idToEmail[String(r.user_id)] ?? null,
+    accentKey: idToAccent[String(r.user_id)] ?? null,
   }))
 }
 

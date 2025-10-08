@@ -6,7 +6,7 @@ import { createPortal } from "react-dom"
 import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
 import { EditProfileDialog, type EditProfileValues } from "@/components/profile/EditProfileDialog"
-import { applyAccentByKey, saveAccentKey, getAccentOption } from "@/lib/accent"
+import { applyAccentByKey, saveAccentKey } from "@/lib/accent"
 import { MapPin, User as UserIcon } from "lucide-react"
 
 type PublicProfile = {
@@ -43,11 +43,7 @@ export default function PublicProfilePage() {
   const [pp, setPp] = React.useState<PublicProfile | null>(null)
   const [stats, setStats] = React.useState<PublicStats | null>(null)
   const [monthDays, setMonthDays] = React.useState<DayAgg[]>([])
-  const iconColor = React.useMemo(() => {
-    if (!pp?.accent_key) return null
-    const opt = getAccentOption(pp.accent_key as any)
-    return opt ? `hsl(${opt.hsl})` : null
-  }, [pp?.accent_key])
+  
 
   const formatLastSeen = React.useCallback((iso: string | null | undefined) => {
     if (!iso) return 'A long time ago'
@@ -193,15 +189,7 @@ export default function PublicProfilePage() {
 
   const colorFor = (cell: { value: number; success: boolean } | null) => {
     if (!cell) return 'bg-stone-300'
-    if (!cell.success && (cell.value || 0) <= 0) return 'bg-stone-300'
-    const v = Math.max(0, Math.min(4, cell.value))
-    return [
-      'bg-emerald-300',
-      'bg-emerald-400',
-      'bg-emerald-500',
-      'bg-emerald-600',
-      'bg-emerald-700',
-    ][v]
+    return cell.success ? 'bg-emerald-600' : 'bg-stone-300'
   }
 
   const [tooltip, setTooltip] = React.useState<{ top: number; left: number; date: string; value: number; success: boolean } | null>(null)
@@ -229,8 +217,7 @@ export default function PublicProfilePage() {
               <div className="flex items-start gap-4">
                 <div className="h-16 w-16 rounded-2xl bg-stone-200 overflow-hidden flex items-center justify-center" aria-hidden>
                   <UserIcon
-                    className="h-8 w-8"
-                    style={{ color: iconColor || 'rgb(22 101 52)' }}
+                    className="h-8 w-8 text-black"
                   />
                 </div>
                 <div className="min-w-0">
@@ -300,14 +287,14 @@ export default function PublicProfilePage() {
             <Card className="rounded-3xl">
               <CardContent className="p-6 md:p-8 space-y-4">
                 <div className="text-lg font-semibold">Past 28 days</div>
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-px">
                   {rows.map((row: Array<{ date: string; value: number; success: boolean }>, ridx: number) => (
-                    <div key={ridx} className="grid grid-cols-7 gap-1">
+                    <div key={ridx} className="grid grid-cols-7 gap-px">
                       {row.map((item: { date: string; value: number; success: boolean }, cidx: number) => (
                         <button
                           key={cidx}
                           type="button"
-                          className={`h-5 w-5 rounded-sm ${colorFor(item)}`}
+                          className={`h-6 w-6 rounded-sm ${colorFor(item)}`}
                           onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => item && showTooltip(e.currentTarget as HTMLButtonElement, item)}
                           onMouseLeave={hideTooltip}
                           onFocus={(e: React.FocusEvent<HTMLButtonElement>) => item && showTooltip(e.currentTarget as HTMLButtonElement, item)}
@@ -318,7 +305,7 @@ export default function PublicProfilePage() {
                     </div>
                   ))}
                 </div>
-                <div className="text-xs opacity-60">Gray = no activity • Green = completed days (darker = more tasks)</div>
+                
                 {tooltip && createPortal(
                   <div
                     className="fixed z-[70] pointer-events-none"

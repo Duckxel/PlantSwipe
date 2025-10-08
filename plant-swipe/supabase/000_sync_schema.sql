@@ -1159,19 +1159,19 @@ declare
   v_longest int := 0;
   v_anchor date := ((now() at time zone 'utc')::date - interval '1 day')::date;
 begin
+  -- Sum plants across gardens the user is currently a member of
   select coalesce(sum(gp.plants_on_hand), 0)::int into v_plants
   from public.garden_plants gp
   where gp.garden_id in (
-    select id from public.gardens where created_by = _user_id
-    union
     select garden_id from public.garden_members where user_id = _user_id
   );
 
+  -- Count only gardens the user is currently a member of (owner or member)
   select count(*)::int into v_gardens
   from (
-    select id as gid from public.gardens where created_by = _user_id
-    union
-    select garden_id as gid from public.garden_members where user_id = _user_id
+    select distinct garden_id
+    from public.garden_members
+    where user_id = _user_id
   ) g;
 
   -- Current streak across all user's gardens
@@ -1179,8 +1179,7 @@ begin
 
   -- Longest historical streak across user's gardens
   with user_gardens as (
-    select id as gid from public.gardens where created_by = _user_id
-    union
+    -- Only gardens where the user is currently a member (owner or member)
     select garden_id as gid from public.garden_members where user_id = _user_id
   ),
   successes as (
@@ -1224,29 +1223,40 @@ as $$
     select generate_series(_start, _end, interval '1 day')::date as d
   ),
   user_gardens as (
-    select id as gid from public.gardens where created_by = _user_id
-    union
+    -- Only gardens where the user is currently a member (owner or member)
     select garden_id as gid from public.garden_members where user_id = _user_id
   ),
-  occs as (
-    select (o.completed_at at time zone 'utc')::date as d, coalesce(o.completed_count, 0) as c
+  due_day as (
+    -- Total required counts due on each day across user's gardens
+    select (o.due_at at time zone 'utc')::date as d, sum(greatest(1, o.required_count))::int as total_required
     from public.garden_plant_task_occurrences o
     join public.garden_plant_tasks t on t.id = o.task_id
     where t.garden_id in (select gid from user_gardens)
-      and o.completed_at is not null
-      and (o.completed_at at time zone 'utc')::date between _start and _end
+      and (o.due_at at time zone 'utc')::date between _start and _end
+    group by 1
   ),
-  succ as (
-    select g.day as d, bool_or(g.success) as ok
-    from public.garden_tasks g
-    where g.garden_id in (select gid from user_gardens)
-      and g.day between _start and _end
-      and g.task_type = 'watering'
-    group by g.day
+  user_done as (
+    -- Sum of increments done by the user per occurrence capped at that occurrence's required_count
+    select (o.due_at at time zone 'utc')::date as d,
+           sum(
+             least(
+               greatest(1, o.required_count),
+               coalesce((select sum(greatest(1, c.increment)) from public.garden_task_user_completions c where c.occurrence_id = o.id and c.user_id = _user_id), 0)
+             )
+           )::int as completed
+    from public.garden_plant_task_occurrences o
+    join public.garden_plant_tasks t on t.id = o.task_id
+    where t.garden_id in (select gid from user_gardens)
+      and (o.due_at at time zone 'utc')::date between _start and _end
+    group by 1
   )
   select d.d as day,
-         coalesce((select sum(c) from occs where occs.d = d.d), 0)::int as completed,
-         coalesce((select ok from succ where succ.d = d.d), false) as any_success
+         coalesce((select completed from user_done where user_done.d = d.d), 0) as completed,
+         (
+           coalesce((select total_required from due_day where due_day.d = d.d), 0) = 0
+           or
+           coalesce((select completed from user_done where user_done.d = d.d), 0) >= coalesce((select total_required from due_day where due_day.d = d.d), 0)
+         ) as any_success
   from days d
   order by d.d asc;
 $$;
@@ -1562,12 +1572,12 @@ $$;
 -- Drop and recreate to allow return type changes
 drop function if exists public.get_profiles_for_garden(uuid) cascade;
 create function public.get_profiles_for_garden(_garden_id uuid)
-returns table(user_id uuid, display_name text, email text)
+returns table(user_id uuid, display_name text, email text, accent_key text)
 language sql
 security definer
 set search_path = public
 as $$
-  select p.id as user_id, p.display_name, u.email
+  select p.id as user_id, p.display_name, u.email, p.accent_key
   from public.garden_members gm
   join public.profiles p on p.id = gm.user_id
   join auth.users u on u.id = gm.user_id
@@ -1688,12 +1698,24 @@ declare
   v_occ record;
   v_day date;
   v_yesterday date := ((now() at time zone 'utc')::date - interval '1 day')::date;
+  v_actor uuid := (select auth.uid());
 begin
   -- Update the occurrence progress and completion timestamp when reaching required count
   update public.garden_plant_task_occurrences
     set completed_count = least(required_count, completed_count + greatest(1, _increment)),
         completed_at = case when completed_count + greatest(1, _increment) >= required_count then now() else completed_at end
   where id = _occurrence_id;
+
+  -- Attribute progress to the current user
+  begin
+    if v_actor is not null then
+      insert into public.garden_task_user_completions (occurrence_id, user_id, increment)
+      values (_occurrence_id, v_actor, greatest(1, _increment));
+    end if;
+  exception when others then
+    -- ignore attribution errors to not block core progress
+    null;
+  end;
 
   -- Resolve garden and day for this occurrence to recompute day success and streak
   select o.id,
@@ -2066,4 +2088,31 @@ declare v_actor uuid := (select auth.uid()); v_name text; begin
 end; $$;
 
 grant execute on function public.log_garden_activity(uuid, text, text, text, text, text) to anon, authenticated;
+
+-- Track per-user increments against task occurrences to attribute completions
+create table if not exists public.garden_task_user_completions (
+  id uuid primary key default gen_random_uuid(),
+  occurrence_id uuid not null references public.garden_plant_task_occurrences(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  increment integer not null check (increment > 0),
+  occurred_at timestamptz not null default now()
+);
+create index if not exists gtuc_occ_user_time_idx on public.garden_task_user_completions (occurrence_id, user_id, occurred_at desc);
+alter table public.garden_task_user_completions enable row level security;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_task_user_completions' and policyname='gtuc_select') then
+    drop policy gtuc_select on public.garden_task_user_completions;
+  end if;
+  create policy gtuc_select on public.garden_task_user_completions for select to authenticated
+    using (
+      -- Allow members of the garden for the occurrence's task to read attribution rows
+      exists (
+        select 1 from public.garden_plant_task_occurrences o
+        join public.garden_plant_tasks t on t.id = o.task_id
+        join public.garden_members gm on gm.garden_id = t.garden_id
+        where o.id = occurrence_id and gm.user_id = (select auth.uid())
+      )
+      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+    );
+end $$;
 
