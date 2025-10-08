@@ -113,6 +113,11 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
                 <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); (onProfile ? onProfile : () => navigate('/profile'))() }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 flex items-center gap-2" role="menuitem">
                   <User className="h-4 w-4" /> Profile
                 </button>
+                {profile?.display_name && (
+                  <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate(`/u/${encodeURIComponent(profile.display_name!)}`) }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 flex items-center gap-2" role="menuitem">
+                    <User className="h-4 w-4" /> View public
+                  </button>
+                )}
                 <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); if (onLogout) { onLogout() } }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 text-red-600 flex items-center gap-2" role="menuitem">
                   <LogOut className="h-4 w-4" /> Logout
                 </button>

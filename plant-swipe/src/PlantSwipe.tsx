@@ -22,6 +22,7 @@ import type { Plant } from "@/types/plant";
 import PlantInfoPage from "@/pages/PlantInfoPage";
 import { useAuth } from "@/context/AuthContext";
 import { ProfilePage } from "@/pages/ProfilePage";
+import PublicProfilePage from "@/pages/PublicProfilePage";
 import { AdminPage } from "@/pages/AdminPage";
 import RequireAdmin from "@/pages/RequireAdmin";
 import { supabase } from "@/lib/supabaseClient";
@@ -56,6 +57,7 @@ export default function PlantSwipe() {
   const [authPassword, setAuthPassword] = useState("")
   const [authPassword2, setAuthPassword2] = useState("")
   const [authDisplayName, setAuthDisplayName] = useState("")
+  
   const [authSubmitting, setAuthSubmitting] = useState(false)
 
   const [plants, setPlants] = useState<Plant[]>([])
@@ -639,7 +641,8 @@ export default function PlantSwipe() {
                     />
                   }
                 />
-                <Route path="/profile" element={user ? <ProfilePage /> : <Navigate to="/" replace />} />
+                <Route path="/profile" element={user ? (profile?.display_name ? <Navigate to={`/u/${encodeURIComponent(profile.display_name)}`} replace /> : <ProfilePage />) : <Navigate to="/" replace />} />
+                <Route path="/u/:username" element={<PublicProfilePage />} />
                 <Route path="/admin" element={<RequireAdmin><AdminPage /></RequireAdmin>} />
                 <Route path="/create" element={user ? (
                   <CreatePlantPage
@@ -691,6 +694,7 @@ export default function PlantSwipe() {
                 <Input id="name" type="text" placeholder="Your name" value={authDisplayName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthDisplayName(e.target.value)} />
               </div>
             )}
+            
             <div className="grid gap-2">
               <Label htmlFor="email">Email</Label>
               <Input id="email" type="email" placeholder="you@example.com" value={authEmail} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthEmail(e.target.value)} disabled={authSubmitting} />

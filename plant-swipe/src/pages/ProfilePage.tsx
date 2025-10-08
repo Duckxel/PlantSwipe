@@ -5,6 +5,8 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabaseClient"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { useNavigate } from "react-router-dom"
 
 type FunStats = {
   loading: boolean
@@ -20,7 +22,14 @@ type FunStats = {
 
 export const ProfilePage: React.FC = () => {
   const { user, profile, refreshProfile, signOut, deleteAccount } = useAuth()
+  const navigate = useNavigate()
   const [displayName, setDisplayName] = React.useState(profile?.display_name || "")
+  const [country, setCountry] = React.useState<string>(profile?.country || "")
+  const [bio, setBio] = React.useState<string>(profile?.bio || "")
+  const [favoritePlant, setFavoritePlant] = React.useState<string>(profile?.favorite_plant || "")
+  const [timezone, setTimezone] = React.useState<string>(profile?.timezone || "")
+  const [experienceYears, setExperienceYears] = React.useState<string>(profile?.experience_years != null ? String(profile.experience_years) : "")
+  const [privateInfo, setPrivateInfo] = React.useState<{ id: string; email: string | null } | null>(null)
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [ok, setOk] = React.useState<string | null>(null)
@@ -38,7 +47,15 @@ export const ProfilePage: React.FC = () => {
 
   React.useEffect(() => {
     setDisplayName(profile?.display_name || "")
+    setCountry(profile?.country || "")
+    setBio(profile?.bio || "")
+    setFavoritePlant(profile?.favorite_plant || "")
+    setTimezone(profile?.timezone || "")
+    setExperienceYears(profile?.experience_years != null ? String(profile.experience_years) : "")
   }, [profile?.display_name])
+
+  // Public path via display name (slug-insensitive)
+  const publicPath = (displayName || '').trim() ? `/u/${encodeURIComponent(displayName)}` : null
 
   const save = async () => {
     setError(null)
@@ -57,9 +74,19 @@ export const ProfilePage: React.FC = () => {
         setError('Display name already taken')
         return
       }
+      // Display name uniqueness (case-insensitive), excluding current user
+      if ((displayName || '').trim().length === 0) { setError('Display name required'); return }
+      const dn = (displayName || '').trim()
+      const nameCheck = await supabase
+        .from('profiles')
+        .select('id')
+        .ilike('display_name', dn)
+        .neq('id', user.id)
+        .maybeSingle()
+      if (nameCheck.data?.id) { setError('Display name already taken'); return }
       const { error: uerr } = await supabase
         .from('profiles')
-        .upsert({ id: user.id, display_name: displayName }, { onConflict: 'id' })
+        .upsert({ id: user.id, display_name: dn, country: (country || null), bio: (bio || null), favorite_plant: (favoritePlant || null), timezone: (timezone || null), experience_years: (experienceYears ? Number(experienceYears) : null) }, { onConflict: 'id' })
       if (uerr) {
         setError(uerr.message)
         return
@@ -70,6 +97,22 @@ export const ProfilePage: React.FC = () => {
       setSaving(false)
     }
   }
+
+  React.useEffect(() => {
+    let cancelled = false
+    const loadPrivate = async () => {
+      try {
+        if (!user?.id) { setPrivateInfo(null); return }
+        const { data, error } = await supabase.rpc('get_user_private_info', { _user_id: user.id })
+        if (!error) {
+          const row = Array.isArray(data) ? data[0] : data
+          if (!cancelled) setPrivateInfo(row ? { id: String(row.id), email: row.email || null } : null)
+        }
+      } catch {}
+    }
+    loadPrivate()
+    return () => { cancelled = true }
+  }, [user?.id])
 
   React.useEffect(() => {
     let cancelled = false
@@ -157,7 +200,7 @@ export const ProfilePage: React.FC = () => {
     <div className="max-w-3xl mx-auto mt-8 px-4 md:px-0">
       <Card className="rounded-3xl">
         <CardContent className="p-6 md:p-8 space-y-4">
-          {/* Removed User ID from UI */}
+          
           <div className="grid gap-2">
             <Label htmlFor="profile-email">Email</Label>
             <Input id="profile-email" name="email" value={(user as any)?.email || ''} disabled />
@@ -166,7 +209,26 @@ export const ProfilePage: React.FC = () => {
             <Label htmlFor="profile-display-name">Display name</Label>
             <Input id="profile-display-name" name="displayName" value={displayName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDisplayName(e.target.value)} />
           </div>
+          
           <div className="grid gap-2">
+            <Label htmlFor="profile-country">Country</Label>
+            <Input id="profile-country" name="country" value={country || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCountry(e.target.value)} />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="profile-favorite-plant">Favorite plant</Label>
+            <Input id="profile-favorite-plant" name="favoritePlant" value={favoritePlant || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFavoritePlant(e.target.value)} />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="profile-timezone">Timezone</Label>
+            <Input id="profile-timezone" name="timezone" value={timezone || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTimezone(e.target.value)} />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="profile-exp">Years of experience with plants</Label>
+            <Input id="profile-exp" name="experienceYears" type="number" inputMode="numeric" value={experienceYears} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setExperienceYears(e.target.value)} />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="profile-bio">Bio</Label>
+            <Input id="profile-bio" name="bio" value={bio || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBio(e.target.value)} />
           </div>
           {error && <div className="text-sm text-red-600">{error}</div>}
           {ok && <div className="text-sm text-green-600">{ok}</div>}
@@ -174,9 +236,30 @@ export const ProfilePage: React.FC = () => {
             <Button className="rounded-2xl" onClick={save} disabled={saving}>Save</Button>
             <Button className="rounded-2xl" variant="secondary" onClick={signOut}>Logout</Button>
             <Button className="rounded-2xl" variant="destructive" onClick={async () => { await deleteAccount() }}>Delete account</Button>
+            {publicPath && (
+              <Button className="rounded-2xl" variant="secondary" onClick={() => navigate(publicPath!)}>View public</Button>
+            )}
           </div>
         </CardContent>
       </Card>
+      <div className="mt-4">
+        <Card className="rounded-3xl">
+          <CardContent className="p-6 md:p-8 space-y-2">
+            <div className="text-lg font-semibold">Private Info</div>
+            <div className="text-sm opacity-60">Only visible to you (and admins)</div>
+            <div className="grid sm:grid-cols-2 gap-3 mt-2">
+              <div className="rounded-xl border p-3">
+                <div className="text-[11px] opacity-60">User ID</div>
+                <div className="text-xs break-all">{privateInfo?.id || '—'}</div>
+              </div>
+              <div className="rounded-xl border p-3">
+                <div className="text-[11px] opacity-60">Email</div>
+                <div className="text-sm">{privateInfo?.email || (user as any)?.email || '—'}</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
       <div className="mt-4">
         <Card className="rounded-3xl">
           <CardContent className="p-6 md:p-8 space-y-4">

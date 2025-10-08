@@ -9,11 +9,12 @@ import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { PlantDetails } from '@/components/plant/PlantDetails'
-import { Info } from 'lucide-react'
+import { Info, ArrowUpRight } from 'lucide-react'
 import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
 import { TaskEditorDialog } from '@/components/plant/TaskEditorDialog'
 import type { Garden } from '@/types/garden'
 import type { Plant } from '@/types/plant'
+import { getGarden, getGardenPlants, getGardenMembers, addMemberByEmail, addMemberByNameOrEmail, deleteGardenPlant, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, getGardenInventory, adjustInventoryAndLogTransaction, updateGardenMemberRole, removeGardenMember, listGardenTasks, syncTaskOccurrencesForGarden, listOccurrencesForTasks, progressTaskOccurrence, updateGardenPlantsOrder, refreshGardenStreak } from '@/lib/gardens'
 import { getGarden, getGardenPlants, getGardenMembers, addMemberByEmail, deleteGardenPlant, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, getGardenInventory, adjustInventoryAndLogTransaction, updateGardenMemberRole, removeGardenMember, listGardenTasks, syncTaskOccurrencesForGarden, listOccurrencesForTasks, progressTaskOccurrence, updateGardenPlantsOrder, refreshGardenStreak, listGardenActivityToday, logGardenActivity } from '@/lib/gardens'
 import { supabase } from '@/lib/supabaseClient'
  
@@ -85,6 +86,7 @@ export const GardenDashboardPage: React.FC = () => {
 
   const [inviteOpen, setInviteOpen] = React.useState(false)
   const [inviteEmail, setInviteEmail] = React.useState('')
+  const [inviteAny, setInviteAny] = React.useState('')
   const [inviteError, setInviteError] = React.useState<string | null>(null)
 
   const currentUserId = user?.id || null
@@ -324,15 +326,15 @@ export const GardenDashboardPage: React.FC = () => {
   }, [plantQuery])
 
   const submitInvite = async () => {
-    if (!id || !inviteEmail.trim()) return
+    if (!id || !inviteAny.trim()) return
     setInviteError(null)
-    const res = await addMemberByEmail({ gardenId: id, email: inviteEmail.trim(), role: 'member' })
+    const res = await addMemberByNameOrEmail({ gardenId: id, input: inviteAny.trim(), role: 'member' })
     if (!res.ok) {
-      setInviteError(res.reason === 'no_account' ? 'No account with this email' : 'Failed to add member')
+      setInviteError(res.reason === 'no_account' ? 'No account found' : 'Failed to add member')
       return
     }
     setInviteOpen(false)
-    setInviteEmail('')
+    setInviteAny('')
     await load()
   }
 
@@ -810,7 +812,7 @@ export const GardenDashboardPage: React.FC = () => {
             }}
           />
 
-          {/* Info Sheet removed; using dedicated route /plants/:id */}
+          
 
           {/* Invite Dialog */}
           <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
@@ -819,11 +821,11 @@ export const GardenDashboardPage: React.FC = () => {
                 <DialogTitle>Add member</DialogTitle>
               </DialogHeader>
               <div className="space-y-3">
-                <Input placeholder="member@email.com" type="email" value={inviteEmail} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInviteEmail(e.target.value)} />
+                <Input placeholder="Enter display name or email" value={inviteAny} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInviteAny(e.target.value)} />
                 {inviteError && <div className="text-sm text-red-600">{inviteError}</div>}
                 <div className="flex justify-end gap-2">
                   <Button variant="secondary" className="rounded-2xl" onClick={() => setInviteOpen(false)}>Cancel</Button>
-                  <Button className="rounded-2xl" onClick={submitInvite} disabled={!inviteEmail.trim()}>Add member</Button>
+                  <Button className="rounded-2xl" onClick={submitInvite} disabled={!inviteAny.trim()}>Add member</Button>
                 </div>
               </div>
             </DialogContent>
@@ -1164,6 +1166,7 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner }: { member: { 
   const [busy, setBusy] = React.useState(false)
   const canPromote = viewerIsOwner && member.role !== 'owner'
   const canRemove = viewerIsOwner && member.role !== 'owner'
+  const navigate = useNavigate()
   const doPromote = async () => {
     if (!canPromote || busy) return
     setBusy(true)
@@ -1188,7 +1191,17 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner }: { member: { 
     }
   }
   return (
-    <Card className="rounded-2xl p-4">
+    <Card className="rounded-2xl p-4 relative">
+      {/* Up-right arrow to view public profile */}
+      {member.displayName && (
+        <button
+          className="absolute top-2 right-2 h-8 w-8 rounded-full flex items-center justify-center border bg-white/90 text-black hover:bg-white shadow"
+          aria-label="View profile"
+          onClick={(e) => { e.stopPropagation(); navigate(`/u/${encodeURIComponent(member.displayName!)}`) }}
+        >
+          <ArrowUpRight className="h-4 w-4" />
+        </button>
+      )}
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="font-medium max-w-[60vw] truncate">{member.displayName || member.userId}</div>

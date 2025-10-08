@@ -46,7 +46,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, display_name, liked_plant_ids, is_admin')
+      .select('id, display_name, liked_plant_ids, is_admin, username, country, bio, favorite_plant, avatar_url, timezone, experience_years')
       .eq('id', currentId)
       .maybeSingle()
     if (!error) {
@@ -79,7 +79,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (check?.banned) return { error: 'Your account is banned. Signup is not allowed.' }
     } catch {}
     // Ensure unique email handled by Supabase; ensure unique display_name in profiles
-    // First check display_name uniqueness
+    // First check display_name uniqueness (case-insensitive)
     const existing = await supabase.from('profiles').select('id').ilike('display_name', displayName).maybeSingle()
     if (existing.data?.id) return { error: 'Display name already taken' }
 
@@ -108,7 +108,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const check = await fetch(`/api/banned/check?email=${encodeURIComponent(email)}`, { credentials: 'same-origin' }).then(r => r.json()).catch(() => ({ banned: false }))
       if (check?.banned) return { error: 'Your account has been banned.' }
     } catch {}
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    // Allow login with display name (username) or email
+    let loginEmail = email
+    if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      try {
+        const { data, error: rpcErr } = await supabase.rpc('get_email_by_display_name', { _name: email })
+        if (!rpcErr && data) loginEmail = String(data)
+      } catch {}
+    }
+    const { error } = await supabase.auth.signInWithPassword({ email: loginEmail, password })
     if (error) return { error: error.message }
     // Fetch profile in background; do not block sign-in completion
     refreshProfile().catch(() => {})
