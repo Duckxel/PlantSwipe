@@ -540,7 +540,9 @@ drop policy if exists gm_insert on public.garden_members;
 drop policy if exists gm_update on public.garden_members;
   create policy gm_update on public.garden_members for update to authenticated
     using (
+      -- Allow garden creator, any current owner of the garden, or admins
       public.is_garden_creator_bypass(garden_id, (select auth.uid()))
+      or public.is_garden_owner_bypass(garden_id, (select auth.uid()))
       or exists (
         select 1 from public.profiles p
         where p.id = (select auth.uid()) and p.is_admin = true
@@ -548,6 +550,7 @@ drop policy if exists gm_update on public.garden_members;
     )
     with check (
       public.is_garden_creator_bypass(garden_id, (select auth.uid()))
+      or public.is_garden_owner_bypass(garden_id, (select auth.uid()))
       or exists (
         select 1 from public.profiles p
         where p.id = (select auth.uid()) and p.is_admin = true
@@ -557,8 +560,10 @@ drop policy if exists gm_update on public.garden_members;
 drop policy if exists gm_delete on public.garden_members;
   create policy gm_delete on public.garden_members for delete to authenticated
     using (
+      -- A user can always remove themselves; creators and owners can remove others
       user_id = (select auth.uid())
       or public.is_garden_creator_bypass(garden_id, (select auth.uid()))
+      or public.is_garden_owner_bypass(garden_id, (select auth.uid()))
       or exists (
         select 1 from public.profiles p
         where p.id = (select auth.uid()) and p.is_admin = true
@@ -606,6 +611,69 @@ do $$ begin
       exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid()))
       or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
     );
+end $$;
+
+-- ========== Ownership invariants ==========
+-- Enforce: There cannot be no owner for a garden. If an update/delete would remove the last
+-- owner from a garden, delete the garden (cascades) instead of leaving it ownerless.
+create or replace function public.enforce_owner_presence()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_remaining int;
+  v_garden uuid;
+  v_user uuid;
+begin
+  if TG_OP = 'DELETE' then
+    if OLD.role = 'owner' then
+      v_garden := OLD.garden_id;
+      v_user := OLD.user_id;
+      select count(*)::int into v_remaining
+      from public.garden_members
+      where garden_id = v_garden and role = 'owner' and user_id <> v_user;
+      if coalesce(v_remaining, 0) = 0 then
+        -- This delete would remove the last owner; delete the garden instead
+        delete from public.gardens where id = v_garden;
+        return OLD;
+      end if;
+    end if;
+    return OLD;
+  elsif TG_OP = 'UPDATE' then
+    if OLD.role = 'owner' and NEW.role <> 'owner' then
+      v_garden := NEW.garden_id;
+      v_user := NEW.user_id;
+      select count(*)::int into v_remaining
+      from public.garden_members
+      where garden_id = v_garden and role = 'owner' and user_id <> v_user;
+      if coalesce(v_remaining, 0) = 0 then
+        -- This update would demote the last owner; delete the garden
+        delete from public.gardens where id = v_garden;
+        return NEW;
+      end if;
+    end if;
+    return NEW;
+  end if;
+  return coalesce(NEW, OLD);
+end;
+$$;
+
+-- Attach triggers idempotently
+do $$ begin
+  begin
+    drop trigger if exists trg_gm_owner_update on public.garden_members;
+  exception when undefined_object then null; end;
+  begin
+    drop trigger if exists trg_gm_owner_delete on public.garden_members;
+  exception when undefined_object then null; end;
+  create trigger trg_gm_owner_update
+    before update on public.garden_members
+    for each row execute function public.enforce_owner_presence();
+  create trigger trg_gm_owner_delete
+    before delete on public.garden_members
+    for each row execute function public.enforce_owner_presence();
 end $$;
 
 -- Schedule tables policies

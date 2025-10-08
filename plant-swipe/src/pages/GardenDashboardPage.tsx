@@ -291,6 +291,10 @@ export const GardenDashboardPage: React.FC = () => {
     return members.some(m => m.userId === user.id && m.role === 'owner')
   }, [members, user?.id, profile?.is_admin])
 
+  const ownersCount = React.useMemo(() => {
+    return members.filter(m => m.role === 'owner').length
+  }, [members])
+
   React.useEffect(() => {
     let ignore = false
     if (!plantQuery.trim()) { setPlantResults([]); return }
@@ -717,7 +721,7 @@ export const GardenDashboardPage: React.FC = () => {
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {members.map(m => (
-                        <MemberCard key={m.userId} member={m} gardenId={id!} onChanged={load} viewerIsOwner={viewerIsOwner} />
+                        <MemberCard key={m.userId} member={m} gardenId={id!} onChanged={load} viewerIsOwner={viewerIsOwner} ownerCount={ownersCount} currentUserId={currentUserId} />
                       ))}
                     </div>
                   </div>
@@ -1160,11 +1164,14 @@ function EditPlantButton({ gp, gardenId, onChanged, serverToday }: { gp: any; ga
   )
 }
 
-function MemberCard({ member, gardenId, onChanged, viewerIsOwner }: { member: { userId: string; displayName?: string | null; email?: string | null; joinedAt?: string | null; role: 'owner' | 'member' }; gardenId: string; onChanged: () => Promise<void>; viewerIsOwner: boolean }) {
+function MemberCard({ member, gardenId, onChanged, viewerIsOwner, ownerCount, currentUserId }: { member: { userId: string; displayName?: string | null; email?: string | null; joinedAt?: string | null; role: 'owner' | 'member' }; gardenId: string; onChanged: () => Promise<void>; viewerIsOwner: boolean; ownerCount: number; currentUserId: string | null }) {
   const [open, setOpen] = React.useState(false)
   const [busy, setBusy] = React.useState(false)
+  const isSelf = !!currentUserId && currentUserId === member.userId
   const canPromote = viewerIsOwner && member.role !== 'owner'
-  const canRemove = viewerIsOwner && member.role !== 'owner'
+  // Owners can remove members; for owners, allow demote only when multiple owners exist
+  const canRemove = viewerIsOwner && (member.role !== 'owner')
+  const canDemoteOwner = viewerIsOwner && member.role === 'owner' && ownerCount > 1 && !isSelf
   const navigate = useNavigate()
   const doPromote = async () => {
     if (!canPromote || busy) return
@@ -1172,6 +1179,21 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner }: { member: { 
     try {
       await updateGardenMemberRole({ gardenId, userId: member.userId, role: 'owner' })
       await onChanged()
+    } finally {
+      setBusy(false)
+      setOpen(false)
+    }
+  }
+  const doDemote = async () => {
+    if (!canDemoteOwner || busy) return
+    // If this is the last owner, our DB trigger will delete the garden; warn accordingly
+    if (!confirm(ownerCount <= 1 ? 'This is the last owner. This will delete the garden. Continue?' : 'Demote this owner to member?')) return
+    setBusy(true)
+    try {
+      await updateGardenMemberRole({ gardenId, userId: member.userId, role: 'member' })
+      await onChanged()
+    } catch (e) {
+      // swallow; page has global error
     } finally {
       setBusy(false)
       setOpen(false)
@@ -1208,17 +1230,41 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner }: { member: { 
           <div className="text-xs opacity-60">{member.role}{member.joinedAt ? ` • Joined ${new Date(member.joinedAt).toLocaleString()}` : ''}</div>
         </div>
         <div className="relative">
-          {viewerIsOwner && member.role !== 'owner' && (
+          {viewerIsOwner && !isSelf && (
             <Button variant="secondary" className="rounded-xl px-2" onClick={(e: any) => { e.stopPropagation(); setOpen((o) => !o) }}>⋯</Button>
           )}
           {open && (
-            <div className="absolute right-0 mt-2 w-44 bg-white border rounded-xl shadow-lg z-10">
-              <button disabled={!canPromote || busy} onClick={(e) => { e.stopPropagation(); doPromote() }} className={`w-full text-left px-3 py-2 rounded-t-xl hover:bg-stone-50 ${!canPromote ? 'opacity-60 cursor-not-allowed' : ''}`}>Promote to owner</button>
-              <button disabled={!canRemove || busy} onClick={(e) => { e.stopPropagation(); doRemove() }} className="w-full text-left px-3 py-2 rounded-b-xl hover:bg-stone-50 text-red-600">Remove member</button>
+            <div className="absolute right-0 mt-2 w-48 bg-white border rounded-xl shadow-lg z-10">
+              {member.role !== 'owner' && (
+                <button disabled={!canPromote || busy} onClick={(e) => { e.stopPropagation(); doPromote() }} className={`w-full text-left px-3 py-2 hover:bg-stone-50 ${!canPromote ? 'opacity-60 cursor-not-allowed' : ''}`}>Promote to owner</button>
+              )}
+              {member.role === 'owner' && (
+                <button disabled={!canDemoteOwner || busy} onClick={(e) => { e.stopPropagation(); doDemote() }} className={`w-full text-left px-3 py-2 hover:bg-stone-50 ${!canDemoteOwner ? 'opacity-60 cursor-not-allowed' : ''}`}>Demote to member</button>
+              )}
+              {member.role !== 'owner' && (
+                <button disabled={!canRemove || busy} onClick={(e) => { e.stopPropagation(); doRemove() }} className="w-full text-left px-3 py-2 hover:bg-stone-50 text-red-600">Remove member</button>
+              )}
             </div>
           )}
         </div>
       </div>
+      {/* Self actions for non-owners: Quit button */}
+      {isSelf && member.role !== 'owner' && (
+        <div className="mt-3 flex justify-end">
+          <Button
+            variant="destructive"
+            className="rounded-2xl"
+            onClick={async (e: any) => {
+              e.stopPropagation()
+              if (!confirm('Quit this garden? You will be removed as a member.')) return
+              try {
+                await removeGardenMember({ gardenId, userId: member.userId })
+                window.location.href = '/gardens'
+              } catch {}
+            }}
+          >Quit</Button>
+        </div>
+      )}
     </Card>
   )
 }
