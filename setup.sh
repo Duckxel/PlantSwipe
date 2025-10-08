@@ -103,9 +103,9 @@ else
 fi
 if $need_node_install; then
   log "Installing/upgrading Node.js to 22.x…"
-  # When running as root, $SUDO is empty; avoid emitting a leading "-E" token
+  # Use sudo only when needed; avoid emitting a stray "-E" if sudo is empty
   if [[ -n "$SUDO" ]]; then
-    curl -fsSL https://deb.nodesource.com/setup_22.x | $SUDO -E bash -
+    curl -fsSL https://deb.nodesource.com/setup_22.x | $SUDO bash -
   else
     curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
   fi
