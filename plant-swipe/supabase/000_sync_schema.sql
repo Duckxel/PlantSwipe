@@ -1159,19 +1159,19 @@ declare
   v_longest int := 0;
   v_anchor date := ((now() at time zone 'utc')::date - interval '1 day')::date;
 begin
+  -- Sum plants across gardens the user is currently a member of
   select coalesce(sum(gp.plants_on_hand), 0)::int into v_plants
   from public.garden_plants gp
   where gp.garden_id in (
-    select id from public.gardens where created_by = _user_id
-    union
     select garden_id from public.garden_members where user_id = _user_id
   );
 
+  -- Count only gardens the user is currently a member of (owner or member)
   select count(*)::int into v_gardens
   from (
-    select id as gid from public.gardens where created_by = _user_id
-    union
-    select garden_id as gid from public.garden_members where user_id = _user_id
+    select distinct garden_id
+    from public.garden_members
+    where user_id = _user_id
   ) g;
 
   -- Current streak across all user's gardens
@@ -1179,8 +1179,7 @@ begin
 
   -- Longest historical streak across user's gardens
   with user_gardens as (
-    select id as gid from public.gardens where created_by = _user_id
-    union
+    -- Only gardens where the user is currently a member (owner or member)
     select garden_id as gid from public.garden_members where user_id = _user_id
   ),
   successes as (
