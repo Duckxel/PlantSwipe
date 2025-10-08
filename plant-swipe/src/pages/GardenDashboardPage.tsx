@@ -16,6 +16,7 @@ import type { Garden } from '@/types/garden'
 import type { Plant } from '@/types/plant'
 import { getGarden, getGardenPlants, getGardenMembers, addMemberByNameOrEmail, deleteGardenPlant, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, updateGardenMemberRole, removeGardenMember, listGardenTasks, syncTaskOccurrencesForGarden, listOccurrencesForTasks, progressTaskOccurrence, updateGardenPlantsOrder, refreshGardenStreak, listGardenActivityToday, logGardenActivity } from '@/lib/gardens'
 import { supabase } from '@/lib/supabaseClient'
+import { getAccentOption } from '@/lib/accent'
  
 
 
@@ -36,7 +37,7 @@ export const GardenDashboardPage: React.FC = () => {
     setTab((seg as TabKey) || 'overview')
   }, [location.pathname, id])
   const [plants, setPlants] = React.useState<Array<any>>([])
-  const [members, setMembers] = React.useState<Array<{ userId: string; displayName?: string | null; email?: string | null; role: 'owner' | 'member'; joinedAt?: string }>>([])
+  const [members, setMembers] = React.useState<Array<{ userId: string; displayName?: string | null; email?: string | null; role: 'owner' | 'member'; joinedAt?: string; accentKey?: string | null }>>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [serverToday, setServerToday] = React.useState<string | null>(null)
@@ -109,7 +110,7 @@ export const GardenDashboardPage: React.FC = () => {
       const gps = await getGardenPlants(id)
       setPlants(gps)
       const ms = await getGardenMembers(id)
-      setMembers(ms.map(m => ({ userId: m.userId, displayName: m.displayName ?? null, email: (m as any).email ?? null, role: m.role, joinedAt: (m as any).joinedAt })))
+      setMembers(ms.map(m => ({ userId: m.userId, displayName: m.displayName ?? null, email: (m as any).email ?? null, role: m.role, joinedAt: (m as any).joinedAt, accentKey: (m as any).accentKey ?? null })))
       const nowIso = await fetchServerNowISO()
       const today = nowIso.slice(0,10)
       setServerToday(today)
@@ -396,11 +397,18 @@ export const GardenDashboardPage: React.FC = () => {
       }
       // Log activity: plant added
       try {
+        const accentColorCss = (() => {
+          const mm = (members as any[]).find((m: any) => m.userId === (profile?.id || user?.id))
+          if (!mm?.accentKey) return null
+          const opt = getAccentOption(mm.accentKey as any)
+          return opt ? `hsl(${opt.hsl})` : null
+        })()
         await logGardenActivity({
           gardenId: id,
           kind: 'plant_added' as any,
           message: `added "${nicknameVal || selectedPlant.name}"${qty > 0 ? ` x${qty}` : ''}`,
           plantName: nicknameVal || selectedPlant.name,
+          actorColor: accentColorCss || null,
         })
         setActivityRev((r) => r + 1)
       } catch {}
@@ -523,7 +531,13 @@ export const GardenDashboardPage: React.FC = () => {
         if (id) {
           const gp = (plants as any[]).find((p: any) => p.id === gardenPlantId)
           const plantName = gp?.nickname || gp?.plant?.name || 'Plant'
-          await logGardenActivity({ gardenId: id, kind: 'task_completed' as any, message: `completed all due tasks on "${plantName}"`, plantName })
+          const accentColorCss = (() => {
+            const mm = (members as any[]).find((m: any) => m.userId === (profile?.id || user?.id))
+            if (!mm?.accentKey) return null
+            const opt = getAccentOption(mm.accentKey as any)
+            return opt ? `hsl(${opt.hsl})` : null
+          })()
+          await logGardenActivity({ gardenId: id, kind: 'task_completed' as any, message: `completed all due tasks on "${plantName}"`, plantName, actorColor: accentColorCss || null })
           setActivityRev((r) => r + 1)
         }
       } catch {}
@@ -699,7 +713,13 @@ export const GardenDashboardPage: React.FC = () => {
                     const msg = done
                       ? `has completed "${label}" Task on "${plantName || 'Plant'}"`
                       : `has progressed "${label}" Task on "${plantName || 'Plant'}" (${Math.min(newCount, required)}/${required})`
-                    await logGardenActivity({ gardenId: id, kind: kind as any, message: msg, plantName: plantName || null, taskName: label })
+                    const accentColorCss = (() => {
+                      const mm = (members as any[]).find((m: any) => m.userId === (profile?.id || user?.id))
+                      if (!mm?.accentKey) return null
+                      const opt = getAccentOption(mm.accentKey as any)
+                      return opt ? `hsl(${opt.hsl})` : null
+                    })()
+                    await logGardenActivity({ gardenId: id, kind: kind as any, message: msg, plantName: plantName || null, taskName: label, actorColor: accentColorCss || null })
                     setActivityRev((r) => r + 1)
                   }
                 } finally {
@@ -1069,12 +1089,15 @@ function OverviewSection({ gardenId, activityRev, plants, membersCount, serverTo
         {errAct && <div className="text-sm text-red-600">{errAct}</div>}
         {!loadingAct && activity.length === 0 && <div className="text-sm opacity-60">No activity yet today.</div>}
         <div className="space-y-2">
-          {activity.map((a) => (
-            <div key={a.id} className="text-sm flex items-start gap-2">
-              <span className={`font-semibold text-emerald-700`}>{a.actorName || 'Someone'}</span>
-              <span className="opacity-80">{a.message}</span>
-            </div>
-          ))}
+          {activity.map((a) => {
+            const color = a.actorColor || null
+            return (
+              <div key={a.id} className="text-sm flex items-start gap-2">
+                <span className="font-semibold" style={color ? { color } : undefined}>{a.actorName || 'Someone'}</span>
+                <span className="opacity-80">{a.message}</span>
+              </div>
+            )
+          })}
         </div>
       </Card>
     </div>
@@ -1164,7 +1187,7 @@ function EditPlantButton({ gp, gardenId, onChanged, serverToday }: { gp: any; ga
   )
 }
 
-function MemberCard({ member, gardenId, onChanged, viewerIsOwner, ownerCount, currentUserId }: { member: { userId: string; displayName?: string | null; email?: string | null; joinedAt?: string | null; role: 'owner' | 'member' }; gardenId: string; onChanged: () => Promise<void>; viewerIsOwner: boolean; ownerCount: number; currentUserId: string | null }) {
+function MemberCard({ member, gardenId, onChanged, viewerIsOwner, ownerCount, currentUserId }: { member: { userId: string; displayName?: string | null; email?: string | null; joinedAt?: string | null; role: 'owner' | 'member'; accentKey?: string | null }; gardenId: string; onChanged: () => Promise<void>; viewerIsOwner: boolean; ownerCount: number; currentUserId: string | null }) {
   const [open, setOpen] = React.useState(false)
   const [busy, setBusy] = React.useState(false)
   const isSelf = !!currentUserId && currentUserId === member.userId
@@ -1255,7 +1278,7 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner, ownerCount, cu
       </div>
       <div className="flex items-start gap-3">
         <div>
-          <div className="font-medium max-w-[60vw] truncate">{member.displayName || member.userId}</div>
+          <div className="font-medium max-w-[60vw] truncate" style={member.accentKey ? (() => { const opt = getAccentOption(member.accentKey as any); return opt ? { color: `hsl(${opt.hsl})` } : undefined })() : undefined}>{member.displayName || member.userId}</div>
           {member.email && <div className="text-xs opacity-60">{member.email}</div>}
           <div className="text-xs opacity-60">{member.role}{member.joinedAt ? ` • Joined ${new Date(member.joinedAt).toLocaleString()}` : ''}</div>
         </div>
