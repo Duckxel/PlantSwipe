@@ -180,6 +180,13 @@ export default function PlantSwipe() {
     loadPlants()
   }, [loadPlants])
 
+  // Global refresh for plant lists without full reload
+  React.useEffect(() => {
+    const onRefresh = () => { loadPlants() }
+    try { window.addEventListener('plants:refresh', onRefresh as EventListener) } catch {}
+    return () => { try { window.removeEventListener('plants:refresh', onRefresh as EventListener) } catch {} }
+  }, [loadPlants])
+
   // Global presence tracking so Admin can see "currently online" users
   const presenceRef = React.useRef<ReturnType<typeof supabase.channel> | null>(null)
   React.useEffect(() => {
