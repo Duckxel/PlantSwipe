@@ -5,13 +5,11 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { ACCENT_OPTIONS, applyAccentByKey, saveAccentKey } from "@/lib/accent"
 import type { AccentKey } from "@/lib/accent"
-import { User } from "lucide-react"
 
 export type EditProfileValues = {
   display_name: string
   country: string
   bio: string
-  favorite_plant: string
   timezone: string
   experience_years: string
   accent_key: AccentKey | null
@@ -60,10 +58,6 @@ export const EditProfileDialog: React.FC<{
             <Input id="ep-country" value={values.country} onChange={(e: React.ChangeEvent<HTMLInputElement>) => set('country', e.target.value)} />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="ep-fav">Favorite plant</Label>
-            <Input id="ep-fav" value={values.favorite_plant} onChange={(e: React.ChangeEvent<HTMLInputElement>) => set('favorite_plant', e.target.value)} />
-          </div>
-          <div className="grid gap-2">
             <Label htmlFor="ep-timezone">Timezone</Label>
             <Input id="ep-timezone" value={values.timezone} onChange={(e: React.ChangeEvent<HTMLInputElement>) => set('timezone', e.target.value)} />
           </div>
@@ -86,12 +80,11 @@ export const EditProfileDialog: React.FC<{
                     key={opt.key}
                     type="button"
                     onClick={() => chooseAccent(opt.key)}
-                    className={`h-10 rounded-xl border relative flex items-center justify-center ${active ? 'ring-2 ring-offset-2' : ''}`}
+                    className={`h-10 rounded-xl border relative ${active ? 'ring-2 ring-offset-2' : ''}`}
                     title={opt.label}
                     style={{ backgroundColor: `hsl(${opt.hsl})`, boxShadow: active ? `0 0 0 2px hsl(${opt.hsl}) inset` : undefined }}
                     aria-pressed={active}
                   >
-                    <User className="h-4 w-4" style={{ color: `hsl(${opt.foreground})` }} />
                   </button>
                 )
               })}

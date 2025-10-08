@@ -13,6 +13,8 @@ type FunStats = {
   daysHere: number | null
   plantsTotal: number | null
   favorites: number | null
+  gardensCount: number | null
+  currentStreak: number | null
   bestStreak: number | null
 }
 
@@ -22,7 +24,6 @@ export const ProfilePage: React.FC = () => {
   const [displayName, setDisplayName] = React.useState(profile?.display_name || "")
   const [country, setCountry] = React.useState<string>(profile?.country || "")
   const [bio, setBio] = React.useState<string>(profile?.bio || "")
-  const [favoritePlant, setFavoritePlant] = React.useState<string>(profile?.favorite_plant || "")
   const [timezone, setTimezone] = React.useState<string>(profile?.timezone || "")
   const [experienceYears, setExperienceYears] = React.useState<string>(profile?.experience_years != null ? String(profile.experience_years) : "")
   const [privateInfo, setPrivateInfo] = React.useState<{ id: string; email: string | null } | null>(null)
@@ -35,6 +36,8 @@ export const ProfilePage: React.FC = () => {
     daysHere: null,
     plantsTotal: null,
     favorites: null,
+    gardensCount: null,
+    currentStreak: null,
     bestStreak: null,
   })
 
@@ -42,7 +45,6 @@ export const ProfilePage: React.FC = () => {
     setDisplayName(profile?.display_name || "")
     setCountry(profile?.country || "")
     setBio(profile?.bio || "")
-    setFavoritePlant(profile?.favorite_plant || "")
     setTimezone(profile?.timezone || "")
     setExperienceYears(profile?.experience_years != null ? String(profile.experience_years) : "")
   }, [profile?.display_name])
@@ -79,7 +81,7 @@ export const ProfilePage: React.FC = () => {
       if (nameCheck.data?.id) { setError('Display name already taken'); return }
       const { error: uerr } = await supabase
         .from('profiles')
-        .upsert({ id: user.id, display_name: dn, country: (country || null), bio: (bio || null), favorite_plant: (favoritePlant || null), timezone: (timezone || null), experience_years: (experienceYears ? Number(experienceYears) : null) }, { onConflict: 'id' })
+        .upsert({ id: user.id, display_name: dn, country: (country || null), bio: (bio || null), timezone: (timezone || null), experience_years: (experienceYears ? Number(experienceYears) : null) }, { onConflict: 'id' })
       if (uerr) {
         setError(uerr.message)
         return
@@ -128,6 +130,8 @@ export const ProfilePage: React.FC = () => {
         } catch {}
 
         let plantsTotal = 0
+        let gardensCount = 0
+        let currentStreak = 0
         let bestStreak = 0
 
         if (uid) {
@@ -136,6 +140,7 @@ export const ProfilePage: React.FC = () => {
             .select('garden_id')
             .eq('user_id', uid)
           const gardenIds: string[] = Array.isArray(membersRes.data) ? membersRes.data.map((r: any) => String(r.garden_id)) : []
+          gardensCount = gardenIds.length
 
           if (gardenIds.length > 0) {
             const plantsRes = await supabase
@@ -154,6 +159,14 @@ export const ProfilePage: React.FC = () => {
               const s = Array.isArray(bestRes.data) && bestRes.data[0] ? Number((bestRes.data[0] as any).streak ?? 0) : 0
               bestStreak = Number.isFinite(s) ? s : 0
             }
+
+            // Current streak across all gardens (AND) using RPC
+            const today = new Date()
+            const anchor = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()))
+            anchor.setUTCDate(anchor.getUTCDate() - 1)
+            const anchorIso = anchor.toISOString().slice(0,10)
+            const { data: cur, error: cerr } = await supabase.rpc('compute_user_current_streak', { _user_id: uid, _anchor_day: anchorIso })
+            if (!cerr && typeof cur === 'number') currentStreak = Number(cur)
           }
         }
 
@@ -164,6 +177,8 @@ export const ProfilePage: React.FC = () => {
             daysHere,
             plantsTotal,
             favorites,
+            gardensCount,
+            currentStreak,
             bestStreak,
           })
         }
@@ -192,10 +207,6 @@ export const ProfilePage: React.FC = () => {
           <div className="grid gap-2">
             <Label htmlFor="profile-country">Country</Label>
             <Input id="profile-country" name="country" value={country || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCountry(e.target.value)} />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="profile-favorite-plant">Favorite plant</Label>
-            <Input id="profile-favorite-plant" name="favoritePlant" value={favoritePlant || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFavoritePlant(e.target.value)} />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="profile-timezone">Timezone</Label>
@@ -243,7 +254,7 @@ export const ProfilePage: React.FC = () => {
         <Card className="rounded-3xl">
           <CardContent className="p-6 md:p-8 space-y-4">
             <div className="text-lg font-semibold">Your Fun Stats</div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               <div className="rounded-xl border p-3 text-center">
                 <div className="text-[11px] opacity-60">Member since</div>
                 <div className="text-base font-semibold">
@@ -262,9 +273,17 @@ export const ProfilePage: React.FC = () => {
                 <div className="text-[11px] opacity-60">Favorites saved</div>
                 <div className="text-base font-semibold tabular-nums">{funStats.loading ? '—' : (funStats.favorites ?? 0)}</div>
               </div>
+                  <div className="rounded-xl border p-3 text-center">
+                    <div className="text-[11px] opacity-60">Gardens</div>
+                    <div className="text-base font-semibold tabular-nums">{funStats.loading ? '—' : (funStats.gardensCount ?? 0)}</div>
+                  </div>
+                  <div className="rounded-xl border p-3 text-center">
+                    <div className="text-[11px] opacity-60">Current streak</div>
+                    <div className="text-base font-semibold tabular-nums">{funStats.loading ? '—' : (funStats.currentStreak ?? 0)}</div>
+                  </div>
               <div className="rounded-xl border p-3 text-center">
-                <div className="text-[11px] opacity-60">Best streak</div>
-                <div className="text-base font-semibold tabular-nums">{funStats.loading ? '—' : (funStats.bestStreak ?? '—')}</div>
+                    <div className="text-[11px] opacity-60">Longest streak</div>
+                    <div className="text-base font-semibold tabular-nums">{funStats.loading ? '—' : (funStats.bestStreak ?? '—')}</div>
               </div>
             </div>
           </CardContent>
