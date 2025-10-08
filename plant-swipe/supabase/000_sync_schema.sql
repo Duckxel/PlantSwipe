@@ -1031,26 +1031,121 @@ do $$ begin
 end $$;
 
 -- ========== RPCs used by the app ==========
--- Public profile fetch by display name (safe columns only)
+-- Public profile fetch by display name (safe columns only) with admin flag, joined_at, and presence
 drop function if exists public.get_profile_public_by_username(text);
 create or replace function public.get_profile_public_by_display_name(_name text)
-returns table(id uuid, display_name text, country text, bio text, favorite_plant text, avatar_url text)
+returns table(
+  id uuid,
+  display_name text,
+  country text,
+  bio text,
+  avatar_url text,
+  accent_key text,
+  is_admin boolean,
+  joined_at timestamptz,
+  last_seen_at timestamptz,
+  is_online boolean
+)
 language sql
 stable
 security definer
 set search_path = public
 as $$
-  select p.id, p.display_name, p.country, p.bio, p.favorite_plant, p.avatar_url
-  from public.profiles p
-  where lower(p.display_name) = lower(_name)
+  with base as (
+    select p.id, p.display_name, p.country, p.bio, p.avatar_url, p.accent_key, p.is_admin
+    from public.profiles p
+    where lower(p.display_name) = lower(_name)
+    limit 1
+  ),
+  auth_meta as (
+    select u.id, u.created_at as joined_at
+    from auth.users u
+    where exists (select 1 from base b where b.id = u.id)
+  ),
+  ls as (
+    select v.user_id, max(v.occurred_at) as last_seen_at
+    from public.web_visits v
+    where exists (select 1 from base b where b.id = v.user_id)
+    group by v.user_id
+  )
+  select b.id,
+         b.display_name,
+         b.country,
+         b.bio,
+         b.avatar_url,
+         b.accent_key,
+         b.is_admin,
+         a.joined_at,
+         l.last_seen_at,
+         coalesce((l.last_seen_at is not null and (now() - l.last_seen_at) <= make_interval(mins => 10)), false) as is_online
+  from base b
+  left join auth_meta a on a.id = b.id
+  left join ls l on l.user_id = b.id
   limit 1;
 $$;
 grant execute on function public.get_profile_public_by_display_name(text) to anon, authenticated;
 
+-- Compute user's current streak across ALL their gardens (AND across gardens)
+drop function if exists public.compute_user_current_streak(uuid, date) cascade;
+create or replace function public.compute_user_current_streak(_user_id uuid, _anchor_day date)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  d date := _anchor_day;
+  s integer := 0;
+  v_gardens_count integer := 0;
+  ok boolean;
+begin
+  -- Count gardens user belongs to (owner or member)
+  select count(*)::int into v_gardens_count
+  from (
+    select id as gid from public.gardens where created_by = _user_id
+    union
+    select garden_id as gid from public.garden_members where user_id = _user_id
+  ) g;
+
+  if coalesce(v_gardens_count, 0) = 0 then
+    return 0; -- no gardens => no streak
+  end if;
+
+  loop
+    -- For this day, require ALL gardens to be successful
+    select bool_and(
+      exists (
+        select 1
+        from public.garden_tasks t
+        where t.garden_id = ug.gid
+          and t.day = d
+          and t.task_type = 'watering'
+          and coalesce(t.success, false) = true
+      )
+    ) into ok
+    from (
+      select id as gid from public.gardens where created_by = _user_id
+      union
+      select garden_id as gid from public.garden_members where user_id = _user_id
+    ) ug;
+
+    if not coalesce(ok, false) then
+      exit;
+    end if;
+
+    s := s + 1;
+    d := (d - interval '1 day')::date;
+  end loop;
+
+  return s;
+end;
+$$;
+grant execute on function public.compute_user_current_streak(uuid, date) to anon, authenticated;
+
 -- Aggregate public stats for a user's gardens/membership
 drop function if exists public.get_user_profile_public_stats(uuid) cascade;
 create or replace function public.get_user_profile_public_stats(_user_id uuid)
-returns table(plants_total integer, best_streak integer)
+returns table(plants_total integer, gardens_count integer, current_streak integer, longest_streak integer)
 language plpgsql
 stable
 security definer
@@ -1058,7 +1153,10 @@ set search_path = public
 as $$
 declare
   v_plants int := 0;
-  v_best int := 0;
+  v_gardens int := 0;
+  v_current int := 0;
+  v_longest int := 0;
+  v_anchor date := ((now() at time zone 'utc')::date - interval '1 day')::date;
 begin
   select coalesce(sum(gp.plants_on_hand), 0)::int into v_plants
   from public.garden_plants gp
@@ -1067,14 +1165,44 @@ begin
     union
     select garden_id from public.garden_members where user_id = _user_id
   );
-  select coalesce(max(g.streak), 0)::int into v_best
-  from public.gardens g
-  where g.id in (
-    select id from public.gardens where created_by = _user_id
+
+  select count(*)::int into v_gardens
+  from (
+    select id as gid from public.gardens where created_by = _user_id
     union
-    select garden_id from public.garden_members where user_id = _user_id
-  );
-  return query select v_plants, v_best;
+    select garden_id as gid from public.garden_members where user_id = _user_id
+  ) g;
+
+  -- Current streak across all user's gardens
+  v_current := case when v_gardens > 0 then public.compute_user_current_streak(_user_id, v_anchor) else 0 end;
+
+  -- Longest historical streak across user's gardens
+  with user_gardens as (
+    select id as gid from public.gardens where created_by = _user_id
+    union
+    select garden_id as gid from public.garden_members where user_id = _user_id
+  ),
+  successes as (
+    select g.garden_id, g.day
+    from public.garden_tasks g
+    where g.garden_id in (select gid from user_gardens)
+      and g.task_type = 'watering'
+      and coalesce(g.success, false) = true
+  ),
+  grouped as (
+    select garden_id,
+           day,
+           (day - ((row_number() over (partition by garden_id order by day))::int * interval '1 day'))::date as grp
+    from successes
+  ),
+  runs as (
+    select garden_id, grp, count(*)::int as len
+    from grouped
+    group by garden_id, grp
+  )
+  select coalesce(max(len), 0)::int into v_longest from runs;
+
+  return query select v_plants, v_gardens, v_current, v_longest;
 end;
 $$;
 grant execute on function public.get_user_profile_public_stats(uuid) to anon, authenticated;

@@ -6,7 +6,8 @@ import { createPortal } from "react-dom"
 import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
 import { EditProfileDialog, type EditProfileValues } from "@/components/profile/EditProfileDialog"
-import { applyAccentByKey, saveAccentKey } from "@/lib/accent"
+import { applyAccentByKey, saveAccentKey, getAccentOption } from "@/lib/accent"
+import { MapPin, User as UserIcon } from "lucide-react"
 
 type PublicProfile = {
   id: string
@@ -14,12 +15,18 @@ type PublicProfile = {
   display_name: string | null
   country: string | null
   bio: string | null
-  favorite_plant: string | null
   avatar_url: string | null
+  is_admin?: boolean | null
+  joined_at?: string | null
+  last_seen_at?: string | null
+  is_online?: boolean | null
+  accent_key?: string | null
 }
 
 type PublicStats = {
   plantsTotal: number
+  gardensCount: number
+  currentStreak: number
   bestStreak: number
 }
 
@@ -36,6 +43,30 @@ export default function PublicProfilePage() {
   const [pp, setPp] = React.useState<PublicProfile | null>(null)
   const [stats, setStats] = React.useState<PublicStats | null>(null)
   const [monthDays, setMonthDays] = React.useState<DayAgg[]>([])
+  const iconColor = React.useMemo(() => {
+    if (!pp?.accent_key) return null
+    const opt = getAccentOption(pp.accent_key as any)
+    return opt ? `hsl(${opt.hsl})` : null
+  }, [pp?.accent_key])
+
+  const formatLastSeen = React.useCallback((iso: string | null | undefined) => {
+    if (!iso) return 'A long time ago'
+    const last = new Date(iso)
+    const now = new Date()
+    const diffMs = Math.max(0, now.getTime() - last.getTime())
+    const diffMin = Math.floor(diffMs / (60 * 1000))
+    const diffHours = Math.floor(diffMin / 60)
+    const diffDays = Math.floor(diffHours / 24)
+    const diffWeeks = Math.floor(diffDays / 7)
+    if (diffMin <= 10) return 'Online'
+    if (diffHours < 1) return 'Online'
+    if (diffHours === 1) return '1 hour ago'
+    if (diffHours < 6) return 'Few hours ago'
+    if (diffDays === 1) return '1 day ago'
+    if (diffDays <= 6) return 'Few days ago'
+    if (diffWeeks <= 3) return 'Few weeks ago'
+    return 'A long time ago'
+  }, [])
 
   React.useEffect(() => {
     let cancelled = false
@@ -59,25 +90,31 @@ export default function PublicProfilePage() {
           display_name: row.display_name || null,
           country: row.country || null,
           bio: row.bio || null,
-          favorite_plant: row.favorite_plant || null,
           avatar_url: row.avatar_url || null,
+          is_admin: Boolean(row.is_admin || false),
+          joined_at: row.joined_at ? String(row.joined_at) : null,
+          last_seen_at: row.last_seen_at ? String(row.last_seen_at) : null,
+          is_online: Boolean(row.is_online || false),
+          accent_key: row.accent_key || null,
         })
 
-        // Stats (only plants total and best streak)
+        // Stats (plants total, gardens count, current and best streak)
         const { data: s, error: serr } = await supabase.rpc('get_user_profile_public_stats', { _user_id: userId })
         if (!serr && s) {
           const statRow = Array.isArray(s) ? s[0] : s
           setStats({
             plantsTotal: Number(statRow.plants_total || 0),
-            bestStreak: Number(statRow.best_streak || 0),
+            gardensCount: Number(statRow.gardens_count || 0),
+            currentStreak: Number(statRow.current_streak || 0),
+            bestStreak: Number(statRow.longest_streak || 0),
           })
         }
 
-        // Heatmap: last 30 days
+        // Heatmap: last 28 days (7x4 grid)
         const today = new Date()
         const end = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()))
         const start = new Date(end)
-        start.setUTCDate(end.getUTCDate() - 29)
+        start.setUTCDate(end.getUTCDate() - 27)
         const startIso = start.toISOString().slice(0,10)
         const endIso = end.toISOString().slice(0,10)
         const { data: series, error: herr } = await supabase.rpc('get_user_daily_tasks', { _user_id: userId, _start: startIso, _end: endIso })
@@ -136,20 +173,19 @@ export default function PublicProfilePage() {
   }, [menuOpen])
 
   const grid = React.useMemo(() => {
-    // Build 5 columns x 7 rows array in chronological order, then columnize
+    // Build fixed 28-day window (4 columns x 7 rows), chronological left-to-right, top-to-bottom
+    if (monthDays.length === 0) return [] as Array<Array<{ date: string; value: number; success: boolean }>>
     const map = new Map<string, DayAgg>()
     for (const d of monthDays) map.set(d.day, d)
+    const first = new Date(monthDays[0].day + 'T00:00:00Z')
     const days: Array<{ date: string; value: number; success: boolean }> = []
-    if (monthDays.length > 0) {
-      const first = new Date(monthDays[0].day + 'T00:00:00Z')
-      const last = new Date(monthDays[monthDays.length - 1].day + 'T00:00:00Z')
-      for (let cur = new Date(first); cur <= last; cur.setUTCDate(cur.getUTCDate() + 1)) {
-        const ymd = cur.toISOString().slice(0,10)
-        const r = map.get(ymd)
-        days.push(r ? { date: ymd, value: r.completed, success: r.any_success } : { date: ymd, value: 0, success: false })
-      }
+    for (let i = 0; i < 28; i++) {
+      const cur = new Date(first)
+      cur.setUTCDate(first.getUTCDate() + i)
+      const ymd = cur.toISOString().slice(0,10)
+      const r = map.get(ymd)
+      days.push(r ? { date: ymd, value: r.completed, success: r.any_success } : { date: ymd, value: 0, success: false })
     }
-    // chunk into columns of 7
     const cols: Array<Array<{ date: string; value: number; success: boolean }>> = []
     for (let i = 0; i < days.length; i += 7) cols.push(days.slice(i, i + 7))
     return cols
@@ -182,13 +218,26 @@ export default function PublicProfilePage() {
           <Card className="rounded-3xl">
             <CardContent className="p-6 md:p-8 space-y-4">
               <div className="flex items-start gap-4">
-                <div className="h-16 w-16 rounded-2xl bg-stone-200 overflow-hidden" aria-hidden>
-                  {/* avatar placeholder */}
+                <div className="h-16 w-16 rounded-2xl bg-stone-200 overflow-hidden flex items-center justify-center" aria-hidden>
+                  <UserIcon
+                    className="h-8 w-8"
+                    style={{ color: iconColor || 'rgb(22 101 52)' }}
+                  />
                 </div>
                 <div className="min-w-0">
-                  <div className="text-2xl font-semibold truncate">{pp.display_name || pp.username || 'Member'}</div>
-                  <div className="text-sm opacity-70">{pp.display_name}</div>
-                  <div className="text-sm opacity-70 mt-1">{pp.country || ''}</div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-2xl font-semibold truncate">{pp.display_name || pp.username || 'Member'}</div>
+                    <span className={`text-[11px] px-2 py-0.5 rounded-full border ${pp.is_admin ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-stone-50 text-stone-700 border-stone-200'}`}>{pp.is_admin ? 'Admin' : 'Member'}</span>
+                  </div>
+                  <div className="text-sm opacity-70 mt-1 flex items-center gap-1">{pp.country ? (<><MapPin className="h-4 w-4" />{pp.country}</>) : ''}</div>
+                  <div className="text-xs opacity-70 mt-1 flex items-center gap-2">
+                    {pp.is_online ? (
+                      <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" />Currently online</span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-stone-300" />{formatLastSeen(pp.last_seen_at)}</span>
+                    )}
+                    {pp.joined_at && <span>• Joined {new Date(pp.joined_at).toLocaleDateString()}</span>}
+                  </div>
                 </div>
                 <div className="ml-auto flex items-center" ref={anchorRef}>
                   {isOwner ? (
@@ -209,9 +258,6 @@ export default function PublicProfilePage() {
               {pp.bio && (
                 <div className="text-sm opacity-90">{pp.bio}</div>
               )}
-              {pp.favorite_plant && (
-                <div className="text-sm"><span className="opacity-60">Favorite plant:</span> {pp.favorite_plant}</div>
-              )}
             </CardContent>
           </Card>
 
@@ -219,10 +265,18 @@ export default function PublicProfilePage() {
             <Card className="rounded-3xl">
               <CardContent className="p-6 md:p-8 space-y-4">
                 <div className="text-lg font-semibold">Highlights</div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <div className="rounded-xl border p-3 text-center">
                     <div className="text-[11px] opacity-60">Plants owned</div>
                     <div className="text-base font-semibold tabular-nums">{stats?.plantsTotal ?? '—'}</div>
+                  </div>
+                  <div className="rounded-xl border p-3 text-center">
+                    <div className="text-[11px] opacity-60">Gardens</div>
+                    <div className="text-base font-semibold tabular-nums">{stats?.gardensCount ?? '—'}</div>
+                  </div>
+                  <div className="rounded-xl border p-3 text-center">
+                    <div className="text-[11px] opacity-60">Current streak</div>
+                    <div className="text-base font-semibold tabular-nums">{stats?.currentStreak ?? '—'}</div>
                   </div>
                   <div className="rounded-xl border p-3 text-center">
                     <div className="text-[11px] opacity-60">Longest streak</div>
@@ -236,14 +290,14 @@ export default function PublicProfilePage() {
           <div className="mt-4">
             <Card className="rounded-3xl">
               <CardContent className="p-6 md:p-8 space-y-4">
-                <div className="text-lg font-semibold">Past 30 days</div>
-                <div className="flex gap-0.5">
+                <div className="text-lg font-semibold">Past 28 days</div>
+                <div className="flex gap-1">
                   {grid.map((col, cidx) => (
-                    <div key={cidx} className="grid grid-rows-7 gap-0.5">
+                    <div key={cidx} className="grid grid-rows-7 gap-1">
                       {Array.from({ length: 7 }).map((_, r) => {
                         const item = col[r] || null
                         const title = item ? `${item.date}: ${item.value} tasks` : ''
-                        return <div key={r} className={`h-4 w-4 rounded-sm ${colorFor(item)}`} title={title} />
+                        return <div key={r} className={`h-5 w-5 rounded-sm ${colorFor(item)}`} title={title} />
                       })}
                     </div>
                   ))}
@@ -263,7 +317,6 @@ export default function PublicProfilePage() {
                 display_name: (pp.display_name || ''),
                 country: (pp.country || ''),
                 bio: (pp.bio || ''),
-                favorite_plant: (pp.favorite_plant || ''),
                 timezone: (profile?.timezone || ''),
                 experience_years: (profile?.experience_years != null ? String(profile.experience_years) : ''),
                 accent_key: null,
@@ -291,7 +344,6 @@ export default function PublicProfilePage() {
                     display_name: dn,
                     country: vals.country || null,
                     bio: vals.bio || null,
-                    favorite_plant: vals.favorite_plant || null,
                     timezone: vals.timezone || null,
                     experience_years: vals.experience_years ? Number(vals.experience_years) : null,
                   }
