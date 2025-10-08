@@ -1033,6 +1033,7 @@ end $$;
 -- ========== RPCs used by the app ==========
 -- Public profile fetch by display name (safe columns only) with admin flag, joined_at, and presence
 drop function if exists public.get_profile_public_by_username(text);
+drop function if exists public.get_profile_public_by_display_name(text);
 create or replace function public.get_profile_public_by_display_name(_name text)
 returns table(
   id uuid,
