@@ -156,15 +156,15 @@ export default function PublicProfilePage() {
   }, [monthDays])
 
   const colorFor = (cell: { value: number; success: boolean } | null) => {
-    if (!cell) return 'bg-stone-200'
-    if (!cell.success && (cell.value || 0) <= 0) return 'bg-stone-200'
+    if (!cell) return 'bg-stone-300'
+    if (!cell.success && (cell.value || 0) <= 0) return 'bg-stone-300'
     const v = Math.max(0, Math.min(4, cell.value))
     return [
-      'bg-emerald-100',
-      'bg-emerald-200',
       'bg-emerald-300',
       'bg-emerald-400',
       'bg-emerald-500',
+      'bg-emerald-600',
+      'bg-emerald-700',
     ][v]
   }
 
@@ -249,13 +249,13 @@ export default function PublicProfilePage() {
             <Card className="rounded-3xl">
               <CardContent className="p-6 md:p-8 space-y-4">
                 <div className="text-lg font-semibold">Past 30 days</div>
-                <div className="grid grid-cols-5 gap-2">
+                <div className="grid grid-cols-5 gap-0.5">
                   {grid.map((col, cidx) => (
-                    <div key={cidx} className="grid grid-rows-7 gap-1">
+                    <div key={cidx} className="grid grid-rows-7 gap-0.5">
                       {Array.from({ length: 7 }).map((_, r) => {
                         const item = col[r] || null
                         const title = item ? `${item.date}: ${item.value} tasks` : ''
-                        return <div key={r} className={`h-3 w-3 rounded ${colorFor(item)}`} title={title} />
+                        return <div key={r} className={`h-4 w-4 rounded-sm ${colorFor(item)}`} title={title} />
                       })}
                     </div>
                   ))}
