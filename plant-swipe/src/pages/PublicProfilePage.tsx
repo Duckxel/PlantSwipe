@@ -249,7 +249,7 @@ export default function PublicProfilePage() {
             <Card className="rounded-3xl">
               <CardContent className="p-6 md:p-8 space-y-4">
                 <div className="text-lg font-semibold">Past 30 days</div>
-                <div className="grid grid-cols-5 gap-0.5">
+                <div className="flex gap-0.5">
                   {grid.map((col, cidx) => (
                     <div key={cidx} className="grid grid-rows-7 gap-0.5">
                       {Array.from({ length: 7 }).map((_, r) => {
