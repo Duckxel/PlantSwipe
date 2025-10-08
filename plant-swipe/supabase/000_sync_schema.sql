@@ -343,6 +343,33 @@ create table if not exists public.garden_plant_task_occurrences (
   completed_at timestamptz
 );
 
+-- Track per-user increments against task occurrences to attribute completions
+create table if not exists public.garden_task_user_completions (
+  id uuid primary key default gen_random_uuid(),
+  occurrence_id uuid not null references public.garden_plant_task_occurrences(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  increment integer not null check (increment > 0),
+  occurred_at timestamptz not null default now()
+);
+create index if not exists gtuc_occ_user_time_idx on public.garden_task_user_completions (occurrence_id, user_id, occurred_at desc);
+alter table public.garden_task_user_completions enable row level security;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_task_user_completions' and policyname='gtuc_select') then
+    drop policy gtuc_select on public.garden_task_user_completions;
+  end if;
+  create policy gtuc_select on public.garden_task_user_completions for select to authenticated
+    using (
+      -- Allow members of the garden for the occurrence's task to read attribution rows
+      exists (
+        select 1 from public.garden_plant_task_occurrences o
+        join public.garden_plant_tasks t on t.id = o.task_id
+        join public.garden_members gm on gm.garden_id = t.garden_id
+        where o.id = occurrence_id and gm.user_id = (select auth.uid())
+      )
+      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+    );
+end $$;
+
 -- ========== RLS ==========
 alter table public.gardens enable row level security;
 alter table public.garden_members enable row level security;
@@ -2088,31 +2115,3 @@ declare v_actor uuid := (select auth.uid()); v_name text; begin
 end; $$;
 
 grant execute on function public.log_garden_activity(uuid, text, text, text, text, text) to anon, authenticated;
-
--- Track per-user increments against task occurrences to attribute completions
-create table if not exists public.garden_task_user_completions (
-  id uuid primary key default gen_random_uuid(),
-  occurrence_id uuid not null references public.garden_plant_task_occurrences(id) on delete cascade,
-  user_id uuid not null references auth.users(id) on delete cascade,
-  increment integer not null check (increment > 0),
-  occurred_at timestamptz not null default now()
-);
-create index if not exists gtuc_occ_user_time_idx on public.garden_task_user_completions (occurrence_id, user_id, occurred_at desc);
-alter table public.garden_task_user_completions enable row level security;
-do $$ begin
-  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_task_user_completions' and policyname='gtuc_select') then
-    drop policy gtuc_select on public.garden_task_user_completions;
-  end if;
-  create policy gtuc_select on public.garden_task_user_completions for select to authenticated
-    using (
-      -- Allow members of the garden for the occurrence's task to read attribution rows
-      exists (
-        select 1 from public.garden_plant_task_occurrences o
-        join public.garden_plant_tasks t on t.id = o.task_id
-        join public.garden_members gm on gm.garden_id = t.garden_id
-        where o.id = occurrence_id and gm.user_id = (select auth.uid())
-      )
-      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
-    );
-end $$;
-
