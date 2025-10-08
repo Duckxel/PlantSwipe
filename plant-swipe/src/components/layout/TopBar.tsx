@@ -91,7 +91,7 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
       <nav className="ml-4 hidden md:flex gap-2">
         <NavPill to="/" isActive={location.pathname === '/'} icon={<Sparkles className="h-4 w-4" />} label="Discovery" />
         <NavPill to="/gardens" isActive={location.pathname.startsWith('/gardens') || location.pathname.startsWith('/garden/')} icon={<Sprout className="h-4 w-4" />} label="Garden" showDot={hasUnfinished} />
-        <NavPill to="/search" isActive={location.pathname.startsWith('/search')} icon={<Search className="h-4 w-4" />} label="Search" />
+        <NavPill to="/search" isActive={location.pathname.startsWith('/search')} icon={<Search className="h-4 w-4" />} label="Encyclopedia" />
       </nav>
   <div className="ml-auto flex items-center gap-2 flex-wrap sm:flex-nowrap min-w-0 justify-end">
         {user && (
