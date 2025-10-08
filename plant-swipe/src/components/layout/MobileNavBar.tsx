@@ -2,6 +2,8 @@ import React from "react"
 import { NavLink, useLocation } from "react-router-dom"
 import { Sparkles, Sprout, Search, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { useAuth } from "@/context/AuthContext"
+import { userHasUnfinishedTasksToday } from "@/lib/gardens"
 
 interface MobileNavBarProps {
   canCreate?: boolean
@@ -9,6 +11,23 @@ interface MobileNavBarProps {
 
 export const MobileNavBar: React.FC<MobileNavBarProps> = ({ canCreate }) => {
   const location = useLocation()
+  const { user } = useAuth()
+  const [hasUnfinished, setHasUnfinished] = React.useState(false)
+
+  React.useEffect(() => {
+    let cancelled = false
+    const run = async () => {
+      try {
+        if (!user?.id) { if (!cancelled) setHasUnfinished(false); return }
+        const has = await userHasUnfinishedTasksToday(user.id)
+        if (!cancelled) setHasUnfinished(has)
+      } catch {
+        if (!cancelled) setHasUnfinished(false)
+      }
+    }
+    run()
+    return () => { cancelled = true }
+  }, [user?.id])
   const currentView: "discovery" | "gardens" | "search" | "create" =
     location.pathname === "/" ? "discovery" :
     location.pathname.startsWith("/gardens") || location.pathname.startsWith('/garden/') ? "gardens" :
@@ -40,8 +59,13 @@ export const MobileNavBar: React.FC<MobileNavBarProps> = ({ canCreate }) => {
             </NavLink>
           </Button>
           <Button asChild variant={"secondary"} size={"icon"} className={currentView === 'gardens' ? "h-12 w-12 rounded-2xl bg-black text-white hover:bg-black/90" : "h-12 w-12 rounded-2xl bg-white text-black hover:bg-stone-100"}>
-            <NavLink to="/gardens" aria-label="Garden" className="no-underline flex items-center justify-center">
-              <Sprout className="h-6 w-6" />
+            <NavLink to="/gardens" aria-label="Garden" className="no-underline flex items-center justify-center relative">
+              <div className="relative">
+                <Sprout className="h-6 w-6" />
+                {hasUnfinished && (
+                  <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white" aria-hidden="true" />)
+                }
+              </div>
             </NavLink>
           </Button>
           <Button asChild variant={"secondary"} size={"icon"} className={currentView === 'search' ? "h-12 w-12 rounded-2xl bg-black text-white hover:bg-black/90" : "h-12 w-12 rounded-2xl bg-white text-black hover:bg-stone-100"}>

@@ -14,6 +14,7 @@ interface TopBarProps {
 }
 
 import { useAuth } from "@/context/AuthContext"
+import { userHasUnfinishedTasksToday } from "@/lib/gardens"
 
 export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, displayName, onProfile, onLogout }) => {
   const navigate = useNavigate()
@@ -23,6 +24,7 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
   const anchorRef = React.useRef<HTMLDivElement | null>(null)
   const menuRef = React.useRef<HTMLDivElement | null>(null)
   const [menuPosition, setMenuPosition] = React.useState<{ top: number; right: number } | null>(null)
+  const [hasUnfinished, setHasUnfinished] = React.useState(false)
 
   const recomputeMenuPosition = React.useCallback(() => {
     const anchor = anchorRef.current
@@ -58,6 +60,21 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
       window.removeEventListener('scroll', onReposition, true)
     }
   }, [menuOpen, recomputeMenuPosition])
+
+  React.useEffect(() => {
+    let cancelled = false
+    const run = async () => {
+      try {
+        if (!user?.id) { if (!cancelled) setHasUnfinished(false); return }
+        const has = await userHasUnfinishedTasksToday(user.id)
+        if (!cancelled) setHasUnfinished(has)
+      } catch {
+        if (!cancelled) setHasUnfinished(false)
+      }
+    }
+    run()
+    return () => { cancelled = true }
+  }, [user?.id])
   const label = displayName && displayName.trim().length > 0 ? displayName : 'Profile'
   return (
     <header className="max-w-5xl mx-auto w-full flex items-center gap-3 px-2 overflow-x-hidden">
@@ -73,7 +90,7 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
       </Link>
       <nav className="ml-4 hidden md:flex gap-2">
         <NavPill to="/" isActive={location.pathname === '/'} icon={<Sparkles className="h-4 w-4" />} label="Discovery" />
-        <NavPill to="/gardens" isActive={location.pathname.startsWith('/gardens') || location.pathname.startsWith('/garden/')} icon={<Sprout className="h-4 w-4" />} label="Garden" />
+        <NavPill to="/gardens" isActive={location.pathname.startsWith('/gardens') || location.pathname.startsWith('/garden/')} icon={<Sprout className="h-4 w-4" />} label="Garden" showDot={hasUnfinished} />
         <NavPill to="/search" isActive={location.pathname.startsWith('/search')} icon={<Search className="h-4 w-4" />} label="Search" />
       </nav>
   <div className="ml-auto flex items-center gap-2 flex-wrap sm:flex-nowrap min-w-0 justify-end">
@@ -126,7 +143,7 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
   )
 }
 
-function NavPill({ to, isActive, icon, label }: { to: string; isActive: boolean; icon: React.ReactNode; label: string }) {
+function NavPill({ to, isActive, icon, label, showDot }: { to: string; isActive: boolean; icon: React.ReactNode; label: string; showDot?: boolean }) {
   return (
     <Button
       asChild
@@ -134,9 +151,12 @@ function NavPill({ to, isActive, icon, label }: { to: string; isActive: boolean;
       className={isActive ? "rounded-2xl bg-black text-white hover:bg-black/90 hover:text-white" : "rounded-2xl bg-white text-black hover:bg-stone-100 hover:text-black"}
     >
       <Link to={to} className="no-underline">
-        <span className="flex items-center gap-2">
+        <span className="relative inline-flex items-center gap-2">
           {icon}
           <span>{label}</span>
+          {showDot && (
+            <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white" aria-hidden="true" />
+          )}
         </span>
       </Link>
     </Button>

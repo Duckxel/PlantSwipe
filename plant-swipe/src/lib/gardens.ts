@@ -344,6 +344,20 @@ export async function getGardenTodayProgress(gardenId: string, dayIso: string): 
   return { due, completed }
 }
 
+export async function userHasUnfinishedTasksToday(userId: string): Promise<boolean> {
+  const gardens = await getUserGardens(userId)
+  if (gardens.length === 0) return false
+  const nowIso = await fetchServerNowISO()
+  const today = nowIso.slice(0, 10)
+  for (const g of gardens) {
+    try {
+      const prog = await getGardenTodayProgress(g.id, today)
+      if (prog.due > prog.completed) return true
+    } catch {}
+  }
+  return false
+}
+
 export async function getGardenInventory(gardenId: string): Promise<Array<{ plantId: string; seedsOnHand: number; plantsOnHand: number; plant?: Plant | null }>> {
   const { data, error } = await supabase
     .from('garden_inventory')
