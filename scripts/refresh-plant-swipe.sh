@@ -22,6 +22,22 @@ SERVICE_NGINX="nginx"
 if [[ $EUID -ne 0 ]]; then SUDO="sudo"; else SUDO=""; fi
 log() { printf "[%s] %s\n" "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*"; }
 
+# Optional: skip restarting services (useful for streaming logs via SSE)
+# Enable with --no-restart flag or SKIP_SERVICE_RESTARTS=true|1 env var
+SKIP_RESTARTS=false
+for arg in "$@"; do
+  case "$arg" in
+    --no-restart|--no-restarts|--skip-restart|--skip-restarts|-n)
+      SKIP_RESTARTS=true
+      ;;
+  esac
+done
+case "${SKIP_SERVICE_RESTARTS:-}" in
+  1|true|TRUE|yes|YES)
+    SKIP_RESTARTS=true
+    ;;
+esac
+
 log "Repo (cwd): $WORK_DIR"
 log "Node app: $NODE_DIR"
 
@@ -64,16 +80,20 @@ $SUDO nginx -t
 log "Reloading nginx…"
 $SUDO systemctl reload "$SERVICE_NGINX"
 
-# Restart services
-log "Restarting services: $SERVICE_NODE, $SERVICE_ADMIN…"
-$SUDO systemctl restart "$SERVICE_NODE" "$SERVICE_ADMIN"
-
-log "Verifying services are active…"
-if $SUDO systemctl is-active "$SERVICE_NODE" "$SERVICE_ADMIN" >/dev/null; then
-  log "Services active."
+# Restart services unless explicitly skipped
+if [[ "$SKIP_RESTARTS" == "true" ]]; then
+  log "Skipping service restarts (requested)"
 else
-  echo "[WARN] One or more services not active" >&2
-  $SUDO systemctl status "$SERVICE_NODE" "$SERVICE_ADMIN" --no-pager || true
+  log "Restarting services: $SERVICE_NODE, $SERVICE_ADMIN…"
+  $SUDO systemctl restart "$SERVICE_NODE" "$SERVICE_ADMIN"
+
+  log "Verifying services are active…"
+  if $SUDO systemctl is-active "$SERVICE_NODE" "$SERVICE_ADMIN" >/dev/null; then
+    log "Services active."
+  else
+    echo "[WARN] One or more services not active" >&2
+    $SUDO systemctl status "$SERVICE_NODE" "$SERVICE_ADMIN" --no-pager || true
+  fi
 fi
 
 log "Done."
