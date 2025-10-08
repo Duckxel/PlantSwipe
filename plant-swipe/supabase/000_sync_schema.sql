@@ -1711,6 +1711,33 @@ as $$
 $$;
 grant execute on function public.get_visitors_series_days(integer) to anon, authenticated;
 
+-- User-specific daily visit counts for last N days (default 30)
+create or replace function public.get_user_visits_series_days(_user_id uuid, _days integer default 30)
+returns table(date text, visits integer)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with days as (
+    select generate_series(
+      (now() at time zone 'utc')::date - make_interval(days => greatest(0, coalesce(_days, 30) - 1)),
+      (now() at time zone 'utc')::date,
+      interval '1 day'
+    )::date as d
+  )
+  select to_char(d, 'YYYY-MM-DD') as date,
+         coalesce((
+           select count(*)
+           from public.web_visits v
+           where v.user_id = _user_id
+             and (timezone('utc', v.occurred_at))::date = d
+         ), 0)::int as visits
+  from days
+  order by d asc;
+$$;
+grant execute on function public.get_user_visits_series_days(uuid, integer) to anon, authenticated;
+
 -- ========== Ban system ==========
 -- Records account-level bans and IP-level bans, including metadata for auditing
 create table if not exists public.banned_accounts (

@@ -1214,6 +1214,93 @@ app.get('/api/admin/member', async (req, res) => {
   }
 })
 
+// Admin: per-user visits series (last 30 days, UTC calendar days)
+app.get('/api/admin/member-visits-series', async (req, res) => {
+  try {
+    // Admin check disabled to mirror member lookup behavior
+    const userIdParam = (req.query.userId || req.query.user_id || '').toString().trim()
+    const emailParam = (req.query.email || '').toString().trim()
+
+    const resolveUserIdViaRest = async (email) => {
+      if (!supabaseUrlEnv || !supabaseAnonKey) return null
+      const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
+      const token = getBearerTokenFromRequest(req)
+      if (token) Object.assign(headers, { 'Authorization': `Bearer ${token}` })
+      try {
+        const rpc = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_user_id_by_email`, {
+          method: 'POST', headers, body: JSON.stringify({ _email: email })
+        })
+        if (rpc.ok) {
+          const val = await rpc.json().catch(() => null)
+          if (val) return String(val)
+        }
+      } catch {}
+      return null
+    }
+
+    // Resolve user id
+    let targetUserId = userIdParam || null
+    if (!targetUserId && emailParam) {
+      const email = emailParam.toLowerCase()
+      if (sql) {
+        try {
+          const users = await sql`select id from auth.users where lower(email) = ${email} limit 1`
+          if (Array.isArray(users) && users[0]) targetUserId = String(users[0].id)
+        } catch {}
+      }
+      if (!targetUserId) targetUserId = await resolveUserIdViaRest(emailParam)
+    }
+    if (!targetUserId) {
+      res.status(400).json({ error: 'Missing userId or email' })
+      return
+    }
+
+    // SQL (preferred)
+    if (sql) {
+      try {
+        const rows = await sql`
+          with days as (
+            select generate_series(((now() at time zone 'utc')::date - interval '29 days'), (now() at time zone 'utc')::date, interval '1 day')::date as d
+          )
+          select d as day,
+                 coalesce((select count(*) from public.web_visits v where v.user_id = ${targetUserId} and (timezone('utc', v.occurred_at))::date = d), 0)::int as visits
+          from days
+          order by d asc
+        `
+        const series30d = (rows || []).map(r => ({ date: new Date(r.day).toISOString().slice(0,10), visits: Number(r.visits || 0) }))
+        const total30d = series30d.reduce((a, b) => a + (b.visits || 0), 0)
+        res.json({ ok: true, userId: targetUserId, series30d, total30d, via: 'database' })
+        return
+      } catch (e) {
+        // fall through to REST
+      }
+    }
+
+    // Supabase REST fallback using security-definer RPC
+    if (supabaseUrlEnv && supabaseAnonKey) {
+      const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
+      const token = getBearerTokenFromRequest(req)
+      if (token) Object.assign(headers, { 'Authorization': `Bearer ${token}` })
+      try {
+        const resp = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_user_visits_series_days`, {
+          method: 'POST', headers, body: JSON.stringify({ _user_id: targetUserId, _days: 30 })
+        })
+        if (resp.ok) {
+          const arr = await resp.json().catch(() => [])
+          const series30d = (Array.isArray(arr) ? arr : []).map((r) => ({ date: String(r.date), visits: Number(r.visits || 0) }))
+          const total30d = series30d.reduce((a, b) => a + (b.visits || 0), 0)
+          res.json({ ok: true, userId: targetUserId, series30d, total30d, via: 'supabase' })
+          return
+        }
+      } catch {}
+    }
+
+    res.status(500).json({ error: 'Database not configured' })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to load member visits series' })
+  }
+})
+
 // Admin: suggest emails by prefix for autocomplete (top 3)
 app.get('/api/admin/member-suggest', async (req, res) => {
   try {
