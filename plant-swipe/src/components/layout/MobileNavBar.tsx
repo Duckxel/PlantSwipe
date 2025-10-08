@@ -17,36 +17,40 @@ export const MobileNavBar: React.FC<MobileNavBarProps> = ({ canCreate }) => {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 md:hidden z-50 border-t bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/70 pb-[max(env(safe-area-inset-bottom),0px)]"
+      className="fixed bottom-0 left-0 right-0 md:hidden z-50 border-t bg-white/70 backdrop-blur-xl supports-[backdrop-filter]:bg-white/50 shadow-[0_-8px_30px_rgba(0,0,0,0.08)] pb-[max(env(safe-area-inset-bottom),0px)]"
       role="navigation"
       aria-label="Primary"
     >
-      <div className="mx-auto max-w-5xl px-3 py-2 grid grid-cols-3 gap-2">
-        <Button asChild variant={"secondary"} className={currentView === 'discovery' ? "rounded-2xl bg-black text-white hover:bg-black/90 hover:text-white" : "rounded-2xl bg-white text-black hover:bg-stone-100 hover:text-black"}>
-          <NavLink to="/" end className="no-underline flex items-center justify-center gap-2 text-sm">
-            <Sparkles className="h-4 w-4" /> <span>Discover</span>
-          </NavLink>
-        </Button>
-        <Button asChild variant={"secondary"} className={currentView === 'gardens' ? "rounded-2xl bg-black text-white hover:bg-black/90 hover:text-white" : "rounded-2xl bg-white text-black hover:bg-stone-100 hover:text-black"}>
-          <NavLink to="/gardens" className="no-underline flex items-center justify-center gap-2 text-sm">
-            <Sprout className="h-4 w-4" /> <span>Garden</span>
-          </NavLink>
-        </Button>
-        <Button asChild variant={"secondary"} className={currentView === 'search' ? "rounded-2xl bg-black text-white hover:bg-black/90 hover:text-white" : "rounded-2xl bg-white text-black hover:bg-stone-100 hover:text-black"}>
-          <NavLink to="/search" className="no-underline flex items-center justify-center gap-2 text-sm">
-            <Search className="h-4 w-4" /> <span>Search</span>
-          </NavLink>
-        </Button>
-      </div>
-      {canCreate && (
-        <div className="mx-auto max-w-5xl px-3 pb-2">
-          <Button asChild className="w-full rounded-2xl">
-            <NavLink to="/create" className="no-underline flex items-center justify-center gap-2 text-sm">
-              <Plus className="h-4 w-4" /> <span>Add Plant</span>
+      <div className="relative mx-auto max-w-5xl px-6 pt-3 pb-3">
+        {/* Center floating create button */}
+        {canCreate && (
+          <div className="pointer-events-none absolute -top-6 left-1/2 -translate-x-1/2">
+            <Button asChild variant={"default"} size={"icon"} className="pointer-events-auto h-14 w-14 rounded-2xl bg-black text-white shadow-xl ring-1 ring-black/10">
+              <NavLink to="/create" aria-label="Add Plant" className="no-underline flex items-center justify-center">
+                <Plus className="h-7 w-7" />
+              </NavLink>
+            </Button>
+          </div>
+        )}
+        {/* Icon-only nav items */}
+        <div className="flex items-center justify-around gap-8">
+          <Button asChild variant={"secondary"} size={"icon"} className={currentView === 'discovery' ? "h-12 w-12 rounded-2xl bg-black text-white hover:bg-black/90" : "h-12 w-12 rounded-2xl bg-white text-black hover:bg-stone-100"}>
+            <NavLink to="/" end aria-label="Discover" className="no-underline flex items-center justify-center">
+              <Sparkles className="h-6 w-6" />
+            </NavLink>
+          </Button>
+          <Button asChild variant={"secondary"} size={"icon"} className={currentView === 'gardens' ? "h-12 w-12 rounded-2xl bg-black text-white hover:bg-black/90" : "h-12 w-12 rounded-2xl bg-white text-black hover:bg-stone-100"}>
+            <NavLink to="/gardens" aria-label="Garden" className="no-underline flex items-center justify-center">
+              <Sprout className="h-6 w-6" />
+            </NavLink>
+          </Button>
+          <Button asChild variant={"secondary"} size={"icon"} className={currentView === 'search' ? "h-12 w-12 rounded-2xl bg-black text-white hover:bg-black/90" : "h-12 w-12 rounded-2xl bg-white text-black hover:bg-stone-100"}>
+            <NavLink to="/search" aria-label="Search" className="no-underline flex items-center justify-center">
+              <Search className="h-6 w-6" />
             </NavLink>
           </Button>
         </div>
-      )}
+      </div>
     </nav>
   )
 }
