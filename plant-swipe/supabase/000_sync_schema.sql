@@ -25,20 +25,19 @@ alter table if exists public.profiles add column if not exists avatar_url text;
 alter table if exists public.profiles add column if not exists timezone text;
 alter table if exists public.profiles add column if not exists experience_years integer;
 
--- Constraints: usernames are lowercase, alphanumeric or underscore, length 3..20
+-- Drop username-specific constraints/index (no longer used)
 do $$ begin
   begin
-    alter table public.profiles
-      add constraint profiles_username_lowercase check (username is null or username = lower(username));
-  exception when duplicate_object then null; end;
+    alter table public.profiles drop constraint if exists profiles_username_lowercase;
+  exception when undefined_object then null; end;
   begin
-    alter table public.profiles
-      add constraint profiles_username_format check (username is null or username ~ '^[a-z0-9_]{3,20}$');
-  exception when duplicate_object then null; end;
+    alter table public.profiles drop constraint if exists profiles_username_format;
+  exception when undefined_object then null; end;
 end $$;
+drop index if exists public.profiles_username_unique;
 
--- Unique index on username (case-insensitive enforced by lowercase check)
-create unique index if not exists profiles_username_unique on public.profiles (username) where username is not null;
+-- Unique index on display_name (case-insensitive)
+create unique index if not exists profiles_display_name_lower_unique on public.profiles ((lower(display_name)));
 alter table public.profiles enable row level security;
 -- Helper to avoid RLS self-recursion when checking admin
 -- Uses SECURITY DEFINER to bypass RLS on public.profiles
@@ -962,20 +961,21 @@ do $$ begin
 end $$;
 
 -- ========== RPCs used by the app ==========
--- Public profile fetch by username (safe columns only)
-create or replace function public.get_profile_public_by_username(_username text)
-returns table(id uuid, username text, display_name text, country text, bio text, favorite_plant text, avatar_url text)
+-- Public profile fetch by display name (safe columns only)
+drop function if exists public.get_profile_public_by_username(text);
+create or replace function public.get_profile_public_by_display_name(_name text)
+returns table(id uuid, display_name text, country text, bio text, favorite_plant text, avatar_url text)
 language sql
 stable
 security definer
 set search_path = public
 as $$
-  select p.id, p.username, p.display_name, p.country, p.bio, p.favorite_plant, p.avatar_url
+  select p.id, p.display_name, p.country, p.bio, p.favorite_plant, p.avatar_url
   from public.profiles p
-  where p.username = lower(_username)
+  where lower(p.display_name) = lower(_name)
   limit 1;
 $$;
-grant execute on function public.get_profile_public_by_username(text) to anon, authenticated;
+grant execute on function public.get_profile_public_by_display_name(text) to anon, authenticated;
 
 -- Aggregate public stats for a user's gardens/membership
 create or replace function public.get_user_profile_public_stats(_user_id uuid)
@@ -1063,8 +1063,9 @@ as $$
 $$;
 grant execute on function public.get_user_daily_tasks(uuid, date, date) to anon, authenticated;
 
--- Public username availability check
-create or replace function public.is_username_available(_username text)
+-- Public display name availability check
+drop function if exists public.is_username_available(text);
+create or replace function public.is_display_name_available(_name text)
 returns boolean
 language sql
 stable
@@ -1072,10 +1073,10 @@ security definer
 set search_path = public
 as $$
   select not exists (
-    select 1 from public.profiles p where p.username = lower(_username)
+    select 1 from public.profiles p where lower(p.display_name) = lower(_name)
   );
 $$;
-grant execute on function public.is_username_available(text) to anon, authenticated;
+grant execute on function public.is_display_name_available(text) to anon, authenticated;
 
 -- Private info fetch (self or admin only)
 create or replace function public.get_user_private_info(_user_id uuid)

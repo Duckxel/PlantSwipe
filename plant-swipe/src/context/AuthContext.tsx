@@ -10,7 +10,7 @@ type AuthContextValue = {
   user: AuthUser | null
   profile: ProfileRow | null
   loading: boolean
-  signUp: (opts: { email: string; password: string; displayName: string; username: string }) => Promise<{ error?: string }>
+  signUp: (opts: { email: string; password: string; displayName: string }) => Promise<{ error?: string }>
   signIn: (opts: { email: string; password: string }) => Promise<{ error?: string }>
   signOut: () => Promise<void>
   deleteAccount: () => Promise<{ error?: string }>
@@ -72,27 +72,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => { sub.subscription.unsubscribe() }
   }, [loadSession, refreshProfile])
 
-  const signUp: AuthContextValue['signUp'] = async ({ email, password, displayName, username }) => {
+  const signUp: AuthContextValue['signUp'] = async ({ email, password, displayName }) => {
     // Check ban by email and IP before attempting signup
     try {
       const check = await fetch(`/api/banned/check?email=${encodeURIComponent(email)}`, { credentials: 'same-origin' }).then(r => r.json()).catch(() => ({ banned: false }))
       if (check?.banned) return { error: 'Your account is banned. Signup is not allowed.' }
     } catch {}
-    // Ensure unique email handled by Supabase; ensure unique display_name and username in profiles
-    // First check display_name uniqueness
+    // Ensure unique email handled by Supabase; ensure unique display_name in profiles
+    // First check display_name uniqueness (case-insensitive)
     const existing = await supabase.from('profiles').select('id').ilike('display_name', displayName).maybeSingle()
     if (existing.data?.id) return { error: 'Display name already taken' }
-
-    // Check username availability via RPC (public)
-    const uname = (username || '').trim().toLowerCase()
-    if (!/^([a-z0-9_]{3,20})$/.test(uname)) return { error: 'Username must be 3-20 chars, letters/numbers/_ only' }
-    try {
-      const { data: available, error: uerr } = await supabase.rpc('is_username_available', { _username: uname })
-      if (uerr) return { error: uerr.message }
-      if (available === false) return { error: 'Username not available' }
-    } catch (e) {
-      return { error: 'Could not verify username availability' }
-    }
 
     const { data, error } = await supabase.auth.signUp({ email, password })
     if (error) return { error: error.message }
@@ -104,7 +93,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       id: uid,
       display_name: displayName,
       liked_plant_ids: [],
-      username: uname,
     })
     if (perr) return { error: perr.message }
 

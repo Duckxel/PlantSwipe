@@ -30,7 +30,7 @@ export default function PublicProfilePage() {
   const params = useParams()
   const navigate = useNavigate()
   const { user, profile } = useAuth()
-  const usernameParam = String(params.username || '').toLowerCase()
+  const displayParam = String(params.username || '')
 
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
@@ -44,8 +44,8 @@ export default function PublicProfilePage() {
       setLoading(true)
       setError(null)
       try {
-        // Basic profile by username
-        const { data: rows, error: perr } = await supabase.rpc('get_profile_public_by_username', { _username: usernameParam })
+        // Basic profile by display name
+        const { data: rows, error: perr } = await supabase.rpc('get_profile_public_by_display_name', { _name: displayParam })
         if (perr) throw perr
         const row = Array.isArray(rows) ? rows[0] : rows
         if (!row) {
@@ -56,7 +56,6 @@ export default function PublicProfilePage() {
         const userId = String(row.id)
         setPp({
           id: userId,
-          username: row.username || null,
           display_name: row.display_name || null,
           country: row.country || null,
           bio: row.bio || null,
@@ -187,7 +186,7 @@ export default function PublicProfilePage() {
                 </div>
                 <div className="min-w-0">
                   <div className="text-2xl font-semibold truncate">{pp.display_name || pp.username || 'Member'}</div>
-                  <div className="text-sm opacity-70">@{pp.username}</div>
+                  <div className="text-sm opacity-70">{pp.display_name}</div>
                   <div className="text-sm opacity-70 mt-1">{pp.country || ''}</div>
                 </div>
                 <div className="ml-auto flex items-center" ref={anchorRef}>

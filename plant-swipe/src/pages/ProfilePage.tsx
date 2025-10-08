@@ -56,8 +56,8 @@ export const ProfilePage: React.FC = () => {
     setExperienceYears(profile?.experience_years != null ? String(profile.experience_years) : "")
   }, [profile?.display_name])
 
-  // If username exists, offer quick link to public page
-  const publicPath = (username || '').trim() ? `/u/${(username || '').toLowerCase()}` : null
+  // Public path via display name (slug-insensitive)
+  const publicPath = (displayName || '').trim() ? `/u/${encodeURIComponent(displayName)}` : null
 
   const save = async () => {
     setError(null)
@@ -76,23 +76,19 @@ export const ProfilePage: React.FC = () => {
         setError('Display name already taken')
         return
       }
-      // Username validation & availability
-      const uname = (username || '').trim().toLowerCase()
-      if (uname.length > 0) {
-        if (!/^([a-z0-9_]{3,20})$/.test(uname)) {
-          setError('Username must be 3-20 chars, letters/numbers/_ only')
-          return
-        }
-        // Allow keeping own username
-        if (uname !== (profile?.username || '')) {
-          const { data: available, error: uerr } = await supabase.rpc('is_username_available', { _username: uname })
-          if (uerr) { setError(uerr.message); return }
-          if (available === false) { setError('Username not available'); return }
-        }
-      }
+      // Display name uniqueness (case-insensitive), excluding current user
+      if ((displayName || '').trim().length === 0) { setError('Display name required'); return }
+      const dn = (displayName || '').trim()
+      const nameCheck = await supabase
+        .from('profiles')
+        .select('id')
+        .ilike('display_name', dn)
+        .neq('id', user.id)
+        .maybeSingle()
+      if (nameCheck.data?.id) { setError('Display name already taken'); return }
       const { error: uerr } = await supabase
         .from('profiles')
-        .upsert({ id: user.id, display_name: displayName, username: uname || null, country: (country || null), bio: (bio || null), favorite_plant: (favoritePlant || null), timezone: (timezone || null), experience_years: (experienceYears ? Number(experienceYears) : null) }, { onConflict: 'id' })
+        .upsert({ id: user.id, display_name: dn, country: (country || null), bio: (bio || null), favorite_plant: (favoritePlant || null), timezone: (timezone || null), experience_years: (experienceYears ? Number(experienceYears) : null) }, { onConflict: 'id' })
       if (uerr) {
         setError(uerr.message)
         return
@@ -215,11 +211,7 @@ export const ProfilePage: React.FC = () => {
             <Label htmlFor="profile-display-name">Display name</Label>
             <Input id="profile-display-name" name="displayName" value={displayName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDisplayName(e.target.value)} />
           </div>
-          <div className="grid gap-2">
-            <Label htmlFor="profile-username">Username</Label>
-            <Input id="profile-username" name="username" value={username || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUsername(e.target.value)} />
-            <div className="text-xs opacity-60">Public profile: /u/{(username || '').toLowerCase()}</div>
-          </div>
+          {/* Username removed */}
           <div className="grid gap-2">
             <Label htmlFor="profile-country">Country</Label>
             <Input id="profile-country" name="country" value={country || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCountry(e.target.value)} />

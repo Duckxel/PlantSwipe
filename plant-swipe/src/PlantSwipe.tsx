@@ -57,7 +57,7 @@ export default function PlantSwipe() {
   const [authPassword, setAuthPassword] = useState("")
   const [authPassword2, setAuthPassword2] = useState("")
   const [authDisplayName, setAuthDisplayName] = useState("")
-  const [authUsername, setAuthUsername] = useState("")
+  // username removed; display name is the public handle
   const [authSubmitting, setAuthSubmitting] = useState(false)
 
   const [plants, setPlants] = useState<Plant[]>([])
@@ -423,7 +423,7 @@ export default function PlantSwipe() {
           setAuthSubmitting(false)
           return
         }
-        const { error } = await signUp({ email: authEmail, password: authPassword, displayName: authDisplayName, username: authUsername })
+        const { error } = await signUp({ email: authEmail, password: authPassword, displayName: authDisplayName })
         if (error) {
           console.error('[auth] signup error', error)
           setAuthError(error)
@@ -641,7 +641,7 @@ export default function PlantSwipe() {
                     />
                   }
                 />
-                <Route path="/profile" element={user ? (profile?.username ? <Navigate to={`/u/${profile.username}`} replace /> : <ProfilePage />) : <Navigate to="/" replace />} />
+                <Route path="/profile" element={user ? (profile?.display_name ? <Navigate to={`/u/${encodeURIComponent(profile.display_name)}`} replace /> : <ProfilePage />) : <Navigate to="/" replace />} />
                 <Route path="/u/:username" element={<PublicProfilePage />} />
                 <Route path="/admin" element={<RequireAdmin><AdminPage /></RequireAdmin>} />
                 <Route path="/create" element={user ? (
@@ -694,13 +694,7 @@ export default function PlantSwipe() {
                 <Input id="name" type="text" placeholder="Your name" value={authDisplayName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthDisplayName(e.target.value)} />
               </div>
             )}
-            {authMode === 'signup' && (
-              <div className="grid gap-2">
-                <Label htmlFor="username">Username</Label>
-                <Input id="username" type="text" placeholder="yourname" value={authUsername} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthUsername(e.target.value)} />
-                <div className="text-xs opacity-60">Lowercase, 3–20 chars, letters/numbers/_; becomes your public link.</div>
-              </div>
-            )}
+            {/* Username removed */}
             <div className="grid gap-2">
               <Label htmlFor="email">Email</Label>
               <Input id="email" type="email" placeholder="you@example.com" value={authEmail} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthEmail(e.target.value)} disabled={authSubmitting} />
