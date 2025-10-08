@@ -11,9 +11,6 @@ type FunStats = {
   loading: boolean
   createdAt: string | null
   daysHere: number | null
-  gardensOwned: number | null
-  gardensMember: number | null
-  gardensTotal: number | null
   plantsTotal: number | null
   favorites: number | null
   bestStreak: number | null
@@ -36,9 +33,6 @@ export const ProfilePage: React.FC = () => {
     loading: true,
     createdAt: null,
     daysHere: null,
-    gardensOwned: null,
-    gardensMember: null,
-    gardensTotal: null,
     plantsTotal: null,
     favorites: null,
     bestStreak: null,
@@ -133,9 +127,6 @@ export const ProfilePage: React.FC = () => {
           }
         } catch {}
 
-        let gardensOwned = 0
-        let gardensMember = 0
-        let gardensTotal = 0
         let plantsTotal = 0
         let bestStreak = 0
 
@@ -145,14 +136,6 @@ export const ProfilePage: React.FC = () => {
             .select('garden_id')
             .eq('user_id', uid)
           const gardenIds: string[] = Array.isArray(membersRes.data) ? membersRes.data.map((r: any) => String(r.garden_id)) : []
-          gardensMember = gardenIds.length
-          gardensTotal = gardenIds.length
-
-          const ownedRes = await supabase
-            .from('gardens')
-            .select('id', { count: 'exact', head: true })
-            .eq('created_by', uid)
-          if (!ownedRes.error) gardensOwned = ownedRes.count ?? 0
 
           if (gardenIds.length > 0) {
             const plantsRes = await supabase
@@ -179,9 +162,6 @@ export const ProfilePage: React.FC = () => {
             loading: false,
             createdAt,
             daysHere,
-            gardensOwned,
-            gardensMember,
-            gardensTotal,
             plantsTotal,
             favorites,
             bestStreak,
@@ -273,14 +253,6 @@ export const ProfilePage: React.FC = () => {
               <div className="rounded-xl border p-3 text-center">
                 <div className="text-[11px] opacity-60">Days in the garden</div>
                 <div className="text-base font-semibold tabular-nums">{funStats.loading ? '—' : (funStats.daysHere ?? '—')}</div>
-              </div>
-              <div className="rounded-xl border p-3 text-center">
-                <div className="text-[11px] opacity-60">Gardens you started</div>
-                <div className="text-base font-semibold tabular-nums">{funStats.loading ? '—' : (funStats.gardensOwned ?? '—')}</div>
-              </div>
-              <div className="rounded-xl border p-3 text-center">
-                <div className="text-[11px] opacity-60">Gardens you're in</div>
-                <div className="text-base font-semibold tabular-nums">{funStats.loading ? '—' : (funStats.gardensMember ?? '—')}</div>
               </div>
               <div className="rounded-xl border p-3 text-center">
                 <div className="text-[11px] opacity-60">Plants you're tending</div>
