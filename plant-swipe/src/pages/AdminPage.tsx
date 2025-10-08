@@ -3,6 +3,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -1447,10 +1448,10 @@ export const AdminPage: React.FC = () => {
                               </DialogHeader>
                               <div className="grid gap-2 mt-2">
                                 <label htmlFor="ban-reason" className="text-xs opacity-60">Reason</label>
-                                <textarea
+                                <Textarea
                                   id="ban-reason"
                                   name="ban-reason"
-                                  className="min-h-[80px] px-3 py-2 rounded-xl border"
+                                  className="min-h-[100px]"
                                   placeholder="Reason for ban"
                                   value={banReason}
                                   onChange={(e) => setBanReason(e.target.value)}

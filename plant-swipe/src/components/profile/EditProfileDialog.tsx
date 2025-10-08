@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import { Textarea } from "@/components/ui/textarea"
 import { ACCENT_OPTIONS, applyAccentByKey, saveAccentKey } from "@/lib/accent"
 import type { AccentKey } from "@/lib/accent"
 
@@ -67,7 +68,7 @@ export const EditProfileDialog: React.FC<{
           </div>
           <div className="grid gap-2">
             <Label htmlFor="ep-bio">Bio</Label>
-            <textarea id="ep-bio" value={values.bio} onChange={(e) => set('bio', (e.target as HTMLTextAreaElement).value)} className="min-h-[80px] px-3 py-2 rounded-xl border" />
+            <Textarea id="ep-bio" value={values.bio} onChange={(e) => set('bio', (e.target as HTMLTextAreaElement).value)} className="min-h-[100px]" />
           </div>
 
           <div className="grid gap-2">
