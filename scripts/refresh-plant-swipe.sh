@@ -41,10 +41,19 @@ esac
 log "Repo (cwd): $WORK_DIR"
 log "Node app: $NODE_DIR"
 
-# Verify we're inside a git repository
+# Ensure inherited environment does not override repository detection
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE || true
+
+# Verify we're inside a git repository (retry once after adding safe.directory)
+log "Verifying git repository…"
 if ! git -C "$WORK_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  echo "[ERROR] Current directory is not inside a git repository: $WORK_DIR" >&2
-  exit 1
+  # Some service users may hit Git's "dubious ownership" protection.
+  # Allow this path as safe for the current user and retry.
+  git config --global --add safe.directory "$WORK_DIR" >/dev/null 2>&1 || true
+  if ! git -C "$WORK_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "[ERROR] Current directory is not inside a git repository: $WORK_DIR" >&2
+    exit 1
+  fi
 fi
 BRANCH_NAME="$(git -C "$WORK_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
 log "Branch: $BRANCH_NAME"
