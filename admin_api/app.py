@@ -29,8 +29,9 @@ def _parse_allowed_services(env_value: str) -> Set[str]:
 
 APP_SECRET = _get_env_var("ADMIN_BUTTON_SECRET", "change-me")
 ADMIN_STATIC_TOKEN = _get_env_var("ADMIN_STATIC_TOKEN", "")
-ALLOWED_SERVICES_RAW = _get_env_var("ADMIN_ALLOWED_SERVICES", "nginx")
-DEFAULT_SERVICE = _get_env_var("ADMIN_DEFAULT_SERVICE", "nginx")
+# Allow nginx, node app, and admin api by default; can be overridden via env
+ALLOWED_SERVICES_RAW = _get_env_var("ADMIN_ALLOWED_SERVICES", "nginx,plant-swipe-node,admin-api")
+DEFAULT_SERVICE = _get_env_var("ADMIN_DEFAULT_SERVICE", "plant-swipe-node")
 
 ALLOWED_SERVICES = _parse_allowed_services(ALLOWED_SERVICES_RAW)
 
