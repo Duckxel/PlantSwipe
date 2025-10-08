@@ -979,27 +979,16 @@ grant execute on function public.get_profile_public_by_display_name(text) to ano
 
 -- Aggregate public stats for a user's gardens/membership
 create or replace function public.get_user_profile_public_stats(_user_id uuid)
-returns table(gardens_owned integer, gardens_member integer, gardens_total integer, plants_total integer, best_streak integer)
+returns table(plants_total integer, best_streak integer)
 language plpgsql
 stable
 security definer
 set search_path = public
 as $$
 declare
-  v_owned int := 0;
-  v_member int := 0;
-  v_total int := 0;
   v_plants int := 0;
   v_best int := 0;
 begin
-  select count(*)::int into v_owned from public.gardens g where g.created_by = _user_id;
-  select count(distinct gm.garden_id)::int into v_member from public.garden_members gm where gm.user_id = _user_id;
-  select count(distinct gid)::int into v_total
-  from (
-    select id as gid from public.gardens where created_by = _user_id
-    union
-    select garden_id as gid from public.garden_members where user_id = _user_id
-  ) t;
   select coalesce(sum(gp.plants_on_hand), 0)::int into v_plants
   from public.garden_plants gp
   where gp.garden_id in (
@@ -1014,7 +1003,7 @@ begin
     union
     select garden_id from public.garden_members where user_id = _user_id
   );
-  return query select v_owned, v_member, v_total, v_plants, v_best;
+  return query select v_plants, v_best;
 end;
 $$;
 grant execute on function public.get_user_profile_public_stats(uuid) to anon, authenticated;

@@ -618,9 +618,6 @@ export const AdminPage: React.FC = () => {
     lastIp?: string | null
     visitsCount?: number
     uniqueIpsCount?: number
-    gardensOwned?: number
-    gardensMember?: number
-    gardensTotal?: number
     plantsTotal?: number
     isBannedEmail?: boolean
     bannedReason?: string | null
@@ -670,9 +667,6 @@ export const AdminPage: React.FC = () => {
         lastIp: data?.lastIp ?? null,
         visitsCount: typeof data?.visitsCount === 'number' ? data.visitsCount : undefined,
         uniqueIpsCount: typeof data?.uniqueIpsCount === 'number' ? data.uniqueIpsCount : undefined,
-        gardensOwned: typeof data?.gardensOwned === 'number' ? data.gardensOwned : undefined,
-        gardensMember: typeof data?.gardensMember === 'number' ? data.gardensMember : undefined,
-        gardensTotal: typeof data?.gardensTotal === 'number' ? data.gardensTotal : undefined,
         plantsTotal: typeof data?.plantsTotal === 'number' ? data.plantsTotal : undefined,
         isBannedEmail: !!data?.isBannedEmail,
         bannedReason: data?.bannedReason ?? null,
@@ -1436,18 +1430,6 @@ export const AdminPage: React.FC = () => {
                     <div className="rounded-xl border p-3 text-center">
                       <div className="text-[11px] opacity-60">Unique IPs</div>
                       <div className="text-base font-semibold tabular-nums">{memberData.uniqueIpsCount ?? '—'}</div>
-                    </div>
-                    <div className="rounded-xl border p-3 text-center">
-                      <div className="text-[11px] opacity-60">Gardens owned</div>
-                      <div className="text-base font-semibold tabular-nums">{memberData.gardensOwned ?? '—'}</div>
-                    </div>
-                    <div className="rounded-xl border p-3 text-center">
-                      <div className="text-[11px] opacity-60">Member of</div>
-                      <div className="text-base font-semibold tabular-nums">{memberData.gardensMember ?? '—'}</div>
-                    </div>
-                    <div className="rounded-xl border p-3 text-center">
-                      <div className="text-[11px] opacity-60">Total gardens</div>
-                      <div className="text-base font-semibold tabular-nums">{memberData.gardensTotal ?? '—'}</div>
                     </div>
                     <div className="rounded-xl border p-3 text-center">
                       <div className="text-[11px] opacity-60">Total plants</div>
