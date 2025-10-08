@@ -31,7 +31,7 @@ export const AdminPage: React.FC = () => {
 
   const [syncing, setSyncing] = React.useState(false)
   
-  const [backingUp, setBackingUp] = React.useState(false)
+  // Backup disabled for now
 
   const [restarting, setRestarting] = React.useState(false)
   const [pulling, setPulling] = React.useState(false)
@@ -432,61 +432,7 @@ export const AdminPage: React.FC = () => {
     }
   }
 
-  const runBackup = async () => {
-    if (backingUp) return
-    setBackingUp(true)
-    try {
-      const token = (await supabase.auth.getSession()).data.session?.access_token
-      if (!token) {
-        alert('You must be signed in to back up the database')
-        return
-      }
-
-      const start = await fetch('/api/admin/backup-db', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        credentials: 'same-origin',
-      })
-      const startBody: { token?: string; filename?: string; error?: string } = await safeJson(start)
-      if (!start.ok) {
-        throw new Error(startBody?.error || `Backup failed (${start.status})`)
-      }
-      const dlToken = startBody?.token
-      const filename: string = startBody?.filename || 'backup.sql.gz'
-      if (!dlToken) throw new Error('Missing download token from server')
-
-      const downloadUrl = `/api/admin/download-backup?token=${encodeURIComponent(dlToken)}`
-      const resp = await fetch(downloadUrl, {
-        method: 'GET',
-        headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/gzip' },
-        credentials: 'same-origin',
-      })
-      if (!resp.ok) {
-        const errText = await resp.text().catch(() => '')
-        let errBody: { error?: string } = {}
-        try { errBody = JSON.parse(errText) } catch {}
-        throw new Error(errBody?.error || errText?.slice(0, 200) || `Download failed (${resp.status})`)
-      }
-      const blob = await resp.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = filename
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      setTimeout(() => URL.revokeObjectURL(url), 2000)
-    } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : String(e)
-      alert(`Backup failed: ${message}`)
-    } finally {
-      setBackingUp(false)
-    }
-  }
+  // Backup UI disabled for now
 
 
   // Loader for total registered accounts (DB first via admin API; fallback to client count)
@@ -1023,10 +969,6 @@ export const AdminPage: React.FC = () => {
             <Button className="rounded-2xl w-full" variant="destructive" onClick={runSyncSchema} disabled={syncing}>
               <Database className="h-4 w-4" />
               <span>{syncing ? 'Syncing Schema…' : 'Sync DB Schema'}</span>
-            </Button>
-            <Button className="rounded-2xl w-full" onClick={runBackup} disabled={backingUp}>
-              <Database className="h-4 w-4" />
-              <span>{backingUp ? 'Creating Backup…' : 'Backup DB'}</span>
             </Button>
           </div>
 
