@@ -566,16 +566,16 @@ export const GardenDashboardPage: React.FC = () => {
       {error && <div className="p-6 text-sm text-red-600">{error}</div>}
       {!loading && garden && (
         <>
-          <aside className="space-y-2 lg:sticky lg:top-4 self-start">
+          <aside className="space-y-2 md:sticky md:top-4 self-start">
             <div className="text-xl font-semibold">{garden.name}</div>
-            <nav className="flex lg:flex-col gap-2">
+            <nav className="flex flex-wrap md:flex-col gap-2">
               {([
                 ['overview','Overview'],
                 ['plants','Plants'],
                 ['routine','Routine'],
                 ['settings','Settings'],
               ] as Array<[TabKey, string]>).map(([k, label]) => (
-                <Button key={k} asChild variant={tab === k ? 'default' : 'secondary'} className="rounded-2xl">
+                <Button key={k} asChild variant={tab === k ? 'default' : 'secondary'} className="rounded-2xl md:w-full">
                   <NavLink to={`/garden/${id}/${k}`} className="no-underline">{label}</NavLink>
                 </Button>
               ))}

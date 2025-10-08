@@ -469,8 +469,8 @@ export default function PlantSwipe() {
     onLogout={async () => { await signOut(); navigate('/') }}
   />
 
-      {/* Mobile bottom nav */}
-      <MobileNavBar canCreate={Boolean(user)} />
+      {/* Mobile bottom nav (hide Create on phones) */}
+      <MobileNavBar canCreate={false} />
 
       {/* Layout: grid only when search view (to avoid narrow column in other views) */}
       <div className={`max-w-6xl mx-auto mt-6 ${currentView === 'search' ? 'lg:grid lg:grid-cols-[260px_1fr] lg:gap-10' : ''}`}>

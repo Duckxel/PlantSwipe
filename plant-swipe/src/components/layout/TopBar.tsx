@@ -77,7 +77,7 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
   }, [user?.id])
   const label = displayName && displayName.trim().length > 0 ? displayName : 'Profile'
   return (
-    <header className="max-w-5xl mx-auto w-full flex items-center gap-3 px-2 overflow-x-hidden">
+    <header className="max-w-6xl mx-auto w-full flex items-center gap-3 px-2 overflow-x-hidden">
       <div className="h-10 w-10 rounded-2xl bg-green-200 flex items-center justify-center shadow">
         <Leaf className="h-5 w-5" />
       </div>
