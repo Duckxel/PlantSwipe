@@ -6,8 +6,8 @@ import { createPortal } from "react-dom"
 import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
 import { EditProfileDialog, type EditProfileValues } from "@/components/profile/EditProfileDialog"
-import { applyAccentByKey, saveAccentKey } from "@/lib/accent"
-import { MapPin } from "lucide-react"
+import { applyAccentByKey, saveAccentKey, getAccentOption } from "@/lib/accent"
+import { MapPin, User as UserIcon } from "lucide-react"
 
 type PublicProfile = {
   id: string
@@ -20,6 +20,7 @@ type PublicProfile = {
   joined_at?: string | null
   last_seen_at?: string | null
   is_online?: boolean | null
+  accent_key?: string | null
 }
 
 type PublicStats = {
@@ -42,6 +43,11 @@ export default function PublicProfilePage() {
   const [pp, setPp] = React.useState<PublicProfile | null>(null)
   const [stats, setStats] = React.useState<PublicStats | null>(null)
   const [monthDays, setMonthDays] = React.useState<DayAgg[]>([])
+  const iconColor = React.useMemo(() => {
+    if (!pp?.accent_key) return null
+    const opt = getAccentOption(pp.accent_key as any)
+    return opt ? `hsl(${opt.hsl})` : null
+  }, [pp?.accent_key])
 
   const formatLastSeen = React.useCallback((iso: string | null | undefined) => {
     if (!iso) return 'A long time ago'
@@ -89,6 +95,7 @@ export default function PublicProfilePage() {
           joined_at: row.joined_at ? String(row.joined_at) : null,
           last_seen_at: row.last_seen_at ? String(row.last_seen_at) : null,
           is_online: Boolean(row.is_online || false),
+          accent_key: row.accent_key || null,
         })
 
         // Stats (plants total, gardens count, current and best streak)
@@ -211,8 +218,11 @@ export default function PublicProfilePage() {
           <Card className="rounded-3xl">
             <CardContent className="p-6 md:p-8 space-y-4">
               <div className="flex items-start gap-4">
-                <div className="h-16 w-16 rounded-2xl bg-stone-200 overflow-hidden" aria-hidden>
-                  {/* avatar placeholder */}
+                <div className="h-16 w-16 rounded-2xl bg-stone-200 overflow-hidden flex items-center justify-center" aria-hidden>
+                  <UserIcon
+                    className="h-8 w-8"
+                    style={{ color: iconColor || 'rgb(22 101 52)' }}
+                  />
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">

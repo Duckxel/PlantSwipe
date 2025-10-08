@@ -1040,6 +1040,7 @@ returns table(
   country text,
   bio text,
   avatar_url text,
+  accent_key text,
   is_admin boolean,
   joined_at timestamptz,
   last_seen_at timestamptz,
@@ -1051,7 +1052,7 @@ security definer
 set search_path = public
 as $$
   with base as (
-    select p.id, p.display_name, p.country, p.bio, p.avatar_url, p.is_admin
+    select p.id, p.display_name, p.country, p.bio, p.avatar_url, p.accent_key, p.is_admin
     from public.profiles p
     where lower(p.display_name) = lower(_name)
     limit 1
@@ -1072,6 +1073,7 @@ as $$
          b.country,
          b.bio,
          b.avatar_url,
+         b.accent_key,
          b.is_admin,
          a.joined_at,
          l.last_seen_at,
