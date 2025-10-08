@@ -172,8 +172,8 @@ export default function PublicProfilePage() {
     }
   }, [menuOpen])
 
-  const grid = React.useMemo(() => {
-    // Build fixed 28-day window (4 columns x 7 rows), chronological left-to-right, top-to-bottom
+  const rows = React.useMemo(() => {
+    // Build fixed 28-day window displayed as 4 rows x 7 columns (horizontal weeks)
     if (monthDays.length === 0) return [] as Array<Array<{ date: string; value: number; success: boolean }>>
     const map = new Map<string, DayAgg>()
     for (const d of monthDays) map.set(d.day, d)
@@ -186,9 +186,9 @@ export default function PublicProfilePage() {
       const r = map.get(ymd)
       days.push(r ? { date: ymd, value: r.completed, success: r.any_success } : { date: ymd, value: 0, success: false })
     }
-    const cols: Array<Array<{ date: string; value: number; success: boolean }>> = []
-    for (let i = 0; i < days.length; i += 7) cols.push(days.slice(i, i + 7))
-    return cols
+    const rows: Array<Array<{ date: string; value: number; success: boolean }>> = []
+    for (let i = 0; i < days.length; i += 7) rows.push(days.slice(i, i + 7))
+    return rows
   }, [monthDays])
 
   const colorFor = (cell: { value: number; success: boolean } | null) => {
@@ -203,6 +203,15 @@ export default function PublicProfilePage() {
       'bg-emerald-700',
     ][v]
   }
+
+  const [tooltip, setTooltip] = React.useState<{ top: number; left: number; date: string; value: number; success: boolean } | null>(null)
+  const showTooltip = (el: HTMLElement, cell: { date: string; value: number; success: boolean }) => {
+    const r = el.getBoundingClientRect()
+    const top = Math.max(8, r.top - 8)
+    const left = r.left + r.width / 2
+    setTooltip({ top, left, date: cell.date, value: cell.value, success: cell.success })
+  }
+  const hideTooltip = () => setTooltip(null)
 
   return (
     <div className="max-w-3xl mx-auto mt-8 px-4 md:px-0">
@@ -291,18 +300,37 @@ export default function PublicProfilePage() {
             <Card className="rounded-3xl">
               <CardContent className="p-6 md:p-8 space-y-4">
                 <div className="text-lg font-semibold">Past 28 days</div>
-                <div className="flex gap-1">
-                  {grid.map((col, cidx) => (
-                    <div key={cidx} className="grid grid-rows-7 gap-1">
-                      {Array.from({ length: 7 }).map((_, r) => {
-                        const item = col[r] || null
-                        const title = item ? `${item.date}: ${item.value} tasks` : ''
-                        return <div key={r} className={`h-5 w-5 rounded-sm ${colorFor(item)}`} title={title} />
-                      })}
+                <div className="flex flex-col gap-1">
+                  {rows.map((row: Array<{ date: string; value: number; success: boolean }>, ridx: number) => (
+                    <div key={ridx} className="grid grid-cols-7 gap-1">
+                      {row.map((item: { date: string; value: number; success: boolean }, cidx: number) => (
+                        <button
+                          key={cidx}
+                          type="button"
+                          className={`h-5 w-5 rounded-sm ${colorFor(item)}`}
+                          onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => item && showTooltip(e.currentTarget as HTMLButtonElement, item)}
+                          onMouseLeave={hideTooltip}
+                          onFocus={(e: React.FocusEvent<HTMLButtonElement>) => item && showTooltip(e.currentTarget as HTMLButtonElement, item)}
+                          onBlur={hideTooltip}
+                          aria-label={item ? `${new Date(item.date).toLocaleDateString()}: ${item.value} tasks${item.success ? ', completed day' : ''}` : ''}
+                        />
+                      ))}
                     </div>
                   ))}
                 </div>
                 <div className="text-xs opacity-60">Gray = no activity • Green = completed days (darker = more tasks)</div>
+                {tooltip && createPortal(
+                  <div
+                    className="fixed z-[70] pointer-events-none"
+                    style={{ top: tooltip.top, left: tooltip.left, transform: 'translate(-50%, -100%)' }}
+                  >
+                    <div className="rounded-xl border bg-white shadow px-3 py-2">
+                      <div className="text-xs font-medium">{new Date(tooltip.date).toLocaleDateString()}</div>
+                      <div className="text-[11px] opacity-70">{tooltip.value} tasks{tooltip.success ? ' • Completed day' : ''}</div>
+                    </div>
+                  </div>,
+                  document.body
+                )}
               </CardContent>
             </Card>
           </div>
