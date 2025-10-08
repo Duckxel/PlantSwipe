@@ -17,7 +17,7 @@ export const MobileNavBar: React.FC<MobileNavBarProps> = ({ canCreate }) => {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 md:hidden z-50 border-t bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/70"
+      className="fixed bottom-0 left-0 right-0 md:hidden z-50 border-t bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/70 pb-[max(env(safe-area-inset-bottom),0px)]"
       role="navigation"
       aria-label="Primary"
     >
