@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { PlantDetails } from '@/components/plant/PlantDetails'
-import { Info } from 'lucide-react'
+import { Info, ArrowUpRight } from 'lucide-react'
 import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
 import { TaskEditorDialog } from '@/components/plant/TaskEditorDialog'
 import type { Garden } from '@/types/garden'
@@ -1033,6 +1033,7 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner }: { member: { 
   const [busy, setBusy] = React.useState(false)
   const canPromote = viewerIsOwner && member.role !== 'owner'
   const canRemove = viewerIsOwner && member.role !== 'owner'
+  const navigate = useNavigate()
   const doPromote = async () => {
     if (!canPromote || busy) return
     setBusy(true)
@@ -1057,7 +1058,17 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner }: { member: { 
     }
   }
   return (
-    <Card className="rounded-2xl p-4">
+    <Card className="rounded-2xl p-4 relative">
+      {/* Up-right arrow to view public profile */}
+      {member.displayName && (
+        <button
+          className="absolute top-2 right-2 h-8 w-8 rounded-full flex items-center justify-center border bg-white/90 text-black hover:bg-white shadow"
+          aria-label="View profile"
+          onClick={(e) => { e.stopPropagation(); navigate(`/u/${encodeURIComponent(member.displayName!)}`) }}
+        >
+          <ArrowUpRight className="h-4 w-4" />
+        </button>
+      )}
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="font-medium max-w-[60vw] truncate">{member.displayName || member.userId}</div>
