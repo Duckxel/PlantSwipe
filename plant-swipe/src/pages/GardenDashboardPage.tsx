@@ -839,6 +839,25 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
     if (!duePlantIds) return []
     return plants.filter((gp: any) => duePlantIds.has(gp.id))
   }, [plants, duePlantIds])
+  const hasTodayTasks = (todayTaskOccurrences || []).length > 0
+  const emptyPhrases = React.useMemo(() => [
+    'Bored? Maybe it\'s time to get more plants… 🪴',
+    'All quiet in the garden today. Enjoy the calm! 🌿',
+    'Nothing due today — your plants salute you. 🫡',
+    'Free day! Maybe browse for a new leafy friend? 🌱',
+    'Rest day. Hydrate yourself instead of the plants. 💧',
+    'No tasks now. Perfect time to plan your next bloom. 🌼',
+    'Garden\'s on cruise control. You earned it. 😌',
+    'No chores today — maybe prune your playlist? 🎧',
+    'Nothing to do! Consider a new herb for the kitchen. 🌿🍃',
+    'Feet up, gloves off. Tomorrow\'s another grow day. 🧤',
+    'Zero tasks. Maximum vibes. ✨',
+    'Your routine is empty — your cart doesn\'t have to be. 🛒🪴',
+  ], [])
+  const randomEmptyPhrase = React.useMemo(() => {
+    const idx = Math.floor(Math.random() * emptyPhrases.length)
+    return emptyPhrases[idx]
+  }, [emptyPhrases])
   const maxCount = Math.max(1, ...weekCounts)
   const occsByPlant: Record<string, typeof todayTaskOccurrences> = {}
   for (const o of todayTaskOccurrences) {
@@ -893,40 +912,46 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
       <div className="flex justify-between items-center">
         <div className="text-base font-medium">Today</div>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {plants.map((gp: any) => {
-          const occs = occsByPlant[gp.id] || []
-          const totalReq = occs.reduce((a, o) => a + Math.max(1, o.requiredCount || 1), 0)
-          const totalDone = occs.reduce((a, o) => a + Math.min(Math.max(1, o.requiredCount || 1), o.completedCount || 0), 0)
-          if (occs.length === 0) return null
-          return (
-            <Card key={gp.id} className="rounded-2xl p-4">
-              <div className="font-medium">{gp.nickname || gp.plant?.name}</div>
-              {gp.nickname && <div className="text-xs opacity-60">{gp.plant?.name}</div>}
-              <div className="text-sm opacity-70">Tasks due: {totalDone} / {totalReq}</div>
-              <div className="mt-2 flex flex-col gap-2">
-                {occs.map((o) => {
-                  const tt = (o as any).taskType || 'custom'
-                  const badgeClass = `${typeToColor[tt]} ${tt === 'harvest' ? 'text-black' : 'text-white'}`
-                  const customEmoji = (o as any).taskEmoji || null
-                  const icon = customEmoji || (tt === 'water' ? '💧' : tt === 'fertilize' ? '🍽️' : tt === 'harvest' ? '🌾' : tt === 'cut' ? '✂️' : '🪴')
-                  return (
-                    <div key={o.id} className="flex items-center justify-between gap-3 text-sm rounded-xl border p-2">
-                      <div className="flex items-center gap-2">
-                        <span className={`h-6 w-6 flex items-center justify-center rounded-md border`}>{icon}</span>
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full ${badgeClass}`}>{String(tt).toUpperCase()}</span>
-                        {/* Time removed per request */}
+      {hasTodayTasks ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {plants.map((gp: any) => {
+            const occs = occsByPlant[gp.id] || []
+            const totalReq = occs.reduce((a, o) => a + Math.max(1, o.requiredCount || 1), 0)
+            const totalDone = occs.reduce((a, o) => a + Math.min(Math.max(1, o.requiredCount || 1), o.completedCount || 0), 0)
+            if (occs.length === 0) return null
+            return (
+              <Card key={gp.id} className="rounded-2xl p-4">
+                <div className="font-medium">{gp.nickname || gp.plant?.name}</div>
+                {gp.nickname && <div className="text-xs opacity-60">{gp.plant?.name}</div>}
+                <div className="text-sm opacity-70">Tasks due: {totalDone} / {totalReq}</div>
+                <div className="mt-2 flex flex-col gap-2">
+                  {occs.map((o) => {
+                    const tt = (o as any).taskType || 'custom'
+                    const badgeClass = `${typeToColor[tt]} ${tt === 'harvest' ? 'text-black' : 'text-white'}`
+                    const customEmoji = (o as any).taskEmoji || null
+                    const icon = customEmoji || (tt === 'water' ? '💧' : tt === 'fertilize' ? '🍽️' : tt === 'harvest' ? '🌾' : tt === 'cut' ? '✂️' : '🪴')
+                    return (
+                      <div key={o.id} className="flex items-center justify-between gap-3 text-sm rounded-xl border p-2">
+                        <div className="flex items-center gap-2">
+                          <span className={`h-6 w-6 flex items-center justify-center rounded-md border`}>{icon}</span>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full ${badgeClass}`}>{String(tt).toUpperCase()}</span>
+                          {/* Time removed per request */}
+                        </div>
+                        <div className="opacity-80">{o.completedCount} / {o.requiredCount}</div>
+                        <Button className="rounded-xl" size="sm" onClick={() => onProgressOccurrence(o.id, 1)} disabled={(o.completedCount || 0) >= (o.requiredCount || 1)}>Complete +1</Button>
                       </div>
-                      <div className="opacity-80">{o.completedCount} / {o.requiredCount}</div>
-                      <Button className="rounded-xl" size="sm" onClick={() => onProgressOccurrence(o.id, 1)} disabled={(o.completedCount || 0) >= (o.requiredCount || 1)}>Complete +1</Button>
-                    </div>
-                  )
-                })}
-              </div>
-            </Card>
-          )
-        })}
-      </div>
+                    )
+                  })}
+                </div>
+              </Card>
+            )
+          })}
+        </div>
+      ) : (
+        <Card className="rounded-2xl p-6 text-center">
+          <div className="text-base">{randomEmptyPhrase}</div>
+        </Card>
+      )}
       <div className="pt-2">
         <div className="text-base font-medium">Due this week</div>
       </div>
