@@ -108,7 +108,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const check = await fetch(`/api/banned/check?email=${encodeURIComponent(email)}`, { credentials: 'same-origin' }).then(r => r.json()).catch(() => ({ banned: false }))
       if (check?.banned) return { error: 'Your account has been banned.' }
     } catch {}
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    // Allow login with display name (username) or email
+    let loginEmail = email
+    if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      try {
+        const { data, error: rpcErr } = await supabase.rpc('get_email_by_display_name', { _name: email })
+        if (!rpcErr && data) loginEmail = String(data)
+      } catch {}
+    }
+    const { error } = await supabase.auth.signInWithPassword({ email: loginEmail, password })
     if (error) return { error: error.message }
     // Fetch profile in background; do not block sign-in completion
     refreshProfile().catch(() => {})

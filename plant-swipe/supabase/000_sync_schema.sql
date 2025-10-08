@@ -1078,6 +1078,21 @@ as $$
 $$;
 grant execute on function public.is_display_name_available(text) to anon, authenticated;
 
+-- Resolve email by display name (for username-style login)
+create or replace function public.get_email_by_display_name(_name text)
+returns text
+language sql
+security definer
+set search_path = public
+as $$
+  select u.email
+  from auth.users u
+  join public.profiles p on p.id = u.id
+  where lower(p.display_name) = lower(_name)
+  limit 1;
+$$;
+grant execute on function public.get_email_by_display_name(text) to anon, authenticated;
+
 -- Private info fetch (self or admin only)
 create or replace function public.get_user_private_info(_user_id uuid)
 returns table(id uuid, email text)
