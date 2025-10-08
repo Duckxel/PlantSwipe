@@ -40,7 +40,7 @@ export const MobileNavBar: React.FC<MobileNavBarProps> = ({ canCreate }) => {
       role="navigation"
       aria-label="Primary"
     >
-      <div className="relative mx-auto max-w-5xl px-6 pt-3 pb-3">
+      <div className="relative mx-auto max-w-6xl px-6 pt-3 pb-3">
         {/* Center floating create button */}
         {canCreate && (
           <div className="pointer-events-none absolute -top-6 left-1/2 -translate-x-1/2">
