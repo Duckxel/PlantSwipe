@@ -1,5 +1,6 @@
 import React from 'react'
 import { supabase, type ProfileRow } from '@/lib/supabaseClient'
+import { applyAccentByKey } from '@/lib/accent'
 
 type AuthUser = {
   id: string
@@ -46,13 +47,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, display_name, liked_plant_ids, is_admin, username, country, bio, favorite_plant, avatar_url, timezone, experience_years')
+      .select('id, display_name, liked_plant_ids, is_admin, username, country, bio, favorite_plant, avatar_url, timezone, experience_years, accent_key')
       .eq('id', currentId)
       .maybeSingle()
     if (!error) {
       setProfile(data as any)
       // Persist profile alongside session so reloads can hydrate faster
       try { localStorage.setItem('plantswipe.profile', JSON.stringify(data)) } catch {}
+      // Apply accent if present
+      if ((data as any)?.accent_key) {
+        try { applyAccentByKey((data as any).accent_key) } catch {}
+      }
     }
   }, [])
 
@@ -93,6 +98,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       id: uid,
       display_name: displayName,
       liked_plant_ids: [],
+      accent_key: 'emerald',
     })
     if (perr) return { error: perr.message }
 
