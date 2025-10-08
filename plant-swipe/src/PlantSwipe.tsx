@@ -488,10 +488,10 @@ export default function PlantSwipe() {
             <div>
               <Label htmlFor="plant-search" className="sr-only">Search plants</Label>
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-60" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-60 pointer-events-none" />
                 <Input
                   id="plant-search"
-                  className="pl-9"
+                  className="pl-9 md:pl-9"
                   placeholder="Search name, meaning, color…"
                   value={query}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
