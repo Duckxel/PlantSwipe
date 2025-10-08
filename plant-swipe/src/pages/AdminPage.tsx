@@ -35,6 +35,15 @@ export const AdminPage: React.FC = () => {
 
   const [restarting, setRestarting] = React.useState(false)
   const [pulling, setPulling] = React.useState(false)
+  const [logOpen, setLogOpen] = React.useState<boolean>(false)
+  const [logLines, setLogLines] = React.useState<string[]>([])
+  const logRef = React.useRef<HTMLDivElement | null>(null)
+  React.useEffect(() => {
+    if (!logOpen) return
+    const el = logRef.current
+    if (!el) return
+    el.scrollTop = el.scrollHeight
+  }, [logLines, logOpen])
 
   // Safely parse response body into JSON, tolerating HTML/error pages
   const safeJson = React.useCallback(async (resp: Response): Promise<any> => {
@@ -372,31 +381,49 @@ export const AdminPage: React.FC = () => {
     if (pulling) return
     setPulling(true)
     try {
-      const token = (await supabase.auth.getSession()).data.session?.access_token
-      // Try POST first to ensure Authorization header is preserved across proxies
-      let res = await fetch('/api/admin/pull-code', {
-        method: 'POST',
-        headers: token ? { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Accept': 'application/json' } : { 'Accept': 'application/json' },
-        body: token ? '{}' : undefined,
+      // Use streaming endpoint for live logs
+      setLogLines([])
+      setLogOpen(true)
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      const headers: Record<string, string> = {}
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+        if (adminToken) headers['X-Admin-Token'] = String(adminToken)
+      } catch {}
+      const resp = await fetch('/api/admin/pull-code/stream', {
+        method: 'GET',
+        headers,
         credentials: 'same-origin',
       })
-      if (res.status === 405) {
-        // Fallback to GET if POST is blocked
-        res = await fetch('/api/admin/pull-code', {
-          method: 'GET',
-          headers: token ? { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } : { 'Accept': 'application/json' },
-          credentials: 'same-origin',
-        })
+      if (!resp.ok || !resp.body) {
+        const body = await safeJson(resp)
+        throw new Error(body?.error || `Stream failed (${resp.status})`)
       }
-      if (!res.ok) {
-        const body: any = await safeJson(res)
-        if (!body || Object.keys(body).length === 0) {
-          const text = await res.text().catch(() => '')
-          throw new Error(text?.slice(0, 200) || `Request failed (${res.status})`)
+      const reader = resp.body.getReader()
+      const decoder = new TextDecoder()
+      let buf = ''
+      const append = (line: string) => setLogLines(prev => [...prev, line])
+      // Minimal SSE parser: handle lines starting with 'data:' and emit
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += decoder.decode(value, { stream: true })
+        let idx
+        while ((idx = buf.indexOf('\n')) >= 0) {
+          const raw = buf.slice(0, idx)
+          buf = buf.slice(idx + 1)
+          const line = raw.replace(/\r$/, '')
+          if (!line) continue
+          if (line.startsWith('data:')) {
+            const payload = line.slice(5).trimStart()
+            append(payload)
+          } else if (!/^(:|event:|id:|retry:)/.test(line)) {
+            append(line)
+          }
         }
-        throw new Error(body?.error || `Request failed (${res.status})`)
       }
-      setTimeout(() => { window.location.reload() }, 800)
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e)
       alert(`Failed to pull & build: ${message}`)
@@ -1054,6 +1081,23 @@ export const AdminPage: React.FC = () => {
             </div>
             <Card className="rounded-2xl">
               <CardContent className="p-4">
+                {/* Live logs from Pull & Build */}
+                {logOpen && (
+                  <div className="mb-3">
+                    <div className="text-sm font-medium mb-1">Pull & Build logs</div>
+                    <div
+                      ref={logRef}
+                      className="h-48 overflow-auto rounded-xl border bg-black text-white text-xs p-3 font-mono whitespace-pre-wrap"
+                      aria-live="polite"
+                    >
+                      {logLines.length === 0 ? 'Starting…' : logLines.join('\n')}
+                    </div>
+                    <div className="mt-2 flex gap-2">
+                      <Button size="sm" variant="secondary" className="rounded-xl" onClick={() => setLogOpen(false)}>Hide</Button>
+                      <Button size="sm" className="rounded-xl" onClick={() => { setLogLines([]); setLogOpen(true) }}>Clear</Button>
+                    </div>
+                  </div>
+                )}
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <div>
                     <div className="text-sm font-medium">Unique visitors — last 7 days</div>

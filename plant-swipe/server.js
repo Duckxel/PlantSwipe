@@ -1892,6 +1892,84 @@ app.options('/api/admin/pull-code', (_req, res) => {
   res.status(204).end()
 })
 
+// Admin: stream pull/build logs via Server-Sent Events (SSE)
+app.get('/api/admin/pull-code/stream', async (req, res) => {
+  try {
+    const uid = "public"
+    if (!uid) return
+
+    // Require admin (same policy as other admin endpoints)
+    const isAdmin = await isAdminFromRequest(req)
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Admin privileges required' })
+      return
+    }
+
+    // SSE headers
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache, no-transform')
+    res.setHeader('Connection', 'keep-alive')
+    res.setHeader('X-Accel-Buffering', 'no') // for nginx
+    res.flushHeaders?.()
+
+    const send = (event, data) => {
+      try {
+        if (event) res.write(`event: ${event}\n`)
+        const payload = typeof data === 'string' ? data : JSON.stringify(data)
+        // Split by lines to avoid giant frames
+        const lines = String(payload).split(/\r?\n/) || []
+        for (const line of lines) res.write(`data: ${line}\n`)
+        res.write('\n')
+      } catch {}
+    }
+
+    send('open', { ok: true, message: 'Starting refresh…' })
+
+    const repoRoot = path.resolve(__dirname, '..')
+    const scriptPath = path.resolve(repoRoot, 'scripts', 'refresh-plant-swipe.sh')
+    try { await fs.access(scriptPath) } catch {
+      send('error', { error: `refresh script not found at ${scriptPath}` })
+      res.end()
+      return
+    }
+    try { await fs.chmod(scriptPath, 0o755) } catch {}
+
+    // Spawn with --no-restart so we can finish streaming, caller can manually reload if desired
+    const child = spawnChild(scriptPath, ['--no-restart'], {
+      cwd: repoRoot,
+      env: { ...process.env, CI: process.env.CI || 'true', SKIP_SERVICE_RESTARTS: '1' },
+      shell: false,
+    })
+
+    // Stream stdout/stderr
+    child.stdout?.on('data', (buf) => {
+      const text = buf.toString()
+      send('log', text)
+    })
+    child.stderr?.on('data', (buf) => {
+      const text = buf.toString()
+      send('log', text)
+    })
+    child.on('error', (err) => {
+      send('error', { error: err?.message || 'spawn failed' })
+    })
+    child.on('close', (code) => {
+      if (code === 0) {
+        send('done', { ok: true, code })
+      } else {
+        send('done', { ok: false, code })
+      }
+      try { res.end() } catch {}
+    })
+
+    // Heartbeat to keep the connection alive behind proxies
+    const id = setInterval(() => { try { res.write(': ping\n\n') } catch {} }, 15000)
+    req.on('close', () => { try { clearInterval(id) } catch {}; try { child.kill('SIGTERM') } catch {} })
+  } catch (e) {
+    try { res.status(500).json({ error: e?.message || 'stream failed' }) } catch {}
+  }
+})
+
 // Admin: list remote branches and current branch
 app.get('/api/admin/branches', async (req, res) => {
   try {
