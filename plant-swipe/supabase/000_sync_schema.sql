@@ -1404,6 +1404,21 @@ as $$
   limit greatest(1, coalesce(_limit, 5));
 $$;
 
+-- Suggest users by display_name prefix (username), joining to auth.users for ordering/metadata
+create or replace function public.suggest_users_by_display_name_prefix(_prefix text, _limit int default 5)
+returns table(id uuid, display_name text, created_at timestamptz)
+language sql
+security definer
+set search_path = public
+as $$
+  select u.id, p.display_name, u.created_at
+  from public.profiles p
+  join auth.users u on u.id = p.id
+  where p.display_name ilike _prefix || '%'
+  order by u.created_at desc
+  limit greatest(1, coalesce(_limit, 5));
+$$;
+
 -- Count helpers for Admin API fallbacks via Supabase REST RPC
 create or replace function public.count_profiles_total()
 returns integer

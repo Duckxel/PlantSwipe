@@ -14,7 +14,7 @@ import {
   Tooltip,
   ReferenceLine,
 } from 'recharts'
-import { RefreshCw, Server, Database, Github, ExternalLink, ShieldCheck, ShieldX, Mail, UserSearch, AlertTriangle, Gavel } from "lucide-react"
+import { RefreshCw, Server, Database, Github, ExternalLink, ShieldCheck, ShieldX, UserSearch, AlertTriangle, Gavel, Search } from "lucide-react"
 import { supabase } from '@/lib/supabaseClient'
 import {
   Dialog,
@@ -638,8 +638,8 @@ export const AdminPage: React.FC = () => {
   // Container ref for Members tab to run form-field validation logs
   const membersContainerRef = React.useRef<HTMLDivElement | null>(null)
 
-  // Email autocomplete state
-  const [emailSuggestions, setEmailSuggestions] = React.useState<Array<{ id: string; email: string }>>([])
+  // Email/username autocomplete state
+  const [emailSuggestions, setEmailSuggestions] = React.useState<Array<{ id: string; email: string | null; display_name?: string | null }>>([])
   const [suggestionsOpen, setSuggestionsOpen] = React.useState(false)
   const [suggestLoading, setSuggestLoading] = React.useState(false)
   const [highlightIndex, setHighlightIndex] = React.useState<number>(-1)
@@ -686,7 +686,7 @@ export const AdminPage: React.FC = () => {
     try {
       const session = (await supabase.auth.getSession()).data.session
       const token = session?.access_token
-      const url = `/api/admin/member?email=${encodeURIComponent(lookupEmail)}`
+      const url = `/api/admin/member?q=${encodeURIComponent(lookupEmail)}`
       const headers: Record<string,string> = { 'Accept': 'application/json' }
       if (token) headers['Authorization'] = `Bearer ${token}`
       try {
@@ -830,7 +830,7 @@ export const AdminPage: React.FC = () => {
     }
   }, [lookupEmail, demoteSubmitting, safeJson])
 
-  // Debounced email suggestions fetch
+  // Debounced email/username suggestions fetch
   React.useEffect(() => {
     let cancelled = false
     let timer: any = null
@@ -858,7 +858,7 @@ export const AdminPage: React.FC = () => {
         const data = await safeJson(resp)
         if (cancelled) return
         if (resp.ok && Array.isArray(data?.suggestions)) {
-          setEmailSuggestions(data.suggestions.map((s: any) => ({ id: String(s.id), email: String(s.email) })))
+          setEmailSuggestions(data.suggestions.map((s: any) => ({ id: String(s.id), email: s?.email ? String(s.email) : null, display_name: s?.display_name ? String(s.display_name) : null })))
           setSuggestionsOpen(true)
           setHighlightIndex(-1)
         } else {
@@ -1231,16 +1231,16 @@ export const AdminPage: React.FC = () => {
             <div className="space-y-4" ref={membersContainerRef}>
           <Card className="rounded-2xl">
                 <CardContent className="p-4 space-y-3">
-                  <div className="text-sm font-medium flex items-center gap-2"><UserSearch className="h-4 w-4" /> Find member by email</div>
+                  <div className="text-sm font-medium flex items-center gap-2"><UserSearch className="h-4 w-4" /> Find member by email or username</div>
                   <div className="flex gap-2 relative">
                     <div className="flex-1 relative">
                   <Input
                     id="member-email"
                     name="member-email"
                     autoComplete="email"
-                    aria-label="Member email"
+                    aria-label="Member email or username"
                     className="rounded-xl"
-                    placeholder="user@example.com"
+                    placeholder="user@example.com or username"
                     value={lookupEmail}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => setLookupEmail(e.target.value)}
                     onFocus={() => { if (emailSuggestions.length > 0) setSuggestionsOpen(true) }}
@@ -1250,7 +1250,9 @@ export const AdminPage: React.FC = () => {
                         if (suggestionsOpen && emailSuggestions.length > 0 && highlightIndex >= 0 && highlightIndex < emailSuggestions.length) {
                           e.preventDefault()
                           const chosen = emailSuggestions[highlightIndex]
-                          setLookupEmail(chosen.email)
+                          const typed = lookupEmail.trim()
+                          const nextVal = typed.includes('@') ? (chosen.email || chosen.display_name || '') : (chosen.display_name || chosen.email || '')
+                          setLookupEmail(nextVal)
                           setSuggestionsOpen(false)
                         } else {
                           e.preventDefault()
@@ -1280,11 +1282,16 @@ export const AdminPage: React.FC = () => {
                               onMouseEnter={() => setHighlightIndex(idx)}
                               onMouseDown={(e) => {
                                 e.preventDefault()
-                                setLookupEmail(s.email)
+                                const typed = lookupEmail.trim()
+                                const nextVal = typed.includes('@') ? (s.email || s.display_name || '') : (s.display_name || s.email || '')
+                                setLookupEmail(nextVal)
                                 setSuggestionsOpen(false)
                               }}
                             >
-                              {s.email}
+                              <div className="truncate">{s.display_name || s.email || ''}</div>
+                              {s.display_name && s.email && s.display_name !== s.email && (
+                                <div className="text-xs opacity-60 truncate">{s.email}</div>
+                              )}
                             </button>
                           ))}
                           {suggestLoading && (
@@ -1294,7 +1301,7 @@ export const AdminPage: React.FC = () => {
                       )}
                     </div>
                     <Button className="rounded-2xl" onClick={lookupMember} disabled={memberLoading || !lookupEmail}>
-                      <Mail className="h-4 w-4" /> Lookup
+                      <Search className="h-4 w-4" /> Lookup
                     </Button>
                   </div>
               {memberError && <div className="text-sm text-rose-600">{memberError}</div>}

@@ -902,12 +902,18 @@ app.get('/api/admin/stats', async (req, res) => {
 app.get('/api/admin/member', async (req, res) => {
   try {
     // Admin check disabled to ensure member lookup works universally
-    const emailParam = (req.query.email || '').toString().trim()
-    if (!emailParam) {
-      res.status(400).json({ error: 'Missing email' })
+    const rawParam = (req.query.q || req.query.email || req.query.username || req.query.name || '').toString().trim()
+    if (!rawParam) {
+      res.status(400).json({ error: 'Missing query' })
       return
     }
-    const email = emailParam.toLowerCase()
+
+    // Determine whether the query is an email or a display name (username)
+    const isLikelyEmail = /@/.test(rawParam)
+    const emailParam = isLikelyEmail ? rawParam : ''
+    const displayParam = isLikelyEmail ? '' : rawParam
+    const qLower = rawParam.toLowerCase()
+    const email = emailParam ? emailParam.toLowerCase() : null
 
     // Helper: lookup via Supabase REST (fallback when SQL unavailable or fails)
     const lookupViaRest = async () => {
@@ -918,19 +924,48 @@ app.get('/api/admin/member', async (req, res) => {
       }
       const baseHeaders = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
       if (token) Object.assign(baseHeaders, { 'Authorization': `Bearer ${token}` })
-      // Resolve user id via RPC (security definer)
+      // Resolve user id via RPC (security definer) using email or display name
       let targetId = null
-      try {
-        const rpc = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_user_id_by_email`, {
-          method: 'POST',
-          headers: { ...baseHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ _email: emailParam }),
-        })
-        if (rpc.ok) {
-          const val = await rpc.json().catch(() => null)
-          if (val) targetId = String(val)
+      let resolvedEmail = emailParam || null
+      if (emailParam) {
+        try {
+          const rpc = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_user_id_by_email`, {
+            method: 'POST',
+            headers: { ...baseHeaders, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ _email: emailParam }),
+          })
+          if (rpc.ok) {
+            const val = await rpc.json().catch(() => null)
+            if (val) targetId = String(val)
+          }
+        } catch {}
+      } else if (displayParam) {
+        try {
+          const rpc = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_user_id_by_display_name`, {
+            method: 'POST',
+            headers: { ...baseHeaders, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ _name: displayParam }),
+          })
+          if (rpc.ok) {
+            const val = await rpc.json().catch(() => null)
+            if (val) targetId = String(val)
+          }
+        } catch {}
+        // Also resolve email for downstream fields
+        if (targetId && !resolvedEmail) {
+          try {
+            const er = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_email_by_display_name`, {
+              method: 'POST',
+              headers: { ...baseHeaders, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ _name: displayParam }),
+            })
+            if (er.ok) {
+              const val = await er.json().catch(() => null)
+              if (val) resolvedEmail = String(val)
+            }
+          } catch {}
         }
-      } catch {}
+      }
       if (!targetId) {
         res.status(404).json({ error: 'User not found' })
         return
@@ -993,7 +1028,8 @@ app.get('/api/admin/member', async (req, res) => {
       let bannedAt = null
       let bannedIps = []
       try {
-        const br = await fetch(`${supabaseUrlEnv}/rest/v1/banned_accounts?email=eq.${encodeURIComponent(email)}&select=reason,banned_at&order=banned_at.desc&limit=1`, {
+        const emailForBan = (resolvedEmail || emailParam || '').toLowerCase()
+        const br = await fetch(`${supabaseUrlEnv}/rest/v1/banned_accounts?email=eq.${encodeURIComponent(emailForBan)}&select=reason,banned_at&order=banned_at.desc&limit=1`, {
           headers: baseHeaders,
         })
         if (br.ok) {
@@ -1006,7 +1042,8 @@ app.get('/api/admin/member', async (req, res) => {
         }
       } catch {}
       try {
-        const bi = await fetch(`${supabaseUrlEnv}/rest/v1/banned_ips?or=(user_id.eq.${encodeURIComponent(targetId)},email.eq.${encodeURIComponent(email)})&select=ip_address`, {
+        const emailForBan = (resolvedEmail || emailParam || '').toLowerCase()
+        const bi = await fetch(`${supabaseUrlEnv}/rest/v1/banned_ips?or=(user_id.eq.${encodeURIComponent(targetId)},email.eq.${encodeURIComponent(emailForBan)})&select=ip_address`, {
           headers: baseHeaders,
         })
         if (bi.ok) {
@@ -1070,7 +1107,7 @@ app.get('/api/admin/member', async (req, res) => {
 
       res.json({
         ok: true,
-        user: { id: targetId, email: emailParam, created_at: null, email_confirmed_at: null, last_sign_in_at: null },
+        user: { id: targetId, email: resolvedEmail || emailParam || null, created_at: null, email_confirmed_at: null, last_sign_in_at: null },
         profile,
         ips,
         lastOnlineAt,
@@ -1094,7 +1131,18 @@ app.get('/api/admin/member', async (req, res) => {
     // SQL path (preferred when server DB connection is configured)
     let user
     try {
-      const users = await sql`select id, email, created_at, email_confirmed_at, last_sign_in_at from auth.users where lower(email) = ${email} limit 1`
+      let users
+      if (email) {
+        users = await sql`select id, email, created_at, email_confirmed_at, last_sign_in_at from auth.users where lower(email) = ${email} limit 1`
+      } else {
+        users = await sql`
+          select u.id, u.email, u.created_at, u.email_confirmed_at, u.last_sign_in_at
+          from auth.users u
+          join public.profiles p on p.id = u.id
+          where lower(p.display_name) = ${qLower}
+          limit 1
+        `
+      }
       if (!Array.isArray(users) || users.length === 0) {
         // Try REST fallback if not found in DB
         return await lookupViaRest()
@@ -1173,7 +1221,7 @@ app.get('/api/admin/member', async (req, res) => {
       const br = await sql`
         select reason, banned_at
         from public.banned_accounts
-        where lower(email) = ${email}
+        where lower(email) = ${email ? email : (user.email ? user.email.toLowerCase() : '')}
         order by banned_at desc
         limit 1
       `
@@ -1187,7 +1235,7 @@ app.get('/api/admin/member', async (req, res) => {
       const bi = await sql`
         select ip_address::text as ip
         from public.banned_ips
-        where user_id = ${user.id} or lower(email) = ${email}
+        where user_id = ${user.id} or lower(email) = ${email ? email : (user.email ? user.email.toLowerCase() : '')}
       `
       bannedIps = Array.isArray(bi) ? bi.map(r => String(r.ip)).filter(Boolean) : []
     } catch {}
@@ -1313,22 +1361,52 @@ app.get('/api/admin/member-suggest', async (req, res) => {
     }
     // Only suggest existing users from the database (or Supabase RPC fallback)
     const out = []
-    const seen = new Set()
+    const seenIds = new Set()
+    const seenEmails = new Set()
+    const seenDisplay = new Set()
     try {
       if (sql) {
-        const rows = await sql`
-          select id, email, created_at
-          from auth.users
-          where lower(email) like ${q + '%'}
-          order by created_at desc
+        // Email matches
+        const emailRows = await sql`
+          select u.id, u.email, u.created_at, p.display_name
+          from auth.users u
+          left join public.profiles p on p.id = u.id
+          where lower(u.email) like ${q + '%'}
+          order by u.created_at desc
           limit 7
         `
-        if (Array.isArray(rows)) {
-          for (const r of rows) {
-            const key = String(r.email).toLowerCase()
-            if (seen.has(key)) continue
-            seen.add(key)
-            out.push({ id: r.id, email: r.email, created_at: r.created_at })
+        if (Array.isArray(emailRows)) {
+          for (const r of emailRows) {
+            const idKey = String(r.id)
+            const emailKey = (r.email ? String(r.email).toLowerCase() : '')
+            if (seenIds.has(idKey) || (emailKey && seenEmails.has(emailKey))) continue
+            seenIds.add(idKey)
+            if (emailKey) seenEmails.add(emailKey)
+            if (r.display_name) seenDisplay.add(String(r.display_name).toLowerCase())
+            out.push({ id: r.id, email: r.email || null, display_name: r.display_name || null, created_at: r.created_at })
+          }
+        }
+        // Display name matches
+        const nameRows = await sql`
+          select u.id, u.email, u.created_at, p.display_name
+          from public.profiles p
+          join auth.users u on u.id = p.id
+          where lower(p.display_name) like ${q + '%'}
+          order by u.created_at desc
+          limit 7
+        `
+        if (Array.isArray(nameRows)) {
+          for (const r of nameRows) {
+            const idKey = String(r.id)
+            const emailKey = (r.email ? String(r.email).toLowerCase() : '')
+            const dispKey = (r.display_name ? String(r.display_name).toLowerCase() : '')
+            if (seenIds.has(idKey)) continue
+            if (emailKey && seenEmails.has(emailKey)) continue
+            if (dispKey && seenDisplay.has(dispKey)) continue
+            seenIds.add(idKey)
+            if (emailKey) seenEmails.add(emailKey)
+            if (dispKey) seenDisplay.add(dispKey)
+            out.push({ id: r.id, email: r.email || null, display_name: r.display_name || null, created_at: r.created_at })
           }
         }
       } else {
@@ -1337,18 +1415,35 @@ app.get('/api/admin/member-suggest', async (req, res) => {
           const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
           const token = getBearerTokenFromRequest(req)
           if (token) Object.assign(headers, { 'Authorization': `Bearer ${token}` })
-          const resp = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/suggest_users_by_email_prefix`, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({ _prefix: q, _limit: 7 }),
-          })
-          if (resp.ok) {
-            const arr = await resp.json().catch(() => [])
+          // Email suggestions
+          const [emailResp, nameResp] = await Promise.all([
+            fetch(`${supabaseUrlEnv}/rest/v1/rpc/suggest_users_by_email_prefix`, {
+              method: 'POST', headers, body: JSON.stringify({ _prefix: q, _limit: 7 }),
+            }),
+            fetch(`${supabaseUrlEnv}/rest/v1/rpc/suggest_users_by_display_name_prefix`, {
+              method: 'POST', headers, body: JSON.stringify({ _prefix: q, _limit: 7 }),
+            }),
+          ])
+          if (emailResp.ok) {
+            const arr = await emailResp.json().catch(() => [])
             for (const r of Array.isArray(arr) ? arr : []) {
-              const key = String(r.email).toLowerCase()
-              if (seen.has(key)) continue
-              seen.add(key)
-              out.push({ id: r.id, email: r.email, created_at: r.created_at })
+              const idKey = String(r.id)
+              const emailKey = (r.email ? String(r.email).toLowerCase() : '')
+              if (seenIds.has(idKey) || (emailKey && seenEmails.has(emailKey))) continue
+              seenIds.add(idKey)
+              if (emailKey) seenEmails.add(emailKey)
+              out.push({ id: r.id, email: r.email || null, display_name: null, created_at: r.created_at })
+            }
+          }
+          if (nameResp.ok) {
+            const arr = await nameResp.json().catch(() => [])
+            for (const r of Array.isArray(arr) ? arr : []) {
+              const idKey = String(r.id)
+              const dispKey = (r.display_name ? String(r.display_name).toLowerCase() : '')
+              if (seenIds.has(idKey) || (dispKey && seenDisplay.has(dispKey))) continue
+              seenIds.add(idKey)
+              if (dispKey) seenDisplay.add(dispKey)
+              out.push({ id: r.id, email: null, display_name: r.display_name || null, created_at: r.created_at || null })
             }
           }
         }
