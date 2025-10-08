@@ -53,6 +53,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
   const [error, setError] = React.useState<string | null>(null)
   const [ok, setOk] = React.useState<string | null>(null)
   const [advanced, setAdvanced] = React.useState(false)
+  const [everAdvanced, setEverAdvanced] = React.useState(false)
 
   const toggleSeason = (s: Plant["seasons"][number]) => {
     setSeasons((cur: string[]) => (cur.includes(s) ? cur.filter((x: string) => x !== s) : [...cur, s]))
@@ -76,6 +77,9 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
       const nameNorm = name.trim()
       const sciNorm = scientificName.trim()
       const colorArray = colors.split(",").map((c) => c.trim()).filter(Boolean)
+      // If the user has ever switched to Advanced, keep those values even
+      // when saving from Simplified so they persist across toggles.
+      const includeAdvanced = advanced || everAdvanced
 
       // Duplicate check: name (case-insensitive)
       const byName = await supabase.from('plants').select('id').ilike('name', nameNorm).limit(1).maybeSingle()
@@ -93,15 +97,15 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
         description: description || null,
         image_url: imageUrl || null,
         care_sunlight: careSunlight,
-        care_soil: advanced ? (careSoil || null) : null,
+        care_soil: includeAdvanced ? (careSoil || null) : null,
         care_difficulty: careDifficulty,
         seeds_available: seedsAvailable,
         // Default watering frequency fields (advanced only)
-        water_freq_period: advanced ? waterFreqPeriod : null,
-        water_freq_amount: advanced ? normalizedAmount : null,
+        water_freq_period: includeAdvanced ? waterFreqPeriod : null,
+        water_freq_amount: includeAdvanced ? normalizedAmount : null,
         // Legacy/alternative field names for compatibility
-        water_freq_unit: advanced ? waterFreqPeriod : null,
-        water_freq_value: advanced ? normalizedAmount : null,
+        water_freq_unit: includeAdvanced ? waterFreqPeriod : null,
+        water_freq_value: includeAdvanced ? normalizedAmount : null,
       })
       if (insErr) { setError(insErr.message); return }
       setOk('Saved')
@@ -125,7 +129,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
               <div className="text-lg font-semibold">Add plant</div>
               <button
                 type="button"
-                onClick={() => setAdvanced((o) => !o)}
+                onClick={() => setAdvanced((prev) => { const next = !prev; if (next) setEverAdvanced(true); return next })}
                 aria-pressed={advanced}
                 className={`px-3 py-1.5 rounded-2xl text-sm border shadow-sm transition flex items-center gap-2 ${advanced ? 'bg-black text-white' : 'bg-white hover:bg-stone-50'}`}
               >
