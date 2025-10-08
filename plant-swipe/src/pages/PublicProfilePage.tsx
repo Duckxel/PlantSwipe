@@ -6,7 +6,7 @@ import { createPortal } from "react-dom"
 import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
 import { EditProfileDialog, type EditProfileValues } from "@/components/profile/EditProfileDialog"
-import { applyAccentByKey, saveAccentKey, getAccentOption } from "@/lib/accent"
+import { applyAccentByKey, saveAccentKey } from "@/lib/accent"
 import { MapPin, User as UserIcon } from "lucide-react"
 
 type PublicProfile = {
@@ -43,11 +43,7 @@ export default function PublicProfilePage() {
   const [pp, setPp] = React.useState<PublicProfile | null>(null)
   const [stats, setStats] = React.useState<PublicStats | null>(null)
   const [monthDays, setMonthDays] = React.useState<DayAgg[]>([])
-  const iconColor = React.useMemo(() => {
-    if (!pp?.accent_key) return null
-    const opt = getAccentOption(pp.accent_key as any)
-    return opt ? `hsl(${opt.hsl})` : null
-  }, [pp?.accent_key])
+  
 
   const formatLastSeen = React.useCallback((iso: string | null | undefined) => {
     if (!iso) return 'A long time ago'
@@ -229,8 +225,7 @@ export default function PublicProfilePage() {
               <div className="flex items-start gap-4">
                 <div className="h-16 w-16 rounded-2xl bg-stone-200 overflow-hidden flex items-center justify-center" aria-hidden>
                   <UserIcon
-                    className="h-8 w-8"
-                    style={{ color: iconColor || 'rgb(22 101 52)' }}
+                    className="h-8 w-8 text-black"
                   />
                 </div>
                 <div className="min-w-0">
