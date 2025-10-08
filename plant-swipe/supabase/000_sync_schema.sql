@@ -1048,6 +1048,7 @@ $$;
 grant execute on function public.get_profile_public_by_display_name(text) to anon, authenticated;
 
 -- Aggregate public stats for a user's gardens/membership
+drop function if exists public.get_user_profile_public_stats(uuid) cascade;
 create or replace function public.get_user_profile_public_stats(_user_id uuid)
 returns table(plants_total integer, best_streak integer)
 language plpgsql
