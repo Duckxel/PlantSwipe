@@ -22,6 +22,7 @@ import type { Plant } from "@/types/plant";
 import PlantInfoPage from "@/pages/PlantInfoPage";
 import { useAuth } from "@/context/AuthContext";
 import { ProfilePage } from "@/pages/ProfilePage";
+import PublicProfilePage from "@/pages/PublicProfilePage";
 import { AdminPage } from "@/pages/AdminPage";
 import RequireAdmin from "@/pages/RequireAdmin";
 import { supabase } from "@/lib/supabaseClient";
@@ -56,6 +57,7 @@ export default function PlantSwipe() {
   const [authPassword, setAuthPassword] = useState("")
   const [authPassword2, setAuthPassword2] = useState("")
   const [authDisplayName, setAuthDisplayName] = useState("")
+  const [authUsername, setAuthUsername] = useState("")
   const [authSubmitting, setAuthSubmitting] = useState(false)
 
   const [plants, setPlants] = useState<Plant[]>([])
@@ -421,7 +423,7 @@ export default function PlantSwipe() {
           setAuthSubmitting(false)
           return
         }
-        const { error } = await signUp({ email: authEmail, password: authPassword, displayName: authDisplayName })
+        const { error } = await signUp({ email: authEmail, password: authPassword, displayName: authDisplayName, username: authUsername })
         if (error) {
           console.error('[auth] signup error', error)
           setAuthError(error)
@@ -639,7 +641,8 @@ export default function PlantSwipe() {
                     />
                   }
                 />
-                <Route path="/profile" element={user ? <ProfilePage /> : <Navigate to="/" replace />} />
+                <Route path="/profile" element={user ? (profile?.username ? <Navigate to={`/u/${profile.username}`} replace /> : <ProfilePage />) : <Navigate to="/" replace />} />
+                <Route path="/u/:username" element={<PublicProfilePage />} />
                 <Route path="/admin" element={<RequireAdmin><AdminPage /></RequireAdmin>} />
                 <Route path="/create" element={user ? (
                   <CreatePlantPage
@@ -689,6 +692,13 @@ export default function PlantSwipe() {
               <div className="grid gap-2">
                 <Label htmlFor="name">Display name</Label>
                 <Input id="name" type="text" placeholder="Your name" value={authDisplayName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthDisplayName(e.target.value)} />
+              </div>
+            )}
+            {authMode === 'signup' && (
+              <div className="grid gap-2">
+                <Label htmlFor="username">Username</Label>
+                <Input id="username" type="text" placeholder="yourname" value={authUsername} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthUsername(e.target.value)} />
+                <div className="text-xs opacity-60">Lowercase, 3–20 chars, letters/numbers/_; becomes your public link.</div>
               </div>
             )}
             <div className="grid gap-2">

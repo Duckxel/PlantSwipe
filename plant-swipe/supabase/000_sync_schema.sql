@@ -16,6 +16,29 @@ create table if not exists public.profiles (
 );
 -- Remove legacy avatar_url column if present
 alter table if exists public.profiles drop column if exists avatar_url;
+-- New public profile fields
+alter table if exists public.profiles add column if not exists username text;
+alter table if exists public.profiles add column if not exists country text;
+alter table if exists public.profiles add column if not exists bio text;
+alter table if exists public.profiles add column if not exists favorite_plant text;
+alter table if exists public.profiles add column if not exists avatar_url text;
+alter table if exists public.profiles add column if not exists timezone text;
+alter table if exists public.profiles add column if not exists experience_years integer;
+
+-- Constraints: usernames are lowercase, alphanumeric or underscore, length 3..20
+do $$ begin
+  begin
+    alter table public.profiles
+      add constraint profiles_username_lowercase check (username is null or username = lower(username));
+  exception when duplicate_object then null; end;
+  begin
+    alter table public.profiles
+      add constraint profiles_username_format check (username is null or username ~ '^[a-z0-9_]{3,20}$');
+  exception when duplicate_object then null; end;
+end $$;
+
+-- Unique index on username (case-insensitive enforced by lowercase check)
+create unique index if not exists profiles_username_unique on public.profiles (username) where username is not null;
 alter table public.profiles enable row level security;
 -- Helper to avoid RLS self-recursion when checking admin
 -- Uses SECURITY DEFINER to bypass RLS on public.profiles
@@ -939,6 +962,144 @@ do $$ begin
 end $$;
 
 -- ========== RPCs used by the app ==========
+-- Public profile fetch by username (safe columns only)
+create or replace function public.get_profile_public_by_username(_username text)
+returns table(id uuid, username text, display_name text, country text, bio text, favorite_plant text, avatar_url text)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select p.id, p.username, p.display_name, p.country, p.bio, p.favorite_plant, p.avatar_url
+  from public.profiles p
+  where p.username = lower(_username)
+  limit 1;
+$$;
+grant execute on function public.get_profile_public_by_username(text) to anon, authenticated;
+
+-- Aggregate public stats for a user's gardens/membership
+create or replace function public.get_user_profile_public_stats(_user_id uuid)
+returns table(gardens_owned integer, gardens_member integer, gardens_total integer, plants_total integer, best_streak integer)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_owned int := 0;
+  v_member int := 0;
+  v_total int := 0;
+  v_plants int := 0;
+  v_best int := 0;
+begin
+  select count(*)::int into v_owned from public.gardens g where g.created_by = _user_id;
+  select count(distinct gm.garden_id)::int into v_member from public.garden_members gm where gm.user_id = _user_id;
+  select count(distinct gid)::int into v_total
+  from (
+    select id as gid from public.gardens where created_by = _user_id
+    union
+    select garden_id as gid from public.garden_members where user_id = _user_id
+  ) t;
+  select coalesce(sum(gp.plants_on_hand), 0)::int into v_plants
+  from public.garden_plants gp
+  where gp.garden_id in (
+    select id from public.gardens where created_by = _user_id
+    union
+    select garden_id from public.garden_members where user_id = _user_id
+  );
+  select coalesce(max(g.streak), 0)::int into v_best
+  from public.gardens g
+  where g.id in (
+    select id from public.gardens where created_by = _user_id
+    union
+    select garden_id from public.garden_members where user_id = _user_id
+  );
+  return query select v_owned, v_member, v_total, v_plants, v_best;
+end;
+$$;
+grant execute on function public.get_user_profile_public_stats(uuid) to anon, authenticated;
+
+-- Daily completed task counts and success flags across all user's gardens
+create or replace function public.get_user_daily_tasks(
+  _user_id uuid,
+  _start date,
+  _end date
+)
+returns table(day date, completed integer, any_success boolean)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with days as (
+    select generate_series(_start, _end, interval '1 day')::date as d
+  ),
+  user_gardens as (
+    select id as gid from public.gardens where created_by = _user_id
+    union
+    select garden_id as gid from public.garden_members where user_id = _user_id
+  ),
+  occs as (
+    select (o.completed_at at time zone 'utc')::date as d, coalesce(o.completed_count, 0) as c
+    from public.garden_plant_task_occurrences o
+    join public.garden_plant_tasks t on t.id = o.task_id
+    where t.garden_id in (select gid from user_gardens)
+      and o.completed_at is not null
+      and (o.completed_at at time zone 'utc')::date between _start and _end
+  ),
+  succ as (
+    select g.day as d, bool_or(g.success) as ok
+    from public.garden_tasks g
+    where g.garden_id in (select gid from user_gardens)
+      and g.day between _start and _end
+      and g.task_type = 'watering'
+    group by g.day
+  )
+  select d.d as day,
+         coalesce((select sum(c) from occs where occs.d = d.d), 0)::int as completed,
+         coalesce((select ok from succ where succ.d = d.d), false) as any_success
+  from days d
+  order by d.d asc;
+$$;
+grant execute on function public.get_user_daily_tasks(uuid, date, date) to anon, authenticated;
+
+-- Public username availability check
+create or replace function public.is_username_available(_username text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select not exists (
+    select 1 from public.profiles p where p.username = lower(_username)
+  );
+$$;
+grant execute on function public.is_username_available(text) to anon, authenticated;
+
+-- Private info fetch (self or admin only)
+create or replace function public.get_user_private_info(_user_id uuid)
+returns table(id uuid, email text)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_caller uuid;
+begin
+  v_caller := auth.uid();
+  if v_caller is null then
+    return;
+  end if;
+  if v_caller = _user_id or public.is_admin_user(v_caller) then
+    return query select u.id, u.email from auth.users u where u.id = _user_id limit 1;
+  else
+    return;
+  end if;
+end;
+$$;
+grant execute on function public.get_user_private_info(uuid) to authenticated;
 create or replace function public.get_server_now()
 returns timestamptz
 language sql

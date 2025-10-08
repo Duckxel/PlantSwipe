@@ -28,6 +28,13 @@ export type ProfileRow = {
   display_name: string | null
   liked_plant_ids: string[] | null
   is_admin?: boolean | null
+  username?: string | null
+  country?: string | null
+  bio?: string | null
+  favorite_plant?: string | null
+  avatar_url?: string | null
+  timezone?: string | null
+  experience_years?: number | null
 }
 
 // Garden-related table row types matching Supabase schema expectations
