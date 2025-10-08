@@ -53,6 +53,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
   const [error, setError] = React.useState<string | null>(null)
   const [ok, setOk] = React.useState<string | null>(null)
   const [advanced, setAdvanced] = React.useState(false)
+  const [everAdvanced, setEverAdvanced] = React.useState(false)
 
   const toggleSeason = (s: Plant["seasons"][number]) => {
     setSeasons((cur: string[]) => (cur.includes(s) ? cur.filter((x: string) => x !== s) : [...cur, s]))
@@ -76,6 +77,9 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
       const nameNorm = name.trim()
       const sciNorm = scientificName.trim()
       const colorArray = colors.split(",").map((c) => c.trim()).filter(Boolean)
+      // If the user has ever switched to Advanced, keep those values even
+      // when saving from Simplified so they persist across toggles.
+      const includeAdvanced = advanced || everAdvanced
 
       // Duplicate check: name (case-insensitive)
       const byName = await supabase.from('plants').select('id').ilike('name', nameNorm).limit(1).maybeSingle()
@@ -93,15 +97,15 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
         description: description || null,
         image_url: imageUrl || null,
         care_sunlight: careSunlight,
-        care_soil: advanced ? (careSoil || null) : null,
+        care_soil: includeAdvanced ? (careSoil || null) : null,
         care_difficulty: careDifficulty,
         seeds_available: seedsAvailable,
         // Default watering frequency fields (advanced only)
-        water_freq_period: advanced ? waterFreqPeriod : null,
-        water_freq_amount: advanced ? normalizedAmount : null,
+        water_freq_period: includeAdvanced ? waterFreqPeriod : null,
+        water_freq_amount: includeAdvanced ? normalizedAmount : null,
         // Legacy/alternative field names for compatibility
-        water_freq_unit: advanced ? waterFreqPeriod : null,
-        water_freq_value: advanced ? normalizedAmount : null,
+        water_freq_unit: includeAdvanced ? waterFreqPeriod : null,
+        water_freq_value: includeAdvanced ? normalizedAmount : null,
       })
       if (insErr) { setError(insErr.message); return }
       setOk('Saved')
@@ -125,11 +129,11 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
               <div className="text-lg font-semibold">Add plant</div>
               <button
                 type="button"
-                onClick={() => setAdvanced((o) => !o)}
+                onClick={() => setAdvanced((prev) => { const next = !prev; if (next) setEverAdvanced(true); return next })}
                 aria-pressed={advanced}
                 className={`px-3 py-1.5 rounded-2xl text-sm border shadow-sm transition flex items-center gap-2 ${advanced ? 'bg-black text-white' : 'bg-white hover:bg-stone-50'}`}
               >
-                Advanced {advanced ? 'On' : 'Off'}
+                {advanced ? 'Advanced' : 'Simplified'}
               </button>
             </div>
             <div className="grid gap-2">
@@ -223,48 +227,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
                 </div>
               </>
             )}
-            <div className="grid gap-2">
-              <Label htmlFor="plant-sunlight">Care: Sunlight</Label>
-              <select id="plant-sunlight" className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm" value={careSunlight} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setCareSunlight(e.target.value as Plant["care"]["sunlight"])}>
-                {(["Low", "Medium", "High"] as const).map((v) => (
-                  <option key={v} value={v}>{v}</option>
-                ))}
-              </select>
-            </div>
-            {/* Water care is derived from frequency; no manual input */}
-            <div className="grid gap-2">
-              <Label htmlFor="plant-soil">Care: Soil</Label>
-              <Input id="plant-soil" autoComplete="off" value={careSoil} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCareSoil(e.target.value)} />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="plant-difficulty">Care: Difficulty</Label>
-              <select id="plant-difficulty" className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm" value={careDifficulty} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setCareDifficulty(e.target.value as Plant["care"]["difficulty"]) }>
-                {(["Easy", "Moderate", "Hard"] as const).map((v) => (
-                  <option key={v} value={v}>{v}</option>
-                ))}
-              </select>
-            </div>
-            <div className="flex items-center gap-2">
-              <input id="plant-seeds" type="checkbox" checked={seedsAvailable} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSeedsAvailable(e.target.checked)} />
-              <Label htmlFor="plant-seeds">Seeds available</Label>
-            </div>
-            {/* Default watering frequency (moved to bottom) */}
-            <div className="grid gap-2">
-              <Label>Default watering frequency</Label>
-              <div className="grid grid-cols-2 gap-2">
-                <select className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm" value={waterFreqPeriod} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setWaterFreqPeriod(e.target.value as any)}>
-                  {(["week","month","year"] as const).map((p) => (
-                    <option key={p} value={p}>{p}</option>
-                  ))}
-                </select>
-                <Input type="number" autoComplete="off" min={1} max={waterFreqPeriod === 'week' ? 7 : waterFreqPeriod === 'month' ? 4 : 12} value={String(waterFreqAmount)} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setWaterFreqAmount(Math.max(1, Number(e.target.value || '1')))} />
-              </div>
-              <div className="text-xs opacity-60">
-                {waterFreqPeriod === 'week' && 'Max 7 per week.'}
-                {waterFreqPeriod === 'month' && 'Max 4 per month (otherwise use week).'}
-                {waterFreqPeriod === 'year' && 'Max 12 per year (otherwise use month).'}
-              </div>
-            </div>
+            
             {error && <div className="text-sm text-red-600">{error}</div>}
             {ok && <div className="text-sm text-green-600">{ok}</div>}
             <div className="flex gap-2 pt-2">
