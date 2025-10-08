@@ -1052,45 +1052,24 @@ app.get('/api/admin/member', async (req, res) => {
         }
       } catch {}
 
-      // Gardens and plants counts (best-effort; requires Authorization due to RLS)
-      let gardensOwned = undefined
-      let gardensMember = undefined
-      let gardensTotal = undefined
+    // Plants count only (drop garden counts)
+      // Plants count only (drop garden counts)
       let plantsTotal = undefined
       try {
-        // Owned count (fast count via headers)
-        const ownCountResp = await fetch(`${supabaseUrlEnv}/rest/v1/gardens?created_by=eq.${encodeURIComponent(targetId)}&select=id`, {
-          headers: { ...baseHeaders, 'Prefer': 'count=exact', 'Range': '0-0' },
-        })
-        if (ownCountResp.ok) {
-          const cr = ownCountResp.headers.get('content-range') || ''
-          const m = cr.match(/\/(\d+)$/)
-          gardensOwned = m ? Number(m[1]) : undefined
-        }
-        // Member list and count
-        let memberGardenIds = []
-        const memResp = await fetch(`${supabaseUrlEnv}/rest/v1/garden_members?user_id=eq.${encodeURIComponent(targetId)}&select=garden_id`, {
-          headers: baseHeaders,
-        })
+        // Gather gardens user can access to compute plants total
+        let gardenIds = []
+        const memResp = await fetch(`${supabaseUrlEnv}/rest/v1/garden_members?user_id=eq.${encodeURIComponent(targetId)}&select=garden_id`, { headers: baseHeaders })
         if (memResp.ok) {
           const arr = await memResp.json().catch(() => [])
-          memberGardenIds = Array.isArray(arr) ? arr.map(r => String(r.garden_id)).filter(Boolean) : []
-          gardensMember = memberGardenIds.length
+          const memberGardenIds = Array.isArray(arr) ? arr.map(r => String(r.garden_id)).filter(Boolean) : []
+          gardenIds = memberGardenIds
         }
-        // Owned list
-        let ownedGardenIds = []
-        const ownListResp = await fetch(`${supabaseUrlEnv}/rest/v1/gardens?created_by=eq.${encodeURIComponent(targetId)}&select=id`, {
-          headers: baseHeaders,
-        })
+        const ownListResp = await fetch(`${supabaseUrlEnv}/rest/v1/gardens?created_by=eq.${encodeURIComponent(targetId)}&select=id`, { headers: baseHeaders })
         if (ownListResp.ok) {
           const arr = await ownListResp.json().catch(() => [])
-          ownedGardenIds = Array.isArray(arr) ? arr.map(r => String(r.id)).filter(Boolean) : []
-        }
-        // Unique garden ids for totals
-        const gidSet = new Set([ ...ownedGardenIds, ...memberGardenIds ])
-        const gardenIds = Array.from(gidSet)
-        if (typeof gardensOwned === 'number' && typeof gardensMember === 'number') {
-          gardensTotal = gardenIds.length
+          const ownedGardenIds = Array.isArray(arr) ? arr.map(r => String(r.id)).filter(Boolean) : []
+          const set = new Set([ ...gardenIds, ...ownedGardenIds ])
+          gardenIds = Array.from(set)
         }
         // Plants total across all user's gardens (sum plants_on_hand)
         if (gardenIds.length > 0) {
@@ -1114,9 +1093,6 @@ app.get('/api/admin/member', async (req, res) => {
         lastIp,
         visitsCount,
         uniqueIpsCount: undefined,
-        gardensOwned,
-        gardensMember,
-        gardensTotal,
         plantsTotal,
         isBannedEmail,
         bannedReason,
@@ -1162,9 +1138,6 @@ app.get('/api/admin/member', async (req, res) => {
     let lastIp = null
     let visitsCount = 0
     let uniqueIpsCount = 0
-    let gardensOwned = 0
-    let gardensMember = 0
-    let gardensTotal = 0
     let isBannedEmail = false
     let bannedReason = null
     let bannedAt = null
@@ -1195,16 +1168,7 @@ app.get('/api/admin/member', async (req, res) => {
       visitsCount = vcRows?.[0]?.c ?? 0
       uniqueIpsCount = uipRows?.[0]?.c ?? 0
     } catch {}
-    try {
-      const [ownRows, memRows, totalRows] = await Promise.all([
-        sql`select count(*)::int as c from public.gardens where created_by = ${user.id}`,
-        sql`select count(distinct garden_id)::int as c from public.garden_members where user_id = ${user.id}`,
-        sql`select count(distinct g.id)::int as c from public.gardens g left join public.garden_members gm on gm.garden_id = g.id where g.created_by = ${user.id} or gm.user_id = ${user.id}`,
-      ])
-      gardensOwned = ownRows?.[0]?.c ?? 0
-      gardensMember = memRows?.[0]?.c ?? 0
-      gardensTotal = totalRows?.[0]?.c ?? (gardensOwned + gardensMember)
-    } catch {}
+    // Drop garden counts on server path
     try {
       const rows = await sql`
         select coalesce(sum(gp.plants_on_hand), 0)::int as c
@@ -1248,9 +1212,6 @@ app.get('/api/admin/member', async (req, res) => {
       lastIp,
       visitsCount,
       uniqueIpsCount,
-      gardensOwned,
-      gardensMember,
-      gardensTotal,
       plantsTotal,
       isBannedEmail,
       bannedReason,

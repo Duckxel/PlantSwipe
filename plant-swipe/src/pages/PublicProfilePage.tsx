@@ -19,9 +19,6 @@ type PublicProfile = {
 }
 
 type PublicStats = {
-  gardensOwned: number
-  gardensMember: number
-  gardensTotal: number
   plantsTotal: number
   bestStreak: number
 }
@@ -66,14 +63,11 @@ export default function PublicProfilePage() {
           avatar_url: row.avatar_url || null,
         })
 
-        // Stats
+        // Stats (only plants total and best streak)
         const { data: s, error: serr } = await supabase.rpc('get_user_profile_public_stats', { _user_id: userId })
         if (!serr && s) {
           const statRow = Array.isArray(s) ? s[0] : s
           setStats({
-            gardensOwned: Number(statRow.gardens_owned || 0),
-            gardensMember: Number(statRow.gardens_member || 0),
-            gardensTotal: Number(statRow.gardens_total || 0),
             plantsTotal: Number(statRow.plants_total || 0),
             bestStreak: Number(statRow.best_streak || 0),
           })
@@ -226,18 +220,6 @@ export default function PublicProfilePage() {
               <CardContent className="p-6 md:p-8 space-y-4">
                 <div className="text-lg font-semibold">Highlights</div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  <div className="rounded-xl border p-3 text-center">
-                    <div className="text-[11px] opacity-60">Gardens started</div>
-                    <div className="text-base font-semibold tabular-nums">{stats?.gardensOwned ?? '—'}</div>
-                  </div>
-                  <div className="rounded-xl border p-3 text-center">
-                    <div className="text-[11px] opacity-60">Gardens in</div>
-                    <div className="text-base font-semibold tabular-nums">{stats?.gardensMember ?? '—'}</div>
-                  </div>
-                  <div className="rounded-xl border p-3 text-center">
-                    <div className="text-[11px] opacity-60">Total gardens</div>
-                    <div className="text-base font-semibold tabular-nums">{stats?.gardensTotal ?? '—'}</div>
-                  </div>
                   <div className="rounded-xl border p-3 text-center">
                     <div className="text-[11px] opacity-60">Plants owned</div>
                     <div className="text-base font-semibold tabular-nums">{stats?.plantsTotal ?? '—'}</div>
