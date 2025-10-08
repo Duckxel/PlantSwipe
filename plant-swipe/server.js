@@ -160,6 +160,21 @@ async function isAdminFromRequest(req) {
         }
       } catch {}
     }
+    // Supabase REST fallback: allow any authenticated user whose profile row has is_admin = true
+    if (!isAdmin && supabaseUrlEnv && supabaseAnonKey) {
+      try {
+        const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+        const bearer = getBearerTokenFromRequest(req)
+        if (bearer) Object.assign(headers, { 'Authorization': `Bearer ${bearer}` })
+        const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}&select=is_admin&limit=1`
+        const resp = await fetch(url, { headers })
+        if (resp.ok) {
+          const arr = await resp.json().catch(() => [])
+          const flag = Array.isArray(arr) && arr[0] ? (arr[0].is_admin === true) : false
+          if (flag) isAdmin = true
+        }
+      } catch {}
+    }
     // Environment allowlists as fallback
     if (!isAdmin) {
       const allowedEmails = (process.env.ADMIN_EMAILS || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
