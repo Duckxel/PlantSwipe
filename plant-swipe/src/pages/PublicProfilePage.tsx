@@ -35,7 +35,7 @@ type DayAgg = { day: string; completed: number; any_success: boolean }
 export default function PublicProfilePage() {
   const params = useParams()
   const navigate = useNavigate()
-  const { user, profile, refreshProfile } = useAuth()
+  const { user, profile, refreshProfile, signOut } = useAuth()
   const displayParam = String(params.username || '')
 
   const [loading, setLoading] = React.useState(true)
@@ -255,7 +255,7 @@ export default function PublicProfilePage() {
                       {menuOpen && menuPos && createPortal(
                         <div ref={menuRef} className="w-40 rounded-xl border bg-white shadow z-[60] p-1" style={{ position: 'fixed', top: menuPos.top, right: menuPos.right }}>
                           <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50" onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); setEditOpen(true) }}>Edit</button>
-                          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50" onMouseDown={async (e) => { e.stopPropagation(); setMenuOpen(false); navigate('/'); }}>Log out</button>
+                          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50" onMouseDown={async (e) => { e.stopPropagation(); setMenuOpen(false); await signOut(); navigate('/') }}>Log out</button>
                           <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 text-red-600" onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/profile') }}>Delete account</button>
                         </div>,
                         document.body
