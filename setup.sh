@@ -103,7 +103,12 @@ else
 fi
 if $need_node_install; then
   log "Installing/upgrading Node.js to 22.x…"
-  curl -fsSL https://deb.nodesource.com/setup_22.x | $SUDO -E bash -
+  # When running as root, $SUDO is empty; avoid emitting a leading "-E" token
+  if [[ -n "$SUDO" ]]; then
+    curl -fsSL https://deb.nodesource.com/setup_22.x | $SUDO -E bash -
+  else
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+  fi
   $PM_INSTALL nodejs
 else
   log "Node.js is sufficiently new ($(node -v))."
