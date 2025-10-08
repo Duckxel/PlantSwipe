@@ -68,7 +68,7 @@ export const EditProfileDialog: React.FC<{
           </div>
           <div className="grid gap-2">
             <Label htmlFor="ep-bio">Bio</Label>
-            <Textarea id="ep-bio" value={values.bio} onChange={(e) => set('bio', (e.target as HTMLTextAreaElement).value)} className="min-h-[100px]" />
+            <Textarea id="ep-bio" value={values.bio} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => set('bio', e.target.value)} />
           </div>
 
           <div className="grid gap-2">
