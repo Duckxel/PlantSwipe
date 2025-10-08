@@ -1071,7 +1071,7 @@ function OverviewSection({ gardenId, activityRev, plants, membersCount, serverTo
         <div className="space-y-2">
           {activity.map((a) => (
             <div key={a.id} className="text-sm flex items-start gap-2">
-              <span className={`font-medium ${colorForName(a.actorName, a.actorColor)}`}>{a.actorName || 'Someone'}</span>
+              <span className={`font-semibold text-emerald-700`}>{a.actorName || 'Someone'}</span>
               <span className="opacity-80">{a.message}</span>
             </div>
           ))}
@@ -1216,7 +1216,7 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner, ownerCount, cu
       {/* Up-right arrow to view public profile */}
       {member.displayName && (
         <button
-          className="absolute top-2 right-2 h-8 w-8 rounded-full flex items-center justify-center border bg-white/90 text-black hover:bg-white shadow"
+          className="absolute bottom-2 right-2 h-8 w-8 rounded-full flex items-center justify-center border bg-white/90 text-black hover:bg-white shadow"
           aria-label="View profile"
           onClick={(e) => { e.stopPropagation(); navigate(`/u/${encodeURIComponent(member.displayName!)}`) }}
         >
