@@ -14,7 +14,7 @@ import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
 import { TaskEditorDialog } from '@/components/plant/TaskEditorDialog'
 import type { Garden } from '@/types/garden'
 import type { Plant } from '@/types/plant'
-import { getGarden, getGardenPlants, getGardenMembers, addMemberByEmail, deleteGardenPlant, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, getGardenInventory, adjustInventoryAndLogTransaction, updateGardenMemberRole, removeGardenMember, listGardenTasks, syncTaskOccurrencesForGarden, listOccurrencesForTasks, progressTaskOccurrence, updateGardenPlantsOrder, refreshGardenStreak } from '@/lib/gardens'
+import { getGarden, getGardenPlants, getGardenMembers, addMemberByEmail, addMemberByNameOrEmail, deleteGardenPlant, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, getGardenInventory, adjustInventoryAndLogTransaction, updateGardenMemberRole, removeGardenMember, listGardenTasks, syncTaskOccurrencesForGarden, listOccurrencesForTasks, progressTaskOccurrence, updateGardenPlantsOrder, refreshGardenStreak } from '@/lib/gardens'
 import { supabase } from '@/lib/supabaseClient'
  
 
@@ -83,6 +83,7 @@ export const GardenDashboardPage: React.FC = () => {
 
   const [inviteOpen, setInviteOpen] = React.useState(false)
   const [inviteEmail, setInviteEmail] = React.useState('')
+  const [inviteAny, setInviteAny] = React.useState('')
   const [inviteError, setInviteError] = React.useState<string | null>(null)
 
   const currentUserId = user?.id || null
@@ -322,15 +323,15 @@ export const GardenDashboardPage: React.FC = () => {
   }, [plantQuery])
 
   const submitInvite = async () => {
-    if (!id || !inviteEmail.trim()) return
+    if (!id || !inviteAny.trim()) return
     setInviteError(null)
-    const res = await addMemberByEmail({ gardenId: id, email: inviteEmail.trim(), role: 'member' })
+    const res = await addMemberByNameOrEmail({ gardenId: id, input: inviteAny.trim(), role: 'member' })
     if (!res.ok) {
-      setInviteError(res.reason === 'no_account' ? 'No account with this email' : 'Failed to add member')
+      setInviteError(res.reason === 'no_account' ? 'No account found' : 'Failed to add member')
       return
     }
     setInviteOpen(false)
-    setInviteEmail('')
+    setInviteAny('')
     await load()
   }
 
@@ -772,11 +773,11 @@ export const GardenDashboardPage: React.FC = () => {
                 <DialogTitle>Add member</DialogTitle>
               </DialogHeader>
               <div className="space-y-3">
-                <Input placeholder="member@email.com" type="email" value={inviteEmail} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInviteEmail(e.target.value)} />
+                <Input placeholder="Enter display name or email" value={inviteAny} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInviteAny(e.target.value)} />
                 {inviteError && <div className="text-sm text-red-600">{inviteError}</div>}
                 <div className="flex justify-end gap-2">
                   <Button variant="secondary" className="rounded-2xl" onClick={() => setInviteOpen(false)}>Cancel</Button>
-                  <Button className="rounded-2xl" onClick={submitInvite} disabled={!inviteEmail.trim()}>Add member</Button>
+                  <Button className="rounded-2xl" onClick={submitInvite} disabled={!inviteAny.trim()}>Add member</Button>
                 </div>
               </div>
             </DialogContent>

@@ -245,6 +245,27 @@ export async function addMemberByEmail(params: { gardenId: string; email: string
   }
 }
 
+export async function addMemberByNameOrEmail(params: { gardenId: string; input: string; role?: 'member' | 'owner' }): Promise<{ ok: boolean; reason?: string }> {
+  const { gardenId, input, role = 'member' } = params
+  const val = input.trim()
+  if (!val) return { ok: false, reason: 'invalid' }
+  // If looks like email, use existing path
+  if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(val)) {
+    return await addMemberByEmail({ gardenId, email: val, role })
+  }
+  // Otherwise, treat as display name
+  try {
+    const { data, error } = await supabase.rpc('get_user_id_by_display_name', { _name: val })
+    if (error) return { ok: false, reason: 'lookup_failed' }
+    const userId = (data ? String(data) : null)
+    if (!userId) return { ok: false, reason: 'no_account' }
+    await addGardenMember({ gardenId, userId, role })
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, reason: 'insert_failed' }
+  }
+}
+
 // Legacy watering schedule helpers removed in favor of Tasks v2 occurrences
 
 // Legacy watering schedule helpers removed
