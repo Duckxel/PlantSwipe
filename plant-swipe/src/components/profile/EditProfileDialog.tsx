@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { ACCENT_OPTIONS, applyAccentByKey, saveAccentKey } from "@/lib/accent"
 import type { AccentKey } from "@/lib/accent"
+import { User } from "lucide-react"
 
 export type EditProfileValues = {
   display_name: string
@@ -85,12 +86,12 @@ export const EditProfileDialog: React.FC<{
                     key={opt.key}
                     type="button"
                     onClick={() => chooseAccent(opt.key)}
-                    className={`h-8 rounded-xl border relative ${active ? 'ring-2 ring-offset-2 ring-black' : ''}`}
+                    className={`h-10 rounded-xl border relative flex items-center justify-center ${active ? 'ring-2 ring-offset-2' : ''}`}
                     title={opt.label}
-                    style={{ backgroundColor: `hsl(${opt.hsl})` }}
+                    style={{ backgroundColor: `hsl(${opt.hsl})`, boxShadow: active ? `0 0 0 2px hsl(${opt.hsl}) inset` : undefined }}
                     aria-pressed={active}
                   >
-                    {active && <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-white" />}
+                    <User className="h-4 w-4" style={{ color: `hsl(${opt.foreground})` }} />
                   </button>
                 )
               })}

@@ -24,6 +24,8 @@ alter table if exists public.profiles add column if not exists favorite_plant te
 alter table if exists public.profiles add column if not exists avatar_url text;
 alter table if exists public.profiles add column if not exists timezone text;
 alter table if exists public.profiles add column if not exists experience_years integer;
+-- Accent color preference; default to a green tone for new accounts
+alter table if exists public.profiles add column if not exists accent_key text default 'emerald';
 
 -- Drop username-specific constraints/index (no longer used)
 do $$ begin

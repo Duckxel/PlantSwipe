@@ -321,6 +321,8 @@ export default function PublicProfilePage() {
                   if (vals.accent_key) {
                     applyAccentByKey(vals.accent_key)
                     saveAccentKey(vals.accent_key)
+                    // Persist accent key in DB as well
+                    await supabase.from('profiles').update({ accent_key: vals.accent_key }).eq('id', user.id)
                   }
 
                   // Refresh UI
