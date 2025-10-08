@@ -405,6 +405,7 @@ export const AdminPage: React.FC = () => {
       const decoder = new TextDecoder()
       let buf = ''
       const append = (line: string) => setLogLines(prev => [...prev, line])
+      let sawDoneOk = false
       // Minimal SSE parser: handle lines starting with 'data:' and emit
       while (true) {
         const { done, value } = await reader.read()
@@ -418,12 +419,36 @@ export const AdminPage: React.FC = () => {
           if (!line) continue
           if (line.startsWith('data:')) {
             const payload = line.slice(5).trimStart()
+            // Try to detect done events to know success
+            try {
+              const obj = JSON.parse(payload)
+              if (obj && typeof obj === 'object' && Object.prototype.hasOwnProperty.call(obj, 'ok')) {
+                if (obj.ok === true) sawDoneOk = true
+              }
+            } catch {}
             append(payload)
           } else if (!/^(:|event:|id:|retry:)/.test(line)) {
             append(line)
           }
         }
       }
+
+      // After stream ends, perform service restarts so the new build/code is active
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+        if (adminToken) {
+          await fetch('/admin/restart-app', {
+            method: 'POST',
+            headers: { 'X-Admin-Token': String(adminToken), 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ service: 'admin-api' })
+          }).catch(() => {})
+        }
+      } catch {}
+      // Restart Node server (existing flow handles authorization and page reload)
+      try {
+        await restartServer()
+      } catch {}
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e)
       alert(`Failed to pull & build: ${message}`)
