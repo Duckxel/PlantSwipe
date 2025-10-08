@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button"
 import { createPortal } from "react-dom"
 import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
+import { EditProfileDialog, type EditProfileValues } from "@/components/profile/EditProfileDialog"
+import { applyAccentByKey, saveAccentKey } from "@/lib/accent"
 
 type PublicProfile = {
   id: string
@@ -29,7 +31,7 @@ type DayAgg = { day: string; completed: number; any_success: boolean }
 export default function PublicProfilePage() {
   const params = useParams()
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, profile, refreshProfile } = useAuth()
   const displayParam = String(params.username || '')
 
   const [loading, setLoading] = React.useState(true)
@@ -106,6 +108,10 @@ export default function PublicProfilePage() {
   const anchorRef = React.useRef<HTMLDivElement | null>(null)
   const menuRef = React.useRef<HTMLDivElement | null>(null)
   const [menuPos, setMenuPos] = React.useState<{ top: number; right: number } | null>(null)
+
+  const [editOpen, setEditOpen] = React.useState(false)
+  const [editSubmitting, setEditSubmitting] = React.useState(false)
+  const [editError, setEditError] = React.useState<string | null>(null)
 
   React.useEffect(() => {
     if (!menuOpen) return
@@ -196,7 +202,7 @@ export default function PublicProfilePage() {
                       <Button className="rounded-2xl" variant="secondary" onClick={() => setMenuOpen((o) => !o)}>⋯</Button>
                       {menuOpen && menuPos && createPortal(
                         <div ref={menuRef} className="w-40 rounded-xl border bg-white shadow z-[60] p-1" style={{ position: 'fixed', top: menuPos.top, right: menuPos.right }}>
-                          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50" onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/profile') }}>Edit</button>
+                          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50" onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); setEditOpen(true) }}>Edit</button>
                           <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50" onMouseDown={async (e) => { e.stopPropagation(); setMenuOpen(false); navigate('/'); }}>Log out</button>
                           <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 text-red-600" onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/profile') }}>Delete account</button>
                         </div>,
@@ -266,6 +272,73 @@ export default function PublicProfilePage() {
           </div>
 
           <div className="mt-4 text-center text-sm opacity-60">Public profile • Visible to everyone</div>
+
+          {isOwner && (
+            <EditProfileDialog
+              open={editOpen}
+              onOpenChange={setEditOpen}
+              initial={{
+                display_name: (pp.display_name || ''),
+                country: (pp.country || ''),
+                bio: (pp.bio || ''),
+                favorite_plant: (pp.favorite_plant || ''),
+                timezone: (profile?.timezone || ''),
+                experience_years: (profile?.experience_years != null ? String(profile.experience_years) : ''),
+                accent_key: null,
+              }}
+              submitting={editSubmitting}
+              error={editError}
+              onSubmit={async (vals: EditProfileValues) => {
+                if (!user?.id) return
+                setEditError(null)
+                setEditSubmitting(true)
+                try {
+                  // Ensure display name unique and valid
+                  const dn = (vals.display_name || '').trim()
+                  if (dn.length === 0) { setEditError('Display name required'); return }
+                  const nameCheck = await supabase
+                    .from('profiles')
+                    .select('id')
+                    .ilike('display_name', dn)
+                    .neq('id', user.id)
+                    .maybeSingle()
+                  if (nameCheck.data?.id) { setEditError('Display name already taken'); return }
+
+                  const updates: Record<string, any> = {
+                    id: user.id,
+                    display_name: dn,
+                    country: vals.country || null,
+                    bio: vals.bio || null,
+                    favorite_plant: vals.favorite_plant || null,
+                    timezone: vals.timezone || null,
+                    experience_years: vals.experience_years ? Number(vals.experience_years) : null,
+                  }
+
+                  const { error: uerr } = await supabase.from('profiles').upsert(updates, { onConflict: 'id' })
+                  if (uerr) { setEditError(uerr.message); return }
+
+                  // Apply accent if chosen
+                  if (vals.accent_key) {
+                    applyAccentByKey(vals.accent_key)
+                    saveAccentKey(vals.accent_key)
+                  }
+
+                  // Refresh UI
+                  await refreshProfile().catch(() => {})
+                  setEditOpen(false)
+                  // Reload public profile data by navigating to new slug if changed
+                  if (dn && dn !== displayParam) {
+                    navigate(`/u/${encodeURIComponent(dn)}`, { replace: true })
+                  } else {
+                    // Re-run effect by toggling param changes via navigation no-op
+                    navigate(0)
+                  }
+                } finally {
+                  setEditSubmitting(false)
+                }
+              }}
+            />
+          )}
         </>
       )}
     </div>
