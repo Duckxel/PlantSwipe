@@ -106,7 +106,17 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
         )}
         <div className="flex gap-2 ml-auto">
           {user && (
-            <Button variant="secondary" className="rounded-2xl" onClick={() => { navigate(`/plants/${plant.id}/edit`); onClose() }}>Edit</Button>
+            <Button
+              variant="secondary"
+              className="rounded-2xl"
+              onClick={() => {
+                // Navigate to the dedicated edit page; do not call onClose here
+                // so we don't immediately pop back to the overlay route.
+                navigate(`/plants/${plant.id}/edit`)
+              }}
+            >
+              Edit
+            </Button>
           )}
           <Button className="rounded-2xl" onClick={onClose}>Close</Button>
         </div>
