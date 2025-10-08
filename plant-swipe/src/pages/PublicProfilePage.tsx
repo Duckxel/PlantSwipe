@@ -300,14 +300,14 @@ export default function PublicProfilePage() {
             <Card className="rounded-3xl">
               <CardContent className="p-6 md:p-8 space-y-4">
                 <div className="text-lg font-semibold">Past 28 days</div>
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-px">
                   {rows.map((row: Array<{ date: string; value: number; success: boolean }>, ridx: number) => (
-                    <div key={ridx} className="grid grid-cols-7 gap-1">
+                    <div key={ridx} className="grid grid-cols-7 gap-px">
                       {row.map((item: { date: string; value: number; success: boolean }, cidx: number) => (
                         <button
                           key={cidx}
                           type="button"
-                          className={`h-5 w-5 rounded-sm ${colorFor(item)}`}
+                          className={`h-6 w-6 rounded-sm ${colorFor(item)}`}
                           onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => item && showTooltip(e.currentTarget as HTMLButtonElement, item)}
                           onMouseLeave={hideTooltip}
                           onFocus={(e: React.FocusEvent<HTMLButtonElement>) => item && showTooltip(e.currentTarget as HTMLButtonElement, item)}
