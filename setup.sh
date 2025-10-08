@@ -66,7 +66,8 @@ SERVICE_NGINX="nginx"
 NGINX_SITE_AVAIL="/etc/nginx/sites-available/plant-swipe.conf"
 NGINX_SITE_ENABL="/etc/nginx/sites-enabled/plant-swipe.conf"
 NGINX_SNIPPET_DST="/etc/nginx/snippets/admin-api.conf"
-WEB_ROOT_LINK="/var/www/PlantSwipe/plant-swipe"
+# Allow override via environment (use sudo -E to preserve):
+WEB_ROOT_LINK="${WEB_ROOT_LINK:-/var/www/PlantSwipe/plant-swipe}"
 ADMIN_DIR="/opt/admin"
 ADMIN_VENV="$ADMIN_DIR/venv"
 ADMIN_ENV_DIR="/etc/admin-api"
@@ -129,14 +130,26 @@ else
   bash -lc "cd '$NODE_DIR' && CI=${CI:-true} npm run build"
 fi
 
-# Link web root expected by nginx config to the repo copy (replace any dir with symlink)
-log "Linking web root to repo: $WEB_ROOT_LINK -> $NODE_DIR"
+# Link web root expected by nginx config to the repo copy, unless that would create
+# a self-referential link (e.g., when the repo itself lives at /var/www/PlantSwipe).
+log "Preparing web root link: $WEB_ROOT_LINK -> $NODE_DIR"
 $SUDO mkdir -p "$(dirname "$WEB_ROOT_LINK")"
-if [[ -e "$WEB_ROOT_LINK" && ! -L "$WEB_ROOT_LINK" ]]; then
-  log "Removing existing non-symlink at $WEB_ROOT_LINK"
-  $SUDO rm -rf "$WEB_ROOT_LINK"
+
+# Compute absolute paths to avoid linking a path to itself
+node_abs="$($SUDO readlink -f "$NODE_DIR" 2>/dev/null || realpath -m "$NODE_DIR" 2>/dev/null || echo "$NODE_DIR")"
+web_parent_abs="$($SUDO readlink -f "$(dirname "$WEB_ROOT_LINK")" 2>/dev/null || realpath -m "$(dirname "$WEB_ROOT_LINK")" 2>/dev/null || echo "$(dirname "$WEB_ROOT_LINK")")"
+web_abs="$web_parent_abs/$(basename "$WEB_ROOT_LINK")"
+
+if [[ "$node_abs" == "$web_abs" ]]; then
+  log "Skipping link: web root path equals target ($web_abs); avoiding self-referential symlink."
+else
+  if [[ -e "$WEB_ROOT_LINK" && ! -L "$WEB_ROOT_LINK" ]]; then
+    log "Removing existing non-symlink at $WEB_ROOT_LINK"
+    $SUDO rm -rf "$WEB_ROOT_LINK"
+  fi
+  $SUDO ln -sfn "$NODE_DIR" "$WEB_ROOT_LINK"
+  log "Linked $WEB_ROOT_LINK -> $NODE_DIR"
 fi
-$SUDO ln -sfn "$NODE_DIR" "$WEB_ROOT_LINK"
 
 # Install nginx site and admin snippet
 log "Installing nginx config…"
