@@ -1581,3 +1581,66 @@ drop function if exists public.set_plant_care_water_from_freq() cascade;
 drop function if exists public.set_updated_at() cascade;
 
 
+-- ========== Activity logs ==========
+-- Captures per-garden human-readable activity events for the current day view
+create table if not exists public.garden_activity_logs (
+  id uuid primary key default gen_random_uuid(),
+  garden_id uuid not null references public.gardens(id) on delete cascade,
+  actor_id uuid references public.profiles(id) on delete set null,
+  actor_name text,
+  actor_color text,
+  kind text not null check (kind in ('plant_added','plant_updated','plant_deleted','task_completed','task_progressed','note')),
+  message text not null,
+  plant_name text,
+  task_name text,
+  occurred_at timestamptz not null default now()
+);
+
+create index if not exists gal_garden_time_idx on public.garden_activity_logs (garden_id, occurred_at desc);
+
+alter table public.garden_activity_logs enable row level security;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_activity_logs' and policyname='gal_select') then
+    drop policy gal_select on public.garden_activity_logs;
+  end if;
+  create policy gal_select on public.garden_activity_logs for select to authenticated
+    using (
+      exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid()))
+      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_activity_logs' and policyname='gal_insert') then
+    drop policy gal_insert on public.garden_activity_logs;
+  end if;
+  create policy gal_insert on public.garden_activity_logs for insert to authenticated
+    with check (
+      exists (select 1 from public.garden_members gm where gm.garden_id = garden_id and gm.user_id = (select auth.uid()))
+      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+    );
+end $$;
+
+-- Helper RPC to write an activity log with best-effort actor name
+create or replace function public.log_garden_activity(
+  _garden_id uuid,
+  _kind text,
+  _message text,
+  _plant_name text default null,
+  _task_name text default null,
+  _actor_color text default null
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare v_actor uuid := (select auth.uid()); v_name text; begin
+  select display_name into v_name from public.profiles where id = v_actor;
+  insert into public.garden_activity_logs (garden_id, actor_id, actor_name, actor_color, kind, message, plant_name, task_name, occurred_at)
+  values (_garden_id, v_actor, v_name, nullif(_actor_color,''), _kind, _message, nullif(_plant_name,''), nullif(_task_name,''), now());
+end; $$;
+
+grant execute on function public.log_garden_activity(uuid, text, text, text, text, text) to anon, authenticated;
+
