@@ -88,7 +88,7 @@ fi
 
 log "Installing base packages…"
 $PM_UPDATE
-$PM_INSTALL nginx python3 python3-venv python3-pip git curl ca-certificates gnupg postgresql-client
+$PM_INSTALL nginx python3 python3-venv python3-pip git curl ca-certificates gnupg postgresql-client ufw
 
 # Install/upgrade Node.js (ensure >= 20; prefer Node 22 LTS)
 need_node_install=false
@@ -167,6 +167,27 @@ $SUDO rm -f /etc/nginx/sites-enabled/plant-swipe || true
 
 log "Testing nginx configuration…"
 $SUDO nginx -t
+
+# Configure firewall (UFW) to allow SSH and web traffic
+log "Configuring firewall (ufw)…"
+if command -v ufw >/dev/null 2>&1; then
+  # Always permit SSH to avoid lockout
+  $SUDO ufw allow OpenSSH >/dev/null 2>&1 || $SUDO ufw allow ssh || true
+  # Allow HTTP/HTTPS (prefer nginx application profile if available)
+  if $SUDO ufw app list >/dev/null 2>&1 && $SUDO ufw app list | grep -q "Nginx Full"; then
+    $SUDO ufw allow "Nginx Full" || true
+  else
+    $SUDO ufw allow 80/tcp || true
+    $SUDO ufw allow 443/tcp || true
+  fi
+  # Enable ufw non-interactively if not already active
+  ufw_status="$($SUDO ufw status 2>/dev/null || true)"
+  if ! echo "$ufw_status" | grep -qi "Status: active"; then
+    $SUDO ufw --force enable
+  fi
+else
+  log "ufw not found; skipping firewall configuration."
+fi
 
 # Admin API: install to /opt/admin with venv
 log "Setting up Admin API venv…"
