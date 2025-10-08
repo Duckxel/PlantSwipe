@@ -29,7 +29,7 @@ type DayAgg = { day: string; completed: number; any_success: boolean }
 export default function PublicProfilePage() {
   const params = useParams()
   const navigate = useNavigate()
-  const { user, profile } = useAuth()
+  const { user } = useAuth()
   const displayParam = String(params.username || '')
 
   const [loading, setLoading] = React.useState(true)
@@ -56,6 +56,7 @@ export default function PublicProfilePage() {
         const userId = String(row.id)
         setPp({
           id: userId,
+          username: null,
           display_name: row.display_name || null,
           country: row.country || null,
           bio: row.bio || null,
@@ -98,7 +99,7 @@ export default function PublicProfilePage() {
     }
     run()
     return () => { cancelled = true }
-  }, [usernameParam])
+  }, [displayParam])
 
   const isOwner = user?.id && pp?.id && user.id === pp.id
   const [menuOpen, setMenuOpen] = React.useState(false)
