@@ -2044,10 +2044,10 @@ app.get('/api/admin/pull-code/stream', async (req, res) => {
     }
     try { await fs.chmod(scriptPath, 0o755) } catch {}
 
-    // Stream logs without restarting during the stream; caller will restart services after
-    const child = spawnChild(scriptPath, ['--no-restart'], {
+    // Allow the script to perform restarts even if it drops the stream briefly
+    const child = spawnChild(scriptPath, [], {
       cwd: repoRoot,
-      env: { ...process.env, CI: process.env.CI || 'true', SKIP_SERVICE_RESTARTS: '1', PLANTSWIPE_REPO_DIR: repoRoot },
+      env: { ...process.env, CI: process.env.CI || 'true', PLANTSWIPE_REPO_DIR: repoRoot },
       shell: false,
     })
 
