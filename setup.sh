@@ -62,6 +62,8 @@ fi
 SERVICE_NODE="plant-swipe-node"
 SERVICE_ADMIN="admin-api"
 SERVICE_NGINX="nginx"
+# Service account that runs Node/Admin services (and git operations)
+SERVICE_USER="${SERVICE_USER:-www-data}"
 
 NGINX_SITE_AVAIL="/etc/nginx/sites-available/plant-swipe.conf"
 NGINX_SITE_ENABL="/etc/nginx/sites-enabled/plant-swipe.conf"
@@ -73,6 +75,7 @@ ADMIN_VENV="$ADMIN_DIR/venv"
 ADMIN_ENV_DIR="/etc/admin-api"
 ADMIN_ENV_FILE="$ADMIN_ENV_DIR/env"
 SYSTEMCTL_BIN="$(command -v systemctl || echo /usr/bin/systemctl)"
+NGINX_BIN="$(command -v nginx || echo /usr/sbin/nginx)"
 
 log "Repo: $REPO_DIR"
 log "Node app: $NODE_DIR"
@@ -92,8 +95,8 @@ prepare_repo_permissions() {
       $SUDO chattr -Ri "$dir/.git" || true
     fi
     $SUDO chmod -R u+rwX "$dir/.git" || true
-    # Normalize ownership of .git to the repo owner
-    $SUDO chown -R "$owner_group" "$dir/.git" || true
+    # Ensure the service user owns .git so git fetch/pull work without sudo
+    $SUDO chown -R "$SERVICE_USER:$SERVICE_USER" "$dir/.git" || true
     # Tolerate SELinux denials by applying a writable context when Enforcing
     if command -v getenforce >/dev/null 2>&1 && [ "$(getenforce)" = "Enforcing" ]; then
       if command -v semanage >/dev/null 2>&1; then
@@ -296,11 +299,11 @@ $SUDO chown -R www-data:www-data "$ADMIN_DIR" || true
 SUDOERS_FILE="/etc/sudoers.d/plantswipe-admin-api"
 log "Configuring sudoers at $SUDOERS_FILE…"
 $SUDO bash -c "cat > '$SUDOERS_FILE' <<EOF
-Defaults:www-data !requiretty
-www-data ALL=(root) NOPASSWD: $SYSTEMCTL_BIN reload nginx
-www-data ALL=(root) NOPASSWD: $SYSTEMCTL_BIN restart $SERVICE_NODE
-www-data ALL=(root) NOPASSWD: $SYSTEMCTL_BIN restart $SERVICE_ADMIN
-www-data ALL=(root) NOPASSWD: $SYSTEMCTL_BIN reboot
+Defaults:$SERVICE_USER !requiretty
+$SERVICE_USER ALL=(root) NOPASSWD: $NGINX_BIN -t
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN reload $SERVICE_NGINX
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN restart $SERVICE_NODE
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN restart $SERVICE_ADMIN
 EOF
 "
 $SUDO chmod 0440 "$SUDOERS_FILE"
@@ -319,6 +322,13 @@ $SUDO systemctl restart "$SERVICE_ADMIN" "$SERVICE_NODE"
 # Final nginx reload to apply site links
 log "Reloading nginx…"
 $SUDO systemctl reload "$SERVICE_NGINX"
+
+# Mark repo as safe for both root and service user to avoid 'dubious ownership'
+log "Marking repo as a safe.directory in git config (root and $SERVICE_USER)…"
+if command -v git >/dev/null 2>&1; then
+  $SUDO -u "$SERVICE_USER" -H git config --global --add safe.directory "$REPO_DIR" || true
+  git config --global --add safe.directory "$REPO_DIR" || true
+fi
 
 # Verify
 log "Verifying services are active…"
