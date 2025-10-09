@@ -15,7 +15,7 @@ import {
   Tooltip,
   ReferenceLine,
 } from 'recharts'
-import { RefreshCw, Server, Database, Github, ExternalLink, ShieldCheck, ShieldX, UserSearch, AlertTriangle, Gavel, Search } from "lucide-react"
+import { RefreshCw, Server, Database, Github, ExternalLink, ShieldCheck, ShieldX, UserSearch, AlertTriangle, Gavel, Search, ChevronDown } from "lucide-react"
 import { supabase } from '@/lib/supabaseClient'
 import {
   Dialog,
@@ -36,15 +36,15 @@ export const AdminPage: React.FC = () => {
 
   const [restarting, setRestarting] = React.useState(false)
   const [pulling, setPulling] = React.useState(false)
-  const [logOpen, setLogOpen] = React.useState<boolean>(false)
-  const [logLines, setLogLines] = React.useState<string[]>([])
-  const logRef = React.useRef<HTMLDivElement | null>(null)
+  const [consoleOpen, setConsoleOpen] = React.useState<boolean>(false)
+  const [consoleLines, setConsoleLines] = React.useState<string[]>([])
+  const consoleRef = React.useRef<HTMLDivElement | null>(null)
   React.useEffect(() => {
-    if (!logOpen) return
-    const el = logRef.current
+    if (!consoleOpen) return
+    const el = consoleRef.current
     if (!el) return
     el.scrollTop = el.scrollHeight
-  }, [logLines, logOpen])
+  }, [consoleLines, consoleOpen])
 
   const copyTextToClipboard = React.useCallback(async (text: string): Promise<boolean> => {
     try {
@@ -70,14 +70,18 @@ export const AdminPage: React.FC = () => {
   }, [])
 
   const getAllLogsText = React.useCallback((): string => {
-    return logLines.join('\n')
-  }, [logLines])
+    return consoleLines.join('\n')
+  }, [consoleLines])
 
   const getErrorLinesText = React.useCallback((): string => {
     const rx = /(^|\b)(err|error|failed|failure|exception|traceback|fatal|npm\s+err!|^npm\s+err)/i
-    const lines = logLines.filter(l => rx.test(l))
+    const lines = consoleLines.filter(l => rx.test(l))
     return lines.length > 0 ? lines.join('\n') : 'No error-like lines detected.'
-  }, [logLines])
+  }, [consoleLines])
+
+  const appendConsole = React.useCallback((line: string) => {
+    setConsoleLines(prev => [...prev, line])
+  }, [])
 
   // Safely parse response body into JSON, tolerating HTML/error pages
   const safeJson = React.useCallback(async (resp: Response): Promise<any> => {
@@ -97,10 +101,12 @@ export const AdminPage: React.FC = () => {
     if (syncing) return
     setSyncing(true)
     try {
+      setConsoleOpen(true)
+      appendConsole('[sync] Sync DB Schema: starting…')
       const session = (await supabase.auth.getSession()).data.session
       const token = session?.access_token
       if (!token) {
-        alert('You must be signed in to run schema sync')
+        appendConsole('[sync] You must be signed in to run schema sync')
         return
       }
       // Try GET first to avoid 405s from proxies that block POST
@@ -133,10 +139,10 @@ export const AdminPage: React.FC = () => {
       if (!resp.ok) {
         throw new Error(body?.error || `Request failed (${resp.status})`)
       }
-      alert('Schema synchronized successfully')
+      appendConsole('[sync] Schema synchronized successfully')
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e)
-      alert(`Failed to sync schema: ${message}`)
+      appendConsole(`[sync] Failed to sync schema: ${message}`)
     } finally {
       setSyncing(false)
     }
@@ -146,10 +152,12 @@ export const AdminPage: React.FC = () => {
     if (restarting) return
     setRestarting(true)
     try {
+      setConsoleOpen(true)
+      appendConsole('[restart] Restart requested…')
       const session = (await supabase.auth.getSession()).data.session
       const token = session?.access_token
       if (!token) {
-        alert('You must be signed in to restart the server')
+        appendConsole('[restart] You must be signed in to restart the server')
         return
       }
       // First attempt: restart via Node API (preserves Authorization)
@@ -224,11 +232,12 @@ export const AdminPage: React.FC = () => {
         } catch {}
         await new Promise(res => setTimeout(res, 1000))
       }
+      appendConsole('[restart] Server healthy. Reloading page…')
       window.location.reload()
 
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e)
-      alert(`Failed to restart server: ${message}`)
+      appendConsole(`[restart] Failed to restart server: ${message}`)
     } finally {
       setRestarting(false)
     }
@@ -416,8 +425,9 @@ export const AdminPage: React.FC = () => {
     setPulling(true)
     try {
       // Use streaming endpoint for live logs
-      setLogLines([])
-      setLogOpen(true)
+      setConsoleLines([])
+      setConsoleOpen(true)
+      appendConsole('[pull] Pull & Build: starting…')
       const session = (await supabase.auth.getSession()).data.session
       const token = session?.access_token
       const headers: Record<string, string> = {}
@@ -438,7 +448,7 @@ export const AdminPage: React.FC = () => {
       const reader = resp.body.getReader()
       const decoder = new TextDecoder()
       let buf = ''
-      const append = (line: string) => setLogLines(prev => [...prev, line])
+      const append = (line: string) => appendConsole(line)
       // Minimal SSE parser: handle lines starting with 'data:' and emit
       while (true) {
         const { done, value } = await reader.read()
@@ -479,7 +489,7 @@ export const AdminPage: React.FC = () => {
       } catch {}
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e)
-      alert(`Failed to pull & build: ${message}`)
+      appendConsole(`[pull] Failed to pull & build: ${message}`)
     } finally {
       setPulling(false)
     }
@@ -954,12 +964,12 @@ export const AdminPage: React.FC = () => {
                   <div className="text-xs opacity-60">Auto‑ping every 60s</div>
                 </div>
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   size="icon"
                   aria-label="Refresh health"
                   onClick={refreshHealth}
                   disabled={healthRefreshing}
-                  className="h-8 w-8"
+                  className="h-8 w-8 rounded-xl border bg-white text-black hover:bg-stone-50"
                 >
                   <RefreshCw className={`h-4 w-4 ${healthRefreshing ? 'animate-spin' : ''}`} />
                 </Button>
@@ -1008,7 +1018,7 @@ export const AdminPage: React.FC = () => {
             </CardContent>
           </Card>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <Button className="rounded-2xl w-full" onClick={restartServer} disabled={restarting}>
               <Server className="h-4 w-4" />
               <RefreshCw className="h-4 w-4" />
@@ -1025,6 +1035,69 @@ export const AdminPage: React.FC = () => {
             </Button>
           </div>
 
+            {/* Admin Console */}
+            <div className="mt-3">
+              <button
+                type="button"
+                className="flex items-center gap-2 text-sm font-medium"
+                onClick={() => setConsoleOpen(o => !o)}
+                aria-expanded={consoleOpen}
+                aria-controls="admin-console"
+              >
+                <ChevronDown className={`h-4 w-4 transition-transform ${consoleOpen ? 'rotate-180' : ''}`} />
+                Admin Console
+                {consoleLines.length > 0 && (
+                  <span className="text-xs opacity-60">({consoleLines.length} lines)</span>
+                )}
+              </button>
+              {consoleOpen && (
+                <div className="mt-2" id="admin-console">
+                  <div
+                    ref={consoleRef}
+                    className="h-48 overflow-auto rounded-xl border bg-black text-white text-xs p-3 font-mono whitespace-pre-wrap"
+                    aria-live="polite"
+                  >
+                    {consoleLines.length === 0 ? 'No messages yet.' : consoleLines.join('\n')}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="rounded-xl"
+                      onClick={() => setConsoleOpen(false)}
+                      title="Hide console"
+                    >Hide</Button>
+                    <Button
+                      size="sm"
+                      className="rounded-xl"
+                      onClick={() => { setConsoleLines([]); setConsoleOpen(true) }}
+                      title="Clear console"
+                    >Clear</Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="rounded-xl"
+                      onClick={async () => {
+                        const ok = await copyTextToClipboard(getAllLogsText())
+                        if (!ok) alert('Copy failed. You can still select and copy manually.')
+                      }}
+                      title="Copy all console lines to clipboard"
+                    >Copy all</Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="rounded-xl"
+                      onClick={async () => {
+                        const ok = await copyTextToClipboard(getErrorLinesText())
+                        if (!ok) alert('Copy failed. You can still select and copy manually.')
+                      }}
+                      title="Copy only error-like lines to clipboard"
+                    >Copy errors</Button>
+                  </div>
+                </div>
+              )}
+            </div>
+
           <div className="pt-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
               <Card className="rounded-2xl">
@@ -1035,12 +1108,12 @@ export const AdminPage: React.FC = () => {
                       <div className="text-xs opacity-60">{onlineUpdatedAt ? `Updated ${formatTimeAgo(onlineUpdatedAt)}` : 'Updated —'}</div>
                     </div>
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="icon"
                       aria-label="Refresh currently online"
                       onClick={() => loadOnlineUsers({ initial: false })}
                       disabled={onlineLoading || onlineRefreshing}
-                      className="h-8 w-8"
+                      className="h-8 w-8 rounded-xl border bg-white text-black hover:bg-stone-50"
                     >
                       <RefreshCw className={`h-4 w-4 ${onlineLoading || onlineRefreshing ? 'animate-spin' : ''}`} />
                     </Button>
@@ -1058,12 +1131,12 @@ export const AdminPage: React.FC = () => {
                       <div className="text-xs opacity-60">{registeredUpdatedAt ? `Updated ${formatTimeAgo(registeredUpdatedAt)}` : 'Updated —'}</div>
                     </div>
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="icon"
                       aria-label="Refresh registered accounts"
                       onClick={() => loadRegisteredCount({ initial: false })}
                       disabled={registeredLoading || registeredRefreshing}
-                      className="h-8 w-8"
+                      className="h-8 w-8 rounded-xl border bg-white text-black hover:bg-stone-50"
                     >
                       <RefreshCw className={`h-4 w-4 ${registeredLoading || registeredRefreshing ? 'animate-spin' : ''}`} />
                     </Button>
@@ -1076,66 +1149,18 @@ export const AdminPage: React.FC = () => {
             </div>
             <Card className="rounded-2xl">
               <CardContent className="p-4">
-                {/* Live logs from Pull & Build */}
-                {logOpen && (
-                  <div className="mb-3">
-                    <div className="text-sm font-medium mb-1">Pull & Build logs</div>
-                    <div
-                      ref={logRef}
-                      className="h-48 overflow-auto rounded-xl border bg-black text-white text-xs p-3 font-mono whitespace-pre-wrap"
-                      aria-live="polite"
-                    >
-                      {logLines.length === 0 ? 'Starting…' : logLines.join('\n')}
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        className="rounded-xl"
-                        onClick={() => setLogOpen(false)}
-                        title="Hide logs"
-                      >Hide</Button>
-                      <Button
-                        size="sm"
-                        className="rounded-xl"
-                        onClick={() => { setLogLines([]); setLogOpen(true) }}
-                        title="Clear logs from the panel"
-                      >Clear</Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="rounded-xl"
-                        onClick={async () => {
-                          const ok = await copyTextToClipboard(getAllLogsText())
-                          if (!ok) alert('Copy failed. You can still select and copy manually.')
-                        }}
-                        title="Copy all log lines to clipboard"
-                      >Copy all</Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="rounded-xl"
-                        onClick={async () => {
-                          const ok = await copyTextToClipboard(getErrorLinesText())
-                          if (!ok) alert('Copy failed. You can still select and copy manually.')
-                        }}
-                        title="Copy only error-like lines to clipboard"
-                      >Copy errors</Button>
-                    </div>
-                  </div>
-                )}
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <div>
                     <div className="text-sm font-medium">Unique visitors — last 7 days</div>
                     <div className="text-xs opacity-60">{visitorsUpdatedAt ? `Updated ${formatTimeAgo(visitorsUpdatedAt)}` : 'Updated —'}</div>
                   </div>
                   <Button
-                    variant="ghost"
+                    variant="outline"
                     size="icon"
                     aria-label="Refresh visitors"
                     onClick={() => loadVisitorsStats({ initial: false })}
                     disabled={visitorsLoading || visitorsRefreshing}
-                    className="h-8 w-8"
+                    className="h-8 w-8 rounded-xl border bg-white text-black hover:bg-stone-50"
                   >
                     <RefreshCw className={`h-4 w-4 ${visitorsLoading || visitorsRefreshing ? 'animate-spin' : ''}`} />
                   </Button>
@@ -1582,12 +1607,12 @@ export const AdminPage: React.FC = () => {
                           <div className="text-xs opacity-60">{memberVisitsUpdatedAt ? `Updated ${formatTimeAgo(memberVisitsUpdatedAt)}` : 'Updated —'}</div>
                         </div>
                         <Button
-                          variant="ghost"
+                          variant="outline"
                           size="icon"
                           aria-label="Refresh visits"
                           onClick={() => { if (memberData?.user?.id) loadMemberVisitsSeries(memberData.user.id, { initial: true }) }}
                           disabled={memberVisitsLoading || !memberData?.user?.id}
-                          className="h-8 w-8"
+                          className="h-8 w-8 rounded-xl border bg-white text-black hover:bg-stone-50"
                         >
                           <RefreshCw className={`h-4 w-4 ${memberVisitsLoading ? 'animate-spin' : ''}`} />
                         </Button>
