@@ -296,6 +296,16 @@ export const GardenDashboardPage: React.FC = () => {
     return members.filter(m => m.role === 'owner').length
   }, [members])
 
+  // Resolve the current viewer's chosen accent color as a CSS hsl() value
+  const getActorColorCss = React.useCallback(() => {
+    const uid = profile?.id || user?.id
+    if (!uid) return null
+    const mm = members.find(m => m.userId === uid)
+    if (!mm?.accentKey) return null
+    const opt = getAccentOption(mm.accentKey as any)
+    return opt ? `hsl(${opt.hsl})` : null
+  }, [members, profile?.id, user?.id])
+
   React.useEffect(() => {
     let ignore = false
     if (!plantQuery.trim()) { setPlantResults([]); return }
@@ -397,18 +407,13 @@ export const GardenDashboardPage: React.FC = () => {
       }
       // Log activity: plant added
       try {
-        const accentColorCss = (() => {
-          const mm = (members as any[]).find((m: any) => m.userId === (profile?.id || user?.id))
-          if (!mm?.accentKey) return null
-          const opt = getAccentOption(mm.accentKey as any)
-          return opt ? `hsl(${opt.hsl})` : null
-        })()
+        const actorColorCss = getActorColorCss()
         await logGardenActivity({
           gardenId: id,
           kind: 'plant_added' as any,
           message: `added "${nicknameVal || selectedPlant.name}"${qty > 0 ? ` x${qty}` : ''}`,
           plantName: nicknameVal || selectedPlant.name,
-          actorColor: accentColorCss || null,
+          actorColor: actorColorCss || null,
         })
         setActivityRev((r) => r + 1)
       } catch {}
@@ -531,13 +536,8 @@ export const GardenDashboardPage: React.FC = () => {
         if (id) {
           const gp = (plants as any[]).find((p: any) => p.id === gardenPlantId)
           const plantName = gp?.nickname || gp?.plant?.name || 'Plant'
-          const accentColorCss = (() => {
-            const mm = (members as any[]).find((m: any) => m.userId === (profile?.id || user?.id))
-            if (!mm?.accentKey) return null
-            const opt = getAccentOption(mm.accentKey as any)
-            return opt ? `hsl(${opt.hsl})` : null
-          })()
-          await logGardenActivity({ gardenId: id, kind: 'task_completed' as any, message: `completed all due tasks on "${plantName}"`, plantName, actorColor: accentColorCss || null })
+          const actorColorCss = getActorColorCss()
+          await logGardenActivity({ gardenId: id, kind: 'task_completed' as any, message: `completed all due tasks on "${plantName}"`, plantName, actorColor: actorColorCss || null })
           setActivityRev((r) => r + 1)
         }
       } catch {}
@@ -657,7 +657,7 @@ export const GardenDashboardPage: React.FC = () => {
                         </div>
                             <div className="mt-2 flex gap-2 flex-wrap">
                               <Button variant="secondary" className="rounded-2xl" onClick={() => { setPendingGardenPlantId(gp.id); setTaskOpen(true) }}>Tasks</Button>
-                              <EditPlantButton gp={gp} gardenId={id!} onChanged={load} serverToday={serverToday} />
+                              <EditPlantButton gp={gp} gardenId={id!} onChanged={load} serverToday={serverToday} actorColorCss={getActorColorCss()} />
                               <Button variant="secondary" className="rounded-2xl" onClick={async () => {
                                 await deleteGardenPlant(gp.id)
                                 if (serverToday && id) {
@@ -679,7 +679,8 @@ export const GardenDashboardPage: React.FC = () => {
                                   } catch {}
                                 }
                                 try {
-                                  await logGardenActivity({ gardenId: id!, kind: 'plant_deleted' as any, message: `deleted "${gp.nickname || gp.plant?.name || 'Plant'}"`, plantName: gp.nickname || gp.plant?.name || null })
+                                  const actorColorCss = getActorColorCss()
+                                  await logGardenActivity({ gardenId: id!, kind: 'plant_deleted' as any, message: `deleted "${gp.nickname || gp.plant?.name || 'Plant'}"`, plantName: gp.nickname || gp.plant?.name || null, actorColor: actorColorCss || null })
                                   setActivityRev((r) => r + 1)
                                 } catch {}
                                 await load()
@@ -713,13 +714,8 @@ export const GardenDashboardPage: React.FC = () => {
                     const msg = done
                       ? `has completed "${label}" Task on "${plantName || 'Plant'}"`
                       : `has progressed "${label}" Task on "${plantName || 'Plant'}" (${Math.min(newCount, required)}/${required})`
-                    const accentColorCss = (() => {
-                      const mm = (members as any[]).find((m: any) => m.userId === (profile?.id || user?.id))
-                      if (!mm?.accentKey) return null
-                      const opt = getAccentOption(mm.accentKey as any)
-                      return opt ? `hsl(${opt.hsl})` : null
-                    })()
-                    await logGardenActivity({ gardenId: id, kind: kind as any, message: msg, plantName: plantName || null, taskName: label, actorColor: accentColorCss || null })
+                    const actorColorCss = getActorColorCss()
+                    await logGardenActivity({ gardenId: id, kind: kind as any, message: msg, plantName: plantName || null, taskName: label, actorColor: actorColorCss || null })
                     setActivityRev((r) => r + 1)
                   }
                 } finally {
@@ -1113,7 +1109,7 @@ function colorForName(name?: string | null, colorToken?: string | null): string 
   return colors[hash % colors.length]
 }
 
-function EditPlantButton({ gp, gardenId, onChanged, serverToday }: { gp: any; gardenId: string; onChanged: () => Promise<void>; serverToday: string | null }) {
+function EditPlantButton({ gp, gardenId, onChanged, serverToday, actorColorCss }: { gp: any; gardenId: string; onChanged: () => Promise<void>; serverToday: string | null; actorColorCss?: string | null }) {
   const [open, setOpen] = React.useState(false)
   const [nickname, setNickname] = React.useState(gp.nickname || '')
   const [count, setCount] = React.useState<number>(Number(gp.plantsOnHand ?? 0))
@@ -1135,7 +1131,7 @@ function EditPlantButton({ gp, gardenId, onChanged, serverToday }: { gp: any; ga
         await supabase.from('garden_plants').delete().eq('id', gp.id)
         if (serverToday) await ensureDailyTasksForGardens(serverToday)
         try {
-          await logGardenActivity({ gardenId, kind: 'plant_deleted' as any, message: `deleted "${gp.nickname || gp.plant?.name || 'Plant'}"`, plantName: gp.nickname || gp.plant?.name || null })
+          await logGardenActivity({ gardenId, kind: 'plant_deleted' as any, message: `deleted "${gp.nickname || gp.plant?.name || 'Plant'}"`, plantName: gp.nickname || gp.plant?.name || null, actorColor: actorColorCss || null })
         } catch {}
       }
       // If name or count changed, log update
@@ -1147,7 +1143,7 @@ function EditPlantButton({ gp, gardenId, onChanged, serverToday }: { gp: any; ga
           if (changedName) parts.push(`name → "${nickname.trim() || '—'}"`)
           if (changedCount) parts.push(`count → ${Math.max(0, Number(count || 0))}`)
           const plantName = nickname.trim() || gp.nickname || gp.plant?.name || 'Plant'
-          await logGardenActivity({ gardenId, kind: 'plant_updated' as any, message: `updated ${plantName}: ${parts.join(', ')}`, plantName })
+          await logGardenActivity({ gardenId, kind: 'plant_updated' as any, message: `updated ${plantName}: ${parts.join(', ')}`, plantName, actorColor: actorColorCss || null })
         }
       } catch {}
       await onChanged()
