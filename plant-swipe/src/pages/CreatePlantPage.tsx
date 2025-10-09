@@ -97,6 +97,8 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
         description: description || null,
         image_url: imageUrl || null,
         care_sunlight: careSunlight,
+        // Ensure DB gets a value even when omitted in simplified flow
+        care_water: 'Low',
         care_soil: includeAdvanced ? (careSoil || null) : null,
         care_difficulty: careDifficulty,
         seeds_available: seedsAvailable,

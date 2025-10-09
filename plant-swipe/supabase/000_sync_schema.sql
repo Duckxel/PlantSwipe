@@ -135,6 +135,9 @@ alter table if exists public.plants add column if not exists updated_at timestam
 -- Relax NOT NULL constraints to support Simplified Add Plant flow
 alter table if exists public.plants alter column scientific_name drop not null;
 alter table if exists public.plants alter column care_soil drop not null;
+-- Allow omitting care_water from inserts; keep sane default
+alter table if exists public.plants alter column care_water drop not null;
+alter table if exists public.plants alter column care_water set default 'Low';
 alter table public.plants enable row level security;
 -- Clean up legacy duplicate read policies if present
 do $$ begin
