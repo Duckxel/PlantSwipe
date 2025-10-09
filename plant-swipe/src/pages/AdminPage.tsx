@@ -483,8 +483,19 @@ export const AdminPage: React.FC = () => {
         }
       }
 
-      // Let backend handle restart after streaming (as before). Keep health poll.
-      try { await new Promise(res => setTimeout(res, 500)); } catch {}
+      // Ensure both Admin API and Node API are restarted after build
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+        if (adminToken) {
+          await fetch('/admin/restart-app', {
+            method: 'POST',
+            headers: { 'X-Admin-Token': String(adminToken), 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ service: 'admin-api' })
+          }).catch(() => {})
+        }
+      } catch {}
+      // Then restart the Node service via our API (includes health poll)
       try { await restartServer() } catch {}
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e)
