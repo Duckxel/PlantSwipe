@@ -294,17 +294,13 @@ fi
 # Install and build Node app
 log "Installing Node dependencies…"
 cd "$NODE_DIR"
-# Repair common permission issues for node_modules and npm cache
+# Ensure a clean install: remove node_modules if present to avoid permission issues
 if [[ -d "$NODE_DIR/node_modules" ]]; then
-  chmod -R u+rwX "$NODE_DIR/node_modules" || true
+  rm -rf "$NODE_DIR/node_modules" || true
 fi
-if command -v npm >/dev/null 2>&1; then
-  npm_config_cache_dir="$(npm config get cache 2>/dev/null || echo "$HOME/.npm")"
-  if [[ -n "$npm_config_cache_dir" ]]; then
-    mkdir -p "$npm_config_cache_dir" || true
-    chmod -R u+rwX "$npm_config_cache_dir" || true
-  fi
-fi
+# Use a writable per-repo npm cache to avoid /var/www/.npm permission issues
+export npm_config_cache="$NODE_DIR/.npm-cache"
+mkdir -p "$npm_config_cache" || true
 # Always run npm as the repo owner to keep ownership consistent
 if [[ "$REPO_OWNER" != "" ]]; then
   if [[ "$EUID" -eq 0 ]]; then
