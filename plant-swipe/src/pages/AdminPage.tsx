@@ -462,38 +462,25 @@ export const AdminPage: React.FC = () => {
       let buf = ''
       const append = (line: string) => appendConsole(line)
       // Minimal SSE parser: handle lines starting with 'data:' and emit
-      try {
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          buf += decoder.decode(value, { stream: true })
-          let idx
-          while ((idx = buf.indexOf('\n')) >= 0) {
-            const raw = buf.slice(0, idx)
-            buf = buf.slice(idx + 1)
-            const line = raw.replace(/\r$/, '')
-            if (!line) continue
-            if (line.startsWith('data:')) {
-              const payloadRaw = line.slice(5).trimStart()
-              if (!payloadRaw) continue
-              // Hide final done/error JSON frames to avoid confusing users when services restart
-              let skip = false
-              if (payloadRaw[0] === '{') {
-                try {
-                  const obj = JSON.parse(payloadRaw)
-                  if (obj && typeof obj.ok === 'boolean' && Object.prototype.hasOwnProperty.call(obj, 'code')) {
-                    skip = true
-                  }
-                } catch {}
-              }
-              if (!skip) append(payloadRaw)
-            } else if (!/^(:|event:|id:|retry:)/.test(line)) {
-              append(line)
-            }
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += decoder.decode(value, { stream: true })
+        let idx
+        while ((idx = buf.indexOf('\n')) >= 0) {
+          const raw = buf.slice(0, idx)
+          buf = buf.slice(idx + 1)
+          const line = raw.replace(/\r$/, '')
+          if (!line) continue
+          if (line.startsWith('data:')) {
+            const payload = line.slice(5).trimStart()
+            // Try to detect done events to know success
+            // no-op: payload may be JSON or plain text; still append for visibility
+            append(payload)
+          } else if (!/^(:|event:|id:|retry:)/.test(line)) {
+            append(line)
           }
         }
-      } catch {
-        // Likely expected when services restart mid-stream; ignore
       }
 
       // Let backend handle restart after streaming (as before). Keep health poll.
