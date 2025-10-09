@@ -84,8 +84,6 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
     setError(null)
     setOk(null)
     if (!name.trim()) { setError("Name is required"); return }
-    if (!scientificName.trim()) { setError("Scientific name is required"); return }
-    if (!careSoil.trim()) { setError("Soil is required"); return }
     // Validate frequency constraints
     const periodMax: Record<'week'|'month'|'year', number> = { week: 7, month: 4, year: 12 }
     const maxAllowed = periodMax[waterFreqPeriod]
@@ -97,7 +95,7 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
         .from('plants')
         .update({
           name: name.trim(),
-          scientific_name: scientificName.trim(),
+          scientific_name: scientificName.trim() || null,
           colors: colorArray,
           seasons,
           rarity,
@@ -105,7 +103,7 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
           description: description || null,
           image_url: imageUrl || null,
           care_sunlight: careSunlight,
-          care_soil: careSoil,
+          care_soil: careSoil.trim() || null,
           care_difficulty: careDifficulty,
           seeds_available: seedsAvailable,
           water_freq_period: waterFreqPeriod,
