@@ -26,6 +26,54 @@ SERVICE_NGINX="nginx"
 if [[ $EUID -ne 0 ]]; then SUDO="sudo"; else SUDO=""; fi
 log() { printf "[%s] %s\n" "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*"; }
 
+# Attempt to repair common causes of git permission failures without changing users
+attempt_git_permission_repair() {
+  # Requires: WORK_DIR, REPO_OWNER, RUN_AS_PREFIX, SUDO, log
+  log "Attempting to auto-repair Git repository permissions…"
+
+  # Ensure .git exists before attempting repairs
+  if [[ ! -d "$WORK_DIR/.git" ]]; then
+    log ".git directory not found; skipping permission repair"
+    return 0
+  fi
+
+  # Clear immutable flags that can block writes even for root
+  if command -v chattr >/dev/null 2>&1; then
+    $SUDO chattr -Ri "$WORK_DIR/.git" || true
+  fi
+
+  # Make .git contents writable for the repo owner and ensure directory traversal
+  $SUDO chmod -R u+rwX "$WORK_DIR/.git" || true
+  $SUDO find "$WORK_DIR" -maxdepth 1 -type d -exec chmod u+rx {} + || true
+
+  # Normalize ownership of .git to the detected repo owner
+  $SUDO chown -R "$REPO_OWNER:$REPO_OWNER" "$WORK_DIR/.git" || true
+
+  # Handle SELinux denials by assigning a writable context when Enforcing
+  if command -v getenforce >/dev/null 2>&1 && [ "$(getenforce)" = "Enforcing" ]; then
+    if command -v semanage >/dev/null 2>&1; then
+      $SUDO semanage fcontext -a -t httpd_sys_rw_content_t "$WORK_DIR/.git(/.*)?" || true
+      $SUDO restorecon -Rv "$WORK_DIR/.git" || true
+    elif command -v chcon >/dev/null 2>&1; then
+      $SUDO chcon -R -t httpd_sys_rw_content_t "$WORK_DIR/.git" || true
+    fi
+  fi
+
+  # Remount the filesystem read-write if it appears mounted read-only
+  if command -v findmnt >/dev/null 2>&1; then
+    local mnt_opts mnt_target
+    mnt_opts="$(findmnt -no OPTIONS "$WORK_DIR" 2>/dev/null || true)"
+    if echo "$mnt_opts" | grep -qw ro; then
+      mnt_target="$(findmnt -no TARGET "$WORK_DIR" 2>/dev/null || echo "$WORK_DIR")"
+      log "Detected read-only mount at $mnt_target — attempting remount rw"
+      $SUDO mount -o remount,rw "$mnt_target" || true
+    fi
+  fi
+
+  # Sanity: try creating FETCH_HEAD as the repo owner
+  "${RUN_AS_PREFIX[@]}" bash -lc "touch '$WORK_DIR/.git/FETCH_HEAD'" >/dev/null 2>&1 || true
+}
+
 # Determine repository owner and, when running as root, run git as owner
 REPO_OWNER="$(stat -c '%U' "$WORK_DIR/.git" 2>/dev/null || stat -c '%U' "$WORK_DIR" 2>/dev/null || echo root)"
 RUN_AS_PREFIX=()
@@ -75,8 +123,24 @@ log "Branch: $BRANCH_NAME"
 # Fetch and update code
 log "Fetching/pruning remotes…"
 if ! "${GIT_CMD[@]}" fetch --all --prune; then
-  echo "[ERROR] git fetch failed. This is usually a permissions issue with .git. Ensure $WORK_DIR is owned by $REPO_OWNER and not root. To fix: chown -R $REPO_OWNER:$REPO_OWNER $WORK_DIR" >&2
-  exit 1
+  # Try to self-heal common permission problems, then retry once
+  attempt_git_permission_repair
+  if ! "${GIT_CMD[@]}" fetch --all --prune; then
+    echo "[ERROR] git fetch failed after auto-repair." >&2
+    echo "Likely causes: insufficient write perms on .git, read-only mount, or SELinux denial." >&2
+    echo "Diagnostics:" >&2
+    ls -ld "$WORK_DIR" "$WORK_DIR/.git" >&2 || true
+    ls -l "$WORK_DIR/.git/FETCH_HEAD" >&2 || true
+    if command -v findmnt >/dev/null 2>&1; then
+      findmnt -no TARGET,SOURCE,FSTYPE,OPTIONS "$WORK_DIR" >&2 || true
+    fi
+    if command -v getenforce >/dev/null 2>&1; then
+      echo "SELinux: $(getenforce)" >&2
+    fi
+    echo "Remediation tips: ensure '$WORK_DIR' and '$WORK_DIR/.git' are owned and writable by '$REPO_OWNER'." >&2
+    echo "Example: chown -R $REPO_OWNER:$REPO_OWNER '$WORK_DIR' && chmod -R u+rwX '$WORK_DIR/.git'" >&2
+    exit 1
+  fi
 fi
 
 log "Pulling latest (fast-forward only) on current branch…"
