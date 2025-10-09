@@ -162,8 +162,14 @@ if ! "${GIT_CMD[@]}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   # Allow this path as safe for the current user and retry.
   "${RUN_AS_PREFIX[@]}" git config --global --add safe.directory "$WORK_DIR" >/dev/null 2>&1 || true
   if ! "${GIT_CMD[@]}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    echo "[ERROR] Current directory is not inside a git repository: $WORK_DIR" >&2
-    exit 1
+    # If detection still fails, try to auto-repair common permission issues
+    attempt_git_permission_repair
+    if ! "${GIT_CMD[@]}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      echo "[ERROR] Current directory is not inside a git repository: $WORK_DIR" >&2
+      # Minimal diagnostics to aid troubleshooting without being too verbose
+      ls -ld "$WORK_DIR" "$WORK_DIR/.git" >&2 || true
+      exit 1
+    fi
   fi
 fi
 BRANCH_NAME="$("${GIT_CMD[@]}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"

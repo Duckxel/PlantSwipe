@@ -28,30 +28,58 @@ const __dirname = path.dirname(__filename)
 // Resolve the real Git repository root, even when running under a symlinked
 // deployment directory like /var/www/PlantSwipe/plant-swipe.
 async function getRepoRoot() {
+  // 1) Allow explicit override via env when it actually points at a repo
   try {
     const override = (process.env.PLANTSWIPE_REPO_DIR || '').trim()
     if (override) {
       try {
         const st = await fs.stat(override)
-        if (st && st.isDirectory()) return override
+        if (st && st.isDirectory()) {
+          const topFromGit = await getTopLevelIfRepo(override)
+          if (topFromGit) return topFromGit
+          try { await fs.access(path.join(override, '.git')) ; return override } catch {}
+        }
       } catch {}
     }
   } catch {}
+
+  // 2) Prefer the real path of the current directory (handles symlinks)
   let realDir = __dirname
+  try { realDir = await fs.realpath(__dirname) } catch {}
+
+  // 3) Try to ask git for the top-level using a safe.directory override
+  const topFromGitHere = await getTopLevelIfRepo(realDir)
+  if (topFromGitHere) return topFromGitHere
+
+  // 4) Ascend a couple of levels and try common candidates
+  const candidates = [
+    realDir,
+    path.resolve(realDir, '..'),
+    path.resolve(realDir, '../..'),
+  ]
+  for (const dir of candidates) {
+    const top = await getTopLevelIfRepo(dir)
+    if (top) return top
+    try {
+      // Also accept git worktree layout where .git is a file
+      await fs.access(path.join(dir, '.git'))
+      return dir
+    } catch {}
+  }
+
+  // 5) Fallback: return the real directory (better than an incorrect parent)
+  return realDir
+}
+
+// Helper: return top-level path if "dir" is a git repo, otherwise null.
+async function getTopLevelIfRepo(dir) {
   try {
-    realDir = await fs.realpath(__dirname)
-  } catch {}
-  try {
-    const { stdout } = await exec(`git -C "${realDir}" rev-parse --show-toplevel`)
+    const { stdout } = await exec(`git -c "safe.directory=${dir}" -C "${dir}" rev-parse --show-toplevel`)
     const root = (stdout || '').toString().trim()
-    if (root) return root
-  } catch {}
-  const parent = path.resolve(realDir, '..')
-  try {
-    await fs.access(path.join(parent, '.git'))
-    return parent
-  } catch {}
-  return parent
+    return root || null
+  } catch {
+    return null
+  }
 }
 
 const exec = promisify(execCb)
