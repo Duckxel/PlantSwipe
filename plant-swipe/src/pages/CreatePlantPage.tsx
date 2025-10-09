@@ -86,6 +86,10 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
       if (byName.error) { setError(byName.error.message); return }
       if (byName.data?.id) { setError('A plant with the same name already exists'); return }
 
+      // Provide safe defaults so simplified flow never violates NOT NULL constraints
+      const defaultPeriod: 'week' | 'month' | 'year' = 'week'
+      const defaultAmount: number = 1
+
       const { error: insErr } = await supabase.from('plants').insert({
         id,
         name: nameNorm,
@@ -102,12 +106,12 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
         care_soil: includeAdvanced ? (careSoil || null) : null,
         care_difficulty: careDifficulty,
         seeds_available: seedsAvailable,
-        // Default watering frequency fields (advanced only)
-        water_freq_period: includeAdvanced ? waterFreqPeriod : null,
-        water_freq_amount: includeAdvanced ? normalizedAmount : null,
+        // Default watering frequency fields (optional in Advanced; always persisted safely)
+        water_freq_period: includeAdvanced ? waterFreqPeriod : defaultPeriod,
+        water_freq_amount: includeAdvanced ? normalizedAmount : defaultAmount,
         // Legacy/alternative field names for compatibility
-        water_freq_unit: includeAdvanced ? waterFreqPeriod : null,
-        water_freq_value: includeAdvanced ? normalizedAmount : null,
+        water_freq_unit: includeAdvanced ? waterFreqPeriod : defaultPeriod,
+        water_freq_value: includeAdvanced ? normalizedAmount : defaultAmount,
       })
       if (insErr) { setError(insErr.message); return }
       setOk('Saved')

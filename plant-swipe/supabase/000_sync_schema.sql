@@ -138,6 +138,21 @@ alter table if exists public.plants alter column care_soil drop not null;
 -- Allow omitting care_water from inserts; keep sane default
 alter table if exists public.plants alter column care_water drop not null;
 alter table if exists public.plants alter column care_water set default 'Low';
+-- Ensure watering frequency fields are optional (some DBs may still have NOT NULL)
+do $$ begin
+  begin
+    alter table if exists public.plants alter column water_freq_period drop not null;
+  exception when undefined_column then null; end;
+  begin
+    alter table if exists public.plants alter column water_freq_amount drop not null;
+  exception when undefined_column then null; end;
+  begin
+    alter table if exists public.plants alter column water_freq_unit drop not null;
+  exception when undefined_column then null; end;
+  begin
+    alter table if exists public.plants alter column water_freq_value drop not null;
+  exception when undefined_column then null; end;
+end $$;
 alter table public.plants enable row level security;
 -- Clean up legacy duplicate read policies if present
 do $$ begin
