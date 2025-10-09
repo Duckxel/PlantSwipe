@@ -352,14 +352,21 @@ if [[ "$SKIP_RESTARTS" == "true" ]]; then
   log "Skipping service restarts (requested)"
 else
   log "Restarting services: $SERVICE_NODE, $SERVICE_ADMIN…"
-  $SUDO systemctl restart "$SERVICE_NODE" "$SERVICE_ADMIN"
+  # Use non-interactive sudo to leverage NOPASSWD rules; avoid askpass prompts
+  for svc in "$SERVICE_NODE" "$SERVICE_ADMIN"; do
+    if ! sudo -n systemctl restart "$svc"; then
+      echo "[ERROR] Failed to restart service: $svc (sudo non-interactive)." >&2
+      echo "        Ensure NOPASSWD sudo is configured for www-data: systemctl restart $svc" >&2
+      exit 1
+    fi
+  done
 
   log "Verifying services are active…"
-  if $SUDO systemctl is-active "$SERVICE_NODE" "$SERVICE_ADMIN" >/dev/null; then
+  if sudo -n systemctl is-active "$SERVICE_NODE" "$SERVICE_ADMIN" >/dev/null; then
     log "Services active."
   else
     echo "[WARN] One or more services not active" >&2
-    $SUDO systemctl status "$SERVICE_NODE" "$SERVICE_ADMIN" --no-pager || true
+    sudo -n systemctl status "$SERVICE_NODE" "$SERVICE_ADMIN" --no-pager || true
   fi
 fi
 
