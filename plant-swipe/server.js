@@ -2044,10 +2044,10 @@ app.get('/api/admin/pull-code/stream', async (req, res) => {
     }
     try { await fs.chmod(scriptPath, 0o755) } catch {}
 
-    // Spawn with --no-restart so we can finish streaming, caller can manually reload if desired
-    const child = spawnChild(scriptPath, ['--no-restart'], {
+    // Let the script perform service restarts itself; the SSE stream may end when services restart
+    const child = spawnChild(scriptPath, [], {
       cwd: repoRoot,
-      env: { ...process.env, CI: process.env.CI || 'true', SKIP_SERVICE_RESTARTS: '1', PLANTSWIPE_REPO_DIR: repoRoot },
+      env: { ...process.env, CI: process.env.CI || 'true', PLANTSWIPE_REPO_DIR: repoRoot },
       shell: false,
     })
 

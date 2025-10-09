@@ -483,20 +483,9 @@ export const AdminPage: React.FC = () => {
         }
       }
 
-      // After stream ends, reload nginx and restart both services as the final step
-      try {
-        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
-        if (adminToken) {
-          await fetch('/api/admin/restart-all', {
-            method: 'POST',
-            headers: { 'X-Admin-Token': String(adminToken), 'Accept': 'application/json' },
-            credentials: 'same-origin',
-          })
-        } else {
-          // Fallback to legacy behavior
-          await restartServer()
-        }
-      } catch {}
+      // Script now restarts services itself; only trigger health poll
+      try { await new Promise(res => setTimeout(res, 500)); } catch {}
+      try { await restartServer() } catch {}
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e)
       appendConsole(`[pull] Failed to pull & build: ${message}`)
