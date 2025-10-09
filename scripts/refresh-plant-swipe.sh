@@ -156,7 +156,7 @@ log "Git user: $REPO_OWNER"
 # Determine if we can sudo non-interactively (for better error messages)
 CAN_SUDO=false
 if [[ -n "$SUDO" ]]; then
-  if $SUDO -n true >/devnull 2>&1; then CAN_SUDO=true; fi
+  if $SUDO -n true >/dev/null 2>&1; then CAN_SUDO=true; fi
 fi
 
 # Optional: skip restarting services (useful for streaming logs via SSE)
@@ -294,20 +294,47 @@ fi
 # Install and build Node app
 log "Installing Node dependencies…"
 cd "$NODE_DIR"
-# Run npm as the invoking user if script is run with sudo, to avoid root-owned files
-if [[ -n "${SUDO_USER:-}" && "${EUID}" -eq 0 ]]; then
-  sudo -u "$SUDO_USER" -H npm ci --no-audit --no-fund
-elif [[ "${EUID}" -eq 0 && "$REPO_OWNER" != "root" ]]; then
-  sudo -u "$REPO_OWNER" -H npm ci --no-audit --no-fund
+# Repair common permission issues for node_modules and npm cache
+if [[ -d "$NODE_DIR/node_modules" ]]; then
+  chmod -R u+rwX "$NODE_DIR/node_modules" || true
+fi
+if command -v npm >/dev/null 2>&1; then
+  npm_config_cache_dir="$(npm config get cache 2>/dev/null || echo "$HOME/.npm")"
+  if [[ -n "$npm_config_cache_dir" ]]; then
+    mkdir -p "$npm_config_cache_dir" || true
+    chmod -R u+rwX "$npm_config_cache_dir" || true
+  fi
+fi
+# Always run npm as the repo owner to keep ownership consistent
+if [[ "$REPO_OWNER" != "" ]]; then
+  if [[ "$EUID" -eq 0 ]]; then
+    sudo -u "$REPO_OWNER" -H npm ci --no-audit --no-fund
+  elif [[ "$REPO_OWNER" != "$CURRENT_USER" && -n "$SUDO" ]]; then
+    if $SUDO -n true >/dev/null 2>&1; then
+      $SUDO -u "$REPO_OWNER" -H npm ci --no-audit --no-fund
+    else
+      npm ci --no-audit --no-fund
+    fi
+  else
+    npm ci --no-audit --no-fund
+  fi
 else
   npm ci --no-audit --no-fund
 fi
 
 log "Building application…"
-if [[ -n "${SUDO_USER:-}" && "${EUID}" -eq 0 ]]; then
-  sudo -u "$SUDO_USER" -H env CI=${CI:-true} npm run build
-elif [[ "${EUID}" -eq 0 && "$REPO_OWNER" != "root" ]]; then
-  sudo -u "$REPO_OWNER" -H env CI=${CI:-true} npm run build
+if [[ "$REPO_OWNER" != "" ]]; then
+  if [[ "$EUID" -eq 0 ]]; then
+    sudo -u "$REPO_OWNER" -H env CI=${CI:-true} npm run build
+  elif [[ "$REPO_OWNER" != "$CURRENT_USER" && -n "$SUDO" ]]; then
+    if $SUDO -n true >/dev/null 2>&1; then
+      $SUDO -u "$REPO_OWNER" -H env CI=${CI:-true} npm run build
+    else
+      CI=${CI:-true} npm run build
+    fi
+  else
+    CI=${CI:-true} npm run build
+  fi
 else
   CI=${CI:-true} npm run build
 fi
