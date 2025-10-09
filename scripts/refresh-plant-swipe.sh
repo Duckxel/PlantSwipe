@@ -23,8 +23,51 @@ SERVICE_NODE="plant-swipe-node"
 SERVICE_ADMIN="admin-api"
 SERVICE_NGINX="nginx"
 
-if [[ $EUID -ne 0 ]]; then SUDO="sudo"; else SUDO=""; fi
 log() { printf "[%s] %s\n" "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*"; }
+
+# Configure sudo usage. When not running as root, prefer a non-interactive
+# askpass helper backed by PSSWORD_KEY loaded from common env files.
+SUDO=""
+ASKPASS_HELPER=""
+if [[ $EUID -ne 0 ]]; then
+  SUDO="sudo"
+  # Load PSSWORD_KEY from environment or known env files if not present
+  if [[ -z "${PSSWORD_KEY:-}" ]]; then
+    # Search a few likely locations for the password key
+    CANDIDATE_ENV_FILES=(
+      "$WORK_DIR/.env"
+      "$NODE_DIR/.env"
+      "/etc/admin-api/env"
+    )
+    for env_file in "${CANDIDATE_ENV_FILES[@]}"; do
+      if [[ -f "$env_file" ]]; then
+        # Extract last occurrence to allow overrides; tolerate whitespace
+        kv_line="$(grep -E '^[[:space:]]*PSSWORD_KEY=' "$env_file" | tail -n1 || true)"
+        if [[ -n "$kv_line" ]]; then
+          PSSWORD_KEY="${kv_line#*=}"
+          export PSSWORD_KEY
+          break
+        fi
+      fi
+    done
+  fi
+  if [[ -n "${PSSWORD_KEY:-}" && -n "$(command -v sudo 2>/dev/null)" ]]; then
+    # Create a secure askpass helper that echoes the password on request.
+    # Embed the resolved password directly to avoid env-sanitization issues.
+    ASKPASS_HELPER="$(mktemp -t plantswipe-askpass.XXXXXX)"
+    chmod 0700 "$ASKPASS_HELPER"
+    cat >"$ASKPASS_HELPER" <<EOF
+#!/usr/bin/env bash
+exec printf "%s" "$(printf %s "${PSSWORD_KEY}")" 2>/dev/null
+EOF
+    export SUDO_ASKPASS="$ASKPASS_HELPER"
+    SUDO="sudo -A"
+  fi
+fi
+
+# Clean up temporary askpass helper on exit
+cleanup_askpass() { [[ -n "$ASKPASS_HELPER" && -f "$ASKPASS_HELPER" ]] && rm -f "$ASKPASS_HELPER" || true; }
+trap cleanup_askpass EXIT
 
 # Attempt to repair common causes of git permission failures without changing users
 attempt_git_permission_repair() {
@@ -77,8 +120,13 @@ attempt_git_permission_repair() {
 # Determine repository owner and, when running as root, run git as owner
 REPO_OWNER="$(stat -c '%U' "$WORK_DIR/.git" 2>/dev/null || stat -c '%U' "$WORK_DIR" 2>/dev/null || echo root)"
 RUN_AS_PREFIX=()
-if [[ $EUID -eq 0 && "$REPO_OWNER" != "root" && -n "$(command -v sudo 2>/dev/null)" ]]; then
-  RUN_AS_PREFIX=(sudo -u "$REPO_OWNER" -H)
+CURRENT_USER="$(id -un 2>/dev/null || echo "")"
+if [[ -n "$(command -v sudo 2>/dev/null)" && -n "$REPO_OWNER" && "$REPO_OWNER" != "$CURRENT_USER" ]]; then
+  if [[ $EUID -eq 0 ]]; then
+    RUN_AS_PREFIX=(sudo -u "$REPO_OWNER" -H)
+  else
+    RUN_AS_PREFIX=($SUDO -u "$REPO_OWNER" -H)
+  fi
 fi
 # Build GIT_CMD possibly prefixed with sudo -u <owner>
 GIT_CMD=("${RUN_AS_PREFIX[@]}" git -c safe.directory="$GIT_SAFE_DIR" -C "$WORK_DIR")
