@@ -229,7 +229,7 @@ if ! "${GIT_LOCAL_CMD[@]}" fetch --all --prune; then
         echo "- repo owner: $REPO_OWNER" >&2
         echo "- can sudo non-interactively: $CAN_SUDO" >&2
         echo "- askpass helper present: $([[ -n \"$SUDO_ASKPASS\" ]] && echo yes || echo no)" >&2
-        echo "- PSSWORD_KEY source: ${PSSWORD_KEY_SOURCE:-none}, length: ${#PSSWORD_KEY:-0}" >&2
+        echo "- PSSWORD_KEY source: ${PSSWORD_KEY_SOURCE:-none}, length: ${#PSSWORD_KEY}" >&2
         ls -ld "$WORK_DIR" "$WORK_DIR/.git" >&2 || true
         ls -l "$WORK_DIR/.git/FETCH_HEAD" >&2 || true
         if ! touch "$WORK_DIR/.git/FETCH_HEAD" 2>/dev/null; then
@@ -255,7 +255,7 @@ if ! "${GIT_LOCAL_CMD[@]}" fetch --all --prune; then
     echo "- repo owner: $REPO_OWNER" >&2
     echo "- can sudo non-interactively: $CAN_SUDO" >&2
     echo "- askpass helper present: $([[ -n \"$SUDO_ASKPASS\" ]] && echo yes || echo no)" >&2
-    echo "- PSSWORD_KEY source: ${PSSWORD_KEY_SOURCE:-none}, length: ${#PSSWORD_KEY:-0}" >&2
+    echo "- PSSWORD_KEY source: ${PSSWORD_KEY_SOURCE:-none}, length: ${#PSSWORD_KEY}" >&2
     ls -ld "$WORK_DIR" "$WORK_DIR/.git" >&2 || true
     ls -l "$WORK_DIR/.git/FETCH_HEAD" >&2 || true
     if ! touch "$WORK_DIR/.git/FETCH_HEAD" 2>/dev/null; then
