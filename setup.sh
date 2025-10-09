@@ -17,7 +17,11 @@ set -euo pipefail
 
 trap 'echo "[ERROR] Command failed at line $LINENO" >&2' ERR
 
-if [[ $EUID -ne 0 ]]; then SUDO="sudo"; else SUDO=""; fi
+if [[ $EUID -ne 0 ]]; then
+  echo "[ERROR] Run as root: sudo ./setup.sh" >&2
+  exit 1
+fi
+SUDO=""
 log() { printf "[%s] %s\n" "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*"; }
 
 # Resolve repo root robustly (works if script is in repo root or in scripts/)
@@ -165,12 +169,12 @@ fi
 # Build frontend and API bundle
 log "Installing Node dependencies…"
 # Ensure a clean install owned by the service user and use a per-repo npm cache
-$SUDO -u "$SERVICE_USER" -H bash -lc "mkdir -p '$NODE_DIR/.npm-cache'"
-$SUDO -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && rm -rf node_modules"
-$SUDO -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && npm_config_cache='$NODE_DIR/.npm-cache' npm ci --no-audit --no-fund"
+sudo -u "$SERVICE_USER" -H bash -lc "mkdir -p '$NODE_DIR/.npm-cache'"
+sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && rm -rf node_modules"
+sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && npm_config_cache='$NODE_DIR/.npm-cache' npm ci --no-audit --no-fund"
 
 log "Building Node application…"
-$SUDO -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && CI=${CI:-true} npm_config_cache='$NODE_DIR/.npm-cache' npm run build"
+sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && CI=${CI:-true} npm_config_cache='$NODE_DIR/.npm-cache' npm run build"
 
 # Link web root expected by nginx config to the repo copy, unless that would create
 # a self-referential link (e.g., when the repo itself lives at /var/www/PlantSwipe).
@@ -323,7 +327,7 @@ $SUDO systemctl reload "$SERVICE_NGINX"
 # Mark repo as safe for both root and service user to avoid 'dubious ownership'
 log "Marking repo as a safe.directory in git config (root and $SERVICE_USER)…"
 if command -v git >/dev/null 2>&1; then
-  $SUDO -u "$SERVICE_USER" -H git config --global --add safe.directory "$REPO_DIR" || true
+  sudo -u "$SERVICE_USER" -H git config --global --add safe.directory "$REPO_DIR" || true
   git config --global --add safe.directory "$REPO_DIR" || true
 fi
 
