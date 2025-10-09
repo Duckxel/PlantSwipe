@@ -34,36 +34,41 @@ ASKPASS_HELPER=""
 PSSWORD_KEY_SOURCE=""
 if [[ $EUID -ne 0 ]]; then
   SUDO="sudo"
-  # Load PSSWORD_KEY from environment or known env files if not present
-  if [[ -z "${PSSWORD_KEY:-}" ]]; then
-    # Search a few likely locations for the password key
-    CANDIDATE_ENV_FILES=(
-      "$WORK_DIR/.env"
-      "$NODE_DIR/.env"
-      "/etc/admin-api/env"
-    )
-    # PSSWORD_KEY_SOURCE is initialized globally
-    for env_file in "${CANDIDATE_ENV_FILES[@]}"; do
-      if [[ -f "$env_file" ]]; then
-        # Extract last occurrence to allow overrides; tolerate whitespace
-        kv_line="$(grep -E '^[[:space:]]*PSSWORD_KEY=' "$env_file" | tail -n1 || true)"
-        if [[ -n "$kv_line" ]]; then
-          PSSWORD_KEY="${kv_line#*=}"
-          # Trim surrounding whitespace
-          PSSWORD_KEY="$(printf %s "$PSSWORD_KEY" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-          # Strip optional surrounding quotes
-          if [[ "${#PSSWORD_KEY}" -ge 2 && "${PSSWORD_KEY:0:1}" == '"' && "${PSSWORD_KEY: -1}" == '"' ]]; then
-            PSSWORD_KEY="${PSSWORD_KEY:1:${#PSSWORD_KEY}-2}"
-          elif [[ "${#PSSWORD_KEY}" -ge 2 && "${PSSWORD_KEY:0:1}" == "'" && "${PSSWORD_KEY: -1}" == "'" ]]; then
-            PSSWORD_KEY="${PSSWORD_KEY:1:${#PSSWORD_KEY}-2}"
-          fi
-          export PSSWORD_KEY
-          PSSWORD_KEY_SOURCE="$env_file"
+  # Resolve PSSWORD_KEY from env or known files; file takes precedence if set
+  CANDIDATE_ENV_FILES=(
+    "$WORK_DIR/.env"
+    "$NODE_DIR/.env"
+    "/etc/admin-api/env"
+  )
+  FILE_PSSWORD_KEY=""
+  FILE_SOURCE=""
+  for env_file in "${CANDIDATE_ENV_FILES[@]}"; do
+    if [[ -f "$env_file" ]]; then
+      kv_line="$(grep -E '^[[:space:]]*PSSWORD_KEY=' "$env_file" | tail -n1 || true)"
+      if [[ -n "$kv_line" ]]; then
+        tmp_key="${kv_line#*=}"
+        tmp_key="$(printf %s "$tmp_key" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+        if [[ "${#tmp_key}" -ge 2 && "${tmp_key:0:1}" == '"' && "${tmp_key: -1}" == '"' ]]; then
+          tmp_key="${tmp_key:1:${#tmp_key}-2}"
+        elif [[ "${#tmp_key}" -ge 2 && "${tmp_key:0:1}" == "'" && "${tmp_key: -1}" == "'" ]]; then
+          tmp_key="${tmp_key:1:${#tmp_key}-2}"
+        fi
+        if [[ -n "$tmp_key" ]]; then
+          FILE_PSSWORD_KEY="$tmp_key"
+          FILE_SOURCE="$env_file"
           break
         fi
       fi
-    done
+    fi
+  done
+  # Choose effective key: prefer file over env when non-empty
+  if [[ -n "$FILE_PSSWORD_KEY" ]]; then
+    PSSWORD_KEY="$FILE_PSSWORD_KEY"
+    PSSWORD_KEY_SOURCE="$FILE_SOURCE"
+  elif [[ -n "${PSSWORD_KEY:-}" ]]; then
+    PSSWORD_KEY_SOURCE="env"
   fi
+  export PSSWORD_KEY
   if [[ -n "${PSSWORD_KEY:-}" && -n "$(command -v sudo 2>/dev/null)" ]]; then
     # Create a secure askpass helper that echoes the password on request.
     # Embed the resolved password directly to avoid env-sanitization issues.
@@ -75,11 +80,8 @@ exec printf "%s" "$(printf %s "${PSSWORD_KEY}")" 2>/dev/null
 EOF
     export SUDO_ASKPASS="$ASKPASS_HELPER"
     SUDO="sudo -A"
-    if [[ -n "$PSSWORD_KEY_SOURCE" ]]; then
-      log "Using sudo askpass helper (key source: $PSSWORD_KEY_SOURCE)"
-    else
-      log "Using sudo askpass helper (key source: env)"
-    fi
+    src_label="$([[ -n "$PSSWORD_KEY_SOURCE" ]] && echo "$PSSWORD_KEY_SOURCE" || echo env)"
+    log "Using sudo askpass helper (key source: $src_label)"
   fi
 fi
 
@@ -151,6 +153,12 @@ GIT_LOCAL_CMD=(git -c safe.directory="$GIT_SAFE_DIR" -C "$WORK_DIR")
 GIT_CMD=("${RUN_AS_PREFIX[@]}" git -c safe.directory="$GIT_SAFE_DIR" -C "$WORK_DIR")
 log "Git user: $REPO_OWNER"
 
+# Determine if we can sudo non-interactively (for better error messages)
+CAN_SUDO=false
+if [[ -n "$SUDO" ]]; then
+  if $SUDO -n true >/devnull 2>&1; then CAN_SUDO=true; fi
+fi
+
 # Optional: skip restarting services (useful for streaming logs via SSE)
 # Enable with --no-restart flag or SKIP_SERVICE_RESTARTS=true|1 env var
 SKIP_RESTARTS=false
@@ -181,10 +189,6 @@ if ! "${GIT_LOCAL_CMD[@]}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   git config --global --add safe.directory "$WORK_DIR" >/dev/null 2>&1 || true
   if ! "${GIT_LOCAL_CMD[@]}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     # If running as a different repo owner and sudo is available, attempt owner verification
-    CAN_SUDO=false
-    if [[ -n "$SUDO" ]]; then
-      if $SUDO -n true >/dev/null 2>&1; then CAN_SUDO=true; fi
-    fi
     if [[ ${#RUN_AS_PREFIX[@]} -gt 0 && "$CAN_SUDO" == "true" ]]; then
       "${RUN_AS_PREFIX[@]}" git config --global --add safe.directory "$WORK_DIR" >/dev/null 2>&1 || true
       if ! "${GIT_CMD[@]}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -205,36 +209,86 @@ if ! "${GIT_LOCAL_CMD[@]}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     fi
   fi
 fi
-BRANCH_NAME="$("${GIT_CMD[@]}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
+BRANCH_NAME="$(${GIT_LOCAL_CMD[@]} rev-parse --abbrev-ref HEAD 2>/dev/null || ${GIT_CMD[@]} rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
 log "Branch: $BRANCH_NAME"
 
 # Fetch and update code
 log "Fetching/pruning remotes…"
-if ! "${GIT_CMD[@]}" fetch --all --prune; then
-  # Try to self-heal common permission problems, then retry once
-  attempt_git_permission_repair
-  if ! "${GIT_CMD[@]}" fetch --all --prune; then
-    echo "[ERROR] git fetch failed after auto-repair." >&2
-    echo "Likely causes: insufficient write perms on .git, read-only mount, or SELinux denial." >&2
+# Try as current user first to avoid sudo
+if ! "${GIT_LOCAL_CMD[@]}" fetch --all --prune; then
+  log "Local fetch failed; will try as repo owner if possible (can_sudo=$CAN_SUDO)"
+  if [[ ${#RUN_AS_PREFIX[@]} -gt 0 && "$CAN_SUDO" == "true" ]]; then
+    if ! "${GIT_CMD[@]}" fetch --all --prune; then
+      # Try to self-heal common permission problems, then retry once
+      attempt_git_permission_repair
+      if ! "${GIT_CMD[@]}" fetch --all --prune; then
+        echo "[ERROR] git fetch failed after auto-repair." >&2
+        echo "Likely causes: insufficient write perms on .git, read-only mount, or SELinux denial." >&2
+        echo "Diagnostics:" >&2
+        echo "- current user: $CURRENT_USER (euid=$EUID)" >&2
+        echo "- repo owner: $REPO_OWNER" >&2
+        echo "- can sudo non-interactively: $CAN_SUDO" >&2
+        echo "- askpass helper present: $([[ -n \"$SUDO_ASKPASS\" ]] && echo yes || echo no)" >&2
+        echo "- PSSWORD_KEY source: ${PSSWORD_KEY_SOURCE:-none}, length: ${#PSSWORD_KEY:-0}" >&2
+        ls -ld "$WORK_DIR" "$WORK_DIR/.git" >&2 || true
+        ls -l "$WORK_DIR/.git/FETCH_HEAD" >&2 || true
+        if ! touch "$WORK_DIR/.git/FETCH_HEAD" 2>/dev/null; then
+          echo "- touch FETCH_HEAD as $CURRENT_USER: FAILED" >&2
+        else
+          echo "- touch FETCH_HEAD as $CURRENT_USER: OK" >&2
+        fi
+        if command -v findmnt >/dev/null 2>&1; then
+          findmnt -no TARGET,SOURCE,FSTYPE,OPTIONS "$WORK_DIR" >&2 || true
+        fi
+        if command -v getenforce >/dev/null 2>&1; then
+          echo "SELinux: $(getenforce)" >&2
+        fi
+        echo "Remediation tips: ensure '$WORK_DIR' and '$WORK_DIR/.git' are owned and writable by '$REPO_OWNER'." >&2
+        echo "Example: chown -R $REPO_OWNER:$REPO_OWNER '$WORK_DIR' && chmod -R u+rwX '$WORK_DIR/.git'" >&2
+        exit 1
+      fi
+    fi
+  else
+    echo "[ERROR] git fetch failed and cannot escalate privileges non-interactively." >&2
     echo "Diagnostics:" >&2
+    echo "- current user: $CURRENT_USER (euid=$EUID)" >&2
+    echo "- repo owner: $REPO_OWNER" >&2
+    echo "- can sudo non-interactively: $CAN_SUDO" >&2
+    echo "- askpass helper present: $([[ -n \"$SUDO_ASKPASS\" ]] && echo yes || echo no)" >&2
+    echo "- PSSWORD_KEY source: ${PSSWORD_KEY_SOURCE:-none}, length: ${#PSSWORD_KEY:-0}" >&2
     ls -ld "$WORK_DIR" "$WORK_DIR/.git" >&2 || true
     ls -l "$WORK_DIR/.git/FETCH_HEAD" >&2 || true
+    if ! touch "$WORK_DIR/.git/FETCH_HEAD" 2>/dev/null; then
+      echo "- touch FETCH_HEAD as $CURRENT_USER: FAILED" >&2
+    else
+      echo "- touch FETCH_HEAD as $CURRENT_USER: OK" >&2
+    fi
     if command -v findmnt >/dev/null 2>&1; then
       findmnt -no TARGET,SOURCE,FSTYPE,OPTIONS "$WORK_DIR" >&2 || true
     fi
     if command -v getenforce >/dev/null 2>&1; then
       echo "SELinux: $(getenforce)" >&2
     fi
-    echo "Remediation tips: ensure '$WORK_DIR' and '$WORK_DIR/.git' are owned and writable by '$REPO_OWNER'." >&2
-    echo "Example: chown -R $REPO_OWNER:$REPO_OWNER '$WORK_DIR' && chmod -R u+rwX '$WORK_DIR/.git'" >&2
+    echo "Remediation suggestions:" >&2
+    echo "- Option A: chown -R $CURRENT_USER:$CURRENT_USER '$WORK_DIR/.git' (preferred)" >&2
+    echo "- Option B: grant NOPASSWD sudo for chown/chmod/systemctl to $CURRENT_USER" >&2
+    echo "- Option C: set correct PSSWORD_KEY in $WORK_DIR/.env or $NODE_DIR/.env" >&2
     exit 1
   fi
 fi
 
 log "Pulling latest (fast-forward only) on current branch…"
-if ! "${GIT_CMD[@]}" pull --ff-only; then
+# Try pull as current user first
+if ! "${GIT_LOCAL_CMD[@]}" pull --ff-only; then
+  if [[ ${#RUN_AS_PREFIX[@]} -gt 0 && "$CAN_SUDO" == "true" ]]; then
+    if ! "${GIT_CMD[@]}" pull --ff-only; then
+      echo "[ERROR] git pull failed. Check remote access and repository permissions. If needed, run as $REPO_OWNER." >&2
+      exit 1
+    fi
+  else
   echo "[ERROR] git pull failed. Check remote access and repository permissions. If needed, run as $REPO_OWNER." >&2
   exit 1
+  fi
 fi
 
 # Install and build Node app
