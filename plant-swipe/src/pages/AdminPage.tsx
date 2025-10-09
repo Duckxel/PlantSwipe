@@ -496,7 +496,7 @@ export const AdminPage: React.FC = () => {
         // Likely expected when services restart mid-stream; ignore
       }
 
-      // Script now restarts services itself; only trigger health poll
+      // Let backend handle restart after streaming (as before). Keep health poll.
       try { await new Promise(res => setTimeout(res, 500)); } catch {}
       try { await restartServer() } catch {}
     } catch (e: unknown) {
