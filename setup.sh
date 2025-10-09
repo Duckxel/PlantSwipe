@@ -164,18 +164,13 @@ fi
 
 # Build frontend and API bundle
 log "Installing Node dependencies…"
-if [[ -n "${SUDO_USER:-}" && "${EUID}" -eq 0 ]]; then
-  sudo -u "$SUDO_USER" -H bash -lc "cd '$NODE_DIR' && npm ci --no-audit --no-fund"
-else
-  bash -lc "cd '$NODE_DIR' && npm ci --no-audit --no-fund"
-fi
+# Ensure a clean install owned by the service user and use a per-repo npm cache
+$SUDO -u "$SERVICE_USER" -H bash -lc "mkdir -p '$NODE_DIR/.npm-cache'"
+$SUDO -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && rm -rf node_modules"
+$SUDO -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && npm_config_cache='$NODE_DIR/.npm-cache' npm ci --no-audit --no-fund"
 
 log "Building Node application…"
-if [[ -n "${SUDO_USER:-}" && "${EUID}" -eq 0 ]]; then
-  sudo -u "$SUDO_USER" -H bash -lc "cd '$NODE_DIR' && CI=${CI:-true} npm run build"
-else
-  bash -lc "cd '$NODE_DIR' && CI=${CI:-true} npm run build"
-fi
+$SUDO -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && CI=${CI:-true} npm_config_cache='$NODE_DIR/.npm-cache' npm run build"
 
 # Link web root expected by nginx config to the repo copy, unless that would create
 # a self-referential link (e.g., when the repo itself lives at /var/www/PlantSwipe).

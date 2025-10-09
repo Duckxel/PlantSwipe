@@ -301,6 +301,7 @@ fi
 # Use a writable per-repo npm cache to avoid /var/www/.npm permission issues
 export npm_config_cache="$NODE_DIR/.npm-cache"
 mkdir -p "$npm_config_cache" || true
+chmod -R u+rwX "$npm_config_cache" || true
 # Always run npm as the repo owner to keep ownership consistent
 if [[ "$REPO_OWNER" != "" ]]; then
   if [[ "$EUID" -eq 0 ]]; then
