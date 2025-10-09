@@ -17,7 +17,6 @@ fi
 # Use per-invocation Git config to avoid "dubious ownership" errors when
 # the repo directory is owned by a different user than the process (e.g., www-data)
 GIT_SAFE_DIR="$WORK_DIR"
-GIT_CMD=(git -c safe.directory="$GIT_SAFE_DIR" -C "$WORK_DIR")
 
 # Fixed service names
 SERVICE_NODE="plant-swipe-node"
@@ -26,6 +25,16 @@ SERVICE_NGINX="nginx"
 
 if [[ $EUID -ne 0 ]]; then SUDO="sudo"; else SUDO=""; fi
 log() { printf "[%s] %s\n" "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*"; }
+
+# Determine repository owner and, when running as root, run git as owner
+REPO_OWNER="$(stat -c '%U' "$WORK_DIR/.git" 2>/dev/null || stat -c '%U' "$WORK_DIR" 2>/dev/null || echo root)"
+RUN_AS_PREFIX=()
+if [[ $EUID -eq 0 && "$REPO_OWNER" != "root" && -n "$(command -v sudo 2>/dev/null)" ]]; then
+  RUN_AS_PREFIX=(sudo -u "$REPO_OWNER" -H)
+fi
+# Build GIT_CMD possibly prefixed with sudo -u <owner>
+GIT_CMD=("${RUN_AS_PREFIX[@]}" git -c safe.directory="$GIT_SAFE_DIR" -C "$WORK_DIR")
+log "Git user: $REPO_OWNER"
 
 # Optional: skip restarting services (useful for streaming logs via SSE)
 # Enable with --no-restart flag or SKIP_SERVICE_RESTARTS=true|1 env var
@@ -54,7 +63,7 @@ log "Verifying git repository…"
 if ! "${GIT_CMD[@]}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   # Some service users may hit Git's "dubious ownership" protection.
   # Allow this path as safe for the current user and retry.
-  git config --global --add safe.directory "$WORK_DIR" >/dev/null 2>&1 || true
+  "${RUN_AS_PREFIX[@]}" git config --global --add safe.directory "$WORK_DIR" >/dev/null 2>&1 || true
   if ! "${GIT_CMD[@]}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     echo "[ERROR] Current directory is not inside a git repository: $WORK_DIR" >&2
     exit 1
@@ -65,10 +74,16 @@ log "Branch: $BRANCH_NAME"
 
 # Fetch and update code
 log "Fetching/pruning remotes…"
-"${GIT_CMD[@]}" fetch --all --prune
+if ! "${GIT_CMD[@]}" fetch --all --prune; then
+  echo "[ERROR] git fetch failed. This is usually a permissions issue with .git. Ensure $WORK_DIR is owned by $REPO_OWNER and not root. To fix: chown -R $REPO_OWNER:$REPO_OWNER $WORK_DIR" >&2
+  exit 1
+fi
 
 log "Pulling latest (fast-forward only) on current branch…"
-"${GIT_CMD[@]}" pull --ff-only
+if ! "${GIT_CMD[@]}" pull --ff-only; then
+  echo "[ERROR] git pull failed. Check remote access and repository permissions. If needed, run as $REPO_OWNER." >&2
+  exit 1
+fi
 
 # Install and build Node app
 log "Installing Node dependencies…"
@@ -76,6 +91,8 @@ cd "$NODE_DIR"
 # Run npm as the invoking user if script is run with sudo, to avoid root-owned files
 if [[ -n "${SUDO_USER:-}" && "${EUID}" -eq 0 ]]; then
   sudo -u "$SUDO_USER" -H npm ci --no-audit --no-fund
+elif [[ "${EUID}" -eq 0 && "$REPO_OWNER" != "root" ]]; then
+  sudo -u "$REPO_OWNER" -H npm ci --no-audit --no-fund
 else
   npm ci --no-audit --no-fund
 fi
@@ -83,6 +100,8 @@ fi
 log "Building application…"
 if [[ -n "${SUDO_USER:-}" && "${EUID}" -eq 0 ]]; then
   sudo -u "$SUDO_USER" -H env CI=${CI:-true} npm run build
+elif [[ "${EUID}" -eq 0 && "$REPO_OWNER" != "root" ]]; then
+  sudo -u "$REPO_OWNER" -H env CI=${CI:-true} npm run build
 else
   CI=${CI:-true} npm run build
 fi
