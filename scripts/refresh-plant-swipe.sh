@@ -30,6 +30,8 @@ log() { printf "[%s] %s\n" "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*"; }
 # askpass helper backed by PSSWORD_KEY loaded from common env files.
 SUDO=""
 ASKPASS_HELPER=""
+# Always initialize to avoid unbound variable under `set -u`
+PSSWORD_KEY_SOURCE=""
 if [[ $EUID -ne 0 ]]; then
   SUDO="sudo"
   # Load PSSWORD_KEY from environment or known env files if not present
@@ -40,7 +42,7 @@ if [[ $EUID -ne 0 ]]; then
       "$NODE_DIR/.env"
       "/etc/admin-api/env"
     )
-    PSSWORD_KEY_SOURCE=""
+    # PSSWORD_KEY_SOURCE is initialized globally
     for env_file in "${CANDIDATE_ENV_FILES[@]}"; do
       if [[ -f "$env_file" ]]; then
         # Extract last occurrence to allow overrides; tolerate whitespace
