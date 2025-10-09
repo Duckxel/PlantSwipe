@@ -14,6 +14,11 @@ else
   NODE_DIR="$WORK_DIR"
 fi
 
+# Use per-invocation Git config to avoid "dubious ownership" errors when
+# the repo directory is owned by a different user than the process (e.g., www-data)
+GIT_SAFE_DIR="$WORK_DIR"
+GIT_CMD=(git -c safe.directory="$GIT_SAFE_DIR" -C "$WORK_DIR")
+
 # Fixed service names
 SERVICE_NODE="plant-swipe-node"
 SERVICE_ADMIN="admin-api"
@@ -46,24 +51,24 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE || true
 
 # Verify we're inside a git repository (retry once after adding safe.directory)
 log "Verifying git repository…"
-if ! git -C "$WORK_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+if ! "${GIT_CMD[@]}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   # Some service users may hit Git's "dubious ownership" protection.
   # Allow this path as safe for the current user and retry.
   git config --global --add safe.directory "$WORK_DIR" >/dev/null 2>&1 || true
-  if ! git -C "$WORK_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  if ! "${GIT_CMD[@]}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     echo "[ERROR] Current directory is not inside a git repository: $WORK_DIR" >&2
     exit 1
   fi
 fi
-BRANCH_NAME="$(git -C "$WORK_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
+BRANCH_NAME="$("${GIT_CMD[@]}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
 log "Branch: $BRANCH_NAME"
 
 # Fetch and update code
 log "Fetching/pruning remotes…"
-git -C "$WORK_DIR" fetch --all --prune
+"${GIT_CMD[@]}" fetch --all --prune
 
 log "Pulling latest (fast-forward only) on current branch…"
-git -C "$WORK_DIR" pull --ff-only
+"${GIT_CMD[@]}" pull --ff-only
 
 # Install and build Node app
 log "Installing Node dependencies…"
