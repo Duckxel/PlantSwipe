@@ -77,6 +77,48 @@ SYSTEMCTL_BIN="$(command -v systemctl || echo /usr/bin/systemctl)"
 log "Repo: $REPO_DIR"
 log "Node app: $NODE_DIR"
 
+# Prepare repository permissions for plug-and-play refresh
+prepare_repo_permissions() {
+  local dir="$1"
+  local owner_group
+  # Determine owner of repo (fallback to current user)
+  owner_group="$(stat -c '%U:%G' "$dir" 2>/dev/null || echo "$USER:${USER}")"
+  log "Preparing repository permissions at $dir (owner: $owner_group)"
+
+  # Ensure directories are traversable and .git is writable
+  $SUDO find "$dir" -type d -exec chmod 755 {} + || true
+  if [[ -d "$dir/.git" ]]; then
+    if command -v chattr >/dev/null 2>&1; then
+      $SUDO chattr -Ri "$dir/.git" || true
+    fi
+    $SUDO chmod -R u+rwX "$dir/.git" || true
+    # Normalize ownership of .git to the repo owner
+    $SUDO chown -R "$owner_group" "$dir/.git" || true
+    # Tolerate SELinux denials by applying a writable context when Enforcing
+    if command -v getenforce >/dev/null 2>&1 && [ "$(getenforce)" = "Enforcing" ]; then
+      if command -v semanage >/dev/null 2>&1; then
+        $SUDO semanage fcontext -a -t httpd_sys_rw_content_t "$dir/.git(/.*)?" || true
+        $SUDO restorecon -Rv "$dir/.git" || true
+      elif command -v chcon >/dev/null 2>&1; then
+        $SUDO chcon -R -t httpd_sys_rw_content_t "$dir/.git" || true
+      fi
+    fi
+  fi
+
+  # If the mount is read-only, try to remount read-write
+  if command -v findmnt >/dev/null 2>&1; then
+    local mnt_opts mnt_target
+    mnt_opts="$(findmnt -no OPTIONS "$dir" 2>/dev/null || true)"
+    if echo "$mnt_opts" | grep -qw ro; then
+      mnt_target="$(findmnt -no TARGET "$dir" 2>/dev/null || echo "$dir")"
+      log "Detected read-only mount at $mnt_target — attempting remount rw"
+      $SUDO mount -o remount,rw "$mnt_target" || true
+    fi
+  fi
+}
+
+prepare_repo_permissions "$REPO_DIR"
+
 # Detect package manager (Debian/Ubuntu assumed). Fallback with message.
 if command -v apt-get >/dev/null 2>&1; then
   PM_UPDATE="$SUDO apt-get update -y"
