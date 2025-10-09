@@ -309,18 +309,18 @@ fi
 # Always run npm as the repo owner to keep ownership consistent
 if [[ "$REPO_OWNER" != "" ]]; then
   if [[ "$EUID" -eq 0 ]]; then
-    sudo -u "$REPO_OWNER" -H npm ci --no-audit --no-fund --cache "$CACHE_DIR"
+    sudo -u "$REPO_OWNER" -H npm ci --include=dev --no-audit --no-fund --cache "$CACHE_DIR"
   elif [[ "$REPO_OWNER" != "$CURRENT_USER" && -n "$SUDO" ]]; then
     if $SUDO -n true >/dev/null 2>&1; then
-      $SUDO -u "$REPO_OWNER" -H npm ci --no-audit --no-fund --cache "$CACHE_DIR"
+      $SUDO -u "$REPO_OWNER" -H npm ci --include=dev --no-audit --no-fund --cache "$CACHE_DIR"
     else
-      npm ci --no-audit --no-fund --cache "$CACHE_DIR"
+      npm ci --include=dev --no-audit --no-fund --cache "$CACHE_DIR"
     fi
   else
-    npm ci --no-audit --no-fund --cache "$CACHE_DIR"
+    npm ci --include=dev --no-audit --no-fund --cache "$CACHE_DIR"
   fi
 else
-  npm ci --no-audit --no-fund --cache "$CACHE_DIR"
+  npm ci --include=dev --no-audit --no-fund --cache "$CACHE_DIR"
 fi
 
 log "Building application…"
