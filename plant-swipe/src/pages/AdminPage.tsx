@@ -38,6 +38,7 @@ export const AdminPage: React.FC = () => {
   const [pulling, setPulling] = React.useState(false)
   const [consoleOpen, setConsoleOpen] = React.useState<boolean>(false)
   const [consoleLines, setConsoleLines] = React.useState<string[]>([])
+  const [reloadReady, setReloadReady] = React.useState<boolean>(false)
   const consoleRef = React.useRef<HTMLDivElement | null>(null)
   React.useEffect(() => {
     if (!consoleOpen) return
@@ -81,6 +82,10 @@ export const AdminPage: React.FC = () => {
 
   const appendConsole = React.useCallback((line: string) => {
     setConsoleLines(prev => [...prev, line])
+  }, [])
+
+  const reloadPage = React.useCallback(() => {
+    try { window.location.reload() } catch {}
   }, [])
 
   // Safely parse response body into JSON, tolerating HTML/error pages
@@ -154,6 +159,7 @@ export const AdminPage: React.FC = () => {
     try {
       setConsoleOpen(true)
       appendConsole('[restart] Restart requested…')
+      setReloadReady(false)
       const session = (await supabase.auth.getSession()).data.session
       const token = session?.access_token
       if (!token) {
@@ -222,18 +228,23 @@ export const AdminPage: React.FC = () => {
         }
       }
 
-      // Wait for API to come back healthy to avoid 502s, then reload
+      // Wait for API to come back healthy to avoid 502s; do NOT auto-reload
       const deadline = Date.now() + 30_000
+      let healthy = false
       while (Date.now() < deadline) {
         try {
           const r = await fetch('/api/health', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
           const b = await safeJson(r)
-          if (r.ok && (b?.ok === true)) break
+          if (r.ok && (b?.ok === true)) { healthy = true; break }
         } catch {}
         await new Promise(res => setTimeout(res, 1000))
       }
-      appendConsole('[restart] Server healthy. Reloading page…')
-      window.location.reload()
+      if (healthy) {
+        appendConsole('[restart] Server healthy. You can reload the page when ready.')
+      } else {
+        appendConsole('[restart] Timed out waiting for server health. You may try reloading manually.')
+      }
+      setReloadReady(true)
 
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e)
@@ -428,6 +439,7 @@ export const AdminPage: React.FC = () => {
       setConsoleLines([])
       setConsoleOpen(true)
       appendConsole('[pull] Pull & Build: starting…')
+      setReloadReady(false)
       const session = (await supabase.auth.getSession()).data.session
       const token = session?.access_token
       const headers: Record<string, string> = {}
@@ -958,6 +970,12 @@ export const AdminPage: React.FC = () => {
           {/* Health monitor */}
           <Card className="rounded-2xl">
             <CardContent className="p-4">
+              {reloadReady && (
+                <div className="mb-3 rounded-xl border bg-amber-50/70 p-3 flex items-center justify-between gap-3">
+                  <div className="text-sm">Server restart complete. Reload when convenient.</div>
+                  <Button className="rounded-xl" onClick={reloadPage}>Reload page</Button>
+                </div>
+              )}
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-sm font-medium">Health monitor</div>
