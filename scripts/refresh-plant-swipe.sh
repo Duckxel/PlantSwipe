@@ -6,7 +6,8 @@ set -euo pipefail
 trap 'echo "[ERROR] Command failed at line $LINENO" >&2' ERR
 
 # Determine working directories based on where the command is RUN (caller cwd)
-WORK_DIR="$(pwd -P)"
+# Allow explicit override via PLANTSWIPE_REPO_DIR when provided by the caller
+WORK_DIR="${PLANTSWIPE_REPO_DIR:-$(pwd -P)}"
 # Prefer nested plant-swipe app if present; otherwise use current dir as Node app
 if [[ -f "$WORK_DIR/plant-swipe/package.json" ]]; then
   NODE_DIR="$WORK_DIR/plant-swipe"
