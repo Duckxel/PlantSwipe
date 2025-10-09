@@ -28,30 +28,58 @@ const __dirname = path.dirname(__filename)
 // Resolve the real Git repository root, even when running under a symlinked
 // deployment directory like /var/www/PlantSwipe/plant-swipe.
 async function getRepoRoot() {
+  // 1) Allow explicit override via env when it actually points at a repo
   try {
     const override = (process.env.PLANTSWIPE_REPO_DIR || '').trim()
     if (override) {
       try {
         const st = await fs.stat(override)
-        if (st && st.isDirectory()) return override
+        if (st && st.isDirectory()) {
+          const topFromGit = await getTopLevelIfRepo(override)
+          if (topFromGit) return topFromGit
+          try { await fs.access(path.join(override, '.git')) ; return override } catch {}
+        }
       } catch {}
     }
   } catch {}
+
+  // 2) Prefer the real path of the current directory (handles symlinks)
   let realDir = __dirname
+  try { realDir = await fs.realpath(__dirname) } catch {}
+
+  // 3) Try to ask git for the top-level using a safe.directory override
+  const topFromGitHere = await getTopLevelIfRepo(realDir)
+  if (topFromGitHere) return topFromGitHere
+
+  // 4) Ascend a couple of levels and try common candidates
+  const candidates = [
+    realDir,
+    path.resolve(realDir, '..'),
+    path.resolve(realDir, '../..'),
+  ]
+  for (const dir of candidates) {
+    const top = await getTopLevelIfRepo(dir)
+    if (top) return top
+    try {
+      // Also accept git worktree layout where .git is a file
+      await fs.access(path.join(dir, '.git'))
+      return dir
+    } catch {}
+  }
+
+  // 5) Fallback: return the real directory (better than an incorrect parent)
+  return realDir
+}
+
+// Helper: return top-level path if "dir" is a git repo, otherwise null.
+async function getTopLevelIfRepo(dir) {
   try {
-    realDir = await fs.realpath(__dirname)
-  } catch {}
-  try {
-    const { stdout } = await exec(`git -C "${realDir}" rev-parse --show-toplevel`)
+    const { stdout } = await exec(`git -c "safe.directory=${dir}" -C "${dir}" rev-parse --show-toplevel`)
     const root = (stdout || '').toString().trim()
-    if (root) return root
-  } catch {}
-  const parent = path.resolve(realDir, '..')
-  try {
-    await fs.access(path.join(parent, '.git'))
-    return parent
-  } catch {}
-  return parent
+    return root || null
+  } catch {
+    return null
+  }
 }
 
 const exec = promisify(execCb)
@@ -820,6 +848,44 @@ app.post('/api/admin/restart-server', handleRestartServer)
 app.get('/api/admin/restart-server', handleRestartServer)
 app.options('/api/admin/restart-server', (_req, res) => {
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+// Admin: reload nginx and restart admin + node services in sequence, then exit self
+app.post('/api/admin/restart-all', async (req, res) => {
+  try {
+    const isAdmin = await isAdminFromRequest(req)
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Admin privileges required' })
+      return
+    }
+
+    res.json({ ok: true, message: 'Reloading nginx and restarting services' })
+
+    setTimeout(async () => {
+      const serviceNode = process.env.NODE_SYSTEMD_SERVICE || process.env.SELF_SYSTEMD_SERVICE || 'plant-swipe-node'
+      const serviceAdmin = process.env.ADMIN_SYSTEMD_SERVICE || 'admin-api'
+      const serviceNginx = process.env.NGINX_SYSTEMD_SERVICE || 'nginx'
+      try { await exec('sudo -n nginx -t', { timeout: 15000 }) } catch {}
+      try { await exec(`sudo -n systemctl reload ${serviceNginx}`, { timeout: 20000 }) } catch {}
+      try {
+        const a = spawnChild('sudo', ['-n', 'systemctl', 'restart', serviceAdmin], { detached: true, stdio: 'ignore' })
+        try { a.unref() } catch {}
+      } catch {}
+      try {
+        const n = spawnChild('sudo', ['-n', 'systemctl', 'restart', serviceNode], { detached: true, stdio: 'ignore' })
+        try { n.unref() } catch {}
+      } catch {}
+      try { process.exit(0) } catch {}
+    }, 150)
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to restart all services' })
+  }
+})
+
+app.options('/api/admin/restart-all', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
   res.status(204).end()
 })
@@ -1978,10 +2044,10 @@ app.get('/api/admin/pull-code/stream', async (req, res) => {
     }
     try { await fs.chmod(scriptPath, 0o755) } catch {}
 
-    // Spawn with --no-restart so we can finish streaming, caller can manually reload if desired
-    const child = spawnChild(scriptPath, ['--no-restart'], {
+    // Allow the script to perform restarts even if it drops the stream briefly
+    const child = spawnChild(scriptPath, [], {
       cwd: repoRoot,
-      env: { ...process.env, CI: process.env.CI || 'true', SKIP_SERVICE_RESTARTS: '1', PLANTSWIPE_REPO_DIR: repoRoot },
+      env: { ...process.env, CI: process.env.CI || 'true', PLANTSWIPE_REPO_DIR: repoRoot },
       shell: false,
     })
 

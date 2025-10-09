@@ -483,7 +483,7 @@ export const AdminPage: React.FC = () => {
         }
       }
 
-      // After stream ends, perform service restarts so the new build/code is active
+      // Ensure both Admin API and Node API are restarted after build
       try {
         const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
         if (adminToken) {
@@ -495,10 +495,8 @@ export const AdminPage: React.FC = () => {
           }).catch(() => {})
         }
       } catch {}
-      // Restart Node server (existing flow handles authorization and page reload)
-      try {
-        await restartServer()
-      } catch {}
+      // Then restart the Node service via our API (includes health poll)
+      try { await restartServer() } catch {}
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e)
       appendConsole(`[pull] Failed to pull & build: ${message}`)
