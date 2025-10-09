@@ -90,12 +90,14 @@ prepare_repo_permissions() {
 
   # Ensure directories are traversable and .git is writable
   $SUDO find "$dir" -type d -exec chmod 755 {} + || true
+  # Ensure the entire working tree is owned by the service user so git can update files
+  $SUDO chown -R "$SERVICE_USER:$SERVICE_USER" "$dir" || true
   if [[ -d "$dir/.git" ]]; then
     if command -v chattr >/dev/null 2>&1; then
       $SUDO chattr -Ri "$dir/.git" || true
     fi
     $SUDO chmod -R u+rwX "$dir/.git" || true
-    # Ensure the service user owns .git so git fetch/pull work without sudo
+    # Redundant but explicit: make sure .git itself is owned by the service user
     $SUDO chown -R "$SERVICE_USER:$SERVICE_USER" "$dir/.git" || true
     # Tolerate SELinux denials by applying a writable context when Enforcing
     if command -v getenforce >/dev/null 2>&1 && [ "$(getenforce)" = "Enforcing" ]; then
