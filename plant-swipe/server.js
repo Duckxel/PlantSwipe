@@ -25,6 +25,35 @@ try {
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
+// Resolve the real Git repository root, even when running under a symlinked
+// deployment directory like /var/www/PlantSwipe/plant-swipe.
+async function getRepoRoot() {
+  try {
+    const override = (process.env.PLANTSWIPE_REPO_DIR || '').trim()
+    if (override) {
+      try {
+        const st = await fs.stat(override)
+        if (st && st.isDirectory()) return override
+      } catch {}
+    }
+  } catch {}
+  let realDir = __dirname
+  try {
+    realDir = await fs.realpath(__dirname)
+  } catch {}
+  try {
+    const { stdout } = await exec(`git -C "${realDir}" rev-parse --show-toplevel`)
+    const root = (stdout || '').toString().trim()
+    if (root) return root
+  } catch {}
+  const parent = path.resolve(realDir, '..')
+  try {
+    await fs.access(path.join(parent, '.git'))
+    return parent
+  } catch {}
+  return parent
+}
+
 const exec = promisify(execCb)
 
 // Supabase client (server-side) for auth verification
@@ -1868,7 +1897,7 @@ async function handlePullCode(req, res) {
     if (!uid) return
 
     const branch = (req.query.branch || '').toString().trim() || undefined
-    const repoRoot = path.resolve(__dirname, '..')
+    const repoRoot = await getRepoRoot()
     const scriptPath = path.resolve(repoRoot, 'scripts', 'refresh-plant-swipe.sh')
 
     // Verify the refresh script exists
@@ -1883,7 +1912,7 @@ async function handlePullCode(req, res) {
 
     // Execute the script from repository root so it updates current branch and builds
     // Run detached so we can return a response before the service restarts
-    const execEnv = { ...process.env, CI: process.env.CI || 'true', SUDO_ASKPASS: process.env.SUDO_ASKPASS || '' }
+    const execEnv = { ...process.env, CI: process.env.CI || 'true', SUDO_ASKPASS: process.env.SUDO_ASKPASS || '', PLANTSWIPE_REPO_DIR: repoRoot }
     const child = spawnChild(scriptPath, {
       cwd: repoRoot,
       detached: true,
@@ -1940,7 +1969,7 @@ app.get('/api/admin/pull-code/stream', async (req, res) => {
 
     send('open', { ok: true, message: 'Starting refresh…' })
 
-    const repoRoot = path.resolve(__dirname, '..')
+    const repoRoot = await getRepoRoot()
     const scriptPath = path.resolve(repoRoot, 'scripts', 'refresh-plant-swipe.sh')
     try { await fs.access(scriptPath) } catch {
       send('error', { error: `refresh script not found at ${scriptPath}` })
@@ -1952,7 +1981,7 @@ app.get('/api/admin/pull-code/stream', async (req, res) => {
     // Spawn with --no-restart so we can finish streaming, caller can manually reload if desired
     const child = spawnChild(scriptPath, ['--no-restart'], {
       cwd: repoRoot,
-      env: { ...process.env, CI: process.env.CI || 'true', SKIP_SERVICE_RESTARTS: '1' },
+      env: { ...process.env, CI: process.env.CI || 'true', SKIP_SERVICE_RESTARTS: '1', PLANTSWIPE_REPO_DIR: repoRoot },
       shell: false,
     })
 
@@ -1992,7 +2021,7 @@ app.get('/api/admin/branches', async (req, res) => {
     if (!uid) return
 
     // Always operate from the repository root and mark it safe for this process
-    const repoRoot = path.resolve(__dirname, '..')
+    const repoRoot = await getRepoRoot()
     const gitBase = `git -c "safe.directory=${repoRoot}" -C "${repoRoot}"`
     await exec(`${gitBase} remote update --prune`, { timeout: 60000 })
     // Prefer for-each-ref over branch -r to avoid pointer lines and formatting quirks
