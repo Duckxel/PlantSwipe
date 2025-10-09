@@ -40,13 +40,23 @@ if [[ $EUID -ne 0 ]]; then
       "$NODE_DIR/.env"
       "/etc/admin-api/env"
     )
+    PSSWORD_KEY_SOURCE=""
     for env_file in "${CANDIDATE_ENV_FILES[@]}"; do
       if [[ -f "$env_file" ]]; then
         # Extract last occurrence to allow overrides; tolerate whitespace
         kv_line="$(grep -E '^[[:space:]]*PSSWORD_KEY=' "$env_file" | tail -n1 || true)"
         if [[ -n "$kv_line" ]]; then
           PSSWORD_KEY="${kv_line#*=}"
+          # Trim surrounding whitespace
+          PSSWORD_KEY="$(printf %s "$PSSWORD_KEY" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+          # Strip optional surrounding quotes
+          if [[ "${#PSSWORD_KEY}" -ge 2 && "${PSSWORD_KEY:0:1}" == '"' && "${PSSWORD_KEY: -1}" == '"' ]]; then
+            PSSWORD_KEY="${PSSWORD_KEY:1:${#PSSWORD_KEY}-2}"
+          elif [[ "${#PSSWORD_KEY}" -ge 2 && "${PSSWORD_KEY:0:1}" == "'" && "${PSSWORD_KEY: -1}" == "'" ]]; then
+            PSSWORD_KEY="${PSSWORD_KEY:1:${#PSSWORD_KEY}-2}"
+          fi
           export PSSWORD_KEY
+          PSSWORD_KEY_SOURCE="$env_file"
           break
         fi
       fi
@@ -63,6 +73,11 @@ exec printf "%s" "$(printf %s "${PSSWORD_KEY}")" 2>/dev/null
 EOF
     export SUDO_ASKPASS="$ASKPASS_HELPER"
     SUDO="sudo -A"
+    if [[ -n "$PSSWORD_KEY_SOURCE" ]]; then
+      log "Using sudo askpass helper (key source: $PSSWORD_KEY_SOURCE)"
+    else
+      log "Using sudo askpass helper (key source: env)"
+    fi
   fi
 fi
 
@@ -129,7 +144,8 @@ if [[ -n "$(command -v sudo 2>/dev/null)" && -n "$REPO_OWNER" && "$REPO_OWNER" !
     RUN_AS_PREFIX=($SUDO -u "$REPO_OWNER" -H)
   fi
 fi
-# Build GIT_CMD possibly prefixed with sudo -u <owner>
+# Build git commands: with and without sudo -u <owner>
+GIT_LOCAL_CMD=(git -c safe.directory="$GIT_SAFE_DIR" -C "$WORK_DIR")
 GIT_CMD=("${RUN_AS_PREFIX[@]}" git -c safe.directory="$GIT_SAFE_DIR" -C "$WORK_DIR")
 log "Git user: $REPO_OWNER"
 
@@ -157,17 +173,32 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE || true
 
 # Verify we're inside a git repository (retry once after adding safe.directory)
 log "Verifying git repository…"
-if ! "${GIT_CMD[@]}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  # Some service users may hit Git's "dubious ownership" protection.
+# Prefer verifying as the current user first to avoid sudo prompts
+if ! "${GIT_LOCAL_CMD[@]}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   # Allow this path as safe for the current user and retry.
-  "${RUN_AS_PREFIX[@]}" git config --global --add safe.directory "$WORK_DIR" >/dev/null 2>&1 || true
-  if ! "${GIT_CMD[@]}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    # If detection still fails, try to auto-repair common permission issues
-    attempt_git_permission_repair
-    if ! "${GIT_CMD[@]}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-      echo "[ERROR] Current directory is not inside a git repository: $WORK_DIR" >&2
-      # Minimal diagnostics to aid troubleshooting without being too verbose
-      ls -ld "$WORK_DIR" "$WORK_DIR/.git" >&2 || true
+  git config --global --add safe.directory "$WORK_DIR" >/dev/null 2>&1 || true
+  if ! "${GIT_LOCAL_CMD[@]}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    # If running as a different repo owner and sudo is available, attempt owner verification
+    CAN_SUDO=false
+    if [[ -n "$SUDO" ]]; then
+      if $SUDO -n true >/dev/null 2>&1; then CAN_SUDO=true; fi
+    fi
+    if [[ ${#RUN_AS_PREFIX[@]} -gt 0 && "$CAN_SUDO" == "true" ]]; then
+      "${RUN_AS_PREFIX[@]}" git config --global --add safe.directory "$WORK_DIR" >/dev/null 2>&1 || true
+      if ! "${GIT_CMD[@]}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        # Try to auto-repair common permission issues and retry once
+        attempt_git_permission_repair
+        if ! "${GIT_CMD[@]}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+          echo "[ERROR] Current directory is not inside a git repository: $WORK_DIR" >&2
+          ls -ld "$WORK_DIR" "$WORK_DIR/.git" >&2 || true
+          exit 1
+        fi
+      fi
+    else
+      # Cannot escalate privileges non-interactively; provide a clear error
+      echo "[ERROR] Git repo detection failed and sudo is not available non-interactively." >&2
+      echo "        Ensure the current user can read '$WORK_DIR/.git' or configure sudo (NOPASSWD)" >&2
+      echo "        or set a valid PSSWORD_KEY in '$WORK_DIR/.env' or '$NODE_DIR/.env'." >&2
       exit 1
     fi
   fi
