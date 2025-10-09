@@ -852,6 +852,44 @@ app.options('/api/admin/restart-server', (_req, res) => {
   res.status(204).end()
 })
 
+// Admin: reload nginx and restart admin + node services in sequence, then exit self
+app.post('/api/admin/restart-all', async (req, res) => {
+  try {
+    const isAdmin = await isAdminFromRequest(req)
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Admin privileges required' })
+      return
+    }
+
+    res.json({ ok: true, message: 'Reloading nginx and restarting services' })
+
+    setTimeout(async () => {
+      const serviceNode = process.env.NODE_SYSTEMD_SERVICE || process.env.SELF_SYSTEMD_SERVICE || 'plant-swipe-node'
+      const serviceAdmin = process.env.ADMIN_SYSTEMD_SERVICE || 'admin-api'
+      const serviceNginx = process.env.NGINX_SYSTEMD_SERVICE || 'nginx'
+      try { await exec('sudo -n nginx -t', { timeout: 15000 }) } catch {}
+      try { await exec(`sudo -n systemctl reload ${serviceNginx}`, { timeout: 20000 }) } catch {}
+      try {
+        const a = spawnChild('sudo', ['-n', 'systemctl', 'restart', serviceAdmin], { detached: true, stdio: 'ignore' })
+        try { a.unref() } catch {}
+      } catch {}
+      try {
+        const n = spawnChild('sudo', ['-n', 'systemctl', 'restart', serviceNode], { detached: true, stdio: 'ignore' })
+        try { n.unref() } catch {}
+      } catch {}
+      try { process.exit(0) } catch {}
+    }, 150)
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to restart all services' })
+  }
+})
+
+app.options('/api/admin/restart-all', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
 // Ensure ban tables exist (idempotent)
 async function ensureBanTables() {
   if (!sql) return

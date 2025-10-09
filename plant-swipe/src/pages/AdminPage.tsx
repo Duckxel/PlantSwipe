@@ -483,21 +483,19 @@ export const AdminPage: React.FC = () => {
         }
       }
 
-      // After stream ends, perform service restarts so the new build/code is active
+      // After stream ends, reload nginx and restart both services as the final step
       try {
         const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
         if (adminToken) {
-          await fetch('/admin/restart-app', {
+          await fetch('/api/admin/restart-all', {
             method: 'POST',
-            headers: { 'X-Admin-Token': String(adminToken), 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            headers: { 'X-Admin-Token': String(adminToken), 'Accept': 'application/json' },
             credentials: 'same-origin',
-            body: JSON.stringify({ service: 'admin-api' })
-          }).catch(() => {})
+          })
+        } else {
+          // Fallback to legacy behavior
+          await restartServer()
         }
-      } catch {}
-      // Restart Node server (existing flow handles authorization and page reload)
-      try {
-        await restartServer()
       } catch {}
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e)
