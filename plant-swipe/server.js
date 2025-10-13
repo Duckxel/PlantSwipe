@@ -1367,7 +1367,7 @@ app.get('/api/admin/members-by-ip', async (req, res) => {
             from public.web_visits v
             join auth.users u on u.id = v.user_id
             left join public.profiles p on p.id = u.id
-            where v.ip_address = ${ip}::inet
+            where v.ip_address = ${ip}::inet and v.user_id is not null
             group by u.id, u.email, p.display_name
             order by last_seen_at desc
           `,

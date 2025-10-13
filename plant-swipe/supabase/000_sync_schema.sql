@@ -2000,6 +2000,7 @@ as $$
          max(v.occurred_at) as last_seen_at
   from public.web_visits v
   where v.ip_address = _ip::inet
+    and v.user_id is not null
   group by v.user_id
   order by last_seen_at desc
 $$;
@@ -2024,7 +2025,7 @@ stable
 security definer
 set search_path = public
 as $$
-  select coalesce((select count(distinct user_id)::int from public.web_visits where ip_address = _ip::inet), 0);
+  select coalesce((select count(distinct user_id)::int from public.web_visits where ip_address = _ip::inet and user_id is not null), 0);
 $$;
 grant execute on function public.count_ip_unique_users(text) to anon, authenticated;
 
