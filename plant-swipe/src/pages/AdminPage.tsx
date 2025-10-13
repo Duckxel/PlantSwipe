@@ -1669,8 +1669,8 @@ export const AdminPage: React.FC = () => {
                           </ResponsiveContainer>
                         </div>
                         {/* Sources breakdown */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
-                          <div className="rounded-xl border p-3">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
+                          <div className="rounded-xl border p-3 md:col-span-2">
                             <div className="text-sm font-medium mb-2">Top countries</div>
                             {topCountries.length === 0 ? (
                               <div className="text-sm opacity-60">No data.</div>
@@ -1703,18 +1703,18 @@ export const AdminPage: React.FC = () => {
                                 <div className="flex flex-col gap-2">
                                   {topCountries.slice(0, 3).map((c, idx) => (
                                     <div key={c.country} className="flex items-center justify-between">
-                                      <div className="flex items-center gap-2">
+                                      <div className="flex-1 flex items-center gap-2 min-w-0">
                                         <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: countryColors[idx % countryColors.length] }} />
-                                        <span className="text-sm">{countryCodeToName(c.country)}</span>
+                                        <span className="text-sm truncate">{countryCodeToName(c.country)}</span>
                                       </div>
                                       <span className="text-sm tabular-nums">{Math.round(c.pct || 0)}%</span>
                                     </div>
                                   ))}
                                   {otherCountries && otherCountries.visits > 0 && (
                                     <div className="flex items-center justify-between">
-                                      <div className="flex items-center gap-2">
+                                      <div className="flex-1 flex items-center gap-2 min-w-0">
                                         <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: countryColors[4 % countryColors.length] }} />
-                                        <span className="text-sm">Other ({otherCountries.count})</span>
+                                        <span className="text-sm truncate">Other ({otherCountries.count})</span>
                                       </div>
                                       <span className="text-sm tabular-nums">{Math.round(otherCountries?.pct || 0)}%</span>
                                     </div>
@@ -1723,7 +1723,7 @@ export const AdminPage: React.FC = () => {
                               </div>
                             )}
                           </div>
-                          <div className="rounded-xl border p-3">
+                          <div className="rounded-xl border p-3 md:col-span-1">
                             <div className="text-sm font-medium mb-2">Top referrers</div>
                             {topReferrers.length === 0 ? (
                               <div className="text-sm opacity-60">No data.</div>
@@ -1731,18 +1731,18 @@ export const AdminPage: React.FC = () => {
                               <div className="flex flex-col gap-2">
                                 {topReferrers.slice(0, 5).map((r, idx) => (
                                   <div key={r.source} className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex-1 flex items-center gap-2 min-w-0">
                                       <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: referrerColors[idx % referrerColors.length] }} />
-                                      <span className="text-sm break-all">{r.source}</span>
+                                      <span className="text-sm truncate">{r.source}</span>
                                     </div>
                                     <span className="text-sm tabular-nums">{Math.round(r.pct || 0)}%</span>
                                   </div>
                                 ))}
                                 {otherReferrers && otherReferrers.visits > 0 && (
                                   <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex-1 flex items-center gap-2 min-w-0">
                                       <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: referrerColors[4 % referrerColors.length] }} />
-                                      <span className="text-sm">Other ({otherReferrers.count})</span>
+                                      <span className="text-sm truncate">Other ({otherReferrers.count})</span>
                                     </div>
                                     <span className="text-sm tabular-nums">{Math.round(otherReferrers.pct || 0)}%</span>
                                   </div>
