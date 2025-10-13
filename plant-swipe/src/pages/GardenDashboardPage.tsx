@@ -634,12 +634,13 @@ export const GardenDashboardPage: React.FC = () => {
                           </button>
                         </div>
                         <div className="grid grid-cols-3 items-stretch gap-0">
-                          <div className="col-span-1 h-full min-h-[148px] rounded-l-2xl overflow-hidden bg-stone-100">
+                          <div className="col-span-1 relative h-full min-h-[148px] rounded-l-2xl overflow-hidden bg-stone-100">
                             {gp.plant?.image ? (
                               <img
                                 src={gp.plant.image}
                                 alt={gp.nickname || gp.plant?.name || 'Plant'}
-                                className="h-full w-full object-cover object-center select-none"
+                                decoding="async"
+                                className="absolute inset-0 h-full w-full object-cover object-center select-none"
                                 draggable={false}
                               />
                             ) : null}
