@@ -826,6 +826,16 @@ export const AdminPage: React.FC = () => {
   const [suggestLoading, setSuggestLoading] = React.useState(false)
   const [highlightIndex, setHighlightIndex] = React.useState<number>(-1)
 
+  // IP lookup state
+  const [ipLookup, setIpLookup] = React.useState('')
+  const [ipLoading, setIpLoading] = React.useState(false)
+  const [ipError, setIpError] = React.useState<string | null>(null)
+  const [ipResults, setIpResults] = React.useState<Array<{ id: string; email: string | null; display_name: string | null; last_seen_at: string | null }>>([])
+  const [ipUsed, setIpUsed] = React.useState<string | null>(null)
+  const [ipUsersCount, setIpUsersCount] = React.useState<number | null>(null)
+  const [ipConnectionsCount, setIpConnectionsCount] = React.useState<number | null>(null)
+  const [ipLastSeenAt, setIpLastSeenAt] = React.useState<string | null>(null)
+
   // Member visits (last 30 days)
   const [memberVisitsLoading, setMemberVisitsLoading] = React.useState<boolean>(false)
   const [memberVisitsSeries, setMemberVisitsSeries] = React.useState<Array<{ date: string; visits: number }>>([])
@@ -899,6 +909,44 @@ export const AdminPage: React.FC = () => {
       setMemberLoading(false)
     }
   }, [lookupEmail, memberLoading, safeJson])
+
+  const lookupByIp = React.useCallback(async () => {
+    const ip = ipLookup.trim()
+    if (!ip || ipLoading) return
+    setIpLoading(true)
+    setIpError(null)
+    setIpResults([])
+    setIpUsed(null)
+    setIpUsersCount(null)
+    setIpConnectionsCount(null)
+    setIpLastSeenAt(null)
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      const headers: Record<string, string> = { 'Accept': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+        if (adminToken) headers['X-Admin-Token'] = String(adminToken)
+      } catch {}
+      const resp = await fetch(`/api/admin/members-by-ip?ip=${encodeURIComponent(ip)}`, { headers, credentials: 'same-origin' })
+      const data = await safeJson(resp)
+      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`)
+      const users = Array.isArray(data?.users)
+        ? data.users.map((u: any) => ({ id: String(u.id), email: u?.email ?? null, display_name: u?.display_name ?? null, last_seen_at: u?.last_seen_at ?? null }))
+        : []
+      setIpResults(users)
+      setIpUsed(typeof data?.ip === 'string' ? data.ip : ip)
+      if (typeof data?.usersCount === 'number') setIpUsersCount(data.usersCount)
+      if (typeof data?.connectionsCount === 'number') setIpConnectionsCount(data.connectionsCount)
+      if (typeof data?.lastSeenAt === 'string') setIpLastSeenAt(data.lastSeenAt)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setIpError(msg || 'IP lookup failed')
+    } finally {
+      setIpLoading(false)
+    }
+  }, [ipLookup, ipLoading, safeJson])
 
   // Auto-load visits series when a member is selected
   React.useEffect(() => {
@@ -1943,6 +1991,86 @@ export const AdminPage: React.FC = () => {
 
               {/* Ban action moved into member card header via hammer button */}
             </div>
+          )}
+
+          {/* IP Search Card */}
+          {activeTab === 'members' && (
+            <Card className="rounded-2xl">
+              <CardContent className="p-4 space-y-3">
+                <div className="text-sm font-medium flex items-center gap-2"><UserSearch className="h-4 w-4" /> Find users by IP address</div>
+                <div className="flex gap-2">
+                  <Input
+                    id="member-ip"
+                    name="member-ip"
+                    autoComplete="off"
+                    aria-label="IP address"
+                    className="rounded-xl"
+                    placeholder="e.g. 203.0.113.42"
+                    value={ipLookup}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setIpLookup(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); lookupByIp() } }}
+                  />
+                  <Button className="rounded-2xl" onClick={lookupByIp} disabled={ipLoading || !ipLookup.trim()}>
+                    <Search className="h-4 w-4" /> Search IP
+                  </Button>
+                </div>
+                {ipError && <div className="text-sm text-rose-600">{ipError}</div>}
+                {ipLoading && (
+                  <div className="space-y-2" aria-live="polite">
+                    <div className="h-4 bg-neutral-200 rounded w-52 animate-pulse" />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                      {Array.from({ length: 6 }).map((_, i) => (
+                        <div key={i} className="h-20 rounded-xl border bg-white animate-pulse" />
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {!ipLoading && ipResults && (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <div className="rounded-xl border p-3 text-center">
+                        <div className="text-[11px] opacity-60">IP</div>
+                        <div className="text-base font-semibold tabular-nums truncate" title={ipUsed || undefined}>{ipUsed || '—'}</div>
+                      </div>
+                      <div className="rounded-xl border p-3 text-center">
+                        <div className="text-[11px] opacity-60">Users</div>
+                        <div className="text-base font-semibold tabular-nums">{ipUsersCount ?? ipResults.length}</div>
+                      </div>
+                      <div className="rounded-xl border p-3 text-center">
+                        <div className="text-[11px] opacity-60">Connections</div>
+                        <div className="text-base font-semibold tabular-nums">{ipConnectionsCount ?? '—'}</div>
+                      </div>
+                    </div>
+                    <div className="text-xs opacity-60">Last seen: {ipLastSeenAt ? new Date(ipLastSeenAt).toLocaleString() : '—'}</div>
+                    {ipResults.length === 0 ? (
+                      <div className="text-sm opacity-60">No users found for this IP.</div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                        {ipResults.map((u) => (
+                          <button
+                            key={u.id}
+                            type="button"
+                            className="text-left rounded-2xl border p-3 bg-white hover:bg-stone-50"
+                            onClick={() => {
+                              const nextVal = (u.email || u.display_name || '').trim()
+                              if (!nextVal) return
+                              setLookupEmail(nextVal)
+                              setTimeout(() => { lookupMember() }, 0)
+                            }}
+                          >
+                            <div className="text-sm font-semibold truncate">{u.display_name || u.email || 'User'}</div>
+                            <div className="text-xs opacity-70 truncate">{u.email || '—'}</div>
+                            {u.last_seen_at && (
+                              <div className="text-[11px] opacity-60 mt-0.5">Last seen {new Date(u.last_seen_at).toLocaleString()}</div>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           )}
         </CardContent>
       </Card>
