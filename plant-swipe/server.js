@@ -1333,6 +1333,104 @@ app.get('/api/admin/member', async (req, res) => {
   }
 })
 
+// Admin: list users who have connected from a specific IP address
+app.get('/api/admin/members-by-ip', async (req, res) => {
+  try {
+    const isAdmin = await isAdminFromRequest(req)
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Admin privileges required' })
+      return
+    }
+    const raw = (req.query.ip || req.query.q || '').toString().trim()
+    const ip = normalizeIp(raw)
+    if (!ip) {
+      res.status(400).json({ error: 'Invalid or missing IP address' })
+      return
+    }
+    // Prefer direct DB when available
+    if (sql) {
+      try {
+        const rows = await sql`
+          select u.id,
+                 u.email,
+                 p.display_name,
+                 max(v.occurred_at) as last_seen_at
+          from public.web_visits v
+          join auth.users u on u.id = v.user_id
+          left join public.profiles p on p.id = u.id
+          where v.ip_address = ${ip}::inet
+          group by u.id, u.email, p.display_name
+          order by last_seen_at desc
+        `
+        const users = (Array.isArray(rows) ? rows : []).map(r => ({
+          id: String(r.id),
+          email: r.email || null,
+          display_name: r.display_name || null,
+          last_seen_at: r.last_seen_at || null,
+        }))
+        res.json({ ok: true, ip, count: users.length, users, via: 'database' })
+        return
+      } catch (e) {
+        // fall back to REST
+      }
+    }
+    // Supabase REST fallback (requires admin via RLS policy)
+    if (!supabaseUrlEnv || !supabaseAnonKey) {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+    const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+    const bearer = getBearerTokenFromRequest(req)
+    if (bearer) Object.assign(headers, { 'Authorization': `Bearer ${bearer}` })
+    // Fetch visits for IP to get distinct user_ids and last_seen
+    const visitsResp = await fetch(`${supabaseUrlEnv}/rest/v1/web_visits?ip_address=eq.${encodeURIComponent(ip)}&select=user_id,occurred_at`, { headers })
+    if (!visitsResp.ok) {
+      const body = await visitsResp.text().catch(() => '')
+      res.status(visitsResp.status).json({ error: body || 'Failed to load visits' })
+      return
+    }
+    const visits = await visitsResp.json().catch(() => [])
+    const userIdToLastSeen = new Map()
+    for (const v of Array.isArray(visits) ? visits : []) {
+      const uid = v?.user_id ? String(v.user_id) : null
+      const ts = v?.occurred_at || null
+      if (!uid) continue
+      const prev = userIdToLastSeen.get(uid)
+      if (!prev || (ts && new Date(ts).getTime() > new Date(prev).getTime())) {
+        userIdToLastSeen.set(uid, ts)
+      }
+    }
+    const userIds = Array.from(userIdToLastSeen.keys())
+    if (userIds.length === 0) {
+      res.json({ ok: true, ip, count: 0, users: [], via: 'supabase' })
+      return
+    }
+    // Load display names; email may not be accessible via REST
+    const inParam = userIds.map(id => encodeURIComponent(id)).join(',')
+    const profResp = await fetch(`${supabaseUrlEnv}/rest/v1/profiles?id=in.(${inParam})&select=id,display_name`, { headers })
+    const profiles = profResp.ok ? await profResp.json().catch(() => []) : []
+    const idToDisplay = new Map()
+    for (const p of Array.isArray(profiles) ? profiles : []) {
+      idToDisplay.set(String(p.id), p?.display_name ? String(p.display_name) : null)
+    }
+    const users = userIds.map((id) => ({
+      id,
+      email: null,
+      display_name: idToDisplay.get(id) || null,
+      last_seen_at: userIdToLastSeen.get(id) || null,
+    }))
+    // Sort by last_seen desc
+    users.sort((a, b) => {
+      const ta = a.last_seen_at ? new Date(a.last_seen_at).getTime() : 0
+      const tb = b.last_seen_at ? new Date(b.last_seen_at).getTime() : 0
+      return tb - ta
+    })
+    res.json({ ok: true, ip, count: users.length, users, via: 'supabase' })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to search by IP' })
+  }
+})
+
 // Admin: per-user visits series (last 30 days, UTC calendar days)
 app.get('/api/admin/member-visits-series', async (req, res) => {
   try {
