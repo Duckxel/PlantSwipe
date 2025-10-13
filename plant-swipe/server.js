@@ -921,6 +921,53 @@ async function ensureBanTables() {
   } catch {}
 }
 
+// Helper: verify key schema objects exist after sync for operator assurance
+async function verifySchemaAfterSync() {
+  if (!sql) return null
+  const requiredTables = [
+    'profiles',
+    'plants',
+    'gardens',
+    'garden_members',
+    'garden_plants',
+    'garden_plant_tasks',
+    'garden_task_user_completions',
+    'garden_watering_schedule',
+    'web_visits',
+  ]
+  const requiredFunctions = [
+    'get_profile_public_by_display_name',
+    'compute_user_current_streak',
+    'get_user_profile_public_stats',
+    'count_unique_ips_last_minutes',
+    'count_unique_ips_last_days',
+  ]
+  const requiredExtensions = [
+    'pgcrypto',
+    'pg_cron',
+  ]
+
+  const [tableRows, funcRows, extRows] = await Promise.all([
+    sql`select table_name from information_schema.tables where table_schema='public' and table_name = any(${sql.array(requiredTables)})`,
+    sql`select p.proname as name from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname = any(${sql.array(requiredFunctions)})`,
+    sql`select extname from pg_extension where extname = any(${sql.array(requiredExtensions)})`,
+  ])
+
+  const presentTables = new Set((tableRows || []).map(r => r.table_name))
+  const presentFunctions = new Set((funcRows || []).map(r => r.name))
+  const presentExtensions = new Set((extRows || []).map(r => r.extname))
+
+  const missingTables = requiredTables.filter(n => !presentTables.has(n))
+  const missingFunctions = requiredFunctions.filter(n => !presentFunctions.has(n))
+  const missingExtensions = requiredExtensions.filter(n => !presentExtensions.has(n))
+
+  return {
+    tables: { required: requiredTables, present: Array.from(presentTables), missing: missingTables },
+    functions: { required: requiredFunctions, present: Array.from(presentFunctions), missing: missingFunctions },
+    extensions: { required: requiredExtensions, present: Array.from(presentExtensions), missing: missingExtensions },
+  }
+}
+
 // Support both POST and GET (some environments may block POST from admin UI)
 async function handleSyncSchema(req, res) {
   if (!sql) {
@@ -941,7 +988,11 @@ async function handleSyncSchema(req, res) {
     // Execute allowing multiple statements
     await sql.unsafe(sqlText, [], { simple: true })
 
-    res.json({ ok: true, message: 'Schema synchronized successfully' })
+    // Verify important objects exist after sync
+    let summary = null
+    try { summary = await verifySchemaAfterSync() } catch {}
+
+    res.json({ ok: true, message: 'Schema synchronized successfully', summary })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to sync schema' })
   }
@@ -2660,10 +2711,16 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(distDir, 'index.html'))
 })
 
-const port = process.env.PORT || 3000
-app.listen(port, () => {
-  console.log(`[server] listening on http://localhost:${port}`)
-  // Best-effort ensure ban tables are present at startup
-  ensureBanTables().catch(() => {})
-})
+const shouldListen = String(process.env.DISABLE_LISTEN || 'false').toLowerCase() !== 'true'
+if (shouldListen) {
+  const port = process.env.PORT || 3000
+  app.listen(port, () => {
+    console.log(`[server] listening on http://localhost:${port}`)
+    // Best-effort ensure ban tables are present at startup
+    ensureBanTables().catch(() => {})
+  })
+}
+
+// Export app for testing and tooling
+export { app }
 

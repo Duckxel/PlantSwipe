@@ -114,7 +114,7 @@ export const AdminPage: React.FC = () => {
         appendConsole('[sync] You must be signed in to run schema sync')
         return
       }
-      // Try GET first to avoid 405s from proxies that block POST
+      // Try Node API first
       let resp = await fetch('/api/admin/sync-schema', {
         method: 'GET',
         headers: (() => {
@@ -127,7 +127,7 @@ export const AdminPage: React.FC = () => {
         credentials: 'same-origin',
       })
       if (resp.status === 405) {
-        // Fallback to POST if GET is blocked
+        // Try POST on Node if GET blocked
         resp = await fetch('/api/admin/sync-schema', {
           method: 'POST',
           headers: (() => {
@@ -140,11 +140,41 @@ export const AdminPage: React.FC = () => {
           credentials: 'same-origin',
         })
       }
+      // If Node API failed, fallback to local Admin API proxied by nginx
+      if (!resp.ok) {
+        const adminHeaders: Record<string, string> = { 'Accept': 'application/json' }
+        try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) adminHeaders['X-Admin-Token'] = String(adminToken) } catch {}
+        let respAdmin = await fetch('/admin/sync-schema', { method: 'GET', headers: adminHeaders, credentials: 'same-origin' })
+        if (respAdmin.status === 405) {
+          respAdmin = await fetch('/admin/sync-schema', { method: 'POST', headers: { ...adminHeaders, 'Content-Type': 'application/json' }, credentials: 'same-origin', body: '{}' })
+        }
+        resp = respAdmin
+      }
       const body = await safeJson(resp)
       if (!resp.ok) {
         throw new Error(body?.error || `Request failed (${resp.status})`)
       }
       appendConsole('[sync] Schema synchronized successfully')
+      const summary = body?.summary
+      if (summary && typeof summary === 'object') {
+        try {
+          const missingTables: string[] = Array.isArray(summary?.tables?.missing) ? summary.tables.missing : []
+          const missingFunctions: string[] = Array.isArray(summary?.functions?.missing) ? summary.functions.missing : []
+          const missingExtensions: string[] = Array.isArray(summary?.extensions?.missing) ? summary.extensions.missing : []
+          const hasMissing = missingTables.length + missingFunctions.length + missingExtensions.length > 0
+          appendConsole('[sync] Post‑sync verification:')
+          appendConsole(`- Tables OK: ${(summary?.tables?.present || []).length}/${(summary?.tables?.required || []).length}`)
+          appendConsole(`- Functions OK: ${(summary?.functions?.present || []).length}/${(summary?.functions?.required || []).length}`)
+          appendConsole(`- Extensions OK: ${(summary?.extensions?.present || []).length}/${(summary?.extensions?.required || []).length}`)
+          if (hasMissing) {
+            if (missingTables.length) appendConsole(`- Missing tables: ${missingTables.join(', ')}`)
+            if (missingFunctions.length) appendConsole(`- Missing functions: ${missingFunctions.join(', ')}`)
+            if (missingExtensions.length) appendConsole(`- Missing extensions: ${missingExtensions.join(', ')}`)
+          } else {
+            appendConsole('- All required objects present')
+          }
+        } catch {}
+      }
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e)
       appendConsole(`[sync] Failed to sync schema: ${message}`)
