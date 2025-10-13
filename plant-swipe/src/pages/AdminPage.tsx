@@ -15,7 +15,7 @@ import {
   Tooltip,
   ReferenceLine,
 } from 'recharts'
-import { RefreshCw, Server, Database, Github, ExternalLink, ShieldCheck, ShieldX, UserSearch, AlertTriangle, Gavel, Search, ChevronDown } from "lucide-react"
+import { RefreshCw, Server, Database, Github, ExternalLink, ShieldCheck, ShieldX, UserSearch, AlertTriangle, Gavel, Search, ChevronDown, GitBranch } from "lucide-react"
 import { supabase } from '@/lib/supabaseClient'
 import {
   Dialog,
@@ -431,6 +431,61 @@ export const AdminPage: React.FC = () => {
 
   
 
+  // ---- Branch management state ----
+  const [branchesLoading, setBranchesLoading] = React.useState<boolean>(true)
+  const [branchesRefreshing, setBranchesRefreshing] = React.useState<boolean>(false)
+  const [branchOptions, setBranchOptions] = React.useState<string[]>([])
+  const [currentBranch, setCurrentBranch] = React.useState<string>("")
+  const [selectedBranch, setSelectedBranch] = React.useState<string>("")
+
+  const loadBranches = React.useCallback(async (opts?: { initial?: boolean }) => {
+    const isInitial = !!opts?.initial
+    if (isInitial) setBranchesLoading(true)
+    else setBranchesRefreshing(true)
+    try {
+      const headersNode: Record<string, string> = { 'Accept': 'application/json' }
+      try {
+        const session = (await supabase.auth.getSession()).data.session
+        const token = session?.access_token
+        if (token) headersNode['Authorization'] = `Bearer ${token}`
+      } catch {}
+      const respNode = await fetch('/api/admin/branches', { headers: headersNode, credentials: 'same-origin' })
+      let data = await safeJson(respNode)
+      let ok = respNode.ok && Array.isArray(data?.branches)
+      if (!ok) {
+        const adminHeaders: Record<string, string> = { 'Accept': 'application/json' }
+        try {
+          const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+          if (adminToken) adminHeaders['X-Admin-Token'] = String(adminToken)
+        } catch {}
+        const respAdmin = await fetch('/admin/branches', { headers: adminHeaders, credentials: 'same-origin' })
+        data = await safeJson(respAdmin)
+        if (!respAdmin.ok || !Array.isArray(data?.branches)) throw new Error(data?.error || `HTTP ${respAdmin.status}`)
+      }
+      const branches: string[] = data.branches
+      const current: string = String(data.current || '')
+      setBranchOptions(branches)
+      setCurrentBranch(current)
+      setSelectedBranch((prev) => {
+        if (!prev) return current
+        return branches.includes(prev) ? prev : current
+      })
+    } catch {
+      if (isInitial) {
+        setBranchOptions([])
+        setCurrentBranch('')
+        setSelectedBranch('')
+      }
+    } finally {
+      if (isInitial) setBranchesLoading(false)
+      else setBranchesRefreshing(false)
+    }
+  }, [safeJson])
+
+  React.useEffect(() => {
+    loadBranches({ initial: true })
+  }, [loadBranches])
+
   const pullLatest = async () => {
     if (pulling) return
     setPulling(true)
@@ -439,6 +494,11 @@ export const AdminPage: React.FC = () => {
       setConsoleLines([])
       setConsoleOpen(true)
       appendConsole('[pull] Pull & Build: starting…')
+      if (selectedBranch && selectedBranch !== currentBranch) {
+        appendConsole(`[pull] Will switch to branch: ${selectedBranch}`)
+      } else if (currentBranch) {
+        appendConsole(`[pull] Staying on branch: ${currentBranch}`)
+      }
       setReloadReady(false)
       const session = (await supabase.auth.getSession()).data.session
       const token = session?.access_token
@@ -448,37 +508,66 @@ export const AdminPage: React.FC = () => {
         const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
         if (adminToken) headers['X-Admin-Token'] = String(adminToken)
       } catch {}
-      const resp = await fetch('/api/admin/pull-code/stream', {
-        method: 'GET',
-        headers,
-        credentials: 'same-origin',
-      })
-      if (!resp.ok || !resp.body) {
-        const body = await safeJson(resp)
-        throw new Error(body?.error || `Stream failed (${resp.status})`)
+      const branchParam = selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''
+      let resp: Response | null = null
+      // Try Node server SSE first
+      try {
+        resp = await fetch(`/api/admin/pull-code/stream${branchParam}`, {
+          method: 'GET',
+          headers,
+          credentials: 'same-origin',
+        })
+      } catch {}
+      // Fallback to Admin API SSE if Node is down or forbidden
+      if (!resp || !resp.ok || !resp.body) {
+        const adminHeaders: Record<string, string> = {}
+        try {
+          const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+          if (adminToken) adminHeaders['X-Admin-Token'] = String(adminToken)
+        } catch {}
+        try {
+          resp = await fetch(`/admin/pull-code/stream${branchParam}`, {
+            method: 'GET',
+            headers: adminHeaders,
+            credentials: 'same-origin',
+          })
+        } catch {}
       }
-      const reader = resp.body.getReader()
-      const decoder = new TextDecoder()
-      let buf = ''
-      const append = (line: string) => appendConsole(line)
-      // Minimal SSE parser: handle lines starting with 'data:' and emit
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buf += decoder.decode(value, { stream: true })
-        let idx
-        while ((idx = buf.indexOf('\n')) >= 0) {
-          const raw = buf.slice(0, idx)
-          buf = buf.slice(idx + 1)
-          const line = raw.replace(/\r$/, '')
-          if (!line) continue
-          if (line.startsWith('data:')) {
-            const payload = line.slice(5).trimStart()
-            // Try to detect done events to know success
-            // no-op: payload may be JSON or plain text; still append for visibility
-            append(payload)
-          } else if (!/^(:|event:|id:|retry:)/.test(line)) {
-            append(line)
+      if (!resp || !resp.ok || !resp.body) {
+        // Last resort: fire-and-forget refresh via Admin API without stream
+        const adminHeadersBg: Record<string, string> = { 'Content-Type': 'application/json', 'Accept': 'application/json' }
+        try {
+          const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+          if (adminToken) adminHeadersBg['X-Admin-Token'] = String(adminToken)
+        } catch {}
+        const bg = await fetch(`/admin/pull-code${branchParam}`, { method: 'POST', headers: adminHeadersBg, credentials: 'same-origin', body: '{}' })
+        const bgBody = await safeJson(bg)
+        if (!bg.ok || bgBody?.ok !== true) {
+          throw new Error(bgBody?.error || `Refresh failed (${bg.status})`)
+        }
+        appendConsole('[pull] Started background refresh via Admin API.')
+        // Skip SSE consumption
+      } else {
+        const reader = resp.body.getReader()
+        const decoder = new TextDecoder()
+        let buf = ''
+        const append = (line: string) => appendConsole(line)
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buf += decoder.decode(value, { stream: true })
+          let idx
+          while ((idx = buf.indexOf('\n')) >= 0) {
+            const raw = buf.slice(0, idx)
+            buf = buf.slice(idx + 1)
+            const line = raw.replace(/\r$/, '')
+            if (!line) continue
+            if (line.startsWith('data:')) {
+              const payload = line.slice(5).trimStart()
+              append(payload)
+            } else if (!/^(:|event:|id:|retry:)/.test(line)) {
+              append(line)
+            }
           }
         }
       }
@@ -497,6 +586,7 @@ export const AdminPage: React.FC = () => {
       } catch {}
       // Then restart the Node service via our API (includes health poll)
       try { await restartServer() } catch {}
+      try { await loadBranches({ initial: false }) } catch {}
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e)
       appendConsole(`[pull] Failed to pull & build: ${message}`)
@@ -1030,6 +1120,55 @@ export const AdminPage: React.FC = () => {
                     {!dbProbe?.ok && <ErrorBadge code={dbProbe.errorCode} />}
                   </div>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Branch selector */}
+          <Card className="rounded-2xl">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  <GitBranch className="h-4 w-4 opacity-70" />
+                  <div className="text-sm font-medium truncate">Branch</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="text-xs opacity-60 hidden sm:block">Current:</div>
+                  <Badge variant="outline" className="rounded-full">
+                    {branchesLoading ? '—' : (currentBranch || 'unknown')}
+                  </Badge>
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-2">
+                <select
+                  className="rounded-xl border px-3 py-2 text-sm bg-white"
+                  value={selectedBranch}
+                  onChange={(e) => setSelectedBranch(e.target.value)}
+                  disabled={branchesLoading || branchesRefreshing}
+                  aria-label="Select branch"
+                >
+                  {branchesLoading ? (
+                    <option value="">Loading…</option>
+                  ) : branchOptions.length === 0 ? (
+                    <option value="">No branches found</option>
+                  ) : (
+                    branchOptions.map(b => (
+                      <option key={b} value={b}>{b}</option>
+                    ))
+                  )}
+                </select>
+                <Button
+                  variant="outline"
+                  className="rounded-xl"
+                  onClick={() => loadBranches({ initial: false })}
+                  disabled={branchesLoading || branchesRefreshing}
+                >
+                  <RefreshCw className={`h-4 w-4 ${branchesRefreshing ? 'animate-spin' : ''}`} />
+                  Refresh branches
+                </Button>
+              </div>
+              <div className="text-xs opacity-60 mt-2">
+                Changing branch takes effect when you run Pull & Build.
               </div>
             </CardContent>
           </Card>

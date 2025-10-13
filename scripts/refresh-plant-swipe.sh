@@ -277,6 +277,49 @@ if ! "${GIT_LOCAL_CMD[@]}" fetch --all --prune; then
   fi
 fi
 
+# Optionally switch to a requested target branch before pulling
+TARGET_BRANCH="${PLANTSWIPE_TARGET_BRANCH:-}"
+if [[ -n "$TARGET_BRANCH" && "$TARGET_BRANCH" != "$BRANCH_NAME" ]]; then
+  log "Target branch requested: $TARGET_BRANCH (current: $BRANCH_NAME)"
+  # If local branch already exists, try checking it out
+  if ${GIT_LOCAL_CMD[@]} show-ref --verify --quiet "refs/heads/$TARGET_BRANCH"; then
+    if ! ${GIT_LOCAL_CMD[@]} checkout "$TARGET_BRANCH"; then
+      if [[ ${#RUN_AS_PREFIX[@]} -gt 0 && "$CAN_SUDO" == "true" ]]; then
+        if ! ${GIT_CMD[@]} checkout "$TARGET_BRANCH"; then
+          echo "[ERROR] Failed to checkout local branch $TARGET_BRANCH" >&2
+          exit 1
+        fi
+      else
+        echo "[ERROR] Failed to checkout local branch $TARGET_BRANCH (no sudo)" >&2
+        exit 1
+      fi
+    fi
+  else
+    # Verify the remote branch exists
+    if ${GIT_LOCAL_CMD[@]} ls-remote --exit-code --heads origin "$TARGET_BRANCH" >/dev/null 2>&1; then
+      # Create/reset local branch from remote and set upstream
+      if ! ${GIT_LOCAL_CMD[@]} checkout -B "$TARGET_BRANCH" "origin/$TARGET_BRANCH"; then
+        if [[ ${#RUN_AS_PREFIX[@]} -gt 0 && "$CAN_SUDO" == "true" ]]; then
+          if ! ${GIT_CMD[@]} checkout -B "$TARGET_BRANCH" "origin/$TARGET_BRANCH"; then
+            echo "[ERROR] Failed to create local branch from origin/$TARGET_BRANCH" >&2
+            exit 1
+          fi
+        else
+          echo "[ERROR] Failed to create local branch from origin/$TARGET_BRANCH (no sudo)" >&2
+          exit 1
+        fi
+      fi
+      # Best-effort to set upstream to origin/branch for future pulls
+      ${GIT_LOCAL_CMD[@]} branch --set-upstream-to="origin/$TARGET_BRANCH" "$TARGET_BRANCH" >/dev/null 2>&1 || true
+    else
+      echo "[ERROR] Target branch '$TARGET_BRANCH' not found on remote 'origin'." >&2
+      exit 1
+    fi
+  fi
+  BRANCH_NAME="$TARGET_BRANCH"
+  log "Switched to branch: $BRANCH_NAME"
+fi
+
 log "Pulling latest (fast-forward only) on current branch…"
 # Try pull as current user first
 if ! "${GIT_LOCAL_CMD[@]}" pull --ff-only; then
