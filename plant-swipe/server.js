@@ -2718,9 +2718,17 @@ app.get('/api/admin/sources-breakdown', async (req, res) => {
         sql`select * from public.get_top_countries(${days}, ${10000})`,
         sql`select * from public.get_top_referrers(${days}, ${10})`,
       ])
-      const topCountries = (countries || []).map(r => ({ country: (r.country || ''), visits: Number(r.visits || 0) })).filter(c => c.country)
-      const topReferrers = (referrers || []).map(r => ({ source: String(r.source || 'direct'), visits: Number(r.visits || 0) }))
-      res.json({ ok: true, topCountries, topReferrers, via: 'database' })
+      const allCountries = (countries || []).map(r => ({ country: (r.country || ''), visits: Number(r.visits || 0) })).filter(c => c.country)
+      const allReferrers = (referrers || []).map(r => ({ source: String(r.source || 'direct'), visits: Number(r.visits || 0) }))
+      allCountries.sort((a, b) => (b.visits || 0) - (a.visits || 0))
+      allReferrers.sort((a, b) => (b.visits || 0) - (a.visits || 0))
+      const topCountries = allCountries.slice(0, 5)
+      const otherCountriesList = allCountries.slice(5)
+      const otherCountries = { count: otherCountriesList.length, visits: otherCountriesList.reduce((s, c) => s + (c.visits || 0), 0) }
+      const topReferrers = allReferrers.slice(0, 5)
+      const otherReferrersList = allReferrers.slice(5)
+      const otherReferrers = { count: otherReferrersList.length, visits: otherReferrersList.reduce((s, c) => s + (c.visits || 0), 0) }
+      res.json({ ok: true, topCountries, otherCountries, topReferrers, otherReferrers, via: 'database', days })
       return
     }
 
@@ -2737,9 +2745,17 @@ app.get('/api/admin/sources-breakdown', async (req, res) => {
       ])
       const cData = cr.ok ? await cr.json().catch(() => []) : []
       const rData = rr.ok ? await rr.json().catch(() => []) : []
-      const topCountries = (Array.isArray(cData) ? cData : []).map((r) => ({ country: String(r.country || ''), visits: Number(r.visits || 0) })).filter(c => !!c.country)
-      const topReferrers = (Array.isArray(rData) ? rData : []).map((r) => ({ source: String(r.source || 'direct'), visits: Number(r.visits || 0) }))
-      res.json({ ok: true, topCountries, topReferrers, via: 'supabase' })
+      const allCountries = (Array.isArray(cData) ? cData : []).map((r) => ({ country: String(r.country || ''), visits: Number(r.visits || 0) })).filter(c => !!c.country)
+      const allReferrers = (Array.isArray(rData) ? rData : []).map((r) => ({ source: String(r.source || 'direct'), visits: Number(r.visits || 0) }))
+      allCountries.sort((a, b) => (b.visits || 0) - (a.visits || 0))
+      allReferrers.sort((a, b) => (b.visits || 0) - (a.visits || 0))
+      const topCountries = allCountries.slice(0, 5)
+      const otherCountriesList = allCountries.slice(5)
+      const otherCountries = { count: otherCountriesList.length, visits: otherCountriesList.reduce((s, c) => s + (c.visits || 0), 0) }
+      const topReferrers = allReferrers.slice(0, 5)
+      const otherReferrersList = allReferrers.slice(5)
+      const otherReferrers = { count: otherReferrersList.length, visits: otherReferrersList.reduce((s, c) => s + (c.visits || 0), 0) }
+      res.json({ ok: true, topCountries, otherCountries, topReferrers, otherReferrers, via: 'supabase', days })
       return
     }
 

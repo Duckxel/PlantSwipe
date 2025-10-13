@@ -314,8 +314,10 @@ export const AdminPage: React.FC = () => {
   const [visitorsUpdatedAt, setVisitorsUpdatedAt] = React.useState<number | null>(null)
   const [visitorsSeries, setVisitorsSeries] = React.useState<Array<{ date: string; uniqueVisitors: number }>>([])
   const [visitorsTotalUnique7d, setVisitorsTotalUnique7d] = React.useState<number>(0)
-  const [topCountries, setTopCountries] = React.useState<Array<{ country: string; visits: number }>>([])
-  const [topReferrers, setTopReferrers] = React.useState<Array<{ source: string; visits: number }>>([])
+  const [topCountries, setTopCountries] = React.useState<Array<{ country: string; visits: number; pct?: number }>>([])
+  const [otherCountries, setOtherCountries] = React.useState<{ count: number; visits: number; pct?: number } | null>(null)
+  const [topReferrers, setTopReferrers] = React.useState<Array<{ source: string; visits: number; pct?: number }>>([])
+  const [otherReferrers, setOtherReferrers] = React.useState<{ count: number; visits: number; pct?: number } | null>(null)
   // Distinct, high-contrast palette for readability
   const countryColors = ['#10b981','#3b82f6','#ef4444','#f59e0b','#8b5cf6','#14b8a6','#6366f1','#d946ef','#06b6d4','#84cc16','#fb7185','#f97316']
   const referrerColors = ['#111827','#3b82f6','#ef4444','#10b981','#f59e0b','#8b5cf6']
@@ -828,13 +830,21 @@ export const AdminPage: React.FC = () => {
         const sbd = await safeJson(sb)
         if (sb.ok) {
           const tc = Array.isArray(sbd?.topCountries) ? sbd.topCountries.map((r: any) => ({ country: String(r.country || ''), visits: Number(r.visits || 0) })).filter((x: any) => x.country) : []
-          const totalCountryVisits = tc.reduce((a: number, b: any) => a + (b.visits || 0), 0) || 0
+          const oc = sbd?.otherCountries && typeof sbd.otherCountries === 'object' ? { count: Number(sbd.otherCountries.count || 0), visits: Number(sbd.otherCountries.visits || 0) } : null
+          const totalCountryVisits = tc.reduce((a: number, b: any) => a + (b.visits || 0), 0) + (oc?.visits || 0)
           const countriesWithPct = totalCountryVisits > 0 ? tc.map(x => ({ ...x, pct: (x.visits / totalCountryVisits) * 100 })) : tc.map(x => ({ ...x, pct: 0 }))
+          const ocWithPct = oc ? { ...oc, pct: totalCountryVisits > 0 ? (oc.visits / totalCountryVisits) * 100 : 0 } : null
+
           const tr = Array.isArray(sbd?.topReferrers) ? sbd.topReferrers.map((r: any) => ({ source: String(r.source || 'direct'), visits: Number(r.visits || 0) })) : []
-          const totalRefVisits = tr.reduce((a: number, b: any) => a + (b.visits || 0), 0) || 0
+          const orf = sbd?.otherReferrers && typeof sbd.otherReferrers === 'object' ? { count: Number(sbd.otherReferrers.count || 0), visits: Number(sbd.otherReferrers.visits || 0) } : null
+          const totalRefVisits = tr.reduce((a: number, b: any) => a + (b.visits || 0), 0) + (orf?.visits || 0)
           const refsWithPct = totalRefVisits > 0 ? tr.map(x => ({ ...x, pct: (x.visits / totalRefVisits) * 100 })) : tr.map(x => ({ ...x, pct: 0 }))
+          const orfWithPct = orf ? { ...orf, pct: totalRefVisits > 0 ? (orf.visits / totalRefVisits) * 100 : 0 } : null
+
           setTopCountries(countriesWithPct)
+          setOtherCountries(ocWithPct)
           setTopReferrers(refsWithPct)
+          setOtherReferrers(orfWithPct)
         }
       } catch {}
       setVisitorsUpdatedAt(Date.now())
@@ -1670,9 +1680,15 @@ export const AdminPage: React.FC = () => {
                                         outerRadius={64}
                                         paddingAngle={3}
                                       >
-                                        {topCountries.map((entry, index) => (
-                                          <Cell key={`cell-${entry.country}`} fill={countryColors[index % countryColors.length]} />
-                                        ))}
+                                        {(() => {
+                                          const slices = [...topCountries]
+                                          if (otherCountries && otherCountries.visits > 0) {
+                                            slices.push({ country: `Other (${otherCountries.count})`, visits: otherCountries.visits })
+                                          }
+                                          return slices.map((entry, index) => (
+                                            <Cell key={`cell-${entry.country}`} fill={countryColors[index % countryColors.length]} />
+                                          ))
+                                        })()}
                                       </Pie>
                                     </PieChart>
                                   </ResponsiveContainer>
@@ -1687,6 +1703,15 @@ export const AdminPage: React.FC = () => {
                                       <span className="text-sm tabular-nums">{Math.round(c.pct)}%</span>
                                     </div>
                                   ))}
+                                  {otherCountries && otherCountries.visits > 0 && (
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-2">
+                                        <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: countryColors[4 % countryColors.length] }} />
+                                        <span className="text-sm">Other ({otherCountries.count})</span>
+                                      </div>
+                                      <span className="text-sm tabular-nums">{Math.round(otherCountries.pct || 0)}%</span>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             )}
