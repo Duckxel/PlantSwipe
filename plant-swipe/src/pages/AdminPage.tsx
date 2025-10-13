@@ -774,12 +774,13 @@ export const AdminPage: React.FC = () => {
   }, [loadOnlineIpsList])
 
   // Load visitors stats (last 7 days)
+  const [visitorsWindowDays, setVisitorsWindowDays] = React.useState<7 | 30>(7)
   const loadVisitorsStats = React.useCallback(async (opts?: { initial?: boolean }) => {
     const isInitial = !!opts?.initial
     if (isInitial) setVisitorsLoading(true)
     else setVisitorsRefreshing(true)
     try {
-      const resp = await fetch('/api/admin/visitors-stats', {
+      const resp = await fetch(`/api/admin/visitors-stats?days=${visitorsWindowDays}`, {
         headers: { 'Accept': 'application/json' },
         credentials: 'same-origin',
       })
@@ -819,7 +820,7 @@ export const AdminPage: React.FC = () => {
       if (isInitial) setVisitorsLoading(false)
       else setVisitorsRefreshing(false)
     }
-  }, [])
+  }, [visitorsWindowDays, safeJson])
 
   React.useEffect(() => {
     loadVisitorsStats({ initial: true })
@@ -1479,7 +1480,23 @@ export const AdminPage: React.FC = () => {
               <CardContent className="p-4">
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <div>
-                    <div className="text-sm font-medium">Unique visitors — last 7 days</div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-sm font-medium">Unique visitors — last {visitorsWindowDays} days</div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          className={`text-xs px-2 py-1 rounded-lg border ${visitorsWindowDays === 7 ? 'bg-black text-white' : 'bg-white'}`}
+                          onClick={() => setVisitorsWindowDays(7)}
+                          aria-pressed={visitorsWindowDays === 7}
+                        >7d</button>
+                        <button
+                          type="button"
+                          className={`text-xs px-2 py-1 rounded-lg border ${visitorsWindowDays === 30 ? 'bg-black text-white' : 'bg-white'}`}
+                          onClick={() => setVisitorsWindowDays(30)}
+                          aria-pressed={visitorsWindowDays === 30}
+                        >30d</button>
+                      </div>
+                    </div>
                     <div className="text-xs opacity-60">{visitorsUpdatedAt ? `Updated ${formatTimeAgo(visitorsUpdatedAt)}` : 'Updated —'}</div>
                   </div>
                   <Button
@@ -1490,7 +1507,7 @@ export const AdminPage: React.FC = () => {
                     disabled={visitorsLoading || visitorsRefreshing}
                     className="h-8 w-8 rounded-xl border bg-white text-black hover:bg-stone-50"
                   >
-                    <RefreshCw className={`h-4 w-4 ${visitorsLoading || visitorsRefreshing ? 'animate-spin' : ''}`} />
+                      <RefreshCw className={`h-4 w-4 ${visitorsLoading || visitorsRefreshing ? 'animate-spin' : ''}`} />
                   </Button>
                 </div>
 

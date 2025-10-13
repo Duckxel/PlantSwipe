@@ -2541,13 +2541,15 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
   // Helper that always succeeds using in-memory analytics
   const respondFromMemory = (extra = {}) => {
     try {
+      const daysParam = Number(req.query.days || 7)
+      const days = (daysParam === 30 ? 30 : 7)
       const currentUniqueVisitors10m = memAnalytics.getUniqueIpCountInLastMinutes(10)
       const uniqueIpsLast30m = memAnalytics.getUniqueIpCountInLastMinutes(30)
       const uniqueIpsLast60m = memAnalytics.getUniqueIpCountInLastMinutes(60)
       const visitsLast60m = memAnalytics.getVisitCountInLastMinutes(60)
-      const uniqueIps7d = memAnalytics.getUniqueIpCountInLastDays(7)
-      const series7d = memAnalytics.getDailySeries(7)
-      res.json({ ok: true, currentUniqueVisitors10m, uniqueIpsLast30m, uniqueIpsLast60m, visitsLast60m, uniqueIps7d, series7d, via: 'memory', ...extra })
+      const uniqueIps7d = memAnalytics.getUniqueIpCountInLastDays(days)
+      const series7d = memAnalytics.getDailySeries(days)
+      res.json({ ok: true, currentUniqueVisitors10m, uniqueIpsLast30m, uniqueIpsLast60m, visitsLast60m, uniqueIps7d, series7d, via: 'memory', days, ...extra })
       return true
     } catch {
       return false
@@ -2563,26 +2565,29 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
           const token = getBearerTokenFromRequest(req)
           if (token) Object.assign(headers, { 'Authorization': `Bearer ${token}` })
 
-          const [c10, c30, c60u, c60v, u7, s7] = await Promise.all([
+          const daysParam = Number(req.query.days || 7)
+          const days = (daysParam === 30 ? 30 : 7)
+
+          const [c10, c30, c60u, c60v, uN, sN] = await Promise.all([
             fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_unique_ips_last_minutes`, { method: 'POST', headers, body: JSON.stringify({ _minutes: 10 }) }),
             fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_unique_ips_last_minutes`, { method: 'POST', headers, body: JSON.stringify({ _minutes: 30 }) }),
             fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_unique_ips_last_minutes`, { method: 'POST', headers, body: JSON.stringify({ _minutes: 60 }) }),
             fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_visits_last_minutes`, { method: 'POST', headers, body: JSON.stringify({ _minutes: 60 }) }),
-            fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_unique_ips_last_days`, { method: 'POST', headers, body: JSON.stringify({ _days: 7 }) }),
-            fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_visitors_series_days`, { method: 'POST', headers, body: JSON.stringify({ _days: 7 }) }),
+            fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_unique_ips_last_days`, { method: 'POST', headers, body: JSON.stringify({ _days: days }) }),
+            fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_visitors_series_days`, { method: 'POST', headers, body: JSON.stringify({ _days: days }) }),
           ])
 
-          const [c10v, c30v, c60uv, c60vv, u7v, s7v] = await Promise.all([
+          const [c10v, c30v, c60uv, c60vv, uNv, sNv] = await Promise.all([
             c10.ok ? c10.json().catch(() => 0) : Promise.resolve(0),
             c30.ok ? c30.json().catch(() => 0) : Promise.resolve(0),
             c60u.ok ? c60u.json().catch(() => 0) : Promise.resolve(0),
             c60v.ok ? c60v.json().catch(() => 0) : Promise.resolve(0),
-            u7.ok ? u7.json().catch(() => 0) : Promise.resolve(0),
-            s7.ok ? s7.json().catch(() => []) : Promise.resolve([]),
+            uN.ok ? uN.json().catch(() => 0) : Promise.resolve(0),
+            sN.ok ? sN.json().catch(() => []) : Promise.resolve([]),
           ])
 
-          const series7d = Array.isArray(s7v)
-            ? s7v.map((r) => ({ date: String(r.date), uniqueVisitors: Number(r.unique_visitors ?? 0) }))
+          const series7d = Array.isArray(sNv)
+            ? sNv.map((r) => ({ date: String(r.date), uniqueVisitors: Number(r.unique_visitors ?? 0) }))
             : []
 
           res.json({
@@ -2591,9 +2596,10 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
             uniqueIpsLast30m: Number(c30v) || 0,
             uniqueIpsLast60m: Number(c60uv) || 0,
             visitsLast60m: Number(c60vv) || 0,
-            uniqueIps7d: Number(u7v) || 0,
+            uniqueIps7d: Number(uNv) || 0,
             series7d,
             via: 'supabase',
+            days,
           })
           return
         } catch {}
@@ -2603,27 +2609,29 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
       return
     }
 
-    const [rows10m, rows30m, rows60mUnique, rows60mRaw, rows7dUnique] = await Promise.all([
+    const daysParam = Number(req.query.days || 7)
+    const days = (daysParam === 30 ? 30 : 7)
+    const [rows10m, rows30m, rows60mUnique, rows60mRaw, rowsNdUnique] = await Promise.all([
       sql`select count(distinct v.ip_address)::int as c from public.web_visits v where v.ip_address is not null and v.occurred_at >= now() - interval '10 minutes'`,
       sql`select count(distinct v.ip_address)::int as c from public.web_visits v where v.ip_address is not null and v.occurred_at >= now() - interval '30 minutes'`,
       sql`select count(distinct v.ip_address)::int as c from public.web_visits v where v.ip_address is not null and v.occurred_at >= now() - interval '60 minutes'`,
       sql`select count(*)::int as c from public.web_visits where occurred_at >= now() - interval '60 minutes'`,
-      // Unique IPs across the last 7 calendar days in UTC
+      // Unique IPs across the last N calendar days in UTC
       sql`select count(distinct v.ip_address)::int as c
            from public.web_visits v
            where v.ip_address is not null
-             and timezone('utc', v.occurred_at) >= ((now() at time zone 'utc')::date - interval '6 days')`
+             and timezone('utc', v.occurred_at) >= ((now() at time zone 'utc')::date - interval '${days - 1} days')`
     ])
 
     const currentUniqueVisitors10m = rows10m?.[0]?.c ?? 0
     const uniqueIpsLast30m = rows30m?.[0]?.c ?? 0
     const uniqueIpsLast60m = rows60mUnique?.[0]?.c ?? 0
     const visitsLast60m = rows60mRaw?.[0]?.c ?? 0
-    const uniqueIps7d = rows7dUnique?.[0]?.c ?? 0
+    const uniqueIps7d = rowsNdUnique?.[0]?.c ?? 0
 
     const rows7 = await sql`
       with days as (
-        select generate_series(((now() at time zone 'utc')::date - interval '6 days'), (now() at time zone 'utc')::date, interval '1 day')::date as d
+        select generate_series(((now() at time zone 'utc')::date - interval '${days - 1} days'), (now() at time zone 'utc')::date, interval '1 day')::date as d
       )
       select d as day,
              coalesce((select count(distinct v.ip_address)
@@ -2635,7 +2643,7 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
     `
     const series7d = (rows7 || []).map(r => ({ date: new Date(r.day).toISOString().slice(0,10), uniqueVisitors: Number(r.unique_visitors || 0) }))
 
-    res.json({ ok: true, currentUniqueVisitors10m, uniqueIpsLast30m, uniqueIpsLast60m, visitsLast60m, uniqueIps7d, series7d, via: 'database' })
+    res.json({ ok: true, currentUniqueVisitors10m, uniqueIpsLast30m, uniqueIpsLast60m, visitsLast60m, uniqueIps7d, series7d, via: 'database', days })
   } catch (e) {
     // On DB failure, fall back to in-memory analytics instead of 500s
     if (!respondFromMemory({ error: e?.message || 'DB query failed' })) {
