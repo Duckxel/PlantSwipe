@@ -1327,6 +1327,50 @@ export const AdminPage: React.FC = () => {
                   <div className="text-2xl font-semibold tabular-nums mt-1">
                     {onlineLoading ? '—' : onlineUsers}
                   </div>
+                  {/* Collapsible Connected IPs under Currently online */}
+                  <div className="mt-3">
+                    <div className="flex items-center justify-between">
+                      <button
+                        type="button"
+                        className="flex items-center gap-2 text-sm font-medium"
+                        onClick={() => setIpsOpen(o => !o)}
+                        aria-expanded={ipsOpen}
+                        aria-controls="connected-ips"
+                      >
+                        <ChevronDown className={`h-4 w-4 transition-transform ${ipsOpen ? 'rotate-180' : ''}`} />
+                        Connected IPs (last 60m)
+                        <span className="text-xs opacity-60">{ipsUpdatedAt ? `· Updated ${formatTimeAgo(ipsUpdatedAt)}` : ''}</span>
+                      </button>
+                      <div className="flex items-center gap-2">
+                        <div className="text-xs opacity-60 hidden sm:block">{ips.length} IPs</div>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          aria-label="Refresh IP list"
+                          onClick={() => loadOnlineIpsList({ initial: false })}
+                          disabled={ipsLoading || ipsRefreshing}
+                          className="h-8 w-8 rounded-xl border bg-white text-black hover:bg-stone-50"
+                        >
+                          <RefreshCw className={`h-4 w-4 ${ipsLoading || ipsRefreshing ? 'animate-spin' : ''}`} />
+                        </Button>
+                      </div>
+                    </div>
+                    {ipsOpen && (
+                      <div className="mt-2" id="connected-ips">
+                        {ipsLoading ? (
+                          <div className="text-sm opacity-60">Loading…</div>
+                        ) : ips.length === 0 ? (
+                          <div className="text-sm opacity-60">No IPs connected in the last 60 minutes.</div>
+                        ) : (
+                          <div className="flex flex-wrap gap-1">
+                            {ips.map((ip) => (
+                              <Badge key={ip} variant="outline" className="rounded-full">{ip}</Badge>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
               <Card className="rounded-2xl">
@@ -1491,50 +1535,6 @@ export const AdminPage: React.FC = () => {
                     )
                   })()
                 )}
-                {/* Collapsible Connected IPs */}
-                <div className="mt-4">
-                  <div className="flex items-center justify-between">
-                    <button
-                      type="button"
-                      className="flex items-center gap-2 text-sm font-medium"
-                      onClick={() => setIpsOpen(o => !o)}
-                      aria-expanded={ipsOpen}
-                      aria-controls="connected-ips"
-                    >
-                      <ChevronDown className={`h-4 w-4 transition-transform ${ipsOpen ? 'rotate-180' : ''}`} />
-                      Connected IPs (last 60m)
-                      <span className="text-xs opacity-60">{ipsUpdatedAt ? `· Updated ${formatTimeAgo(ipsUpdatedAt)}` : ''}</span>
-                    </button>
-                    <div className="flex items-center gap-2">
-                      <div className="text-xs opacity-60 hidden sm:block">{ips.length} IPs</div>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        aria-label="Refresh IP list"
-                        onClick={() => loadOnlineIpsList({ initial: false })}
-                        disabled={ipsLoading || ipsRefreshing}
-                        className="h-8 w-8 rounded-xl border bg-white text-black hover:bg-stone-50"
-                      >
-                        <RefreshCw className={`h-4 w-4 ${ipsLoading || ipsRefreshing ? 'animate-spin' : ''}`} />
-                      </Button>
-                    </div>
-                  </div>
-                  {ipsOpen && (
-                    <div className="mt-2" id="connected-ips">
-                      {ipsLoading ? (
-                        <div className="text-sm opacity-60">Loading…</div>
-                      ) : ips.length === 0 ? (
-                        <div className="text-sm opacity-60">No IPs connected in the last 60 minutes.</div>
-                      ) : (
-                        <div className="flex flex-wrap gap-1">
-                          {ips.map((ip) => (
-                            <Badge key={ip} variant="outline" className="rounded-full">{ip}</Badge>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
               </CardContent>
             </Card>
             <div className="text-xs font-medium uppercase tracking-wide opacity-60 mt-6 mb-2">Quick Links</div>
