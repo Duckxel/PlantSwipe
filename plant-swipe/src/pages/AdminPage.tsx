@@ -451,6 +451,10 @@ export const AdminPage: React.FC = () => {
       } catch {}
       const respNode = await fetch('/api/admin/branches', { headers: headersNode, credentials: 'same-origin' })
       let data = await safeJson(respNode)
+      // Guard against accidental inclusion of non-branch items
+      if (Array.isArray(data?.branches)) {
+        data.branches = data.branches.filter((b: string) => b && b !== 'origin' && b !== 'HEAD')
+      }
       let ok = respNode.ok && Array.isArray(data?.branches)
       if (!ok) {
         const adminHeaders: Record<string, string> = { 'Accept': 'application/json' }
@@ -460,6 +464,9 @@ export const AdminPage: React.FC = () => {
         } catch {}
         const respAdmin = await fetch('/admin/branches', { headers: adminHeaders, credentials: 'same-origin' })
         data = await safeJson(respAdmin)
+        if (Array.isArray(data?.branches)) {
+          data.branches = data.branches.filter((b: string) => b && b !== 'origin' && b !== 'HEAD')
+        }
         if (!respAdmin.ok || !Array.isArray(data?.branches)) throw new Error(data?.error || `HTTP ${respAdmin.status}`)
       }
       const branches: string[] = data.branches
@@ -508,7 +515,7 @@ export const AdminPage: React.FC = () => {
         const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
         if (adminToken) headers['X-Admin-Token'] = String(adminToken)
       } catch {}
-      const branchParam = selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''
+      const branchParam = (selectedBranch && selectedBranch !== currentBranch) ? `?branch=${encodeURIComponent(selectedBranch)}` : ''
       let resp: Response | null = null
       // Try Node server SSE first
       try {
