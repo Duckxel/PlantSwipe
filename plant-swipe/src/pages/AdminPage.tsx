@@ -1305,7 +1305,7 @@ export const AdminPage: React.FC = () => {
           <div className="pt-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
               <Card className="rounded-2xl">
-                <CardContent className="p-4">
+                <CardContent className="p-4 space-y-2">
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       <div className="text-sm opacity-60">Currently online</div>
@@ -1338,21 +1338,23 @@ export const AdminPage: React.FC = () => {
                         <ChevronDown className={`h-4 w-4 transition-transform ${ipsOpen ? 'rotate-180' : ''}`} />
                         IPs
                       </button>
-                      <div className="flex items-center gap-2" />
+                      <div />
                     </div>
                     {ipsOpen && (
                       <div className="mt-2" id="connected-ips">
-                        {ipsLoading ? (
-                          <div className="text-sm opacity-60">Loading…</div>
-                        ) : ips.length === 0 ? (
-                          <div className="text-sm opacity-60">No IPs.</div>
-                        ) : (
-                          <div className="flex flex-wrap gap-1">
-                            {ips.map((ip) => (
-                              <Badge key={ip} variant="outline" className="rounded-full">{ip}</Badge>
-                            ))}
-                          </div>
-                        )}
+                        <div className="rounded-xl border bg-white p-3 max-h-48 overflow-auto">
+                          {ipsLoading ? (
+                            <div className="text-sm opacity-60">Loading…</div>
+                          ) : ips.length === 0 ? (
+                            <div className="text-sm opacity-60">No IPs.</div>
+                          ) : (
+                            <div className="flex flex-wrap gap-2">
+                              {ips.map((ip) => (
+                                <Badge key={ip} variant="outline" className="rounded-full px-2 py-1 text-xs">{ip}</Badge>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>
