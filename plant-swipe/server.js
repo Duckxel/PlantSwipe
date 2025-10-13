@@ -1979,6 +1979,10 @@ async function handlePullCode(req, res) {
     // Execute the script from repository root so it updates current branch and builds
     // Run detached so we can return a response before the service restarts
     const execEnv = { ...process.env, CI: process.env.CI || 'true', SUDO_ASKPASS: process.env.SUDO_ASKPASS || '', PLANTSWIPE_REPO_DIR: repoRoot }
+    if (branch) {
+      // Pass target branch to refresh script
+      execEnv.PLANTSWIPE_TARGET_BRANCH = branch
+    }
     const child = spawnChild(scriptPath, {
       cwd: repoRoot,
       detached: true,
@@ -2036,6 +2040,7 @@ app.get('/api/admin/pull-code/stream', async (req, res) => {
     send('open', { ok: true, message: 'Starting refresh…' })
 
     const repoRoot = await getRepoRoot()
+    const branch = (req.query.branch || '').toString().trim() || ''
     const scriptPath = path.resolve(repoRoot, 'scripts', 'refresh-plant-swipe.sh')
     try { await fs.access(scriptPath) } catch {
       send('error', { error: `refresh script not found at ${scriptPath}` })
@@ -2045,9 +2050,14 @@ app.get('/api/admin/pull-code/stream', async (req, res) => {
     try { await fs.chmod(scriptPath, 0o755) } catch {}
 
     // Allow the script to perform restarts even if it drops the stream briefly
+    const childEnv = { ...process.env, CI: process.env.CI || 'true', PLANTSWIPE_REPO_DIR: repoRoot }
+    if (branch) {
+      childEnv.PLANTSWIPE_TARGET_BRANCH = branch
+      send('log', `[pull] Target branch requested: ${branch}`)
+    }
     const child = spawnChild(scriptPath, [], {
       cwd: repoRoot,
-      env: { ...process.env, CI: process.env.CI || 'true', PLANTSWIPE_REPO_DIR: repoRoot },
+      env: childEnv,
       shell: false,
     })
 
