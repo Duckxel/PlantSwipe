@@ -790,6 +790,9 @@ export const AdminPage: React.FC = () => {
   const [ipError, setIpError] = React.useState<string | null>(null)
   const [ipResults, setIpResults] = React.useState<Array<{ id: string; email: string | null; display_name: string | null; last_seen_at: string | null }>>([])
   const [ipUsed, setIpUsed] = React.useState<string | null>(null)
+  const [ipUsersCount, setIpUsersCount] = React.useState<number | null>(null)
+  const [ipConnectionsCount, setIpConnectionsCount] = React.useState<number | null>(null)
+  const [ipLastSeenAt, setIpLastSeenAt] = React.useState<string | null>(null)
 
   // Member visits (last 30 days)
   const [memberVisitsLoading, setMemberVisitsLoading] = React.useState<boolean>(false)
@@ -872,6 +875,9 @@ export const AdminPage: React.FC = () => {
     setIpError(null)
     setIpResults([])
     setIpUsed(null)
+    setIpUsersCount(null)
+    setIpConnectionsCount(null)
+    setIpLastSeenAt(null)
     try {
       const session = (await supabase.auth.getSession()).data.session
       const token = session?.access_token
@@ -889,6 +895,9 @@ export const AdminPage: React.FC = () => {
         : []
       setIpResults(users)
       setIpUsed(typeof data?.ip === 'string' ? data.ip : ip)
+      if (typeof data?.usersCount === 'number') setIpUsersCount(data.usersCount)
+      if (typeof data?.connectionsCount === 'number') setIpConnectionsCount(data.connectionsCount)
+      if (typeof data?.lastSeenAt === 'string') setIpLastSeenAt(data.lastSeenAt)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       setIpError(msg || 'IP lookup failed')
@@ -1943,7 +1952,21 @@ export const AdminPage: React.FC = () => {
                 )}
                 {!ipLoading && ipResults && (
                   <div className="space-y-2">
-                    <div className="text-sm">Total users via this IP{ipUsed ? ` (${ipUsed})` : ''}: <span className="font-semibold tabular-nums">{ipResults.length}</span></div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <div className="rounded-xl border p-3 text-center">
+                        <div className="text-[11px] opacity-60">IP</div>
+                        <div className="text-base font-semibold tabular-nums truncate" title={ipUsed || undefined}>{ipUsed || '—'}</div>
+                      </div>
+                      <div className="rounded-xl border p-3 text-center">
+                        <div className="text-[11px] opacity-60">Users</div>
+                        <div className="text-base font-semibold tabular-nums">{ipUsersCount ?? ipResults.length}</div>
+                      </div>
+                      <div className="rounded-xl border p-3 text-center">
+                        <div className="text-[11px] opacity-60">Connections</div>
+                        <div className="text-base font-semibold tabular-nums">{ipConnectionsCount ?? '—'}</div>
+                      </div>
+                    </div>
+                    <div className="text-xs opacity-60">Last seen: {ipLastSeenAt ? new Date(ipLastSeenAt).toLocaleString() : '—'}</div>
                     {ipResults.length === 0 ? (
                       <div className="text-sm opacity-60">No users found for this IP.</div>
                     ) : (

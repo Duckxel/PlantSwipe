@@ -1351,25 +1351,37 @@ app.get('/api/admin/members-by-ip', async (req, res) => {
     // Prefer direct DB when available
     if (sql) {
       try {
-        const rows = await sql`
-          select u.id,
-                 u.email,
-                 p.display_name,
-                 max(v.occurred_at) as last_seen_at
-          from public.web_visits v
-          join auth.users u on u.id = v.user_id
-          left join public.profiles p on p.id = u.id
-          where v.ip_address = ${ip}::inet
-          group by u.id, u.email, p.display_name
-          order by last_seen_at desc
-        `
+        const [aggRows, rows] = await Promise.all([
+          sql`
+            select count(*)::int as connections_count,
+                   max(occurred_at) as last_seen_at,
+                   count(distinct user_id)::int as users_count
+            from public.web_visits
+            where ip_address = ${ip}::inet
+          `,
+          sql`
+            select u.id,
+                   u.email,
+                   p.display_name,
+                   max(v.occurred_at) as last_seen_at
+            from public.web_visits v
+            join auth.users u on u.id = v.user_id
+            left join public.profiles p on p.id = u.id
+            where v.ip_address = ${ip}::inet
+            group by u.id, u.email, p.display_name
+            order by last_seen_at desc
+          `,
+        ])
         const users = (Array.isArray(rows) ? rows : []).map(r => ({
           id: String(r.id),
           email: r.email || null,
           display_name: r.display_name || null,
           last_seen_at: r.last_seen_at || null,
         }))
-        res.json({ ok: true, ip, count: users.length, users, via: 'database' })
+        const connectionsCount = aggRows?.[0]?.connections_count ?? users.length
+        const usersCount = aggRows?.[0]?.users_count ?? users.length
+        const lastSeenAt = aggRows?.[0]?.last_seen_at || null
+        res.json({ ok: true, ip, usersCount, connectionsCount, lastSeenAt, users, via: 'database' })
         return
       } catch (e) {
         // fall back to REST
@@ -1442,7 +1454,37 @@ app.get('/api/admin/members-by-ip', async (req, res) => {
       const tb = b.last_seen_at ? new Date(b.last_seen_at).getTime() : 0
       return tb - ta
     })
-    res.json({ ok: true, ip, count: users.length, users, via: 'supabase' })
+    // Aggregate: connections count
+    let connectionsCount = 0
+    try {
+      const vc = await fetch(`${supabaseUrlEnv}/rest/v1/web_visits?ip_address=eq.${encodeURIComponent(ip)}&select=id`, {
+        headers: { ...headers, 'Prefer': 'count=exact', 'Range': '0-0' },
+      })
+      const cr = vc.headers.get('content-range') || ''
+      const m = cr.match(/\/(\d+)$/)
+      if (m) connectionsCount = Number(m[1])
+    } catch {}
+    // Aggregate: last seen at
+    let lastSeenAt = null
+    try {
+      const lr = await fetch(`${supabaseUrlEnv}/rest/v1/web_visits?ip_address=eq.${encodeURIComponent(ip)}&select=occurred_at&order=occurred_at.desc&limit=1`, { headers })
+      if (lr.ok) {
+        const arr = await lr.json().catch(() => [])
+        if (Array.isArray(arr) && arr[0]) lastSeenAt = arr[0].occurred_at || null
+      }
+    } catch {}
+    // Aggregate: users count (distinct)
+    let usersCount = users.length
+    try {
+      const ur = await fetch(`${supabaseUrlEnv}/rest/v1/web_visits?ip_address=eq.${encodeURIComponent(ip)}&select=user_id&distinct`, {
+        headers: { ...headers, 'Prefer': 'count=exact', 'Range': '0-0' },
+      })
+      const cr = ur.headers.get('content-range') || ''
+      const m = cr.match(/\/(\d+)$/)
+      if (m) usersCount = Number(m[1])
+    } catch {}
+
+    res.json({ ok: true, ip, usersCount, connectionsCount, lastSeenAt, users, via: 'supabase' })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to search by IP' })
   }
