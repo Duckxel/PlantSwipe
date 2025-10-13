@@ -2369,6 +2369,78 @@ app.get('/api/admin/visitors-unique-7d', async (req, res) => {
   }
 })
 
+// Admin: list unique IP addresses connected in the last N minutes (default 60)
+app.get('/api/admin/online-ips', async (req, res) => {
+  const uid = "public"
+  if (!uid) return
+  const minutesParam = Number(req.query.minutes || req.query.window || 60)
+  const windowMinutes = Number.isFinite(minutesParam) && minutesParam > 0 ? Math.min(24 * 60, Math.floor(minutesParam)) : 60
+
+  const respondFromMemory = (extra = {}) => {
+    try {
+      // Build set of IPs from the in-memory minute buckets within the window
+      const nowMin = Math.floor(Date.now() / 60000)
+      const start = nowMin - windowMinutes + 1
+      const uniq = new Set()
+      for (let m = start; m <= nowMin; m++) {
+        const set = memAnalytics.minuteToUniqueIps.get(m)
+        if (set && set.size) {
+          for (const ip of set) uniq.add(ip)
+        }
+      }
+      const ips = Array.from(uniq)
+      res.json({ ok: true, ips, via: 'memory', windowMinutes, count: ips.length, updatedAt: Date.now() })
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  try {
+    if (sql) {
+      const rows = await sql`
+        select distinct v.ip_address as ip
+        from public.web_visits v
+        where v.ip_address is not null
+          and v.occurred_at >= now() - interval '${windowMinutes} minutes'
+        order by ip asc
+      `
+      const ips = Array.isArray(rows) ? rows.map(r => String(r.ip)).filter(Boolean) : []
+      res.json({ ok: true, ips, via: 'database', windowMinutes, count: ips.length, updatedAt: Date.now() })
+      return
+    }
+
+    // Supabase REST fallback: query distinct IPs in window
+    if (supabaseUrlEnv && supabaseAnonKey) {
+      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+      const token = getBearerTokenFromRequest(req)
+      if (token) headers.Authorization = `Bearer ${token}`
+      // Use RPC if available; otherwise use REST with select distinct
+      let ips = []
+      try {
+        const resp = await fetch(`${supabaseUrlEnv}/rest/v1/web_visits?select=ip_address&occurred_at=gte.${new Date(Date.now() - windowMinutes * 60000).toISOString()}&ip_address=not.is.null`, { headers })
+        if (resp.ok) {
+          const arr = await resp.json().catch(() => [])
+          const uniq = new Set((Array.isArray(arr) ? arr : []).map(r => String(r.ip_address || '')).filter(Boolean))
+          ips = Array.from(uniq).sort()
+        }
+      } catch {}
+      if (ips.length > 0) {
+        res.json({ ok: true, ips, via: 'supabase', windowMinutes, count: ips.length, updatedAt: Date.now() })
+        return
+      }
+    }
+
+    if (!respondFromMemory()) {
+      res.status(500).json({ ok: false, error: 'Failed to collect IPs' })
+    }
+  } catch (e) {
+    if (!respondFromMemory({ error: e?.message || 'DB query failed' })) {
+      res.status(500).json({ ok: false, error: e?.message || 'DB query failed' })
+    }
+  }
+})
+
 // Admin: simple online users count (unique IPs past 60 minutes)
 app.get('/api/admin/online-users', async (req, res) => {
   const uid = "public"

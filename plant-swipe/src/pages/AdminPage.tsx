@@ -267,6 +267,11 @@ export const AdminPage: React.FC = () => {
   const [visitorsUpdatedAt, setVisitorsUpdatedAt] = React.useState<number | null>(null)
   const [visitorsSeries, setVisitorsSeries] = React.useState<Array<{ date: string; uniqueVisitors: number }>>([])
   const [visitorsTotalUnique7d, setVisitorsTotalUnique7d] = React.useState<number>(0)
+  // Connected IPs (last 60 minutes)
+  const [ips, setIps] = React.useState<string[]>([])
+  const [ipsLoading, setIpsLoading] = React.useState<boolean>(true)
+  const [ipsRefreshing, setIpsRefreshing] = React.useState<boolean>(false)
+  const [ipsOpen, setIpsOpen] = React.useState<boolean>(false)
   // Tick every minute to update the "Updated X ago" label without refetching
   const [nowMs, setNowMs] = React.useState<number>(() => Date.now())
   React.useEffect(() => {
@@ -698,6 +703,43 @@ export const AdminPage: React.FC = () => {
     }, 60_000)
     return () => clearInterval(intervalId)
   }, [loadOnlineUsers])
+
+  // Loader for list of connected IPs (unique IPs past N minutes; default 60)
+  const loadOnlineIpsList = React.useCallback(async (opts?: { initial?: boolean; minutes?: number }) => {
+    const isInitial = !!opts?.initial
+    const minutes = Number.isFinite(opts?.minutes as number) && (opts?.minutes as number)! > 0 ? Math.floor(opts!.minutes as number) : 60
+    if (isInitial) setIpsLoading(true)
+    else setIpsRefreshing(true)
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      const headers: Record<string, string> = { 'Accept': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+        if (adminToken) headers['X-Admin-Token'] = String(adminToken)
+      } catch {}
+      const resp = await fetch(`/api/admin/online-ips?minutes=${encodeURIComponent(String(minutes))}` , { headers, credentials: 'same-origin' })
+      const data = await safeJson(resp)
+      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`)
+      const list: string[] = Array.isArray(data?.ips) ? data.ips.map((s: any) => String(s)).filter(Boolean) : []
+      setIps(list)
+    } catch {
+      // keep last
+    } finally {
+      if (isInitial) setIpsLoading(false)
+      else setIpsRefreshing(false)
+    }
+  }, [safeJson])
+
+  // Initial load and auto-refresh every 60s
+  React.useEffect(() => {
+    loadOnlineIpsList({ initial: true })
+  }, [loadOnlineIpsList])
+  React.useEffect(() => {
+    const id = setInterval(() => { loadOnlineIpsList({ initial: false }) }, 60_000)
+    return () => clearInterval(id)
+  }, [loadOnlineIpsList])
 
   // Load visitors stats (last 7 days)
   const loadVisitorsStats = React.useCallback(async (opts?: { initial?: boolean }) => {
@@ -1177,25 +1219,25 @@ export const AdminPage: React.FC = () => {
               <div className="text-xs opacity-60 mt-2">
                 Changing branch takes effect when you run Pull & Build.
               </div>
+              {/* Action buttons moved into Branch card */}
+              <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <Button className="rounded-2xl w-full" onClick={restartServer} disabled={restarting}>
+                  <Server className="h-4 w-4" />
+                  <RefreshCw className="h-4 w-4" />
+                  <span>{restarting ? 'Restarting…' : 'Restart Server'}</span>
+                </Button>
+                <Button className="rounded-2xl w-full" variant="secondary" onClick={pullLatest} disabled={pulling}>
+                  <Github className="h-4 w-4" />
+                  <RefreshCw className="h-4 w-4" />
+                  <span>{pulling ? 'Pulling…' : 'Pull & Build'}</span>
+                </Button>
+                <Button className="rounded-2xl w-full" variant="destructive" onClick={runSyncSchema} disabled={syncing}>
+                  <Database className="h-4 w-4" />
+                  <span>{syncing ? 'Syncing Schema…' : 'Sync DB Schema'}</span>
+                </Button>
+              </div>
             </CardContent>
           </Card>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <Button className="rounded-2xl w-full" onClick={restartServer} disabled={restarting}>
-              <Server className="h-4 w-4" />
-              <RefreshCw className="h-4 w-4" />
-              <span>{restarting ? 'Restarting…' : 'Restart Server'}</span>
-            </Button>
-            <Button className="rounded-2xl w-full" variant="secondary" onClick={pullLatest} disabled={pulling}>
-              <Github className="h-4 w-4" />
-              <RefreshCw className="h-4 w-4" />
-              <span>{pulling ? 'Pulling…' : 'Pull & Build'}</span>
-            </Button>
-            <Button className="rounded-2xl w-full" variant="destructive" onClick={runSyncSchema} disabled={syncing}>
-              <Database className="h-4 w-4" />
-              <span>{syncing ? 'Syncing Schema…' : 'Sync DB Schema'}</span>
-            </Button>
-          </div>
 
             {/* Admin Console */}
             <div className="mt-3">
@@ -1263,7 +1305,7 @@ export const AdminPage: React.FC = () => {
           <div className="pt-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
               <Card className="rounded-2xl">
-                <CardContent className="p-4">
+                <CardContent className="p-4 space-y-2">
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       <div className="text-sm opacity-60">Currently online</div>
@@ -1273,15 +1315,48 @@ export const AdminPage: React.FC = () => {
                       variant="outline"
                       size="icon"
                       aria-label="Refresh currently online"
-                      onClick={() => loadOnlineUsers({ initial: false })}
-                      disabled={onlineLoading || onlineRefreshing}
+                      onClick={() => { loadOnlineUsers({ initial: false }); loadOnlineIpsList({ initial: false }) }}
+                      disabled={onlineLoading || onlineRefreshing || ipsLoading || ipsRefreshing}
                       className="h-8 w-8 rounded-xl border bg-white text-black hover:bg-stone-50"
                     >
-                      <RefreshCw className={`h-4 w-4 ${onlineLoading || onlineRefreshing ? 'animate-spin' : ''}`} />
+                      <RefreshCw className={`h-4 w-4 ${(onlineLoading || onlineRefreshing || ipsLoading || ipsRefreshing) ? 'animate-spin' : ''}`} />
                     </Button>
                   </div>
                   <div className="text-2xl font-semibold tabular-nums mt-1">
                     {onlineLoading ? '—' : onlineUsers}
+                  </div>
+                  {/* Collapsible Connected IPs under Currently online */}
+                  <div className="mt-3">
+                    <div className="flex items-center justify-between">
+                      <button
+                        type="button"
+                        className="flex items-center gap-2 text-sm font-medium"
+                        onClick={() => setIpsOpen(o => !o)}
+                        aria-expanded={ipsOpen}
+                        aria-controls="connected-ips"
+                      >
+                        <ChevronDown className={`h-4 w-4 transition-transform ${ipsOpen ? 'rotate-180' : ''}`} />
+                        IPs
+                      </button>
+                      <div />
+                    </div>
+                    {ipsOpen && (
+                      <div className="mt-2" id="connected-ips">
+                        <div className="rounded-xl border bg-white p-3 max-h-48 overflow-auto">
+                          {ipsLoading ? (
+                            <div className="text-sm opacity-60">Loading…</div>
+                          ) : ips.length === 0 ? (
+                            <div className="text-sm opacity-60">No IPs.</div>
+                          ) : (
+                            <div className="flex flex-wrap gap-2">
+                              {ips.map((ip) => (
+                                <Badge key={ip} variant="outline" className="rounded-full px-2 py-1 text-xs">{ip}</Badge>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
