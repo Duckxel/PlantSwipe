@@ -145,6 +145,26 @@ export const AdminPage: React.FC = () => {
         throw new Error(body?.error || `Request failed (${resp.status})`)
       }
       appendConsole('[sync] Schema synchronized successfully')
+      const summary = body?.summary
+      if (summary && typeof summary === 'object') {
+        try {
+          const missingTables: string[] = Array.isArray(summary?.tables?.missing) ? summary.tables.missing : []
+          const missingFunctions: string[] = Array.isArray(summary?.functions?.missing) ? summary.functions.missing : []
+          const missingExtensions: string[] = Array.isArray(summary?.extensions?.missing) ? summary.extensions.missing : []
+          const hasMissing = missingTables.length + missingFunctions.length + missingExtensions.length > 0
+          appendConsole('[sync] Post‑sync verification:')
+          appendConsole(`- Tables OK: ${(summary?.tables?.present || []).length}/${(summary?.tables?.required || []).length}`)
+          appendConsole(`- Functions OK: ${(summary?.functions?.present || []).length}/${(summary?.functions?.required || []).length}`)
+          appendConsole(`- Extensions OK: ${(summary?.extensions?.present || []).length}/${(summary?.extensions?.required || []).length}`)
+          if (hasMissing) {
+            if (missingTables.length) appendConsole(`- Missing tables: ${missingTables.join(', ')}`)
+            if (missingFunctions.length) appendConsole(`- Missing functions: ${missingFunctions.join(', ')}`)
+            if (missingExtensions.length) appendConsole(`- Missing extensions: ${missingExtensions.join(', ')}`)
+          } else {
+            appendConsole('- All required objects present')
+          }
+        } catch {}
+      }
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e)
       appendConsole(`[sync] Failed to sync schema: ${message}`)
