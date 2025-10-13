@@ -128,11 +128,17 @@ def list_branches():
         subprocess.run(shlex.split(f"{git_base} remote update --prune"), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
         # List remote branches
         res = subprocess.run(shlex.split(f"{git_base} for-each-ref --format='%(refname:short)' refs/remotes/origin"), capture_output=True, text=True, timeout=30, check=False)
-        branches = [
-            s.strip().replace("origin/", "")
-            for s in (res.stdout or "").split("\n")
-            if s.strip() and s.strip() != "HEAD" and "->" not in s
-        ]
+        # Normalize remote ref names and exclude non-branch entries
+        branches = []
+        for raw in (res.stdout or "").split("\n"):
+            s = (raw or "").strip()
+            if not s or "->" in s:
+                continue
+            name = s.replace("origin/", "")
+            # Filter out HEAD pointer and the remote namespace itself ("origin")
+            if name in ("HEAD", "origin"):
+                continue
+            branches.append(name)
         if not branches:
             # fallback to local
             res_local = subprocess.run(shlex.split(f"{git_base} for-each-ref --format='%(refname:short)' refs/heads"), capture_output=True, text=True, timeout=30, check=False)

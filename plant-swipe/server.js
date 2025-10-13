@@ -1976,6 +1976,30 @@ async function handlePullCode(req, res) {
     // Ensure it is executable (best-effort)
     try { await fs.chmod(scriptPath, 0o755) } catch {}
 
+    // Pre-validate requested branch to fail fast on typos or deleted branches
+    if (branch) {
+      try {
+        const gitBase = `git -c "safe.directory=${repoRoot}" -C "${repoRoot}"`
+        await exec(`${gitBase} remote update --prune`, { timeout: 30000 })
+        const [{ stdout: remoteOut }, { stdout: localOut }] = await Promise.all([
+          exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/remotes/origin`, { timeout: 30000 }),
+          exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/heads`, { timeout: 30000 }),
+        ])
+        const normalize = (s) => s.trim().replace(/^origin\//, '')
+        const allowed = new Set(
+          [...(remoteOut || '').split('\n'), ...(localOut || '').split('\n')]
+            .map(x => x.trim())
+            .filter(Boolean)
+            .map(normalize)
+            .filter(name => name && name !== 'HEAD' && name !== 'origin' && !name.includes('->'))
+        )
+        if (!allowed.has(branch)) {
+          res.status(400).json({ ok: false, error: `Unknown branch: ${branch}` })
+          return
+        }
+      } catch {}
+    }
+
     // Execute the script from repository root so it updates current branch and builds
     // Run detached so we can return a response before the service restarts
     const execEnv = { ...process.env, CI: process.env.CI || 'true', SUDO_ASKPASS: process.env.SUDO_ASKPASS || '', PLANTSWIPE_REPO_DIR: repoRoot }
@@ -2052,6 +2076,29 @@ app.get('/api/admin/pull-code/stream', async (req, res) => {
     // Allow the script to perform restarts even if it drops the stream briefly
     const childEnv = { ...process.env, CI: process.env.CI || 'true', PLANTSWIPE_REPO_DIR: repoRoot }
     if (branch) {
+      // Pre-validate requested branch and surface a clear error on failure
+      try {
+        const gitBase = `git -c "safe.directory=${repoRoot}" -C "${repoRoot}"`
+        await exec(`${gitBase} remote update --prune`, { timeout: 30000 })
+        const [{ stdout: remoteOut }, { stdout: localOut }] = await Promise.all([
+          exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/remotes/origin`, { timeout: 30000 }),
+          exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/heads`, { timeout: 30000 }),
+        ])
+        const normalize = (s) => s.trim().replace(/^origin\//, '')
+        const allowed = new Set(
+          [...(remoteOut || '').split('\n'), ...(localOut || '').split('\n')]
+            .map(x => x.trim())
+            .filter(Boolean)
+            .map(normalize)
+            .filter(name => name && name !== 'HEAD' && name !== 'origin' && !name.includes('->'))
+        )
+        if (!allowed.has(branch)) {
+          send('error', { error: `Unknown branch: ${branch}` })
+          send('done', { ok: false, code: 1 })
+          res.end()
+          return
+        }
+      } catch {}
       childEnv.PLANTSWIPE_TARGET_BRANCH = branch
       send('log', `[pull] Target branch requested: ${branch}`)
     }
@@ -2107,8 +2154,8 @@ app.get('/api/admin/branches', async (req, res) => {
       .map(s => s.trim())
       .filter(Boolean)
       .map(name => name.replace(/^origin\//, ''))
-      // Exclude HEAD pointer and any symbolic ref lines
-      .filter(name => name !== 'HEAD' && !name.includes('->'))
+      // Exclude HEAD pointer, the remote namespace itself ("origin"), and any symbolic ref lines
+      .filter(name => name !== 'HEAD' && name !== 'origin' && !name.includes('->'))
       .sort((a, b) => a.localeCompare(b))
 
     // Fallback to local branches if remote list is empty (e.g., detached or offline)
