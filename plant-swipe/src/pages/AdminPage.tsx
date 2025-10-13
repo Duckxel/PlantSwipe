@@ -829,16 +829,23 @@ export const AdminPage: React.FC = () => {
         const sb = await fetch(`/api/admin/sources-breakdown?days=${visitorsWindowDays}`, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
         const sbd = await safeJson(sb)
         if (sb.ok) {
-          const tc = Array.isArray(sbd?.topCountries) ? sbd.topCountries.map((r: { country?: string; visits?: number }) => ({ country: String(r.country || ''), visits: Number(r.visits || 0) })).filter((x) => x.country) : []
+          const tc = Array.isArray(sbd?.topCountries)
+            ? sbd.topCountries.map((r: { country?: string; visits?: number }) => ({ country: String(r.country || ''), visits: Number(r.visits || 0) }))
+                .filter((x: { country: string }) => !!x.country)
+            : []
           const oc = sbd?.otherCountries && typeof sbd.otherCountries === 'object' ? { count: Number(sbd.otherCountries.count || 0), visits: Number(sbd.otherCountries.visits || 0) } : null
           const totalCountryVisits = tc.reduce((a: number, b: any) => a + (b.visits || 0), 0) + (oc?.visits || 0)
-          const countriesWithPct = totalCountryVisits > 0 ? tc.map(x => ({ ...x, pct: (x.visits / totalCountryVisits) * 100 })) : tc.map(x => ({ ...x, pct: 0 }))
+          const countriesWithPct = totalCountryVisits > 0
+            ? tc.map((x: { country: string; visits: number }) => ({ ...x, pct: (x.visits / totalCountryVisits) * 100 }))
+            : tc.map((x: { country: string; visits: number }) => ({ ...x, pct: 0 }))
           const ocWithPct = oc ? { ...oc, pct: totalCountryVisits > 0 ? (oc.visits / totalCountryVisits) * 100 : 0 } : null
 
           const tr = Array.isArray(sbd?.topReferrers) ? sbd.topReferrers.map((r: { source?: string; visits?: number }) => ({ source: String(r.source || 'direct'), visits: Number(r.visits || 0) })) : []
           const orf = sbd?.otherReferrers && typeof sbd.otherReferrers === 'object' ? { count: Number(sbd.otherReferrers.count || 0), visits: Number(sbd.otherReferrers.visits || 0) } : null
           const totalRefVisits = tr.reduce((a: number, b: any) => a + (b.visits || 0), 0) + (orf?.visits || 0)
-          const refsWithPct = totalRefVisits > 0 ? tr.map(x => ({ ...x, pct: (x.visits / totalRefVisits) * 100 })) : tr.map(x => ({ ...x, pct: 0 }))
+          const refsWithPct = totalRefVisits > 0
+            ? tr.map((x: { source: string; visits: number }) => ({ ...x, pct: (x.visits / totalRefVisits) * 100 }))
+            : tr.map((x: { source: string; visits: number }) => ({ ...x, pct: 0 }))
           const orfWithPct = orf ? { ...orf, pct: totalRefVisits > 0 ? (orf.visits / totalRefVisits) * 100 : 0 } : null
 
           setTopCountries(countriesWithPct)
@@ -1722,15 +1729,24 @@ export const AdminPage: React.FC = () => {
                               <div className="text-sm opacity-60">No data.</div>
                             ) : (
                               <div className="flex flex-col gap-2">
-                                {topReferrers.slice(0, 3).map((r, idx) => (
+                                {topReferrers.slice(0, 5).map((r, idx) => (
                                   <div key={r.source} className="flex items-center justify-between">
                                     <div className="flex items-center gap-2">
                                       <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: referrerColors[idx % referrerColors.length] }} />
                                       <span className="text-sm break-all">{r.source}</span>
                                     </div>
-                                    <span className="text-sm tabular-nums">{Math.round(r.pct)}%</span>
+                                    <span className="text-sm tabular-nums">{Math.round(r.pct || 0)}%</span>
                                   </div>
                                 ))}
+                                {otherReferrers && otherReferrers.visits > 0 && (
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: referrerColors[4 % referrerColors.length] }} />
+                                      <span className="text-sm">Other ({otherReferrers.count})</span>
+                                    </div>
+                                    <span className="text-sm tabular-nums">{Math.round(otherReferrers.pct || 0)}%</span>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
