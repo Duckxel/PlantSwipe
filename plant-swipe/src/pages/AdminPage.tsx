@@ -1691,7 +1691,7 @@ export const AdminPage: React.FC = () => {
                               <div className="text-sm opacity-60">No data.</div>
                             ) : (
                               <div className="flex flex-col gap-2">
-                                {topReferrers.slice(0, 3).map((r, idx) => (
+                                {topReferrers.slice(0, 3).map((r) => (
                                   <div key={r.source} className="flex items-center justify-between">
                                     <div className="flex items-center gap-2">
                                       <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: '#111827' }} />
