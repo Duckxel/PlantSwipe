@@ -225,22 +225,14 @@ export const AdminPage: React.FC = () => {
 
       let nodeResp: Response | null = null
       try {
-        nodeResp = await fetch('/api/admin/restart-server', {
+        nodeResp = await fetch('/api/admin/restart-all', {
           method: 'POST',
           headers: nodePostHeaders,
           credentials: 'same-origin',
           body: '{}',
         })
       } catch {}
-      if (nodeResp && nodeResp.status === 405) {
-        try {
-          nodeResp = await fetch('/api/admin/restart-server', {
-            method: 'GET',
-            headers: nodeHeaders,
-            credentials: 'same-origin',
-          })
-        } catch {}
-      }
+      // restart-all is POST-only on the Node API; no GET fallback here
 
       let ok = false
       let nodeErrorMsg = 'Restart request failed'
@@ -259,7 +251,17 @@ export const AdminPage: React.FC = () => {
             'Accept': 'application/json',
             'X-Admin-Token': String(adminToken),
           }
-          // Service name defaults server-side; send explicit as a hint
+          // Best-effort: reload nginx to minimize 502s during service restarts
+          try {
+            const reloadResp = await fetch('/admin/reload-nginx', {
+              method: 'POST',
+              headers: adminHeaders,
+              credentials: 'same-origin',
+              body: '{}',
+            })
+            await safeJson(reloadResp).catch(() => null)
+          } catch {}
+          // Then restart the Node service via Admin API
           const adminResp = await fetch('/admin/restart-app', {
             method: 'POST',
             headers: adminHeaders,
