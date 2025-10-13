@@ -1612,9 +1612,10 @@ export const AdminPage: React.FC = () => {
                     return (
                       <div>
                         <div className="text-sm font-medium mb-2">Total for the whole week: <span className="tabular-nums">{totalVal}</span></div>
-                        <div className="h-64">
-                          <ResponsiveContainer width="100%" height="100%">
-                            <ComposedChart
+                        <div className="w-full flex justify-center">
+                          <div className="h-64 w-full max-w-3xl">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <ComposedChart
                               data={visitorsSeries}
                               margin={{ top: 10, right: 16, bottom: 14, left: 16 }}
                             >
@@ -1667,6 +1668,7 @@ export const AdminPage: React.FC = () => {
                               />
                             </ComposedChart>
                           </ResponsiveContainer>
+                          </div>
                         </div>
                         {/* Sources breakdown */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
