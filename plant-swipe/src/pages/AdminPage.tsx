@@ -443,19 +443,25 @@ export const AdminPage: React.FC = () => {
     if (isInitial) setBranchesLoading(true)
     else setBranchesRefreshing(true)
     try {
-      const headers: Record<string, string> = { 'Accept': 'application/json' }
+      const headersNode: Record<string, string> = { 'Accept': 'application/json' }
       try {
         const session = (await supabase.auth.getSession()).data.session
         const token = session?.access_token
-        if (token) headers['Authorization'] = `Bearer ${token}`
+        if (token) headersNode['Authorization'] = `Bearer ${token}`
       } catch {}
-      try {
-        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
-        if (adminToken) headers['X-Admin-Token'] = String(adminToken)
-      } catch {}
-      const resp = await fetch('/api/admin/branches', { headers, credentials: 'same-origin' })
-      const data = await safeJson(resp)
-      if (!resp.ok || !Array.isArray(data?.branches)) throw new Error(data?.error || `HTTP ${resp.status}`)
+      const respNode = await fetch('/api/admin/branches', { headers: headersNode, credentials: 'same-origin' })
+      let data = await safeJson(respNode)
+      let ok = respNode.ok && Array.isArray(data?.branches)
+      if (!ok) {
+        const adminHeaders: Record<string, string> = { 'Accept': 'application/json' }
+        try {
+          const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+          if (adminToken) adminHeaders['X-Admin-Token'] = String(adminToken)
+        } catch {}
+        const respAdmin = await fetch('/admin/branches', { headers: adminHeaders, credentials: 'same-origin' })
+        data = await safeJson(respAdmin)
+        if (!respAdmin.ok || !Array.isArray(data?.branches)) throw new Error(data?.error || `HTTP ${respAdmin.status}`)
+      }
       const branches: string[] = data.branches
       const current: string = String(data.current || '')
       setBranchOptions(branches)
@@ -503,37 +509,65 @@ export const AdminPage: React.FC = () => {
         if (adminToken) headers['X-Admin-Token'] = String(adminToken)
       } catch {}
       const branchParam = selectedBranch ? `?branch=${encodeURIComponent(selectedBranch)}` : ''
-      const resp = await fetch(`/api/admin/pull-code/stream${branchParam}`, {
-        method: 'GET',
-        headers,
-        credentials: 'same-origin',
-      })
-      if (!resp.ok || !resp.body) {
-        const body = await safeJson(resp)
-        throw new Error(body?.error || `Stream failed (${resp.status})`)
+      let resp: Response | null = null
+      // Try Node server SSE first
+      try {
+        resp = await fetch(`/api/admin/pull-code/stream${branchParam}`, {
+          method: 'GET',
+          headers,
+          credentials: 'same-origin',
+        })
+      } catch {}
+      // Fallback to Admin API SSE if Node is down or forbidden
+      if (!resp || !resp.ok || !resp.body) {
+        const adminHeaders: Record<string, string> = {}
+        try {
+          const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+          if (adminToken) adminHeaders['X-Admin-Token'] = String(adminToken)
+        } catch {}
+        try {
+          resp = await fetch(`/admin/pull-code/stream${branchParam}`, {
+            method: 'GET',
+            headers: adminHeaders,
+            credentials: 'same-origin',
+          })
+        } catch {}
       }
-      const reader = resp.body.getReader()
-      const decoder = new TextDecoder()
-      let buf = ''
-      const append = (line: string) => appendConsole(line)
-      // Minimal SSE parser: handle lines starting with 'data:' and emit
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buf += decoder.decode(value, { stream: true })
-        let idx
-        while ((idx = buf.indexOf('\n')) >= 0) {
-          const raw = buf.slice(0, idx)
-          buf = buf.slice(idx + 1)
-          const line = raw.replace(/\r$/, '')
-          if (!line) continue
-          if (line.startsWith('data:')) {
-            const payload = line.slice(5).trimStart()
-            // Try to detect done events to know success
-            // no-op: payload may be JSON or plain text; still append for visibility
-            append(payload)
-          } else if (!/^(:|event:|id:|retry:)/.test(line)) {
-            append(line)
+      if (!resp || !resp.ok || !resp.body) {
+        // Last resort: fire-and-forget refresh via Admin API without stream
+        const adminHeadersBg: Record<string, string> = { 'Content-Type': 'application/json', 'Accept': 'application/json' }
+        try {
+          const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+          if (adminToken) adminHeadersBg['X-Admin-Token'] = String(adminToken)
+        } catch {}
+        const bg = await fetch(`/admin/pull-code${branchParam}`, { method: 'POST', headers: adminHeadersBg, credentials: 'same-origin', body: '{}' })
+        const bgBody = await safeJson(bg)
+        if (!bg.ok || bgBody?.ok !== true) {
+          throw new Error(bgBody?.error || `Refresh failed (${bg.status})`)
+        }
+        appendConsole('[pull] Started background refresh via Admin API.')
+        // Skip SSE consumption
+      } else {
+        const reader = resp.body.getReader()
+        const decoder = new TextDecoder()
+        let buf = ''
+        const append = (line: string) => appendConsole(line)
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buf += decoder.decode(value, { stream: true })
+          let idx
+          while ((idx = buf.indexOf('\n')) >= 0) {
+            const raw = buf.slice(0, idx)
+            buf = buf.slice(idx + 1)
+            const line = raw.replace(/\r$/, '')
+            if (!line) continue
+            if (line.startsWith('data:')) {
+              const payload = line.slice(5).trimStart()
+              append(payload)
+            } else if (!/^(:|event:|id:|retry:)/.test(line)) {
+              append(line)
+            }
           }
         }
       }
