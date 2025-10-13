@@ -724,7 +724,6 @@ export const AdminPage: React.FC = () => {
       if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`)
       const list: string[] = Array.isArray(data?.ips) ? data.ips.map((s: any) => String(s)).filter(Boolean) : []
       setIps(list)
-      setIpsUpdatedAt(Date.now())
     } catch {
       // keep last
     } finally {
