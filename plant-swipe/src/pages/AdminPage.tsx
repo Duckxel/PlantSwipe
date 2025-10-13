@@ -1338,11 +1338,9 @@ export const AdminPage: React.FC = () => {
                         aria-controls="connected-ips"
                       >
                         <ChevronDown className={`h-4 w-4 transition-transform ${ipsOpen ? 'rotate-180' : ''}`} />
-                        Connected IPs (last 60m)
-                        <span className="text-xs opacity-60">{ipsUpdatedAt ? `· Updated ${formatTimeAgo(ipsUpdatedAt)}` : ''}</span>
+                        IPs
                       </button>
                       <div className="flex items-center gap-2">
-                        <div className="text-xs opacity-60 hidden sm:block">{ips.length} IPs</div>
                         <Button
                           variant="outline"
                           size="icon"
@@ -1360,7 +1358,7 @@ export const AdminPage: React.FC = () => {
                         {ipsLoading ? (
                           <div className="text-sm opacity-60">Loading…</div>
                         ) : ips.length === 0 ? (
-                          <div className="text-sm opacity-60">No IPs connected in the last 60 minutes.</div>
+                          <div className="text-sm opacity-60">No IPs.</div>
                         ) : (
                           <div className="flex flex-wrap gap-1">
                             {ips.map((ip) => (
