@@ -550,10 +550,19 @@ function normalizeIp(ip) {
 
 function getClientIp(req) {
   const h = req.headers
+  // Prefer the first IP in X-Forwarded-For when present (left-most is original client)
   const xff = (h['x-forwarded-for'] || h['X-Forwarded-For'] || '').toString()
   if (xff) return normalizeIp(xff.split(',')[0].trim())
+  // Common CDN / proxy specific headers
   const cf = (h['cf-connecting-ip'] || h['CF-Connecting-IP'] || '').toString()
   if (cf) return normalizeIp(cf)
+  const trueClient = (h['true-client-ip'] || h['True-Client-IP'] || '').toString()
+  if (trueClient) return normalizeIp(trueClient)
+  const fastly = (h['fastly-client-ip'] || h['Fastly-Client-IP'] || '').toString()
+  if (fastly) return normalizeIp(fastly)
+  const xClientIp = (h['x-client-ip'] || h['X-Client-IP'] || '').toString()
+  if (xClientIp) return normalizeIp(xClientIp)
+  // Finally, fall back to X-Real-IP set by upstream (e.g., nginx) or the socket address
   const real = (h['x-real-ip'] || h['X-Real-IP'] || '').toString()
   if (real) return normalizeIp(real)
   return normalizeIp(req.ip || req.connection?.remoteAddress || '')
@@ -561,17 +570,163 @@ function getClientIp(req) {
 
 function getGeoFromHeaders(req) {
   const h = req.headers
-  const country = (h['x-vercel-ip-country'] || h['cf-ipcountry'] || h['x-geo-country'] || '').toString() || null
-  const region = (h['x-vercel-ip-region'] || h['x-geo-region'] || '').toString() || null
-  const city = (h['x-vercel-ip-city'] || h['x-geo-city'] || '').toString() || null
-  const lat = Number(h['x-vercel-ip-latitude'] || h['x-geo-latitude'] || '')
-  const lon = Number(h['x-vercel-ip-longitude'] || h['x-geo-longitude'] || '')
+  // Country detection from common providers (normalize to upper-case when likely a code)
+  const vercelCountry = (h['x-vercel-ip-country'] || '').toString()
+  const cfCountry = (h['cf-ipcountry'] || '').toString()
+  const geoCountry = (h['x-geo-country'] || '').toString()
+  const cfViewerCountry = (h['cloudfront-viewer-country'] || h['CloudFront-Viewer-Country'] || '').toString()
+  const appEngineCountry = (h['x-appengine-country'] || h['X-AppEngine-Country'] || '').toString()
+  const fastlyCountry = (h['x-fastly-geoip-country-code'] || h['fastly-geoip-country-code'] || '').toString()
+  const genericCountry = (h['x-country-code'] || '').toString()
+
+  const countryRaw = vercelCountry || cfCountry || geoCountry || cfViewerCountry || appEngineCountry || fastlyCountry || genericCountry || ''
+  const country = countryRaw && /^[a-z]{2}$/i.test(countryRaw) ? countryRaw.toUpperCase() : (countryRaw || null)
+
+  // Region/state detection
+  const vercelRegion = (h['x-vercel-ip-region'] || '').toString()
+  const geoRegion = (h['x-geo-region'] || '').toString()
+  const appEngineRegion = (h['x-appengine-region'] || h['X-AppEngine-Region'] || '').toString()
+  const region = vercelRegion || geoRegion || appEngineRegion || ''
+
+  // City detection
+  const vercelCity = (h['x-vercel-ip-city'] || '').toString()
+  const geoCity = (h['x-geo-city'] || '').toString()
+  const appEngineCity = (h['x-appengine-city'] || h['X-AppEngine-City'] || '').toString()
+  const city = vercelCity || geoCity || appEngineCity || ''
+
+  // Latitude / longitude
+  const latHeader = (h['x-vercel-ip-latitude'] || h['x-geo-latitude'] || '').toString()
+  const lonHeader = (h['x-vercel-ip-longitude'] || h['x-geo-longitude'] || '').toString()
+  let lat = Number(latHeader)
+  let lon = Number(lonHeader)
+
+  // App Engine packs city lat/long into a single header as "lat,long"
+  const appEngineLatLong = (h['x-appengine-citylatlong'] || h['X-AppEngine-CityLatLong'] || '').toString()
+  if ((!Number.isFinite(lat) || !Number.isFinite(lon)) && appEngineLatLong.includes(',')) {
+    const parts = appEngineLatLong.split(',')
+    const la = Number(parts[0])
+    const lo = Number(parts[1])
+    if (Number.isFinite(la) && Number.isFinite(lo)) { lat = la; lon = lo }
+  }
+
   return {
     geo_country: country || null,
     geo_region: region || null,
     geo_city: city || null,
     latitude: Number.isFinite(lat) ? lat : null,
     longitude: Number.isFinite(lon) ? lon : null,
+  }
+}
+
+// In-memory cache for IP -> geo lookups to avoid repeated external calls
+const geoCache = new Map()
+
+function isPrivateIp(ip) {
+  try {
+    const s = String(ip || '').toLowerCase()
+    if (!s) return true
+    if (s === '127.0.0.1' || s === '::1') return true
+    if (s.startsWith('10.')) return true
+    if (s.startsWith('192.168.')) return true
+    const first = s.split('.')
+    const a = Number(first[0]); const b = Number(first[1])
+    if (a === 172 && b >= 16 && b <= 31) return true
+    if (s.startsWith('fc') || s.startsWith('fd')) return true // IPv6 unique local
+    if (s.startsWith('fe80:')) return true // IPv6 link-local
+  } catch {}
+  return false
+}
+
+function geoDebugLog(...args) {
+  try {
+    const enabled = String(process.env.GEO_LOG_DEBUG || '').toLowerCase() === 'true'
+    if (enabled) console.log('[geo]', ...args)
+  } catch {}
+}
+
+async function lookupGeoForIp(ip) {
+  const key = `ip:${ip}`
+  const now = Date.now()
+  const ttlMs = 24 * 60 * 60 * 1000 // 24h
+  const cached = geoCache.get(key)
+  if (cached && (now - cached.ts < ttlMs)) {
+    return cached.val
+  }
+
+  if (!ip || isPrivateIp(ip)) {
+    const val = { geo_country: null, geo_region: null, geo_city: null, latitude: null, longitude: null }
+    geoCache.set(key, { ts: now, val })
+    return val
+  }
+
+  // Provider 1: ipapi.co (HTTPS, no key required for basic usage)
+  try {
+    const r = await fetch(`https://ipapi.co/${encodeURIComponent(ip)}/json/`, { method: 'GET', headers: { 'Accept': 'application/json' }, redirect: 'follow' })
+    if (r.ok) {
+      const j = await r.json().catch(() => null)
+      if (j && (j.country || j.region || j.city)) {
+        const val = {
+          geo_country: j.country ? String(j.country).toUpperCase() : null, // ISO code
+          geo_region: j.region || null,
+          geo_city: j.city || null,
+          latitude: Number.isFinite(Number(j.latitude)) ? Number(j.latitude) : null,
+          longitude: Number.isFinite(Number(j.longitude)) ? Number(j.longitude) : null,
+        }
+        geoCache.set(key, { ts: now, val })
+        geoDebugLog('ipapi.co resolved', ip, val)
+        return val
+      }
+    }
+  } catch (e) {
+    geoDebugLog('ipapi.co failed', ip, e?.message || String(e))
+  }
+
+  // Provider 2: ip-api.com (HTTP; keep as last resort)
+  try {
+    const r2 = await fetch(`http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,message,country,countryCode,regionName,city,lat,lon`, { method: 'GET', headers: { 'Accept': 'application/json' } })
+    if (r2.ok) {
+      const j2 = await r2.json().catch(() => null)
+      if (j2 && j2.status === 'success') {
+        const val = {
+          geo_country: j2.countryCode ? String(j2.countryCode).toUpperCase() : (j2.country || null),
+          geo_region: j2.regionName || null,
+          geo_city: j2.city || null,
+          latitude: Number.isFinite(Number(j2.lat)) ? Number(j2.lat) : null,
+          longitude: Number.isFinite(Number(j2.lon)) ? Number(j2.lon) : null,
+        }
+        geoCache.set(key, { ts: now, val })
+        geoDebugLog('ip-api.com resolved', ip, val)
+        return val
+      }
+    }
+  } catch (e) {
+    geoDebugLog('ip-api.com failed', ip, e?.message || String(e))
+  }
+
+  const val = { geo_country: null, geo_region: null, geo_city: null, latitude: null, longitude: null }
+  geoCache.set(key, { ts: now, val })
+  return val
+}
+
+async function resolveGeo(req, ipAddress) {
+  const headerGeo = getGeoFromHeaders(req)
+  const hasHeaderCountry = !!headerGeo.geo_country
+  const hasHeaderRegion = !!headerGeo.geo_region
+  const needsLookup = !hasHeaderCountry || !hasHeaderRegion
+
+  if (!needsLookup) return headerGeo
+
+  try {
+    const fromIp = await lookupGeoForIp(ipAddress)
+    return {
+      geo_country: headerGeo.geo_country || fromIp.geo_country || null,
+      geo_region: headerGeo.geo_region || fromIp.geo_region || null,
+      geo_city: headerGeo.geo_city || fromIp.geo_city || null,
+      latitude: headerGeo.latitude ?? fromIp.latitude ?? null,
+      longitude: headerGeo.longitude ?? fromIp.longitude ?? null,
+    }
+  } catch {
+    return headerGeo
   }
 }
 
@@ -588,6 +743,41 @@ function parseUtmFromUrl(urlOrPath) {
   } catch {
     return { utm_source: null, utm_medium: null, utm_campaign: null, utm_term: null, utm_content: null }
   }
+}
+
+function extractHostname(url) {
+  try {
+    const u = new URL(url)
+    return u.hostname || null
+  } catch {
+    try {
+      // Attempt to handle bare domains like "example.com/path"
+      const withProto = new URL(`http://${String(url || '').replace(/^\/+/, '')}`)
+      return withProto.hostname || null
+    } catch { return null }
+  }
+}
+
+function deriveTrafficSource(referrer, utm) {
+  const u = utm || {}
+  const hasUtm = !!(u.utm_source || u.source)
+  if (hasUtm) {
+    return {
+      traffic_source: 'utm',
+      traffic_details: {
+        source: u.utm_source || u.source || null,
+        medium: u.utm_medium || u.medium || null,
+        campaign: u.utm_campaign || u.campaign || null,
+        term: u.utm_term || u.term || null,
+        content: u.utm_content || u.content || null,
+      }
+    }
+  }
+  const domain = extractHostname(referrer || '')
+  if (domain) {
+    return { traffic_source: 'referral', traffic_details: { domain } }
+  }
+  return { traffic_source: 'direct', traffic_details: {} }
 }
 
 // Lightweight in-memory analytics as a resilient fallback when DB is unavailable
@@ -768,12 +958,12 @@ async function insertWebVisit({ sessionId, userId, pagePath, referrer, userAgent
       referrer: referrer || null,
       user_agent: userAgent || null,
       ip_address: ipAddress || null,
-      geo_country: geo?.geo_country || null,
+      geo_country: (geo?.geo_country && /^[a-z]{2}$/i.test(String(geo.geo_country))) ? String(geo.geo_country).toUpperCase() : (geo?.geo_country || null),
       geo_region: geo?.geo_region || null,
       geo_city: geo?.geo_city || null,
       latitude: geo?.latitude ?? null,
       longitude: geo?.longitude ?? null,
-      extra: extra || {},
+      extra: (() => { try { const { traffic_source, traffic_details } = deriveTrafficSource(referrer, parsedUtm); return { ...(extra || {}), traffic_source, traffic_details } } catch { return (extra || {}) } })(),
       visit_num: null,
       page_title: pageTitle || null,
       language: lang,
@@ -789,7 +979,7 @@ async function insertWebVisit({ sessionId, userId, pagePath, referrer, userAgent
       insert into public.web_visits
         (session_id, user_id, page_path, referrer, user_agent, ip_address, geo_country, geo_region, geo_city, latitude, longitude, extra, visit_num, page_title, language, utm_source, utm_medium, utm_campaign, utm_term, utm_content)
       values
-        (${sessionId}, ${userId || null}, ${pagePath}, ${referrer || null}, ${userAgent || null}, ${ipAddress || null}, ${geo?.geo_country || null}, ${geo?.geo_region || null}, ${geo?.geo_city || null}, ${geo?.latitude || null}, ${geo?.longitude || null}, ${extra ? sql.json(extra) : sql.json({})}, ${computedVisitNum}, ${pageTitle || null}, ${lang}, ${utm_source}, ${utm_medium}, ${utm_campaign}, ${utm_term}, ${utm_content})
+        (${sessionId}, ${userId || null}, ${pagePath}, ${referrer || null}, ${userAgent || null}, ${ipAddress || null}, ${(geo?.geo_country && /^[a-z]{2}$/i.test(String(geo.geo_country))) ? String(geo.geo_country).toUpperCase() : (geo?.geo_country || null)}, ${geo?.geo_region || null}, ${geo?.geo_city || null}, ${geo?.latitude || null}, ${geo?.longitude || null}, ${extra ? sql.json((() => { try { const { traffic_source, traffic_details } = deriveTrafficSource(referrer, parsedUtm); return { ...(extra || {}), traffic_source, traffic_details } } catch { return (extra || {}) } })()) : sql.json({})}, ${computedVisitNum}, ${pageTitle || null}, ${lang}, ${utm_source}, ${utm_medium}, ${utm_campaign}, ${utm_term}, ${utm_content})
     `
   } catch (e) {
     // On DB failure, attempt Supabase REST fallback (handles older schemas too)
@@ -800,12 +990,12 @@ async function insertWebVisit({ sessionId, userId, pagePath, referrer, userAgent
       referrer: referrer || null,
       user_agent: userAgent || null,
       ip_address: ipAddress || null,
-      geo_country: geo?.geo_country || null,
+      geo_country: (geo?.geo_country && /^[a-z]{2}$/i.test(String(geo.geo_country))) ? String(geo.geo_country).toUpperCase() : (geo?.geo_country || null),
       geo_region: geo?.geo_region || null,
       geo_city: geo?.geo_city || null,
       latitude: geo?.latitude ?? null,
       longitude: geo?.longitude ?? null,
-      extra: extra || {},
+      extra: (() => { try { const { traffic_source, traffic_details } = deriveTrafficSource(referrer, parsedUtm); return { ...(extra || {}), traffic_source, traffic_details } } catch { return (extra || {}) } })(),
       // Avoid computing visit_num via REST; leave null when falling back
       visit_num: null,
       page_title: pageTitle || null,
@@ -2389,9 +2579,9 @@ app.options('/api/admin/branches', (_req, res) => {
 app.post('/api/track-visit', async (req, res) => {
   try {
     const sessionId = getOrSetSessionId(req, res)
-    const { pagePath, referrer, userId, extra, pageTitle, language, utm } = req.body || {}
+    const { pagePath, referrer: bodyReferrer, userId, extra, pageTitle, language, utm } = req.body || {}
     const ipAddress = getClientIp(req)
-    const geo = getGeoFromHeaders(req)
+    const geo = await resolveGeo(req, ipAddress)
     const userAgent = req.get('user-agent') || ''
     const tokenUserId = await getUserIdFromRequest(req)
     const effectiveUserId = tokenUserId || (typeof userId === 'string' ? userId : null)
@@ -2401,6 +2591,7 @@ app.post('/api/track-visit', async (req, res) => {
     }
     const acceptLanguage = (req.get('accept-language') || '').split(',')[0] || null
     const lang = language || acceptLanguage
+    const referrer = (typeof bodyReferrer === 'string' && bodyReferrer.length > 0) ? bodyReferrer : (req.get('referer') || req.get('referrer') || '')
     await insertWebVisit({ sessionId, userId: effectiveUserId, pagePath, referrer, userAgent, ipAddress, geo, extra, pageTitle, language: lang, utm }, req)
     res.status(204).end()
   } catch (e) {
@@ -2701,11 +2892,13 @@ app.get('*', (req, res) => {
     const pagePath = req.originalUrl || req.path || '/'
     const referrer = req.get('referer') || req.get('referrer') || ''
     const ipAddress = getClientIp(req)
-    const geo = getGeoFromHeaders(req)
     const userAgent = req.get('user-agent') || ''
     const acceptLanguage = (req.get('accept-language') || '').split(',')[0] || null
-    getUserIdFromRequest(req)
-      .then((uid) => insertWebVisit({ sessionId, userId: uid || null, pagePath, referrer, userAgent, ipAddress, geo, extra: { source: 'initial_load' }, language: acceptLanguage }, req))
+    // Resolve geo asynchronously and do not block response rendering
+    resolveGeo(req, ipAddress)
+      .then((geo) => getUserIdFromRequest(req)
+        .then((uid) => insertWebVisit({ sessionId, userId: uid || null, pagePath, referrer, userAgent, ipAddress, geo, extra: { source: 'initial_load' }, language: acceptLanguage }, req))
+        .catch(() => {}))
       .catch(() => {})
   } catch {}
   res.sendFile(path.join(distDir, 'index.html'))
