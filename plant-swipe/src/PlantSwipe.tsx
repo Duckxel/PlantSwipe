@@ -227,7 +227,7 @@ export default function PlantSwipe() {
             userId: user?.id || null,
             pageTitle: document.title || null,
             language: navigator.language || (navigator as any).languages?.[0] || null,
-            utm: null,
+            // utm removed from server; not sent anymore
             extra,
           }),
           keepalive: true,
@@ -262,7 +262,6 @@ export default function PlantSwipe() {
             userId: user?.id || null,
             pageTitle: document.title || null,
             language: navigator.language || (navigator as any).languages?.[0] || null,
-            utm: null,
             extra: { source: 'heartbeat' },
           }),
           keepalive: true,

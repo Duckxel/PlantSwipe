@@ -100,6 +100,22 @@ do $$ begin
     );
 end $$;
 
+-- ========== Purge old web_visits (retention) ==========
+-- Keep only the last 35 days of visit data
+do $$ begin
+  if exists (select 1 from cron.job where jobname = 'purge_old_web_visits') then
+    perform cron.unschedule(jobid) from cron.job where jobname = 'purge_old_web_visits';
+  end if;
+  perform cron.schedule(
+    'purge_old_web_visits',
+    '0 3 * * *',
+    $cron$
+    delete from public.web_visits
+    where timezone('utc', occurred_at) < ((now() at time zone 'utc')::date - interval '35 days');
+    $cron$
+  );
+end $$;
+
 -- ========== Plants (catalog) ==========
 create table if not exists public.plants (
   id text primary key,
@@ -1855,8 +1871,6 @@ create table if not exists public.web_visits (
   geo_country text,
   geo_region text,
   geo_city text,
-  latitude double precision,
-  longitude double precision,
   extra jsonb not null default '{}'::jsonb
 );
 
@@ -1864,11 +1878,14 @@ create table if not exists public.web_visits (
 alter table if exists public.web_visits add column if not exists visit_num integer;
 alter table if exists public.web_visits add column if not exists page_title text;
 alter table if exists public.web_visits add column if not exists language text;
-alter table if exists public.web_visits add column if not exists utm_source text;
-alter table if exists public.web_visits add column if not exists utm_medium text;
-alter table if exists public.web_visits add column if not exists utm_campaign text;
-alter table if exists public.web_visits add column if not exists utm_term text;
-alter table if exists public.web_visits add column if not exists utm_content text;
+-- Remove deprecated marketing and coordinate columns
+alter table if exists public.web_visits drop column if exists utm_source;
+alter table if exists public.web_visits drop column if exists utm_medium;
+alter table if exists public.web_visits drop column if exists utm_campaign;
+alter table if exists public.web_visits drop column if exists utm_term;
+alter table if exists public.web_visits drop column if exists utm_content;
+alter table if exists public.web_visits drop column if exists latitude;
+alter table if exists public.web_visits drop column if exists longitude;
 
 -- Helpful indexes
 create index if not exists web_visits_occurred_at_idx on public.web_visits (occurred_at desc);
@@ -2065,6 +2082,53 @@ as $$
   order by d asc;
 $$;
 grant execute on function public.get_visitors_series_days(integer) to anon, authenticated;
+
+-- Top countries in last N days (default 30)
+create or replace function public.get_top_countries(_days integer default 30, _limit integer default 10)
+returns table(country text, visits integer)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with cutoff as (
+    select (now() at time zone 'utc')::date - make_interval(days => greatest(0, coalesce(_days, 30) - 1)) as d
+  )
+  select upper(v.geo_country) as country,
+         count(distinct v.ip_address)::int as visits
+  from public.web_visits v
+  where timezone('utc', v.occurred_at) >= (select d from cutoff)
+    and v.geo_country is not null and v.geo_country <> ''
+  group by 1
+  order by visits desc
+  limit greatest(1, coalesce(_limit, 10));
+$$;
+grant execute on function public.get_top_countries(integer, integer) to anon, authenticated;
+
+-- Top referrers (domains) in last N days (default 30)
+create or replace function public.get_top_referrers(_days integer default 30, _limit integer default 10)
+returns table(source text, visits integer)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with cutoff as (
+    select (now() at time zone 'utc')::date - make_interval(days => greatest(0, coalesce(_days, 30) - 1)) as d
+  )
+  select case
+           when v.referrer is null or v.referrer = '' then 'direct'
+           when v.referrer ilike 'http%' then split_part(split_part(v.referrer, '://', 2), '/', 1)
+           else v.referrer
+         end as source,
+         count(distinct v.ip_address)::int as visits
+  from public.web_visits v
+  where timezone('utc', v.occurred_at) >= (select d from cutoff)
+  group by 1
+  order by visits desc
+  limit greatest(1, coalesce(_limit, 10));
+$$;
+grant execute on function public.get_top_referrers(integer, integer) to anon, authenticated;
 
 -- User-specific daily visit counts for last N days (default 30)
 create or replace function public.get_user_visits_series_days(_user_id uuid, _days integer default 30)

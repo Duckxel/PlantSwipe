@@ -14,6 +14,9 @@ import {
   YAxis,
   Tooltip,
   ReferenceLine,
+  PieChart,
+  Pie,
+  Cell,
 } from 'recharts'
 import { RefreshCw, Server, Database, Github, ExternalLink, ShieldCheck, ShieldX, UserSearch, AlertTriangle, Gavel, Search, ChevronDown, GitBranch } from "lucide-react"
 import { supabase } from '@/lib/supabaseClient'
@@ -29,6 +32,20 @@ import {
 } from '@/components/ui/dialog'
 
 export const AdminPage: React.FC = () => {
+  const countryCodeToName = React.useCallback((code: string): string => {
+    try {
+      const c = String(code || '').toUpperCase()
+      if (!c) return ''
+      if ((Intl as any)?.DisplayNames) {
+        try {
+          const dn = new (Intl as any).DisplayNames([navigator.language || 'en'], { type: 'region' })
+          const name = dn.of(c)
+          return name || c
+        } catch {}
+      }
+      return c
+    } catch { return code }
+  }, [])
 
   const [syncing, setSyncing] = React.useState(false)
   
@@ -297,6 +314,13 @@ export const AdminPage: React.FC = () => {
   const [visitorsUpdatedAt, setVisitorsUpdatedAt] = React.useState<number | null>(null)
   const [visitorsSeries, setVisitorsSeries] = React.useState<Array<{ date: string; uniqueVisitors: number }>>([])
   const [visitorsTotalUnique7d, setVisitorsTotalUnique7d] = React.useState<number>(0)
+  const [topCountries, setTopCountries] = React.useState<Array<{ country: string; visits: number; pct?: number }>>([])
+  const [otherCountries, setOtherCountries] = React.useState<{ count: number; visits: number; pct?: number } | null>(null)
+  const [topReferrers, setTopReferrers] = React.useState<Array<{ source: string; visits: number; pct?: number }>>([])
+  const [otherReferrers, setOtherReferrers] = React.useState<{ count: number; visits: number; pct?: number } | null>(null)
+  // Distinct, high-contrast palette for readability
+  const countryColors = ['#10b981','#3b82f6','#ef4444','#f59e0b','#8b5cf6','#14b8a6','#6366f1','#d946ef','#06b6d4','#84cc16','#fb7185','#f97316']
+  const referrerColors = ['#111827','#3b82f6','#ef4444','#10b981','#f59e0b','#8b5cf6']
   // Connected IPs (last 60 minutes)
   const [ips, setIps] = React.useState<string[]>([])
   const [ipsLoading, setIpsLoading] = React.useState<boolean>(true)
@@ -772,12 +796,13 @@ export const AdminPage: React.FC = () => {
   }, [loadOnlineIpsList])
 
   // Load visitors stats (last 7 days)
+  const [visitorsWindowDays, setVisitorsWindowDays] = React.useState<7 | 30>(7)
   const loadVisitorsStats = React.useCallback(async (opts?: { initial?: boolean }) => {
     const isInitial = !!opts?.initial
     if (isInitial) setVisitorsLoading(true)
     else setVisitorsRefreshing(true)
     try {
-      const resp = await fetch('/api/admin/visitors-stats', {
+      const resp = await fetch(`/api/admin/visitors-stats?days=${visitorsWindowDays}`, {
         headers: { 'Accept': 'application/json' },
         credentials: 'same-origin',
       })
@@ -799,6 +824,36 @@ export const AdminPage: React.FC = () => {
           setVisitorsTotalUnique7d(Number.isFinite(total7d) ? total7d : 0)
         }
       } catch {}
+      // Load sources breakdown in parallel
+      try {
+        const sb = await fetch(`/api/admin/sources-breakdown?days=${visitorsWindowDays}`, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+        const sbd = await safeJson(sb)
+        if (sb.ok) {
+          const tc = Array.isArray(sbd?.topCountries)
+            ? sbd.topCountries.map((r: { country?: string; visits?: number }) => ({ country: String(r.country || ''), visits: Number(r.visits || 0) }))
+                .filter((x: { country: string }) => !!x.country)
+            : []
+          const oc = sbd?.otherCountries && typeof sbd.otherCountries === 'object' ? { count: Number(sbd.otherCountries.count || 0), visits: Number(sbd.otherCountries.visits || 0) } : null
+          const totalCountryVisits = tc.reduce((a: number, b: any) => a + (b.visits || 0), 0) + (oc?.visits || 0)
+          const countriesWithPct = totalCountryVisits > 0
+            ? tc.map((x: { country: string; visits: number }) => ({ ...x, pct: (x.visits / totalCountryVisits) * 100 }))
+            : tc.map((x: { country: string; visits: number }) => ({ ...x, pct: 0 }))
+          const ocWithPct = oc ? { ...oc, pct: totalCountryVisits > 0 ? (oc.visits / totalCountryVisits) * 100 : 0 } : null
+
+          const tr = Array.isArray(sbd?.topReferrers) ? sbd.topReferrers.map((r: { source?: string; visits?: number }) => ({ source: String(r.source || 'direct'), visits: Number(r.visits || 0) })) : []
+          const orf = sbd?.otherReferrers && typeof sbd.otherReferrers === 'object' ? { count: Number(sbd.otherReferrers.count || 0), visits: Number(sbd.otherReferrers.visits || 0) } : null
+          const totalRefVisits = tr.reduce((a: number, b: any) => a + (b.visits || 0), 0) + (orf?.visits || 0)
+          const refsWithPct = totalRefVisits > 0
+            ? tr.map((x: { source: string; visits: number }) => ({ ...x, pct: (x.visits / totalRefVisits) * 100 }))
+            : tr.map((x: { source: string; visits: number }) => ({ ...x, pct: 0 }))
+          const orfWithPct = orf ? { ...orf, pct: totalRefVisits > 0 ? (orf.visits / totalRefVisits) * 100 : 0 } : null
+
+          setTopCountries(countriesWithPct)
+          setOtherCountries(ocWithPct)
+          setTopReferrers(refsWithPct)
+          setOtherReferrers(orfWithPct)
+        }
+      } catch {}
       setVisitorsUpdatedAt(Date.now())
     } catch {
       // keep last known
@@ -806,7 +861,7 @@ export const AdminPage: React.FC = () => {
       if (isInitial) setVisitorsLoading(false)
       else setVisitorsRefreshing(false)
     }
-  }, [])
+  }, [visitorsWindowDays, safeJson])
 
   React.useEffect(() => {
     loadVisitorsStats({ initial: true })
@@ -1466,7 +1521,23 @@ export const AdminPage: React.FC = () => {
               <CardContent className="p-4">
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <div>
-                    <div className="text-sm font-medium">Unique visitors — last 7 days</div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-sm font-medium">Unique visitors — last {visitorsWindowDays} days</div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          className={`text-xs px-2 py-1 rounded-lg border ${visitorsWindowDays === 7 ? 'bg-black text-white' : 'bg-white'}`}
+                          onClick={() => setVisitorsWindowDays(7)}
+                          aria-pressed={visitorsWindowDays === 7}
+                        >7d</button>
+                        <button
+                          type="button"
+                          className={`text-xs px-2 py-1 rounded-lg border ${visitorsWindowDays === 30 ? 'bg-black text-white' : 'bg-white'}`}
+                          onClick={() => setVisitorsWindowDays(30)}
+                          aria-pressed={visitorsWindowDays === 30}
+                        >30d</button>
+                      </div>
+                    </div>
                     <div className="text-xs opacity-60">{visitorsUpdatedAt ? `Updated ${formatTimeAgo(visitorsUpdatedAt)}` : 'Updated —'}</div>
                   </div>
                   <Button
@@ -1477,7 +1548,7 @@ export const AdminPage: React.FC = () => {
                     disabled={visitorsLoading || visitorsRefreshing}
                     className="h-8 w-8 rounded-xl border bg-white text-black hover:bg-stone-50"
                   >
-                    <RefreshCw className={`h-4 w-4 ${visitorsLoading || visitorsRefreshing ? 'animate-spin' : ''}`} />
+                      <RefreshCw className={`h-4 w-4 ${visitorsLoading || visitorsRefreshing ? 'animate-spin' : ''}`} />
                   </Button>
                 </div>
 
@@ -1497,6 +1568,7 @@ export const AdminPage: React.FC = () => {
 
                     const formatDow = (isoDate: string) => {
                       try {
+                        if (visitorsWindowDays === 30) return ''
                         const dt = new Date(isoDate + 'T00:00:00Z')
                         return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dt.getUTCDay()]
                       } catch {
@@ -1540,7 +1612,7 @@ export const AdminPage: React.FC = () => {
                     return (
                       <div>
                         <div className="text-sm font-medium mb-2">Total for the whole week: <span className="tabular-nums">{totalVal}</span></div>
-                        <div className="h-64">
+                        <div className="h-72 w-full max-w-5xl mx-auto px-2 sm:px-4">
                           <ResponsiveContainer width="100%" height="100%">
                             <ComposedChart
                               data={visitorsSeries}
@@ -1595,6 +1667,89 @@ export const AdminPage: React.FC = () => {
                               />
                             </ComposedChart>
                           </ResponsiveContainer>
+                        </div>
+                        {/* Sources breakdown */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
+                          <div className="rounded-xl border p-3 md:col-span-2">
+                            <div className="text-sm font-medium mb-2">Top countries</div>
+                            {topCountries.length === 0 ? (
+                              <div className="text-sm opacity-60">No data.</div>
+                            ) : (
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <div className="col-span-2 min-h-[150px]">
+                                  <ResponsiveContainer width="100%" height={150}>
+                                    <PieChart>
+                                      <Pie
+                                        data={topCountries}
+                                        dataKey="visits"
+                                        nameKey="country"
+                                        innerRadius={36}
+                                        outerRadius={64}
+                                        paddingAngle={3}
+                                      >
+                                        {(() => {
+                                          const slices: Array<{ country: string; visits: number }> = [...topCountries]
+                                          if (otherCountries && otherCountries.visits > 0) {
+                                            slices.push({ country: `Other (${otherCountries.count})`, visits: otherCountries.visits })
+                                          }
+                                          return slices.map((entry, index) => (
+                                            <Cell key={`cell-${entry.country}`} fill={countryColors[index % countryColors.length]} />
+                                          ))
+                                        })()}
+                                      </Pie>
+                                    </PieChart>
+                                  </ResponsiveContainer>
+                                </div>
+                                <div className="flex flex-col gap-2">
+                                  {topCountries.slice(0, 3).map((c, idx) => (
+                                    <div key={c.country} className="flex items-center justify-between">
+                                      <div className="flex-1 flex items-center gap-2 min-w-0">
+                                        <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: countryColors[idx % countryColors.length] }} />
+                                        <span className="text-sm truncate">{countryCodeToName(c.country)}</span>
+                                      </div>
+                                      <span className="text-sm tabular-nums">{Math.round(c.pct || 0)}%</span>
+                                    </div>
+                                  ))}
+                                  {otherCountries && otherCountries.visits > 0 && (
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex-1 flex items-center gap-2 min-w-0">
+                                        <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: countryColors[4 % countryColors.length] }} />
+                                        <span className="text-sm truncate">Other ({otherCountries.count})</span>
+                                      </div>
+                                      <span className="text-sm tabular-nums">{Math.round(otherCountries?.pct || 0)}%</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                          <div className="rounded-xl border p-3 md:col-span-1">
+                            <div className="text-sm font-medium mb-2">Top referrers</div>
+                            {topReferrers.length === 0 ? (
+                              <div className="text-sm opacity-60">No data.</div>
+                            ) : (
+                              <div className="flex flex-col gap-2">
+                                {topReferrers.slice(0, 5).map((r, idx) => (
+                                  <div key={r.source} className="flex items-center justify-between">
+                                    <div className="flex-1 flex items-center gap-2 min-w-0">
+                                      <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: referrerColors[idx % referrerColors.length] }} />
+                                      <span className="text-sm truncate">{r.source}</span>
+                                    </div>
+                                    <span className="text-sm tabular-nums">{Math.round(r.pct || 0)}%</span>
+                                  </div>
+                                ))}
+                                {otherReferrers && otherReferrers.visits > 0 && (
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex-1 flex items-center gap-2 min-w-0">
+                                      <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: referrerColors[4 % referrerColors.length] }} />
+                                      <span className="text-sm truncate">Other ({otherReferrers.count})</span>
+                                    </div>
+                                    <span className="text-sm tabular-nums">{Math.round(otherReferrers.pct || 0)}%</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     )
