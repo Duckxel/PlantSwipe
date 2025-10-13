@@ -2718,7 +2718,7 @@ app.get('/api/admin/sources-breakdown', async (req, res) => {
         sql`select * from public.get_top_countries(${days}, ${10})`,
         sql`select * from public.get_top_referrers(${days}, ${10})`,
       ])
-      const topCountries = (countries || []).map(r => ({ country: (r.country || 'UNKNOWN'), visits: Number(r.visits || 0) }))
+      const topCountries = (countries || []).map(r => ({ country: (r.country || ''), visits: Number(r.visits || 0) })).filter(c => c.country)
       const topReferrers = (referrers || []).map(r => ({ source: String(r.source || 'direct'), visits: Number(r.visits || 0) }))
       res.json({ ok: true, topCountries, topReferrers, via: 'database' })
       return
@@ -2737,7 +2737,7 @@ app.get('/api/admin/sources-breakdown', async (req, res) => {
       ])
       const cData = cr.ok ? await cr.json().catch(() => []) : []
       const rData = rr.ok ? await rr.json().catch(() => []) : []
-      const topCountries = (Array.isArray(cData) ? cData : []).map((r) => ({ country: String(r.country || 'UNKNOWN'), visits: Number(r.visits || 0) }))
+      const topCountries = (Array.isArray(cData) ? cData : []).map((r) => ({ country: String(r.country || ''), visits: Number(r.visits || 0) })).filter(c => !!c.country)
       const topReferrers = (Array.isArray(rData) ? rData : []).map((r) => ({ source: String(r.source || 'direct'), visits: Number(r.visits || 0) }))
       res.json({ ok: true, topCountries, topReferrers, via: 'supabase' })
       return

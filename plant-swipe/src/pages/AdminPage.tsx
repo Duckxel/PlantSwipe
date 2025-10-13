@@ -14,6 +14,9 @@ import {
   YAxis,
   Tooltip,
   ReferenceLine,
+  PieChart,
+  Pie,
+  Cell,
 } from 'recharts'
 import { RefreshCw, Server, Database, Github, ExternalLink, ShieldCheck, ShieldX, UserSearch, AlertTriangle, Gavel, Search, ChevronDown, GitBranch } from "lucide-react"
 import { supabase } from '@/lib/supabaseClient'
@@ -29,6 +32,20 @@ import {
 } from '@/components/ui/dialog'
 
 export const AdminPage: React.FC = () => {
+  const countryCodeToName = React.useCallback((code: string): string => {
+    try {
+      const c = String(code || '').toUpperCase()
+      if (!c) return ''
+      if ((Intl as any)?.DisplayNames) {
+        try {
+          const dn = new (Intl as any).DisplayNames([navigator.language || 'en'], { type: 'region' })
+          const name = dn.of(c)
+          return name || c
+        } catch {}
+      }
+      return c
+    } catch { return code }
+  }, [])
 
   const [syncing, setSyncing] = React.useState(false)
   
@@ -299,6 +316,7 @@ export const AdminPage: React.FC = () => {
   const [visitorsTotalUnique7d, setVisitorsTotalUnique7d] = React.useState<number>(0)
   const [topCountries, setTopCountries] = React.useState<Array<{ country: string; visits: number }>>([])
   const [topReferrers, setTopReferrers] = React.useState<Array<{ source: string; visits: number }>>([])
+  const countryColors = ['#111827','#1f2937','#374151','#4b5563','#6b7280','#9ca3af','#d1d5db','#e5e7eb','#f3f4f6','#9CA3AF']
   // Connected IPs (last 60 minutes)
   const [ips, setIps] = React.useState<string[]>([])
   const [ipsLoading, setIpsLoading] = React.useState<boolean>(true)
@@ -804,10 +822,10 @@ export const AdminPage: React.FC = () => {
       } catch {}
       // Load sources breakdown in parallel
       try {
-        const sb = await fetch('/api/admin/sources-breakdown', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+        const sb = await fetch(`/api/admin/sources-breakdown?days=${visitorsWindowDays}`, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
         const sbd = await safeJson(sb)
         if (sb.ok) {
-          const tc = Array.isArray(sbd?.topCountries) ? sbd.topCountries.map((r: any) => ({ country: String(r.country || 'UNKNOWN'), visits: Number(r.visits || 0) })) : []
+          const tc = Array.isArray(sbd?.topCountries) ? sbd.topCountries.map((r: any) => ({ country: String(r.country || ''), visits: Number(r.visits || 0) })).filter((x: any) => x.country) : []
           const tr = Array.isArray(sbd?.topReferrers) ? sbd.topReferrers.map((r: any) => ({ source: String(r.source || 'direct'), visits: Number(r.visits || 0) })) : []
           setTopCountries(tc)
           setTopReferrers(tr)
@@ -1634,13 +1652,36 @@ export const AdminPage: React.FC = () => {
                             {topCountries.length === 0 ? (
                               <div className="text-sm opacity-60">No data.</div>
                             ) : (
-                              <div className="flex flex-wrap gap-2">
-                                {topCountries.map((c) => (
-                                  <Badge key={c.country} variant="outline" className="rounded-full">
-                                    <span className="mr-1">{c.country}</span>
-                                    <span className="tabular-nums">{c.visits}</span>
-                                  </Badge>
-                                ))}
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <div className="col-span-2 min-h-[180px]">
+                                  <ResponsiveContainer width="100%" height={180}>
+                                    <PieChart>
+                                      <Pie
+                                        data={topCountries}
+                                        dataKey="visits"
+                                        nameKey="country"
+                                        innerRadius={50}
+                                        outerRadius={80}
+                                        paddingAngle={2}
+                                      >
+                                        {topCountries.map((entry, index) => (
+                                          <Cell key={`cell-${entry.country}`} fill={countryColors[index % countryColors.length]} />
+                                        ))}
+                                      </Pie>
+                                    </PieChart>
+                                  </ResponsiveContainer>
+                                </div>
+                                <div className="flex flex-col gap-2">
+                                  {topCountries.slice(0, 3).map((c, idx) => (
+                                    <div key={c.country} className="flex items-center justify-between">
+                                      <div className="flex items-center gap-2">
+                                        <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: countryColors[idx % countryColors.length] }} />
+                                        <span className="text-sm">{countryCodeToName(c.country)}</span>
+                                      </div>
+                                      <span className="text-sm tabular-nums">{c.visits}</span>
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
                             )}
                           </div>
@@ -1649,12 +1690,15 @@ export const AdminPage: React.FC = () => {
                             {topReferrers.length === 0 ? (
                               <div className="text-sm opacity-60">No data.</div>
                             ) : (
-                              <div className="flex flex-wrap gap-2">
-                                {topReferrers.map((r) => (
-                                  <Badge key={r.source} variant="outline" className="rounded-full">
-                                    <span className="mr-1">{r.source}</span>
-                                    <span className="tabular-nums">{r.visits}</span>
-                                  </Badge>
+                              <div className="flex flex-col gap-2">
+                                {topReferrers.slice(0, 3).map((r, idx) => (
+                                  <div key={r.source} className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: '#111827' }} />
+                                      <span className="text-sm break-all">{r.source}</span>
+                                    </div>
+                                    <span className="text-sm tabular-nums">{r.visits}</span>
+                                  </div>
                                 ))}
                               </div>
                             )}

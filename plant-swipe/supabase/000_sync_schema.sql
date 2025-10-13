@@ -2094,10 +2094,11 @@ as $$
   with cutoff as (
     select (now() at time zone 'utc')::date - make_interval(days => greatest(0, coalesce(_days, 30) - 1)) as d
   )
-  select coalesce(upper(v.geo_country), 'UNKNOWN') as country,
+  select upper(v.geo_country) as country,
          count(*)::int as visits
   from public.web_visits v
   where timezone('utc', v.occurred_at) >= (select d from cutoff)
+    and v.geo_country is not null and v.geo_country <> ''
   group by 1
   order by visits desc
   limit greatest(1, coalesce(_limit, 10));
