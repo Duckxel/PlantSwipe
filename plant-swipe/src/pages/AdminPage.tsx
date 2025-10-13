@@ -316,7 +316,9 @@ export const AdminPage: React.FC = () => {
   const [visitorsTotalUnique7d, setVisitorsTotalUnique7d] = React.useState<number>(0)
   const [topCountries, setTopCountries] = React.useState<Array<{ country: string; visits: number }>>([])
   const [topReferrers, setTopReferrers] = React.useState<Array<{ source: string; visits: number }>>([])
-  const countryColors = ['#111827','#1f2937','#374151','#4b5563','#6b7280','#9ca3af','#d1d5db','#e5e7eb','#f3f4f6','#9CA3AF']
+  // Distinct, high-contrast palette for readability
+  const countryColors = ['#10b981','#3b82f6','#ef4444','#f59e0b','#8b5cf6','#14b8a6','#6366f1','#d946ef','#06b6d4','#84cc16','#fb7185','#f97316']
+  const referrerColors = ['#111827','#3b82f6','#ef4444','#10b981','#f59e0b','#8b5cf6']
   // Connected IPs (last 60 minutes)
   const [ips, setIps] = React.useState<string[]>([])
   const [ipsLoading, setIpsLoading] = React.useState<boolean>(true)
@@ -1653,16 +1655,16 @@ export const AdminPage: React.FC = () => {
                               <div className="text-sm opacity-60">No data.</div>
                             ) : (
                               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                <div className="col-span-2 min-h-[180px]">
-                                  <ResponsiveContainer width="100%" height={180}>
+                                <div className="col-span-2 min-h-[150px]">
+                                  <ResponsiveContainer width="100%" height={150}>
                                     <PieChart>
                                       <Pie
                                         data={topCountries}
                                         dataKey="visits"
                                         nameKey="country"
-                                        innerRadius={50}
-                                        outerRadius={80}
-                                        paddingAngle={2}
+                                        innerRadius={36}
+                                        outerRadius={64}
+                                        paddingAngle={3}
                                       >
                                         {topCountries.map((entry, index) => (
                                           <Cell key={`cell-${entry.country}`} fill={countryColors[index % countryColors.length]} />
@@ -1691,10 +1693,10 @@ export const AdminPage: React.FC = () => {
                               <div className="text-sm opacity-60">No data.</div>
                             ) : (
                               <div className="flex flex-col gap-2">
-                                {topReferrers.slice(0, 3).map((r) => (
+                                {topReferrers.slice(0, 3).map((r, idx) => (
                                   <div key={r.source} className="flex items-center justify-between">
                                     <div className="flex items-center gap-2">
-                                      <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: '#111827' }} />
+                                      <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: referrerColors[idx % referrerColors.length] }} />
                                       <span className="text-sm break-all">{r.source}</span>
                                     </div>
                                     <span className="text-sm tabular-nums">{r.visits}</span>
