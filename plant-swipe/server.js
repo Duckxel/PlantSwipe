@@ -2715,7 +2715,7 @@ app.get('/api/admin/sources-breakdown', async (req, res) => {
       const daysParam = Number(req.query.days || 30)
       const days = (daysParam === 7 ? 7 : 30)
       const [countries, referrers] = await Promise.all([
-        sql`select * from public.get_top_countries(${days}, ${10})`,
+        sql`select * from public.get_top_countries(${days}, ${10000})`,
         sql`select * from public.get_top_referrers(${days}, ${10})`,
       ])
       const topCountries = (countries || []).map(r => ({ country: (r.country || ''), visits: Number(r.visits || 0) })).filter(c => c.country)
@@ -2732,7 +2732,7 @@ app.get('/api/admin/sources-breakdown', async (req, res) => {
       const days = (daysParam === 7 ? 7 : 30)
       // Prefer RPCs for reliable grouping
       const [cr, rr] = await Promise.all([
-        fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_top_countries`, { method: 'POST', headers, body: JSON.stringify({ _days: days, _limit: 10 }) }),
+        fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_top_countries`, { method: 'POST', headers, body: JSON.stringify({ _days: days, _limit: 10000 }) }),
         fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_top_referrers`, { method: 'POST', headers, body: JSON.stringify({ _days: days, _limit: 10 }) }),
       ])
       const cData = cr.ok ? await cr.json().catch(() => []) : []

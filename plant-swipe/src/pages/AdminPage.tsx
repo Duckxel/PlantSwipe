@@ -828,9 +828,13 @@ export const AdminPage: React.FC = () => {
         const sbd = await safeJson(sb)
         if (sb.ok) {
           const tc = Array.isArray(sbd?.topCountries) ? sbd.topCountries.map((r: any) => ({ country: String(r.country || ''), visits: Number(r.visits || 0) })).filter((x: any) => x.country) : []
+          const totalCountryVisits = tc.reduce((a: number, b: any) => a + (b.visits || 0), 0) || 0
+          const countriesWithPct = totalCountryVisits > 0 ? tc.map(x => ({ ...x, pct: (x.visits / totalCountryVisits) * 100 })) : tc.map(x => ({ ...x, pct: 0 }))
           const tr = Array.isArray(sbd?.topReferrers) ? sbd.topReferrers.map((r: any) => ({ source: String(r.source || 'direct'), visits: Number(r.visits || 0) })) : []
-          setTopCountries(tc)
-          setTopReferrers(tr)
+          const totalRefVisits = tr.reduce((a: number, b: any) => a + (b.visits || 0), 0) || 0
+          const refsWithPct = totalRefVisits > 0 ? tr.map(x => ({ ...x, pct: (x.visits / totalRefVisits) * 100 })) : tr.map(x => ({ ...x, pct: 0 }))
+          setTopCountries(countriesWithPct)
+          setTopReferrers(refsWithPct)
         }
       } catch {}
       setVisitorsUpdatedAt(Date.now())
@@ -1680,7 +1684,7 @@ export const AdminPage: React.FC = () => {
                                         <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: countryColors[idx % countryColors.length] }} />
                                         <span className="text-sm">{countryCodeToName(c.country)}</span>
                                       </div>
-                                      <span className="text-sm tabular-nums">{c.visits}</span>
+                                      <span className="text-sm tabular-nums">{Math.round(c.pct)}%</span>
                                     </div>
                                   ))}
                                 </div>
@@ -1699,7 +1703,7 @@ export const AdminPage: React.FC = () => {
                                       <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: referrerColors[idx % referrerColors.length] }} />
                                       <span className="text-sm break-all">{r.source}</span>
                                     </div>
-                                    <span className="text-sm tabular-nums">{r.visits}</span>
+                                    <span className="text-sm tabular-nums">{Math.round(r.pct)}%</span>
                                   </div>
                                 ))}
                               </div>
