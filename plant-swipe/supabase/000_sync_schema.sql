@@ -1988,6 +1988,56 @@ as $$
 $$;
 grant execute on function public.get_user_distinct_ips(uuid) to anon, authenticated;
 
+-- Admin helpers: list distinct users by IP with last seen
+create or replace function public.get_users_by_ip(_ip text)
+returns table(id uuid, last_seen_at timestamptz)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select v.user_id as id,
+         max(v.occurred_at) as last_seen_at
+  from public.web_visits v
+  where v.ip_address = _ip::inet
+  group by v.user_id
+  order by last_seen_at desc
+$$;
+grant execute on function public.get_users_by_ip(text) to anon, authenticated;
+
+-- Admin helpers: aggregates for a given IP
+create or replace function public.count_ip_connections(_ip text)
+returns integer
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce((select count(*)::int from public.web_visits where ip_address = _ip::inet), 0);
+$$;
+grant execute on function public.count_ip_connections(text) to anon, authenticated;
+
+create or replace function public.count_ip_unique_users(_ip text)
+returns integer
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce((select count(distinct user_id)::int from public.web_visits where ip_address = _ip::inet), 0);
+$$;
+grant execute on function public.count_ip_unique_users(text) to anon, authenticated;
+
+create or replace function public.get_ip_last_seen(_ip text)
+returns timestamptz
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select max(occurred_at) from public.web_visits where ip_address = _ip::inet;
+$$;
+grant execute on function public.get_ip_last_seen(text) to anon, authenticated;
 -- Daily unique visitors series for the last N days in UTC (default 7)
 create or replace function public.get_visitors_series_days(_days integer default 7)
 returns table(date text, unique_visitors integer)

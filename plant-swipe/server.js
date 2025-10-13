@@ -1454,34 +1454,28 @@ app.get('/api/admin/members-by-ip', async (req, res) => {
       const tb = b.last_seen_at ? new Date(b.last_seen_at).getTime() : 0
       return tb - ta
     })
-    // Aggregate: connections count
+    // Aggregates via RPCs to avoid RLS surprises
     let connectionsCount = 0
-    try {
-      const vc = await fetch(`${supabaseUrlEnv}/rest/v1/web_visits?ip_address=eq.${encodeURIComponent(ip)}&select=id`, {
-        headers: { ...headers, 'Prefer': 'count=exact', 'Range': '0-0' },
-      })
-      const cr = vc.headers.get('content-range') || ''
-      const m = cr.match(/\/(\d+)$/)
-      if (m) connectionsCount = Number(m[1])
-    } catch {}
-    // Aggregate: last seen at
     let lastSeenAt = null
-    try {
-      const lr = await fetch(`${supabaseUrlEnv}/rest/v1/web_visits?ip_address=eq.${encodeURIComponent(ip)}&select=occurred_at&order=occurred_at.desc&limit=1`, { headers })
-      if (lr.ok) {
-        const arr = await lr.json().catch(() => [])
-        if (Array.isArray(arr) && arr[0]) lastSeenAt = arr[0].occurred_at || null
-      }
-    } catch {}
-    // Aggregate: users count (distinct)
     let usersCount = users.length
     try {
-      const ur = await fetch(`${supabaseUrlEnv}/rest/v1/web_visits?ip_address=eq.${encodeURIComponent(ip)}&select=user_id&distinct`, {
-        headers: { ...headers, 'Prefer': 'count=exact', 'Range': '0-0' },
-      })
-      const cr = ur.headers.get('content-range') || ''
-      const m = cr.match(/\/(\d+)$/)
-      if (m) usersCount = Number(m[1])
+      const [connResp, usersResp, lastResp] = await Promise.all([
+        fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_ip_connections`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ _ip: ip }) }),
+        fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_ip_unique_users`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ _ip: ip }) }),
+        fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_ip_last_seen`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ _ip: ip }) }),
+      ])
+      if (connResp.ok) {
+        const val = await connResp.json().catch(() => 0)
+        if (typeof val === 'number') connectionsCount = val
+      }
+      if (usersResp.ok) {
+        const val = await usersResp.json().catch(() => users.length)
+        if (typeof val === 'number') usersCount = val
+      }
+      if (lastResp.ok) {
+        const val = await lastResp.json().catch(() => null)
+        if (val) lastSeenAt = val
+      }
     } catch {}
 
     res.json({ ok: true, ip, usersCount, connectionsCount, lastSeenAt, users, via: 'supabase' })
