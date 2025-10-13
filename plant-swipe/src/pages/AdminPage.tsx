@@ -829,13 +829,13 @@ export const AdminPage: React.FC = () => {
         const sb = await fetch(`/api/admin/sources-breakdown?days=${visitorsWindowDays}`, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
         const sbd = await safeJson(sb)
         if (sb.ok) {
-          const tc = Array.isArray(sbd?.topCountries) ? sbd.topCountries.map((r: any) => ({ country: String(r.country || ''), visits: Number(r.visits || 0) })).filter((x: any) => x.country) : []
+          const tc = Array.isArray(sbd?.topCountries) ? sbd.topCountries.map((r: { country?: string; visits?: number }) => ({ country: String(r.country || ''), visits: Number(r.visits || 0) })).filter((x) => x.country) : []
           const oc = sbd?.otherCountries && typeof sbd.otherCountries === 'object' ? { count: Number(sbd.otherCountries.count || 0), visits: Number(sbd.otherCountries.visits || 0) } : null
           const totalCountryVisits = tc.reduce((a: number, b: any) => a + (b.visits || 0), 0) + (oc?.visits || 0)
           const countriesWithPct = totalCountryVisits > 0 ? tc.map(x => ({ ...x, pct: (x.visits / totalCountryVisits) * 100 })) : tc.map(x => ({ ...x, pct: 0 }))
           const ocWithPct = oc ? { ...oc, pct: totalCountryVisits > 0 ? (oc.visits / totalCountryVisits) * 100 : 0 } : null
 
-          const tr = Array.isArray(sbd?.topReferrers) ? sbd.topReferrers.map((r: any) => ({ source: String(r.source || 'direct'), visits: Number(r.visits || 0) })) : []
+          const tr = Array.isArray(sbd?.topReferrers) ? sbd.topReferrers.map((r: { source?: string; visits?: number }) => ({ source: String(r.source || 'direct'), visits: Number(r.visits || 0) })) : []
           const orf = sbd?.otherReferrers && typeof sbd.otherReferrers === 'object' ? { count: Number(sbd.otherReferrers.count || 0), visits: Number(sbd.otherReferrers.visits || 0) } : null
           const totalRefVisits = tr.reduce((a: number, b: any) => a + (b.visits || 0), 0) + (orf?.visits || 0)
           const refsWithPct = totalRefVisits > 0 ? tr.map(x => ({ ...x, pct: (x.visits / totalRefVisits) * 100 })) : tr.map(x => ({ ...x, pct: 0 }))
@@ -1681,7 +1681,7 @@ export const AdminPage: React.FC = () => {
                                         paddingAngle={3}
                                       >
                                         {(() => {
-                                          const slices = [...topCountries]
+                                          const slices: Array<{ country: string; visits: number }> = [...topCountries]
                                           if (otherCountries && otherCountries.visits > 0) {
                                             slices.push({ country: `Other (${otherCountries.count})`, visits: otherCountries.visits })
                                           }
@@ -1700,7 +1700,7 @@ export const AdminPage: React.FC = () => {
                                         <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: countryColors[idx % countryColors.length] }} />
                                         <span className="text-sm">{countryCodeToName(c.country)}</span>
                                       </div>
-                                      <span className="text-sm tabular-nums">{Math.round(c.pct)}%</span>
+                                      <span className="text-sm tabular-nums">{Math.round(c.pct || 0)}%</span>
                                     </div>
                                   ))}
                                   {otherCountries && otherCountries.visits > 0 && (
@@ -1709,7 +1709,7 @@ export const AdminPage: React.FC = () => {
                                         <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: countryColors[4 % countryColors.length] }} />
                                         <span className="text-sm">Other ({otherCountries.count})</span>
                                       </div>
-                                      <span className="text-sm tabular-nums">{Math.round(otherCountries.pct || 0)}%</span>
+                                      <span className="text-sm tabular-nums">{Math.round(otherCountries?.pct || 0)}%</span>
                                     </div>
                                   )}
                                 </div>

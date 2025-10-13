@@ -2095,7 +2095,7 @@ as $$
     select (now() at time zone 'utc')::date - make_interval(days => greatest(0, coalesce(_days, 30) - 1)) as d
   )
   select upper(v.geo_country) as country,
-         count(*)::int as visits
+         count(distinct v.ip_address)::int as visits
   from public.web_visits v
   where timezone('utc', v.occurred_at) >= (select d from cutoff)
     and v.geo_country is not null and v.geo_country <> ''
@@ -2121,7 +2121,7 @@ as $$
            when v.referrer ilike 'http%' then split_part(split_part(v.referrer, '://', 2), '/', 1)
            else v.referrer
          end as source,
-         count(*)::int as visits
+         count(distinct v.ip_address)::int as visits
   from public.web_visits v
   where timezone('utc', v.occurred_at) >= (select d from cutoff)
   group by 1
