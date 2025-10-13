@@ -1108,16 +1108,17 @@ app.get('/api/admin/member', async (req, res) => {
         }
       } catch {}
 
-      // Distinct IPs (best-effort; requires Authorization due to RLS)
+      // Distinct IPs via security-definer RPC to ensure completeness
       let ips = []
       try {
-        const ipRes = await fetch(`${supabaseUrlEnv}/rest/v1/web_visits?user_id=eq.${encodeURIComponent(targetId)}&select=ip_address&order=ip_address.asc`, {
-          headers: baseHeaders,
+        const ipRes = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_user_distinct_ips`, {
+          method: 'POST',
+          headers: { ...baseHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ _user_id: targetId }),
         })
         if (ipRes.ok) {
           const arr = await ipRes.json().catch(() => [])
-          const set = new Set(arr.map(r => r && r.ip_address ? String(r.ip_address) : null).filter(Boolean))
-          ips = Array.from(set)
+          ips = Array.isArray(arr) ? arr.map((r) => String(r.ip)).filter(Boolean) : []
         }
       } catch {}
 
@@ -1413,9 +1414,25 @@ app.get('/api/admin/members-by-ip', async (req, res) => {
     for (const p of Array.isArray(profiles) ? profiles : []) {
       idToDisplay.set(String(p.id), p?.display_name ? String(p.display_name) : null)
     }
+    // Fetch emails via security-definer RPC to bypass RLS on auth.users
+    let emails = []
+    try {
+      const emailResp = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_emails_by_user_ids`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ _ids: userIds }),
+      })
+      if (emailResp.ok) {
+        emails = await emailResp.json().catch(() => [])
+      }
+    } catch {}
+    const idToEmail = new Map()
+    for (const r of Array.isArray(emails) ? emails : []) {
+      if (r && r.id) idToEmail.set(String(r.id), r?.email ? String(r.email) : null)
+    }
     const users = userIds.map((id) => ({
       id,
-      email: null,
+      email: idToEmail.get(id) || null,
       display_name: idToDisplay.get(id) || null,
       last_seen_at: userIdToLastSeen.get(id) || null,
     }))

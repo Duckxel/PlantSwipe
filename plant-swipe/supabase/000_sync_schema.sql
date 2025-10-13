@@ -1958,6 +1958,36 @@ as $$
 $$;
 grant execute on function public.count_unique_ips_last_days(integer) to anon, authenticated;
 
+-- Admin helpers: fetch emails for a list of user IDs (uses auth.users)
+create or replace function public.get_emails_by_user_ids(_ids uuid[])
+returns table(id uuid, email text)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select u.id, u.email
+  from auth.users u
+  where u.id = any(_ids)
+  order by u.created_at desc
+$$;
+grant execute on function public.get_emails_by_user_ids(uuid[]) to anon, authenticated;
+
+-- Admin helpers: return distinct IPs for a given user id
+create or replace function public.get_user_distinct_ips(_user_id uuid)
+returns table(ip text)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select distinct v.ip_address::text as ip
+  from public.web_visits v
+  where v.user_id = _user_id and v.ip_address is not null
+  order by ip asc
+$$;
+grant execute on function public.get_user_distinct_ips(uuid) to anon, authenticated;
+
 -- Daily unique visitors series for the last N days in UTC (default 7)
 create or replace function public.get_visitors_series_days(_days integer default 7)
 returns table(date text, unique_visitors integer)
