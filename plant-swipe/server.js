@@ -594,27 +594,10 @@ function getGeoFromHeaders(req) {
   const appEngineCity = (h['x-appengine-city'] || h['X-AppEngine-City'] || '').toString()
   const city = vercelCity || geoCity || appEngineCity || ''
 
-  // Latitude / longitude
-  const latHeader = (h['x-vercel-ip-latitude'] || h['x-geo-latitude'] || '').toString()
-  const lonHeader = (h['x-vercel-ip-longitude'] || h['x-geo-longitude'] || '').toString()
-  let lat = Number(latHeader)
-  let lon = Number(lonHeader)
-
-  // App Engine packs city lat/long into a single header as "lat,long"
-  const appEngineLatLong = (h['x-appengine-citylatlong'] || h['X-AppEngine-CityLatLong'] || '').toString()
-  if ((!Number.isFinite(lat) || !Number.isFinite(lon)) && appEngineLatLong.includes(',')) {
-    const parts = appEngineLatLong.split(',')
-    const la = Number(parts[0])
-    const lo = Number(parts[1])
-    if (Number.isFinite(la) && Number.isFinite(lo)) { lat = la; lon = lo }
-  }
-
   return {
     geo_country: country || null,
     geo_region: region || null,
     geo_city: city || null,
-    latitude: Number.isFinite(lat) ? lat : null,
-    longitude: Number.isFinite(lon) ? lon : null,
   }
 }
 
@@ -654,7 +637,7 @@ async function lookupGeoForIp(ip) {
   }
 
   if (!ip || isPrivateIp(ip)) {
-    const val = { geo_country: null, geo_region: null, geo_city: null, latitude: null, longitude: null }
+    const val = { geo_country: null, geo_region: null, geo_city: null }
     geoCache.set(key, { ts: now, val })
     return val
   }
@@ -669,8 +652,6 @@ async function lookupGeoForIp(ip) {
           geo_country: j.country ? String(j.country).toUpperCase() : null, // ISO code
           geo_region: j.region || null,
           geo_city: j.city || null,
-          latitude: Number.isFinite(Number(j.latitude)) ? Number(j.latitude) : null,
-          longitude: Number.isFinite(Number(j.longitude)) ? Number(j.longitude) : null,
         }
         geoCache.set(key, { ts: now, val })
         geoDebugLog('ipapi.co resolved', ip, val)
@@ -683,7 +664,7 @@ async function lookupGeoForIp(ip) {
 
   // Provider 2: ip-api.com (HTTP; keep as last resort)
   try {
-    const r2 = await fetch(`http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,message,country,countryCode,regionName,city,lat,lon`, { method: 'GET', headers: { 'Accept': 'application/json' } })
+    const r2 = await fetch(`http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,message,country,countryCode,regionName,city`, { method: 'GET', headers: { 'Accept': 'application/json' } })
     if (r2.ok) {
       const j2 = await r2.json().catch(() => null)
       if (j2 && j2.status === 'success') {
@@ -691,8 +672,6 @@ async function lookupGeoForIp(ip) {
           geo_country: j2.countryCode ? String(j2.countryCode).toUpperCase() : (j2.country || null),
           geo_region: j2.regionName || null,
           geo_city: j2.city || null,
-          latitude: Number.isFinite(Number(j2.lat)) ? Number(j2.lat) : null,
-          longitude: Number.isFinite(Number(j2.lon)) ? Number(j2.lon) : null,
         }
         geoCache.set(key, { ts: now, val })
         geoDebugLog('ip-api.com resolved', ip, val)
@@ -703,7 +682,7 @@ async function lookupGeoForIp(ip) {
     geoDebugLog('ip-api.com failed', ip, e?.message || String(e))
   }
 
-  const val = { geo_country: null, geo_region: null, geo_city: null, latitude: null, longitude: null }
+  const val = { geo_country: null, geo_region: null, geo_city: null }
   geoCache.set(key, { ts: now, val })
   return val
 }
@@ -722,26 +701,9 @@ async function resolveGeo(req, ipAddress) {
       geo_country: headerGeo.geo_country || fromIp.geo_country || null,
       geo_region: headerGeo.geo_region || fromIp.geo_region || null,
       geo_city: headerGeo.geo_city || fromIp.geo_city || null,
-      latitude: headerGeo.latitude ?? fromIp.latitude ?? null,
-      longitude: headerGeo.longitude ?? fromIp.longitude ?? null,
     }
   } catch {
     return headerGeo
-  }
-}
-
-function parseUtmFromUrl(urlOrPath) {
-  try {
-    const u = new URL(urlOrPath, 'http://local')
-    return {
-      utm_source: u.searchParams.get('utm_source'),
-      utm_medium: u.searchParams.get('utm_medium'),
-      utm_campaign: u.searchParams.get('utm_campaign'),
-      utm_term: u.searchParams.get('utm_term'),
-      utm_content: u.searchParams.get('utm_content'),
-    }
-  } catch {
-    return { utm_source: null, utm_medium: null, utm_campaign: null, utm_term: null, utm_content: null }
   }
 }
 
@@ -758,21 +720,7 @@ function extractHostname(url) {
   }
 }
 
-function deriveTrafficSource(referrer, utm) {
-  const u = utm || {}
-  const hasUtm = !!(u.utm_source || u.source)
-  if (hasUtm) {
-    return {
-      traffic_source: 'utm',
-      traffic_details: {
-        source: u.utm_source || u.source || null,
-        medium: u.utm_medium || u.medium || null,
-        campaign: u.utm_campaign || u.campaign || null,
-        term: u.utm_term || u.term || null,
-        content: u.utm_content || u.content || null,
-      }
-    }
-  }
+function deriveTrafficSource(referrer) {
   const domain = extractHostname(referrer || '')
   if (domain) {
     return { traffic_source: 'referral', traffic_details: { domain } }
@@ -921,8 +869,6 @@ async function insertWebVisitViaSupabaseRest(payload, req) {
       geo_country: payload.geo_country ?? null,
       geo_region: payload.geo_region ?? null,
       geo_city: payload.geo_city ?? null,
-      latitude: payload.latitude ?? null,
-      longitude: payload.longitude ?? null,
       extra: payload.extra ?? {},
     }
     const minResp = await fetch(`${supabaseUrlEnv}/rest/v1/web_visits`, {
@@ -936,17 +882,12 @@ async function insertWebVisitViaSupabaseRest(payload, req) {
   }
 }
 
-async function insertWebVisit({ sessionId, userId, pagePath, referrer, userAgent, ipAddress, geo, extra, pageTitle, language, utm, visitNum }, req) {
+async function insertWebVisit({ sessionId, userId, pagePath, referrer, userAgent, ipAddress, geo, extra, pageTitle, language, visitNum }, req) {
   // Always record into in-memory analytics, regardless of DB availability
   try { memAnalytics.recordVisit(String(ipAddress || ''), Date.now()) } catch {}
 
   // Prepare common fields
-  const parsedUtm = utm || parseUtmFromUrl(pagePath || '/')
-  const utm_source = parsedUtm?.utm_source || parsedUtm?.source || null
-  const utm_medium = parsedUtm?.utm_medium || parsedUtm?.medium || null
-  const utm_campaign = parsedUtm?.utm_campaign || parsedUtm?.campaign || null
-  const utm_term = parsedUtm?.utm_term || parsedUtm?.term || null
-  const utm_content = parsedUtm?.utm_content || parsedUtm?.content || null
+  const parsedUtm = null
   const lang = language || null
 
   // If no direct DB, try Supabase REST immediately
@@ -961,13 +902,10 @@ async function insertWebVisit({ sessionId, userId, pagePath, referrer, userAgent
       geo_country: (geo?.geo_country && /^[a-z]{2}$/i.test(String(geo.geo_country))) ? String(geo.geo_country).toUpperCase() : (geo?.geo_country || null),
       geo_region: geo?.geo_region || null,
       geo_city: geo?.geo_city || null,
-      latitude: geo?.latitude ?? null,
-      longitude: geo?.longitude ?? null,
-      extra: (() => { try { const { traffic_source, traffic_details } = deriveTrafficSource(referrer, parsedUtm); return { ...(extra || {}), traffic_source, traffic_details } } catch { return (extra || {}) } })(),
+      extra: (() => { try { const { traffic_source, traffic_details } = deriveTrafficSource(referrer); return { ...(extra || {}), traffic_source, traffic_details } } catch { return (extra || {}) } })(),
       visit_num: null,
       page_title: pageTitle || null,
       language: lang,
-      utm_source, utm_medium, utm_campaign, utm_term, utm_content,
     }
     await insertWebVisitViaSupabaseRest(restPayload, req)
     return
@@ -977,9 +915,9 @@ async function insertWebVisit({ sessionId, userId, pagePath, referrer, userAgent
     const computedVisitNum = Number.isFinite(visitNum) ? visitNum : await computeNextVisitNum(sessionId)
     await sql`
       insert into public.web_visits
-        (session_id, user_id, page_path, referrer, user_agent, ip_address, geo_country, geo_region, geo_city, latitude, longitude, extra, visit_num, page_title, language, utm_source, utm_medium, utm_campaign, utm_term, utm_content)
+        (session_id, user_id, page_path, referrer, user_agent, ip_address, geo_country, geo_region, geo_city, extra, visit_num, page_title, language)
       values
-        (${sessionId}, ${userId || null}, ${pagePath}, ${referrer || null}, ${userAgent || null}, ${ipAddress || null}, ${(geo?.geo_country && /^[a-z]{2}$/i.test(String(geo.geo_country))) ? String(geo.geo_country).toUpperCase() : (geo?.geo_country || null)}, ${geo?.geo_region || null}, ${geo?.geo_city || null}, ${geo?.latitude || null}, ${geo?.longitude || null}, ${extra ? sql.json((() => { try { const { traffic_source, traffic_details } = deriveTrafficSource(referrer, parsedUtm); return { ...(extra || {}), traffic_source, traffic_details } } catch { return (extra || {}) } })()) : sql.json({})}, ${computedVisitNum}, ${pageTitle || null}, ${lang}, ${utm_source}, ${utm_medium}, ${utm_campaign}, ${utm_term}, ${utm_content})
+        (${sessionId}, ${userId || null}, ${pagePath}, ${referrer || null}, ${userAgent || null}, ${ipAddress || null}, ${(geo?.geo_country && /^[a-z]{2}$/i.test(String(geo.geo_country))) ? String(geo.geo_country).toUpperCase() : (geo?.geo_country || null)}, ${geo?.geo_region || null}, ${geo?.geo_city || null}, ${extra ? sql.json((() => { try { const { traffic_source, traffic_details } = deriveTrafficSource(referrer); return { ...(extra || {}), traffic_source, traffic_details } } catch { return (extra || {}) } })()) : sql.json({})}, ${computedVisitNum}, ${pageTitle || null}, ${lang})
     `
   } catch (e) {
     // On DB failure, attempt Supabase REST fallback (handles older schemas too)
@@ -993,14 +931,11 @@ async function insertWebVisit({ sessionId, userId, pagePath, referrer, userAgent
       geo_country: (geo?.geo_country && /^[a-z]{2}$/i.test(String(geo.geo_country))) ? String(geo.geo_country).toUpperCase() : (geo?.geo_country || null),
       geo_region: geo?.geo_region || null,
       geo_city: geo?.geo_city || null,
-      latitude: geo?.latitude ?? null,
-      longitude: geo?.longitude ?? null,
-      extra: (() => { try { const { traffic_source, traffic_details } = deriveTrafficSource(referrer, parsedUtm); return { ...(extra || {}), traffic_source, traffic_details } } catch { return (extra || {}) } })(),
+      extra: (() => { try { const { traffic_source, traffic_details } = deriveTrafficSource(referrer); return { ...(extra || {}), traffic_source, traffic_details } } catch { return (extra || {}) } })(),
       // Avoid computing visit_num via REST; leave null when falling back
       visit_num: null,
       page_title: pageTitle || null,
       language: lang,
-      utm_source, utm_medium, utm_campaign, utm_term, utm_content,
     }
     await insertWebVisitViaSupabaseRest(restPayload, req)
   }
@@ -2579,7 +2514,7 @@ app.options('/api/admin/branches', (_req, res) => {
 app.post('/api/track-visit', async (req, res) => {
   try {
     const sessionId = getOrSetSessionId(req, res)
-    const { pagePath, referrer: bodyReferrer, userId, extra, pageTitle, language, utm } = req.body || {}
+    const { pagePath, referrer: bodyReferrer, userId, extra, pageTitle, language } = req.body || {}
     const ipAddress = getClientIp(req)
     const geo = await resolveGeo(req, ipAddress)
     const userAgent = req.get('user-agent') || ''
@@ -2592,7 +2527,7 @@ app.post('/api/track-visit', async (req, res) => {
     const acceptLanguage = (req.get('accept-language') || '').split(',')[0] || null
     const lang = language || acceptLanguage
     const referrer = (typeof bodyReferrer === 'string' && bodyReferrer.length > 0) ? bodyReferrer : (req.get('referer') || req.get('referrer') || '')
-    await insertWebVisit({ sessionId, userId: effectiveUserId, pagePath, referrer, userAgent, ipAddress, geo, extra, pageTitle, language: lang, utm }, req)
+    await insertWebVisit({ sessionId, userId: effectiveUserId, pagePath, referrer, userAgent, ipAddress, geo, extra, pageTitle, language: lang }, req)
     res.status(204).end()
   } catch (e) {
     res.status(500).json({ error: 'Failed to record visit' })

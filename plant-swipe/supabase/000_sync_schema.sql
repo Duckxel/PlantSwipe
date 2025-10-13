@@ -1855,8 +1855,6 @@ create table if not exists public.web_visits (
   geo_country text,
   geo_region text,
   geo_city text,
-  latitude double precision,
-  longitude double precision,
   extra jsonb not null default '{}'::jsonb
 );
 
@@ -1864,11 +1862,14 @@ create table if not exists public.web_visits (
 alter table if exists public.web_visits add column if not exists visit_num integer;
 alter table if exists public.web_visits add column if not exists page_title text;
 alter table if exists public.web_visits add column if not exists language text;
-alter table if exists public.web_visits add column if not exists utm_source text;
-alter table if exists public.web_visits add column if not exists utm_medium text;
-alter table if exists public.web_visits add column if not exists utm_campaign text;
-alter table if exists public.web_visits add column if not exists utm_term text;
-alter table if exists public.web_visits add column if not exists utm_content text;
+-- Remove deprecated marketing and coordinate columns
+alter table if exists public.web_visits drop column if exists utm_source;
+alter table if exists public.web_visits drop column if exists utm_medium;
+alter table if exists public.web_visits drop column if exists utm_campaign;
+alter table if exists public.web_visits drop column if exists utm_term;
+alter table if exists public.web_visits drop column if exists utm_content;
+alter table if exists public.web_visits drop column if exists latitude;
+alter table if exists public.web_visits drop column if exists longitude;
 
 -- Helpful indexes
 create index if not exists web_visits_occurred_at_idx on public.web_visits (occurred_at desc);
