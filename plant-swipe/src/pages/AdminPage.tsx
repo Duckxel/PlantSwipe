@@ -271,7 +271,6 @@ export const AdminPage: React.FC = () => {
   const [ips, setIps] = React.useState<string[]>([])
   const [ipsLoading, setIpsLoading] = React.useState<boolean>(true)
   const [ipsRefreshing, setIpsRefreshing] = React.useState<boolean>(false)
-  const [ipsUpdatedAt, setIpsUpdatedAt] = React.useState<number | null>(null)
   const [ipsOpen, setIpsOpen] = React.useState<boolean>(false)
   // Tick every minute to update the "Updated X ago" label without refetching
   const [nowMs, setNowMs] = React.useState<number>(() => Date.now())
@@ -1317,11 +1316,11 @@ export const AdminPage: React.FC = () => {
                       variant="outline"
                       size="icon"
                       aria-label="Refresh currently online"
-                      onClick={() => loadOnlineUsers({ initial: false })}
-                      disabled={onlineLoading || onlineRefreshing}
+                      onClick={() => { loadOnlineUsers({ initial: false }); loadOnlineIpsList({ initial: false }) }}
+                      disabled={onlineLoading || onlineRefreshing || ipsLoading || ipsRefreshing}
                       className="h-8 w-8 rounded-xl border bg-white text-black hover:bg-stone-50"
                     >
-                      <RefreshCw className={`h-4 w-4 ${onlineLoading || onlineRefreshing ? 'animate-spin' : ''}`} />
+                      <RefreshCw className={`h-4 w-4 ${(onlineLoading || onlineRefreshing || ipsLoading || ipsRefreshing) ? 'animate-spin' : ''}`} />
                     </Button>
                   </div>
                   <div className="text-2xl font-semibold tabular-nums mt-1">
@@ -1340,18 +1339,7 @@ export const AdminPage: React.FC = () => {
                         <ChevronDown className={`h-4 w-4 transition-transform ${ipsOpen ? 'rotate-180' : ''}`} />
                         IPs
                       </button>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          aria-label="Refresh IP list"
-                          onClick={() => loadOnlineIpsList({ initial: false })}
-                          disabled={ipsLoading || ipsRefreshing}
-                          className="h-8 w-8 rounded-xl border bg-white text-black hover:bg-stone-50"
-                        >
-                          <RefreshCw className={`h-4 w-4 ${ipsLoading || ipsRefreshing ? 'animate-spin' : ''}`} />
-                        </Button>
-                      </div>
+                      <div className="flex items-center gap-2" />
                     </div>
                     {ipsOpen && (
                       <div className="mt-2" id="connected-ips">
