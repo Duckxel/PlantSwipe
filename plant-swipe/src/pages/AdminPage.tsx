@@ -297,6 +297,8 @@ export const AdminPage: React.FC = () => {
   const [visitorsUpdatedAt, setVisitorsUpdatedAt] = React.useState<number | null>(null)
   const [visitorsSeries, setVisitorsSeries] = React.useState<Array<{ date: string; uniqueVisitors: number }>>([])
   const [visitorsTotalUnique7d, setVisitorsTotalUnique7d] = React.useState<number>(0)
+  const [topCountries, setTopCountries] = React.useState<Array<{ country: string; visits: number }>>([])
+  const [topReferrers, setTopReferrers] = React.useState<Array<{ source: string; visits: number }>>([])
   // Connected IPs (last 60 minutes)
   const [ips, setIps] = React.useState<string[]>([])
   const [ipsLoading, setIpsLoading] = React.useState<boolean>(true)
@@ -797,6 +799,17 @@ export const AdminPage: React.FC = () => {
         if (totalResp.ok) {
           const total7d = Number(totalData?.uniqueIps7d ?? totalData?.weeklyUniqueIps7d ?? 0)
           setVisitorsTotalUnique7d(Number.isFinite(total7d) ? total7d : 0)
+        }
+      } catch {}
+      // Load sources breakdown in parallel
+      try {
+        const sb = await fetch('/api/admin/sources-breakdown', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+        const sbd = await safeJson(sb)
+        if (sb.ok) {
+          const tc = Array.isArray(sbd?.topCountries) ? sbd.topCountries.map((r: any) => ({ country: String(r.country || 'UNKNOWN'), visits: Number(r.visits || 0) })) : []
+          const tr = Array.isArray(sbd?.topReferrers) ? sbd.topReferrers.map((r: any) => ({ source: String(r.source || 'direct'), visits: Number(r.visits || 0) })) : []
+          setTopCountries(tc)
+          setTopReferrers(tr)
         }
       } catch {}
       setVisitorsUpdatedAt(Date.now())
@@ -1595,6 +1608,39 @@ export const AdminPage: React.FC = () => {
                               />
                             </ComposedChart>
                           </ResponsiveContainer>
+                        </div>
+                        {/* Sources breakdown */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+                          <div className="rounded-xl border p-3">
+                            <div className="text-sm font-medium mb-2">Top countries</div>
+                            {topCountries.length === 0 ? (
+                              <div className="text-sm opacity-60">No data.</div>
+                            ) : (
+                              <div className="flex flex-wrap gap-2">
+                                {topCountries.map((c) => (
+                                  <Badge key={c.country} variant="outline" className="rounded-full">
+                                    <span className="mr-1">{c.country}</span>
+                                    <span className="tabular-nums">{c.visits}</span>
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <div className="rounded-xl border p-3">
+                            <div className="text-sm font-medium mb-2">Top referrers</div>
+                            {topReferrers.length === 0 ? (
+                              <div className="text-sm opacity-60">No data.</div>
+                            ) : (
+                              <div className="flex flex-wrap gap-2">
+                                {topReferrers.map((r) => (
+                                  <Badge key={r.source} variant="outline" className="rounded-full">
+                                    <span className="mr-1">{r.source}</span>
+                                    <span className="tabular-nums">{r.visits}</span>
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     )
