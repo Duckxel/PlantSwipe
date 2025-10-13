@@ -56,6 +56,7 @@ export const AdminPage: React.FC = () => {
   const [consoleOpen, setConsoleOpen] = React.useState<boolean>(false)
   const [consoleLines, setConsoleLines] = React.useState<string[]>([])
   const [reloadReady, setReloadReady] = React.useState<boolean>(false)
+  const [preRestartNotice, setPreRestartNotice] = React.useState<boolean>(false)
   const consoleRef = React.useRef<HTMLDivElement | null>(null)
   React.useEffect(() => {
     if (!consoleOpen) return
@@ -207,6 +208,7 @@ export const AdminPage: React.FC = () => {
       setConsoleOpen(true)
       appendConsole('[restart] Restart requested…')
       setReloadReady(false)
+      setPreRestartNotice(false)
       const session = (await supabase.auth.getSession()).data.session
       const token = session?.access_token
       if (!token) {
@@ -612,12 +614,16 @@ export const AdminPage: React.FC = () => {
           throw new Error(bgBody?.error || `Refresh failed (${bg.status})`)
         }
         appendConsole('[pull] Started background refresh via Admin API.')
-        // Skip SSE consumption
+        appendConsole('[pull] Not restarting services automatically without build status. Use streamed mode to auto-restart.')
+        // Skip SSE consumption and do not restart services automatically
       } else {
         const reader = resp.body.getReader()
         const decoder = new TextDecoder()
         let buf = ''
         const append = (line: string) => appendConsole(line)
+        let currentEvent: string | null = null
+        let sawDoneEvent = false
+        let buildOk = false
         while (true) {
           const { done, value } = await reader.read()
           if (done) break
@@ -628,17 +634,37 @@ export const AdminPage: React.FC = () => {
             buf = buf.slice(idx + 1)
             const line = raw.replace(/\r$/, '')
             if (!line) continue
-            if (line.startsWith('data:')) {
+            if (line.startsWith('event:')) {
+              currentEvent = line.slice(6).trim()
+            } else if (line.startsWith('data:')) {
               const payload = line.slice(5).trimStart()
+              if (currentEvent === 'done') {
+                try {
+                  const obj = JSON.parse(payload)
+                  if (obj && typeof obj.ok === 'boolean') {
+                    sawDoneEvent = true
+                    buildOk = !!obj.ok
+                  }
+                } catch {}
+              }
               append(payload)
             } else if (!/^(:|event:|id:|retry:)/.test(line)) {
               append(line)
             }
           }
         }
+        const success = sawDoneEvent && buildOk
+        if (!success) {
+          if (!sawDoneEvent) appendConsole('[pull] Stream finished without a terminal result; not restarting automatically.')
+          if (sawDoneEvent && !buildOk) appendConsole('[pull] Build or validation failed. Website remains on the previous version; not restarting services.')
+          return
+        }
       }
 
-      // Ensure both Admin API and Node API are restarted after build
+      // Show a non-blocking orange notice just before restarts
+      setPreRestartNotice(true)
+
+      // Ensure both Admin API and Node API are restarted after successful build
       try {
         const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
         if (adminToken) {
@@ -1240,6 +1266,12 @@ export const AdminPage: React.FC = () => {
           {/* Health monitor */}
           <Card className="rounded-2xl">
             <CardContent className="p-4">
+              {preRestartNotice && (
+                <div className="mb-3 rounded-xl border bg-amber-100 p-3 flex items-center justify-between gap-3">
+                  <div className="text-sm text-amber-900">New version built. Page info may be outdated. We will restart services now; the site will stay up. You can reload anytime.</div>
+                  <Button className="rounded-xl" variant="outline" onClick={reloadPage}>Reload now</Button>
+                </div>
+              )}
               {reloadReady && (
                 <div className="mb-3 rounded-xl border bg-amber-50/70 p-3 flex items-center justify-between gap-3">
                   <div className="text-sm">Server restart complete. Reload when convenient.</div>

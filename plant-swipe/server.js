@@ -2330,6 +2330,9 @@ async function handlePullCode(req, res) {
     // Execute the script from repository root so it updates current branch and builds
     // Run detached so we can return a response before the service restarts
     const execEnv = { ...process.env, CI: process.env.CI || 'true', SUDO_ASKPASS: process.env.SUDO_ASKPASS || '', PLANTSWIPE_REPO_DIR: repoRoot }
+    // Do not restart services inside the script when invoked from the API.
+    // This allows us to finish the SSE cleanly and control restarts from the UI.
+    execEnv.SKIP_SERVICE_RESTARTS = 'true'
     if (branch) {
       // Pass target branch to refresh script
       execEnv.PLANTSWIPE_TARGET_BRANCH = branch
@@ -2402,6 +2405,8 @@ app.get('/api/admin/pull-code/stream', async (req, res) => {
 
     // Allow the script to perform restarts even if it drops the stream briefly
     const childEnv = { ...process.env, CI: process.env.CI || 'true', PLANTSWIPE_REPO_DIR: repoRoot }
+    // Avoid restarting services from the script while streaming logs (keeps SSE alive)
+    childEnv.SKIP_SERVICE_RESTARTS = 'true'
     if (branch) {
       // Pre-validate requested branch and surface a clear error on failure
       try {

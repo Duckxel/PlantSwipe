@@ -236,6 +236,9 @@ def _run_refresh(branch: Optional[str], stream: bool):
     env = os.environ.copy()
     env.setdefault("CI", os.environ.get("CI", "true"))
     env["PLANTSWIPE_REPO_DIR"] = repo_root
+    # Prevent the refresh script from restarting services on its own.
+    # We will perform restarts explicitly after verifying build success.
+    env["SKIP_SERVICE_RESTARTS"] = "true"
     if branch:
         env["PLANTSWIPE_TARGET_BRANCH"] = branch
     if stream:
