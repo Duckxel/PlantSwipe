@@ -7,6 +7,7 @@ from typing import Set, Optional
 from flask import Flask, request, abort, jsonify, Response
 from pathlib import Path
 import shlex
+from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
 
 
 def _get_env_var(name: str, default: Optional[str] = None) -> str:
@@ -116,6 +117,81 @@ def _ensure_executable(path: str) -> None:
         os.chmod(path, 0o755)
     except Exception:
         pass
+
+
+def _sql_schema_path(repo_root: str) -> str:
+    # Monorepo layout: SQL lives under plant-swipe/supabase/000_sync_schema.sql
+    p1 = Path(repo_root) / "plant-swipe" / "supabase" / "000_sync_schema.sql"
+    if p1.is_file():
+        return str(p1)
+    # Fallback: try directly under repo_root/supabase
+    p2 = Path(repo_root) / "supabase" / "000_sync_schema.sql"
+    return str(p2)
+
+
+def _ensure_sslmode_in_url(db_url: str) -> str:
+    try:
+        u = urlparse(db_url)
+        host = (u.hostname or '').lower()
+        if host in ("localhost", "127.0.0.1"):
+            return db_url
+        q = dict(parse_qsl(u.query, keep_blank_values=True))
+        if 'sslmode' not in q:
+            q['sslmode'] = 'require'
+            new_query = urlencode(q)
+            return urlunparse((u.scheme, u.netloc, u.path, u.params, new_query, u.fragment))
+    except Exception:
+        pass
+    return db_url
+
+
+def _build_database_url() -> str:
+    # 1) Direct URL envs
+    for name in ("DATABASE_URL", "POSTGRES_URL", "POSTGRES_PRISMA_URL", "SUPABASE_DB_URL"):
+        val = _get_env_var(name)
+        if val:
+            return _ensure_sslmode_in_url(val)
+
+    # 2) PG* pieces
+    host = _get_env_var("PGHOST") or _get_env_var("POSTGRES_HOST")
+    user = _get_env_var("PGUSER") or _get_env_var("POSTGRES_USER")
+    password = _get_env_var("PGPASSWORD") or _get_env_var("POSTGRES_PASSWORD")
+    port = _get_env_var("PGPORT") or _get_env_var("POSTGRES_PORT") or "5432"
+    database = _get_env_var("PGDATABASE") or _get_env_var("POSTGRES_DB") or "postgres"
+    if host and user:
+        from urllib.parse import quote
+        auth = quote(user)
+        if password:
+            auth = f"{auth}:{quote(password)}"
+        url = f"postgresql://{auth}@{host}:{port}/{database}"
+        return _ensure_sslmode_in_url(url)
+
+    # 3) Supabase derive from project URL + DB password
+    supa_url = _get_env_var("SUPABASE_URL") or _get_env_var("VITE_SUPABASE_URL") or _get_env_var("REACT_APP_SUPABASE_URL") or _get_env_var("NEXT_PUBLIC_SUPABASE_URL")
+    supa_pass = _get_env_var("SUPABASE_DB_PASSWORD") or _get_env_var("PGPASSWORD") or _get_env_var("POSTGRES_PASSWORD")
+    if supa_url and supa_pass:
+        try:
+            u = urlparse(supa_url)
+            project_ref = (u.hostname or '').split('.')[0]
+            host = f"db.{project_ref}.supabase.co"
+            user = _get_env_var("SUPABASE_DB_USER") or _get_env_var("PGUSER") or _get_env_var("POSTGRES_USER") or "postgres"
+            port = _get_env_var("SUPABASE_DB_PORT") or _get_env_var("PGPORT") or _get_env_var("POSTGRES_PORT") or "5432"
+            database = _get_env_var("SUPABASE_DB_NAME") or _get_env_var("PGDATABASE") or _get_env_var("POSTGRES_DB") or "postgres"
+            from urllib.parse import quote
+            auth = f"{quote(user)}:{quote(supa_pass)}"
+            url = f"postgresql://{auth}@{host}:{port}/{database}"
+            return _ensure_sslmode_in_url(url)
+        except Exception:
+            pass
+    return ""
+
+
+def _psql_available() -> bool:
+    try:
+        subprocess.run(["psql", "--version"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+        return True
+    except Exception:
+        return False
 
 
 @app.get("/admin/branches")
@@ -253,6 +329,46 @@ def reboot():
     _reboot_machine()
     # If reboot succeeds, client may never see this response
     return jsonify({"ok": True, "action": "reboot"})
+
+
+@app.get("/admin/sync-schema")
+@app.post("/admin/sync-schema")
+def sync_schema():
+    _verify_request()
+    repo_root = _get_repo_root()
+    sql_path = _sql_schema_path(repo_root)
+    if not os.path.isfile(sql_path):
+        return jsonify({"ok": False, "error": f"sync SQL not found at {sql_path}"}), 500
+
+    db_url = _build_database_url()
+    if not db_url:
+        return jsonify({"ok": False, "error": "Database not configured"}), 500
+
+    if not _psql_available():
+        return jsonify({"ok": False, "error": "psql not available on server"}), 500
+
+    try:
+        # Run psql with ON_ERROR_STOP for atomic failure; quiet mode to limit noise
+        cmd = [
+            "psql",
+            db_url,
+            "-v", "ON_ERROR_STOP=1",
+            "-X",
+            "-q",
+            "-f", sql_path,
+        ]
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=180, check=False)
+        if res.returncode != 0:
+            out = (res.stdout or "")
+            err = (res.stderr or "")
+            # Return tail to avoid huge payloads
+            tail = "\n".join((out + "\n" + err).splitlines()[-80:])
+            return jsonify({"ok": False, "error": "psql failed", "detail": tail}), 500
+        # Success
+        tail = "\n".join((res.stdout or "").splitlines()[-20:])
+        return jsonify({"ok": True, "message": "Schema synchronized successfully", "stdoutTail": tail})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e) or "Failed to run psql"}), 500
 
 
 if __name__ == "__main__":
