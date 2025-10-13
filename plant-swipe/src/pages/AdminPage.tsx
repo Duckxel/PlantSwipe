@@ -2250,7 +2250,7 @@ export const AdminPage: React.FC = () => {
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); lookupByIp() } }}
                     ref={memberIpInputRef}
                   />
-                  <Button className="rounded-2xl" onClick={lookupByIp} disabled={ipLoading || !ipLookup.trim()}>
+                  <Button className="rounded-2xl" onClick={() => lookupByIp()} disabled={ipLoading || !ipLookup.trim()}>
                     <Search className="h-4 w-4" /> Search IP
                   </Button>
                 </div>
