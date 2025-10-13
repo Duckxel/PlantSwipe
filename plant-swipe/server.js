@@ -2712,25 +2712,14 @@ app.get('/api/admin/sources-breakdown', async (req, res) => {
   try {
     // Memory fallback cannot easily yield breakdowns; prefer DB or Supabase REST
     if (sql) {
+      const daysParam = Number(req.query.days || 30)
+      const days = (daysParam === 7 ? 7 : 30)
       const [countries, referrers] = await Promise.all([
-        sql`select coalesce(upper(geo_country), 'UNKNOWN') as country, count(*)::int as c
-             from public.web_visits
-             group by country
-             order by c desc
-             limit 10`,
-        sql`select case
-               when referrer is null or referrer = '' then 'direct'
-               when referrer ilike 'http%' then split_part(split_part(referrer, '://', 2), '/', 1)
-               else referrer
-             end as source,
-             count(*)::int as c
-             from public.web_visits
-             group by source
-             order by c desc
-             limit 10`,
+        sql`select * from public.get_top_countries(${days}, ${10})`,
+        sql`select * from public.get_top_referrers(${days}, ${10})`,
       ])
-      const topCountries = (countries || []).map(r => ({ country: (r.country || 'UNKNOWN'), visits: Number(r.c || 0) }))
-      const topReferrers = (referrers || []).map(r => ({ source: String(r.source || 'direct'), visits: Number(r.c || 0) }))
+      const topCountries = (countries || []).map(r => ({ country: (r.country || 'UNKNOWN'), visits: Number(r.visits || 0) }))
+      const topReferrers = (referrers || []).map(r => ({ source: String(r.source || 'direct'), visits: Number(r.visits || 0) }))
       res.json({ ok: true, topCountries, topReferrers, via: 'database' })
       return
     }
@@ -2739,30 +2728,17 @@ app.get('/api/admin/sources-breakdown', async (req, res) => {
       const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
       const token = getBearerTokenFromRequest(req)
       if (token) headers.Authorization = `Bearer ${token}`
-      const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
-      // Countries
-      const cUrl = `${supabaseUrlEnv}/rest/v1/web_visits?select=geo_country,count:count()&occurred_at=gte.${encodeURIComponent(since)}&group=geo_country&order=count.desc.nullslast&limit=10`
-      // Referrers: fetch referrer strings, client will collapse domains; but we collapse here via SQL when direct DB available.
-      const rUrl = `${supabaseUrlEnv}/rest/v1/web_visits?select=referrer,count:count()&occurred_at=gte.${encodeURIComponent(since)}&group=referrer&order=count.desc.nullslast&limit=50`
-      const [cr, rr] = await Promise.all([fetch(cUrl, { headers }), fetch(rUrl, { headers })])
+      const daysParam = Number(req.query.days || 30)
+      const days = (daysParam === 7 ? 7 : 30)
+      // Prefer RPCs for reliable grouping
+      const [cr, rr] = await Promise.all([
+        fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_top_countries`, { method: 'POST', headers, body: JSON.stringify({ _days: days, _limit: 10 }) }),
+        fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_top_referrers`, { method: 'POST', headers, body: JSON.stringify({ _days: days, _limit: 10 }) }),
+      ])
       const cData = cr.ok ? await cr.json().catch(() => []) : []
       const rData = rr.ok ? await rr.json().catch(() => []) : []
-      const topCountries = (Array.isArray(cData) ? cData : [])
-        .map((r) => ({ country: (r.geo_country ? String(r.geo_country).toUpperCase() : 'UNKNOWN'), visits: Number(r.count || 0) }))
-        .filter((x) => x.visits > 0)
-        .slice(0, 10)
-      const collapseDomain = (ref) => {
-        try { return new URL(String(ref)).hostname || 'direct' } catch { return (ref ? String(ref) : 'direct') }
-      }
-      const refAgg = new Map()
-      for (const row of (Array.isArray(rData) ? rData : [])) {
-        const key = row?.referrer ? collapseDomain(row.referrer) : 'direct'
-        const prev = refAgg.get(key) || 0
-        refAgg.set(key, prev + Number(row?.count || 0))
-      }
-      const topReferrers = Array.from(refAgg.entries()).map(([source, visits]) => ({ source: String(source || 'direct'), visits: Number(visits || 0) }))
-        .sort((a, b) => b.visits - a.visits)
-        .slice(0, 10)
+      const topCountries = (Array.isArray(cData) ? cData : []).map((r) => ({ country: String(r.country || 'UNKNOWN'), visits: Number(r.visits || 0) }))
+      const topReferrers = (Array.isArray(rData) ? rData : []).map((r) => ({ source: String(r.source || 'direct'), visits: Number(r.visits || 0) }))
       res.json({ ok: true, topCountries, topReferrers, via: 'supabase' })
       return
     }

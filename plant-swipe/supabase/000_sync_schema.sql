@@ -2083,6 +2083,52 @@ as $$
 $$;
 grant execute on function public.get_visitors_series_days(integer) to anon, authenticated;
 
+-- Top countries in last N days (default 30)
+create or replace function public.get_top_countries(_days integer default 30, _limit integer default 10)
+returns table(country text, visits integer)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with cutoff as (
+    select (now() at time zone 'utc')::date - make_interval(days => greatest(0, coalesce(_days, 30) - 1)) as d
+  )
+  select coalesce(upper(v.geo_country), 'UNKNOWN') as country,
+         count(*)::int as visits
+  from public.web_visits v
+  where timezone('utc', v.occurred_at) >= (select d from cutoff)
+  group by 1
+  order by visits desc
+  limit greatest(1, coalesce(_limit, 10));
+$$;
+grant execute on function public.get_top_countries(integer, integer) to anon, authenticated;
+
+-- Top referrers (domains) in last N days (default 30)
+create or replace function public.get_top_referrers(_days integer default 30, _limit integer default 10)
+returns table(source text, visits integer)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with cutoff as (
+    select (now() at time zone 'utc')::date - make_interval(days => greatest(0, coalesce(_days, 30) - 1)) as d
+  )
+  select case
+           when v.referrer is null or v.referrer = '' then 'direct'
+           when v.referrer ilike 'http%' then split_part(split_part(v.referrer, '://', 2), '/', 1)
+           else v.referrer
+         end as source,
+         count(*)::int as visits
+  from public.web_visits v
+  where timezone('utc', v.occurred_at) >= (select d from cutoff)
+  group by 1
+  order by visits desc
+  limit greatest(1, coalesce(_limit, 10));
+$$;
+grant execute on function public.get_top_referrers(integer, integer) to anon, authenticated;
+
 -- User-specific daily visit counts for last N days (default 30)
 create or replace function public.get_user_visits_series_days(_user_id uuid, _days integer default 30)
 returns table(date text, visits integer)

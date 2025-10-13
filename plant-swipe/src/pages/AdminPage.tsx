@@ -1527,6 +1527,7 @@ export const AdminPage: React.FC = () => {
 
                     const formatDow = (isoDate: string) => {
                       try {
+                        if (visitorsWindowDays === 30) return ''
                         const dt = new Date(isoDate + 'T00:00:00Z')
                         return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dt.getUTCDay()]
                       } catch {
