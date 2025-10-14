@@ -3183,7 +3183,12 @@ app.get('/api/admin/sources-breakdown', async (req, res) => {
       allReferrers.sort((a, b) => (b.visits || 0) - (a.visits || 0))
       const topCountries = allCountries.slice(0, 5)
       const otherCountriesList = allCountries.slice(5)
-      const otherCountries = { count: otherCountriesList.length, visits: otherCountriesList.reduce((s, c) => s + (c.visits || 0), 0) }
+      const otherCountries = {
+        count: otherCountriesList.length,
+        visits: otherCountriesList.reduce((s, c) => s + (c.visits || 0), 0),
+        codes: otherCountriesList.map(c => c.country).filter(Boolean),
+        items: otherCountriesList.map(c => ({ country: c.country, visits: Number(c.visits || 0) })),
+      }
       const topReferrers = allReferrers.slice(0, 5)
       const otherReferrersList = allReferrers.slice(5)
       const otherReferrers = { count: otherReferrersList.length, visits: otherReferrersList.reduce((s, c) => s + (c.visits || 0), 0) }
@@ -3210,7 +3215,12 @@ app.get('/api/admin/sources-breakdown', async (req, res) => {
       allReferrers.sort((a, b) => (b.visits || 0) - (a.visits || 0))
       const topCountries = allCountries.slice(0, 5)
       const otherCountriesList = allCountries.slice(5)
-      const otherCountries = { count: otherCountriesList.length, visits: otherCountriesList.reduce((s, c) => s + (c.visits || 0), 0) }
+      const otherCountries = {
+        count: otherCountriesList.length,
+        visits: otherCountriesList.reduce((s, c) => s + (c.visits || 0), 0),
+        codes: otherCountriesList.map(c => c.country).filter(Boolean),
+        items: otherCountriesList.map(c => ({ country: c.country, visits: Number(c.visits || 0) })),
+      }
       const topReferrers = allReferrers.slice(0, 5)
       const otherReferrersList = allReferrers.slice(5)
       const otherReferrers = { count: otherReferrersList.length, visits: otherReferrersList.reduce((s, c) => s + (c.visits || 0), 0) }
