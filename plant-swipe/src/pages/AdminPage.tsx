@@ -928,6 +928,7 @@ export const AdminPage: React.FC = () => {
     topCountries?: Array<{ country: string; visits: number }>
     topDevices?: Array<{ device: string; visits: number }>
     meanRpm5m?: number | null
+    adminNotes?: Array<{ id: string; admin_id: string | null; admin_name: string | null; message: string; created_at: string | null }>
   } | null>(null)
   const [banReason, setBanReason] = React.useState('')
   const [banSubmitting, setBanSubmitting] = React.useState(false)
@@ -1032,6 +1033,7 @@ export const AdminPage: React.FC = () => {
         topCountries: Array.isArray(data?.topCountries) ? data.topCountries : [],
         topDevices: Array.isArray(data?.topDevices) ? data.topDevices : [],
         meanRpm5m: typeof data?.meanRpm5m === 'number' ? data.meanRpm5m : null,
+        adminNotes: Array.isArray(data?.adminNotes) ? data.adminNotes.map((n: any) => ({ id: String(n.id), admin_id: n?.admin_id || null, admin_name: n?.admin_name || null, message: String(n?.message || ''), created_at: n?.created_at || null })) : [],
       })
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -2306,6 +2308,28 @@ export const AdminPage: React.FC = () => {
                     </CardContent>
                   </Card>
 
+                  <Card className="rounded-2xl">
+                    <CardContent className="p-4 space-y-2">
+                      <div className="text-sm font-medium">Admin notes</div>
+                      <AddAdminNote profileId={memberData.user?.id || ''} onAdded={() => lookupMember()} />
+                      <div className="space-y-2">
+                        {(memberData.adminNotes || []).length === 0 ? (
+                          <div className="text-sm opacity-60">No notes yet.</div>
+                        ) : (
+                          (memberData.adminNotes || []).map((n) => (
+                            <div key={n.id} className="rounded-xl border p-3 bg-white">
+                              <div className="text-xs opacity-60 flex items-center justify-between">
+                                <span>{n.admin_name || 'Admin'}{n.admin_id ? ` · ${n.admin_id}` : ''}</span>
+                                <span>{n.created_at ? new Date(n.created_at).toLocaleString() : ''}</span>
+                              </div>
+                              <div className="text-sm mt-1 whitespace-pre-wrap break-words">{n.message}</div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+
                   {(memberData.isBannedEmail || (memberData.bannedIps && memberData.bannedIps.length > 0)) && (
                     <div className="rounded-xl border p-3 bg-rose-50/60">
                       <div className="text-sm font-medium text-rose-700 flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Banned details</div>
@@ -2472,4 +2496,49 @@ export const AdminPage: React.FC = () => {
 }
 
 export default AdminPage
+
+function AddAdminNote({ profileId, onAdded }: { profileId: string; onAdded: () => void }) {
+  const [value, setValue] = React.useState('')
+  const [submitting, setSubmitting] = React.useState(false)
+  const disabled = !profileId || !value.trim() || submitting
+  const submit = React.useCallback(async () => {
+    if (disabled) return
+    setSubmitting(true)
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      const headers: Record<string, string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+        if (adminToken) headers['X-Admin-Token'] = String(adminToken)
+      } catch {}
+      const resp = await fetch('/api/admin/member-note', {
+        method: 'POST',
+        headers,
+        credentials: 'same-origin',
+        body: JSON.stringify({ profileId, message: value.trim() }),
+      })
+      const data = await resp.json().catch(() => ({}))
+      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`)
+      setValue('')
+      onAdded()
+    } catch {
+      // noop
+    } finally {
+      setSubmitting(false)
+    }
+  }, [profileId, value, submitting, onAdded])
+  return (
+    <div className="flex gap-2">
+      <Textarea
+        placeholder="Add a note for other admins (visible only to admins)"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        className="min-h-[56px]"
+      />
+      <Button onClick={submit} disabled={disabled} className="self-start rounded-2xl">Add</Button>
+    </div>
+  )
+}
 

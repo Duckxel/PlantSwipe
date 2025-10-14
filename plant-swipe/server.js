@@ -1490,6 +1490,29 @@ app.get('/api/admin/member', async (req, res) => {
       const rows = await sql`select id, display_name, is_admin from public.profiles where id = ${user.id} limit 1`
       profile = Array.isArray(rows) && rows[0] ? rows[0] : null
     } catch {}
+    // Load latest admin notes for this profile (DB or REST)
+    let adminNotes = []
+    try {
+      if (sql) {
+        const rows = await sql`
+          select id, profile_id, admin_id, admin_name, message, created_at
+          from public.profile_admin_notes
+          where profile_id = ${user.id}
+          order by created_at desc
+          limit 50
+        `
+        adminNotes = Array.isArray(rows) ? rows.map(r => ({ id: String(r.id), admin_id: r.admin_id || null, admin_name: r.admin_name || null, message: String(r.message || ''), created_at: r.created_at })) : []
+      } else if (supabaseUrlEnv && supabaseAnonKey) {
+        const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+        const token = getBearerTokenFromRequest(req)
+        if (token) headers['Authorization'] = `Bearer ${token}`
+        const resp = await fetch(`${supabaseUrlEnv}/rest/v1/profile_admin_notes?profile_id=eq.${encodeURIComponent(user.id)}&select=id,profile_id,admin_id,admin_name,message,created_at&order=created_at.desc&limit=50`, { headers })
+        if (resp.ok) {
+          const arr = await resp.json().catch(() => [])
+          adminNotes = Array.isArray(arr) ? arr.map((r) => ({ id: String(r.id), admin_id: r?.admin_id || null, admin_name: r?.admin_name || null, message: String(r?.message || ''), created_at: r?.created_at || null })) : []
+        }
+      }
+    } catch {}
     let ips = []
     let lastOnlineAt = null
     let lastIp = null
@@ -1642,9 +1665,71 @@ app.get('/api/admin/member', async (req, res) => {
       topCountries: topCountries.slice(0, 5),
       topDevices: topDevices.slice(0, 5),
       meanRpm5m,
+      adminNotes,
     })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to lookup member' })
+  }
+})
+// Admin: add a note on a profile
+app.post('/api/admin/member-note', async (req, res) => {
+  try {
+    const adminUserId = await ensureAdmin(req, res)
+    if (!adminUserId) return
+    const { profileId, message } = req.body || {}
+    const pid = typeof profileId === 'string' ? profileId.trim() : ''
+    const msg = typeof message === 'string' ? message.trim() : ''
+    if (!pid || !msg) {
+      res.status(400).json({ error: 'Missing profileId or message' })
+      return
+    }
+
+    // Get admin display name
+    let adminName = null
+    try {
+      if (sql) {
+        const rows = await sql`select coalesce(display_name, '') as name from public.profiles where id = ${adminUserId} limit 1`
+        adminName = rows?.[0]?.name || null
+      } else if (supabaseUrlEnv && supabaseAnonKey) {
+        const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+        const token = getBearerTokenFromRequest(req)
+        if (token) headers['Authorization'] = `Bearer ${token}`
+        const resp = await fetch(`${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(adminUserId)}&select=display_name&limit=1`, { headers })
+        if (resp.ok) {
+          const arr = await resp.json().catch(() => [])
+          adminName = Array.isArray(arr) && arr[0] ? (arr[0].display_name || null) : null
+        }
+      }
+    } catch {}
+
+    // Insert note
+    let created = null
+    if (sql) {
+      const rows = await sql`
+        insert into public.profile_admin_notes (profile_id, admin_id, admin_name, message)
+        values (${pid}, ${adminUserId}, ${adminName}, ${msg})
+        returning id, created_at
+      `
+      created = rows?.[0]?.created_at || null
+    } else if (supabaseUrlEnv && supabaseAnonKey) {
+      const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
+      const token = getBearerTokenFromRequest(req)
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      const resp = await fetch(`${supabaseUrlEnv}/rest/v1/profile_admin_notes`, {
+        method: 'POST', headers, body: JSON.stringify({ profile_id: pid, admin_id: adminUserId, admin_name: adminName, message: msg }),
+      })
+      if (!resp.ok) {
+        const body = await resp.text().catch(() => '')
+        res.status(resp.status).json({ error: body || 'Failed to insert note' })
+        return
+      }
+    } else {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+    res.json({ ok: true, created_at: created })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to add note' })
   }
 })
 

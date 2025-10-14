@@ -2220,6 +2220,47 @@ drop function if exists public.set_updated_at() cascade;
 
 
 -- ========== Activity logs ==========
+
+-- ========== Admin notes on profiles ==========
+-- Store admin-authored notes against user profiles for auditing and collaboration
+create table if not exists public.profile_admin_notes (
+  id uuid primary key default gen_random_uuid(),
+  profile_id uuid not null references public.profiles(id) on delete cascade,
+  admin_id uuid,
+  admin_name text,
+  message text not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists pan_profile_time_idx on public.profile_admin_notes (profile_id, created_at desc);
+create index if not exists pan_admin_time_idx on public.profile_admin_notes (admin_id, created_at desc);
+
+alter table public.profile_admin_notes enable row level security;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='profile_admin_notes' and policyname='pan_admin_select') then
+    drop policy pan_admin_select on public.profile_admin_notes;
+  end if;
+  create policy pan_admin_select on public.profile_admin_notes for select to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='profile_admin_notes' and policyname='pan_admin_insert') then
+    drop policy pan_admin_insert on public.profile_admin_notes;
+  end if;
+  create policy pan_admin_insert on public.profile_admin_notes for insert to authenticated
+    with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='profile_admin_notes' and policyname='pan_admin_delete') then
+    drop policy pan_admin_delete on public.profile_admin_notes;
+  end if;
+  create policy pan_admin_delete on public.profile_admin_notes for delete to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+
 -- Captures per-garden human-readable activity events for the current day view
 create table if not exists public.garden_activity_logs (
   id uuid primary key default gen_random_uuid(),
