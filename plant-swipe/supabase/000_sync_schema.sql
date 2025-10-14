@@ -2285,8 +2285,10 @@ end $$;
 create or replace function public.schedule_admin_logs_purge()
 returns void language plpgsql as $$
 begin
-  perform cron.schedule('purge_admin_activity_logs', '0 3 * * *', $$
-    delete from public.admin_activity_logs where occurred_at < now() - interval '30 days'$$);
+  perform cron.schedule('purge_admin_activity_logs', '0 3 * * *', $cron$
+    delete from public.admin_activity_logs
+    where timezone('utc', occurred_at) < ((now() at time zone 'utc')::date - interval '30 days');
+  $cron$);
 end$$;
 select public.schedule_admin_logs_purge();
 
