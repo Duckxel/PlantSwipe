@@ -22,8 +22,9 @@ export function SchedulePickerDialog(props: {
   onChangeAmount?: (n: number) => void
   lockToYear?: boolean
   allowedPeriods?: Period[]
+  modal?: boolean
 }) {
-  const { open, onOpenChange, period, amount, onSave, initialSelection, onChangeAmount, lockToYear, allowedPeriods } = props
+  const { open, onOpenChange, period, amount, onSave, initialSelection, onChangeAmount, lockToYear, allowedPeriods, modal = true } = props
 
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -207,7 +208,7 @@ export function SchedulePickerDialog(props: {
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange} modal={modal}>
       <DialogContent className="rounded-2xl max-w-3xl">
         <DialogHeader>
           <DialogTitle>Pick your watering schedule</DialogTitle>
