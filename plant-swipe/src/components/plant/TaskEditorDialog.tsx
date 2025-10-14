@@ -92,6 +92,8 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
         onOpenAutoFocus={(e) => { e.preventDefault() }}
         onPointerDownOutside={(e) => { e.preventDefault() }}
         onInteractOutside={(e) => { e.preventDefault() }}
+        // Keep the menu and nested dialogs clickable
+        onCloseAutoFocus={(e) => { e.preventDefault() }}
       >
         <DialogHeader>
           <DialogTitle>Tasks</DialogTitle>
@@ -176,6 +178,7 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
         initialSelection={patternSelection}
         onChangeAmount={(n) => setPatternAmount(n)}
         allowedPeriods={[patternPeriod]}
+        modal={false}
       />
       <TaskCreateDialog
         open={createOpen}
@@ -259,8 +262,8 @@ function TaskRowMenu({ onEdit, onDelete }: { onEdit?: () => void; onDelete: () =
       {open && createPortal(
         <div
           ref={menuRef as any}
-          style={{ position: 'fixed', top: position.top, right: position.right, width: '10rem', zIndex: 70 }}
-          className="bg-white border rounded-xl shadow-lg z-[70]"
+          style={{ position: 'fixed', top: position.top, right: position.right, width: '10rem', zIndex: 80 }}
+          className="bg-white border rounded-xl shadow-lg z-[80]"
         >
           {onEdit && (
             <button onClick={(e) => { e.stopPropagation(); setOpen(false); onEdit() }} className="w-full text-left px-3 py-2 rounded-t-xl hover:bg-stone-50">Edit</button>

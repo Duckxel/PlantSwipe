@@ -42,7 +42,7 @@ const DialogContent = React.forwardRef<
         className
       )}
       // Ensure content always stays on top of other overlays
-      style={{ zIndex: 70 }}
+      style={{ zIndex: 80 }}
       {...props}
     >
       {children}
