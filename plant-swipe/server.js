@@ -84,6 +84,16 @@ async function getTopLevelIfRepo(dir) {
 
 const exec = promisify(execCb)
 
+// Utility: wrap a promise with a timeout that rejects when exceeded
+function withTimeout(promise, ms, label = 'TIMEOUT') {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(label)), Math.max(1, ms || 0))
+    Promise.resolve(promise)
+      .then((v) => { try { clearTimeout(t) } catch {}; resolve(v) })
+      .catch((e) => { try { clearTimeout(t) } catch {}; reject(e) })
+  })
+}
+
 // Supabase client (server-side) for auth verification
 // Support both runtime server env and Vite-style public envs
 const supabaseUrlEnv = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -336,10 +346,9 @@ function buildConnectionString() {
     try {
       const url = new URL(cs)
       const isLocal = url.hostname === 'localhost' || url.hostname === '127.0.0.1'
-      if (!isLocal && !url.searchParams.has('sslmode')) {
-        url.searchParams.set('sslmode', 'require')
-        cs = url.toString()
-      }
+      if (!isLocal && !url.searchParams.has('sslmode')) url.searchParams.set('sslmode', 'require')
+      if (!url.searchParams.has('connect_timeout')) url.searchParams.set('connect_timeout', '5')
+      cs = url.toString()
     } catch {}
   }
   return cs
@@ -3218,7 +3227,10 @@ app.post('/api/track-visit', async (req, res) => {
     const sessionId = getOrSetSessionId(req, res)
     const { pagePath, referrer: bodyReferrer, userId, extra, pageTitle, language } = req.body || {}
     const ipAddress = getClientIp(req)
-    const geo = await resolveGeo(req, ipAddress)
+    let geo = { geo_country: null, geo_region: null, geo_city: null }
+    try {
+      geo = await withTimeout(resolveGeo(req, ipAddress), 800, 'GEO_TIMEOUT')
+    } catch {}
     const userAgent = req.get('user-agent') || ''
     const tokenUserId = await getUserIdFromRequest(req)
     const effectiveUserId = tokenUserId || (typeof userId === 'string' ? userId : null)
@@ -3229,7 +3241,8 @@ app.post('/api/track-visit', async (req, res) => {
     const acceptLanguage = (req.get('accept-language') || '').split(',')[0] || null
     const lang = language || acceptLanguage
     const referrer = (typeof bodyReferrer === 'string' && bodyReferrer.length > 0) ? bodyReferrer : (req.get('referer') || req.get('referrer') || '')
-    await insertWebVisit({ sessionId, userId: effectiveUserId, pagePath, referrer, userAgent, ipAddress, geo, extra, pageTitle, language: lang }, req)
+    // Do not block the response on DB write; best-effort in background
+    insertWebVisit({ sessionId, userId: effectiveUserId, pagePath, referrer, userAgent, ipAddress, geo, extra, pageTitle, language: lang }, req).catch(() => {})
     res.status(204).end()
   } catch (e) {
     res.status(500).json({ error: 'Failed to record visit' })
@@ -3526,7 +3539,8 @@ app.get('/api/admin/online-ips', async (req, res) => {
       // Use RPC if available; otherwise use REST with select distinct
       let ips = []
       try {
-        const resp = await fetch(`${supabaseUrlEnv}/rest/v1/web_visits?select=ip_address&occurred_at=gte.${new Date(Date.now() - windowMinutes * 60000).toISOString()}&ip_address=not.is.null`, { headers })
+        const url = `${supabaseUrlEnv}/rest/v1/web_visits?select=ip_address&occurred_at=gte.${new Date(Date.now() - windowMinutes * 60000).toISOString()}&ip_address=not.is.null`
+        const resp = await withTimeout(fetch(url, { headers }), 1200, 'REST_TIMEOUT')
         if (resp.ok) {
           const arr = await resp.json().catch(() => [])
           const uniq = new Set((Array.isArray(arr) ? arr : []).map(r => String(r.ip_address || '')).filter(Boolean))
