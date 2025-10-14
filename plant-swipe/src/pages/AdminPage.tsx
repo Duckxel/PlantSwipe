@@ -924,6 +924,10 @@ export const AdminPage: React.FC = () => {
     bannedReason?: string | null
     bannedAt?: string | null
     bannedIps?: string[]
+    topReferrers?: Array<{ source: string; visits: number }>
+    topCountries?: Array<{ country: string; visits: number }>
+    topDevices?: Array<{ device: string; visits: number }>
+    meanRpm5m?: number | null
   } | null>(null)
   const [banReason, setBanReason] = React.useState('')
   const [banSubmitting, setBanSubmitting] = React.useState(false)
@@ -951,6 +955,10 @@ export const AdminPage: React.FC = () => {
   const [ipUsersCount, setIpUsersCount] = React.useState<number | null>(null)
   const [ipConnectionsCount, setIpConnectionsCount] = React.useState<number | null>(null)
   const [ipLastSeenAt, setIpLastSeenAt] = React.useState<string | null>(null)
+  const [ipTopReferrers, setIpTopReferrers] = React.useState<Array<{ source: string; visits: number }>>([])
+  const [ipTopDevices, setIpTopDevices] = React.useState<Array<{ device: string; visits: number }>>([])
+  const [ipCountry, setIpCountry] = React.useState<string | null>(null)
+  const [ipMeanRpm5m, setIpMeanRpm5m] = React.useState<number | null>(null)
 
   // Ref to focus the IP input when jumping from overview
   const memberIpInputRef = React.useRef<HTMLInputElement | null>(null)
@@ -1020,6 +1028,10 @@ export const AdminPage: React.FC = () => {
         bannedReason: data?.bannedReason ?? null,
         bannedAt: data?.bannedAt ?? null,
         bannedIps: Array.isArray(data?.bannedIps) ? data.bannedIps : [],
+        topReferrers: Array.isArray(data?.topReferrers) ? data.topReferrers : [],
+        topCountries: Array.isArray(data?.topCountries) ? data.topCountries : [],
+        topDevices: Array.isArray(data?.topDevices) ? data.topDevices : [],
+        meanRpm5m: typeof data?.meanRpm5m === 'number' ? data.meanRpm5m : null,
       })
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -1039,6 +1051,10 @@ export const AdminPage: React.FC = () => {
     setIpUsersCount(null)
     setIpConnectionsCount(null)
     setIpLastSeenAt(null)
+    setIpTopReferrers([])
+    setIpTopDevices([])
+    setIpCountry(null)
+    setIpMeanRpm5m(null)
     try {
       const session = (await supabase.auth.getSession()).data.session
       const token = session?.access_token
@@ -1059,6 +1075,10 @@ export const AdminPage: React.FC = () => {
       if (typeof data?.usersCount === 'number') setIpUsersCount(data.usersCount)
       if (typeof data?.connectionsCount === 'number') setIpConnectionsCount(data.connectionsCount)
       if (typeof data?.lastSeenAt === 'string') setIpLastSeenAt(data.lastSeenAt)
+      if (Array.isArray(data?.ipTopReferrers)) setIpTopReferrers(data.ipTopReferrers)
+      if (Array.isArray(data?.ipTopDevices)) setIpTopDevices(data.ipTopDevices)
+      if (typeof data?.ipCountry === 'string') setIpCountry(data.ipCountry)
+      if (typeof data?.ipMeanRpm5m === 'number') setIpMeanRpm5m(data.ipMeanRpm5m)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       setIpError(msg || 'IP lookup failed')
@@ -1980,6 +2000,12 @@ export const AdminPage: React.FC = () => {
                               {memberData.lastOnlineAt && (
                                 <Badge variant="outline" className="rounded-full px-2 py-0.5">Last online {new Date(memberData.lastOnlineAt).toLocaleString()}</Badge>
                               )}
+                              {(memberData as any)?.lastCountry && (
+                                <Badge variant="outline" className="rounded-full px-2 py-0.5">{countryCodeToName((memberData as any).lastCountry)}</Badge>
+                              )}
+                              {(memberData as any)?.lastReferrer && (
+                                <Badge variant="outline" className="rounded-full px-2 py-0.5">Referrer {(memberData as any).lastReferrer}</Badge>
+                              )}
                               {memberData.user?.created_at && (
                                 <Badge variant="outline" className="rounded-full px-2 py-0.5">Joined {new Date(memberData.user.created_at).toLocaleDateString()}</Badge>
                               )}
@@ -2123,6 +2149,55 @@ export const AdminPage: React.FC = () => {
                     <div className="rounded-xl border p-3 text-center">
                       <div className="text-[11px] opacity-60">Last IP</div>
                       <div className="text-base font-semibold tabular-nums truncate" title={memberData.lastIp || undefined}>{memberData.lastIp || '—'}</div>
+                    </div>
+                    <div className="rounded-xl border p-3 text-center">
+                      <div className="text-[11px] opacity-60">Mean RPM (5m)</div>
+                      <div className="text-base font-semibold tabular-nums">{typeof memberData.meanRpm5m === 'number' ? memberData.meanRpm5m.toFixed(2) : '—'}</div>
+                    </div>
+                    <div className="rounded-xl border p-3">
+                      <div className="text-[11px] opacity-60 mb-1">Top referrers</div>
+                      {(!memberData.topReferrers || memberData.topReferrers.length === 0) ? (
+                        <div className="text-xs opacity-60">—</div>
+                      ) : (
+                        <div className="space-y-0.5">
+                          {memberData.topReferrers.slice(0,3).map((r, idx) => (
+                            <div key={`${r.source}-${idx}`} className="flex items-center justify-between text-sm">
+                              <div className="truncate mr-2">{r.source || 'direct'}</div>
+                              <div className="tabular-nums">{r.visits}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="rounded-xl border p-3">
+                      <div className="text-[11px] opacity-60 mb-1">Top countries</div>
+                      {(!memberData.topCountries || memberData.topCountries.length === 0) ? (
+                        <div className="text-xs opacity-60">—</div>
+                      ) : (
+                        <div className="space-y-0.5">
+                          {memberData.topCountries.slice(0,3).map((c, idx) => (
+                            <div key={`${c.country}-${idx}`} className="flex items-center justify-between text-sm">
+                              <div className="truncate mr-2">{countryCodeToName(c.country)}</div>
+                              <div className="tabular-nums">{c.visits}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="rounded-xl border p-3">
+                      <div className="text-[11px] opacity-60 mb-1">Top devices</div>
+                      {(!memberData.topDevices || memberData.topDevices.length === 0) ? (
+                        <div className="text-xs opacity-60">—</div>
+                      ) : (
+                        <div className="space-y-0.5">
+                          {memberData.topDevices.slice(0,3).map((d, idx) => (
+                            <div key={`${d.device}-${idx}`} className="flex items-center justify-between text-sm">
+                              <div className="truncate mr-2">{d.device}</div>
+                              <div className="tabular-nums">{d.visits}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -2317,6 +2392,46 @@ export const AdminPage: React.FC = () => {
                         <div className="text-[11px] opacity-60">Connections</div>
                         <div className="text-base font-semibold tabular-nums">{ipConnectionsCount ?? '—'}</div>
                       </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <div className="rounded-xl border p-3 text-center">
+                        <div className="text-[11px] opacity-60">Mean RPM (5m)</div>
+                        <div className="text-base font-semibold tabular-nums">{typeof ipMeanRpm5m === 'number' ? ipMeanRpm5m.toFixed(2) : '—'}</div>
+                      </div>
+                      <div className="rounded-xl border p-3 text-center">
+                        <div className="text-[11px] opacity-60">Country</div>
+                        <div className="text-base font-semibold tabular-nums">{ipCountry ? countryCodeToName(ipCountry) : '—'}</div>
+                      </div>
+                      <div className="rounded-xl border p-3">
+                        <div className="text-[11px] opacity-60 mb-1">Top referrers</div>
+                        {(ipTopReferrers.length === 0) ? (
+                          <div className="text-xs opacity-60">—</div>
+                        ) : (
+                          <div className="space-y-0.5">
+                            {ipTopReferrers.slice(0,3).map((r, idx) => (
+                              <div key={`${r.source}-${idx}`} className="flex items-center justify-between text-sm">
+                                <div className="truncate mr-2">{r.source || 'direct'}</div>
+                                <div className="tabular-nums">{r.visits}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="rounded-xl border p-3">
+                      <div className="text-[11px] opacity-60 mb-1">Top devices</div>
+                      {(ipTopDevices.length === 0) ? (
+                        <div className="text-xs opacity-60">—</div>
+                      ) : (
+                        <div className="space-y-0.5">
+                          {ipTopDevices.slice(0,4).map((d, idx) => (
+                            <div key={`${d.device}-${idx}`} className="flex items-center justify-between text-sm">
+                              <div className="truncate mr-2">{d.device}</div>
+                              <div className="tabular-nums">{d.visits}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <div className="text-xs opacity-60">Last seen: {ipLastSeenAt ? new Date(ipLastSeenAt).toLocaleString() : '—'}</div>
                     {ipResults.length === 0 ? (
