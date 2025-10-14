@@ -359,14 +359,26 @@ if (!connectionString) {
   console.warn('[server] DATABASE_URL not configured — API will error on queries')
 }
 
-// Prefer SSL for non-local databases even if URL lacks sslmode
+// Prefer SSL for non-local databases even if URL lacks sslmode; honor custom CA
 let postgresOptions = {}
 try {
   if (connectionString) {
     const u = new URL(connectionString)
     const isLocal = u.hostname === 'localhost' || u.hostname === '127.0.0.1'
     if (!isLocal) {
-      postgresOptions = { ssl: true }
+      const allowInsecure = String(process.env.ALLOW_INSECURE_DB_TLS || 'false').toLowerCase() === 'true'
+      const caPath = process.env.PGSSLROOTCERT || process.env.NODE_EXTRA_CA_CERTS || '/etc/ssl/certs/aws-rds-global.pem'
+      let ssl = undefined
+      try {
+        if (caPath && fsSync.existsSync(caPath)) {
+          const ca = fsSync.readFileSync(caPath, 'utf8')
+          ssl = { rejectUnauthorized: true, ca }
+        }
+      } catch {}
+      if (!ssl) {
+        ssl = allowInsecure ? { rejectUnauthorized: false } : true
+      }
+      postgresOptions = { ssl }
     }
   }
 } catch {}
@@ -422,7 +434,7 @@ app.get('/api/health', async (_req, res) => {
     let err = null
     if (sql) {
       try {
-        const rows = await sql`select 1 as one`
+        const rows = await withTimeout(sql`select 1 as one`, 1000, 'DB_TIMEOUT')
         dbOk = Array.isArray(rows) && rows[0] && Number(rows[0].one) === 1
       } catch (e) {
         err = e?.message || 'query failed'
@@ -3178,9 +3190,10 @@ app.get('/api/admin/branches', async (req, res) => {
     // Always operate from the repository root and mark it safe for this process
     const repoRoot = await getRepoRoot()
     const gitBase = `git -c "safe.directory=${repoRoot}" -C "${repoRoot}"`
-    await exec(`${gitBase} remote update --prune`, { timeout: 60000 })
+    // Keep this fast: limit network timeout and avoid blocking when offline
+    try { await exec(`${gitBase} remote update --prune`, { timeout: 5000 }) } catch {}
     // Prefer for-each-ref over branch -r to avoid pointer lines and formatting quirks
-    const { stdout: branchesStdout } = await exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/remotes/origin`, { timeout: 60000 })
+    const { stdout: branchesStdout } = await exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/remotes/origin`, { timeout: 5000 })
     let branches = branchesStdout
       .split('\n')
       .map(s => s.trim())
@@ -3192,7 +3205,7 @@ app.get('/api/admin/branches', async (req, res) => {
 
     // Fallback to local branches if remote list is empty (e.g., detached or offline)
     if (branches.length === 0) {
-      const { stdout: localStdout } = await exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/heads`, { timeout: 60000 })
+      const { stdout: localStdout } = await exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/heads`, { timeout: 3000 })
       branches = localStdout
         .split('\n')
         .map(s => s.trim())
@@ -3200,7 +3213,7 @@ app.get('/api/admin/branches', async (req, res) => {
         .sort((a, b) => a.localeCompare(b))
     }
 
-    const { stdout: currentStdout } = await exec(`${gitBase} rev-parse --abbrev-ref HEAD`, { timeout: 30000 })
+    const { stdout: currentStdout } = await exec(`${gitBase} rev-parse --abbrev-ref HEAD`, { timeout: 3000 })
     const current = currentStdout.trim()
 
     try {
