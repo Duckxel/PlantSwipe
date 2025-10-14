@@ -2730,18 +2730,20 @@ const AdminLogs: React.FC = () => {
         ) : logs.length === 0 ? (
           <div className="text-sm opacity-60">No admin activity logged.</div>
         ) : (
-          <div className="bg-black text-green-300 rounded-2xl p-3 text-xs font-mono overflow-y-auto overflow-x-hidden max-h-[480px]">
-            {logs.slice(0, visibleCount).map((l, idx) => (
-              <div key={idx} className="whitespace-pre-wrap break-words">
-                {formatLogLine(l)}
-              </div>
-            ))}
-          </div>
-          {logs.length > visibleCount && (
-            <div className="flex justify-end mt-2">
-              <Button variant="outline" className="rounded-2xl h-8 px-3" onClick={() => setVisibleCount((c) => Math.min(c + 50, logs.length))}>Show more</Button>
+          <>
+            <div className="bg-black text-green-300 rounded-2xl p-3 text-xs font-mono overflow-y-auto overflow-x-hidden max-h-[480px]">
+              {logs.slice(0, visibleCount).map((l, idx) => (
+                <div key={idx} className="whitespace-pre-wrap break-words">
+                  {formatLogLine(l)}
+                </div>
+              ))}
             </div>
-          )}
+            {logs.length > visibleCount && (
+              <div className="flex justify-end mt-2">
+                <Button variant="outline" className="rounded-2xl h-8 px-3" onClick={() => setVisibleCount((c) => Math.min(c + 50, logs.length))}>Show more</Button>
+              </div>
+            )}
+          </>
         )}
       </CardContent>
     </Card>
