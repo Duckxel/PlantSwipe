@@ -1501,6 +1501,12 @@ app.get('/api/admin/member', async (req, res) => {
         }
       } catch {}
 
+      try {
+        const caller = await getUserFromRequest(req)
+        const adminId = caller?.id || null
+        const adminName = null
+        if (sql) await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'admin_lookup', ${email || displayParam || null}, ${sql.json({ via: 'rest' })})`
+      } catch {}
       res.json({
         ok: true,
         user: { id: targetId, email: resolvedEmail || emailParam || null, created_at: null, email_confirmed_at: null, last_sign_in_at: null },
@@ -1712,6 +1718,12 @@ app.get('/api/admin/member', async (req, res) => {
       meanRpm5m = Number((((rpmRows?.[0]?.c ?? 0) / 5)).toFixed(2))
     } catch {}
 
+    try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      const adminName = null
+      if (sql) await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'admin_lookup', ${email || qLower || null}, ${sql.json({ via: 'db' })})`
+    } catch {}
     res.json({
       ok: true,
       user: { id: user.id, email: user.email, created_at: user.created_at, email_confirmed_at: user.email_confirmed_at || null, last_sign_in_at: user.last_sign_in_at || null },
@@ -1938,6 +1950,11 @@ app.get('/api/admin/members-by-ip', async (req, res) => {
         const ipTopDevices = Array.from(uaMap.entries()).map(([device, visits]) => ({ device, visits: Number(visits) })).sort((a, b) => (b.visits || 0) - (a.visits || 0))
         const ipCountry = (lastCountryRow && lastCountryRow[0] && lastCountryRow[0].geo_country) ? String(lastCountryRow[0].geo_country).toUpperCase() : null
         const ipMeanRpm5m = Number((((rpmRow?.[0]?.c ?? 0) / 5)).toFixed(2))
+        try {
+          const caller = await getUserFromRequest(req)
+          const adminId = caller?.id || null
+          if (sql) await sql`insert into public.admin_activity_logs (admin_id, action, target, detail) values (${adminId}, 'admin_lookup', ${ip}, ${sql.json({ path: 'members-by-ip', via: 'db' })})`
+        } catch {}
         res.json({ ok: true, ip, usersCount, connectionsCount, lastSeenAt, users, via: 'database', ipTopReferrers: ipTopReferrers.slice(0,5), ipTopDevices: ipTopDevices.slice(0,5), ipCountry, ipMeanRpm5m })
         return
       } catch (e) {
@@ -2056,6 +2073,11 @@ app.get('/api/admin/members-by-ip', async (req, res) => {
     const ipTopDevices = Array.from(deviceCounts.entries()).map(([device, visits]) => ({ device, visits: Number(visits) })).sort((a, b) => (b.visits || 0) - (a.visits || 0)).slice(0,5)
     const ipCountry = lastCountry || null
     const ipMeanRpm5m = Number((rpmCount5m / 5).toFixed(2))
+    try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      if (sql) await sql`insert into public.admin_activity_logs (admin_id, action, target, detail) values (${adminId}, 'admin_lookup', ${ip}, ${sql.json({ path: 'members-by-ip', via: 'rest' })})`
+    } catch {}
     res.json({ ok: true, ip, usersCount, connectionsCount, lastSeenAt, users, via: 'supabase', ipTopReferrers, ipTopDevices, ipCountry, ipMeanRpm5m })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to search by IP' })
