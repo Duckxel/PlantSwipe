@@ -171,9 +171,41 @@ export const AdminPage: React.FC = () => {
       }
       const body = await safeJson(resp)
       if (!resp.ok) {
+        // Surface backend-provided details for easier debugging
+        if (body?.detail) {
+          appendConsole(`[sync] Detail: ${String(body.detail).slice(0, 4000)}`)
+        }
+        if (body?.stdoutTail) {
+          appendConsole('[sync] psql output (tail):')
+          String(body.stdoutTail).split('\n').slice(-50).forEach((line: string) => {
+            if (line?.trim()) appendConsole(`  ${line}`)
+          })
+        }
+        if (Array.isArray(body?.notices) && body.notices.length) {
+          appendConsole(`[sync] Notices (${Math.min(body.notices.length, 50)} shown):`)
+          body.notices.slice(0, 50).forEach((n: any) => appendConsole(`  - ${String(n)}`))
+        }
         throw new Error(body?.error || `Request failed (${resp.status})`)
       }
-      appendConsole('[sync] Schema synchronized successfully')
+      // Display informational notices/stdout and any rows returned by the SQL
+      if (body?.stdoutTail) {
+        appendConsole('[sync] psql output (tail):')
+        String(body.stdoutTail).split('\n').slice(-50).forEach((line: string) => {
+          if (line?.trim()) appendConsole(`  ${line}`)
+        })
+      }
+      if (Array.isArray(body?.notices) && body.notices.length) {
+        appendConsole(`[sync] Notices (${Math.min(body.notices.length, 50)} shown):`)
+        body.notices.slice(0, 50).forEach((n: any) => appendConsole(`  - ${String(n)}`))
+      }
+      if (Array.isArray(body?.rows) && body.rows.length) {
+        const shown = Math.min(body.rows.length, 20)
+        const total = Number(body?.rowCount ?? body.rows.length)
+        appendConsole(`[sync] Returned rows: showing ${shown} of ${total}`)
+        try {
+          body.rows.slice(0, shown).forEach((r: any, i: number) => appendConsole(`  #${i + 1} ${JSON.stringify(r)}`))
+        } catch {}
+      }
       const summary = body?.summary
       if (summary && typeof summary === 'object') {
         try {
@@ -181,6 +213,11 @@ export const AdminPage: React.FC = () => {
           const missingFunctions: string[] = Array.isArray(summary?.functions?.missing) ? summary.functions.missing : []
           const missingExtensions: string[] = Array.isArray(summary?.extensions?.missing) ? summary.extensions.missing : []
           const hasMissing = missingTables.length + missingFunctions.length + missingExtensions.length > 0
+          if (hasMissing) {
+            appendConsole('[sync] Completed with issues — missing required objects detected:')
+          } else {
+            appendConsole('[sync] Schema synchronized successfully')
+          }
           appendConsole('[sync] Post‑sync verification:')
           appendConsole(`- Tables OK: ${(summary?.tables?.present || []).length}/${(summary?.tables?.required || []).length}`)
           appendConsole(`- Functions OK: ${(summary?.functions?.present || []).length}/${(summary?.functions?.required || []).length}`)
@@ -193,6 +230,8 @@ export const AdminPage: React.FC = () => {
             appendConsole('- All required objects present')
           }
         } catch {}
+      } else {
+        appendConsole('[sync] Schema synchronized successfully')
       }
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e)

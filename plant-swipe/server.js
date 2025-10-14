@@ -1176,8 +1176,9 @@ async function handleSyncSchema(req, res) {
     res.status(500).json({ error: 'Database not configured' })
     return
   }
+  // Collect server-side NOTICE messages and optional result rows for operator feedback
+  const notices = []
   try {
-    // Require admin (robust detection; currently permissive via isAdminFromRequest)
     const isAdmin = await isAdminFromRequest(req)
     if (!isAdmin) {
       res.status(403).json({ error: 'Admin privileges required' })
@@ -1187,16 +1188,64 @@ async function handleSyncSchema(req, res) {
     const sqlPath = path.resolve(__dirname, 'supabase', '000_sync_schema.sql')
     const sqlText = await fs.readFile(sqlPath, 'utf8')
 
-    // Execute allowing multiple statements
-    await sql.unsafe(sqlText, [], { simple: true })
+    // Use a dedicated short-lived connection so we can capture onnotice for this run
+    const conn = postgres(connectionString, {
+      ...postgresOptions,
+      max: 1,
+      onnotice: (n) => {
+        try {
+          const msg = typeof n === 'string' ? n : (n?.message || JSON.stringify(n))
+          if (msg && notices.length < 500) notices.push(msg)
+        } catch {}
+      },
+    })
+
+    let lastResult = null
+    try {
+      // Execute inside a single transaction; allow multiple statements
+      await conn.begin(async (tx) => {
+        lastResult = await tx.unsafe(sqlText, [], { simple: true })
+      })
+    } finally {
+      try { await conn.end({ timeout: 2_000 }) } catch {}
+    }
+
+    // Prepare lightweight payload of any rows returned by the final statement
+    let rows = undefined
+    let rowCount = undefined
+    if (Array.isArray(lastResult)) {
+      const limited = lastResult.slice(0, 100)
+      // Shallow-truncate very large field values to keep payload reasonable
+      rows = limited.map((r) => {
+        const out = {}
+        for (const [k, v] of Object.entries(r)) {
+          const s = typeof v === 'string' ? v : JSON.stringify(v)
+          out[k] = s && s.length > 500 ? `${s.slice(0, 500)}…` : v
+        }
+        return out
+      })
+      rowCount = lastResult.length
+    } else if (lastResult && typeof lastResult.count !== 'undefined') {
+      rowCount = Number(lastResult.count) || 0
+    }
 
     // Verify important objects exist after sync
     let summary = null
     try { summary = await verifySchemaAfterSync() } catch {}
 
-    res.json({ ok: true, message: 'Schema synchronized successfully', summary })
+    res.json({
+      ok: true,
+      message: 'Schema synchronized successfully',
+      summary,
+      notices: notices.length ? notices : undefined,
+      rows,
+      rowCount,
+    })
   } catch (e) {
-    res.status(500).json({ error: e?.message || 'Failed to sync schema' })
+    res.status(500).json({
+      error: e?.message || 'Failed to sync schema',
+      notices: notices.length ? notices : undefined,
+    })
   }
 }
 
