@@ -1374,6 +1374,9 @@ export const AdminPage: React.FC = () => {
           {/* Overview Tab */}
           {activeTab === 'overview' && (
           <>
+          {/* Broadcast message controls */}
+          <BroadcastControls />
+
           {/* Health monitor */}
           <Card className="rounded-2xl">
             <CardContent className="p-4">
@@ -2624,6 +2627,172 @@ export const AdminPage: React.FC = () => {
 
     </div>
   )
+}
+
+// --- Broadcast controls (Overview tab) ---
+const BroadcastControls: React.FC = () => {
+  const [active, setActive] = React.useState<{ id: string; message: string; expiresAt: string | null } | null>(null)
+  const [message, setMessage] = React.useState('')
+  const [duration, setDuration] = React.useState<string>('')
+  const [submitting, setSubmitting] = React.useState(false)
+  const [removing, setRemoving] = React.useState(false)
+  const [now, setNow] = React.useState(() => Date.now())
+
+  React.useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [])
+
+  const msRemaining = React.useCallback((expiresAt: string | null): number | null => {
+    if (!expiresAt) return null
+    const end = Date.parse(expiresAt)
+    if (!Number.isFinite(end)) return null
+    return Math.max(0, end - now)
+  }, [now])
+
+  const formatDuration = (ms: number): string => {
+    const totalSeconds = Math.floor(Math.max(0, ms) / 1000)
+    const s = totalSeconds % 60
+    const totalMinutes = Math.floor(totalSeconds / 60)
+    const m = totalMinutes % 60
+    const h = Math.floor(totalMinutes / 60)
+    const d = Math.floor(h / 24)
+    if (d > 0) return `${d}d ${h % 24}h ${m}m`
+    if (h > 0) return `${h}h ${m}m`
+    if (m > 0) return `${m}m ${s}s`
+    return `${s}s`
+  }
+
+  const loadActive = React.useCallback(async () => {
+    try {
+      const r = await fetch('/api/broadcast/active', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+      const b = await r.json().catch(() => ({}))
+      setActive(b?.broadcast || null)
+    } catch {}
+  }, [])
+
+  React.useEffect(() => { loadActive() }, [loadActive])
+
+  const onSubmit = React.useCallback(async () => {
+    if (submitting) return
+    if (!message.trim()) return
+    setSubmitting(true)
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      const headers: Record<string, string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      try { const staticToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (staticToken) headers['X-Admin-Token'] = String(staticToken) } catch {}
+      const ms = parseDurationToMs(duration)
+      const resp = await fetch('/api/admin/broadcast', {
+        method: 'POST',
+        headers,
+        credentials: 'same-origin',
+        body: JSON.stringify({ message: message.trim(), durationMs: ms }),
+      })
+      const b = await resp.json().catch(() => ({}))
+      if (!resp.ok) throw new Error(b?.error || `HTTP ${resp.status}`)
+      setActive(b?.broadcast || null)
+      setMessage('')
+      setDuration('')
+    } catch (e) {
+      alert((e as Error)?.message || 'Failed to create broadcast')
+    } finally {
+      setSubmitting(false)
+    }
+  }, [message, duration, submitting])
+
+  const onRemove = React.useCallback(async () => {
+    if (removing) return
+    setRemoving(true)
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      const headers: Record<string, string> = { 'Accept': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      try { const staticToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (staticToken) headers['X-Admin-Token'] = String(staticToken) } catch {}
+      const resp = await fetch('/api/admin/broadcast', { method: 'DELETE', headers, credentials: 'same-origin' })
+      const b = await resp.json().catch(() => ({}))
+      if (!resp.ok) throw new Error(b?.error || `HTTP ${resp.status}`)
+      setActive(null)
+    } catch (e) {
+      alert((e as Error)?.message || 'Failed to remove broadcast')
+    } finally {
+      setRemoving(false)
+    }
+  }, [removing])
+
+  const durations: Array<{ label: string; value: string }> = [
+    { label: '1 min', value: '1m' },
+    { label: '5 mins', value: '5m' },
+    { label: '30 mins', value: '30m' },
+    { label: '1 hour', value: '1h' },
+    { label: '5 hours', value: '5h' },
+    { label: '1 day', value: '1d' },
+    { label: 'Unlimited', value: 'unlimited' },
+  ]
+
+  return (
+    <Card className="rounded-2xl">
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between">
+          <div className="text-sm font-medium">Global broadcast message</div>
+        </div>
+        {!active ? (
+          <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
+            <Input
+              placeholder="Write a short message (single line)"
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              maxLength={200}
+            />
+            <select
+              className="rounded-xl border px-3 py-2 text-sm bg-white"
+              value={duration}
+              onChange={(e) => setDuration(e.target.value)}
+              aria-label="Display time"
+            >
+              <option value="">Select duration…</option>
+              {durations.map(d => (
+                <option key={d.value} value={d.value}>{d.label}</option>
+              ))}
+            </select>
+            <Button className="rounded-2xl" onClick={onSubmit} disabled={submitting || !message.trim() || !duration}>
+              Send
+            </Button>
+          </div>
+        ) : (
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-sm font-semibold truncate">{active.message}</div>
+              <div className="text-xs opacity-60">
+                {active.expiresAt ? (
+                  <>Disappears in {formatDuration(msRemaining(active.expiresAt) || 0)}</>
+                ) : (
+                  <>Unlimited</>
+                )}
+              </div>
+            </div>
+            <Button className="rounded-2xl" variant="destructive" onClick={onRemove} disabled={removing}>
+              <Trash2 className="h-4 w-4 mr-1" /> Remove
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function parseDurationToMs(val: string): number | null {
+  const v = String(val || '').toLowerCase().trim()
+  if (!v || v === 'unlimited') return null
+  const m = v.match(/^(\d+)([smhd])$/)
+  if (!m) return null
+  const n = Number(m[1])
+  const unit = m[2]
+  if (!Number.isFinite(n) || n <= 0) return null
+  const mult = unit === 's' ? 1000 : unit === 'm' ? 60_000 : unit === 'h' ? 3_600_000 : 86_400_000
+  return n * mult
 }
 
 export default AdminPage

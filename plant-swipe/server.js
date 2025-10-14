@@ -1259,6 +1259,25 @@ async function ensureBanTables() {
   } catch {}
 }
 
+// Ensure broadcast table exists (idempotent)
+async function ensureBroadcastTable() {
+  if (!sql) return
+  try {
+    await sql`
+      create table if not exists public.broadcast_messages (
+        id uuid primary key default gen_random_uuid(),
+        message text not null,
+        created_at timestamptz not null default now(),
+        expires_at timestamptz null,
+        removed_at timestamptz null,
+        created_by uuid null
+      );
+    `
+    await sql`create index if not exists broadcast_messages_created_at_idx on public.broadcast_messages (created_at desc);`
+    await sql`create index if not exists broadcast_messages_active_idx on public.broadcast_messages (expires_at) where removed_at is null;`
+  } catch {}
+}
+
 // Helper: verify key schema objects exist after sync for operator assurance
 async function verifySchemaAfterSync() {
   if (!sql) return null
@@ -3578,6 +3597,208 @@ app.get('/api/admin/online-users', async (req, res) => {
   }
 })
 
+// --- Global broadcast message system ---
+// SSE client registry
+const broadcastClients = new Set()
+
+function sseWrite(res, event, data) {
+  try {
+    if (!res) return
+    if (event) res.write(`event: ${event}\n`)
+    const payload = typeof data === 'string' ? data : JSON.stringify(data)
+    const lines = String(payload).split(/\r?\n/)
+    for (const line of lines) res.write(`data: ${line}\n`)
+    res.write('\n')
+  } catch {}
+}
+
+async function getActiveBroadcastRow() {
+  // Prefer direct SQL when available
+  if (sql) {
+    try {
+      const rows = await sql`
+        select id::text as id, message, created_at, expires_at
+        from public.broadcast_messages
+        where removed_at is null and (expires_at is null or expires_at > now())
+        order by created_at desc
+        limit 1
+      `
+      return Array.isArray(rows) && rows[0] ? rows[0] : null
+    } catch {}
+  }
+  // Supabase REST fallback for reads
+  if (supabaseUrlEnv && supabaseAnonKey) {
+    try {
+      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+      const url = `${supabaseUrlEnv}/rest/v1/broadcast_messages?removed_at=is.null&select=id,message,created_at,expires_at&order=created_at.desc&limit=10`
+      const r = await fetch(url, { headers })
+      if (r.ok) {
+        const arr = await r.json().catch(() => [])
+        const now = Date.now()
+        const valid = (Array.isArray(arr) ? arr : []).find((row) => {
+          const ex = row?.expires_at ? Date.parse(row.expires_at) : null
+          return !ex || ex > now
+        })
+        return valid || null
+      }
+    } catch {}
+  }
+  return null
+}
+
+function broadcastToAll(payload) {
+  try {
+    for (const res of Array.from(broadcastClients)) {
+      sseWrite(res, 'broadcast', payload)
+    }
+  } catch {}
+}
+
+function clearBroadcastForAll() {
+  try {
+    for (const res of Array.from(broadcastClients)) {
+      sseWrite(res, 'clear', { ok: true })
+    }
+  } catch {}
+}
+
+// Public: fetch current active broadcast
+app.get('/api/broadcast/active', async (_req, res) => {
+  try {
+    const row = await getActiveBroadcastRow()
+    if (row) {
+      res.json({ ok: true, broadcast: {
+        id: String(row.id || ''),
+        message: String(row.message || ''),
+        createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
+        expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
+      } })
+    } else {
+      res.json({ ok: true, broadcast: null })
+    }
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e?.message || 'Failed to load broadcast' })
+  }
+})
+
+// Public: Server-Sent Events stream for broadcast updates
+app.get('/api/broadcast/stream', async (req, res) => {
+  try {
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache, no-transform')
+    res.setHeader('Connection', 'keep-alive')
+    res.setHeader('X-Accel-Buffering', 'no')
+    res.flushHeaders?.()
+
+    // Send initial state
+    try {
+      const row = await getActiveBroadcastRow()
+      if (row) {
+        sseWrite(res, 'broadcast', {
+          id: String(row.id || ''),
+          message: String(row.message || ''),
+          createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
+          expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
+        })
+      } else {
+        sseWrite(res, 'clear', { ok: true })
+      }
+    } catch {}
+
+    broadcastClients.add(res)
+    const hb = setInterval(() => { try { res.write(': ping\n\n') } catch {} }, 15000)
+    req.on('close', () => { try { clearInterval(hb) } catch {}; broadcastClients.delete(res) })
+  } catch (e) {
+    try { res.status(500).json({ error: e?.message || 'stream failed' }) } catch {}
+  }
+})
+
+// Admin: create a new broadcast message
+app.post('/api/admin/broadcast', async (req, res) => {
+  try {
+    // Require admin and ensure table
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
+    if (!sql) {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+    await ensureBroadcastTable()
+
+    const messageRaw = (req.body?.message || '').toString().trim()
+    const durationMsRaw = Number(req.body?.durationMs || req.body?.duration_ms || req.body?.duration || 0)
+    if (!messageRaw) {
+      res.status(400).json({ error: 'Message is required' })
+      return
+    }
+    // Enforce single active message
+    const active = await sql`
+      select id from public.broadcast_messages
+      where removed_at is null and (expires_at is null or expires_at > now())
+      limit 1
+    `
+    if (Array.isArray(active) && active.length > 0) {
+      res.status(409).json({ error: 'An active broadcast already exists' })
+      return
+    }
+    let expiresAt = null
+    if (Number.isFinite(durationMsRaw) && durationMsRaw > 0) {
+      expiresAt = new Date(Date.now() + Math.floor(durationMsRaw)).toISOString()
+    }
+    const rows = await sql`
+      insert into public.broadcast_messages (message, created_by, expires_at)
+      values (${messageRaw}, ${typeof adminId === 'string' ? adminId : null}, ${expiresAt ? expiresAt : null})
+      returning id::text as id, message, created_at, expires_at
+    `
+    const row = Array.isArray(rows) && rows[0] ? rows[0] : null
+    const payload = row ? {
+      id: String(row.id || ''),
+      message: String(row.message || ''),
+      createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
+      expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
+    } : null
+    if (payload) broadcastToAll(payload)
+    res.json({ ok: true, broadcast: payload })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to create broadcast' })
+  }
+})
+
+// Admin: remove current (or specified) broadcast message
+app.delete('/api/admin/broadcast', async (req, res) => {
+  try {
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
+    if (!sql) {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+    await ensureBroadcastTable()
+    const idParam = (req.query?.id || req.body?.id || '').toString().trim()
+    let rows
+    if (idParam) {
+      rows = await sql`
+        update public.broadcast_messages
+        set removed_at = now()
+        where id = ${idParam} and removed_at is null
+        returning id
+      `
+    } else {
+      rows = await sql`
+        update public.broadcast_messages
+        set removed_at = now()
+        where removed_at is null and (expires_at is null or expires_at > now())
+        returning id
+      `
+    }
+    const changed = Array.isArray(rows) && rows.length > 0
+    if (changed) clearBroadcastForAll()
+    res.json({ ok: true, removed: changed })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to remove broadcast' })
+  }
+})
+
 // Static assets
 const distDir = path.resolve(__dirname, 'dist')
 app.use(express.static(distDir))
@@ -3607,6 +3828,7 @@ if (shouldListen) {
     console.log(`[server] listening on http://localhost:${port}`)
     // Best-effort ensure ban tables are present at startup
     ensureBanTables().catch(() => {})
+    ensureBroadcastTable().catch(() => {})
   })
 }
 
