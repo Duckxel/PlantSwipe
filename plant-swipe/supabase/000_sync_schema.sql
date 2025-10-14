@@ -2416,3 +2416,61 @@ declare v_actor uuid := (select auth.uid()); v_name text; begin
 end; $$;
 
 grant execute on function public.log_garden_activity(uuid, text, text, text, text, text) to anon, authenticated;
+
+-- ========== Consolidated daily maintenance ==========
+-- Combine daily jobs into a single scheduled function to reduce pg_cron entries
+create or replace function public.run_daily_maintenance()
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare v_day date := (now() at time zone 'utc')::date; begin
+  -- 1) Compute garden tasks and update streaks
+  perform public.compute_daily_tasks_for_all_gardens(v_day);
+  -- 2) Purge old analytics and logs
+  delete from public.web_visits
+  where timezone('utc', occurred_at) < ((now() at time zone 'utc')::date - interval '35 days');
+  delete from public.admin_activity_logs
+  where timezone('utc', occurred_at) < ((now() at time zone 'utc')::date - interval '30 days');
+  delete from public.garden_activity_logs
+  where timezone('utc', occurred_at) < ((now() at time zone 'utc')::date - interval '35 days');
+end; $$;
+
+-- Unschedule legacy/duplicate jobs and schedule a single daily job
+do $$
+declare r record; begin
+  -- Unschedule by known job names (idempotent)
+  for r in select jobid from cron.job where jobname in (
+    'compute_daily_garden_tasks',
+    'purge_old_web_visits',
+    'purge_admin_activity_logs',
+    'purge_old_garden_activity_logs',
+    'daily_maintenance'
+  ) loop
+    perform cron.unschedule(r.jobid);
+  end loop;
+
+  -- Also unschedule any jobs created in the past by matching command text
+  for r in select jobid from cron.job where command ilike '%ensure_daily_tasks_for_gardens(%' loop
+    perform cron.unschedule(r.jobid);
+  end loop;
+  for r in select jobid from cron.job where command ilike '%compute_daily_tasks_for_all_gardens(%' loop
+    perform cron.unschedule(r.jobid);
+  end loop;
+  for r in select jobid from cron.job where command ilike '%delete from public.web_visits%interval ''35 days''%'
+  loop perform cron.unschedule(r.jobid); end loop;
+  for r in select jobid from cron.job where command ilike '%delete from public.garden_activity_logs%interval ''35 days''%'
+  loop perform cron.unschedule(r.jobid); end loop;
+  for r in select jobid from cron.job where command ilike '%delete from public.admin_activity_logs%interval ''30 days''%'
+  loop perform cron.unschedule(r.jobid); end loop;
+
+  -- Schedule a single daily maintenance at 00:05 UTC
+  perform cron.schedule(
+    'daily_maintenance',
+    '5 0 * * *',
+    $cron$
+    select public.run_daily_maintenance()
+    $cron$
+  );
+end $$;
