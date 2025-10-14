@@ -501,6 +501,26 @@ app.post('/api/admin/log-action', async (req, res) => {
     try {
       const caller = await getUserFromRequest(req)
       adminId = caller?.id || null
+      // Resolve admin display name for clearer logs
+      if (sql && adminId) {
+        try {
+          const rows = await sql`select coalesce(display_name, '') as name from public.profiles where id = ${adminId} limit 1`
+          adminName = (rows?.[0]?.name || '').trim() || null
+        } catch {}
+      }
+      if (!adminName && supabaseUrlEnv && supabaseAnonKey && adminId) {
+        try {
+          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const bearer = getBearerTokenFromRequest(req)
+          if (bearer) headers['Authorization'] = `Bearer ${bearer}`
+          const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(adminId)}&select=display_name&limit=1`
+          const r = await fetch(url, { headers })
+          if (r.ok) {
+            const arr = await r.json().catch(() => [])
+            adminName = Array.isArray(arr) && arr[0] ? (arr[0].display_name || null) : null
+          }
+        } catch {}
+      }
     } catch {}
 
     let ok = false

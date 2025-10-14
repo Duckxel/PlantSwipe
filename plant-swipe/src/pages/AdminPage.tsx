@@ -2683,7 +2683,7 @@ const AdminLogs: React.FC = () => {
 
   const formatLogLine = React.useCallback((l: { occurred_at: string; admin_id?: string | null; admin_name: string | null; action: string; target: string | null; detail: any }): string => {
     const ts = l.occurred_at ? new Date(l.occurred_at).toLocaleString() : ''
-    const who = (l.admin_name && String(l.admin_name).trim()) || (l.admin_id ? `id:${l.admin_id}` : 'Admin')
+    const who = (l.admin_name && String(l.admin_name).trim()) || 'Admin'
     const act = l.action || ''
     const tgt = l.target ? ` — ${l.target}` : ''
     const det = l.detail ? ` ${JSON.stringify(l.detail)}` : ''
@@ -2731,7 +2731,7 @@ const AdminLogs: React.FC = () => {
           <div className="text-sm opacity-60">No admin activity logged.</div>
         ) : (
           <>
-            <div className="bg-black text-green-300 rounded-2xl p-3 text-xs font-mono overflow-y-auto overflow-x-hidden max-h-[480px]">
+            <div className="bg-black text-green-300 rounded-2xl p-3 text-[11px] font-mono overflow-y-auto overflow-x-hidden max-h-[480px] space-y-2">
               {logs.slice(0, visibleCount).map((l, idx) => (
                 <div key={idx} className="whitespace-pre-wrap break-words">
                   {formatLogLine(l)}
