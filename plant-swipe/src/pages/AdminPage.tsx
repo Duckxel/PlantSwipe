@@ -1790,7 +1790,7 @@ export const AdminPage: React.FC = () => {
                                   </ResponsiveContainer>
                                 </div>
                                 <div className="flex flex-col gap-2">
-                                  {topCountries.slice(0, 3).map((c, idx) => (
+                                  {topCountries.slice(0, 5).map((c, idx) => (
                                     <div key={c.country} className="flex items-center justify-between">
                                       <div className="flex-1 flex items-center gap-2 min-w-0">
                                         <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: countryColors[idx % countryColors.length] }} />
@@ -1802,7 +1802,7 @@ export const AdminPage: React.FC = () => {
                                   {otherCountries && otherCountries.visits > 0 && (
                                     <div className="flex items-center justify-between">
                                       <div className="flex-1 flex items-center gap-2 min-w-0">
-                                        <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: countryColors[4 % countryColors.length] }} />
+                                        <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: countryColors[5 % countryColors.length] }} />
                                         <span className="text-sm truncate">Other ({otherCountries.count})</span>
                                       </div>
                                       <span className="text-sm tabular-nums">{Math.round(otherCountries?.pct || 0)}%</span>
