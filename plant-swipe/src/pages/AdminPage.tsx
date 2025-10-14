@@ -205,12 +205,12 @@ export const AdminPage: React.FC = () => {
     setRestarting(true)
     try {
       setConsoleOpen(true)
-      appendConsole('[restart] Restart requested…')
+      appendConsole('[restart] Restart services requested…')
       setReloadReady(false)
       const session = (await supabase.auth.getSession()).data.session
       const token = session?.access_token
       if (!token) {
-        appendConsole('[restart] You must be signed in to restart the server')
+        appendConsole('[restart] You must be signed in to restart services')
         return
       }
       // First attempt: restart via Node API (preserves Authorization)
@@ -261,16 +261,19 @@ export const AdminPage: React.FC = () => {
             })
             await safeJson(reloadResp).catch(() => null)
           } catch {}
-          // Then restart the Node service via Admin API
-          const adminResp = await fetch('/admin/restart-app', {
-            method: 'POST',
-            headers: adminHeaders,
-            credentials: 'same-origin',
-            body: JSON.stringify({ service: 'plant-swipe-node' }),
-          })
-          const ab = await safeJson(adminResp)
-          if (!adminResp.ok || ab?.ok !== true) {
-            throw new Error(ab?.error || `Admin restart failed (${adminResp.status})`)
+          // Then restart the Admin API and Node services via Admin API
+          const services = ['admin-api', 'plant-swipe-node']
+          for (const svc of services) {
+            const r = await fetch('/admin/restart-app', {
+              method: 'POST',
+              headers: adminHeaders,
+              credentials: 'same-origin',
+              body: JSON.stringify({ service: svc }),
+            })
+            const jb = await safeJson(r)
+            if (!r.ok || jb?.ok !== true) {
+              throw new Error(jb?.error || `Admin restart failed for ${svc} (${r.status})`)
+            }
           }
         } else {
           throw new Error(nodeErrorMsg)
@@ -289,15 +292,15 @@ export const AdminPage: React.FC = () => {
         await new Promise(res => setTimeout(res, 1000))
       }
       if (healthy) {
-        appendConsole('[restart] Server healthy. You can reload the page when ready.')
+        appendConsole('[restart] Services healthy. You can reload the page when ready.')
       } else {
-        appendConsole('[restart] Timed out waiting for server health. You may try reloading manually.')
+        appendConsole('[restart] Timed out waiting for service health. You may try reloading manually.')
       }
       setReloadReady(true)
 
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e)
-      appendConsole(`[restart] Failed to restart server: ${message}`)
+      appendConsole(`[restart] Failed to restart services: ${message}`)
     } finally {
       setRestarting(false)
     }
@@ -1244,7 +1247,7 @@ export const AdminPage: React.FC = () => {
             <CardContent className="p-4">
               {reloadReady && (
                 <div className="mb-3 rounded-xl border bg-amber-50/70 p-3 flex items-center justify-between gap-3">
-                  <div className="text-sm">Server restart complete. Reload when convenient.</div>
+                  <div className="text-sm">Services restart complete. Reload when convenient.</div>
                   <Button className="rounded-xl" onClick={reloadPage}>Reload page</Button>
                 </div>
               )}
@@ -1359,7 +1362,7 @@ export const AdminPage: React.FC = () => {
                 <Button className="rounded-2xl w-full" onClick={restartServer} disabled={restarting}>
                   <Server className="h-4 w-4" />
                   <RefreshCw className="h-4 w-4" />
-                  <span>{restarting ? 'Restarting…' : 'Restart Server'}</span>
+                  <span>{restarting ? 'Restarting…' : 'Restart Services'}</span>
                 </Button>
                 <Button className="rounded-2xl w-full" variant="secondary" onClick={pullLatest} disabled={pulling}>
                   <Github className="h-4 w-4" />
