@@ -1,4 +1,5 @@
 import React from "react"
+import { createPortal } from "react-dom"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -322,12 +323,26 @@ export const AdminPage: React.FC = () => {
   const [visitorsSeries, setVisitorsSeries] = React.useState<Array<{ date: string; uniqueVisitors: number }>>([])
   const [visitorsTotalUnique7d, setVisitorsTotalUnique7d] = React.useState<number>(0)
   const [topCountries, setTopCountries] = React.useState<Array<{ country: string; visits: number; pct?: number }>>([])
-  const [otherCountries, setOtherCountries] = React.useState<{ count: number; visits: number; pct?: number } | null>(null)
+  const [otherCountries, setOtherCountries] = React.useState<{ count: number; visits: number; pct?: number; codes?: string[] } | null>(null)
   const [topReferrers, setTopReferrers] = React.useState<Array<{ source: string; visits: number; pct?: number }>>([])
   const [otherReferrers, setOtherReferrers] = React.useState<{ count: number; visits: number; pct?: number } | null>(null)
   // Distinct, high-contrast palette for readability
   const countryColors = ['#10b981','#3b82f6','#ef4444','#f59e0b','#8b5cf6','#14b8a6','#6366f1','#d946ef','#06b6d4','#84cc16','#fb7185','#f97316']
   const referrerColors = ['#111827','#3b82f6','#ef4444','#10b981','#f59e0b','#8b5cf6']
+  // Floating tooltip for the "Other countries" legend item
+  const [otherCountriesTooltip, setOtherCountriesTooltip] = React.useState<{ top: number; left: number; names: string[] } | null>(null)
+  const showOtherCountriesTooltip = React.useCallback((el: HTMLElement) => {
+    try {
+      if (!otherCountries || !Array.isArray(otherCountries.codes) || otherCountries.codes.length === 0) return
+      const rect = el.getBoundingClientRect()
+      const names = otherCountries.codes
+        .map((c) => countryCodeToName(c))
+        .filter((n) => !!n)
+        .sort((a, b) => a.localeCompare(b))
+      setOtherCountriesTooltip({ top: Math.max(8, rect.top - 8), left: rect.left + rect.width / 2, names })
+    } catch {}
+  }, [otherCountries, countryCodeToName])
+  const hideOtherCountriesTooltip = React.useCallback(() => setOtherCountriesTooltip(null), [])
   // Connected IPs (last 60 minutes)
   const [ips, setIps] = React.useState<string[]>([])
   const [ipsLoading, setIpsLoading] = React.useState<boolean>(true)
@@ -864,7 +879,15 @@ export const AdminPage: React.FC = () => {
             ? sbd.topCountries.map((r: { country?: string; visits?: number }) => ({ country: String(r.country || ''), visits: Number(r.visits || 0) }))
                 .filter((x: { country: string }) => !!x.country)
             : []
-          const oc = sbd?.otherCountries && typeof sbd.otherCountries === 'object' ? { count: Number(sbd.otherCountries.count || 0), visits: Number(sbd.otherCountries.visits || 0) } : null
+          const oc = sbd?.otherCountries && typeof sbd.otherCountries === 'object'
+            ? {
+                count: Number(sbd.otherCountries.count || 0),
+                visits: Number(sbd.otherCountries.visits || 0),
+                codes: Array.isArray(sbd.otherCountries.codes)
+                  ? sbd.otherCountries.codes.map((x: any) => String(x || '')).filter(Boolean)
+                  : undefined,
+              }
+            : null
           const totalCountryVisits = tc.reduce((a: number, b: any) => a + (b.visits || 0), 0) + (oc?.visits || 0)
           const countriesWithPct = totalCountryVisits > 0
             ? tc.map((x: { country: string; visits: number }) => ({ ...x, pct: (x.visits / totalCountryVisits) * 100 }))
@@ -1806,7 +1829,13 @@ export const AdminPage: React.FC = () => {
                                   ))}
                                   {otherCountries && otherCountries.visits > 0 && (
                                     <div className="flex items-center justify-between">
-                                      <div className="flex-1 flex items-center gap-2 min-w-0">
+                                      <div
+                                        className="flex-1 flex items-center gap-2 min-w-0"
+                                        onMouseEnter={(e) => showOtherCountriesTooltip(e.currentTarget as HTMLElement)}
+                                        onMouseLeave={hideOtherCountriesTooltip}
+                                        onFocus={(e) => showOtherCountriesTooltip(e.currentTarget as HTMLElement)}
+                                        onBlur={hideOtherCountriesTooltip}
+                                      >
                                         <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: countryColors[5 % countryColors.length] }} />
                                         <span className="text-sm truncate">Other ({otherCountries.count})</span>
                                       </div>
@@ -2445,6 +2474,22 @@ export const AdminPage: React.FC = () => {
                           </div>
                         )}
                       </div>
+                      {otherCountriesTooltip && createPortal(
+                        <div
+                          className="fixed z-[70] pointer-events-none"
+                          style={{ top: otherCountriesTooltip.top, left: otherCountriesTooltip.left, transform: 'translate(-50%, -100%)' }}
+                        >
+                          <div className="rounded-xl border bg-white shadow px-3 py-2 max-w-[280px]">
+                            <div className="text-xs font-medium mb-1">Countries in Other</div>
+                            <div className="text-[11px] opacity-80 space-y-0.5 max-h-48 overflow-auto">
+                              {otherCountriesTooltip.names.map((n, idx) => (
+                                <div key={`${n}-${idx}`} className="truncate">{n}</div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>,
+                        document.body
+                      )}
                     </div>
                     <div className="rounded-xl border p-3">
                       <div className="text-[11px] opacity-60 mb-1">Top devices</div>
