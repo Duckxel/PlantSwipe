@@ -1809,17 +1809,23 @@ export const AdminPage: React.FC = () => {
                                           if (!d) return null
                                           if (d.isOther) {
                                             const items: Array<{ country: string; visits: number }> = Array.isArray(otherCountries?.items) ? otherCountries!.items as Array<{ country: string; visits: number }> : []
-                                            const rows: Array<{ name: string; visits: number; pct: number }> = items
-                                              .map((it: { country: string; visits: number }) => ({ name: countryCodeToName(it.country), visits: it.visits, pct: totalVisits > 0 ? (it.visits / totalVisits) * 100 : 0 }))
+                                            const otherTotal = Math.max(0, otherCountries?.visits || 0)
+                                            const rows: Array<{ name: string; visits: number; pctTotal: number; pctOther: number }> = items
+                                              .map((it: { country: string; visits: number }) => ({
+                                                name: countryCodeToName(it.country),
+                                                visits: it.visits,
+                                                pctTotal: totalVisits > 0 ? (it.visits / totalVisits) * 100 : 0,
+                                                pctOther: otherTotal > 0 ? (it.visits / otherTotal) * 100 : 0,
+                                              }))
                                               .sort((a: { visits: number }, b: { visits: number }) => (b.visits || 0) - (a.visits || 0))
                                             return (
                                               <div className="rounded-xl border bg-white shadow px-3 py-2 max-w-[260px]">
                                                 <div className="text-xs font-medium mb-1">Countries in Other</div>
                                                 <div className="text-[11px] opacity-80 space-y-0.5 max-h-48 overflow-auto">
-                                                  {rows.map((r: { name: string; visits: number; pct: number }, idx: number) => (
+                                                  {rows.map((r: { name: string; visits: number; pctTotal: number; pctOther: number }, idx: number) => (
                                                     <div key={`${r.name}-${idx}`} className="flex items-center justify-between gap-3">
                                                       <div className="truncate">{r.name}</div>
-                                                      <div className="text-[11px] tabular-nums whitespace-nowrap">{Math.round(r.pct)}% · {r.visits}</div>
+                                                      <div className="text-[11px] tabular-nums whitespace-nowrap">{Math.round(r.pctOther)}% of Other · {Math.round(r.pctTotal)}% · {r.visits}</div>
                                                     </div>
                                                   ))}
                                                 </div>
