@@ -214,6 +214,7 @@ function TaskRowMenu({ onEdit, onDelete }: { onEdit?: () => void; onDelete: () =
   const buttonRef = React.useRef<HTMLButtonElement | null>(null)
   const menuRef = React.useRef<HTMLDivElement | null>(null)
   const [position, setPosition] = React.useState<{ top: number; right: number; placement: 'top' | 'bottom' }>({ top: 0, right: 0, placement: 'bottom' })
+  const rafRef = React.useRef<number | null>(null)
 
   const computePosition = React.useCallback((placementHint?: 'top' | 'bottom') => {
     const btn = buttonRef.current
@@ -230,7 +231,10 @@ function TaskRowMenu({ onEdit, onDelete }: { onEdit?: () => void; onDelete: () =
   React.useEffect(() => {
     if (!open) return
     computePosition()
-    const onWindow = () => computePosition(position.placement)
+    const onWindow = () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+      rafRef.current = requestAnimationFrame(() => computePosition(position.placement))
+    }
     const onDocClick = (e: MouseEvent) => {
       const target = e.target as Node
       if (menuRef.current && menuRef.current.contains(target)) return
@@ -246,6 +250,7 @@ function TaskRowMenu({ onEdit, onDelete }: { onEdit?: () => void; onDelete: () =
       window.removeEventListener('resize', onWindow)
       window.removeEventListener('scroll', onWindow, true)
       document.removeEventListener('mousedown', onDocClick, true)
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
     }
   }, [open, computePosition, position.placement])
 
@@ -259,7 +264,7 @@ function TaskRowMenu({ onEdit, onDelete }: { onEdit?: () => void; onDelete: () =
       >
         ⋯
       </Button>
-      {open && createPortal(
+      {open && (
         <div
           ref={menuRef as any}
           style={{ position: 'fixed', top: position.top, right: position.right, width: '10rem', zIndex: 80 }}
@@ -269,8 +274,7 @@ function TaskRowMenu({ onEdit, onDelete }: { onEdit?: () => void; onDelete: () =
             <button onClick={(e) => { e.stopPropagation(); setOpen(false); onEdit() }} className="w-full text-left px-3 py-2 rounded-t-xl hover:bg-stone-50">Edit</button>
           )}
           <button onClick={(e) => { e.stopPropagation(); setOpen(false); onDelete() }} className={`w-full text-left px-3 py-2 ${onEdit ? '' : 'rounded-t-xl'} rounded-b-xl hover:bg-stone-50 text-red-600`}>Delete</button>
-        </div>,
-        document.body
+        </div>
       )}
     </div>
   )
