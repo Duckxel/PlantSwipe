@@ -1,5 +1,6 @@
 -- plantswipe: single idempotent SQL to sync DB schema to current app usage
--- Safe to run multiple times. Creates/updates required objects, and removes unused ones without dropping data rows.
+-- Safe to run multiple times. Creates/updates required objects, and removes unused ones.
+-- Note: This script now drops unnecessary public tables not used by the app.
 -- NOTE: Requires Postgres + Supabase environment (auth schema present). Uses security definer where needed.
 
 -- ========== Extensions ==========
@@ -2217,6 +2218,37 @@ drop function if exists public.is_owner(uuid) cascade;
 drop function if exists public.mark_garden_plant_done_today(uuid, uuid, date) cascade;
 drop function if exists public.set_plant_care_water_from_freq() cascade;
 drop function if exists public.set_updated_at() cascade;
+
+-- ========== Remove unnecessary legacy/experimental tables ==========
+do $$
+declare
+  required_tables text[] := array[
+    -- core/user
+    'profiles',
+    -- catalog
+    'plants',
+    -- gardens domain
+    'gardens','garden_members','garden_plants','garden_plant_events',
+    'garden_inventory','garden_instance_inventory','garden_transactions',
+    'garden_tasks','garden_plant_schedule','garden_watering_schedule',
+    'garden_plant_tasks','garden_plant_task_occurrences','garden_task_user_completions',
+    -- telemetry/admin
+    'web_visits','banned_accounts','banned_ips','profile_admin_notes','admin_activity_logs','garden_activity_logs'
+  ];
+  keep_tables text[] := required_tables; -- alias for clarity
+  t record;
+begin
+  -- Drop any public tables not in the allowlist. This avoids drift from experiments.
+  for t in
+    select tablename from pg_tables
+    where schemaname = 'public'
+      and tablename <> 'schema_migrations'
+      and not (tablename = any(keep_tables))
+  loop
+    execute format('drop table if exists public.%I cascade', t.tablename);
+    raise notice 'Dropped unnecessary table: public.%', t.tablename;
+  end loop;
+end $$;
 
 
 -- ========== Activity logs ==========
