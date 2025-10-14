@@ -1536,15 +1536,15 @@ app.get('/api/admin/members-by-ip', async (req, res) => {
             where ip_address = ${ip}::inet
           `,
           sql`
-            select u.id,
+            select v.user_id as id,
                    u.email,
                    p.display_name,
                    max(v.occurred_at) as last_seen_at
             from public.web_visits v
-            join auth.users u on u.id = v.user_id
-            left join public.profiles p on p.id = u.id
+            left join auth.users u on u.id = v.user_id
+            left join public.profiles p on p.id = v.user_id
             where v.ip_address = ${ip}::inet and v.user_id is not null
-            group by u.id, u.email, p.display_name
+            group by v.user_id, u.email, p.display_name
             order by last_seen_at desc
           `,
         ])
@@ -1555,8 +1555,10 @@ app.get('/api/admin/members-by-ip', async (req, res) => {
           last_seen_at: r.last_seen_at || null,
         }))
         const connectionsCount = aggRows?.[0]?.connections_count ?? users.length
-        const usersCount = aggRows?.[0]?.users_count ?? users.length
-        const lastSeenAt = aggRows?.[0]?.last_seen_at || null
+        // Align displayed count with actual list of user cards
+        const usersCount = users.length
+        // Align last seen with the most recent known user (first row is latest)
+        const lastSeenAt = users.length > 0 ? users[0].last_seen_at : null
         res.json({ ok: true, ip, usersCount, connectionsCount, lastSeenAt, users, via: 'database' })
         return
       } catch (e) {
@@ -1632,7 +1634,8 @@ app.get('/api/admin/members-by-ip', async (req, res) => {
     })
     // Aggregates via RPCs to avoid RLS surprises
     let connectionsCount = 0
-    let lastSeenAt = null
+    // Align last seen and users count with the actual displayed list
+    let lastSeenAt = users.length > 0 ? users[0].last_seen_at : null
     let usersCount = users.length
     try {
       const [connResp, usersResp, lastResp] = await Promise.all([
@@ -1644,13 +1647,13 @@ app.get('/api/admin/members-by-ip', async (req, res) => {
         const val = await connResp.json().catch(() => 0)
         if (typeof val === 'number') connectionsCount = val
       }
+      // Keep usersCount aligned with the list (do not override via RPC)
       if (usersResp.ok) {
-        const val = await usersResp.json().catch(() => users.length)
-        if (typeof val === 'number') usersCount = val
+        await usersResp.json().catch(() => users.length)
       }
+      // Keep lastSeenAt aligned with known users (do not override with guest-only visits)
       if (lastResp.ok) {
-        const val = await lastResp.json().catch(() => null)
-        if (val) lastSeenAt = val
+        await lastResp.json().catch(() => null)
       }
     } catch {}
 

@@ -926,6 +926,9 @@ export const AdminPage: React.FC = () => {
   const [ipConnectionsCount, setIpConnectionsCount] = React.useState<number | null>(null)
   const [ipLastSeenAt, setIpLastSeenAt] = React.useState<string | null>(null)
 
+  // Ref to focus the IP input when jumping from overview
+  const memberIpInputRef = React.useRef<HTMLInputElement | null>(null)
+
   // Member visits (last 30 days)
   const [memberVisitsLoading, setMemberVisitsLoading] = React.useState<boolean>(false)
   const [memberVisitsSeries, setMemberVisitsSeries] = React.useState<Array<{ date: string; visits: number }>>([])
@@ -1000,8 +1003,8 @@ export const AdminPage: React.FC = () => {
     }
   }, [lookupEmail, memberLoading, safeJson])
 
-  const lookupByIp = React.useCallback(async () => {
-    const ip = ipLookup.trim()
+  const lookupByIp = React.useCallback(async (overrideIp?: string) => {
+    const ip = (overrideIp ?? ipLookup).trim()
     if (!ip || ipLoading) return
     setIpLoading(true)
     setIpError(null)
@@ -1037,6 +1040,21 @@ export const AdminPage: React.FC = () => {
       setIpLoading(false)
     }
   }, [ipLookup, ipLoading, safeJson])
+
+  // Jump from overview IP badge to Members tab IP lookup
+  const jumpToIpLookup = React.useCallback((ip: string) => {
+    const next = String(ip || '').trim()
+    if (!next) return
+    setActiveTab('members')
+    setIpLookup(next)
+    setTimeout(() => {
+      try {
+        memberIpInputRef.current?.focus()
+      } catch {}
+      // Trigger the same search flow as pressing Enter in the input
+      lookupByIp(next)
+    }, 0)
+  }, [lookupByIp])
 
   // Auto-load visits series when a member is selected
   React.useEffect(() => {
@@ -1488,7 +1506,19 @@ export const AdminPage: React.FC = () => {
                           ) : (
                             <div className="flex flex-wrap gap-2">
                               {ips.map((ip) => (
-                                <Badge key={ip} variant="outline" className="rounded-full px-2 py-1 text-xs">{ip}</Badge>
+                                <Badge
+                                  key={ip}
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={() => jumpToIpLookup(ip)}
+                                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); jumpToIpLookup(ip) } }}
+                                  title={`Lookup members for ${ip}`}
+                                  aria-label={`Lookup members for ${ip}`}
+                                  variant="outline"
+                                  className="rounded-full px-2 py-1 text-xs cursor-pointer hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-ring"
+                                >
+                                  {ip}
+                                </Badge>
                               ))}
                             </div>
                           )}
@@ -2068,7 +2098,19 @@ export const AdminPage: React.FC = () => {
                     <div className="text-xs font-medium uppercase tracking-wide opacity-60">Known IPs ({memberData.ips.length})</div>
                     <div className="flex flex-wrap gap-1">
                       {memberData.ips.map((ip) => (
-                        <Badge key={ip} variant="outline" className="rounded-full">{ip}</Badge>
+                        <Badge
+                          key={ip}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => jumpToIpLookup(ip)}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); jumpToIpLookup(ip) } }}
+                          title={`Lookup members for ${ip}`}
+                          aria-label={`Lookup members for ${ip}`}
+                          variant="outline"
+                          className="rounded-full cursor-pointer hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-ring"
+                        >
+                          {ip}
+                        </Badge>
                       ))}
                       {memberData.ips.length === 0 && <div className="text-xs opacity-60">No IPs recorded</div>}
                     </div>
@@ -2167,7 +2209,19 @@ export const AdminPage: React.FC = () => {
                         <div className="text-sm mt-1">Blocked IPs:
                           <div className="mt-1 flex flex-wrap gap-1">
                             {memberData.bannedIps.map(ip => (
-                              <Badge key={ip} variant="outline" className="rounded-full bg-white">{ip}</Badge>
+                              <Badge
+                                key={ip}
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => jumpToIpLookup(ip)}
+                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); jumpToIpLookup(ip) } }}
+                                title={`Lookup members for ${ip}`}
+                                aria-label={`Lookup members for ${ip}`}
+                                variant="outline"
+                                className="rounded-full bg-white cursor-pointer hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-ring"
+                              >
+                                {ip}
+                              </Badge>
                             ))}
                           </div>
                         </div>
@@ -2199,8 +2253,9 @@ export const AdminPage: React.FC = () => {
                     value={ipLookup}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => setIpLookup(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); lookupByIp() } }}
+                    ref={memberIpInputRef}
                   />
-                  <Button className="rounded-2xl" onClick={lookupByIp} disabled={ipLoading || !ipLookup.trim()}>
+                  <Button className="rounded-2xl" onClick={() => lookupByIp()} disabled={ipLoading || !ipLookup.trim()}>
                     <Search className="h-4 w-4" /> Search IP
                   </Button>
                 </div>
