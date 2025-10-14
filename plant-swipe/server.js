@@ -1015,6 +1015,12 @@ async function handleRestartServer(req, res) {
       return
     }
 
+    try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      const adminName = null
+      if (sql) await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'restart_server', null, ${sql.json({})})`
+    } catch {}
     res.json({ ok: true, message: 'Restarting server' })
     // Give time for response to flush, then request systemd to restart the service.
     setTimeout(() => {
@@ -1051,6 +1057,12 @@ app.post('/api/admin/restart-all', async (req, res) => {
       return
     }
 
+    try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      const adminName = null
+      if (sql) await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'restart_all', null, ${sql.json({})})`
+    } catch {}
     res.json({ ok: true, message: 'Reloading nginx and restarting services' })
 
     setTimeout(async () => {
