@@ -277,7 +277,8 @@ NODE_SERVICE_FILE="/etc/systemd/system/$SERVICE_NODE.service"
 $SUDO bash -c "cat > '$NODE_SERVICE_FILE' <<EOF
 [Unit]
 Description=PlantSwipe Node API
-After=network.target
+Wants=network-online.target
+After=network-online.target
 
 [Service]
 User=www-data
@@ -285,7 +286,11 @@ Group=www-data
 Environment=NODE_ENV=production
 WorkingDirectory=$NODE_DIR
 ExecStart=/usr/bin/node server.js
-Restart=on-failure
+Restart=always
+RestartSec=3s
+StartLimitIntervalSec=60
+StartLimitBurst=10
+TimeoutStopSec=15s
 KillMode=mixed
 
 [Install]
@@ -323,6 +328,15 @@ $SUDO systemctl restart "$SERVICE_ADMIN" "$SERVICE_NODE"
 # Final nginx reload to apply site links
 log "Reloading nginx…"
 $SUDO systemctl reload "$SERVICE_NGINX"
+
+# Install out-of-band restart helper
+RESTART_HELPER_DST="/usr/local/bin/plantswipe-restart"
+if [[ -f "$REPO_DIR/scripts/restart-services.sh" ]]; then
+  log "Installing restart helper to $RESTART_HELPER_DST…"
+  $SUDO install -D -m 0755 "$REPO_DIR/scripts/restart-services.sh" "$RESTART_HELPER_DST"
+else
+  log "restart-services.sh not found in repo; skipping helper installation."
+fi
 
 # Mark repo as safe for both root and service user to avoid 'dubious ownership'
 log "Marking repo as a safe.directory in git config (root and $SERVICE_USER)…"
