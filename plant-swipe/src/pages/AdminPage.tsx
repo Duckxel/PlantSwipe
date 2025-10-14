@@ -127,6 +127,52 @@ export const AdminPage: React.FC = () => {
     try {
       setConsoleOpen(true)
       appendConsole('[sync] Sync DB Schema: starting…')
+      // Try streaming endpoint first for live feedback
+      try {
+        const es = new EventSource('/api/admin/sync-schema/stream')
+        await new Promise<void>((resolve, reject) => {
+          let finished = false
+          const onLog = (ev: MessageEvent) => { const t = String(ev.data || ''); if (t) appendConsole(t) }
+          es.addEventListener('log', onLog)
+          es.addEventListener('summary', (ev: MessageEvent) => {
+            try {
+              const s = JSON.parse(String(ev.data || '{}'))
+              appendConsole('[sync] Post‑sync verification:')
+              appendConsole(`- Tables OK: ${(s?.tables?.present || []).length}/${(s?.tables?.required || []).length}`)
+              appendConsole(`- Functions OK: ${(s?.functions?.present || []).length}/${(s?.functions?.required || []).length}`)
+              appendConsole(`- Extensions OK: ${(s?.extensions?.present || []).length}/${(s?.extensions?.required || []).length}`)
+              const mt = Array.isArray(s?.tables?.missing) ? s.tables.missing : []
+              const mf = Array.isArray(s?.functions?.missing) ? s.functions.missing : []
+              const me = Array.isArray(s?.extensions?.missing) ? s.extensions.missing : []
+              const hasMissing = mt.length + mf.length + me.length > 0
+              if (hasMissing) {
+                if (mt.length) appendConsole(`- Missing tables: ${mt.join(', ')}`)
+                if (mf.length) appendConsole(`- Missing functions: ${mf.join(', ')}`)
+                if (me.length) appendConsole(`- Missing extensions: ${me.join(', ')}`)
+              } else {
+                appendConsole('- All required objects present')
+              }
+            } catch {}
+          })
+          es.addEventListener('done', (ev: MessageEvent) => {
+            finished = true
+            try {
+              const p = JSON.parse(String(ev.data || '{}'))
+              if (p?.ok) appendConsole('[sync] Schema synchronized successfully')
+              else appendConsole(`[sync] Failed (code ${p?.code ?? 'unknown'})`)
+            } catch {}
+            try { es.close() } catch {}
+            resolve()
+          })
+          es.addEventListener('error', () => {
+            if (!finished) {
+              try { es.close() } catch {}
+              reject(new Error('stream_error'))
+            }
+          })
+        })
+        return
+      } catch {}
       const session = (await supabase.auth.getSession()).data.session
       const token = session?.access_token
       if (!token) {

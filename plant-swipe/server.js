@@ -1188,7 +1188,25 @@ async function handleSyncSchema(req, res) {
     const sqlPath = path.resolve(__dirname, 'supabase', '000_sync_schema.sql')
     const sqlText = await fs.readFile(sqlPath, 'utf8')
 
-    // Use a dedicated short-lived connection so we can capture onnotice for this run
+    // Prefer psql to mirror CLI feedback; fallback to driver if psql unavailable
+    const psqlOk = await isPsqlAvailable()
+    if (psqlOk) {
+      const { code, stdout, stderr } = await runPsqlSyncSchema(sqlPath)
+      if (code !== 0) {
+        const combined = `${stdout || ''}\n${stderr || ''}`
+        const tail = combined.split(/\r?\n/).slice(-120).join('\n')
+        res.status(500).json({ error: 'psql failed', detail: tail, stdoutTail: tail })
+        return
+      }
+      // Success via psql: compute summary and return stdout tail
+      let summary = null
+      try { summary = await verifySchemaAfterSync() } catch {}
+      const outTail = (stdout || '').split(/\r?\n/).slice(-120).join('\n')
+      res.json({ ok: true, message: 'Schema synchronized successfully', summary, stdoutTail: outTail })
+      return
+    }
+
+    // Fallback path: use driver and onnotice
     const conn = postgres(connectionString, {
       ...postgresOptions,
       max: 1,
@@ -1202,7 +1220,6 @@ async function handleSyncSchema(req, res) {
 
     let lastResult = null
     try {
-      // Execute inside a single transaction; allow multiple statements
       await conn.begin(async (tx) => {
         lastResult = await tx.unsafe(sqlText, [], { simple: true })
       })
@@ -1210,12 +1227,10 @@ async function handleSyncSchema(req, res) {
       try { await conn.end({ timeout: 2_000 }) } catch {}
     }
 
-    // Prepare lightweight payload of any rows returned by the final statement
     let rows = undefined
     let rowCount = undefined
     if (Array.isArray(lastResult)) {
       const limited = lastResult.slice(0, 100)
-      // Shallow-truncate very large field values to keep payload reasonable
       rows = limited.map((r) => {
         const out = {}
         for (const [k, v] of Object.entries(r)) {
@@ -1229,18 +1244,10 @@ async function handleSyncSchema(req, res) {
       rowCount = Number(lastResult.count) || 0
     }
 
-    // Verify important objects exist after sync
     let summary = null
     try { summary = await verifySchemaAfterSync() } catch {}
 
-    res.json({
-      ok: true,
-      message: 'Schema synchronized successfully',
-      summary,
-      notices: notices.length ? notices : undefined,
-      rows,
-      rowCount,
-    })
+    res.json({ ok: true, message: 'Schema synchronized successfully', summary, notices: notices.length ? notices : undefined, rows, rowCount })
   } catch (e) {
     res.status(500).json({
       error: e?.message || 'Failed to sync schema',
@@ -1257,6 +1264,84 @@ app.options('/api/admin/sync-schema', (_req, res) => {
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
   res.status(204).end()
 })
+
+// Streaming (SSE) schema sync via psql for live operator feedback
+app.get('/api/admin/sync-schema/stream', async (req, res) => {
+  try {
+    const isAdmin = await isAdminFromRequest(req)
+    if (!isAdmin) return
+  } catch { return }
+
+  const available = await isPsqlAvailable()
+  if (!available) {
+    res.status(405).json({ error: 'psql not available for streaming' })
+    return
+  }
+
+  // SSE headers
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+  })
+  const send = (event, data) => {
+    try {
+      if (event) res.write(`event: ${event}\n`)
+      if (data !== undefined) res.write(`data: ${typeof data === 'string' ? data : JSON.stringify(data)}\n`)
+      res.write('\n')
+    } catch {}
+  }
+  send('open', { ok: true, message: 'Starting schema sync…' })
+
+  const sqlPath = path.resolve(__dirname, 'supabase', '000_sync_schema.sql')
+  const args = [connectionString, '-v', 'ON_ERROR_STOP=1', '-X', '-q', '-f', sqlPath]
+  const child = spawnChild('psql', args, { env: { ...process.env }, stdio: ['ignore', 'pipe', 'pipe'] })
+
+  child.stdout?.on('data', (buf) => {
+    String(buf)
+      .split(/\r?\n/)
+      .forEach((line) => { if (line?.trim()) send('log', line) })
+  })
+  child.stderr?.on('data', (buf) => {
+    String(buf)
+      .split(/\r?\n/)
+      .forEach((line) => { if (line?.trim()) send('log', line) })
+  })
+  child.on('error', (err) => {
+    send('error', err?.message || 'spawn failed')
+  })
+  child.on('close', async (code) => {
+    if (code === 0) {
+      let summary = null
+      try { summary = await verifySchemaAfterSync() } catch {}
+      if (summary) send('summary', summary)
+      send('done', { ok: true })
+    } else {
+      send('done', { ok: false, code })
+    }
+    try { res.end() } catch {}
+  })
+})
+
+async function isPsqlAvailable() {
+  try {
+    await exec('psql --version', { timeout: 5000 })
+    return true
+  } catch { return false }
+}
+
+async function runPsqlSyncSchema(sqlPath) {
+  return await new Promise((resolve) => {
+    const args = [connectionString, '-v', 'ON_ERROR_STOP=1', '-X', '-q', '-f', sqlPath]
+    const child = spawnChild('psql', args, { env: { ...process.env }, stdio: ['pipe', 'pipe', 'pipe'] })
+    let out = ''
+    let err = ''
+    child.stdout?.on('data', (buf) => { out += String(buf) })
+    child.stderr?.on('data', (buf) => { err += String(buf) })
+    child.on('close', (code) => resolve({ code, stdout: out, stderr: err }))
+    child.on('error', () => resolve({ code: 1, stdout: out, stderr: err || 'spawn failed' }))
+  })
+}
 
 // Admin: global stats (bypass RLS via server connection)
 app.get('/api/admin/stats', async (req, res) => {
