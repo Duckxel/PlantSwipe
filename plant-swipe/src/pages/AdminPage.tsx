@@ -1064,9 +1064,25 @@ export const AdminPage: React.FC = () => {
         meanRpm5m: typeof data?.meanRpm5m === 'number' ? data.meanRpm5m : null,
         adminNotes: Array.isArray(data?.adminNotes) ? data.adminNotes.map((n: any) => ({ id: String(n.id), admin_id: n?.admin_id || null, admin_name: n?.admin_name || null, message: String(n?.message || ''), created_at: n?.created_at || null })) : [],
       })
+      // Log lookup success (UI)
+      try {
+        const headers2: Record<string,string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+        if (token) headers2['Authorization'] = `Bearer ${token}`
+        try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) headers2['X-Admin-Token'] = String(adminToken) } catch {}
+        await fetch('/api/admin/log-action', { method: 'POST', headers: headers2, credentials: 'same-origin', body: JSON.stringify({ action: 'admin_lookup', target: lookupEmail, detail: { via: 'ui' } }) })
+      } catch {}
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       setMemberError(msg || 'Lookup failed')
+      // Log failed lookup
+      try {
+        const session = (await supabase.auth.getSession()).data.session
+        const token = session?.access_token
+        const headers2: Record<string,string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+        if (token) headers2['Authorization'] = `Bearer ${token}`
+        try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) headers2['X-Admin-Token'] = String(adminToken) } catch {}
+        await fetch('/api/admin/log-action', { method: 'POST', headers: headers2, credentials: 'same-origin', body: JSON.stringify({ action: 'admin_lookup_failed', target: lookupEmail, detail: { error: msg } }) })
+      } catch {}
     } finally {
       setMemberLoading(false)
     }
@@ -1110,9 +1126,25 @@ export const AdminPage: React.FC = () => {
       if (Array.isArray(data?.ipTopDevices)) setIpTopDevices(data.ipTopDevices)
       if (typeof data?.ipCountry === 'string') setIpCountry(data.ipCountry)
       if (typeof data?.ipMeanRpm5m === 'number') setIpMeanRpm5m(data.ipMeanRpm5m)
+      // Log IP lookup (success)
+      try {
+        const headers2: Record<string,string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+        if (token) headers2['Authorization'] = `Bearer ${token}`
+        try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) headers2['X-Admin-Token'] = String(adminToken) } catch {}
+        await fetch('/api/admin/log-action', { method: 'POST', headers: headers2, credentials: 'same-origin', body: JSON.stringify({ action: 'ip_lookup', target: ip, detail: { via: 'ui' } }) })
+      } catch {}
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       setIpError(msg || 'IP lookup failed')
+      // Log IP lookup failure
+      try {
+        const session = (await supabase.auth.getSession()).data.session
+        const token = session?.access_token
+        const headers2: Record<string,string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+        if (token) headers2['Authorization'] = `Bearer ${token}`
+        try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) headers2['X-Admin-Token'] = String(adminToken) } catch {}
+        await fetch('/api/admin/log-action', { method: 'POST', headers: headers2, credentials: 'same-origin', body: JSON.stringify({ action: 'ip_lookup_failed', target: ip, detail: { error: msg } }) })
+      } catch {}
     } finally {
       setIpLoading(false)
     }
@@ -2621,6 +2653,13 @@ function AddAdminNote({ profileId, onAdded }: { profileId: string; onAdded: () =
       })
       const data = await resp.json().catch(() => ({}))
       if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`)
+      // Log note create (UI)
+      try {
+        const headers2: Record<string,string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+        if (token) headers2['Authorization'] = `Bearer ${token}`
+        try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) headers2['X-Admin-Token'] = String(adminToken) } catch {}
+        await fetch('/api/admin/log-action', { method: 'POST', headers: headers2, credentials: 'same-origin', body: JSON.stringify({ action: 'add_note', target: profileId, detail: { source: 'ui' } }) })
+      } catch {}
       setValue('')
       setOpen(false)
       onAdded()
@@ -2668,6 +2707,13 @@ function NoteRow({ note, onRemoved }: { note: { id: string; admin_id: string | n
       if (!resp.ok) {
         // ignore error UI for now
       }
+      // Log note delete (UI)
+      try {
+        const headers2: Record<string,string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+        if (token) headers2['Authorization'] = `Bearer ${token}`
+        try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) headers2['X-Admin-Token'] = String(adminToken) } catch {}
+        await fetch('/api/admin/log-action', { method: 'POST', headers: headers2, credentials: 'same-origin', body: JSON.stringify({ action: 'delete_note', target: note.id, detail: { source: 'ui' } }) })
+      } catch {}
       onRemoved()
     } catch {
       // noop
@@ -2702,9 +2748,48 @@ function NoteRow({ note, onRemoved }: { note: { id: string; admin_id: string | n
 }
 
 const AdminLogs: React.FC = () => {
-  const [logs, setLogs] = React.useState<Array<{ occurred_at: string; admin_name: string | null; action: string; target: string | null; detail: any }>>([])
+  const [logs, setLogs] = React.useState<Array<{ occurred_at: string; admin_id?: string | null; admin_name: string | null; action: string; target: string | null; detail: any }>>([])
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  const [visibleCount, setVisibleCount] = React.useState<number>(20)
+
+  const copyTextToClipboard = React.useCallback(async (text: string): Promise<boolean> => {
+    try {
+      if (navigator && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        await navigator.clipboard.writeText(text)
+        return true
+      }
+    } catch {}
+    try {
+      const ta = document.createElement('textarea')
+      ta.value = text
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.focus()
+      ta.select()
+      const ok = document.execCommand('copy')
+      document.body.removeChild(ta)
+      return ok
+    } catch {
+      return false
+    }
+  }, [])
+
+  const formatLogLine = React.useCallback((l: { occurred_at: string; admin_id?: string | null; admin_name: string | null; action: string; target: string | null; detail: any }): string => {
+    const ts = l.occurred_at ? new Date(l.occurred_at).toLocaleString() : ''
+    const who = (l.admin_name && String(l.admin_name).trim()) || 'Admin'
+    const act = l.action || ''
+    const tgt = l.target ? ` — ${l.target}` : ''
+    const det = l.detail ? ` ${JSON.stringify(l.detail)}` : ''
+    return `${ts} :: ${who} // ${act}${tgt}${det}`
+  }, [])
+
+  const copyVisibleLogs = React.useCallback(async () => {
+    const subset = logs.slice(0, visibleCount)
+    const text = subset.map(formatLogLine).join('\n')
+    await copyTextToClipboard(text)
+  }, [logs, visibleCount, copyTextToClipboard, formatLogLine])
   const load = React.useCallback(async () => {
     setLoading(true); setError(null)
     try {
@@ -2718,6 +2803,7 @@ const AdminLogs: React.FC = () => {
       if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`)
       const list = Array.isArray(data?.logs) ? data.logs : []
       setLogs(list)
+      setVisibleCount(Math.min(20, list.length || 20))
     } catch (e: any) {
       setError(e?.message || 'Failed to load logs')
     } finally { setLoading(false) }
@@ -2728,7 +2814,10 @@ const AdminLogs: React.FC = () => {
       <CardContent className="p-4">
         <div className="flex items-center justify-between mb-2">
           <div className="text-sm font-medium">Admin logs — last 30 days</div>
-          <Button size="icon" variant="outline" className="rounded-xl" onClick={load} disabled={loading} aria-label="Refresh logs"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></Button>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" className="rounded-2xl h-8 px-3" onClick={copyVisibleLogs} disabled={loading} aria-label="Copy logs">Copy</Button>
+            <Button size="icon" variant="outline" className="rounded-2xl" onClick={load} disabled={loading} aria-label="Refresh logs"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></Button>
+          </div>
         </div>
         {error && <div className="text-sm text-rose-600">{error}</div>}
         {loading ? (
@@ -2736,13 +2825,20 @@ const AdminLogs: React.FC = () => {
         ) : logs.length === 0 ? (
           <div className="text-sm opacity-60">No admin activity logged.</div>
         ) : (
-          <div className="bg-black text-green-300 rounded-xl p-3 text-xs font-mono overflow-auto max-h-[480px]">
-            {logs.map((l, idx) => (
-              <div key={idx} className="whitespace-pre">
-                [{l.occurred_at ? new Date(l.occurred_at).toLocaleString() : ''}] {(l.admin_name || 'Admin')} — {l.action}{l.target ? ` ${l.target}` : ''}{' '}{JSON.stringify(l.detail || {})}
+          <>
+            <div className="bg-black text-green-300 rounded-2xl p-3 text-[11px] font-mono overflow-y-auto overflow-x-hidden max-h-[480px] space-y-2">
+              {logs.slice(0, visibleCount).map((l, idx) => (
+                <div key={idx} className="whitespace-pre-wrap break-words">
+                  {formatLogLine(l)}
+                </div>
+              ))}
+            </div>
+            {logs.length > visibleCount && (
+              <div className="flex justify-end mt-2">
+                <Button variant="outline" className="rounded-2xl h-8 px-3" onClick={() => setVisibleCount((c) => Math.min(c + 50, logs.length))}>Show more</Button>
               </div>
-            ))}
-          </div>
+            )}
+          </>
         )}
       </CardContent>
     </Card>

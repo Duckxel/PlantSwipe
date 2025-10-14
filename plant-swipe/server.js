@@ -247,6 +247,20 @@ async function isAdminFromRequest(req) {
   }
 }
 
+// Helper: insert admin_activity_logs row via Supabase REST when DB is unavailable
+async function insertAdminActivityViaRest(req, row) {
+  try {
+    if (!(supabaseUrlEnv && supabaseAnonKey)) return false
+    const headers = { apikey: supabaseAnonKey, Accept: 'application/json', 'Content-Type': 'application/json' }
+    const bearer = getBearerTokenFromRequest(req)
+    if (bearer) headers['Authorization'] = `Bearer ${bearer}`
+    const resp = await fetch(`${supabaseUrlEnv}/rest/v1/admin_activity_logs`, { method: 'POST', headers, body: JSON.stringify(row) })
+    return resp.ok
+  } catch {
+    return false
+  }
+}
+
 async function ensureAdmin(req, res) {
   try {
     // Public mode or static token
@@ -441,7 +455,7 @@ app.get('/api/admin/admin-logs', async (req, res) => {
       const token = getBearerTokenFromRequest(req)
       if (token) headers['Authorization'] = `Bearer ${token}`
       const sinceIso = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
-      const url = `${supabaseUrlEnv}/rest/v1/admin_activity_logs?occurred_at=gte.${encodeURIComponent(sinceIso)}&select=occurred_at,admin_name,action,target,detail&order=occurred_at.desc&limit=1000`
+      const url = `${supabaseUrlEnv}/rest/v1/admin_activity_logs?occurred_at=gte.${encodeURIComponent(sinceIso)}&select=occurred_at,admin_id,admin_name,action,target,detail&order=occurred_at.desc&limit=1000`
       const r = await fetch(url, { headers })
       if (!r.ok) {
         const body = await r.text().catch(() => '')
@@ -453,7 +467,7 @@ app.get('/api/admin/admin-logs', async (req, res) => {
       return
     }
     const rows = await sql`
-      select occurred_at, admin_name, action, target, detail
+      select occurred_at, admin_id, admin_name, action, target, detail
       from public.admin_activity_logs
       where occurred_at >= now() - interval '${days} days'
       order by occurred_at desc
@@ -463,6 +477,78 @@ app.get('/api/admin/admin-logs', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to load admin logs' })
   }
+})
+
+// Admin: generic log endpoint to record an action from admin_api or UI
+app.post('/api/admin/log-action', async (req, res) => {
+  try {
+    const isAdmin = await isAdminFromRequest(req)
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Admin privileges required' })
+      return
+    }
+    const body = req.body || {}
+    const action = typeof body.action === 'string' ? body.action.trim() : ''
+    if (!action) {
+      res.status(400).json({ error: 'action required' })
+      return
+    }
+    const target = (body.target == null || typeof body.target === 'string') ? body.target : String(body.target)
+    const detail = (body.detail && typeof body.detail === 'object') ? body.detail : {}
+
+    let adminId = null
+    let adminName = null
+    try {
+      const caller = await getUserFromRequest(req)
+      adminId = caller?.id || null
+      // Resolve admin display name for clearer logs
+      if (sql && adminId) {
+        try {
+          const rows = await sql`select coalesce(display_name, '') as name from public.profiles where id = ${adminId} limit 1`
+          adminName = (rows?.[0]?.name || '').trim() || null
+        } catch {}
+      }
+      if (!adminName && supabaseUrlEnv && supabaseAnonKey && adminId) {
+        try {
+          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const bearer = getBearerTokenFromRequest(req)
+          if (bearer) headers['Authorization'] = `Bearer ${bearer}`
+          const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(adminId)}&select=display_name&limit=1`
+          const r = await fetch(url, { headers })
+          if (r.ok) {
+            const arr = await r.json().catch(() => [])
+            adminName = Array.isArray(arr) && arr[0] ? (arr[0].display_name || null) : null
+          }
+        } catch {}
+      }
+    } catch {}
+
+    let ok = false
+    if (sql) {
+      try {
+        await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, ${action}, ${target || null}, ${sql.json(detail)})`
+        ok = true
+      } catch {}
+    }
+    if (!ok) {
+      try {
+        const row = { admin_id: adminId, admin_name: adminName, action, target: target || null, detail }
+        ok = await insertAdminActivityViaRest(req, row)
+      } catch {}
+    }
+    if (!ok) {
+      res.status(500).json({ error: 'Failed to log action' })
+      return
+    }
+    res.json({ ok: true })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to log action' })
+  }
+})
+app.options('/api/admin/log-action', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
 })
 
 // Database health: returns ok along with latency; always 200 for easier probes
@@ -1018,8 +1104,33 @@ async function handleRestartServer(req, res) {
     try {
       const caller = await getUserFromRequest(req)
       const adminId = caller?.id || null
-      const adminName = null
-      if (sql) await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'restart_server', null, ${sql.json({})})`
+      let adminName = null
+      if (sql && adminId) {
+        try {
+          const rows = await sql`select coalesce(display_name, '') as name from public.profiles where id = ${adminId} limit 1`
+          adminName = (rows?.[0]?.name || '').trim() || null
+        } catch {}
+      }
+      if (!adminName && supabaseUrlEnv && supabaseAnonKey && adminId) {
+        try {
+          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const bearer = getBearerTokenFromRequest(req)
+          if (bearer) headers['Authorization'] = `Bearer ${bearer}`
+          const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(adminId)}&select=display_name&limit=1`
+          const r = await fetch(url, { headers })
+          if (r.ok) {
+            const arr = await r.json().catch(() => [])
+            adminName = Array.isArray(arr) && arr[0] ? (arr[0].display_name || null) : null
+          }
+        } catch {}
+      }
+      let ok = false
+      if (sql) {
+        try { await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'restart_server', null, ${sql.json({})})`; ok = true } catch {}
+      }
+      if (!ok) {
+        try { await insertAdminActivityViaRest(req, { admin_id: adminId, admin_name: adminName, action: 'restart_server', target: null, detail: {} }) } catch {}
+      }
     } catch {}
     res.json({ ok: true, message: 'Restarting server' })
     // Give time for response to flush, then request systemd to restart the service.
@@ -1060,8 +1171,33 @@ app.post('/api/admin/restart-all', async (req, res) => {
     try {
       const caller = await getUserFromRequest(req)
       const adminId = caller?.id || null
-      const adminName = null
-      if (sql) await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'restart_all', null, ${sql.json({})})`
+      let adminName = null
+      if (sql && adminId) {
+        try {
+          const rows = await sql`select coalesce(display_name, '') as name from public.profiles where id = ${adminId} limit 1`
+          adminName = (rows?.[0]?.name || '').trim() || null
+        } catch {}
+      }
+      if (!adminName && supabaseUrlEnv && supabaseAnonKey && adminId) {
+        try {
+          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const bearer = getBearerTokenFromRequest(req)
+          if (bearer) headers['Authorization'] = `Bearer ${bearer}`
+          const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(adminId)}&select=display_name&limit=1`
+          const r = await fetch(url, { headers })
+          if (r.ok) {
+            const arr = await r.json().catch(() => [])
+            adminName = Array.isArray(arr) && arr[0] ? (arr[0].display_name || null) : null
+          }
+        } catch {}
+      }
+      let ok = false
+      if (sql) {
+        try { await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'restart_all', null, ${sql.json({})})`; ok = true } catch {}
+      }
+      if (!ok) {
+        try { await insertAdminActivityViaRest(req, { admin_id: adminId, admin_name: adminName, action: 'restart_all', target: null, detail: {} }) } catch {}
+      }
     } catch {}
     res.json({ ok: true, message: 'Reloading nginx and restarting services' })
 
@@ -1194,8 +1330,38 @@ async function handleSyncSchema(req, res) {
     let summary = null
     try { summary = await verifySchemaAfterSync() } catch {}
 
+    // Log admin action (success)
+    try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      const detail = { summary }
+      let logged = false
+      if (sql) {
+        try {
+          await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${null}, 'sync_schema', null, ${sql.json(detail)})`
+          logged = true
+        } catch {}
+      }
+      if (!logged) {
+        try {
+          await insertAdminActivityViaRest(req, { admin_id: adminId, admin_name: null, action: 'sync_schema', target: null, detail })
+        } catch {}
+      }
+    } catch {}
+
     res.json({ ok: true, message: 'Schema synchronized successfully', summary })
   } catch (e) {
+    // Log failure
+    try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      const detail = { error: e?.message || String(e) }
+      if (sql) {
+        try { await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${null}, 'sync_schema_failed', null, ${sql.json(detail)})` } catch {}
+      } else {
+        try { await insertAdminActivityViaRest(req, { admin_id: adminId, admin_name: null, action: 'sync_schema_failed', target: null, detail }) } catch {}
+      }
+    } catch {}
     res.status(500).json({ error: e?.message || 'Failed to sync schema' })
   }
 }
@@ -2791,8 +2957,33 @@ async function handlePullCode(req, res) {
     try {
       const caller = await getUserFromRequest(req)
       const adminId = caller?.id || null
-      const adminName = null
-      if (sql) await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'pull_code', ${branch || null}, ${sql.json({ source: 'api' })})`
+      let adminName = null
+      if (sql && adminId) {
+        try {
+          const rows = await sql`select coalesce(display_name, '') as name from public.profiles where id = ${adminId} limit 1`
+          adminName = (rows?.[0]?.name || '').trim() || null
+        } catch {}
+      }
+      if (!adminName && supabaseUrlEnv && supabaseAnonKey && adminId) {
+        try {
+          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const bearer = getBearerTokenFromRequest(req)
+          if (bearer) headers['Authorization'] = `Bearer ${bearer}`
+          const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(adminId)}&select=display_name&limit=1`
+          const r = await fetch(url, { headers })
+          if (r.ok) {
+            const arr = await r.json().catch(() => [])
+            adminName = Array.isArray(arr) && arr[0] ? (arr[0].display_name || null) : null
+          }
+        } catch {}
+      }
+      let ok = false
+      if (sql) {
+        try { await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'pull_code', ${branch || null}, ${sql.json({ source: 'api' })})`; ok = true } catch {}
+      }
+      if (!ok) {
+        try { await insertAdminActivityViaRest(req, { admin_id: adminId, admin_name: adminName, action: 'pull_code', target: branch || null, detail: { source: 'api' } }) } catch {}
+      }
     } catch {}
     res.json({ ok: true, branch, started: true })
   } catch (e) {
@@ -2843,6 +3034,39 @@ app.get('/api/admin/pull-code/stream', async (req, res) => {
 
     const repoRoot = await getRepoRoot()
     const branch = (req.query.branch || '').toString().trim() || ''
+
+    // Log that a streamed pull/build has been initiated
+    try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      let adminName = null
+      if (sql && adminId) {
+        try {
+          const rows = await sql`select coalesce(display_name, '') as name from public.profiles where id = ${adminId} limit 1`
+          adminName = (rows?.[0]?.name || '').trim() || null
+        } catch {}
+      }
+      if (!adminName && supabaseUrlEnv && supabaseAnonKey && adminId) {
+        try {
+          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const bearer = getBearerTokenFromRequest(req)
+          if (bearer) headers['Authorization'] = `Bearer ${bearer}`
+          const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(adminId)}&select=display_name&limit=1`
+          const r = await fetch(url, { headers })
+          if (r.ok) {
+            const arr = await r.json().catch(() => [])
+            adminName = Array.isArray(arr) && arr[0] ? (arr[0].display_name || null) : null
+          }
+        } catch {}
+      }
+      let ok = false
+      if (sql) {
+        try { await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'pull_code', ${branch || null}, ${sql.json({ source: 'stream' })})`; ok = true } catch {}
+      }
+      if (!ok) {
+        try { await insertAdminActivityViaRest(req, { admin_id: adminId, admin_name: adminName, action: 'pull_code', target: branch || null, detail: { source: 'stream' } }) } catch {}
+      }
+    } catch {}
     const scriptPath = path.resolve(repoRoot, 'scripts', 'refresh-plant-swipe.sh')
     try { await fs.access(scriptPath) } catch {
       send('error', { error: `refresh script not found at ${scriptPath}` })
