@@ -2358,6 +2358,21 @@ create index if not exists gal_garden_time_idx on public.garden_activity_logs (g
 
 alter table public.garden_activity_logs enable row level security;
 
+-- Purge garden activity logs older than 35 days daily at 03:00 UTC
+do $$ begin
+  if exists (select 1 from cron.job where jobname = 'purge_old_garden_activity_logs') then
+    perform cron.unschedule(jobid) from cron.job where jobname = 'purge_old_garden_activity_logs';
+  end if;
+  perform cron.schedule(
+    'purge_old_garden_activity_logs',
+    '0 3 * * *',
+    $cron$
+    delete from public.garden_activity_logs
+    where timezone('utc', occurred_at) < ((now() at time zone 'utc')::date - interval '35 days');
+    $cron$
+  );
+end $$;
+
 do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_activity_logs' and policyname='gal_select') then
     drop policy gal_select on public.garden_activity_logs;
