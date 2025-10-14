@@ -1104,8 +1104,33 @@ async function handleRestartServer(req, res) {
     try {
       const caller = await getUserFromRequest(req)
       const adminId = caller?.id || null
-      const adminName = null
-      if (sql) await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'restart_server', null, ${sql.json({})})`
+      let adminName = null
+      if (sql && adminId) {
+        try {
+          const rows = await sql`select coalesce(display_name, '') as name from public.profiles where id = ${adminId} limit 1`
+          adminName = (rows?.[0]?.name || '').trim() || null
+        } catch {}
+      }
+      if (!adminName && supabaseUrlEnv && supabaseAnonKey && adminId) {
+        try {
+          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const bearer = getBearerTokenFromRequest(req)
+          if (bearer) headers['Authorization'] = `Bearer ${bearer}`
+          const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(adminId)}&select=display_name&limit=1`
+          const r = await fetch(url, { headers })
+          if (r.ok) {
+            const arr = await r.json().catch(() => [])
+            adminName = Array.isArray(arr) && arr[0] ? (arr[0].display_name || null) : null
+          }
+        } catch {}
+      }
+      let ok = false
+      if (sql) {
+        try { await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'restart_server', null, ${sql.json({})})`; ok = true } catch {}
+      }
+      if (!ok) {
+        try { await insertAdminActivityViaRest(req, { admin_id: adminId, admin_name: adminName, action: 'restart_server', target: null, detail: {} }) } catch {}
+      }
     } catch {}
     res.json({ ok: true, message: 'Restarting server' })
     // Give time for response to flush, then request systemd to restart the service.
@@ -1146,8 +1171,33 @@ app.post('/api/admin/restart-all', async (req, res) => {
     try {
       const caller = await getUserFromRequest(req)
       const adminId = caller?.id || null
-      const adminName = null
-      if (sql) await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'restart_all', null, ${sql.json({})})`
+      let adminName = null
+      if (sql && adminId) {
+        try {
+          const rows = await sql`select coalesce(display_name, '') as name from public.profiles where id = ${adminId} limit 1`
+          adminName = (rows?.[0]?.name || '').trim() || null
+        } catch {}
+      }
+      if (!adminName && supabaseUrlEnv && supabaseAnonKey && adminId) {
+        try {
+          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const bearer = getBearerTokenFromRequest(req)
+          if (bearer) headers['Authorization'] = `Bearer ${bearer}`
+          const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(adminId)}&select=display_name&limit=1`
+          const r = await fetch(url, { headers })
+          if (r.ok) {
+            const arr = await r.json().catch(() => [])
+            adminName = Array.isArray(arr) && arr[0] ? (arr[0].display_name || null) : null
+          }
+        } catch {}
+      }
+      let ok = false
+      if (sql) {
+        try { await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'restart_all', null, ${sql.json({})})`; ok = true } catch {}
+      }
+      if (!ok) {
+        try { await insertAdminActivityViaRest(req, { admin_id: adminId, admin_name: adminName, action: 'restart_all', target: null, detail: {} }) } catch {}
+      }
     } catch {}
     res.json({ ok: true, message: 'Reloading nginx and restarting services' })
 
@@ -2907,8 +2957,33 @@ async function handlePullCode(req, res) {
     try {
       const caller = await getUserFromRequest(req)
       const adminId = caller?.id || null
-      const adminName = null
-      if (sql) await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'pull_code', ${branch || null}, ${sql.json({ source: 'api' })})`
+      let adminName = null
+      if (sql && adminId) {
+        try {
+          const rows = await sql`select coalesce(display_name, '') as name from public.profiles where id = ${adminId} limit 1`
+          adminName = (rows?.[0]?.name || '').trim() || null
+        } catch {}
+      }
+      if (!adminName && supabaseUrlEnv && supabaseAnonKey && adminId) {
+        try {
+          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const bearer = getBearerTokenFromRequest(req)
+          if (bearer) headers['Authorization'] = `Bearer ${bearer}`
+          const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(adminId)}&select=display_name&limit=1`
+          const r = await fetch(url, { headers })
+          if (r.ok) {
+            const arr = await r.json().catch(() => [])
+            adminName = Array.isArray(arr) && arr[0] ? (arr[0].display_name || null) : null
+          }
+        } catch {}
+      }
+      let ok = false
+      if (sql) {
+        try { await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'pull_code', ${branch || null}, ${sql.json({ source: 'api' })})`; ok = true } catch {}
+      }
+      if (!ok) {
+        try { await insertAdminActivityViaRest(req, { admin_id: adminId, admin_name: adminName, action: 'pull_code', target: branch || null, detail: { source: 'api' } }) } catch {}
+      }
     } catch {}
     res.json({ ok: true, branch, started: true })
   } catch (e) {
