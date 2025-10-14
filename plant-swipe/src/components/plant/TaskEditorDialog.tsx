@@ -87,7 +87,12 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="rounded-2xl" onOpenAutoFocus={(e) => { e.preventDefault() }}>
+      <DialogContent
+        className="rounded-2xl"
+        onOpenAutoFocus={(e) => { e.preventDefault() }}
+        onPointerDownOutside={(e) => { e.preventDefault() }}
+        onInteractOutside={(e) => { e.preventDefault() }}
+      >
         <DialogHeader>
           <DialogTitle>Tasks</DialogTitle>
         </DialogHeader>
