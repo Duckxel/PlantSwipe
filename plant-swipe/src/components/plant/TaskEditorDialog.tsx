@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import type { GardenPlantTask } from '@/types/garden'
-import { listPlantTasks, deletePlantTask, updatePatternTask } from '@/lib/gardens'
+import { listPlantTasks, deletePlantTask, updatePatternTask, listGardenTasks, syncTaskOccurrencesForGarden } from '@/lib/gardens'
 import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
 import { TaskCreateDialog } from '@/components/plant/TaskCreateDialog'
 
@@ -70,6 +70,14 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
   const remove = async (taskId: string) => {
     try {
       await deletePlantTask(taskId)
+      // Ensure occurrences are regenerated and UI reflects changes
+      try {
+        const allTasks = await listGardenTasks(gardenId)
+        const now = new Date()
+        const startIso = new Date(now.getTime() - 7*24*3600*1000).toISOString()
+        const endIso = new Date(now.getTime() + 60*24*3600*1000).toISOString()
+        await syncTaskOccurrencesForGarden(gardenId, startIso, endIso)
+      } catch {}
       await load()
       if (onChanged) await onChanged()
     } catch (e: any) {
@@ -79,7 +87,7 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="rounded-2xl">
+      <DialogContent className="rounded-2xl" onOpenAutoFocus={(e) => { e.preventDefault() }}>
         <DialogHeader>
           <DialogTitle>Tasks</DialogTitle>
         </DialogHeader>
@@ -119,7 +127,8 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
                         yearlyDays: t.yearlyDays || undefined,
                         monthlyNthWeekdays: t.monthlyNthWeekdays || undefined,
                       })
-                      setPatternOpen(true)
+                      // Delay open to next tick to avoid menu overlay capturing events
+                      setTimeout(() => setPatternOpen(true), 0)
                     } : undefined}
                     onDelete={() => remove(t.id)}
                   />
@@ -245,8 +254,8 @@ function TaskRowMenu({ onEdit, onDelete }: { onEdit?: () => void; onDelete: () =
       {open && createPortal(
         <div
           ref={menuRef as any}
-          style={{ position: 'fixed', top: position.top, right: position.right, width: '10rem' }}
-          className="bg-white border rounded-xl shadow-lg z-[60]"
+          style={{ position: 'fixed', top: position.top, right: position.right, width: '10rem', zIndex: 70 }}
+          className="bg-white border rounded-xl shadow-lg z-[70]"
         >
           {onEdit && (
             <button onClick={(e) => { e.stopPropagation(); setOpen(false); onEdit() }} className="w-full text-left px-3 py-2 rounded-t-xl hover:bg-stone-50">Edit</button>
