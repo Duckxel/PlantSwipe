@@ -3187,6 +3187,7 @@ app.get('/api/admin/sources-breakdown', async (req, res) => {
         count: otherCountriesList.length,
         visits: otherCountriesList.reduce((s, c) => s + (c.visits || 0), 0),
         codes: otherCountriesList.map(c => c.country).filter(Boolean),
+        items: otherCountriesList.map(c => ({ country: c.country, visits: Number(c.visits || 0) })),
       }
       const topReferrers = allReferrers.slice(0, 5)
       const otherReferrersList = allReferrers.slice(5)
@@ -3218,6 +3219,7 @@ app.get('/api/admin/sources-breakdown', async (req, res) => {
         count: otherCountriesList.length,
         visits: otherCountriesList.reduce((s, c) => s + (c.visits || 0), 0),
         codes: otherCountriesList.map(c => c.country).filter(Boolean),
+        items: otherCountriesList.map(c => ({ country: c.country, visits: Number(c.visits || 0) })),
       }
       const topReferrers = allReferrers.slice(0, 5)
       const otherReferrersList = allReferrers.slice(5)

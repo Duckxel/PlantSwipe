@@ -323,7 +323,8 @@ export const AdminPage: React.FC = () => {
   const [visitorsSeries, setVisitorsSeries] = React.useState<Array<{ date: string; uniqueVisitors: number }>>([])
   const [visitorsTotalUnique7d, setVisitorsTotalUnique7d] = React.useState<number>(0)
   const [topCountries, setTopCountries] = React.useState<Array<{ country: string; visits: number; pct?: number }>>([])
-  const [otherCountries, setOtherCountries] = React.useState<{ count: number; visits: number; pct?: number; codes?: string[] } | null>(null)
+  type OtherCountriesBucket = { count: number; visits: number; pct?: number; codes?: string[]; items?: Array<{ country: string; visits: number }> }
+  const [otherCountries, setOtherCountries] = React.useState<OtherCountriesBucket | null>(null)
   const [topReferrers, setTopReferrers] = React.useState<Array<{ source: string; visits: number; pct?: number }>>([])
   const [otherReferrers, setOtherReferrers] = React.useState<{ count: number; visits: number; pct?: number } | null>(null)
   // Distinct, high-contrast palette for readability
@@ -1796,24 +1797,62 @@ export const AdminPage: React.FC = () => {
                                 <div className="col-span-2 min-h-[150px]">
                                   <ResponsiveContainer width="100%" height={150}>
                                     <PieChart>
-                                      <Pie
-                                        data={topCountries}
-                                        dataKey="visits"
-                                        nameKey="country"
-                                        innerRadius={36}
-                                        outerRadius={64}
-                                        paddingAngle={3}
-                                      >
-                                        {(() => {
-                                          const slices: Array<{ country: string; visits: number }> = [...topCountries]
-                                          if (otherCountries && otherCountries.visits > 0) {
-                                            slices.push({ country: `Other (${otherCountries.count})`, visits: otherCountries.visits })
+                                      {(() => {
+                                        const pieData: Array<{ country: string; visits: number; pct?: number; isOther?: boolean }> = [...topCountries]
+                                        if (otherCountries && otherCountries.visits > 0) {
+                                          pieData.push({ country: 'Other', visits: otherCountries.visits, pct: otherCountries.pct, isOther: true })
+                                        }
+                                        const totalVisits = pieData.reduce((s, x) => s + (x.visits || 0), 0)
+                                        const CountryPieTooltip = ({ active, payload }: { active?: boolean; payload?: any[] }) => {
+                                          if (!active || !payload || !payload.length) return null
+                                          const d = payload[0]?.payload as { country: string; visits: number; pct?: number; isOther?: boolean }
+                                          if (!d) return null
+                                          if (d.isOther) {
+                                            const items: Array<{ country: string; visits: number }> = Array.isArray(otherCountries?.items) ? otherCountries!.items as Array<{ country: string; visits: number }> : []
+                                            const rows: Array<{ name: string; visits: number; pct: number }> = items
+                                              .map((it: { country: string; visits: number }) => ({ name: countryCodeToName(it.country), visits: it.visits, pct: totalVisits > 0 ? (it.visits / totalVisits) * 100 : 0 }))
+                                              .sort((a: { visits: number }, b: { visits: number }) => (b.visits || 0) - (a.visits || 0))
+                                            return (
+                                              <div className="rounded-xl border bg-white shadow px-3 py-2 max-w-[260px]">
+                                                <div className="text-xs font-medium mb-1">Countries in Other</div>
+                                                <div className="text-[11px] opacity-80 space-y-0.5 max-h-48 overflow-auto">
+                                                  {rows.map((r: { name: string; visits: number; pct: number }, idx: number) => (
+                                                    <div key={`${r.name}-${idx}`} className="flex items-center justify-between gap-3">
+                                                      <div className="truncate">{r.name}</div>
+                                                      <div className="text-[11px] tabular-nums whitespace-nowrap">{Math.round(r.pct)}% · {r.visits}</div>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              </div>
+                                            )
                                           }
-                                          return slices.map((entry, index) => (
-                                            <Cell key={`cell-${entry.country}`} fill={countryColors[index % countryColors.length]} />
-                                          ))
-                                        })()}
-                                      </Pie>
+                                          const name = countryCodeToName(d.country)
+                                          const pct = Math.round(d.pct ?? (totalVisits > 0 ? (d.visits / totalVisits) * 100 : 0))
+                                          return (
+                                            <div className="rounded-xl border bg-white shadow px-3 py-2">
+                                              <div className="text-xs font-medium">{name}</div>
+                                              <div className="text-[11px] opacity-80">{pct}% · {d.visits}</div>
+                                            </div>
+                                          )
+                                        }
+                                        return (
+                                          <>
+                                            <Pie
+                                              data={pieData}
+                                              dataKey="visits"
+                                              nameKey="country"
+                                              innerRadius={36}
+                                              outerRadius={64}
+                                              paddingAngle={3}
+                                            >
+                                              {pieData.map((entry, index) => (
+                                                <Cell key={`cell-${entry.country}-${index}`} fill={countryColors[index % countryColors.length]} />
+                                              ))}
+                                            </Pie>
+                                            <Tooltip content={<CountryPieTooltip />} cursor={{ stroke: 'rgba(0,0,0,0.1)' }} />
+                                          </>
+                                        )
+                                      })()}
                                     </PieChart>
                                   </ResponsiveContainer>
                                 </div>
