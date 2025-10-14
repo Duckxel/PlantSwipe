@@ -103,7 +103,7 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
             <div className="text-sm font-medium">Existing tasks</div>
             <Button className="rounded-2xl" onClick={() => setCreateOpen(true)}>Add Task</Button>
           </div>
-          <div className="max-h-64 overflow-auto rounded-xl border">
+          <div className="rounded-xl border">
             {loading && <div className="p-3 text-sm opacity-60">Loading…</div>}
             {error && <div className="p-3 text-sm text-red-600">{error}</div>}
             {!loading && tasks.length === 0 && <div className="p-3 text-sm opacity-60">No tasks yet</div>}
