@@ -455,7 +455,7 @@ app.get('/api/admin/admin-logs', async (req, res) => {
       const token = getBearerTokenFromRequest(req)
       if (token) headers['Authorization'] = `Bearer ${token}`
       const sinceIso = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
-      const url = `${supabaseUrlEnv}/rest/v1/admin_activity_logs?occurred_at=gte.${encodeURIComponent(sinceIso)}&select=occurred_at,admin_name,action,target,detail&order=occurred_at.desc&limit=1000`
+      const url = `${supabaseUrlEnv}/rest/v1/admin_activity_logs?occurred_at=gte.${encodeURIComponent(sinceIso)}&select=occurred_at,admin_id,admin_name,action,target,detail&order=occurred_at.desc&limit=1000`
       const r = await fetch(url, { headers })
       if (!r.ok) {
         const body = await r.text().catch(() => '')
@@ -467,7 +467,7 @@ app.get('/api/admin/admin-logs', async (req, res) => {
       return
     }
     const rows = await sql`
-      select occurred_at, admin_name, action, target, detail
+      select occurred_at, admin_id, admin_name, action, target, detail
       from public.admin_activity_logs
       where occurred_at >= now() - interval '${days} days'
       order by occurred_at desc
