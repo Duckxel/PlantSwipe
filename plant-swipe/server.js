@@ -421,6 +421,50 @@ app.get('/api/health', async (_req, res) => {
   }
 })
 
+// Admin: fetch admin activity logs for the last N days (default 30)
+app.get('/api/admin/admin-logs', async (req, res) => {
+  try {
+    const isAdmin = await isAdminFromRequest(req)
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Admin privileges required' })
+      return
+    }
+    const daysParam = Number(req.query.days || 30)
+    const days = (Number.isFinite(daysParam) && daysParam > 0) ? Math.min(90, Math.floor(daysParam)) : 30
+    if (!sql) {
+      // Supabase REST fallback
+      if (!(supabaseUrlEnv && supabaseAnonKey)) {
+        res.status(500).json({ error: 'Database not configured' })
+        return
+      }
+      const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+      const token = getBearerTokenFromRequest(req)
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      const sinceIso = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
+      const url = `${supabaseUrlEnv}/rest/v1/admin_activity_logs?occurred_at=gte.${encodeURIComponent(sinceIso)}&select=occurred_at,admin_name,action,target,detail&order=occurred_at.desc&limit=1000`
+      const r = await fetch(url, { headers })
+      if (!r.ok) {
+        const body = await r.text().catch(() => '')
+        res.status(r.status).json({ error: body || 'Failed to load logs' })
+        return
+      }
+      const arr = await r.json().catch(() => [])
+      res.json({ ok: true, logs: Array.isArray(arr) ? arr : [], via: 'supabase' })
+      return
+    }
+    const rows = await sql`
+      select occurred_at, admin_name, action, target, detail
+      from public.admin_activity_logs
+      where occurred_at >= now() - interval '${days} days'
+      order by occurred_at desc
+      limit 2000
+    `
+    res.json({ ok: true, logs: Array.isArray(rows) ? rows : [], via: 'database' })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to load admin logs' })
+  }
+})
+
 // Database health: returns ok along with latency; always 200 for easier probes
 app.get('/api/health/db', async (_req, res) => {
   const started = Date.now()
@@ -1738,6 +1782,18 @@ app.post('/api/admin/member-note', async (req, res) => {
       res.status(500).json({ error: 'Database not configured' })
       return
     }
+    // Log admin action
+    try {
+      const aid = adminUserId
+      let aname = adminName
+      if (!aname && sql) {
+        const rows = await sql`select coalesce(display_name, '') as name from public.profiles where id = ${aid} limit 1`
+        aname = rows?.[0]?.name || null
+      }
+      if (sql) {
+        await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${aid}, ${aname}, 'add_note', ${profileId}, ${sql.json({ message: msg })})`
+      }
+    } catch {}
     res.json({ ok: true, created_at: created })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to add note' })
@@ -1755,7 +1811,14 @@ app.delete('/api/admin/member-note/:id', async (req, res) => {
       return
     }
     if (sql) {
+      // Identify profile for logging
+      let pid = null
+      try {
+        const rows = await sql`select profile_id from public.profile_admin_notes where id = ${noteId}::uuid`
+        pid = rows?.[0]?.profile_id || null
+      } catch {}
       await sql`delete from public.profile_admin_notes where id = ${noteId}::uuid`
+      try { await sql`insert into public.admin_activity_logs (admin_id, action, target, detail) values (${adminUserId}, 'delete_note', ${pid}, ${sql.json({ noteId })})` } catch {}
       res.json({ ok: true })
       return
     }
@@ -2230,6 +2293,12 @@ app.post('/api/admin/promote-admin', async (req, res) => {
       res.status(500).json({ error: e?.message || 'Failed to promote user' })
       return
     }
+    try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      const adminName = null
+      await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'promote_admin', ${targetId}, ${sql.json({ email: targetEmail })})`
+    } catch {}
     res.json({ ok: true, userId: targetId, email: targetEmail, isAdmin: true })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to promote user' })
@@ -2287,6 +2356,12 @@ app.post('/api/admin/demote-admin', async (req, res) => {
       res.status(500).json({ error: e?.message || 'Failed to demote user' })
       return
     }
+    try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      const adminName = null
+      await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'demote_admin', ${targetId}, ${sql.json({ email: targetEmail })})`
+    } catch {}
     res.json({ ok: true, userId: targetId, email: targetEmail, isAdmin: false })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to demote user' })
@@ -2402,6 +2477,12 @@ app.post('/api/admin/ban', async (req, res) => {
       try { await sql`delete from auth.users where id = ${userId}` } catch {}
     }
 
+    try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      const adminName = null
+      await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'ban_user', ${email}, ${sql.json({ userId, ips })})`
+    } catch {}
     res.json({ ok: true, userId: userId || null, email, ipCount: ips.length, bannedAt: new Date().toISOString() })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to ban user' })

@@ -2245,6 +2245,51 @@ do $$ begin
     using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
 end $$;
 
+-- ========== Admin activity logs ==========
+-- Records admin actions for auditing; auto-purge older than 30 days
+create table if not exists public.admin_activity_logs (
+  id uuid primary key default gen_random_uuid(),
+  admin_id uuid references public.profiles(id) on delete set null,
+  admin_name text,
+  action text not null,
+  target text,
+  detail jsonb not null default '{}',
+  occurred_at timestamptz not null default now()
+);
+
+create index if not exists aal_time_idx on public.admin_activity_logs (occurred_at desc);
+create index if not exists aal_admin_idx on public.admin_activity_logs (admin_id, occurred_at desc);
+
+alter table public.admin_activity_logs enable row level security;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='admin_activity_logs' and policyname='aal_admin_select') then
+    drop policy aal_admin_select on public.admin_activity_logs;
+  end if;
+  create policy aal_admin_select on public.admin_activity_logs for select to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='admin_activity_logs' and policyname='aal_admin_insert') then
+    drop policy aal_admin_insert on public.admin_activity_logs;
+  end if;
+  create policy aal_admin_insert on public.admin_activity_logs for insert to authenticated
+    with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+
+-- Purge admin logs older than 30 days daily
+do $$ begin
+  if exists (select 1 from pg_proc where proname = 'schedule_admin_logs_purge') then
+    drop function schedule_admin_logs_purge();
+  end if;
+end $$;
+create or replace function public.schedule_admin_logs_purge()
+returns void language plpgsql as $$
+begin
+  perform cron.schedule('purge_admin_activity_logs', '0 3 * * *', $$
+    delete from public.admin_activity_logs where occurred_at < now() - interval '30 days'$$);
+end$$;
+select public.schedule_admin_logs_purge();
+
 do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='profile_admin_notes' and policyname='pan_admin_insert') then
     drop policy pan_admin_insert on public.profile_admin_notes;

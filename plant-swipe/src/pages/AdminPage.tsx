@@ -18,7 +18,7 @@ import {
   Pie,
   Cell,
 } from 'recharts'
-import { RefreshCw, Server, Database, Github, ExternalLink, ShieldCheck, ShieldX, UserSearch, AlertTriangle, Gavel, Search, ChevronDown, GitBranch } from "lucide-react"
+import { RefreshCw, Server, Database, Github, ExternalLink, ShieldCheck, ShieldX, UserSearch, AlertTriangle, Gavel, Search, ChevronDown, GitBranch, Trash2 } from "lucide-react"
 import { supabase } from '@/lib/supabaseClient'
 import {
   Dialog,
@@ -907,7 +907,7 @@ export const AdminPage: React.FC = () => {
   }, [loadVisitorsStats])
 
   // ---- Members tab state ----
-  const [activeTab, setActiveTab] = React.useState<'overview' | 'members'>('overview')
+  const [activeTab, setActiveTab] = React.useState<'overview' | 'members' | 'admin_logs'>('overview')
   const [lookupEmail, setLookupEmail] = React.useState('')
   const [memberLoading, setMemberLoading] = React.useState(false)
   const [memberError, setMemberError] = React.useState<string | null>(null)
@@ -1302,6 +1302,11 @@ export const AdminPage: React.FC = () => {
                 className="rounded-2xl"
                 onClick={() => setActiveTab('members')}
               >Members</Button>
+              <Button
+                variant={activeTab === 'admin_logs' ? 'default' : 'secondary'}
+                className="rounded-2xl"
+                onClick={() => setActiveTab('admin_logs')}
+              >Admin Logs</Button>
             </div>
           </div>
 
@@ -1874,6 +1879,11 @@ export const AdminPage: React.FC = () => {
           </>
           )}
 
+          {/* Admin Logs Tab */}
+          {activeTab === 'admin_logs' && (
+            <AdminLogs />
+          )}
+
           {/* Members Tab */}
           {activeTab === 'members' && (
             <div className="space-y-4" ref={membersContainerRef}>
@@ -2308,11 +2318,10 @@ export const AdminPage: React.FC = () => {
 
                   <Card className="rounded-2xl">
                     <CardContent className="p-4 space-y-2">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-start justify-between">
                         <div className="text-sm font-medium">Admin notes</div>
-                        <AddNoteToggle />
+                        <AddAdminNote profileId={memberData.user?.id || ''} onAdded={() => lookupMember()} />
                       </div>
-                      <AddAdminNote profileId={memberData.user?.id || ''} onAdded={() => lookupMember()} />
                       <div className="space-y-2">
                         {(memberData.adminNotes || []).length === 0 ? (
                           <div className="text-sm opacity-60">No notes yet.</div>
@@ -2548,9 +2557,6 @@ function AddAdminNote({ profileId, onAdded }: { profileId: string; onAdded: () =
   )
 }
 
-function AddNoteToggle() {
-  return <div />
-}
 
 function NoteRow({ note, onRemoved }: { note: { id: string; admin_id: string | null; admin_name: string | null; message: string; created_at: string | null }, onRemoved: () => void }) {
   const [removing, setRemoving] = React.useState(false)
@@ -2574,19 +2580,77 @@ function NoteRow({ note, onRemoved }: { note: { id: string; admin_id: string | n
       setRemoving(false)
     }
   }, [note?.id, removing, onRemoved])
+  const [confirming, setConfirming] = React.useState(false)
   return (
     <div className="rounded-xl border p-3 bg-white">
       <div className="text-xs opacity-60 flex items-center justify-between">
-        <span>{note.admin_name || 'Admin'}{note.admin_id ? ` · ${note.admin_id}` : ''}</span>
+        <span>{note.admin_name || 'Admin'}</span>
         <div className="flex items-center gap-2">
           <span>{note.created_at ? new Date(note.created_at).toLocaleString() : ''}</span>
-          <button type="button" aria-label="More actions" className="px-2 py-1 rounded hover:bg-stone-100" onClick={remove} disabled={removing}>⋯</button>
+          {!confirming ? (
+            <button type="button" aria-label="Delete note" className="px-2 py-1 rounded hover:bg-rose-50 text-rose-600" onClick={() => setConfirming(true)}>
+              <Trash2 className="h-4 w-4" />
+            </button>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="destructive" onClick={remove} disabled={removing} className="h-7 px-2 rounded-xl">Confirm</Button>
+              <Button size="sm" variant="secondary" onClick={() => setConfirming(false)} className="h-7 px-2 rounded-xl">Cancel</Button>
+            </div>
+          )}
         </div>
       </div>
       <div className="text-xs mt-1 font-mono whitespace-pre-wrap break-words">
         {note.message}
       </div>
     </div>
+  )
+}
+
+const AdminLogs: React.FC = () => {
+  const [logs, setLogs] = React.useState<Array<{ occurred_at: string; admin_name: string | null; action: string; target: string | null; detail: any }>>([])
+  const [loading, setLoading] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+  const load = React.useCallback(async () => {
+    setLoading(true); setError(null)
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      const headers: Record<string, string> = { 'Accept': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) headers['X-Admin-Token'] = String(adminToken) } catch {}
+      const r = await fetch('/api/admin/admin-logs?days=30', { headers, credentials: 'same-origin' })
+      const data = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`)
+      const list = Array.isArray(data?.logs) ? data.logs : []
+      setLogs(list)
+    } catch (e: any) {
+      setError(e?.message || 'Failed to load logs')
+    } finally { setLoading(false) }
+  }, [])
+  React.useEffect(() => { load() }, [load])
+  return (
+    <Card className="rounded-2xl">
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-sm font-medium">Admin logs — last 30 days</div>
+          <Button size="icon" variant="outline" className="rounded-xl" onClick={load} disabled={loading} aria-label="Refresh logs"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></Button>
+        </div>
+        {error && <div className="text-sm text-rose-600">{error}</div>}
+        {loading ? (
+          <div className="text-sm opacity-60">Loading…</div>
+        ) : logs.length === 0 ? (
+          <div className="text-sm opacity-60">No admin activity logged.</div>
+        ) : (
+          <div className="bg-black text-green-300 rounded-xl p-3 text-xs font-mono overflow-auto max-h-[480px]">
+            {logs.map((l, idx) => (
+              <div key={idx} className="whitespace-pre">
+                [{l.occurred_at ? new Date(l.occurred_at).toLocaleString() : ''}] {(l.admin_name || 'Admin')} — {l.action}{l.target ? ` ${l.target}` : ''}{' '}{JSON.stringify(l.detail || {})}
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 
