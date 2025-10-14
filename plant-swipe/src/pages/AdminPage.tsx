@@ -887,6 +887,11 @@ export const AdminPage: React.FC = () => {
                 codes: Array.isArray(sbd.otherCountries.codes)
                   ? sbd.otherCountries.codes.map((x: any) => String(x || '')).filter(Boolean)
                   : undefined,
+                items: Array.isArray(sbd.otherCountries.items)
+                  ? sbd.otherCountries.items
+                      .map((it: any) => ({ country: String(it?.country || ''), visits: Number(it?.visits || 0) }))
+                      .filter((it: { country: string }) => !!it.country)
+                  : undefined,
               }
             : null
           const totalCountryVisits = tc.reduce((a: number, b: any) => a + (b.visits || 0), 0) + (oc?.visits || 0)
@@ -1819,9 +1824,9 @@ export const AdminPage: React.FC = () => {
                                               }))
                                               .sort((a: { visits: number }, b: { visits: number }) => (b.visits || 0) - (a.visits || 0))
                                             return (
-                                              <div className="rounded-xl border bg-white shadow px-3 py-2 max-w-[260px]">
+                                              <div className="rounded-xl border bg-white shadow px-3 py-2 max-w-[480px]">
                                                 <div className="text-xs font-medium mb-1">Countries in Other</div>
-                                                <div className="text-[11px] opacity-80 space-y-0.5 max-h-48 overflow-auto">
+                                                <div className="text-[11px] opacity-80 space-y-0.5">
                                                   {rows.map((r: { name: string; visits: number; pctTotal: number; pctOther: number }, idx: number) => (
                                                     <div key={`${r.name}-${idx}`} className="flex items-center justify-between gap-3">
                                                       <div className="truncate">{r.name}</div>
