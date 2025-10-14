@@ -139,7 +139,7 @@ fi
 
 log "Installing base packages…"
 $PM_UPDATE
-$PM_INSTALL nginx python3 python3-venv python3-pip git curl ca-certificates gnupg postgresql-client ufw
+$PM_INSTALL nginx python3 python3-venv python3-pip git curl ca-certificates gnupg postgresql-client ufw netcat-openbsd
 
 # Ensure global AWS RDS CA bundle for TLS to Supabase Postgres
 log "Installing AWS RDS global CA bundle for TLS…"
@@ -151,6 +151,106 @@ if [[ -f "$AWS_RDS_CA" ]]; then
   update-ca-certificates >/dev/null 2>&1 || true
 else
   log "[WARN] Failed to fetch AWS RDS CA bundle; you may need to configure NODE_EXTRA_CA_CERTS manually."
+fi
+
+# Ensure egress to database host (Supabase Postgres) and test reachability
+log "Ensuring database egress allow rules and testing connectivity…"
+
+# Helper: extract a key=value from an env file, trimming quotes
+read_env_kv() {
+  local file="$1"; local key="$2"; local line val
+  [[ -f "$file" ]] || { echo ""; return 0; }
+  line="$(grep -E "^[[:space:]]*${key}=" "$file" | tail -n1 | sed -E "s/^[[:space:]]*${key}=//" | tr -d '\r')"
+  # Strip surrounding quotes if present
+  if [[ -n "$line" && "${line:0:1}" == '"' && "${line: -1}" == '"' ]]; then
+    val="${line:1:${#line}-2}"
+  elif [[ -n "$line" && "${line:0:1}" == "'" && "${line: -1}" == "'" ]]; then
+    val="${line:1:${#line}-2}"
+  else
+    val="$line"
+  fi
+  echo "$val"
+}
+
+DB_URL=""
+SUPA_URL=""
+
+for f in "$NODE_DIR/.env.server" "$NODE_DIR/.env" "$ADMIN_ENV_FILE"; do
+  if [[ -z "$DB_URL" ]]; then DB_URL="$(read_env_kv "$f" DATABASE_URL)"; fi
+  if [[ -z "$SUPA_URL" ]]; then SUPA_URL="$(read_env_kv "$f" SUPABASE_URL)"; fi
+  if [[ -z "$SUPA_URL" ]]; then SUPA_URL="$(read_env_kv "$f" VITE_SUPABASE_URL)"; fi
+done
+
+DB_HOST=""; DB_PORT="5432"
+if [[ -n "$DB_URL" ]]; then
+  # Use python3 to robustly parse the URL
+  read DB_HOST DB_PORT < <(DB_URL="$DB_URL" python3 - "$DB_URL" <<'PY'
+import os, sys
+from urllib.parse import urlparse
+u = urlparse(os.environ.get('DB_URL',''))
+host = u.hostname or ''
+port = str(u.port or 5432)
+print(f"{host} {port}")
+PY
+  )
+elif [[ -n "$SUPA_URL" ]]; then
+  # Derive DB host from Supabase project URL
+  read DB_HOST DB_PORT < <(SUPA_URL="$SUPA_URL" python3 - <<'PY'
+import os
+from urllib.parse import urlparse
+su = os.environ.get('SUPA_URL','')
+try:
+  h = urlparse(su).hostname or ''
+  ref = h.split('.')[0] if h else ''
+  host = f"db.{ref}.supabase.co" if ref else ''
+except Exception:
+  host = ''
+print(f"{host} 5432")
+PY
+  )
+fi
+
+if [[ -n "$DB_HOST" ]]; then
+  # If UFW is active and blocks outgoing, add per-IP allow rules for 5432/tcp
+  ufw_status="$($SUDO ufw status verbose 2>/dev/null || true)"
+  need_out_rule=false
+  if echo "$ufw_status" | grep -qiE "Status: active"; then
+    if echo "$ufw_status" | grep -qiE "outgoing\s+deny|Default:.*outgoing.*deny"; then
+      need_out_rule=true
+    fi
+  fi
+  if $need_out_rule; then
+    # Resolve DB host to IPv4 addresses and allow out on 5432 for each
+    ips="$(getent ahostsv4 "$DB_HOST" 2>/dev/null | awk '{print $1}' | sort -u)"
+    if [[ -n "$ips" ]]; then
+      for ip in $ips; do
+        $SUDO ufw allow out to "$ip" port "$DB_PORT" proto tcp >/dev/null 2>&1 || true
+      done
+      log "UFW: allowed outbound TCP $DB_PORT to $DB_HOST ($ips)"
+    else
+      # Fallback: permit out to any on port 5432 (least restrictive but functional)
+      $SUDO ufw allow out to any port "$DB_PORT" proto tcp >/dev/null 2>&1 || true
+      log "UFW: allowed outbound TCP $DB_PORT to any (could not resolve $DB_HOST)"
+    fi
+  fi
+
+  # Quick reachability test (non-fatal)
+  if command -v nc >/dev/null 2>&1; then
+    if nc -z -w 5 "$DB_HOST" "$DB_PORT" >/dev/null 2>&1; then
+      log "DB reachability OK: $DB_HOST:$DB_PORT"
+    else
+      log "[WARN] Cannot reach $DB_HOST:$DB_PORT now; network or firewall may block outgoing."
+    fi
+  else
+    # Fallback using bash /dev/tcp with timeout
+    if timeout 5 bash -lc ">/dev/tcp/$DB_HOST/$DB_PORT" >/dev/null 2>&1; then
+      log "DB reachability OK (bash /dev/tcp): $DB_HOST:$DB_PORT"
+    else
+      log "[WARN] Cannot reach $DB_HOST:$DB_PORT (bash /dev/tcp)."
+    fi
+  fi
+else
+  log "[INFO] No DATABASE_URL or SUPABASE_URL found; skipping DB egress check."
 fi
 
 # Install/upgrade Node.js (ensure >= 20; prefer Node 22 LTS)
