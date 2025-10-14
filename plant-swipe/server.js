@@ -3034,6 +3034,39 @@ app.get('/api/admin/pull-code/stream', async (req, res) => {
 
     const repoRoot = await getRepoRoot()
     const branch = (req.query.branch || '').toString().trim() || ''
+
+    // Log that a streamed pull/build has been initiated
+    try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      let adminName = null
+      if (sql && adminId) {
+        try {
+          const rows = await sql`select coalesce(display_name, '') as name from public.profiles where id = ${adminId} limit 1`
+          adminName = (rows?.[0]?.name || '').trim() || null
+        } catch {}
+      }
+      if (!adminName && supabaseUrlEnv && supabaseAnonKey && adminId) {
+        try {
+          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const bearer = getBearerTokenFromRequest(req)
+          if (bearer) headers['Authorization'] = `Bearer ${bearer}`
+          const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(adminId)}&select=display_name&limit=1`
+          const r = await fetch(url, { headers })
+          if (r.ok) {
+            const arr = await r.json().catch(() => [])
+            adminName = Array.isArray(arr) && arr[0] ? (arr[0].display_name || null) : null
+          }
+        } catch {}
+      }
+      let ok = false
+      if (sql) {
+        try { await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'pull_code', ${branch || null}, ${sql.json({ source: 'stream' })})`; ok = true } catch {}
+      }
+      if (!ok) {
+        try { await insertAdminActivityViaRest(req, { admin_id: adminId, admin_name: adminName, action: 'pull_code', target: branch || null, detail: { source: 'stream' } }) } catch {}
+      }
+    } catch {}
     const scriptPath = path.resolve(repoRoot, 'scripts', 'refresh-plant-swipe.sh')
     try { await fs.access(scriptPath) } catch {
       send('error', { error: `refresh script not found at ${scriptPath}` })
