@@ -42,6 +42,25 @@ HMAC_HEADER = "X-Button-Token"
 
 app = Flask(__name__)
 
+# Optional: forward admin actions to Node app for centralized logging
+def _log_admin_action(action: str, target: str = "", detail: dict | None = None) -> None:
+    try:
+        import requests
+        node_url = os.environ.get("NODE_APP_URL", "http://127.0.0.1:3000")
+        token = request.headers.get("Authorization", "")
+        headers = {"Accept": "application/json"}
+        if token:
+            headers["Authorization"] = token
+        # Node will infer admin from bearer token; use an internal endpoint
+        url = f"{node_url}/api/admin/log-action"
+        payload = {"action": action, "target": target or None, "detail": detail or {}}
+        try:
+            requests.post(url, json=payload, headers=headers, timeout=2)
+        except Exception:
+            pass
+    except Exception:
+        pass
+
 
 def _verify_request() -> None:
     # Option A: HMAC on raw body via X-Button-Token
@@ -290,6 +309,10 @@ def _run_refresh(branch: Optional[str], stream: bool):
 def admin_refresh_stream():
     _verify_request()
     branch = (request.args.get("branch") or "").strip() or None
+    try:
+        _log_admin_action("pull_code", branch or "")
+    except Exception:
+        pass
     return _run_refresh(branch, stream=True)
 
 
@@ -299,6 +322,10 @@ def admin_refresh():
     _verify_request()
     body = request.get_json(silent=True) or {}
     branch = (request.args.get("branch") or body.get("branch") or "").strip() or None
+    try:
+        _log_admin_action("pull_code", branch or "")
+    except Exception:
+        pass
     return _run_refresh(branch, stream=False)
 
 
@@ -316,6 +343,10 @@ def restart_app():
     if not service:
         abort(400, description="missing service")
     _restart_service(service)
+    try:
+        _log_admin_action("restart_service", service)
+    except Exception:
+        pass
     return jsonify({"ok": True, "action": "restart", "service": service})
 
 
@@ -323,6 +354,10 @@ def restart_app():
 def reload_nginx():
     _verify_request()
     _reload_nginx()
+    try:
+        _log_admin_action("reload_nginx", "nginx")
+    except Exception:
+        pass
     return jsonify({"ok": True, "action": "reload", "service": "nginx"})
 
 
@@ -331,6 +366,10 @@ def reboot():
     _verify_request()
     _reboot_machine()
     # If reboot succeeds, client may never see this response
+    try:
+        _log_admin_action("reboot", "server")
+    except Exception:
+        pass
     return jsonify({"ok": True, "action": "reboot"})
 
 

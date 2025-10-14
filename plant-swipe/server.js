@@ -421,6 +421,50 @@ app.get('/api/health', async (_req, res) => {
   }
 })
 
+// Admin: fetch admin activity logs for the last N days (default 30)
+app.get('/api/admin/admin-logs', async (req, res) => {
+  try {
+    const isAdmin = await isAdminFromRequest(req)
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Admin privileges required' })
+      return
+    }
+    const daysParam = Number(req.query.days || 30)
+    const days = (Number.isFinite(daysParam) && daysParam > 0) ? Math.min(90, Math.floor(daysParam)) : 30
+    if (!sql) {
+      // Supabase REST fallback
+      if (!(supabaseUrlEnv && supabaseAnonKey)) {
+        res.status(500).json({ error: 'Database not configured' })
+        return
+      }
+      const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+      const token = getBearerTokenFromRequest(req)
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      const sinceIso = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
+      const url = `${supabaseUrlEnv}/rest/v1/admin_activity_logs?occurred_at=gte.${encodeURIComponent(sinceIso)}&select=occurred_at,admin_name,action,target,detail&order=occurred_at.desc&limit=1000`
+      const r = await fetch(url, { headers })
+      if (!r.ok) {
+        const body = await r.text().catch(() => '')
+        res.status(r.status).json({ error: body || 'Failed to load logs' })
+        return
+      }
+      const arr = await r.json().catch(() => [])
+      res.json({ ok: true, logs: Array.isArray(arr) ? arr : [], via: 'supabase' })
+      return
+    }
+    const rows = await sql`
+      select occurred_at, admin_name, action, target, detail
+      from public.admin_activity_logs
+      where occurred_at >= now() - interval '${days} days'
+      order by occurred_at desc
+      limit 2000
+    `
+    res.json({ ok: true, logs: Array.isArray(rows) ? rows : [], via: 'database' })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to load admin logs' })
+  }
+})
+
 // Database health: returns ok along with latency; always 200 for easier probes
 app.get('/api/health/db', async (_req, res) => {
   const started = Date.now()
@@ -728,6 +772,27 @@ function deriveTrafficSource(referrer) {
   return { traffic_source: 'direct', traffic_details: {} }
 }
 
+// Basic device categorization from a User-Agent string for admin analytics
+function categorizeDeviceFromUa(userAgent) {
+  try {
+    const ua = String(userAgent || '')
+    if (!ua) return 'Other'
+    const uaLower = ua.toLowerCase()
+    if (/(bot|spider|crawler|bingpreview|googlebot|duckduckbot|facebookexternalhit|slackbot|twitterbot)/i.test(ua)) return 'Bot'
+    if (/iphone/i.test(ua)) return 'iPhone'
+    if (/ipad/i.test(ua)) return 'iPad'
+    if (/android/i.test(ua)) {
+      if (/mobile/i.test(ua)) return 'Android Phone'
+      return 'Android Tablet'
+    }
+    if (/cros/i.test(ua)) return 'ChromeOS'
+    if (/windows nt/i.test(ua)) return 'Windows'
+    if (/macintosh|mac os x/i.test(ua)) return 'Mac'
+    if (/linux/i.test(ua)) return 'Linux'
+    return 'Other'
+  } catch { return 'Other' }
+}
+
 // Lightweight in-memory analytics as a resilient fallback when DB is unavailable
 class MemoryAnalytics {
   constructor() {
@@ -950,6 +1015,12 @@ async function handleRestartServer(req, res) {
       return
     }
 
+    try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      const adminName = null
+      if (sql) await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'restart_server', null, ${sql.json({})})`
+    } catch {}
     res.json({ ok: true, message: 'Restarting server' })
     // Give time for response to flush, then request systemd to restart the service.
     setTimeout(() => {
@@ -986,6 +1057,12 @@ app.post('/api/admin/restart-all', async (req, res) => {
       return
     }
 
+    try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      const adminName = null
+      if (sql) await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'restart_all', null, ${sql.json({})})`
+    } catch {}
     res.json({ ok: true, message: 'Reloading nginx and restarting services' })
 
     setTimeout(async () => {
@@ -1268,18 +1345,24 @@ app.get('/api/admin/member', async (req, res) => {
         }
       } catch {}
 
-      // Last online and last IP (best-effort; requires Authorization due to RLS)
+      // Last online and last IP/country/referrer (best-effort; requires Authorization due to RLS)
       let lastOnlineAt = null
       let lastIp = null
+      let lastCountry = null
+      let lastReferrer = null
       try {
-        const lr = await fetch(`${supabaseUrlEnv}/rest/v1/web_visits?user_id=eq.${encodeURIComponent(targetId)}&select=occurred_at,ip_address&order=occurred_at.desc&limit=1`, {
+        const lr = await fetch(`${supabaseUrlEnv}/rest/v1/web_visits?user_id=eq.${encodeURIComponent(targetId)}&select=occurred_at,ip_address,geo_country,referrer&order=occurred_at.desc&limit=1`, {
           headers: baseHeaders,
         })
         if (lr.ok) {
           const arr = await lr.json().catch(() => [])
           if (Array.isArray(arr) && arr[0]) {
             lastOnlineAt = arr[0].occurred_at || null
-            lastIp = arr[0].ip_address || null
+            lastIp = (arr[0].ip_address || '').toString().replace(/\/[0-9]{1,3}$/, '') || null
+            lastCountry = arr[0].geo_country ? String(arr[0].geo_country).toUpperCase() : null
+            const ref = arr[0].referrer || ''
+            const domain = extractHostname(ref)
+            lastReferrer = domain || (ref ? String(ref) : 'direct')
           }
         }
       } catch {}
@@ -1294,7 +1377,7 @@ app.get('/api/admin/member', async (req, res) => {
         })
         if (ipRes.ok) {
           const arr = await ipRes.json().catch(() => [])
-          ips = Array.isArray(arr) ? arr.map((r) => String(r.ip)).filter(Boolean) : []
+          ips = Array.isArray(arr) ? arr.map((r) => String(r.ip).replace(/\/[0-9]{1,3}$/, '')).filter(Boolean) : []
         }
       } catch {}
 
@@ -1371,6 +1454,59 @@ app.get('/api/admin/member', async (req, res) => {
         }
       } catch {}
 
+      // Aggregates (REST fallback): pull recent visits and compute locally
+      let memberTopReferrers = []
+      let memberTopCountries = []
+      let memberTopDevices = []
+      let meanRpm5m = null
+      try {
+        const cutoff30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+        const cutoff5m = Date.now() - 5 * 60 * 1000
+        const r = await fetch(`${supabaseUrlEnv}/rest/v1/web_visits?user_id=eq.${encodeURIComponent(targetId)}&occurred_at=gte.${encodeURIComponent(cutoff30d)}&select=referrer,geo_country,user_agent,occurred_at&order=occurred_at.desc`, {
+          headers: { ...baseHeaders },
+        })
+        if (r.ok) {
+          const arr = await r.json().catch(() => [])
+          const refCounts = new Map()
+          const countryCounts = new Map()
+          const deviceCounts = new Map()
+          let last5mCount = 0
+          for (const v of Array.isArray(arr) ? arr : []) {
+            const domain = extractHostname(v?.referrer || '')
+            const src = domain || (v?.referrer ? String(v.referrer) : '') || 'direct'
+            refCounts.set(src, (refCounts.get(src) || 0) + 1)
+            const cc = (v?.geo_country ? String(v.geo_country).toUpperCase() : '')
+            if (cc) countryCounts.set(cc, (countryCounts.get(cc) || 0) + 1)
+            const dev = categorizeDeviceFromUa(v?.user_agent || '')
+            deviceCounts.set(dev, (deviceCounts.get(dev) || 0) + 1)
+            try { if (v?.occurred_at && new Date(v.occurred_at).getTime() >= cutoff5m) last5mCount++ } catch {}
+          }
+          memberTopReferrers = Array.from(refCounts.entries()).map(([source, visits]) => ({ source, visits: Number(visits) }))
+          memberTopCountries = Array.from(countryCounts.entries()).map(([country, visits]) => ({ country, visits: Number(visits) }))
+          memberTopDevices = Array.from(deviceCounts.entries()).map(([device, visits]) => ({ device, visits: Number(visits) }))
+          memberTopReferrers.sort((a, b) => (b.visits || 0) - (a.visits || 0))
+          memberTopCountries.sort((a, b) => (b.visits || 0) - (a.visits || 0))
+          memberTopDevices.sort((a, b) => (b.visits || 0) - (a.visits || 0))
+          meanRpm5m = Number((last5mCount / 5).toFixed(2))
+        }
+      } catch {}
+
+      // Load admin notes via REST (admin-only via RLS)
+      let adminNotes = []
+      try {
+        const nr = await fetch(`${supabaseUrlEnv}/rest/v1/profile_admin_notes?profile_id=eq.${encodeURIComponent(targetId)}&select=id,profile_id,admin_id,admin_name,message,created_at&order=created_at.desc&limit=50`, { headers: baseHeaders })
+        if (nr.ok) {
+          const arr = await nr.json().catch(() => [])
+          adminNotes = Array.isArray(arr) ? arr.map((r) => ({ id: String(r.id), admin_id: r?.admin_id || null, admin_name: r?.admin_name || null, message: String(r?.message || ''), created_at: r?.created_at || null })) : []
+        }
+      } catch {}
+
+      try {
+        const caller = await getUserFromRequest(req)
+        const adminId = caller?.id || null
+        const adminName = null
+        if (sql) await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'admin_lookup', ${email || displayParam || null}, ${sql.json({ via: 'rest' })})`
+      } catch {}
       res.json({
         ok: true,
         user: { id: targetId, email: resolvedEmail || emailParam || null, created_at: null, email_confirmed_at: null, last_sign_in_at: null },
@@ -1378,13 +1514,20 @@ app.get('/api/admin/member', async (req, res) => {
         ips,
         lastOnlineAt,
         lastIp,
+        lastCountry,
+        lastReferrer,
         visitsCount,
-        uniqueIpsCount: undefined,
+        uniqueIpsCount: Array.isArray(ips) ? ips.length : undefined,
         plantsTotal,
         isBannedEmail,
         bannedReason,
         bannedAt,
         bannedIps,
+        topReferrers: memberTopReferrers.slice(0, 5),
+        topCountries: memberTopCountries.slice(0, 5),
+        topDevices: memberTopDevices.slice(0, 5),
+        meanRpm5m,
+        adminNotes,
       })
     }
 
@@ -1420,6 +1563,29 @@ app.get('/api/admin/member', async (req, res) => {
       const rows = await sql`select id, display_name, is_admin from public.profiles where id = ${user.id} limit 1`
       profile = Array.isArray(rows) && rows[0] ? rows[0] : null
     } catch {}
+    // Load latest admin notes for this profile (DB or REST)
+    let adminNotes = []
+    try {
+      if (sql) {
+        const rows = await sql`
+          select id, profile_id, admin_id, admin_name, message, created_at
+          from public.profile_admin_notes
+          where profile_id = ${user.id}
+          order by created_at desc
+          limit 50
+        `
+        adminNotes = Array.isArray(rows) ? rows.map(r => ({ id: String(r.id), admin_id: r.admin_id || null, admin_name: r.admin_name || null, message: String(r.message || ''), created_at: r.created_at })) : []
+      } else if (supabaseUrlEnv && supabaseAnonKey) {
+        const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+        const token = getBearerTokenFromRequest(req)
+        if (token) headers['Authorization'] = `Bearer ${token}`
+        const resp = await fetch(`${supabaseUrlEnv}/rest/v1/profile_admin_notes?profile_id=eq.${encodeURIComponent(user.id)}&select=id,profile_id,admin_id,admin_name,message,created_at&order=created_at.desc&limit=50`, { headers })
+        if (resp.ok) {
+          const arr = await resp.json().catch(() => [])
+          adminNotes = Array.isArray(arr) ? arr.map((r) => ({ id: String(r.id), admin_id: r?.admin_id || null, admin_name: r?.admin_name || null, message: String(r?.message || ''), created_at: r?.created_at || null })) : []
+        }
+      }
+    } catch {}
     let ips = []
     let lastOnlineAt = null
     let lastIp = null
@@ -1432,11 +1598,13 @@ app.get('/api/admin/member', async (req, res) => {
     let plantsTotal = 0
     try {
       const ipRows = await sql`select distinct ip_address::text as ip from public.web_visits where user_id = ${user.id} and ip_address is not null order by ip asc`
-      ips = (ipRows || []).map(r => String(r.ip)).filter(Boolean)
+      ips = (ipRows || []).map(r => String(r.ip).replace(/\/[0-9]{1,3}$/, '')).filter(Boolean)
     } catch {}
+    let lastCountry = null
+    let lastReferrer = null
     try {
       const lastRows = await sql`
-        select occurred_at, ip_address::text as ip
+        select occurred_at, ip_address::text as ip, geo_country, referrer
         from public.web_visits
         where user_id = ${user.id}
         order by occurred_at desc
@@ -1444,7 +1612,11 @@ app.get('/api/admin/member', async (req, res) => {
       `
       if (Array.isArray(lastRows) && lastRows[0]) {
         lastOnlineAt = lastRows[0].occurred_at || null
-        lastIp = lastRows[0].ip || null
+        lastIp = (lastRows[0].ip || '').toString().replace(/\/[0-9]{1,3}$/, '') || null
+        lastCountry = lastRows[0].geo_country ? String(lastRows[0].geo_country).toUpperCase() : null
+        const ref = lastRows[0].referrer || ''
+        const domain = extractHostname(ref)
+        lastReferrer = domain || (ref ? String(ref) : 'direct')
       }
     } catch {}
     try {
@@ -1490,6 +1662,68 @@ app.get('/api/admin/member', async (req, res) => {
       `
       bannedIps = Array.isArray(bi) ? bi.map(r => String(r.ip)).filter(Boolean) : []
     } catch {}
+    // Aggregates (SQL path)
+    let topReferrers = []
+    let topCountries = []
+    let topDevices = []
+    let meanRpm5m = null
+    try {
+      const [refRows, countryRows, uaRows, rpmRows] = await Promise.all([
+        sql`
+          select source, visits from (
+            select case
+                     when v.referrer is null or v.referrer = '' then 'direct'
+                     when v.referrer ilike 'http%' then split_part(split_part(v.referrer, '://', 2), '/', 1)
+                     else v.referrer
+                   end as source,
+                   count(*)::int as visits
+            from public.web_visits v
+            where v.user_id = ${user.id}
+              and v.occurred_at >= now() - interval '30 days'
+            group by 1
+          ) s
+          order by visits desc
+          limit 10
+        `,
+        sql`
+          select upper(v.geo_country) as country, count(*)::int as visits
+          from public.web_visits v
+          where v.user_id = ${user.id}
+            and v.geo_country is not null and v.geo_country <> ''
+            and v.occurred_at >= now() - interval '30 days'
+          group by 1
+          order by visits desc
+          limit 10
+        `,
+        sql`
+          select v.user_agent, count(*)::int as visits
+          from public.web_visits v
+          where v.user_id = ${user.id}
+            and v.occurred_at >= now() - interval '30 days'
+          group by v.user_agent
+          order by visits desc
+          limit 200
+        `,
+        sql`select count(*)::int as c from public.web_visits where user_id = ${user.id} and occurred_at >= now() - interval '5 minutes'`,
+      ])
+      topReferrers = (Array.isArray(refRows) ? refRows : []).map(r => ({ source: String(r.source || 'direct'), visits: Number(r.visits || 0) }))
+      topCountries = (Array.isArray(countryRows) ? countryRows : []).map(r => ({ country: String(r.country || ''), visits: Number(r.visits || 0) }))
+      const deviceMap = new Map()
+      for (const r of Array.isArray(uaRows) ? uaRows : []) {
+        const key = categorizeDeviceFromUa(r?.user_agent || '')
+        deviceMap.set(key, (deviceMap.get(key) || 0) + Number(r?.visits || 0))
+      }
+      topDevices = Array.from(deviceMap.entries()).map(([device, visits]) => ({ device, visits: Number(visits) }))
+      topDevices.sort((a, b) => (b.visits || 0) - (a.visits || 0))
+      meanRpm5m = Number((((rpmRows?.[0]?.c ?? 0) / 5)).toFixed(2))
+    } catch {}
+
+    try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      const adminName = null
+      if (sql) await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'admin_lookup', ${email || qLower || null}, ${sql.json({ via: 'db' })})`
+    } catch {}
     res.json({
       ok: true,
       user: { id: user.id, email: user.email, created_at: user.created_at, email_confirmed_at: user.email_confirmed_at || null, last_sign_in_at: user.last_sign_in_at || null },
@@ -1497,6 +1731,8 @@ app.get('/api/admin/member', async (req, res) => {
       ips,
       lastOnlineAt,
       lastIp,
+      lastCountry,
+      lastReferrer,
       visitsCount,
       uniqueIpsCount,
       plantsTotal,
@@ -1504,9 +1740,128 @@ app.get('/api/admin/member', async (req, res) => {
       bannedReason,
       bannedAt,
       bannedIps,
+      topReferrers: topReferrers.slice(0, 5),
+      topCountries: topCountries.slice(0, 5),
+      topDevices: topDevices.slice(0, 5),
+      meanRpm5m,
+      adminNotes,
     })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to lookup member' })
+  }
+})
+// Admin: add a note on a profile
+app.post('/api/admin/member-note', async (req, res) => {
+  try {
+    const adminUserId = await ensureAdmin(req, res)
+    if (!adminUserId) return
+    const { profileId, message } = req.body || {}
+    const pid = typeof profileId === 'string' ? profileId.trim() : ''
+    const msg = typeof message === 'string' ? message.trim() : ''
+    if (!pid || !msg) {
+      res.status(400).json({ error: 'Missing profileId or message' })
+      return
+    }
+
+    // Get admin display name
+    let adminName = null
+    try {
+      if (sql) {
+        const rows = await sql`select coalesce(display_name, '') as name from public.profiles where id = ${adminUserId} limit 1`
+        adminName = rows?.[0]?.name || null
+      } else if (supabaseUrlEnv && supabaseAnonKey) {
+        const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+        const token = getBearerTokenFromRequest(req)
+        if (token) headers['Authorization'] = `Bearer ${token}`
+        const resp = await fetch(`${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(adminUserId)}&select=display_name&limit=1`, { headers })
+        if (resp.ok) {
+          const arr = await resp.json().catch(() => [])
+          adminName = Array.isArray(arr) && arr[0] ? (arr[0].display_name || null) : null
+        }
+      }
+    } catch {}
+
+    // Insert note
+    let created = null
+    if (sql) {
+      const rows = await sql`
+        insert into public.profile_admin_notes (profile_id, admin_id, admin_name, message)
+        values (${pid}, ${adminUserId}, ${adminName}, ${msg})
+        returning id, created_at
+      `
+      created = rows?.[0]?.created_at || null
+    } else if (supabaseUrlEnv && supabaseAnonKey) {
+      const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
+      const token = getBearerTokenFromRequest(req)
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      const resp = await fetch(`${supabaseUrlEnv}/rest/v1/profile_admin_notes`, {
+        method: 'POST', headers, body: JSON.stringify({ profile_id: pid, admin_id: adminUserId, admin_name: adminName, message: msg }),
+      })
+      if (!resp.ok) {
+        const body = await resp.text().catch(() => '')
+        res.status(resp.status).json({ error: body || 'Failed to insert note' })
+        return
+      }
+    } else {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+    // Log admin action
+    try {
+      const aid = adminUserId
+      let aname = adminName
+      if (!aname && sql) {
+        const rows = await sql`select coalesce(display_name, '') as name from public.profiles where id = ${aid} limit 1`
+        aname = rows?.[0]?.name || null
+      }
+      if (sql) {
+        await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${aid}, ${aname}, 'add_note', ${profileId}, ${sql.json({ message: msg })})`
+      }
+    } catch {}
+    res.json({ ok: true, created_at: created })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to add note' })
+  }
+})
+
+// Admin: delete a note by id
+app.delete('/api/admin/member-note/:id', async (req, res) => {
+  try {
+    const adminUserId = await ensureAdmin(req, res)
+    if (!adminUserId) return
+    const noteId = (req.params.id || '').toString().trim()
+    if (!noteId) {
+      res.status(400).json({ error: 'Missing note id' })
+      return
+    }
+    if (sql) {
+      // Identify profile for logging
+      let pid = null
+      try {
+        const rows = await sql`select profile_id from public.profile_admin_notes where id = ${noteId}::uuid`
+        pid = rows?.[0]?.profile_id || null
+      } catch {}
+      await sql`delete from public.profile_admin_notes where id = ${noteId}::uuid`
+      try { await sql`insert into public.admin_activity_logs (admin_id, action, target, detail) values (${adminUserId}, 'delete_note', ${pid}, ${sql.json({ noteId })})` } catch {}
+      res.json({ ok: true })
+      return
+    }
+    if (supabaseUrlEnv && supabaseAnonKey) {
+      const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+      const token = getBearerTokenFromRequest(req)
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      const r = await fetch(`${supabaseUrlEnv}/rest/v1/profile_admin_notes?id=eq.${encodeURIComponent(noteId)}`, { method: 'DELETE', headers })
+      if (!r.ok) {
+        const body = await r.text().catch(() => '')
+        res.status(r.status).json({ error: body || 'Failed to delete note' })
+        return
+      }
+      res.json({ ok: true })
+      return
+    }
+    res.status(500).json({ error: 'Database not configured' })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to delete note' })
   }
 })
 
@@ -1527,7 +1882,7 @@ app.get('/api/admin/members-by-ip', async (req, res) => {
     // Prefer direct DB when available
     if (sql) {
       try {
-        const [aggRows, rows] = await Promise.all([
+        const [aggRows, rows, refRows, uaRows, lastCountryRow, rpmRow] = await Promise.all([
           sql`
             select count(*)::int as connections_count,
                    max(occurred_at) as last_seen_at,
@@ -1547,6 +1902,33 @@ app.get('/api/admin/members-by-ip', async (req, res) => {
             group by v.user_id, u.email, p.display_name
             order by last_seen_at desc
           `,
+          sql`
+            select source, visits from (
+              select case
+                       when v.referrer is null or v.referrer = '' then 'direct'
+                       when v.referrer ilike 'http%' then split_part(split_part(v.referrer, '://', 2), '/', 1)
+                       else v.referrer
+                     end as source,
+                     count(*)::int as visits
+              from public.web_visits v
+              where v.ip_address = ${ip}::inet
+                and v.occurred_at >= now() - interval '30 days'
+              group by 1
+            ) s
+            order by visits desc
+            limit 10
+          `,
+          sql`
+            select v.user_agent, count(*)::int as visits
+            from public.web_visits v
+            where v.ip_address = ${ip}::inet
+              and v.occurred_at >= now() - interval '30 days'
+            group by v.user_agent
+            order by visits desc
+            limit 200
+          `,
+          sql`select geo_country from public.web_visits where ip_address = ${ip}::inet and geo_country is not null and geo_country <> '' order by occurred_at desc limit 1`,
+          sql`select count(*)::int as c from public.web_visits where ip_address = ${ip}::inet and occurred_at >= now() - interval '5 minutes'`,
         ])
         const users = (Array.isArray(rows) ? rows : []).map(r => ({
           id: String(r.id),
@@ -1559,7 +1941,21 @@ app.get('/api/admin/members-by-ip', async (req, res) => {
         const usersCount = users.length
         // Align last seen with the most recent known user (first row is latest)
         const lastSeenAt = users.length > 0 ? users[0].last_seen_at : null
-        res.json({ ok: true, ip, usersCount, connectionsCount, lastSeenAt, users, via: 'database' })
+        const ipTopReferrers = (Array.isArray(refRows) ? refRows : []).map(r => ({ source: String(r.source || 'direct'), visits: Number(r.visits || 0) }))
+        const uaMap = new Map()
+        for (const r of Array.isArray(uaRows) ? uaRows : []) {
+          const key = categorizeDeviceFromUa(r?.user_agent || '')
+          uaMap.set(key, (uaMap.get(key) || 0) + Number(r?.visits || 0))
+        }
+        const ipTopDevices = Array.from(uaMap.entries()).map(([device, visits]) => ({ device, visits: Number(visits) })).sort((a, b) => (b.visits || 0) - (a.visits || 0))
+        const ipCountry = (lastCountryRow && lastCountryRow[0] && lastCountryRow[0].geo_country) ? String(lastCountryRow[0].geo_country).toUpperCase() : null
+        const ipMeanRpm5m = Number((((rpmRow?.[0]?.c ?? 0) / 5)).toFixed(2))
+        try {
+          const caller = await getUserFromRequest(req)
+          const adminId = caller?.id || null
+          if (sql) await sql`insert into public.admin_activity_logs (admin_id, action, target, detail) values (${adminId}, 'admin_lookup', ${ip}, ${sql.json({ path: 'members-by-ip', via: 'db' })})`
+        } catch {}
+        res.json({ ok: true, ip, usersCount, connectionsCount, lastSeenAt, users, via: 'database', ipTopReferrers: ipTopReferrers.slice(0,5), ipTopDevices: ipTopDevices.slice(0,5), ipCountry, ipMeanRpm5m })
         return
       } catch (e) {
         // fall back to REST
@@ -1574,7 +1970,7 @@ app.get('/api/admin/members-by-ip', async (req, res) => {
     const bearer = getBearerTokenFromRequest(req)
     if (bearer) Object.assign(headers, { 'Authorization': `Bearer ${bearer}` })
     // Fetch visits for IP to get distinct user_ids and last_seen
-    const visitsResp = await fetch(`${supabaseUrlEnv}/rest/v1/web_visits?ip_address=eq.${encodeURIComponent(ip)}&select=user_id,occurred_at`, { headers })
+    const visitsResp = await fetch(`${supabaseUrlEnv}/rest/v1/web_visits?ip_address=eq.${encodeURIComponent(ip)}&select=user_id,occurred_at,referrer,user_agent,geo_country&order=occurred_at.desc`, { headers })
     if (!visitsResp.ok) {
       const body = await visitsResp.text().catch(() => '')
       res.status(visitsResp.status).json({ error: body || 'Failed to load visits' })
@@ -1582,6 +1978,12 @@ app.get('/api/admin/members-by-ip', async (req, res) => {
     }
     const visits = await visitsResp.json().catch(() => [])
     const userIdToLastSeen = new Map()
+    // REST aggregates for IP
+    const refCounts = new Map()
+    const deviceCounts = new Map()
+    let lastCountry = null
+    let rpmCount5m = 0
+    const cutoff5m = Date.now() - 5 * 60 * 1000
     for (const v of Array.isArray(visits) ? visits : []) {
       const uid = v?.user_id ? String(v.user_id) : null
       const ts = v?.occurred_at || null
@@ -1590,6 +1992,16 @@ app.get('/api/admin/members-by-ip', async (req, res) => {
       if (!prev || (ts && new Date(ts).getTime() > new Date(prev).getTime())) {
         userIdToLastSeen.set(uid, ts)
       }
+      // aggregates
+      const domain = extractHostname(v?.referrer || '')
+      const src = domain || (v?.referrer ? String(v.referrer) : '') || 'direct'
+      refCounts.set(src, (refCounts.get(src) || 0) + 1)
+      if (v?.user_agent) {
+        const dev = categorizeDeviceFromUa(v.user_agent)
+        deviceCounts.set(dev, (deviceCounts.get(dev) || 0) + 1)
+      }
+      if (!lastCountry && v?.geo_country) lastCountry = String(v.geo_country).toUpperCase()
+      try { if (ts && new Date(ts).getTime() >= cutoff5m) rpmCount5m++ } catch {}
     }
     const userIds = Array.from(userIdToLastSeen.keys())
     if (userIds.length === 0) {
@@ -1657,7 +2069,16 @@ app.get('/api/admin/members-by-ip', async (req, res) => {
       }
     } catch {}
 
-    res.json({ ok: true, ip, usersCount, connectionsCount, lastSeenAt, users, via: 'supabase' })
+    const ipTopReferrers = Array.from(refCounts.entries()).map(([source, visits]) => ({ source, visits: Number(visits) })).sort((a, b) => (b.visits || 0) - (a.visits || 0)).slice(0,5)
+    const ipTopDevices = Array.from(deviceCounts.entries()).map(([device, visits]) => ({ device, visits: Number(visits) })).sort((a, b) => (b.visits || 0) - (a.visits || 0)).slice(0,5)
+    const ipCountry = lastCountry || null
+    const ipMeanRpm5m = Number((rpmCount5m / 5).toFixed(2))
+    try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      if (sql) await sql`insert into public.admin_activity_logs (admin_id, action, target, detail) values (${adminId}, 'admin_lookup', ${ip}, ${sql.json({ path: 'members-by-ip', via: 'rest' })})`
+    } catch {}
+    res.json({ ok: true, ip, usersCount, connectionsCount, lastSeenAt, users, via: 'supabase', ipTopReferrers, ipTopDevices, ipCountry, ipMeanRpm5m })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to search by IP' })
   }
@@ -1906,6 +2327,12 @@ app.post('/api/admin/promote-admin', async (req, res) => {
       res.status(500).json({ error: e?.message || 'Failed to promote user' })
       return
     }
+    try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      const adminName = null
+      await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'promote_admin', ${targetId}, ${sql.json({ email: targetEmail })})`
+    } catch {}
     res.json({ ok: true, userId: targetId, email: targetEmail, isAdmin: true })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to promote user' })
@@ -1963,6 +2390,12 @@ app.post('/api/admin/demote-admin', async (req, res) => {
       res.status(500).json({ error: e?.message || 'Failed to demote user' })
       return
     }
+    try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      const adminName = null
+      await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'demote_admin', ${targetId}, ${sql.json({ email: targetEmail })})`
+    } catch {}
     res.json({ ok: true, userId: targetId, email: targetEmail, isAdmin: false })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to demote user' })
@@ -2078,6 +2511,12 @@ app.post('/api/admin/ban', async (req, res) => {
       try { await sql`delete from auth.users where id = ${userId}` } catch {}
     }
 
+    try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      const adminName = null
+      await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'ban_user', ${email}, ${sql.json({ userId, ips })})`
+    } catch {}
     res.json({ ok: true, userId: userId || null, email, ipCount: ips.length, bannedAt: new Date().toISOString() })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to ban user' })
@@ -2349,6 +2788,12 @@ async function handlePullCode(req, res) {
     })
     try { child.unref() } catch {}
 
+    try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      const adminName = null
+      if (sql) await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'pull_code', ${branch || null}, ${sql.json({ source: 'api' })})`
+    } catch {}
     res.json({ ok: true, branch, started: true })
   } catch (e) {
     res.status(500).json({ ok: false, error: e?.message || 'refresh failed' })
@@ -2506,6 +2951,12 @@ app.get('/api/admin/branches', async (req, res) => {
     const { stdout: currentStdout } = await exec(`${gitBase} rev-parse --abbrev-ref HEAD`, { timeout: 30000 })
     const current = currentStdout.trim()
 
+    try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      const adminName = null
+      if (sql) await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'list_branches', ${current || null}, ${sql.json({ count: branches.length })})`
+    } catch {}
     res.json({ branches, current })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to list branches' })

@@ -18,7 +18,7 @@ import {
   Pie,
   Cell,
 } from 'recharts'
-import { RefreshCw, Server, Database, Github, ExternalLink, ShieldCheck, ShieldX, UserSearch, AlertTriangle, Gavel, Search, ChevronDown, GitBranch } from "lucide-react"
+import { RefreshCw, Server, Database, Github, ExternalLink, ShieldCheck, ShieldX, UserSearch, AlertTriangle, Gavel, Search, ChevronDown, GitBranch, Trash2 } from "lucide-react"
 import { supabase } from '@/lib/supabaseClient'
 import {
   Dialog,
@@ -907,7 +907,7 @@ export const AdminPage: React.FC = () => {
   }, [loadVisitorsStats])
 
   // ---- Members tab state ----
-  const [activeTab, setActiveTab] = React.useState<'overview' | 'members'>('overview')
+  const [activeTab, setActiveTab] = React.useState<'overview' | 'members' | 'admin_logs'>('overview')
   const [lookupEmail, setLookupEmail] = React.useState('')
   const [memberLoading, setMemberLoading] = React.useState(false)
   const [memberError, setMemberError] = React.useState<string | null>(null)
@@ -924,6 +924,11 @@ export const AdminPage: React.FC = () => {
     bannedReason?: string | null
     bannedAt?: string | null
     bannedIps?: string[]
+    topReferrers?: Array<{ source: string; visits: number }>
+    topCountries?: Array<{ country: string; visits: number }>
+    topDevices?: Array<{ device: string; visits: number }>
+    meanRpm5m?: number | null
+    adminNotes?: Array<{ id: string; admin_id: string | null; admin_name: string | null; message: string; created_at: string | null }>
   } | null>(null)
   const [banReason, setBanReason] = React.useState('')
   const [banSubmitting, setBanSubmitting] = React.useState(false)
@@ -951,6 +956,10 @@ export const AdminPage: React.FC = () => {
   const [ipUsersCount, setIpUsersCount] = React.useState<number | null>(null)
   const [ipConnectionsCount, setIpConnectionsCount] = React.useState<number | null>(null)
   const [ipLastSeenAt, setIpLastSeenAt] = React.useState<string | null>(null)
+  const [ipTopReferrers, setIpTopReferrers] = React.useState<Array<{ source: string; visits: number }>>([])
+  const [ipTopDevices, setIpTopDevices] = React.useState<Array<{ device: string; visits: number }>>([])
+  const [ipCountry, setIpCountry] = React.useState<string | null>(null)
+  const [ipMeanRpm5m, setIpMeanRpm5m] = React.useState<number | null>(null)
 
   // Ref to focus the IP input when jumping from overview
   const memberIpInputRef = React.useRef<HTMLInputElement | null>(null)
@@ -1020,6 +1029,11 @@ export const AdminPage: React.FC = () => {
         bannedReason: data?.bannedReason ?? null,
         bannedAt: data?.bannedAt ?? null,
         bannedIps: Array.isArray(data?.bannedIps) ? data.bannedIps : [],
+        topReferrers: Array.isArray(data?.topReferrers) ? data.topReferrers : [],
+        topCountries: Array.isArray(data?.topCountries) ? data.topCountries : [],
+        topDevices: Array.isArray(data?.topDevices) ? data.topDevices : [],
+        meanRpm5m: typeof data?.meanRpm5m === 'number' ? data.meanRpm5m : null,
+        adminNotes: Array.isArray(data?.adminNotes) ? data.adminNotes.map((n: any) => ({ id: String(n.id), admin_id: n?.admin_id || null, admin_name: n?.admin_name || null, message: String(n?.message || ''), created_at: n?.created_at || null })) : [],
       })
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -1039,6 +1053,10 @@ export const AdminPage: React.FC = () => {
     setIpUsersCount(null)
     setIpConnectionsCount(null)
     setIpLastSeenAt(null)
+    setIpTopReferrers([])
+    setIpTopDevices([])
+    setIpCountry(null)
+    setIpMeanRpm5m(null)
     try {
       const session = (await supabase.auth.getSession()).data.session
       const token = session?.access_token
@@ -1059,6 +1077,10 @@ export const AdminPage: React.FC = () => {
       if (typeof data?.usersCount === 'number') setIpUsersCount(data.usersCount)
       if (typeof data?.connectionsCount === 'number') setIpConnectionsCount(data.connectionsCount)
       if (typeof data?.lastSeenAt === 'string') setIpLastSeenAt(data.lastSeenAt)
+      if (Array.isArray(data?.ipTopReferrers)) setIpTopReferrers(data.ipTopReferrers)
+      if (Array.isArray(data?.ipTopDevices)) setIpTopDevices(data.ipTopDevices)
+      if (typeof data?.ipCountry === 'string') setIpCountry(data.ipCountry)
+      if (typeof data?.ipMeanRpm5m === 'number') setIpMeanRpm5m(data.ipMeanRpm5m)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       setIpError(msg || 'IP lookup failed')
@@ -1280,6 +1302,11 @@ export const AdminPage: React.FC = () => {
                 className="rounded-2xl"
                 onClick={() => setActiveTab('members')}
               >Members</Button>
+              <Button
+                variant={activeTab === 'admin_logs' ? 'default' : 'secondary'}
+                className="rounded-2xl"
+                onClick={() => setActiveTab('admin_logs')}
+              >Admin Logs</Button>
             </div>
           </div>
 
@@ -1768,7 +1795,7 @@ export const AdminPage: React.FC = () => {
                                   </ResponsiveContainer>
                                 </div>
                                 <div className="flex flex-col gap-2">
-                                  {topCountries.slice(0, 3).map((c, idx) => (
+                                  {topCountries.slice(0, 5).map((c, idx) => (
                                     <div key={c.country} className="flex items-center justify-between">
                                       <div className="flex-1 flex items-center gap-2 min-w-0">
                                         <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: countryColors[idx % countryColors.length] }} />
@@ -1780,7 +1807,7 @@ export const AdminPage: React.FC = () => {
                                   {otherCountries && otherCountries.visits > 0 && (
                                     <div className="flex items-center justify-between">
                                       <div className="flex-1 flex items-center gap-2 min-w-0">
-                                        <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: countryColors[4 % countryColors.length] }} />
+                                        <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: countryColors[5 % countryColors.length] }} />
                                         <span className="text-sm truncate">Other ({otherCountries.count})</span>
                                       </div>
                                       <span className="text-sm tabular-nums">{Math.round(otherCountries?.pct || 0)}%</span>
@@ -1850,6 +1877,11 @@ export const AdminPage: React.FC = () => {
             </div>
           </div>
           </>
+          )}
+
+          {/* Admin Logs Tab */}
+          {activeTab === 'admin_logs' && (
+            <AdminLogs />
           )}
 
           {/* Members Tab */}
@@ -1979,6 +2011,12 @@ export const AdminPage: React.FC = () => {
                               )}
                               {memberData.lastOnlineAt && (
                                 <Badge variant="outline" className="rounded-full px-2 py-0.5">Last online {new Date(memberData.lastOnlineAt).toLocaleString()}</Badge>
+                              )}
+                              {(memberData as any)?.lastCountry && (
+                                <Badge variant="outline" className="rounded-full px-2 py-0.5">{countryCodeToName((memberData as any).lastCountry)}</Badge>
+                              )}
+                              {(memberData as any)?.lastReferrer && (
+                                <Badge variant="outline" className="rounded-full px-2 py-0.5">Referrer {(memberData as any).lastReferrer}</Badge>
                               )}
                               {memberData.user?.created_at && (
                                 <Badge variant="outline" className="rounded-full px-2 py-0.5">Joined {new Date(memberData.user.created_at).toLocaleDateString()}</Badge>
@@ -2112,10 +2150,7 @@ export const AdminPage: React.FC = () => {
                       <div className="text-[11px] opacity-60">Visits</div>
                       <div className="text-base font-semibold tabular-nums">{memberData.visitsCount ?? '—'}</div>
                     </div>
-                    <div className="rounded-xl border p-3 text-center">
-                      <div className="text-[11px] opacity-60">Unique IPs</div>
-                      <div className="text-base font-semibold tabular-nums">{memberData.uniqueIpsCount ?? '—'}</div>
-                    </div>
+                    
                     <div className="rounded-xl border p-3 text-center">
                       <div className="text-[11px] opacity-60">Total plants</div>
                       <div className="text-base font-semibold tabular-nums">{memberData.plantsTotal ?? '—'}</div>
@@ -2124,10 +2159,60 @@ export const AdminPage: React.FC = () => {
                       <div className="text-[11px] opacity-60">Last IP</div>
                       <div className="text-base font-semibold tabular-nums truncate" title={memberData.lastIp || undefined}>{memberData.lastIp || '—'}</div>
                     </div>
+                    <div className="rounded-xl border p-3 text-center">
+                      <div className="text-[11px] opacity-60">Mean RPM (5m)</div>
+                      <div className="text-base font-semibold tabular-nums">{typeof memberData.meanRpm5m === 'number' ? memberData.meanRpm5m.toFixed(2) : '—'}</div>
+                    </div>
+                    <div className="rounded-xl border p-3">
+                      <div className="text-[11px] opacity-60 mb-1">Top referrers</div>
+                      {(!memberData.topReferrers || memberData.topReferrers.length === 0) ? (
+                        <div className="text-xs opacity-60">—</div>
+                      ) : (
+                        <div className="space-y-0.5">
+                          {memberData.topReferrers.slice(0,3).map((r, idx) => (
+                            <div key={`${r.source}-${idx}`} className="flex items-center justify-between text-sm">
+                              <div className="truncate mr-2">{r.source || 'direct'}</div>
+                              <div className="tabular-nums">{r.visits}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="rounded-xl border p-3">
+                      <div className="text-[11px] opacity-60 mb-1">Top countries</div>
+                      {(!memberData.topCountries || memberData.topCountries.length === 0) ? (
+                        <div className="text-xs opacity-60">—</div>
+                      ) : (
+                        <div className="space-y-0.5">
+                          {memberData.topCountries.slice(0,3).map((c, idx) => (
+                            <div key={`${c.country}-${idx}`} className="flex items-center justify-between text-sm">
+                              <div className="truncate mr-2">{countryCodeToName(c.country)}</div>
+                              <div className="tabular-nums">{c.visits}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="rounded-xl border p-3">
+                      <div className="text-[11px] opacity-60 mb-1">Top devices</div>
+                      {(!memberData.topDevices || memberData.topDevices.length === 0) ? (
+                        <div className="text-xs opacity-60">—</div>
+                      ) : (
+                        <div className="space-y-0.5">
+                          {memberData.topDevices.slice(0,3).map((d, idx) => (
+                            <div key={`${d.device}-${idx}`} className="flex items-center justify-between text-sm">
+                              <div className="truncate mr-2">{d.device}</div>
+                              <div className="tabular-nums">{d.visits}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div className="space-y-1">
-                    <div className="text-xs font-medium uppercase tracking-wide opacity-60">Known IPs ({memberData.ips.length})</div>
+                    <div className="text-xs font-medium uppercase tracking-wide opacity-60">Known IPs</div>
+                    <div className="text-xs opacity-60">Unique IPs: <span className="tabular-nums">{memberData.ips.length}</span></div>
                     <div className="flex flex-wrap gap-1">
                       {memberData.ips.map((ip) => (
                         <Badge
@@ -2231,6 +2316,24 @@ export const AdminPage: React.FC = () => {
                     </CardContent>
                   </Card>
 
+                  <Card className="rounded-2xl">
+                    <CardContent className="p-4 space-y-2">
+                      <div className="flex items-start justify-between">
+                        <div className="text-sm font-medium">Admin notes</div>
+                        <AddAdminNote profileId={memberData.user?.id || ''} onAdded={() => lookupMember()} />
+                      </div>
+                      <div className="space-y-2">
+                        {(memberData.adminNotes || []).length === 0 ? (
+                          <div className="text-sm opacity-60">No notes yet.</div>
+                        ) : (
+                          (memberData.adminNotes || []).map((n) => (
+                            <NoteRow key={n.id} note={n} onRemoved={() => lookupMember()} />
+                          ))
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+
                   {(memberData.isBannedEmail || (memberData.bannedIps && memberData.bannedIps.length > 0)) && (
                     <div className="rounded-xl border p-3 bg-rose-50/60">
                       <div className="text-sm font-medium text-rose-700 flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Banned details</div>
@@ -2318,6 +2421,46 @@ export const AdminPage: React.FC = () => {
                         <div className="text-base font-semibold tabular-nums">{ipConnectionsCount ?? '—'}</div>
                       </div>
                     </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <div className="rounded-xl border p-3 text-center">
+                        <div className="text-[11px] opacity-60">Mean RPM (5m)</div>
+                        <div className="text-base font-semibold tabular-nums">{typeof ipMeanRpm5m === 'number' ? ipMeanRpm5m.toFixed(2) : '—'}</div>
+                      </div>
+                      <div className="rounded-xl border p-3 text-center">
+                        <div className="text-[11px] opacity-60">Country</div>
+                        <div className="text-base font-semibold tabular-nums">{ipCountry ? countryCodeToName(ipCountry) : '—'}</div>
+                      </div>
+                      <div className="rounded-xl border p-3">
+                        <div className="text-[11px] opacity-60 mb-1">Top referrers</div>
+                        {(ipTopReferrers.length === 0) ? (
+                          <div className="text-xs opacity-60">—</div>
+                        ) : (
+                          <div className="space-y-0.5">
+                            {ipTopReferrers.slice(0,3).map((r, idx) => (
+                              <div key={`${r.source}-${idx}`} className="flex items-center justify-between text-sm">
+                                <div className="truncate mr-2">{r.source || 'direct'}</div>
+                                <div className="tabular-nums">{r.visits}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="rounded-xl border p-3">
+                      <div className="text-[11px] opacity-60 mb-1">Top devices</div>
+                      {(ipTopDevices.length === 0) ? (
+                        <div className="text-xs opacity-60">—</div>
+                      ) : (
+                        <div className="space-y-0.5">
+                          {ipTopDevices.slice(0,4).map((d, idx) => (
+                            <div key={`${d.device}-${idx}`} className="flex items-center justify-between text-sm">
+                              <div className="truncate mr-2">{d.device}</div>
+                              <div className="tabular-nums">{d.visits}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                     <div className="text-xs opacity-60">Last seen: {ipLastSeenAt ? new Date(ipLastSeenAt).toLocaleString() : '—'}</div>
                     {ipResults.length === 0 ? (
                       <div className="text-sm opacity-60">No users found for this IP.</div>
@@ -2357,4 +2500,157 @@ export const AdminPage: React.FC = () => {
 }
 
 export default AdminPage
+
+function AddAdminNote({ profileId, onAdded }: { profileId: string; onAdded: () => void }) {
+  const [value, setValue] = React.useState('')
+  const [submitting, setSubmitting] = React.useState(false)
+  const [open, setOpen] = React.useState(false)
+  const disabled = !profileId || !value.trim() || submitting
+  const submit = React.useCallback(async () => {
+    if (disabled) return
+    setSubmitting(true)
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      const headers: Record<string, string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+        if (adminToken) headers['X-Admin-Token'] = String(adminToken)
+      } catch {}
+      const resp = await fetch('/api/admin/member-note', {
+        method: 'POST',
+        headers,
+        credentials: 'same-origin',
+        body: JSON.stringify({ profileId, message: value.trim() }),
+      })
+      const data = await resp.json().catch(() => ({}))
+      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`)
+      setValue('')
+      setOpen(false)
+      onAdded()
+    } catch {
+      // noop
+    } finally {
+      setSubmitting(false)
+    }
+  }, [profileId, value, submitting, onAdded])
+  return (
+    <div>
+      {!open ? (
+        <Button onClick={() => setOpen(true)} className="rounded-2xl">Add note</Button>
+      ) : (
+        <div className="flex gap-2">
+          <Textarea
+            placeholder="Add a note for other admins (visible only to admins)"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            className="min-h-[56px]"
+          />
+          <div className="flex flex-col gap-2">
+            <Button onClick={submit} disabled={disabled} className="rounded-2xl">Save</Button>
+            <Button variant="secondary" onClick={() => { setOpen(false); setValue('') }} className="rounded-2xl">Cancel</Button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+
+function NoteRow({ note, onRemoved }: { note: { id: string; admin_id: string | null; admin_name: string | null; message: string; created_at: string | null }, onRemoved: () => void }) {
+  const [removing, setRemoving] = React.useState(false)
+  const remove = React.useCallback(async () => {
+    if (removing) return
+    setRemoving(true)
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      const headers: Record<string, string> = { 'Accept': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) headers['X-Admin-Token'] = String(adminToken) } catch {}
+      const resp = await fetch(`/api/admin/member-note/${encodeURIComponent(note.id)}`, { method: 'DELETE', headers, credentials: 'same-origin' })
+      if (!resp.ok) {
+        // ignore error UI for now
+      }
+      onRemoved()
+    } catch {
+      // noop
+    } finally {
+      setRemoving(false)
+    }
+  }, [note?.id, removing, onRemoved])
+  const [confirming, setConfirming] = React.useState(false)
+  return (
+    <div className="rounded-xl border p-3 bg-white">
+      <div className="text-xs opacity-60 flex items-center justify-between">
+        <span>{note.admin_name || 'Admin'}</span>
+        <div className="flex items-center gap-2">
+          <span>{note.created_at ? new Date(note.created_at).toLocaleString() : ''}</span>
+          {!confirming ? (
+            <button type="button" aria-label="Delete note" className="px-2 py-1 rounded hover:bg-rose-50 text-rose-600" onClick={() => setConfirming(true)}>
+              <Trash2 className="h-4 w-4" />
+            </button>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="destructive" onClick={remove} disabled={removing} className="h-7 px-2 rounded-xl">Confirm</Button>
+              <Button size="sm" variant="secondary" onClick={() => setConfirming(false)} className="h-7 px-2 rounded-xl">Cancel</Button>
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="text-xs mt-1 font-mono whitespace-pre-wrap break-words">
+        {note.message}
+      </div>
+    </div>
+  )
+}
+
+const AdminLogs: React.FC = () => {
+  const [logs, setLogs] = React.useState<Array<{ occurred_at: string; admin_name: string | null; action: string; target: string | null; detail: any }>>([])
+  const [loading, setLoading] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+  const load = React.useCallback(async () => {
+    setLoading(true); setError(null)
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      const headers: Record<string, string> = { 'Accept': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) headers['X-Admin-Token'] = String(adminToken) } catch {}
+      const r = await fetch('/api/admin/admin-logs?days=30', { headers, credentials: 'same-origin' })
+      const data = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`)
+      const list = Array.isArray(data?.logs) ? data.logs : []
+      setLogs(list)
+    } catch (e: any) {
+      setError(e?.message || 'Failed to load logs')
+    } finally { setLoading(false) }
+  }, [])
+  React.useEffect(() => { load() }, [load])
+  return (
+    <Card className="rounded-2xl">
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-sm font-medium">Admin logs — last 30 days</div>
+          <Button size="icon" variant="outline" className="rounded-xl" onClick={load} disabled={loading} aria-label="Refresh logs"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></Button>
+        </div>
+        {error && <div className="text-sm text-rose-600">{error}</div>}
+        {loading ? (
+          <div className="text-sm opacity-60">Loading…</div>
+        ) : logs.length === 0 ? (
+          <div className="text-sm opacity-60">No admin activity logged.</div>
+        ) : (
+          <div className="bg-black text-green-300 rounded-xl p-3 text-xs font-mono overflow-auto max-h-[480px]">
+            {logs.map((l, idx) => (
+              <div key={idx} className="whitespace-pre">
+                [{l.occurred_at ? new Date(l.occurred_at).toLocaleString() : ''}] {(l.admin_name || 'Admin')} — {l.action}{l.target ? ` ${l.target}` : ''}{' '}{JSON.stringify(l.detail || {})}
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
 
