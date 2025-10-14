@@ -141,6 +141,18 @@ log "Installing base packages…"
 $PM_UPDATE
 $PM_INSTALL nginx python3 python3-venv python3-pip git curl ca-certificates gnupg postgresql-client ufw
 
+# Ensure global AWS RDS CA bundle for TLS to Supabase Postgres
+log "Installing AWS RDS global CA bundle for TLS…"
+AWS_RDS_CA="/etc/ssl/certs/aws-rds-global.pem"
+if [[ ! -f "$AWS_RDS_CA" ]]; then
+  curl -fsSL -o "$AWS_RDS_CA" "https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem" || true
+fi
+if [[ -f "$AWS_RDS_CA" ]]; then
+  update-ca-certificates >/dev/null 2>&1 || true
+else
+  log "[WARN] Failed to fetch AWS RDS CA bundle; you may need to configure NODE_EXTRA_CA_CERTS manually."
+fi
+
 # Install/upgrade Node.js (ensure >= 20; prefer Node 22 LTS)
 need_node_install=false
 if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
@@ -268,9 +280,16 @@ fi
 
 # Install systemd services
 log "Installing systemd units…"
-# Admin API unit from repo
-$SUDO install -m 0644 -D "$REPO_DIR/admin_api/admin-api.service" \
-  "/etc/systemd/system/$SERVICE_ADMIN.service"
+# Admin API unit from repo (ensure extra CA for TLS)
+ADMIN_SERVICE_FILE="/etc/systemd/system/$SERVICE_ADMIN.service"
+$SUDO install -m 0644 -D "$REPO_DIR/admin_api/admin-api.service" "$ADMIN_SERVICE_FILE"
+# Inject NODE_EXTRA_CA_CERTS into Admin API service if missing
+if ! grep -q "NODE_EXTRA_CA_CERTS" "$ADMIN_SERVICE_FILE" 2>/dev/null; then
+  tmpfile="/tmp/admin-api.service.$$"
+  awk '1; $0 ~ /^WorkingDirectory=/ && !seen { print "Environment=NODE_EXTRA_CA_CERTS=/etc/ssl/certs/aws-rds-global.pem"; seen=1 }' "$ADMIN_SERVICE_FILE" > "$tmpfile"
+  $SUDO install -m 0644 "$tmpfile" "$ADMIN_SERVICE_FILE"
+  rm -f "$tmpfile"
+fi
 
 # Node API unit (WorkingDirectory points to the repo copy)
 NODE_SERVICE_FILE="/etc/systemd/system/$SERVICE_NODE.service"
@@ -284,6 +303,7 @@ After=network-online.target
 User=www-data
 Group=www-data
 Environment=NODE_ENV=production
+Environment=NODE_EXTRA_CA_CERTS=/etc/ssl/certs/aws-rds-global.pem
 WorkingDirectory=$NODE_DIR
 ExecStart=/usr/bin/node server.js
 Restart=always
