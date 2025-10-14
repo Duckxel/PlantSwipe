@@ -2766,6 +2766,12 @@ async function handlePullCode(req, res) {
     })
     try { child.unref() } catch {}
 
+    try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      const adminName = null
+      if (sql) await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'pull_code', ${branch || null}, ${sql.json({ source: 'api' })})`
+    } catch {}
     res.json({ ok: true, branch, started: true })
   } catch (e) {
     res.status(500).json({ ok: false, error: e?.message || 'refresh failed' })
@@ -2923,6 +2929,12 @@ app.get('/api/admin/branches', async (req, res) => {
     const { stdout: currentStdout } = await exec(`${gitBase} rev-parse --abbrev-ref HEAD`, { timeout: 30000 })
     const current = currentStdout.trim()
 
+    try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      const adminName = null
+      if (sql) await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'list_branches', ${current || null}, ${sql.json({ count: branches.length })})`
+    } catch {}
     res.json({ branches, current })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to list branches' })
