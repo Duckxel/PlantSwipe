@@ -1302,7 +1302,7 @@ app.get('/api/admin/member', async (req, res) => {
           const arr = await lr.json().catch(() => [])
           if (Array.isArray(arr) && arr[0]) {
             lastOnlineAt = arr[0].occurred_at || null
-            lastIp = arr[0].ip_address || null
+            lastIp = (arr[0].ip_address || '').toString().replace(/\/[0-9]{1,3}$/, '') || null
             lastCountry = arr[0].geo_country ? String(arr[0].geo_country).toUpperCase() : null
             const ref = arr[0].referrer || ''
             const domain = extractHostname(ref)
@@ -1321,7 +1321,7 @@ app.get('/api/admin/member', async (req, res) => {
         })
         if (ipRes.ok) {
           const arr = await ipRes.json().catch(() => [])
-          ips = Array.isArray(arr) ? arr.map((r) => String(r.ip)).filter(Boolean) : []
+          ips = Array.isArray(arr) ? arr.map((r) => String(r.ip).replace(/\/[0-9]{1,3}$/, '')).filter(Boolean) : []
         }
       } catch {}
 
@@ -1435,6 +1435,16 @@ app.get('/api/admin/member', async (req, res) => {
         }
       } catch {}
 
+      // Load admin notes via REST (admin-only via RLS)
+      let adminNotes = []
+      try {
+        const nr = await fetch(`${supabaseUrlEnv}/rest/v1/profile_admin_notes?profile_id=eq.${encodeURIComponent(targetId)}&select=id,profile_id,admin_id,admin_name,message,created_at&order=created_at.desc&limit=50`, { headers: baseHeaders })
+        if (nr.ok) {
+          const arr = await nr.json().catch(() => [])
+          adminNotes = Array.isArray(arr) ? arr.map((r) => ({ id: String(r.id), admin_id: r?.admin_id || null, admin_name: r?.admin_name || null, message: String(r?.message || ''), created_at: r?.created_at || null })) : []
+        }
+      } catch {}
+
       res.json({
         ok: true,
         user: { id: targetId, email: resolvedEmail || emailParam || null, created_at: null, email_confirmed_at: null, last_sign_in_at: null },
@@ -1445,7 +1455,7 @@ app.get('/api/admin/member', async (req, res) => {
         lastCountry,
         lastReferrer,
         visitsCount,
-        uniqueIpsCount: undefined,
+        uniqueIpsCount: Array.isArray(ips) ? ips.length : undefined,
         plantsTotal,
         isBannedEmail,
         bannedReason,
@@ -1455,6 +1465,7 @@ app.get('/api/admin/member', async (req, res) => {
         topCountries: memberTopCountries.slice(0, 5),
         topDevices: memberTopDevices.slice(0, 5),
         meanRpm5m,
+        adminNotes,
       })
     }
 
@@ -1525,7 +1536,7 @@ app.get('/api/admin/member', async (req, res) => {
     let plantsTotal = 0
     try {
       const ipRows = await sql`select distinct ip_address::text as ip from public.web_visits where user_id = ${user.id} and ip_address is not null order by ip asc`
-      ips = (ipRows || []).map(r => String(r.ip)).filter(Boolean)
+      ips = (ipRows || []).map(r => String(r.ip).replace(/\/[0-9]{1,3}$/, '')).filter(Boolean)
     } catch {}
     let lastCountry = null
     let lastReferrer = null
@@ -1539,7 +1550,7 @@ app.get('/api/admin/member', async (req, res) => {
       `
       if (Array.isArray(lastRows) && lastRows[0]) {
         lastOnlineAt = lastRows[0].occurred_at || null
-        lastIp = lastRows[0].ip || null
+        lastIp = (lastRows[0].ip || '').toString().replace(/\/[0-9]{1,3}$/, '') || null
         lastCountry = lastRows[0].geo_country ? String(lastRows[0].geo_country).toUpperCase() : null
         const ref = lastRows[0].referrer || ''
         const domain = extractHostname(ref)

@@ -2140,10 +2140,7 @@ export const AdminPage: React.FC = () => {
                       <div className="text-[11px] opacity-60">Visits</div>
                       <div className="text-base font-semibold tabular-nums">{memberData.visitsCount ?? '—'}</div>
                     </div>
-                    <div className="rounded-xl border p-3 text-center">
-                      <div className="text-[11px] opacity-60">Unique IPs</div>
-                      <div className="text-base font-semibold tabular-nums">{memberData.uniqueIpsCount ?? '—'}</div>
-                    </div>
+                    
                     <div className="rounded-xl border p-3 text-center">
                       <div className="text-[11px] opacity-60">Total plants</div>
                       <div className="text-base font-semibold tabular-nums">{memberData.plantsTotal ?? '—'}</div>
@@ -2204,7 +2201,8 @@ export const AdminPage: React.FC = () => {
                   </div>
 
                   <div className="space-y-1">
-                    <div className="text-xs font-medium uppercase tracking-wide opacity-60">Known IPs ({memberData.ips.length})</div>
+                    <div className="text-xs font-medium uppercase tracking-wide opacity-60">Known IPs</div>
+                    <div className="text-xs opacity-60">Unique IPs: <span className="tabular-nums">{memberData.ips.length}</span></div>
                     <div className="flex flex-wrap gap-1">
                       {memberData.ips.map((ip) => (
                         <Badge
