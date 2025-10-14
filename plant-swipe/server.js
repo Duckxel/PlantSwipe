@@ -1744,6 +1744,40 @@ app.post('/api/admin/member-note', async (req, res) => {
   }
 })
 
+// Admin: delete a note by id
+app.delete('/api/admin/member-note/:id', async (req, res) => {
+  try {
+    const adminUserId = await ensureAdmin(req, res)
+    if (!adminUserId) return
+    const noteId = (req.params.id || '').toString().trim()
+    if (!noteId) {
+      res.status(400).json({ error: 'Missing note id' })
+      return
+    }
+    if (sql) {
+      await sql`delete from public.profile_admin_notes where id = ${noteId}::uuid`
+      res.json({ ok: true })
+      return
+    }
+    if (supabaseUrlEnv && supabaseAnonKey) {
+      const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+      const token = getBearerTokenFromRequest(req)
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      const r = await fetch(`${supabaseUrlEnv}/rest/v1/profile_admin_notes?id=eq.${encodeURIComponent(noteId)}`, { method: 'DELETE', headers })
+      if (!r.ok) {
+        const body = await r.text().catch(() => '')
+        res.status(r.status).json({ error: body || 'Failed to delete note' })
+        return
+      }
+      res.json({ ok: true })
+      return
+    }
+    res.status(500).json({ error: 'Database not configured' })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to delete note' })
+  }
+})
+
 // Admin: list users who have connected from a specific IP address
 app.get('/api/admin/members-by-ip', async (req, res) => {
   try {

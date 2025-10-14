@@ -2308,20 +2308,17 @@ export const AdminPage: React.FC = () => {
 
                   <Card className="rounded-2xl">
                     <CardContent className="p-4 space-y-2">
-                      <div className="text-sm font-medium">Admin notes</div>
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm font-medium">Admin notes</div>
+                        <AddNoteToggle />
+                      </div>
                       <AddAdminNote profileId={memberData.user?.id || ''} onAdded={() => lookupMember()} />
                       <div className="space-y-2">
                         {(memberData.adminNotes || []).length === 0 ? (
                           <div className="text-sm opacity-60">No notes yet.</div>
                         ) : (
                           (memberData.adminNotes || []).map((n) => (
-                            <div key={n.id} className="rounded-xl border p-3 bg-white">
-                              <div className="text-xs opacity-60 flex items-center justify-between">
-                                <span>{n.admin_name || 'Admin'}{n.admin_id ? ` · ${n.admin_id}` : ''}</span>
-                                <span>{n.created_at ? new Date(n.created_at).toLocaleString() : ''}</span>
-                              </div>
-                              <div className="text-sm mt-1 whitespace-pre-wrap break-words">{n.message}</div>
-                            </div>
+                            <NoteRow key={n.id} note={n} onRemoved={() => lookupMember()} />
                           ))
                         )}
                       </div>
@@ -2498,6 +2495,7 @@ export default AdminPage
 function AddAdminNote({ profileId, onAdded }: { profileId: string; onAdded: () => void }) {
   const [value, setValue] = React.useState('')
   const [submitting, setSubmitting] = React.useState(false)
+  const [open, setOpen] = React.useState(false)
   const disabled = !profileId || !value.trim() || submitting
   const submit = React.useCallback(async () => {
     if (disabled) return
@@ -2520,6 +2518,7 @@ function AddAdminNote({ profileId, onAdded }: { profileId: string; onAdded: () =
       const data = await resp.json().catch(() => ({}))
       if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`)
       setValue('')
+      setOpen(false)
       onAdded()
     } catch {
       // noop
@@ -2528,14 +2527,65 @@ function AddAdminNote({ profileId, onAdded }: { profileId: string; onAdded: () =
     }
   }, [profileId, value, submitting, onAdded])
   return (
-    <div className="flex gap-2">
-      <Textarea
-        placeholder="Add a note for other admins (visible only to admins)"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        className="min-h-[56px]"
-      />
-      <Button onClick={submit} disabled={disabled} className="self-start rounded-2xl">Add</Button>
+    <div>
+      {!open ? (
+        <Button onClick={() => setOpen(true)} className="rounded-2xl">Add note</Button>
+      ) : (
+        <div className="flex gap-2">
+          <Textarea
+            placeholder="Add a note for other admins (visible only to admins)"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            className="min-h-[56px]"
+          />
+          <div className="flex flex-col gap-2">
+            <Button onClick={submit} disabled={disabled} className="rounded-2xl">Save</Button>
+            <Button variant="secondary" onClick={() => { setOpen(false); setValue('') }} className="rounded-2xl">Cancel</Button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function AddNoteToggle() {
+  return <div />
+}
+
+function NoteRow({ note, onRemoved }: { note: { id: string; admin_id: string | null; admin_name: string | null; message: string; created_at: string | null }, onRemoved: () => void }) {
+  const [removing, setRemoving] = React.useState(false)
+  const remove = React.useCallback(async () => {
+    if (removing) return
+    setRemoving(true)
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      const headers: Record<string, string> = { 'Accept': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) headers['X-Admin-Token'] = String(adminToken) } catch {}
+      const resp = await fetch(`/api/admin/member-note/${encodeURIComponent(note.id)}`, { method: 'DELETE', headers, credentials: 'same-origin' })
+      if (!resp.ok) {
+        // ignore error UI for now
+      }
+      onRemoved()
+    } catch {
+      // noop
+    } finally {
+      setRemoving(false)
+    }
+  }, [note?.id, removing, onRemoved])
+  return (
+    <div className="rounded-xl border p-3 bg-white">
+      <div className="text-xs opacity-60 flex items-center justify-between">
+        <span>{note.admin_name || 'Admin'}{note.admin_id ? ` · ${note.admin_id}` : ''}</span>
+        <div className="flex items-center gap-2">
+          <span>{note.created_at ? new Date(note.created_at).toLocaleString() : ''}</span>
+          <button type="button" aria-label="More actions" className="px-2 py-1 rounded hover:bg-stone-100" onClick={remove} disabled={removing}>⋯</button>
+        </div>
+      </div>
+      <div className="text-xs mt-1 font-mono whitespace-pre-wrap break-words">
+        {note.message}
+      </div>
     </div>
   )
 }
