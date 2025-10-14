@@ -2419,7 +2419,7 @@ grant execute on function public.log_garden_activity(uuid, text, text, text, tex
 
 -- ========== Consolidated daily maintenance ==========
 -- Combine daily jobs into a single scheduled function to reduce pg_cron entries
-create or replace function public.run_daily_maintenance()
+create or replace function public.midnight_maintenance()
 returns void
 language plpgsql
 security definer
@@ -2446,7 +2446,8 @@ declare r record; begin
     'purge_old_web_visits',
     'purge_admin_activity_logs',
     'purge_old_garden_activity_logs',
-    'daily_maintenance'
+    'daily_maintenance',
+    'midnight_maintenance'
   ) loop
     perform cron.unschedule(r.jobid);
   end loop;
@@ -2465,12 +2466,12 @@ declare r record; begin
   for r in select jobid from cron.job where command ilike '%delete from public.admin_activity_logs%interval ''30 days''%'
   loop perform cron.unschedule(r.jobid); end loop;
 
-  -- Schedule a single daily maintenance at 00:05 UTC
+  -- Schedule a single daily maintenance at 00:00 UTC
   perform cron.schedule(
-    'daily_maintenance',
-    '5 0 * * *',
+    'midnight_maintenance',
+    '0 0 * * *',
     $cron$
-    select public.run_daily_maintenance()
+    select public.midnight_maintenance()
     $cron$
   );
 end $$;
