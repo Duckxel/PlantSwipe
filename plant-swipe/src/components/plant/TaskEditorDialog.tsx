@@ -213,7 +213,7 @@ function TaskRowMenu({ onEdit, onDelete }: { onEdit?: () => void; onDelete: () =
   const [open, setOpen] = React.useState(false)
   const buttonRef = React.useRef<HTMLButtonElement | null>(null)
   const menuRef = React.useRef<HTMLDivElement | null>(null)
-  const [position, setPosition] = React.useState<{ top: number; right: number; placement: 'top' | 'bottom' }>({ top: 0, right: 0, placement: 'bottom' })
+  const [position, setPosition] = React.useState<{ top: number; left: number; placement: 'top' | 'bottom' }>({ top: 0, left: 0, placement: 'bottom' })
   const rafRef = React.useRef<number | null>(null)
 
   const computePosition = React.useCallback((placementHint?: 'top' | 'bottom') => {
@@ -221,11 +221,12 @@ function TaskRowMenu({ onEdit, onDelete }: { onEdit?: () => void; onDelete: () =
     if (!btn) return
     const rect = btn.getBoundingClientRect()
     const predictedHeight = onEdit ? 88 : 46 // approximate menu height
+    const predictedWidth = 160 // w-40 => 10rem
     const spaceBelow = window.innerHeight - rect.bottom
     const place: 'top' | 'bottom' = placementHint || (spaceBelow < predictedHeight + 12 ? 'top' : 'bottom')
     const top = place === 'bottom' ? (rect.bottom + 8) : (rect.top - predictedHeight - 8)
-    const right = Math.max(0, window.innerWidth - rect.right)
-    setPosition({ top: Math.max(8, Math.min(top, window.innerHeight - 8 - predictedHeight)), right, placement: place })
+    const left = Math.max(8, Math.min(rect.left, window.innerWidth - predictedWidth - 8))
+    setPosition({ top: Math.max(8, Math.min(top, window.innerHeight - 8 - predictedHeight)), left, placement: place })
   }, [onEdit])
 
   React.useEffect(() => {
@@ -264,17 +265,18 @@ function TaskRowMenu({ onEdit, onDelete }: { onEdit?: () => void; onDelete: () =
       >
         ⋯
       </Button>
-      {open && (
+      {open && createPortal(
         <div
           ref={menuRef as any}
-          style={{ position: 'fixed', top: position.top, right: position.right, width: '10rem', zIndex: 80 }}
-          className="bg-white border rounded-xl shadow-lg z-[80]"
+          style={{ position: 'fixed', top: position.top, left: position.left, width: '10rem', zIndex: 90 }}
+          className="bg-white border rounded-xl shadow-lg z-[90]"
         >
           {onEdit && (
             <button onClick={(e) => { e.stopPropagation(); setOpen(false); onEdit() }} className="w-full text-left px-3 py-2 rounded-t-xl hover:bg-stone-50">Edit</button>
           )}
           <button onClick={(e) => { e.stopPropagation(); setOpen(false); onDelete() }} className={`w-full text-left px-3 py-2 ${onEdit ? '' : 'rounded-t-xl'} rounded-b-xl hover:bg-stone-50 text-red-600`}>Delete</button>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
