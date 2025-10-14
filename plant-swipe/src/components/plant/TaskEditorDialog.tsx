@@ -90,10 +90,10 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
       <DialogContent
         className="rounded-2xl"
         onOpenAutoFocus={(e) => { e.preventDefault() }}
-        onPointerDownOutside={(e) => { e.preventDefault() }}
-        onInteractOutside={(e) => { e.preventDefault() }}
-        // Keep the menu and nested dialogs clickable
-        onCloseAutoFocus={(e) => { e.preventDefault() }}
+        // Allow outside pointer events so absolutely positioned menu stays interactive
+        onPointerDownOutside={(e) => { /* allow */ }}
+        onInteractOutside={(e) => { /* allow */ }}
+        onCloseAutoFocus={(e) => { /* allow */ }}
       >
         <DialogHeader>
           <DialogTitle>Tasks</DialogTitle>
@@ -265,18 +265,16 @@ function TaskRowMenu({ onEdit, onDelete }: { onEdit?: () => void; onDelete: () =
       >
         ⋯
       </Button>
-      {open && createPortal(
+      {open && (
         <div
           ref={menuRef as any}
-          style={{ position: 'fixed', top: position.top, left: position.left, width: '10rem', zIndex: 90 }}
-          className="bg-white border rounded-xl shadow-lg z-[90]"
+          className="absolute right-0 top-full mt-2 w-40 bg-white border rounded-xl shadow-lg z-[80]"
         >
           {onEdit && (
             <button onClick={(e) => { e.stopPropagation(); setOpen(false); onEdit() }} className="w-full text-left px-3 py-2 rounded-t-xl hover:bg-stone-50">Edit</button>
           )}
           <button onClick={(e) => { e.stopPropagation(); setOpen(false); onDelete() }} className={`w-full text-left px-3 py-2 ${onEdit ? '' : 'rounded-t-xl'} rounded-b-xl hover:bg-stone-50 text-red-600`}>Delete</button>
-        </div>,
-        document.body
+        </div>
       )}
     </div>
   )
