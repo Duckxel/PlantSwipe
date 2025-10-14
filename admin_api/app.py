@@ -51,6 +51,10 @@ def _log_admin_action(action: str, target: str = "", detail: dict | None = None)
         headers = {"Accept": "application/json"}
         if token:
             headers["Authorization"] = token
+        # Forward static admin token if we have one, so Node can authorize without bearer
+        static_token = os.environ.get("ADMIN_STATIC_TOKEN", "")
+        if static_token:
+            headers["X-Admin-Token"] = static_token
         # Node will infer admin from bearer token; use an internal endpoint
         url = f"{node_url}/api/admin/log-action"
         payload = {"action": action, "target": target or None, "detail": detail or {}}
@@ -380,13 +384,25 @@ def sync_schema():
     repo_root = _get_repo_root()
     sql_path = _sql_schema_path(repo_root)
     if not os.path.isfile(sql_path):
+        try:
+            _log_admin_action("sync_schema_failed", detail={"error": "sync SQL not found", "path": sql_path})
+        except Exception:
+            pass
         return jsonify({"ok": False, "error": f"sync SQL not found at {sql_path}"}), 500
 
     db_url = _build_database_url()
     if not db_url:
+        try:
+            _log_admin_action("sync_schema_failed", detail={"error": "Database not configured"})
+        except Exception:
+            pass
         return jsonify({"ok": False, "error": "Database not configured"}), 500
 
     if not _psql_available():
+        try:
+            _log_admin_action("sync_schema_failed", detail={"error": "psql not available on server"})
+        except Exception:
+            pass
         return jsonify({"ok": False, "error": "psql not available on server"}), 500
 
     try:
@@ -405,11 +421,23 @@ def sync_schema():
             err = (res.stderr or "")
             # Return tail to avoid huge payloads
             tail = "\n".join((out + "\n" + err).splitlines()[-80:])
+            try:
+                _log_admin_action("sync_schema_failed", detail={"error": "psql failed", "detail": tail})
+            except Exception:
+                pass
             return jsonify({"ok": False, "error": "psql failed", "detail": tail}), 500
         # Success
         tail = "\n".join((res.stdout or "").splitlines()[-20:])
+        try:
+            _log_admin_action("sync_schema", detail={"stdoutTail": tail})
+        except Exception:
+            pass
         return jsonify({"ok": True, "message": "Schema synchronized successfully", "stdoutTail": tail})
     except Exception as e:
+        try:
+            _log_admin_action("sync_schema_failed", detail={"error": str(e) or "Failed to run psql"})
+        except Exception:
+            pass
         return jsonify({"ok": False, "error": str(e) or "Failed to run psql"}), 500
 
 

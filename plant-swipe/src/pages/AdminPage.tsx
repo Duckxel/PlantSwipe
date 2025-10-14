@@ -1035,9 +1035,25 @@ export const AdminPage: React.FC = () => {
         meanRpm5m: typeof data?.meanRpm5m === 'number' ? data.meanRpm5m : null,
         adminNotes: Array.isArray(data?.adminNotes) ? data.adminNotes.map((n: any) => ({ id: String(n.id), admin_id: n?.admin_id || null, admin_name: n?.admin_name || null, message: String(n?.message || ''), created_at: n?.created_at || null })) : [],
       })
+      // Log lookup success (UI)
+      try {
+        const headers2: Record<string,string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+        if (token) headers2['Authorization'] = `Bearer ${token}`
+        try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) headers2['X-Admin-Token'] = String(adminToken) } catch {}
+        await fetch('/api/admin/log-action', { method: 'POST', headers: headers2, credentials: 'same-origin', body: JSON.stringify({ action: 'admin_lookup', target: lookupEmail, detail: { via: 'ui' } }) })
+      } catch {}
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       setMemberError(msg || 'Lookup failed')
+      // Log failed lookup
+      try {
+        const session = (await supabase.auth.getSession()).data.session
+        const token = session?.access_token
+        const headers2: Record<string,string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+        if (token) headers2['Authorization'] = `Bearer ${token}`
+        try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) headers2['X-Admin-Token'] = String(adminToken) } catch {}
+        await fetch('/api/admin/log-action', { method: 'POST', headers: headers2, credentials: 'same-origin', body: JSON.stringify({ action: 'admin_lookup_failed', target: lookupEmail, detail: { error: msg } }) })
+      } catch {}
     } finally {
       setMemberLoading(false)
     }
@@ -1081,9 +1097,25 @@ export const AdminPage: React.FC = () => {
       if (Array.isArray(data?.ipTopDevices)) setIpTopDevices(data.ipTopDevices)
       if (typeof data?.ipCountry === 'string') setIpCountry(data.ipCountry)
       if (typeof data?.ipMeanRpm5m === 'number') setIpMeanRpm5m(data.ipMeanRpm5m)
+      // Log IP lookup (success)
+      try {
+        const headers2: Record<string,string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+        if (token) headers2['Authorization'] = `Bearer ${token}`
+        try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) headers2['X-Admin-Token'] = String(adminToken) } catch {}
+        await fetch('/api/admin/log-action', { method: 'POST', headers: headers2, credentials: 'same-origin', body: JSON.stringify({ action: 'ip_lookup', target: ip, detail: { via: 'ui' } }) })
+      } catch {}
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       setIpError(msg || 'IP lookup failed')
+      // Log IP lookup failure
+      try {
+        const session = (await supabase.auth.getSession()).data.session
+        const token = session?.access_token
+        const headers2: Record<string,string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+        if (token) headers2['Authorization'] = `Bearer ${token}`
+        try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) headers2['X-Admin-Token'] = String(adminToken) } catch {}
+        await fetch('/api/admin/log-action', { method: 'POST', headers: headers2, credentials: 'same-origin', body: JSON.stringify({ action: 'ip_lookup_failed', target: ip, detail: { error: msg } }) })
+      } catch {}
     } finally {
       setIpLoading(false)
     }
@@ -2526,6 +2558,13 @@ function AddAdminNote({ profileId, onAdded }: { profileId: string; onAdded: () =
       })
       const data = await resp.json().catch(() => ({}))
       if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`)
+      // Log note create (UI)
+      try {
+        const headers2: Record<string,string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+        if (token) headers2['Authorization'] = `Bearer ${token}`
+        try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) headers2['X-Admin-Token'] = String(adminToken) } catch {}
+        await fetch('/api/admin/log-action', { method: 'POST', headers: headers2, credentials: 'same-origin', body: JSON.stringify({ action: 'add_note', target: profileId, detail: { source: 'ui' } }) })
+      } catch {}
       setValue('')
       setOpen(false)
       onAdded()
@@ -2573,6 +2612,13 @@ function NoteRow({ note, onRemoved }: { note: { id: string; admin_id: string | n
       if (!resp.ok) {
         // ignore error UI for now
       }
+      // Log note delete (UI)
+      try {
+        const headers2: Record<string,string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+        if (token) headers2['Authorization'] = `Bearer ${token}`
+        try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) headers2['X-Admin-Token'] = String(adminToken) } catch {}
+        await fetch('/api/admin/log-action', { method: 'POST', headers: headers2, credentials: 'same-origin', body: JSON.stringify({ action: 'delete_note', target: note.id, detail: { source: 'ui' } }) })
+      } catch {}
       onRemoved()
     } catch {
       // noop

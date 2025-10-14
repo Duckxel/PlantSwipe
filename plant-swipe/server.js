@@ -247,6 +247,20 @@ async function isAdminFromRequest(req) {
   }
 }
 
+// Helper: insert admin_activity_logs row via Supabase REST when DB is unavailable
+async function insertAdminActivityViaRest(req, row) {
+  try {
+    if (!(supabaseUrlEnv && supabaseAnonKey)) return false
+    const headers = { apikey: supabaseAnonKey, Accept: 'application/json', 'Content-Type': 'application/json' }
+    const bearer = getBearerTokenFromRequest(req)
+    if (bearer) headers['Authorization'] = `Bearer ${bearer}`
+    const resp = await fetch(`${supabaseUrlEnv}/rest/v1/admin_activity_logs`, { method: 'POST', headers, body: JSON.stringify(row) })
+    return resp.ok
+  } catch {
+    return false
+  }
+}
+
 async function ensureAdmin(req, res) {
   try {
     // Public mode or static token
@@ -463,6 +477,58 @@ app.get('/api/admin/admin-logs', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to load admin logs' })
   }
+})
+
+// Admin: generic log endpoint to record an action from admin_api or UI
+app.post('/api/admin/log-action', async (req, res) => {
+  try {
+    const isAdmin = await isAdminFromRequest(req)
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Admin privileges required' })
+      return
+    }
+    const body = req.body || {}
+    const action = typeof body.action === 'string' ? body.action.trim() : ''
+    if (!action) {
+      res.status(400).json({ error: 'action required' })
+      return
+    }
+    const target = (body.target == null || typeof body.target === 'string') ? body.target : String(body.target)
+    const detail = (body.detail && typeof body.detail === 'object') ? body.detail : {}
+
+    let adminId = null
+    let adminName = null
+    try {
+      const caller = await getUserFromRequest(req)
+      adminId = caller?.id || null
+    } catch {}
+
+    let ok = false
+    if (sql) {
+      try {
+        await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, ${action}, ${target || null}, ${sql.json(detail)})`
+        ok = true
+      } catch {}
+    }
+    if (!ok) {
+      try {
+        const row = { admin_id: adminId, admin_name: adminName, action, target: target || null, detail }
+        ok = await insertAdminActivityViaRest(req, row)
+      } catch {}
+    }
+    if (!ok) {
+      res.status(500).json({ error: 'Failed to log action' })
+      return
+    }
+    res.json({ ok: true })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to log action' })
+  }
+})
+app.options('/api/admin/log-action', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
 })
 
 // Database health: returns ok along with latency; always 200 for easier probes
@@ -1194,8 +1260,38 @@ async function handleSyncSchema(req, res) {
     let summary = null
     try { summary = await verifySchemaAfterSync() } catch {}
 
+    // Log admin action (success)
+    try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      const detail = { summary }
+      let logged = false
+      if (sql) {
+        try {
+          await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${null}, 'sync_schema', null, ${sql.json(detail)})`
+          logged = true
+        } catch {}
+      }
+      if (!logged) {
+        try {
+          await insertAdminActivityViaRest(req, { admin_id: adminId, admin_name: null, action: 'sync_schema', target: null, detail })
+        } catch {}
+      }
+    } catch {}
+
     res.json({ ok: true, message: 'Schema synchronized successfully', summary })
   } catch (e) {
+    // Log failure
+    try {
+      const caller = await getUserFromRequest(req)
+      const adminId = caller?.id || null
+      const detail = { error: e?.message || String(e) }
+      if (sql) {
+        try { await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${null}, 'sync_schema_failed', null, ${sql.json(detail)})` } catch {}
+      } else {
+        try { await insertAdminActivityViaRest(req, { admin_id: adminId, admin_name: null, action: 'sync_schema_failed', target: null, detail }) } catch {}
+      }
+    } catch {}
     res.status(500).json({ error: e?.message || 'Failed to sync schema' })
   }
 }
