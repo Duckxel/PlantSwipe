@@ -608,7 +608,15 @@ export const GardenDashboardPage: React.FC = () => {
                     {plants.map((gp: any, idx: number) => (
                       <Card key={gp.id} className={`rounded-2xl overflow-hidden relative ${dragIdx === idx ? 'ring-2 ring-black' : ''}`}
                         draggable
-                        onDragStart={() => setDragIdx(idx)}
+                        onDragStart={(e) => {
+                          // Prevent drag when starting from interactive controls
+                          const target = e.target as HTMLElement
+                          if (target && target.closest('button, a, input, textarea, select, [role="menuitem"]')) {
+                            e.preventDefault()
+                            return
+                          }
+                          setDragIdx(idx)
+                        }}
                         onDragOver={(e) => e.preventDefault()}
                         onDrop={async () => {
                           if (dragIdx === null || dragIdx === idx) return
@@ -657,9 +665,24 @@ export const GardenDashboardPage: React.FC = () => {
                           )}
                         </div>
                             <div className="mt-2 flex gap-2 flex-wrap">
-                              <Button variant="secondary" className="rounded-2xl" onClick={() => { setPendingGardenPlantId(gp.id); setTaskOpen(true) }}>Tasks</Button>
+                              <Button
+                                variant="secondary"
+                                className="rounded-2xl"
+                                draggable={false}
+                                onMouseDown={(e: any) => e.stopPropagation()}
+                                onTouchStart={(e: any) => e.stopPropagation()}
+                                onClick={() => { setPendingGardenPlantId(gp.id); setTaskOpen(true) }}
+                              >
+                                Tasks
+                              </Button>
                               <EditPlantButton gp={gp} gardenId={id!} onChanged={load} serverToday={serverToday} actorColorCss={getActorColorCss()} />
-                              <Button variant="secondary" className="rounded-2xl" onClick={async () => {
+                              <Button
+                                variant="secondary"
+                                className="rounded-2xl"
+                                draggable={false}
+                                onMouseDown={(e: any) => e.stopPropagation()}
+                                onTouchStart={(e: any) => e.stopPropagation()}
+                                onClick={async () => {
                                 await deleteGardenPlant(gp.id)
                                 if (serverToday && id) {
                                   try {
@@ -685,7 +708,10 @@ export const GardenDashboardPage: React.FC = () => {
                                   setActivityRev((r) => r + 1)
                                 } catch {}
                                 await load()
-                              }}>Delete</Button>
+                                }}
+                              >
+                                Delete
+                              </Button>
                             </div>
                           </div>
                         </div>
