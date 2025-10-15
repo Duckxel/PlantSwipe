@@ -481,6 +481,12 @@ $SERVICE_USER ALL=(root) NOPASSWD: $NGINX_BIN -t
 $SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN reload $SERVICE_NGINX
 $SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN restart $SERVICE_NODE
 $SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN restart $SERVICE_ADMIN
+# Allow website Pull & Build to sync service env and reload units without password
+$SERVICE_USER ALL=(root) NOPASSWD: /bin/mkdir
+$SERVICE_USER ALL=(root) NOPASSWD: /usr/bin/install
+$SERVICE_USER ALL=(root) NOPASSWD: /bin/sed
+$SERVICE_USER ALL=(root) NOPASSWD: /usr/bin/tee
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN daemon-reload
 EOF
 "
 $SUDO chmod 0440 "$SUDOERS_FILE"
