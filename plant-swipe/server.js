@@ -3415,19 +3415,18 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
     const visitsLast60m = rows60mRaw?.[0]?.c ?? 0
     const uniqueIps7d = rowsNdUnique?.[0]?.c ?? 0
 
-    const rows7 = await sql`
-      with days as (
-        select generate_series(((now() at time zone 'utc')::date - interval '${days - 1} days'), (now() at time zone 'utc')::date, interval '1 day')::date as d
-      )
-      select d as day,
-             coalesce((select count(distinct v.ip_address)
-                       from ${VISITS_TABLE_SQL_IDENT} v
-                       where timezone('utc', v.occurred_at)::date = d
-                         and v.ip_address is not null), 0)::int as unique_visitors
-      from days
-      order by d asc
-    `
-    const series7d = (rows7 || []).map(r => ({ date: new Date(r.day).toISOString().slice(0,10), uniqueVisitors: Number(r.unique_visitors || 0) }))
+    const rows7 = await sql.unsafe(
+      `with days as (
+         select generate_series(((now() at time zone 'utc')::date - interval '${days - 1} days'), (now() at time zone 'utc')::date, interval '1 day')::date as d
+       )
+       select to_char(d, 'YYYY-MM-DD') as date,
+              coalesce((select count(distinct v.ip_address)
+                        from ${VISITS_TABLE_SQL_IDENT} v
+                        where timezone('utc', v.occurred_at)::date = d
+                          and v.ip_address is not null), 0)::int as unique_visitors
+       from days
+       order by d asc`)
+    const series7d = (rows7 || []).map(r => ({ date: String(r.date), uniqueVisitors: Number(r.unique_visitors || 0) }))
 
     res.json({ ok: true, currentUniqueVisitors10m, uniqueIpsLast30m, uniqueIpsLast60m, visitsLast60m, uniqueIps7d, series7d, via: 'database', days })
   } catch (e) {
