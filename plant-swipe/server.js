@@ -388,25 +388,27 @@ try {
     const isLocal = u.hostname === 'localhost' || u.hostname === '127.0.0.1'
     if (!isLocal) {
       const allowInsecure = String(process.env.ALLOW_INSECURE_DB_TLS || 'false').toLowerCase() === 'true'
-      const candidates = [
+      if (allowInsecure) {
+        postgresOptions = { ssl: { rejectUnauthorized: false } }
+      } else {
+        const candidates = [
         process.env.PGSSLROOTCERT,
         process.env.NODE_EXTRA_CA_CERTS,
         '/etc/ssl/certs/aws-rds-global.pem',
         '/etc/ssl/certs/ca-certificates.crt',
-      ].filter(Boolean)
-      let ssl = undefined
-      for (const p of candidates) {
-        try {
-          if (p && fsSync.existsSync(p)) {
-            const ca = fsSync.readFileSync(p, 'utf8')
-            if (ca && ca.length > 0) { ssl = { rejectUnauthorized: true, ca }; break }
-          }
-        } catch {}
+        ].filter(Boolean)
+        let ssl = undefined
+        for (const p of candidates) {
+          try {
+            if (p && fsSync.existsSync(p)) {
+              const ca = fsSync.readFileSync(p, 'utf8')
+              if (ca && ca.length > 0) { ssl = { rejectUnauthorized: true, ca }; break }
+            }
+          } catch {}
+        }
+        if (!ssl) ssl = true
+        postgresOptions = { ssl }
       }
-      if (!ssl) {
-        ssl = allowInsecure ? { rejectUnauthorized: false } : true
-      }
-      postgresOptions = { ssl }
     }
   }
 } catch {}
