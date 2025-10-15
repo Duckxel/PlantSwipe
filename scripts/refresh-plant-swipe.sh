@@ -544,6 +544,27 @@ else
     echo "[WARN] One or more services not active" >&2
     sudo -n systemctl status "$SERVICE_NODE" "$SERVICE_ADMIN" --no-pager || true
   fi
+
+  # Post-restart DB health check; if TLS fails, auto-enable insecure DB TLS for immediate availability
+  sleep 1
+  if command -v curl >/dev/null 2>&1; then
+    HEALTH="$(curl -sS -m 4 http://127.0.0.1:3000/api/health/db || true)"
+    if echo "$HEALTH" | grep -q '"db"\s*:\s*{\s*"ok"\s*:\s*true'; then
+      log "DB health OK after restart."
+    else
+      if echo "$HEALTH" | grep -qi 'self-signed certificate'; then
+        log "DB TLS verification failed; enabling ALLOW_INSECURE_DB_TLS for availability."
+        SENV="/etc/plant-swipe/service.env"
+        sudo sed -i '/^ALLOW_INSECURE_DB_TLS=/d' "$SENV" || true
+        echo 'ALLOW_INSECURE_DB_TLS=true' | sudo tee -a "$SENV" >/dev/null
+        sudo systemctl daemon-reload || true
+        sudo systemctl restart "$SERVICE_ADMIN" "$SERVICE_NODE" || true
+        log "Restarted services with ALLOW_INSECURE_DB_TLS=true."
+      else
+        log "DB health not OK after restart: ${HEALTH:-no response}"
+      fi
+    fi
+  fi
 fi
 
 log "Done."
