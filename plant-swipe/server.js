@@ -3453,12 +3453,12 @@ app.get('/api/admin/visitors-unique-7d', async (req, res) => {
   }
   try {
     if (sql) {
-      const rows = await sql`
-        select count(distinct v.ip_address)::int as c
-        from ${VISITS_TABLE_SQL_IDENT} v
-        where v.ip_address is not null
-          and timezone('utc', v.occurred_at) >= ((now() at time zone 'utc')::date - interval '6 days')
-      `
+      const rows = await sql.unsafe(
+        `select count(distinct v.ip_address)::int as c
+         from ${VISITS_TABLE_SQL_IDENT} v
+         where v.ip_address is not null
+           and (timezone('utc', v.occurred_at))::date >= ((now() at time zone 'utc')::date - interval '6 days')`
+      )
       const uniqueIps7d = rows?.[0]?.c ?? 0
       res.json({ ok: true, uniqueIps7d, via: 'database' })
       return
