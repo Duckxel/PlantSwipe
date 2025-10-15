@@ -104,7 +104,7 @@ export const GardenDashboardPage: React.FC = () => {
     return self?.role === 'owner'
   }, [members, currentUserId, profile?.is_admin])
 
-  const load = React.useCallback(async (opts?: { silent?: boolean }) => {
+  const load = React.useCallback(async (opts?: { silent?: boolean; preserveHeavy?: boolean }) => {
     if (!id) return
     // Keep UI visible on subsequent reloads to avoid blink
     const silent = opts?.silent ?? (garden !== null)
@@ -198,7 +198,8 @@ export const GardenDashboardPage: React.FC = () => {
 
       // Derive week counts exclusively from Tasks v2 occurrences (no legacy schedule)
       // Heavy task/occurrence computation deferred to when user opens Routine/Plants
-      const computeHeavy = false
+      // Preserve heavy state on silent reloads (routine UI stability)
+      const computeHeavy = opts?.preserveHeavy ? false : false
       if (computeHeavy) {
         const weekStartIso = `${weekDaysIso[0]}T00:00:00.000Z`
         const weekEndIso = `${weekDaysIso[6]}T23:59:59.999Z`
@@ -266,13 +267,16 @@ export const GardenDashboardPage: React.FC = () => {
         }
         setDueToday(dueTodaySet)
       } else {
-        setTodayTaskOccurrences([])
-        setTaskCountsByPlant({})
-        setTaskOccDueToday({})
-        setWeekCountsByType({ water: Array(7).fill(0), fertilize: Array(7).fill(0), harvest: Array(7).fill(0), cut: Array(7).fill(0), custom: Array(7).fill(0) })
-        setWeekCounts(Array(7).fill(0))
-        setDueThisWeekByPlant({})
-        setDueToday(new Set<string>())
+        // Do not clear heavy routine state during light reloads; keep last known values
+        if (!silent) {
+          setTodayTaskOccurrences([])
+          setTaskCountsByPlant({})
+          setTaskOccDueToday({})
+          setWeekCountsByType({ water: Array(7).fill(0), fertilize: Array(7).fill(0), harvest: Array(7).fill(0), cut: Array(7).fill(0), custom: Array(7).fill(0) })
+          setWeekCounts(Array(7).fill(0))
+          setDueThisWeekByPlant({})
+          setDueToday(new Set<string>())
+        }
       }
 
 
@@ -438,7 +442,7 @@ export const GardenDashboardPage: React.FC = () => {
           // Debounce and pause while modals are open
           const now = Date.now()
           const since = now - (lastReloadRef.current || 0)
-          const minInterval = 2500
+          const minInterval = 8000
           if (anyModalOpen) {
             pendingReloadRef.current = true
             return
@@ -446,13 +450,13 @@ export const GardenDashboardPage: React.FC = () => {
           if (since < minInterval) {
             if (reloadTimer) return
             const wait = Math.max(0, minInterval - since)
-            reloadTimer = setTimeout(() => { reloadTimer = null; lastReloadRef.current = Date.now(); setActivityRev((r) => r + 1); load({ silent: true }) }, wait)
+            reloadTimer = setTimeout(() => { reloadTimer = null; lastReloadRef.current = Date.now(); setActivityRev((r) => r + 1); load({ silent: true, preserveHeavy: true }) }, wait)
             return
           }
           lastReloadRef.current = now
           setActivityRev((r) => r + 1)
           if (reloadTimer) return
-          reloadTimer = setTimeout(() => { reloadTimer = null; load({ silent: true }) }, 400)
+          reloadTimer = setTimeout(() => { reloadTimer = null; load({ silent: true, preserveHeavy: true }) }, 1000)
         }
         es.addEventListener('activity', scheduleReload as any)
         es.addEventListener('ready', () => {})
@@ -669,7 +673,10 @@ export const GardenDashboardPage: React.FC = () => {
         // Recompute today's task for this garden to reflect new schedule
         await computeGardenTaskForDay({ gardenId: garden.id, dayIso: serverToday })
       }
-      await load()
+      await load({ silent: true, preserveHeavy: true })
+      if (tab === 'routine') {
+        await loadHeavyForCurrentTab()
+      }
       if (id) navigate(`/garden/${id}/plants`)
     } catch (e: any) {
       setError(e?.message || 'Failed to save schedule')
@@ -704,7 +711,10 @@ export const GardenDashboardPage: React.FC = () => {
           await upsertGardenTask({ gardenId: garden.id, day: today, gardenPlantId: null, success })
         } catch {}
       }
-      await load()
+      await load({ silent: true, preserveHeavy: true })
+      if (tab === 'routine') {
+        await loadHeavyForCurrentTab()
+      }
       if (id) navigate(`/garden/${id}/routine`)
     } catch (e: any) {
       setError(e?.message || 'Failed to log watering')
@@ -935,9 +945,10 @@ export const GardenDashboardPage: React.FC = () => {
                     await logGardenActivity({ gardenId: id, kind: kind as any, message: msg, plantName: plantName || null, taskName: label, actorColor: actorColorCss || null })
                     setActivityRev((r) => r + 1)
                   }
-                } finally {
-                  await load()
-                }
+              } finally {
+                await load({ silent: true, preserveHeavy: true })
+                await loadHeavyForCurrentTab()
+              }
               }} />} />
               <Route path="settings" element={(
                 <div className="space-y-6">
@@ -1044,7 +1055,12 @@ export const GardenDashboardPage: React.FC = () => {
             gardenPlantId={pendingGardenPlantId || ''}
             onChanged={async () => {
               // Ensure page reflects latest tasks after create/update/delete
-              await load()
+              // Silent lightweight reload to keep UI stable
+              await load({ silent: true, preserveHeavy: true })
+              // If routine tab is visible, refresh heavy data immediately
+              if (tab === 'routine') {
+                await loadHeavyForCurrentTab()
+              }
             }}
           />
 
