@@ -106,6 +106,8 @@ export const GardenDashboardPage: React.FC = () => {
     setError(null)
     try {
       // Fast-path: hydrate via batched API, then continue with detailed computations
+      let hydratedPlants: any[] | null = null
+      let gpsLocal: any[] | null = null
       let hydrated = false
       try {
         const session = (await supabase.auth.getSession()).data.session
@@ -124,7 +126,7 @@ export const GardenDashboardPage: React.FC = () => {
               createdAt: String(data.garden.createdAt || ''),
               streak: Number(data.garden.streak || 0),
             } as any)
-            if (Array.isArray(data.plants)) setPlants(data.plants)
+            if (Array.isArray(data.plants)) { setPlants(data.plants); hydratedPlants = data.plants }
             if (Array.isArray(data.members)) setMembers(data.members.map((m: any) => ({ userId: String(m.userId || m.user_id), displayName: m.displayName ?? m.display_name ?? null, email: m.email ?? null, role: m.role, joinedAt: m.joinedAt ?? m.joined_at ?? null, accentKey: m.accentKey ?? null })))
             if (data.serverNow) setServerToday(String(data.serverNow).slice(0,10))
             hydrated = true
@@ -135,7 +137,7 @@ export const GardenDashboardPage: React.FC = () => {
       let gardenCreatedDayIso: string | null = null
       let todayLocal: string | null = null
       if (!hydrated) {
-        const [g0, gps, ms, nowIso] = await Promise.all([
+        const [g0, gpsRaw, ms, nowIso] = await Promise.all([
           getGarden(id),
           getGardenPlants(id),
           getGardenMembers(id),
@@ -144,7 +146,8 @@ export const GardenDashboardPage: React.FC = () => {
         setGarden(g0)
         // Track garden creation day (YYYY-MM-DD) to avoid validating pre-creation days
         gardenCreatedDayIso = g0?.createdAt ? new Date(g0.createdAt).toISOString().slice(0,10) : null
-        setPlants(gps)
+        gpsLocal = gpsRaw
+        setPlants(gpsRaw)
         setMembers(ms.map(m => ({ userId: m.userId, displayName: m.displayName ?? null, email: (m as any).email ?? null, role: m.role, joinedAt: (m as any).joinedAt, accentKey: (m as any).accentKey ?? null })))
         todayLocal = nowIso.slice(0,10)
         setServerToday(todayLocal)
@@ -273,7 +276,8 @@ export const GardenDashboardPage: React.FC = () => {
       let total = 0
       let species = 0
       const seenSpecies = new Set<string>()
-      for (const gp of gps as any[]) {
+      const plantsLocal = (hydratedPlants ?? gpsLocal ?? plants) as any[]
+      for (const gp of plantsLocal) {
         const c = Number(gp.plantsOnHand || 0)
         perInstanceCounts[String(gp.plantId)] = (perInstanceCounts[String(gp.plantId)] || 0) + c
         total += c
