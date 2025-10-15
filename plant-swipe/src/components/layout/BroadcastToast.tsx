@@ -115,8 +115,6 @@ const BroadcastToast: React.FC = () => {
 
   if (!broadcast) return null
 
-  const remaining = msRemaining(broadcast.expiresAt, now)
-
   const severity = (broadcast.severity === 'warning' || broadcast.severity === 'danger') ? broadcast.severity : 'info'
   const severityLabel = severity === 'warning' ? 'Warning' : severity === 'danger' ? 'Danger' : 'Information'
   const borderClass = severity === 'warning' ? 'border-yellow-400' : severity === 'danger' ? 'border-red-500' : 'border-white'
@@ -147,25 +145,16 @@ const BroadcastToast: React.FC = () => {
             <IconComp className="h-4 w-4" />
           </span>
           <div className="break-words flex-1">
-            <div className="font-semibold mb-1">{severityLabel}</div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className={`h-3 w-3 rounded-sm border border-neutral-300 ${squareBgClass}`} aria-hidden />
+              <div className="font-semibold">{severityLabel}</div>
+            </div>
             <div>{broadcast.message}</div>
           </div>
         </div>
       </div>
     </div>
   )
-}
-
-function formatDuration(ms: number): string {
-  ms = Math.max(0, Math.floor(ms))
-  const totalSeconds = Math.floor(ms / 1000)
-  const s = totalSeconds % 60
-  const totalMinutes = Math.floor(totalSeconds / 60)
-  const m = totalMinutes % 60
-  const h = Math.floor(totalMinutes / 60)
-  if (h > 0) return `${h}h ${m}m ${s}s`
-  if (m > 0) return `${m}m ${s}s`
-  return `${s}s`
 }
 
 export default BroadcastToast
