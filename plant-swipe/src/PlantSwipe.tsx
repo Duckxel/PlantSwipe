@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { TopBar } from "@/components/layout/TopBar";
 import { BottomBar } from "@/components/layout/BottomBar";
+import BroadcastToast from "@/components/layout/BroadcastToast";
 import MobileNavBar from "@/components/layout/MobileNavBar";
 import { SwipePage } from "@/pages/SwipePage";
 import { GardenListPage } from "@/pages/GardenListPage";
@@ -723,6 +724,7 @@ export default function PlantSwipe() {
       </Dialog>
 
       <BottomBar />
+      <BroadcastToast />
     </div>
   )
 }

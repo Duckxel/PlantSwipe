@@ -2221,6 +2221,37 @@ drop function if exists public.set_updated_at() cascade;
 
 -- ========== Activity logs ==========
 
+-- ========== Broadcast messages ==========
+-- A simple table to store a single active broadcast at a time.
+-- The Node server enforces single-active via API; schema remains minimal.
+create table if not exists public.broadcast_messages (
+  id uuid primary key default gen_random_uuid(),
+  message text not null,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz null,
+  removed_at timestamptz null,
+  created_by uuid references public.profiles(id) on delete set null
+);
+create index if not exists broadcast_messages_created_at_idx on public.broadcast_messages (created_at desc);
+create index if not exists broadcast_messages_active_idx on public.broadcast_messages (expires_at) where removed_at is null;
+alter table public.broadcast_messages enable row level security;
+-- Only admins can select/insert/update/delete via Supabase REST
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='broadcast_messages' and policyname='broadcast_admin_select') then
+    drop policy broadcast_admin_select on public.broadcast_messages;
+  end if;
+  create policy broadcast_admin_select on public.broadcast_messages for select to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='broadcast_messages' and policyname='broadcast_admin_write') then
+    drop policy broadcast_admin_write on public.broadcast_messages;
+  end if;
+  create policy broadcast_admin_write on public.broadcast_messages for all to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true))
+    with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+
 -- ========== Admin notes on profiles ==========
 -- Store admin-authored notes against user profiles for auditing and collaboration
 create table if not exists public.profile_admin_notes (

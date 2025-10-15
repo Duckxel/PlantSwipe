@@ -21,6 +21,27 @@ dotenv.config()
 try {
   dotenv.config({ path: path.resolve(__dirname, '.env.server') })
 } catch {}
+// Ensure we also load a co-located .env next to server.js regardless of cwd
+try {
+  dotenv.config({ path: path.resolve(__dirname, '.env') })
+} catch {}
+
+// Map common env aliases so deployments can be plug‑and‑play with a single .env
+function preferEnv(target, sources) {
+  if (!process.env[target]) {
+    for (const k of sources) {
+      const v = process.env[k]
+      if (v && String(v).length > 0) { process.env[target] = v; break }
+    }
+  }
+}
+// Allow DB_URL to serve as DATABASE_URL, and other common aliases
+preferEnv('DATABASE_URL', ['DB_URL', 'PG_URL', 'POSTGRES_URL', 'POSTGRES_PRISMA_URL', 'SUPABASE_DB_URL'])
+// Normalize Supabase envs for server code if only VITE_* are present
+preferEnv('SUPABASE_URL', ['VITE_SUPABASE_URL', 'REACT_APP_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_URL'])
+preferEnv('SUPABASE_ANON_KEY', ['VITE_SUPABASE_ANON_KEY', 'REACT_APP_SUPABASE_ANON_KEY', 'NEXT_PUBLIC_SUPABASE_ANON_KEY'])
+// Normalize optional admin token from frontend env
+preferEnv('ADMIN_STATIC_TOKEN', ['VITE_ADMIN_STATIC_TOKEN'])
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -83,6 +104,16 @@ async function getTopLevelIfRepo(dir) {
 }
 
 const exec = promisify(execCb)
+
+// Utility: wrap a promise with a timeout that rejects when exceeded
+function withTimeout(promise, ms, label = 'TIMEOUT') {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(label)), Math.max(1, ms || 0))
+    Promise.resolve(promise)
+      .then((v) => { try { clearTimeout(t) } catch {}; resolve(v) })
+      .catch((e) => { try { clearTimeout(t) } catch {}; reject(e) })
+  })
+}
 
 // Supabase client (server-side) for auth verification
 // Support both runtime server env and Vite-style public envs
@@ -336,10 +367,9 @@ function buildConnectionString() {
     try {
       const url = new URL(cs)
       const isLocal = url.hostname === 'localhost' || url.hostname === '127.0.0.1'
-      if (!isLocal && !url.searchParams.has('sslmode')) {
-        url.searchParams.set('sslmode', 'require')
-        cs = url.toString()
-      }
+      if (!isLocal && !url.searchParams.has('sslmode')) url.searchParams.set('sslmode', 'require')
+      if (!url.searchParams.has('connect_timeout')) url.searchParams.set('connect_timeout', '5')
+      cs = url.toString()
     } catch {}
   }
   return cs
@@ -350,14 +380,35 @@ if (!connectionString) {
   console.warn('[server] DATABASE_URL not configured — API will error on queries')
 }
 
-// Prefer SSL for non-local databases even if URL lacks sslmode
+// Prefer SSL for non-local databases even if URL lacks sslmode; honor custom CA
 let postgresOptions = {}
 try {
   if (connectionString) {
     const u = new URL(connectionString)
     const isLocal = u.hostname === 'localhost' || u.hostname === '127.0.0.1'
     if (!isLocal) {
-      postgresOptions = { ssl: true }
+      const allowInsecure = String(process.env.ALLOW_INSECURE_DB_TLS || 'false').toLowerCase() === 'true'
+      if (allowInsecure) {
+        postgresOptions = { ssl: { rejectUnauthorized: false } }
+      } else {
+        const candidates = [
+        process.env.PGSSLROOTCERT,
+        process.env.NODE_EXTRA_CA_CERTS,
+        '/etc/ssl/certs/aws-rds-global.pem',
+        '/etc/ssl/certs/ca-certificates.crt',
+        ].filter(Boolean)
+        let ssl = undefined
+        for (const p of candidates) {
+          try {
+            if (p && fsSync.existsSync(p)) {
+              const ca = fsSync.readFileSync(p, 'utf8')
+              if (ca && ca.length > 0) { ssl = { rejectUnauthorized: true, ca }; break }
+            }
+          } catch {}
+        }
+        if (!ssl) ssl = true
+        postgresOptions = { ssl }
+      }
     }
   }
 } catch {}
@@ -413,7 +464,7 @@ app.get('/api/health', async (_req, res) => {
     let err = null
     if (sql) {
       try {
-        const rows = await sql`select 1 as one`
+        const rows = await withTimeout(sql`select 1 as one`, 1000, 'DB_TIMEOUT')
         dbOk = Array.isArray(rows) && rows[0] && Number(rows[0].one) === 1
       } catch (e) {
         err = e?.message || 'query failed'
@@ -469,7 +520,7 @@ app.get('/api/admin/admin-logs', async (req, res) => {
     const rows = await sql`
       select occurred_at, admin_id, admin_name, action, target, detail
       from public.admin_activity_logs
-      where occurred_at >= now() - interval '${days} days'
+      where occurred_at >= (now() - make_interval(days => ${days}))
       order by occurred_at desc
       limit 2000
     `
@@ -526,7 +577,11 @@ app.post('/api/admin/log-action', async (req, res) => {
     let ok = false
     if (sql) {
       try {
-        await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, ${action}, ${target || null}, ${sql.json(detail)})`
+        // Cast to expected types to avoid parameter type ambiguity
+        await sql`
+          insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail)
+          values (${adminId || null}::uuid, ${adminName || null}::text, ${action}::text, ${target || null}::text, ${sql.json(detail)})
+        `
         ok = true
       } catch {}
     }
@@ -1256,6 +1311,25 @@ async function ensureBanTables() {
       );
     `
     await sql`create index if not exists banned_ips_banned_at_idx on public.banned_ips (banned_at desc);`
+  } catch {}
+}
+
+// Ensure broadcast table exists (idempotent)
+async function ensureBroadcastTable() {
+  if (!sql) return
+  try {
+    await sql`
+      create table if not exists public.broadcast_messages (
+        id uuid primary key default gen_random_uuid(),
+        message text not null,
+        created_at timestamptz not null default now(),
+        expires_at timestamptz null,
+        removed_at timestamptz null,
+        created_by uuid null
+      );
+    `
+    await sql`create index if not exists broadcast_messages_created_at_idx on public.broadcast_messages (created_at desc);`
+    await sql`create index if not exists broadcast_messages_active_idx on public.broadcast_messages (expires_at) where removed_at is null;`
   } catch {}
 }
 
@@ -3150,9 +3224,10 @@ app.get('/api/admin/branches', async (req, res) => {
     // Always operate from the repository root and mark it safe for this process
     const repoRoot = await getRepoRoot()
     const gitBase = `git -c "safe.directory=${repoRoot}" -C "${repoRoot}"`
-    await exec(`${gitBase} remote update --prune`, { timeout: 60000 })
+    // Keep this fast: limit network timeout and avoid blocking when offline
+    try { await exec(`${gitBase} remote update --prune`, { timeout: 5000 }) } catch {}
     // Prefer for-each-ref over branch -r to avoid pointer lines and formatting quirks
-    const { stdout: branchesStdout } = await exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/remotes/origin`, { timeout: 60000 })
+    const { stdout: branchesStdout } = await exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/remotes/origin`, { timeout: 5000 })
     let branches = branchesStdout
       .split('\n')
       .map(s => s.trim())
@@ -3164,7 +3239,7 @@ app.get('/api/admin/branches', async (req, res) => {
 
     // Fallback to local branches if remote list is empty (e.g., detached or offline)
     if (branches.length === 0) {
-      const { stdout: localStdout } = await exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/heads`, { timeout: 60000 })
+      const { stdout: localStdout } = await exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/heads`, { timeout: 3000 })
       branches = localStdout
         .split('\n')
         .map(s => s.trim())
@@ -3172,7 +3247,7 @@ app.get('/api/admin/branches', async (req, res) => {
         .sort((a, b) => a.localeCompare(b))
     }
 
-    const { stdout: currentStdout } = await exec(`${gitBase} rev-parse --abbrev-ref HEAD`, { timeout: 30000 })
+    const { stdout: currentStdout } = await exec(`${gitBase} rev-parse --abbrev-ref HEAD`, { timeout: 3000 })
     const current = currentStdout.trim()
 
     try {
@@ -3199,7 +3274,10 @@ app.post('/api/track-visit', async (req, res) => {
     const sessionId = getOrSetSessionId(req, res)
     const { pagePath, referrer: bodyReferrer, userId, extra, pageTitle, language } = req.body || {}
     const ipAddress = getClientIp(req)
-    const geo = await resolveGeo(req, ipAddress)
+    let geo = { geo_country: null, geo_region: null, geo_city: null }
+    try {
+      geo = await withTimeout(resolveGeo(req, ipAddress), 800, 'GEO_TIMEOUT')
+    } catch {}
     const userAgent = req.get('user-agent') || ''
     const tokenUserId = await getUserIdFromRequest(req)
     const effectiveUserId = tokenUserId || (typeof userId === 'string' ? userId : null)
@@ -3210,7 +3288,8 @@ app.post('/api/track-visit', async (req, res) => {
     const acceptLanguage = (req.get('accept-language') || '').split(',')[0] || null
     const lang = language || acceptLanguage
     const referrer = (typeof bodyReferrer === 'string' && bodyReferrer.length > 0) ? bodyReferrer : (req.get('referer') || req.get('referrer') || '')
-    await insertWebVisit({ sessionId, userId: effectiveUserId, pagePath, referrer, userAgent, ipAddress, geo, extra, pageTitle, language: lang }, req)
+    // Do not block the response on DB write; best-effort in background
+    insertWebVisit({ sessionId, userId: effectiveUserId, pagePath, referrer, userAgent, ipAddress, geo, extra, pageTitle, language: lang }, req).catch(() => {})
     res.status(204).end()
   } catch (e) {
     res.status(500).json({ error: 'Failed to record visit' })
@@ -3507,7 +3586,8 @@ app.get('/api/admin/online-ips', async (req, res) => {
       // Use RPC if available; otherwise use REST with select distinct
       let ips = []
       try {
-        const resp = await fetch(`${supabaseUrlEnv}/rest/v1/web_visits?select=ip_address&occurred_at=gte.${new Date(Date.now() - windowMinutes * 60000).toISOString()}&ip_address=not.is.null`, { headers })
+        const url = `${supabaseUrlEnv}/rest/v1/web_visits?select=ip_address&occurred_at=gte.${new Date(Date.now() - windowMinutes * 60000).toISOString()}&ip_address=not.is.null`
+        const resp = await withTimeout(fetch(url, { headers }), 1200, 'REST_TIMEOUT')
         if (resp.ok) {
           const arr = await resp.json().catch(() => [])
           const uniq = new Set((Array.isArray(arr) ? arr : []).map(r => String(r.ip_address || '')).filter(Boolean))
@@ -3578,6 +3658,208 @@ app.get('/api/admin/online-users', async (req, res) => {
   }
 })
 
+// --- Global broadcast message system ---
+// SSE client registry
+const broadcastClients = new Set()
+
+function sseWrite(res, event, data) {
+  try {
+    if (!res) return
+    if (event) res.write(`event: ${event}\n`)
+    const payload = typeof data === 'string' ? data : JSON.stringify(data)
+    const lines = String(payload).split(/\r?\n/)
+    for (const line of lines) res.write(`data: ${line}\n`)
+    res.write('\n')
+  } catch {}
+}
+
+async function getActiveBroadcastRow() {
+  // Prefer direct SQL when available
+  if (sql) {
+    try {
+      const rows = await sql`
+        select id::text as id, message, created_at, expires_at
+        from public.broadcast_messages
+        where removed_at is null and (expires_at is null or expires_at > now())
+        order by created_at desc
+        limit 1
+      `
+      return Array.isArray(rows) && rows[0] ? rows[0] : null
+    } catch {}
+  }
+  // Supabase REST fallback for reads
+  if (supabaseUrlEnv && supabaseAnonKey) {
+    try {
+      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+      const url = `${supabaseUrlEnv}/rest/v1/broadcast_messages?removed_at=is.null&select=id,message,created_at,expires_at&order=created_at.desc&limit=10`
+      const r = await fetch(url, { headers })
+      if (r.ok) {
+        const arr = await r.json().catch(() => [])
+        const now = Date.now()
+        const valid = (Array.isArray(arr) ? arr : []).find((row) => {
+          const ex = row?.expires_at ? Date.parse(row.expires_at) : null
+          return !ex || ex > now
+        })
+        return valid || null
+      }
+    } catch {}
+  }
+  return null
+}
+
+function broadcastToAll(payload) {
+  try {
+    for (const res of Array.from(broadcastClients)) {
+      sseWrite(res, 'broadcast', payload)
+    }
+  } catch {}
+}
+
+function clearBroadcastForAll() {
+  try {
+    for (const res of Array.from(broadcastClients)) {
+      sseWrite(res, 'clear', { ok: true })
+    }
+  } catch {}
+}
+
+// Public: fetch current active broadcast
+app.get('/api/broadcast/active', async (_req, res) => {
+  try {
+    const row = await getActiveBroadcastRow()
+    if (row) {
+      res.json({ ok: true, broadcast: {
+        id: String(row.id || ''),
+        message: String(row.message || ''),
+        createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
+        expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
+      } })
+    } else {
+      res.json({ ok: true, broadcast: null })
+    }
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e?.message || 'Failed to load broadcast' })
+  }
+})
+
+// Public: Server-Sent Events stream for broadcast updates
+app.get('/api/broadcast/stream', async (req, res) => {
+  try {
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache, no-transform')
+    res.setHeader('Connection', 'keep-alive')
+    res.setHeader('X-Accel-Buffering', 'no')
+    res.flushHeaders?.()
+
+    // Send initial state
+    try {
+      const row = await getActiveBroadcastRow()
+      if (row) {
+        sseWrite(res, 'broadcast', {
+          id: String(row.id || ''),
+          message: String(row.message || ''),
+          createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
+          expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
+        })
+      } else {
+        sseWrite(res, 'clear', { ok: true })
+      }
+    } catch {}
+
+    broadcastClients.add(res)
+    const hb = setInterval(() => { try { res.write(': ping\n\n') } catch {} }, 15000)
+    req.on('close', () => { try { clearInterval(hb) } catch {}; broadcastClients.delete(res) })
+  } catch (e) {
+    try { res.status(500).json({ error: e?.message || 'stream failed' }) } catch {}
+  }
+})
+
+// Admin: create a new broadcast message
+app.post('/api/admin/broadcast', async (req, res) => {
+  try {
+    // Require admin and ensure table
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
+    if (!sql) {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+    await ensureBroadcastTable()
+
+    const messageRaw = (req.body?.message || '').toString().trim()
+    const durationMsRaw = Number(req.body?.durationMs || req.body?.duration_ms || req.body?.duration || 0)
+    if (!messageRaw) {
+      res.status(400).json({ error: 'Message is required' })
+      return
+    }
+    // Enforce single active message
+    const active = await sql`
+      select id from public.broadcast_messages
+      where removed_at is null and (expires_at is null or expires_at > now())
+      limit 1
+    `
+    if (Array.isArray(active) && active.length > 0) {
+      res.status(409).json({ error: 'An active broadcast already exists' })
+      return
+    }
+    let expiresAt = null
+    if (Number.isFinite(durationMsRaw) && durationMsRaw > 0) {
+      expiresAt = new Date(Date.now() + Math.floor(durationMsRaw)).toISOString()
+    }
+    const rows = await sql`
+      insert into public.broadcast_messages (message, created_by, expires_at)
+      values (${messageRaw}, ${typeof adminId === 'string' ? adminId : null}, ${expiresAt ? expiresAt : null})
+      returning id::text as id, message, created_at, expires_at
+    `
+    const row = Array.isArray(rows) && rows[0] ? rows[0] : null
+    const payload = row ? {
+      id: String(row.id || ''),
+      message: String(row.message || ''),
+      createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
+      expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
+    } : null
+    if (payload) broadcastToAll(payload)
+    res.json({ ok: true, broadcast: payload })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to create broadcast' })
+  }
+})
+
+// Admin: remove current (or specified) broadcast message
+app.delete('/api/admin/broadcast', async (req, res) => {
+  try {
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
+    if (!sql) {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+    await ensureBroadcastTable()
+    const idParam = (req.query?.id || req.body?.id || '').toString().trim()
+    let rows
+    if (idParam) {
+      rows = await sql`
+        update public.broadcast_messages
+        set removed_at = now()
+        where id = ${idParam} and removed_at is null
+        returning id
+      `
+    } else {
+      rows = await sql`
+        update public.broadcast_messages
+        set removed_at = now()
+        where removed_at is null and (expires_at is null or expires_at > now())
+        returning id
+      `
+    }
+    const changed = Array.isArray(rows) && rows.length > 0
+    if (changed) clearBroadcastForAll()
+    res.json({ ok: true, removed: changed })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to remove broadcast' })
+  }
+})
+
 // Static assets
 const distDir = path.resolve(__dirname, 'dist')
 app.use(express.static(distDir))
@@ -3607,6 +3889,7 @@ if (shouldListen) {
     console.log(`[server] listening on http://localhost:${port}`)
     // Best-effort ensure ban tables are present at startup
     ensureBanTables().catch(() => {})
+    ensureBroadcastTable().catch(() => {})
   })
 }
 
