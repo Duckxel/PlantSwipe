@@ -414,6 +414,24 @@ try {
 } catch {}
 const sql = connectionString ? postgres(connectionString, postgresOptions) : null
 
+// Resolve visits table name (default: public.web_visits). Supports alternate names like visit-web.
+const VISITS_TABLE_ENV =
+  (process.env.VISITS_TABLE ||
+    process.env.VISIT_TABLE ||
+    process.env.WEB_VISITS_TABLE ||
+    'web_visits').trim()
+
+function buildVisitsTableIdentifier() {
+  try {
+    const t = VISITS_TABLE_ENV || 'web_visits'
+    // Allow letters, digits, underscore or hyphen
+    if (/^[a-zA-Z0-9_]+$/.test(t)) return `public.${t}`
+    if (/^[a-zA-Z0-9_-]+$/.test(t)) return `public."${t}"`
+  } catch {}
+  return 'public.web_visits'
+}
+const VISITS_TABLE_SQL_IDENT = buildVisitsTableIdentifier()
+
 const app = express()
 // Trust proxy headers so req.secure and x-forwarded-proto reflect real scheme
 try { app.set('trust proxy', true) } catch {}
@@ -1043,7 +1061,7 @@ const memAnalytics = new MemoryAnalytics()
 async function computeNextVisitNum(sessionId) {
   if (!sql || !sessionId) return null
   try {
-    const rows = await sql`select count(*)::int as c from public.web_visits where session_id = ${sessionId}`
+    const rows = await sql.unsafe(`select count(*)::int as c from ${VISITS_TABLE_SQL_IDENT} where session_id = $1`, [sessionId])
     const c = Array.isArray(rows) && rows[0] ? Number(rows[0].c) : 0
     return c + 1
   } catch {
@@ -1058,7 +1076,8 @@ async function insertWebVisitViaSupabaseRest(payload, req) {
     const token = getBearerTokenFromRequest(req)
     if (token) Object.assign(headers, { 'Authorization': `Bearer ${token}` })
     // First try full payload (new schema)
-    const fullResp = await fetch(`${supabaseUrlEnv}/rest/v1/web_visits`, {
+    const tablePath = (process.env.VISITS_TABLE_REST || VISITS_TABLE_ENV || 'web_visits')
+    const fullResp = await fetch(`${supabaseUrlEnv}/rest/v1/${tablePath}`, {
       method: 'POST',
       headers,
       body: JSON.stringify(payload),
@@ -1077,7 +1096,7 @@ async function insertWebVisitViaSupabaseRest(payload, req) {
       geo_city: payload.geo_city ?? null,
       extra: payload.extra ?? {},
     }
-    const minResp = await fetch(`${supabaseUrlEnv}/rest/v1/web_visits`, {
+    const minResp = await fetch(`${supabaseUrlEnv}/rest/v1/${tablePath}`, {
       method: 'POST',
       headers,
       body: JSON.stringify(minimal),
@@ -1119,12 +1138,14 @@ async function insertWebVisit({ sessionId, userId, pagePath, referrer, userAgent
 
   try {
     const computedVisitNum = Number.isFinite(visitNum) ? visitNum : await computeNextVisitNum(sessionId)
-    await sql`
-      insert into public.web_visits
-        (session_id, user_id, page_path, referrer, user_agent, ip_address, geo_country, geo_region, geo_city, extra, visit_num, page_title, language)
-      values
-        (${sessionId}, ${userId || null}, ${pagePath}, ${referrer || null}, ${userAgent || null}, ${ipAddress || null}, ${(geo?.geo_country && /^[a-z]{2}$/i.test(String(geo.geo_country))) ? String(geo.geo_country).toUpperCase() : (geo?.geo_country || null)}, ${geo?.geo_region || null}, ${geo?.geo_city || null}, ${extra ? sql.json((() => { try { const { traffic_source, traffic_details } = deriveTrafficSource(referrer); return { ...(extra || {}), traffic_source, traffic_details } } catch { return (extra || {}) } })()) : sql.json({})}, ${computedVisitNum}, ${pageTitle || null}, ${lang})
-    `
+    const trafficAugmentedExtra = (() => { try { const { traffic_source, traffic_details } = deriveTrafficSource(referrer); return { ...(extra || {}), traffic_source, traffic_details } } catch { return (extra || {}) } })()
+    const geoCountry = (geo?.geo_country && /^[a-z]{2}$/i.test(String(geo.geo_country))) ? String(geo.geo_country).toUpperCase() : (geo?.geo_country || null)
+    await sql.unsafe(
+      `insert into ${VISITS_TABLE_SQL_IDENT}
+         (session_id, user_id, page_path, referrer, user_agent, ip_address, geo_country, geo_region, geo_city, extra, visit_num, page_title, language)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13)`,
+      [sessionId, userId || null, pagePath, referrer || null, userAgent || null, ipAddress || null, geoCountry, geo?.geo_region || null, geo?.geo_city || null, JSON.stringify(trafficAugmentedExtra), computedVisitNum, pageTitle || null, lang]
+    )
   } catch (e) {
     // On DB failure, attempt Supabase REST fallback (handles older schemas too)
     const restPayload = {
@@ -1591,7 +1612,8 @@ app.get('/api/admin/member', async (req, res) => {
       let lastCountry = null
       let lastReferrer = null
       try {
-        const lr = await fetch(`${supabaseUrlEnv}/rest/v1/web_visits?user_id=eq.${encodeURIComponent(targetId)}&select=occurred_at,ip_address,geo_country,referrer&order=occurred_at.desc&limit=1`, {
+        const tablePath = (process.env.VISITS_TABLE_REST || VISITS_TABLE_ENV || 'web_visits')
+        const lr = await fetch(`${supabaseUrlEnv}/rest/v1/${tablePath}?user_id=eq.${encodeURIComponent(targetId)}&select=occurred_at,ip_address,geo_country,referrer&order=occurred_at.desc&limit=1`, {
           headers: baseHeaders,
         })
         if (lr.ok) {
@@ -1624,7 +1646,7 @@ app.get('/api/admin/member', async (req, res) => {
       // Counts (best-effort via headers; requires Authorization)
       let visitsCount = undefined
       try {
-        const vc = await fetch(`${supabaseUrlEnv}/rest/v1/web_visits?user_id=eq.${encodeURIComponent(targetId)}&select=id`, {
+        const vc = await fetch(`${supabaseUrlEnv}/rest/v1/${tablePath}?user_id=eq.${encodeURIComponent(targetId)}&select=id`, {
           headers: { ...baseHeaders, 'Prefer': 'count=exact', 'Range': '0-0' },
         })
         const cr = vc.headers.get('content-range') || ''
@@ -1702,7 +1724,7 @@ app.get('/api/admin/member', async (req, res) => {
       try {
         const cutoff30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
         const cutoff5m = Date.now() - 5 * 60 * 1000
-        const r = await fetch(`${supabaseUrlEnv}/rest/v1/web_visits?user_id=eq.${encodeURIComponent(targetId)}&occurred_at=gte.${encodeURIComponent(cutoff30d)}&select=referrer,geo_country,user_agent,occurred_at&order=occurred_at.desc`, {
+        const r = await fetch(`${supabaseUrlEnv}/rest/v1/${tablePath}?user_id=eq.${encodeURIComponent(targetId)}&occurred_at=gte.${encodeURIComponent(cutoff30d)}&select=referrer,geo_country,user_agent,occurred_at&order=occurred_at.desc`, {
           headers: { ...baseHeaders },
         })
         if (r.ok) {
@@ -1837,7 +1859,7 @@ app.get('/api/admin/member', async (req, res) => {
     let bannedIps = []
     let plantsTotal = 0
     try {
-      const ipRows = await sql`select distinct ip_address::text as ip from public.web_visits where user_id = ${user.id} and ip_address is not null order by ip asc`
+      const ipRows = await sql.unsafe(`select distinct ip_address::text as ip from ${VISITS_TABLE_SQL_IDENT} where user_id = $1 and ip_address is not null order by ip asc`, [user.id])
       ips = (ipRows || []).map(r => String(r.ip).replace(/\/[0-9]{1,3}$/, '')).filter(Boolean)
     } catch {}
     let lastCountry = null
@@ -1845,7 +1867,7 @@ app.get('/api/admin/member', async (req, res) => {
     try {
       const lastRows = await sql`
         select occurred_at, ip_address::text as ip, geo_country, referrer
-        from public.web_visits
+        from ${VISITS_TABLE_SQL_IDENT}
         where user_id = ${user.id}
         order by occurred_at desc
         limit 1
@@ -1861,8 +1883,8 @@ app.get('/api/admin/member', async (req, res) => {
     } catch {}
     try {
       const [vcRows, uipRows] = await Promise.all([
-        sql`select count(*)::int as c from public.web_visits where user_id = ${user.id}`,
-        sql`select count(distinct ip_address)::int as c from public.web_visits where user_id = ${user.id} and ip_address is not null`,
+        sql.unsafe(`select count(*)::int as c from ${VISITS_TABLE_SQL_IDENT} where user_id = $1`, [user.id]),
+        sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where user_id = $1 and ip_address is not null`, [user.id]),
       ])
       visitsCount = vcRows?.[0]?.c ?? 0
       uniqueIpsCount = uipRows?.[0]?.c ?? 0
@@ -1917,7 +1939,7 @@ app.get('/api/admin/member', async (req, res) => {
                      else v.referrer
                    end as source,
                    count(*)::int as visits
-            from public.web_visits v
+            from ${VISITS_TABLE_SQL_IDENT} v
             where v.user_id = ${user.id}
               and v.occurred_at >= now() - interval '30 days'
             group by 1
@@ -1927,7 +1949,7 @@ app.get('/api/admin/member', async (req, res) => {
         `,
         sql`
           select upper(v.geo_country) as country, count(*)::int as visits
-          from public.web_visits v
+          from ${VISITS_TABLE_SQL_IDENT} v
           where v.user_id = ${user.id}
             and v.geo_country is not null and v.geo_country <> ''
             and v.occurred_at >= now() - interval '30 days'
@@ -1937,14 +1959,14 @@ app.get('/api/admin/member', async (req, res) => {
         `,
         sql`
           select v.user_agent, count(*)::int as visits
-          from public.web_visits v
+          from ${VISITS_TABLE_SQL_IDENT} v
           where v.user_id = ${user.id}
             and v.occurred_at >= now() - interval '30 days'
           group by v.user_agent
           order by visits desc
           limit 200
         `,
-        sql`select count(*)::int as c from public.web_visits where user_id = ${user.id} and occurred_at >= now() - interval '5 minutes'`,
+        sql.unsafe(`select count(*)::int as c from ${VISITS_TABLE_SQL_IDENT} where user_id = $1 and occurred_at >= now() - interval '5 minutes'`, [user.id]),
       ])
       topReferrers = (Array.isArray(refRows) ? refRows : []).map(r => ({ source: String(r.source || 'direct'), visits: Number(r.visits || 0) }))
       topCountries = (Array.isArray(countryRows) ? countryRows : []).map(r => ({ country: String(r.country || ''), visits: Number(r.visits || 0) }))
@@ -2127,7 +2149,7 @@ app.get('/api/admin/members-by-ip', async (req, res) => {
             select count(*)::int as connections_count,
                    max(occurred_at) as last_seen_at,
                    count(distinct user_id)::int as users_count
-            from public.web_visits
+            from ${sql ? sql`` : ''} public.web_visits
             where ip_address = ${ip}::inet
           `,
           sql`
@@ -2135,7 +2157,7 @@ app.get('/api/admin/members-by-ip', async (req, res) => {
                    u.email,
                    p.display_name,
                    max(v.occurred_at) as last_seen_at
-            from public.web_visits v
+            from ${sql ? sql`` : ''} public.web_visits v
             left join auth.users u on u.id = v.user_id
             left join public.profiles p on p.id = v.user_id
             where v.ip_address = ${ip}::inet and v.user_id is not null
@@ -2150,7 +2172,7 @@ app.get('/api/admin/members-by-ip', async (req, res) => {
                        else v.referrer
                      end as source,
                      count(*)::int as visits
-              from public.web_visits v
+              from ${sql ? sql`` : ''} public.web_visits v
               where v.ip_address = ${ip}::inet
                 and v.occurred_at >= now() - interval '30 days'
               group by 1
@@ -2160,15 +2182,15 @@ app.get('/api/admin/members-by-ip', async (req, res) => {
           `,
           sql`
             select v.user_agent, count(*)::int as visits
-            from public.web_visits v
+            from ${sql ? sql`` : ''} public.web_visits v
             where v.ip_address = ${ip}::inet
               and v.occurred_at >= now() - interval '30 days'
             group by v.user_agent
             order by visits desc
             limit 200
           `,
-          sql`select geo_country from public.web_visits where ip_address = ${ip}::inet and geo_country is not null and geo_country <> '' order by occurred_at desc limit 1`,
-          sql`select count(*)::int as c from public.web_visits where ip_address = ${ip}::inet and occurred_at >= now() - interval '5 minutes'`,
+          sql.unsafe(`select geo_country from ${VISITS_TABLE_SQL_IDENT} where ip_address = $1::inet and geo_country is not null and geo_country <> '' order by occurred_at desc limit 1`, [ip]),
+          sql.unsafe(`select count(*)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address = $1::inet and occurred_at >= now() - interval '5 minutes'`, [ip]),
         ])
         const users = (Array.isArray(rows) ? rows : []).map(r => ({
           id: String(r.id),
@@ -2210,7 +2232,8 @@ app.get('/api/admin/members-by-ip', async (req, res) => {
     const bearer = getBearerTokenFromRequest(req)
     if (bearer) Object.assign(headers, { 'Authorization': `Bearer ${bearer}` })
     // Fetch visits for IP to get distinct user_ids and last_seen
-    const visitsResp = await fetch(`${supabaseUrlEnv}/rest/v1/web_visits?ip_address=eq.${encodeURIComponent(ip)}&select=user_id,occurred_at,referrer,user_agent,geo_country&order=occurred_at.desc`, { headers })
+    const tablePath = (process.env.VISITS_TABLE_REST || VISITS_TABLE_ENV || 'web_visits')
+    const visitsResp = await fetch(`${supabaseUrlEnv}/rest/v1/${tablePath}?ip_address=eq.${encodeURIComponent(ip)}&select=user_id,occurred_at,referrer,user_agent,geo_country&order=occurred_at.desc`, { headers })
     if (!visitsResp.ok) {
       const body = await visitsResp.text().catch(() => '')
       res.status(visitsResp.status).json({ error: body || 'Failed to load visits' })
@@ -2373,7 +2396,7 @@ app.get('/api/admin/member-visits-series', async (req, res) => {
             select generate_series(((now() at time zone 'utc')::date - interval '29 days'), (now() at time zone 'utc')::date, interval '1 day')::date as d
           )
           select d as day,
-                 coalesce((select count(*) from public.web_visits v where v.user_id = ${targetUserId} and (timezone('utc', v.occurred_at))::date = d), 0)::int as visits
+                 coalesce((select count(*) from ${VISITS_TABLE_SQL_IDENT} v where v.user_id = ${targetUserId} and (timezone('utc', v.occurred_at))::date = d), 0)::int as visits
           from days
           order by d asc
         `
@@ -2714,7 +2737,7 @@ app.post('/api/admin/ban', async (req, res) => {
     // Gather distinct IPs used by this user
     let ips = []
     if (userId) {
-      const ipRows = await sql`select distinct ip_address::text as ip from public.web_visits where user_id = ${userId} and ip_address is not null`
+      const ipRows = await sql.unsafe(`select distinct ip_address::text as ip from ${VISITS_TABLE_SQL_IDENT} where user_id = $1 and ip_address is not null`, [userId])
       ips = (ipRows || []).map(r => String(r.ip)).filter(Boolean)
     }
     // Best-effort admin identification from token
@@ -3375,15 +3398,15 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
     const daysParam = Number(req.query.days || 7)
     const days = (daysParam === 30 ? 30 : 7)
     const [rows10m, rows30m, rows60mUnique, rows60mRaw, rowsNdUnique] = await Promise.all([
-      sql`select count(distinct v.ip_address)::int as c from public.web_visits v where v.ip_address is not null and v.occurred_at >= now() - interval '10 minutes'`,
-      sql`select count(distinct v.ip_address)::int as c from public.web_visits v where v.ip_address is not null and v.occurred_at >= now() - interval '30 minutes'`,
-      sql`select count(distinct v.ip_address)::int as c from public.web_visits v where v.ip_address is not null and v.occurred_at >= now() - interval '60 minutes'`,
-      sql`select count(*)::int as c from public.web_visits where occurred_at >= now() - interval '60 minutes'`,
+      sql.unsafe(`select count(distinct v.ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} v where v.ip_address is not null and v.occurred_at >= now() - interval '10 minutes'`),
+      sql.unsafe(`select count(distinct v.ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} v where v.ip_address is not null and v.occurred_at >= now() - interval '30 minutes'`),
+      sql.unsafe(`select count(distinct v.ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} v where v.ip_address is not null and v.occurred_at >= now() - interval '60 minutes'`),
+      sql.unsafe(`select count(*)::int as c from ${VISITS_TABLE_SQL_IDENT} where occurred_at >= now() - interval '60 minutes'`),
       // Unique IPs across the last N calendar days in UTC
-      sql`select count(distinct v.ip_address)::int as c
-           from public.web_visits v
-           where v.ip_address is not null
-             and timezone('utc', v.occurred_at) >= ((now() at time zone 'utc')::date - interval '${days - 1} days')`
+      sql.unsafe(`select count(distinct v.ip_address)::int as c
+                  from ${VISITS_TABLE_SQL_IDENT} v
+                  where v.ip_address is not null
+                    and timezone('utc', v.occurred_at) >= ((now() at time zone 'utc')::date - interval '${days - 1} days')`)
     ])
 
     const currentUniqueVisitors10m = rows10m?.[0]?.c ?? 0
@@ -3392,19 +3415,19 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
     const visitsLast60m = rows60mRaw?.[0]?.c ?? 0
     const uniqueIps7d = rowsNdUnique?.[0]?.c ?? 0
 
-    const rows7 = await sql`
-      with days as (
-        select generate_series(((now() at time zone 'utc')::date - interval '${days - 1} days'), (now() at time zone 'utc')::date, interval '1 day')::date as d
-      )
-      select d as day,
-             coalesce((select count(distinct v.ip_address)
-                       from public.web_visits v
-                       where timezone('utc', v.occurred_at)::date = d
-                         and v.ip_address is not null), 0)::int as unique_visitors
-      from days
-      order by d asc
-    `
-    const series7d = (rows7 || []).map(r => ({ date: new Date(r.day).toISOString().slice(0,10), uniqueVisitors: Number(r.unique_visitors || 0) }))
+    const rows7 = await sql.unsafe(
+      `with days as (
+         select generate_series(((now() at time zone 'utc')::date - interval '${days - 1} days'), (now() at time zone 'utc')::date, interval '1 day')::date as d
+       )
+       select to_char(d, 'YYYY-MM-DD') as date,
+              coalesce((
+                select count(distinct v.ip_address)
+                from ${VISITS_TABLE_SQL_IDENT} v
+                where (timezone('utc', v.occurred_at))::date = d
+              ), 0)::int as unique_visitors
+       from days
+       order by d asc`)
+    const series7d = (rows7 || []).map(r => ({ date: String(r.date), uniqueVisitors: Number(r.unique_visitors || 0) }))
 
     res.json({ ok: true, currentUniqueVisitors10m, uniqueIpsLast30m, uniqueIpsLast60m, visitsLast60m, uniqueIps7d, series7d, via: 'database', days })
   } catch (e) {
@@ -3430,12 +3453,12 @@ app.get('/api/admin/visitors-unique-7d', async (req, res) => {
   }
   try {
     if (sql) {
-      const rows = await sql`
-        select count(distinct v.ip_address)::int as c
-        from public.web_visits v
-        where v.ip_address is not null
-          and timezone('utc', v.occurred_at) >= ((now() at time zone 'utc')::date - interval '6 days')
-      `
+      const rows = await sql.unsafe(
+        `select count(distinct v.ip_address)::int as c
+         from ${VISITS_TABLE_SQL_IDENT} v
+         where v.ip_address is not null
+           and (timezone('utc', v.occurred_at))::date >= ((now() at time zone 'utc')::date - interval '6 days')`
+      )
       const uniqueIps7d = rows?.[0]?.c ?? 0
       res.json({ ok: true, uniqueIps7d, via: 'database' })
       return
@@ -3569,7 +3592,7 @@ app.get('/api/admin/online-ips', async (req, res) => {
     if (sql) {
       const rows = await sql`
         select distinct v.ip_address as ip
-        from public.web_visits v
+        from ${VISITS_TABLE_SQL_IDENT} v
         where v.ip_address is not null
           and v.occurred_at >= now() - interval '${windowMinutes} minutes'
         order by ip asc
@@ -3587,7 +3610,8 @@ app.get('/api/admin/online-ips', async (req, res) => {
       // Use RPC if available; otherwise use REST with select distinct
       let ips = []
       try {
-        const url = `${supabaseUrlEnv}/rest/v1/web_visits?select=ip_address&occurred_at=gte.${new Date(Date.now() - windowMinutes * 60000).toISOString()}&ip_address=not.is.null`
+        const tablePath = (process.env.VISITS_TABLE_REST || VISITS_TABLE_ENV || 'web_visits')
+        const url = `${supabaseUrlEnv}/rest/v1/${tablePath}?select=ip_address&occurred_at=gte.${new Date(Date.now() - windowMinutes * 60000).toISOString()}&ip_address=not.is.null`
         const resp = await withTimeout(fetch(url, { headers }), 1200, 'REST_TIMEOUT')
         if (resp.ok) {
           const arr = await resp.json().catch(() => [])
@@ -3627,7 +3651,7 @@ app.get('/api/admin/online-users', async (req, res) => {
   try {
     if (sql) {
       const [ipRows] = await Promise.all([
-        sql`select count(distinct v.ip_address)::int as c from public.web_visits v where v.ip_address is not null and v.occurred_at >= now() - interval '60 minutes'`,
+        sql.unsafe(`select count(distinct v.ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} v where v.ip_address is not null and v.occurred_at >= now() - interval '60 minutes'`),
       ])
       const ipCount = ipRows?.[0]?.c ?? 0
       res.json({ ok: true, onlineUsers: ipCount, via: 'database' })

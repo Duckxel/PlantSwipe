@@ -33,6 +33,16 @@ import {
 } from '@/components/ui/dialog'
 
 export const AdminPage: React.FC = () => {
+  const shortenMiddle = React.useCallback((value: string, maxChars: number = 28): string => {
+    try {
+      const s = String(value || '')
+      if (s.length <= maxChars) return s
+      const keep = Math.max(3, Math.floor((maxChars - 3) / 2))
+      const left = s.slice(0, keep)
+      const right = s.slice(-keep)
+      return `${left}...${right}`
+    } catch { return value }
+  }, [])
   const countryCodeToName = React.useCallback((code: string): string => {
     try {
       const c = String(code || '').toUpperCase()
@@ -1462,8 +1472,8 @@ export const AdminPage: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="text-xs opacity-60 hidden sm:block">Current:</div>
-                  <Badge variant="outline" className="rounded-full">
-                    {branchesLoading ? '—' : (currentBranch || 'unknown')}
+                  <Badge variant="outline" className="rounded-full max-w-[360px] truncate" title={currentBranch || undefined}>
+                    {branchesLoading ? '—' : shortenMiddle(currentBranch || 'unknown', 56)}
                   </Badge>
                 </div>
               </div>
@@ -1481,7 +1491,7 @@ export const AdminPage: React.FC = () => {
                     <option value="">No branches found</option>
                   ) : (
                     branchOptions.map(b => (
-                      <option key={b} value={b}>{b}</option>
+                      <option key={b} value={b} title={b}>{shortenMiddle(b, 64)}</option>
                     ))
                   )}
                 </select>
@@ -1770,7 +1780,7 @@ export const AdminPage: React.FC = () => {
                     return (
                       <div>
                         <div className="text-sm font-medium mb-2">Total for the whole week: <span className="tabular-nums">{totalVal}</span></div>
-                        <div className="h-72 w-full max-w-5xl mx-auto px-2 sm:px-4">
+                        <div className="h-72 w-full max-w-none mx-0">
                           <ResponsiveContainer width="100%" height="100%">
                             <ComposedChart
                               data={visitorsSeries}
