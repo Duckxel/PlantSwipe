@@ -104,9 +104,11 @@ export const GardenDashboardPage: React.FC = () => {
     return self?.role === 'owner'
   }, [members, currentUserId, profile?.is_admin])
 
-  const load = React.useCallback(async () => {
+  const load = React.useCallback(async (opts?: { silent?: boolean }) => {
     if (!id) return
-    setLoading(true)
+    // Keep UI visible on subsequent reloads to avoid blink
+    const silent = opts?.silent ?? (garden !== null)
+    if (!silent) setLoading(true)
     setError(null)
     try {
       // Fast-path: hydrate via batched API, then continue with detailed computations
@@ -316,9 +318,9 @@ export const GardenDashboardPage: React.FC = () => {
     } catch (e: any) {
       setError(e?.message || 'Failed to load garden')
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
-  }, [id])
+  }, [id, garden])
 
   React.useEffect(() => { load() }, [load])
 
@@ -444,13 +446,13 @@ export const GardenDashboardPage: React.FC = () => {
           if (since < minInterval) {
             if (reloadTimer) return
             const wait = Math.max(0, minInterval - since)
-            reloadTimer = setTimeout(() => { reloadTimer = null; lastReloadRef.current = Date.now(); setActivityRev((r) => r + 1); load() }, wait)
+            reloadTimer = setTimeout(() => { reloadTimer = null; lastReloadRef.current = Date.now(); setActivityRev((r) => r + 1); load({ silent: true }) }, wait)
             return
           }
           lastReloadRef.current = now
           setActivityRev((r) => r + 1)
           if (reloadTimer) return
-          reloadTimer = setTimeout(() => { reloadTimer = null; load() }, 400)
+          reloadTimer = setTimeout(() => { reloadTimer = null; load({ silent: true }) }, 400)
         }
         es.addEventListener('activity', scheduleReload as any)
         es.addEventListener('ready', () => {})
@@ -468,7 +470,7 @@ export const GardenDashboardPage: React.FC = () => {
       pendingReloadRef.current = false
       lastReloadRef.current = Date.now()
       setActivityRev((r) => r + 1)
-      load()
+      load({ silent: true })
     }
   }, [anyModalOpen, load])
 
