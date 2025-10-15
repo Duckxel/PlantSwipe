@@ -2978,6 +2978,45 @@ const AdminLogs: React.FC = () => {
     } finally { setLoading(false) }
   }, [])
   React.useEffect(() => { load() }, [load])
+
+  // Live stream of admin logs via SSE
+  React.useEffect(() => {
+    let es: EventSource | null = null
+    let updating = false
+    ;(async () => {
+      try {
+        const session = (await supabase.auth.getSession()).data.session
+        const token = session?.access_token
+        // Static admin token if configured
+        let adminToken: string | null = null
+        try { adminToken = String((globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN || '') || null } catch {}
+        const q: string[] = []
+        if (token) q.push(`token=${encodeURIComponent(token)}`)
+        if (adminToken) q.push(`admin_token=${encodeURIComponent(adminToken)}`)
+        const url = `/api/admin/admin-logs/stream${q.length ? ('?' + q.join('&')) : ''}`
+        es = new EventSource(url)
+        es.addEventListener('snapshot', (ev: MessageEvent) => {
+          try {
+            const data = JSON.parse(String(ev.data || '{}'))
+            const list = Array.isArray(data?.logs) ? data.logs : []
+            setLogs(list)
+            setVisibleCount(Math.min(20, list.length || 20))
+          } catch {}
+        })
+        es.addEventListener('append', (ev: MessageEvent) => {
+          try {
+            const row = JSON.parse(String(ev.data || '{}'))
+            if (updating) return
+            updating = true
+            setLogs((prev) => [row, ...prev].slice(0, 2000))
+            setTimeout(() => { updating = false }, 0)
+          } catch {}
+        })
+        es.onerror = () => {}
+      } catch {}
+    })()
+    return () => { try { es?.close() } catch {} }
+  }, [])
   return (
     <Card className="rounded-2xl">
       <CardContent className="p-4">

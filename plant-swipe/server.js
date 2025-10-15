@@ -3774,6 +3774,436 @@ app.get('/api/broadcast/stream', async (req, res) => {
   }
 })
 
+// ---- Garden overview + realtime (SSE) ----
+
+async function isGardenMember(req, gardenId, userIdOverride = null) {
+  try {
+    const user = userIdOverride ? { id: userIdOverride } : await getUserFromRequest(req)
+    if (!user?.id) return false
+    // Admins can access any garden
+    try { if (await isAdminFromRequest(req)) return true } catch {}
+    if (sql) {
+      const rows = await sql`
+        select 1 as ok from public.garden_members
+        where garden_id = ${gardenId} and user_id = ${user.id}
+        limit 1
+      `
+      return Array.isArray(rows) && rows.length > 0
+    }
+    if (supabaseUrlEnv && supabaseAnonKey) {
+      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+      const bearer = getBearerTokenFromRequest(req)
+      if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
+      const url = `${supabaseUrlEnv}/rest/v1/garden_members?garden_id=eq.${encodeURIComponent(gardenId)}&user_id=eq.${encodeURIComponent(user.id)}&select=garden_id&limit=1`
+      const r = await fetch(url, { headers })
+      if (r.ok) {
+        const arr = await r.json().catch(() => [])
+        return Array.isArray(arr) && arr.length > 0
+      }
+    }
+    return false
+  } catch {
+    return false
+  }
+}
+
+// Batched initial load for a garden
+app.get('/api/garden/:id/overview', async (req, res) => {
+  try {
+    const gardenId = String(req.params.id || '').trim()
+    if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
+    const user = await getUserFromRequest(req)
+    if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
+    const member = await isGardenMember(req, gardenId, user.id)
+    if (!member) { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
+
+    let garden = null
+    let plants = []
+    let members = []
+    const serverNow = new Date().toISOString()
+
+    if (sql) {
+      const gRows = await sql`
+        select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, coalesce(streak, 0)::int as streak
+        from public.gardens where id = ${gardenId} limit 1
+      `
+      garden = Array.isArray(gRows) && gRows[0] ? gRows[0] : null
+
+      const gpRows = await sql`
+        select
+          gp.id::text as id,
+          gp.garden_id::text as garden_id,
+          gp.plant_id::text as plant_id,
+          gp.nickname,
+          gp.seeds_planted::int as seeds_planted,
+          gp.planted_at,
+          gp.expected_bloom_date,
+          gp.override_water_freq_unit,
+          gp.override_water_freq_value::int as override_water_freq_value,
+          gp.plants_on_hand::int as plants_on_hand,
+          gp.sort_index::int as sort_index,
+          p.id as p_id,
+          p.name as p_name,
+          p.scientific_name as p_scientific_name,
+          p.colors as p_colors,
+          p.seasons as p_seasons,
+          p.rarity as p_rarity,
+          p.meaning as p_meaning,
+          p.description as p_description,
+          p.image_url as p_image_url,
+          p.care_sunlight as p_care_sunlight,
+          p.care_water as p_care_water,
+          p.care_soil as p_care_soil,
+          p.care_difficulty as p_care_difficulty,
+          p.seeds_available as p_seeds_available,
+          p.water_freq_unit as p_water_freq_unit,
+          p.water_freq_value as p_water_freq_value,
+          p.water_freq_period as p_water_freq_period,
+          p.water_freq_amount as p_water_freq_amount
+        from public.garden_plants gp
+        left join public.plants p on p.id = gp.plant_id
+        where gp.garden_id = ${gardenId}
+        order by gp.sort_index asc nulls last
+      `
+      plants = (gpRows || []).map((r) => ({
+        id: String(r.id),
+        gardenId: String(r.garden_id),
+        plantId: String(r.plant_id),
+        nickname: r.nickname,
+        seedsPlanted: Number(r.seeds_planted || 0),
+        plantedAt: r.planted_at || null,
+        expectedBloomDate: r.expected_bloom_date || null,
+        overrideWaterFreqUnit: r.override_water_freq_unit || null,
+        overrideWaterFreqValue: (r.override_water_freq_value ?? null),
+        plantsOnHand: Number(r.plants_on_hand || 0),
+        sortIndex: (r.sort_index ?? null),
+        plant: r.p_id ? {
+          id: String(r.p_id),
+          name: String(r.p_name || ''),
+          scientificName: String(r.p_scientific_name || ''),
+          colors: Array.isArray(r.p_colors) ? r.p_colors.map(String) : [],
+          seasons: Array.isArray(r.p_seasons) ? r.p_seasons.map(String) : [],
+          rarity: r.p_rarity,
+          meaning: r.p_meaning || '',
+          description: r.p_description || '',
+          image: r.p_image_url || '',
+          care: { sunlight: r.p_care_sunlight || 'Low', water: r.p_care_water || 'Low', soil: r.p_care_soil || '', difficulty: r.p_care_difficulty || 'Easy' },
+          seedsAvailable: Boolean(r.p_seeds_available ?? false),
+          waterFreqUnit: r.p_water_freq_unit || undefined,
+          waterFreqValue: r.p_water_freq_value ?? null,
+          waterFreqPeriod: r.p_water_freq_period || undefined,
+          waterFreqAmount: r.p_water_freq_amount ?? null,
+        } : null,
+      }))
+
+      const mRows = await sql`
+        select gm.garden_id::text as garden_id, gm.user_id::text as user_id, gm.role, gm.joined_at,
+               p.display_name, p.accent_key,
+               u.email
+        from public.garden_members gm
+        left join public.profiles p on p.id = gm.user_id
+        left join auth.users u on u.id = gm.user_id
+        where gm.garden_id = ${gardenId}
+      `
+      members = (mRows || []).map((r) => ({
+        gardenId: String(r.garden_id),
+        userId: String(r.user_id),
+        role: r.role,
+        joinedAt: r.joined_at ? new Date(r.joined_at).toISOString() : null,
+        displayName: r.display_name || null,
+        email: r.email || null,
+        accentKey: r.accent_key || null,
+      }))
+    } else if (supabaseUrlEnv && supabaseAnonKey) {
+      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+      const bearer = getBearerTokenFromRequest(req)
+      if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
+
+      // Garden
+      const gUrl = `${supabaseUrlEnv}/rest/v1/gardens?id=eq.${encodeURIComponent(gardenId)}&select=id,name,cover_image_url,created_by,created_at,streak&limit=1`
+      const gResp = await fetch(gUrl, { headers })
+      if (gResp.ok) {
+        const arr = await gResp.json().catch(() => [])
+        const row = Array.isArray(arr) && arr[0] ? arr[0] : null
+        if (row) garden = { id: String(row.id), name: row.name, cover_image_url: row.cover_image_url || null, created_by: String(row.created_by), created_at: row.created_at, streak: Number(row.streak || 0) }
+      }
+
+      // Garden plants
+      const gpUrl = `${supabaseUrlEnv}/rest/v1/garden_plants?garden_id=eq.${encodeURIComponent(gardenId)}&select=id,garden_id,plant_id,nickname,seeds_planted,planted_at,expected_bloom_date,override_water_freq_unit,override_water_freq_value,plants_on_hand,sort_index`
+      const gpResp = await fetch(gpUrl, { headers })
+      let gpRows = []
+      if (gpResp.ok) gpRows = await gpResp.json().catch(() => [])
+      const plantIds = Array.from(new Set(gpRows.map((r) => r.plant_id)))
+      let plantsMap = {}
+      if (plantIds.length > 0) {
+        const inParam = plantIds.map((id) => encodeURIComponent(String(id))).join(',')
+        const pUrl = `${supabaseUrlEnv}/rest/v1/plants?id=in.(${inParam})&select=id,name,scientific_name,colors,seasons,rarity,meaning,description,image_url,care_sunlight,care_water,care_soil,care_difficulty,seeds_available,water_freq_unit,water_freq_value,water_freq_period,water_freq_amount`
+        const pResp = await fetch(pUrl, { headers })
+        const pRows = pResp.ok ? (await pResp.json().catch(() => [])) : []
+        for (const p of pRows) {
+          plantsMap[String(p.id)] = {
+            id: String(p.id),
+            name: String(p.name || ''),
+            scientificName: String(p.scientific_name || ''),
+            colors: Array.isArray(p.colors) ? p.colors.map(String) : [],
+            seasons: Array.isArray(p.seasons) ? p.seasons.map(String) : [],
+            rarity: p.rarity,
+            meaning: p.meaning || '',
+            description: p.description || '',
+            image: p.image_url || '',
+            care: { sunlight: p.care_sunlight || 'Low', water: p.care_water || 'Low', soil: p.care_soil || '', difficulty: p.care_difficulty || 'Easy' },
+            seedsAvailable: Boolean(p.seeds_available ?? false),
+            waterFreqUnit: p.water_freq_unit || undefined,
+            waterFreqValue: p.water_freq_value ?? null,
+            waterFreqPeriod: p.water_freq_period || undefined,
+            waterFreqAmount: p.water_freq_amount ?? null,
+          }
+        }
+      }
+      plants = gpRows.map((r) => ({
+        id: String(r.id),
+        gardenId: String(r.garden_id),
+        plantId: String(r.plant_id),
+        nickname: r.nickname,
+        seedsPlanted: Number(r.seeds_planted || 0),
+        plantedAt: r.planted_at || null,
+        expectedBloomDate: r.expected_bloom_date || null,
+        overrideWaterFreqUnit: r.override_water_freq_unit || null,
+        overrideWaterFreqValue: (r.override_water_freq_value ?? null),
+        plantsOnHand: Number(r.plants_on_hand || 0),
+        sortIndex: (r.sort_index ?? null),
+        plant: plantsMap[String(r.plant_id)] || null,
+      }))
+
+      // Members via RPC to include email
+      try {
+        const rpcResp = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_profiles_for_garden`, {
+          method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ _garden_id: gardenId })
+        })
+        if (rpcResp.ok) {
+          const rows = await rpcResp.json().catch(() => [])
+          const gmResp = await fetch(`${supabaseUrlEnv}/rest/v1/garden_members?garden_id=eq.${encodeURIComponent(gardenId)}&select=garden_id,user_id,role,joined_at`, { headers })
+          const gms = gmResp.ok ? (await gmResp.json().catch(() => [])) : []
+          const meta = {}
+          for (const r of rows) meta[String(r.user_id)] = { display_name: r.display_name || null, email: r.email || null }
+          members = gms.map((m) => ({
+            gardenId: String(m.garden_id),
+            userId: String(m.user_id),
+            role: m.role,
+            joinedAt: m.joined_at,
+            displayName: (meta[String(m.user_id)] || {}).display_name || null,
+            email: (meta[String(m.user_id)] || {}).email || null,
+            accentKey: null,
+          }))
+        }
+      } catch {}
+    } else {
+      res.status(500).json({ ok: false, error: 'Database not configured' }); return
+    }
+
+    // Normalize garden object to frontend shape
+    const gardenOut = garden ? {
+      id: String(garden.id),
+      name: String(garden.name),
+      coverImageUrl: (garden.cover_image_url || garden.coverImageUrl || null),
+      createdBy: String(garden.created_by || garden.createdBy || ''),
+      createdAt: garden.created_at ? new Date(garden.created_at).toISOString() : (garden.createdAt || null),
+      streak: Number(garden.streak ?? 0),
+    } : null
+    res.json({ ok: true, garden: gardenOut, plants, members, serverNow })
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e?.message || 'overview failed' })
+  }
+})
+
+// Garden activity SSE — pushes new rows in garden_activity_logs
+app.get('/api/garden/:id/stream', async (req, res) => {
+  try {
+    const gardenId = String(req.params.id || '').trim()
+    if (!gardenId) { res.status(400).json({ error: 'garden id required' }); return }
+    // Support token via query param for EventSource which cannot set headers
+    let user = null
+    try {
+      const qToken = (req.query?.token || req.query?.access_token)
+      if (qToken && supabaseServer) {
+        const { data, error } = await supabaseServer.auth.getUser(String(qToken))
+        if (!error && data?.user?.id) user = { id: data.user.id, email: data.user.email || null }
+      }
+    } catch {}
+    if (!user) user = await getUserFromRequest(req)
+    if (!user?.id) { res.status(401).json({ error: 'Unauthorized' }); return }
+    const member = await isGardenMember(req, gardenId, user.id)
+    if (!member) { res.status(403).json({ error: 'Forbidden' }); return }
+
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache, no-transform')
+    res.setHeader('Connection', 'keep-alive')
+    res.setHeader('X-Accel-Buffering', 'no')
+    res.flushHeaders?.()
+
+    // Initial acknowledge
+    sseWrite(res, 'ready', { ok: true, gardenId })
+
+    // Start from last 2 minutes to avoid missing events across reconnects
+    let lastSeen = new Date(Date.now() - 2 * 60 * 1000).toISOString()
+
+    const poll = async () => {
+      try {
+        if (sql) {
+          const rows = await sql`
+            select id::text as id, garden_id::text as garden_id, actor_id::text as actor_id, actor_name, actor_color, kind, message, plant_name, task_name, occurred_at
+            from public.garden_activity_logs
+            where garden_id = ${gardenId} and occurred_at > ${lastSeen}
+            order by occurred_at asc
+            limit 500
+          `
+          for (const r of rows || []) {
+            lastSeen = new Date(r.occurred_at).toISOString()
+            sseWrite(res, 'activity', {
+              id: String(r.id), gardenId: String(r.garden_id), actorId: r.actor_id || null, actorName: r.actor_name || null, actorColor: r.actor_color || null,
+              kind: r.kind, message: r.message, plantName: r.plant_name || null, taskName: r.task_name || null, occurredAt: new Date(r.occurred_at).toISOString(),
+            })
+          }
+        } else if (supabaseUrlEnv && supabaseAnonKey) {
+          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const url = `${supabaseUrlEnv}/rest/v1/garden_activity_logs?garden_id=eq.${encodeURIComponent(gardenId)}&occurred_at=gt.${encodeURIComponent(lastSeen)}&select=id,garden_id,actor_id,actor_name,actor_color,kind,message,plant_name,task_name,occurred_at&order=occurred_at.asc&limit=500`
+          const r = await fetch(url, { headers })
+          if (r.ok) {
+            const arr = await r.json().catch(() => [])
+            for (const row of arr) {
+              lastSeen = new Date(row.occurred_at).toISOString()
+              sseWrite(res, 'activity', {
+                id: String(row.id), gardenId: String(row.garden_id), actorId: row.actor_id || null, actorName: row.actor_name || null, actorColor: row.actor_color || null,
+                kind: row.kind, message: row.message, plantName: row.plant_name || null, taskName: row.task_name || null, occurredAt: new Date(row.occurred_at).toISOString(),
+              })
+            }
+          }
+        }
+      } catch {}
+    }
+
+    const iv = setInterval(poll, 2500)
+    const hb = setInterval(() => { try { res.write(': ping\n\n') } catch {} }, 15000)
+    req.on('close', () => { try { clearInterval(iv); clearInterval(hb) } catch {} })
+  } catch (e) {
+    try { res.status(500).json({ error: e?.message || 'stream failed' }) } catch {}
+  }
+})
+
+// ---- Admin logs SSE ----
+app.get('/api/admin/admin-logs/stream', async (req, res) => {
+  try {
+    // Allow admin static token via query param for EventSource
+    try {
+      const adminToken = (req.query?.admin_token ? String(req.query.admin_token) : '')
+      if (adminToken) {
+        try { req.headers['x-admin-token'] = adminToken } catch {}
+      }
+    } catch {}
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
+
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache, no-transform')
+    res.setHeader('Connection', 'keep-alive')
+    res.setHeader('X-Accel-Buffering', 'no')
+    res.flushHeaders?.()
+
+    let lastSeen = new Date(Date.now() - 5 * 60 * 1000).toISOString()
+
+    // Send initial snapshot (latest 200)
+    try {
+      if (sql) {
+        const rows = await sql`
+          select occurred_at, admin_id::text as admin_id, admin_name, action, target, detail
+          from public.admin_activity_logs
+          where occurred_at >= now() - interval '30 days'
+          order by occurred_at desc
+          limit 200
+        `
+        const list = (rows || []).map((r) => ({
+          occurred_at: new Date(r.occurred_at).toISOString(),
+          admin_id: r.admin_id || null,
+          admin_name: r.admin_name || null,
+          action: r.action,
+          target: r.target || null,
+          detail: r.detail || null,
+        }))
+        sseWrite(res, 'snapshot', { logs: list })
+        if (list[0]?.occurred_at) lastSeen = list[0].occurred_at
+      } else if (supabaseUrlEnv && supabaseAnonKey) {
+        const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+        const url = `${supabaseUrlEnv}/rest/v1/admin_activity_logs?occurred_at=gte.${encodeURIComponent(new Date(Date.now() - 30*24*3600*1000).toISOString())}&select=occurred_at,admin_id,admin_name,action,target,detail&order=occurred_at.desc&limit=200`
+        const r = await fetch(url, { headers })
+        if (r.ok) {
+          const arr = await r.json().catch(() => [])
+          const list = (arr || []).map((row) => ({
+            occurred_at: new Date(row.occurred_at).toISOString(),
+            admin_id: row.admin_id || null,
+            admin_name: row.admin_name || null,
+            action: row.action,
+            target: row.target || null,
+            detail: row.detail || null,
+          }))
+          sseWrite(res, 'snapshot', { logs: list })
+          if (list[0]?.occurred_at) lastSeen = list[0].occurred_at
+        }
+      }
+    } catch {}
+
+    const poll = async () => {
+      try {
+        if (sql) {
+          const rows = await sql`
+            select occurred_at, admin_id::text as admin_id, admin_name, action, target, detail
+            from public.admin_activity_logs
+            where occurred_at > ${lastSeen}
+            order by occurred_at asc
+            limit 500
+          `
+          for (const r of rows || []) {
+            const payload = {
+              occurred_at: new Date(r.occurred_at).toISOString(),
+              admin_id: r.admin_id || null,
+              admin_name: r.admin_name || null,
+              action: r.action,
+              target: r.target || null,
+              detail: r.detail || null,
+            }
+            lastSeen = payload.occurred_at
+            sseWrite(res, 'append', payload)
+          }
+        } else if (supabaseUrlEnv && supabaseAnonKey) {
+          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const url = `${supabaseUrlEnv}/rest/v1/admin_activity_logs?occurred_at=gt.${encodeURIComponent(lastSeen)}&select=occurred_at,admin_id,admin_name,action,target,detail&order=occurred_at.asc&limit=500`
+          const r = await fetch(url, { headers })
+          if (r.ok) {
+            const arr = await r.json().catch(() => [])
+            for (const row of arr || []) {
+              const payload = {
+                occurred_at: new Date(row.occurred_at).toISOString(),
+                admin_id: row.admin_id || null,
+                admin_name: row.admin_name || null,
+                action: row.action,
+                target: row.target || null,
+                detail: row.detail || null,
+              }
+              lastSeen = payload.occurred_at
+              sseWrite(res, 'append', payload)
+            }
+          }
+        }
+      } catch {}
+    }
+
+    const iv = setInterval(poll, 2500)
+    const hb = setInterval(() => { try { res.write(': ping\n\n') } catch {} }, 15000)
+    req.on('close', () => { try { clearInterval(iv); clearInterval(hb) } catch {} })
+  } catch (e) {
+    try { res.status(500).json({ error: e?.message || 'stream failed' }) } catch {}
+  }
+})
+
 // Admin: create a new broadcast message
 app.post('/api/admin/broadcast', async (req, res) => {
   try {

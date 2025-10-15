@@ -190,6 +190,17 @@ export const ProfilePage: React.FC = () => {
     return () => { cancelled = true }
   }, [user?.id, profile?.liked_plant_ids])
 
+  // Realtime: apply live profile changes (display name, accent, etc.)
+  React.useEffect(() => {
+    if (!user?.id) return
+    const channel = supabase.channel('rt-self-profile')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` }, () => {
+        refreshProfile().catch(() => {})
+      })
+      .subscribe()
+    return () => { try { supabase.removeChannel(channel) } catch {} }
+  }, [user?.id, refreshProfile])
+
   return (
     <div className="max-w-3xl mx-auto mt-8 px-4 md:px-0">
       <Card className="rounded-3xl">
