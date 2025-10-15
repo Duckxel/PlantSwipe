@@ -87,6 +87,10 @@ export const GardenDashboardPage: React.FC = () => {
   }, [profile?.liked_plant_ids])
 
   const [inviteOpen, setInviteOpen] = React.useState(false)
+  // Track if any modal is open to pause reloads
+  const anyModalOpen = addOpen || addDetailsOpen || scheduleOpen || taskOpen || inviteOpen
+  const lastReloadRef = React.useRef<number>(0)
+  const pendingReloadRef = React.useRef<boolean>(false)
   const [inviteEmail, setInviteEmail] = React.useState('')
   const [inviteAny, setInviteAny] = React.useState('')
   const [inviteError, setInviteError] = React.useState<string | null>(null)
@@ -429,6 +433,21 @@ export const GardenDashboardPage: React.FC = () => {
         const url = token ? `/api/garden/${id}/stream?token=${encodeURIComponent(token)}` : `/api/garden/${id}/stream`
         es = new EventSource(url)
         const scheduleReload = () => {
+          // Debounce and pause while modals are open
+          const now = Date.now()
+          const since = now - (lastReloadRef.current || 0)
+          const minInterval = 2500
+          if (anyModalOpen) {
+            pendingReloadRef.current = true
+            return
+          }
+          if (since < minInterval) {
+            if (reloadTimer) return
+            const wait = Math.max(0, minInterval - since)
+            reloadTimer = setTimeout(() => { reloadTimer = null; lastReloadRef.current = Date.now(); setActivityRev((r) => r + 1); load() }, wait)
+            return
+          }
+          lastReloadRef.current = now
           setActivityRev((r) => r + 1)
           if (reloadTimer) return
           reloadTimer = setTimeout(() => { reloadTimer = null; load() }, 400)
@@ -441,7 +460,17 @@ export const GardenDashboardPage: React.FC = () => {
       } catch {}
     })()
     return () => { try { es?.close() } catch {}; if (reloadTimer) { try { clearTimeout(reloadTimer) } catch {} } }
-  }, [id, load])
+  }, [id, load, anyModalOpen])
+
+  // When modals close, run any pending reload once
+  React.useEffect(() => {
+    if (!anyModalOpen && pendingReloadRef.current) {
+      pendingReloadRef.current = false
+      lastReloadRef.current = Date.now()
+      setActivityRev((r) => r + 1)
+      load()
+    }
+  }, [anyModalOpen, load])
 
   const viewerIsOwner = React.useMemo(() => {
     // Admins can manage any garden
