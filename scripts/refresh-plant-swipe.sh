@@ -462,6 +462,67 @@ $SUDO nginx -t
 log "Reloading nginx…"
 $SUDO systemctl reload "$SERVICE_NGINX"
 
+# Keep service environment in sync with repo .env for plug‑and‑play deployment
+render_service_env() {
+  local service_env_dir="/etc/plant-swipe"
+  local service_env_file="$service_env_dir/service.env"
+  $SUDO mkdir -p "$service_env_dir"
+  declare -A kv
+  _load_env() {
+    local f="$1"; [[ -f "$f" ]] || return 0
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      [[ "$line" =~ ^[[:space:]]*# ]] && continue
+      [[ "$line" =~ ^[[:space:]]*$ ]] && continue
+      if [[ "$line" =~ ^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+        local key="${BASH_REMATCH[1]}"; local val="${BASH_REMATCH[2]}"
+        val="${val%$'\r'}"
+        if [[ "${val:0:1}" == '"' && "${val: -1}" == '"' ]]; then val="${val:1:${#val}-2}"; fi
+        if [[ "${val:0:1}" == "'" && "${val: -1}" == "'" ]]; then val="${val:1:${#val}-2}"; fi
+        kv[$key]="$val"
+      fi
+    done < "$f"
+  }
+  _load_env "$NODE_DIR/.env"
+  _load_env "$NODE_DIR/.env.server"
+  # alias mapping
+  [[ -z "${kv[DATABASE_URL]:-}" && -n "${kv[DB_URL]:-}" ]] && kv[DATABASE_URL]="${kv[DB_URL]}"
+  [[ -z "${kv[SUPABASE_URL]:-}" && -n "${kv[VITE_SUPABASE_URL]:-}" ]] && kv[SUPABASE_URL]="${kv[VITE_SUPABASE_URL]}"
+  [[ -z "${kv[SUPABASE_ANON_KEY]:-}" && -n "${kv[VITE_SUPABASE_ANON_KEY]:-}" ]] && kv[SUPABASE_ANON_KEY]="${kv[VITE_SUPABASE_ANON_KEY]}"
+  [[ -z "${kv[ADMIN_STATIC_TOKEN]:-}" && -n "${kv[VITE_ADMIN_STATIC_TOKEN]:-}" ]] && kv[ADMIN_STATIC_TOKEN]="${kv[VITE_ADMIN_STATIC_TOKEN]}"
+  # enforce sslmode=require
+  if [[ -n "${kv[DATABASE_URL]:-}" && "${kv[DATABASE_URL]}" != *"sslmode="* ]]; then
+    if [[ "${kv[DATABASE_URL]}" == *"?"* ]]; then kv[DATABASE_URL]="${kv[DATABASE_URL]}&sslmode=require"; else kv[DATABASE_URL]="${kv[DATABASE_URL]}?sslmode=require"; fi
+  fi
+  # TLS trust defaults
+  kv[NODE_ENV]="production"
+  kv[NODE_EXTRA_CA_CERTS]="/etc/ssl/certs/aws-rds-global.pem"
+  kv[PGSSLROOTCERT]="/etc/ssl/certs/aws-rds-global.pem"
+  # write out sorted
+  local tmp; tmp="$(mktemp)"
+  {
+    for k in "${!kv[@]}"; do printf "%s=%s\n" "$k" "${kv[$k]}"; done | sort
+  } > "$tmp"
+  $SUDO install -m 0640 "$tmp" "$service_env_file"
+  rm -f "$tmp"
+
+  # Ensure both services load it via drop-ins (non-destructive)
+  $SUDO mkdir -p "/etc/systemd/system/$SERVICE_NODE.service.d" "/etc/systemd/system/$SERVICE_ADMIN.service.d"
+  $SUDO bash -c "cat > '/etc/systemd/system/$SERVICE_NODE.service.d/10-env.conf' <<EOF
+[Service]
+EnvironmentFile=$service_env_file
+EOF
+"
+  $SUDO bash -c "cat > '/etc/systemd/system/$SERVICE_ADMIN.service.d/10-env.conf' <<EOF
+[Service]
+EnvironmentFile=$service_env_file
+EOF
+"
+  $SUDO systemctl daemon-reload || true
+}
+
+log "Syncing service environment from repo .env…"
+render_service_env
+
 # Restart services unless explicitly skipped
 if [[ "$SKIP_RESTARTS" == "true" ]]; then
   log "Skipping service restarts (requested)"
