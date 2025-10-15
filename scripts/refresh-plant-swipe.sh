@@ -520,20 +520,33 @@ EOF
   $SUDO systemctl daemon-reload || true
 }
 
-log "Syncing service environment from repo .env…"
-render_service_env
+# Optionally skip syncing service environment if requested
+if [[ "${SKIP_ENV_SYNC:-}" == "true" ]]; then
+  log "Skipping service env sync (requested)"
+else
+  log "Syncing service environment from repo .env…"
+  render_service_env
+fi
 
 # Restart services unless explicitly skipped
 if [[ "$SKIP_RESTARTS" == "true" ]]; then
   log "Skipping service restarts (requested)"
 else
   log "Restarting services: $SERVICE_NODE, $SERVICE_ADMIN…"
-  # Use non-interactive sudo to leverage NOPASSWD rules; avoid askpass prompts
+  # Prefer non-interactive; if that fails and askpass is available, try $SUDO
   for svc in "$SERVICE_NODE" "$SERVICE_ADMIN"; do
     if ! sudo -n systemctl restart "$svc"; then
-      echo "[ERROR] Failed to restart service: $svc (sudo non-interactive)." >&2
-      echo "        Ensure NOPASSWD sudo is configured for www-data: systemctl restart $svc" >&2
-      exit 1
+      if [[ -n "$SUDO_ASKPASS" ]]; then
+        if ! $SUDO systemctl restart "$svc"; then
+          echo "[ERROR] Failed to restart service: $svc (sudo askpass)." >&2
+          echo "        Fix sudoers or PSSWORD_KEY, or set NOPASSWD." >&2
+          exit 1
+        fi
+      else
+        echo "[ERROR] Failed to restart service: $svc (sudo non-interactive)." >&2
+        echo "        Ensure NOPASSWD sudo is configured for www-data: systemctl restart $svc" >&2
+        exit 1
+      fi
     fi
   done
 

@@ -3015,6 +3015,7 @@ async function handlePullCode(req, res) {
     // Do not restart services inside the script when invoked from the API.
     // This allows us to finish the SSE cleanly and control restarts from the UI.
     execEnv.SKIP_SERVICE_RESTARTS = 'true'
+    execEnv.SKIP_ENV_SYNC = 'true'
     if (branch) {
       // Pass target branch to refresh script
       execEnv.PLANTSWIPE_TARGET_BRANCH = branch
