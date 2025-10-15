@@ -6,6 +6,9 @@ from typing import Set, Optional
 
 from flask import Flask, request, abort, jsonify, Response
 from pathlib import Path
+import os
+from dotenv import load_dotenv
+from pathlib import Path
 import shlex
 from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
 
@@ -39,6 +42,37 @@ DEFAULT_SERVICE = _get_env_var("ADMIN_DEFAULT_SERVICE", "plant-swipe-node")
 ALLOWED_SERVICES = _parse_allowed_services(ALLOWED_SERVICES_RAW)
 
 HMAC_HEADER = "X-Button-Token"
+
+# Load .env files from the repo's plant-swipe directory to unify configuration
+def _load_repo_env():
+    try:
+        here = Path(__file__).resolve().parent
+        # repo root is parent of admin_api
+        repo = here.parent
+        # Prefer plant-swipe/.env and .env.server if present
+        env1 = repo / 'plant-swipe' / '.env'
+        env2 = repo / 'plant-swipe' / '.env.server'
+        if env1.is_file():
+            load_dotenv(dotenv_path=str(env1), override=False)
+        if env2.is_file():
+            load_dotenv(dotenv_path=str(env2), override=False)
+        # Map common aliases so Admin API can reuse same env file
+        def prefer_env(target: str, sources: list[str]) -> None:
+            if os.environ.get(target):
+                return
+            for k in sources:
+                v = os.environ.get(k)
+                if v:
+                    os.environ[target] = v
+                    return
+        prefer_env('DATABASE_URL', ['DB_URL', 'PG_URL', 'POSTGRES_URL', 'POSTGRES_PRISMA_URL', 'SUPABASE_DB_URL'])
+        prefer_env('SUPABASE_URL', ['VITE_SUPABASE_URL', 'REACT_APP_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_URL'])
+        prefer_env('SUPABASE_DB_PASSWORD', ['PGPASSWORD', 'POSTGRES_PASSWORD'])
+        prefer_env('ADMIN_STATIC_TOKEN', ['VITE_ADMIN_STATIC_TOKEN'])
+    except Exception:
+        pass
+
+_load_repo_env()
 
 app = Flask(__name__)
 
