@@ -2400,3 +2400,10 @@ declare v_actor uuid := (select auth.uid()); v_name text; begin
 end; $$;
 
 grant execute on function public.log_garden_activity(uuid, text, text, text, text, text) to anon, authenticated;
+
+-- ========== Realtime support indexes (merged from 999_realtime_indexes.sql) ==========
+-- Keep these idempotent to safely re-run during sync
+create index if not exists gp_garden_idx on public.garden_plants (garden_id);
+create index if not exists gm_garden_user_idx on public.garden_members (garden_id, user_id);
+create index if not exists gpt_garden_idx on public.garden_plant_tasks (garden_id);
+create index if not exists gpto_task_due_idx on public.garden_plant_task_occurrences (task_id, due_at);
