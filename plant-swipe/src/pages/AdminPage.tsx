@@ -1780,7 +1780,7 @@ export const AdminPage: React.FC = () => {
                     return (
                       <div>
                         <div className="text-sm font-medium mb-2">Total for the whole week: <span className="tabular-nums">{totalVal}</span></div>
-                        <div className="h-72 w-full max-w-5xl mx-auto px-2 sm:px-4">
+                        <div className="h-72 w-full max-w-none mx-0">
                           <ResponsiveContainer width="100%" height="100%">
                             <ComposedChart
                               data={visitorsSeries}
