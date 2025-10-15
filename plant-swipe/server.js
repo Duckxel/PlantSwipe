@@ -21,6 +21,27 @@ dotenv.config()
 try {
   dotenv.config({ path: path.resolve(__dirname, '.env.server') })
 } catch {}
+// Ensure we also load a co-located .env next to server.js regardless of cwd
+try {
+  dotenv.config({ path: path.resolve(__dirname, '.env') })
+} catch {}
+
+// Map common env aliases so deployments can be plug‑and‑play with a single .env
+function preferEnv(target, sources) {
+  if (!process.env[target]) {
+    for (const k of sources) {
+      const v = process.env[k]
+      if (v && String(v).length > 0) { process.env[target] = v; break }
+    }
+  }
+}
+// Allow DB_URL to serve as DATABASE_URL, and other common aliases
+preferEnv('DATABASE_URL', ['DB_URL', 'PG_URL', 'POSTGRES_URL', 'POSTGRES_PRISMA_URL', 'SUPABASE_DB_URL'])
+// Normalize Supabase envs for server code if only VITE_* are present
+preferEnv('SUPABASE_URL', ['VITE_SUPABASE_URL', 'REACT_APP_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_URL'])
+preferEnv('SUPABASE_ANON_KEY', ['VITE_SUPABASE_ANON_KEY', 'REACT_APP_SUPABASE_ANON_KEY', 'NEXT_PUBLIC_SUPABASE_ANON_KEY'])
+// Normalize optional admin token from frontend env
+preferEnv('ADMIN_STATIC_TOKEN', ['VITE_ADMIN_STATIC_TOKEN'])
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
