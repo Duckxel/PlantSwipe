@@ -2631,8 +2631,9 @@ export const AdminPage: React.FC = () => {
 
 // --- Broadcast controls (Overview tab) ---
 const BroadcastControls: React.FC = () => {
-  const [active, setActive] = React.useState<{ id: string; message: string; expiresAt: string | null } | null>(null)
+  const [active, setActive] = React.useState<{ id: string; message: string; severity?: 'info' | 'warning' | 'danger'; expiresAt: string | null } | null>(null)
   const [message, setMessage] = React.useState('')
+  const [severity, setSeverity] = React.useState<'info' | 'warning' | 'danger'>('info')
   const [duration, setDuration] = React.useState<string>('')
   const [submitting, setSubmitting] = React.useState(false)
   const [removing, setRemoving] = React.useState(false)
@@ -2688,12 +2689,13 @@ const BroadcastControls: React.FC = () => {
         method: 'POST',
         headers,
         credentials: 'same-origin',
-        body: JSON.stringify({ message: message.trim(), durationMs: ms }),
+        body: JSON.stringify({ message: message.trim(), severity, durationMs: ms }),
       })
       const b = await resp.json().catch(() => ({}))
       if (!resp.ok) throw new Error(b?.error || `HTTP ${resp.status}`)
       setActive(b?.broadcast || null)
       setMessage('')
+      setSeverity('info')
       setDuration('')
     } catch (e) {
       alert((e as Error)?.message || 'Failed to create broadcast')
@@ -2739,13 +2741,23 @@ const BroadcastControls: React.FC = () => {
           <div className="text-sm font-medium">Global broadcast message</div>
         </div>
         {!active ? (
-          <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
+          <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto_auto]">
             <Input
               placeholder="Write a short message (single line)"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               maxLength={200}
             />
+            <select
+              className="rounded-xl border px-3 py-2 text-sm bg-white"
+              value={severity}
+              onChange={(e) => setSeverity((e.target.value as any) || 'info')}
+              aria-label="Type"
+            >
+              <option value="info">Information</option>
+              <option value="warning">Warning</option>
+              <option value="danger">Danger</option>
+            </select>
             <select
               className="rounded-xl border px-3 py-2 text-sm bg-white"
               value={duration}

@@ -1,8 +1,10 @@
 import React from 'react'
+import { Info, AlertTriangle, XCircle, ChevronDown, ChevronUp } from 'lucide-react'
 
 export type Broadcast = {
   id: string
   message: string
+  severity?: 'info' | 'warning' | 'danger'
   createdAt: string | null
   expiresAt: string | null
 }
@@ -58,6 +60,7 @@ function savePosition(pos: PositionKey) {
 const BroadcastToast: React.FC = () => {
   const [broadcast, setBroadcast] = React.useState<Broadcast | null>(null)
   const [pos, setPos] = React.useState<PositionKey>(loadPosition)
+  const [open, setOpen] = React.useState<boolean>(false)
   const now = useNowTick(1000)
 
   // Initial fetch to hydrate
@@ -86,9 +89,11 @@ const BroadcastToast: React.FC = () => {
           setBroadcast({
             id: String(data?.id || ''),
             message: String(data?.message || ''),
+            severity: (data?.severity === 'warning' || data?.severity === 'danger') ? data.severity : 'info',
             createdAt: data?.createdAt || null,
             expiresAt: data?.expiresAt || null,
           })
+          setOpen(false)
         } catch {}
       })
       es.addEventListener('clear', () => {
@@ -114,6 +119,14 @@ const BroadcastToast: React.FC = () => {
 
   const remaining = msRemaining(broadcast.expiresAt, now)
 
+  const severity = (broadcast.severity === 'warning' || broadcast.severity === 'danger') ? broadcast.severity : 'info'
+  const severityLabel = severity === 'warning' ? 'Warning' : severity === 'danger' ? 'Danger' : 'Information'
+  const borderClass = severity === 'warning' ? 'border-yellow-400' : severity === 'danger' ? 'border-red-500' : 'border-white'
+  const squareBgClass = severity === 'warning' ? 'bg-yellow-400' : severity === 'danger' ? 'bg-red-500' : 'bg-white'
+  const iconColorClass = severity === 'warning' ? 'text-yellow-600' : severity === 'danger' ? 'text-red-600' : 'text-neutral-500'
+
+  const IconComp = severity === 'warning' ? AlertTriangle : severity === 'danger' ? XCircle : Info
+
   const handleCycle = (e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault()
     const next = nextPositionKey(pos)
@@ -130,11 +143,35 @@ const BroadcastToast: React.FC = () => {
       title="Click to move between corners"
       style={{ WebkitTapHighlightColor: 'transparent' }}
     >
-      <div className="cursor-pointer select-none rounded-2xl border bg-white shadow-lg p-3 sm:p-4 text-sm text-neutral-900">
-        <div className="font-semibold mb-1">Notice</div>
-        <div className="break-words">{broadcast.message}</div>
-        {remaining !== null && (
-          <div className="mt-2 text-xs opacity-60">Disappears in {formatDuration(remaining)}</div>
+      <div className={`select-none rounded-2xl border ${borderClass} bg-white shadow-lg text-sm text-neutral-900 overflow-hidden`}
+      >
+        <button
+          type="button"
+          className="w-full flex items-center gap-2 px-3 sm:px-4 py-2"
+          onClick={(e) => { e.stopPropagation(); setOpen(o => !o) }}
+          aria-expanded={open}
+        >
+          <span className={`shrink-0 ${iconColorClass}`}>
+            <IconComp className="h-4 w-4" />
+          </span>
+          <span className={`h-3 w-3 rounded-sm border border-neutral-300 ${squareBgClass}`} aria-hidden />
+          <span className="font-semibold truncate">{severityLabel}</span>
+          <span className="ml-auto opacity-70">
+            {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </span>
+        </button>
+        {open && (
+          <div className="px-3 sm:px-4 pb-3">
+            <div className="flex items-start gap-2">
+              <span className={`mt-[3px] ${iconColorClass}`}>
+                <IconComp className="h-4 w-4" />
+              </span>
+              <div className="break-words">{broadcast.message}</div>
+            </div>
+            {remaining !== null && (
+              <div className="mt-2 text-xs opacity-60">Disappears in {formatDuration(remaining)}</div>
+            )}
+          </div>
         )}
       </div>
     </div>
