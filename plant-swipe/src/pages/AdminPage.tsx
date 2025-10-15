@@ -58,6 +58,7 @@ export const AdminPage: React.FC = () => {
   const [consoleLines, setConsoleLines] = React.useState<string[]>([])
   const [reloadReady, setReloadReady] = React.useState<boolean>(false)
   const [preRestartNotice, setPreRestartNotice] = React.useState<boolean>(false)
+  const [broadcastOpen, setBroadcastOpen] = React.useState<boolean>(false)
   const consoleRef = React.useRef<HTMLDivElement | null>(null)
   React.useEffect(() => {
     if (!consoleOpen) return
@@ -1374,9 +1375,6 @@ export const AdminPage: React.FC = () => {
           {/* Overview Tab */}
           {activeTab === 'overview' && (
           <>
-          {/* Broadcast message controls */}
-          <BroadcastControls />
-
           {/* Health monitor */}
           <Card className="rounded-2xl">
             <CardContent className="p-4">
@@ -1452,10 +1450,34 @@ export const AdminPage: React.FC = () => {
             </CardContent>
           </Card>
 
-          {/* Branch selector */}
+          {/* Actions */}
           <Card className="rounded-2xl">
             <CardContent className="p-4">
               <div className="flex items-center justify-between gap-3">
+                <div className="text-sm font-medium truncate">Actions</div>
+              </div>
+
+              {/* Collapsible: Broadcast message creation */}
+              <div className="mt-2">
+                <button
+                  type="button"
+                  className="flex items-center gap-2 text-sm font-medium"
+                  onClick={() => setBroadcastOpen(o => !o)}
+                  aria-expanded={broadcastOpen}
+                  aria-controls="broadcast-create"
+                >
+                  <ChevronDown className={`h-4 w-4 transition-transform ${broadcastOpen ? 'rotate-180' : ''}`} />
+                  Broadcast message
+                </button>
+                {broadcastOpen && (
+                  <div className="mt-2" id="broadcast-create">
+                    <BroadcastControls inline onExpired={() => setBroadcastOpen(true)} />
+                  </div>
+                )}
+              </div>
+
+              {/* Branch selection */}
+              <div className="mt-4 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2 min-w-0">
                   <GitBranch className="h-4 w-4 opacity-70" />
                   <div className="text-sm font-medium truncate">Branch</div>
@@ -1498,7 +1520,8 @@ export const AdminPage: React.FC = () => {
               <div className="text-xs opacity-60 mt-2">
                 Changing branch takes effect when you run Pull & Build.
               </div>
-              {/* Action buttons moved into Branch card */}
+
+              {/* Action buttons */}
               <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <Button className="rounded-2xl w-full" onClick={restartServer} disabled={restarting}>
                   <Server className="h-4 w-4" />
@@ -2630,8 +2653,8 @@ export const AdminPage: React.FC = () => {
 }
 
 // --- Broadcast controls (Overview tab) ---
-const BroadcastControls: React.FC = () => {
-  const [active, setActive] = React.useState<{ id: string; message: string; severity?: 'info' | 'warning' | 'danger'; expiresAt: string | null } | null>(null)
+const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void }> = ({ inline = false, onExpired }) => {
+  const [active, setActive] = React.useState<{ id: string; message: string; severity?: 'info' | 'warning' | 'danger'; expiresAt: string | null; adminName?: string | null } | null>(null)
   const [message, setMessage] = React.useState('')
   const [severity, setSeverity] = React.useState<'info' | 'warning' | 'danger'>('info')
   const [duration, setDuration] = React.useState<string>('')
@@ -2673,6 +2696,18 @@ const BroadcastControls: React.FC = () => {
   }, [])
 
   React.useEffect(() => { loadActive() }, [loadActive])
+
+  // When current broadcast expires, revert to create form and notify parent (to re-open section)
+  React.useEffect(() => {
+    if (!active?.expiresAt) return
+    const remain = msRemaining(active.expiresAt)
+    if (remain === null) return
+    const id = window.setTimeout(() => {
+      setActive(null)
+      onExpired?.()
+    }, Math.max(0, remain))
+    return () => window.clearTimeout(id)
+  }, [active?.expiresAt, onExpired, msRemaining])
 
   const onSubmit = React.useCallback(async () => {
     if (submitting) return
@@ -2734,12 +2769,11 @@ const BroadcastControls: React.FC = () => {
     { label: 'Unlimited', value: 'unlimited' },
   ]
 
-  return (
-    <Card className="rounded-2xl">
-      <CardContent className="p-4">
-        <div className="flex items-center justify-between">
-          <div className="text-sm font-medium">Global broadcast message</div>
-        </div>
+  const content = (
+    <div>
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-medium">Global broadcast message</div>
+      </div>
         {!active ? (
           <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto_auto]">
             <Input
@@ -2778,10 +2812,9 @@ const BroadcastControls: React.FC = () => {
             <div className="min-w-0">
               <div className="text-sm font-semibold truncate">{active.message}</div>
               <div className="text-xs opacity-60">
-                {active.expiresAt ? (
-                  <>Disappears in {formatDuration(msRemaining(active.expiresAt) || 0)}</>
-                ) : (
-                  <>Unlimited</>
+                Submitted by {active.adminName ? active.adminName : 'Admin'}
+                {active.expiresAt && (
+                  <> — Expires in {formatDuration(msRemaining(active.expiresAt) || 0)}</>
                 )}
               </div>
             </div>
@@ -2790,8 +2823,11 @@ const BroadcastControls: React.FC = () => {
             </Button>
           </div>
         )}
-      </CardContent>
-    </Card>
+    </div>
+  )
+  if (inline) return content
+  return (
+    <Card className="rounded-2xl"><CardContent className="p-4">{content}</CardContent></Card>
   )
 }
 

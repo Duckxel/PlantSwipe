@@ -1,5 +1,5 @@
 import React from 'react'
-import { Info, AlertTriangle, XCircle, ChevronDown, ChevronUp } from 'lucide-react'
+import { Info, AlertTriangle, XCircle } from 'lucide-react'
 
 export type Broadcast = {
   id: string
@@ -60,7 +60,6 @@ function savePosition(pos: PositionKey) {
 const BroadcastToast: React.FC = () => {
   const [broadcast, setBroadcast] = React.useState<Broadcast | null>(null)
   const [pos, setPos] = React.useState<PositionKey>(loadPosition)
-  const [open, setOpen] = React.useState<boolean>(false)
   const now = useNowTick(1000)
 
   // Initial fetch to hydrate
@@ -93,7 +92,6 @@ const BroadcastToast: React.FC = () => {
             createdAt: data?.createdAt || null,
             expiresAt: data?.expiresAt || null,
           })
-          setOpen(false)
         } catch {}
       })
       es.addEventListener('clear', () => {
@@ -143,36 +141,16 @@ const BroadcastToast: React.FC = () => {
       title="Click to move between corners"
       style={{ WebkitTapHighlightColor: 'transparent' }}
     >
-      <div className={`select-none rounded-2xl border ${borderClass} bg-white shadow-lg text-sm text-neutral-900 overflow-hidden`}
-      >
-        <button
-          type="button"
-          className="w-full flex items-center gap-2 px-3 sm:px-4 py-2"
-          onClick={(e) => { e.stopPropagation(); setOpen(o => !o) }}
-          aria-expanded={open}
-        >
-          <span className={`shrink-0 ${iconColorClass}`}>
+      <div className={`select-none rounded-2xl border ${borderClass} bg-white shadow-lg text-sm text-neutral-900 overflow-hidden p-3 sm:p-4`}>
+        <div className="flex items-start gap-2">
+          <span className={`mt-[2px] ${iconColorClass}`}>
             <IconComp className="h-4 w-4" />
           </span>
-          <span className={`h-3 w-3 rounded-sm border border-neutral-300 ${squareBgClass}`} aria-hidden />
-          <span className="font-semibold truncate">{severityLabel}</span>
-          <span className="ml-auto opacity-70">
-            {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-          </span>
-        </button>
-        {open && (
-          <div className="px-3 sm:px-4 pb-3">
-            <div className="flex items-start gap-2">
-              <span className={`mt-[3px] ${iconColorClass}`}>
-                <IconComp className="h-4 w-4" />
-              </span>
-              <div className="break-words">{broadcast.message}</div>
-            </div>
-            {remaining !== null && (
-              <div className="mt-2 text-xs opacity-60">Disappears in {formatDuration(remaining)}</div>
-            )}
+          <div className="break-words flex-1">
+            <div className="font-semibold mb-1">{severityLabel}</div>
+            <div>{broadcast.message}</div>
           </div>
-        )}
+        </div>
       </div>
     </div>
   )
