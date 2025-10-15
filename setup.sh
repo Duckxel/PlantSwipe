@@ -486,6 +486,9 @@ $SERVICE_USER ALL=(root) NOPASSWD: /bin/mkdir
 $SERVICE_USER ALL=(root) NOPASSWD: /usr/bin/install
 $SERVICE_USER ALL=(root) NOPASSWD: /bin/sed
 $SERVICE_USER ALL=(root) NOPASSWD: /usr/bin/tee
+$SERVICE_USER ALL=(root) NOPASSWD: /bin/chown
+$SERVICE_USER ALL=(root) NOPASSWD: /bin/chmod
+$SERVICE_USER ALL=(root) NOPASSWD: /bin/bash
 $SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN daemon-reload
 EOF
 "
