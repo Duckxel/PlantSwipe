@@ -1893,6 +1893,8 @@ create index if not exists web_visits_session_idx on public.web_visits (session_
 create index if not exists web_visits_user_idx on public.web_visits (user_id);
 create index if not exists web_visits_page_idx on public.web_visits (page_path);
 create index if not exists web_visits_ip_idx on public.web_visits (ip_address);
+-- Expression index to accelerate daily unique IP aggregations in UTC
+create index if not exists web_visits_day_utc_ip_idx on public.web_visits (((timezone('utc', occurred_at))::date), ip_address);
 
 -- RLS: restrict reads to admins only; writes are server-side (bypass RLS)
 alter table public.web_visits enable row level security;

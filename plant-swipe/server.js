@@ -3420,10 +3420,11 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
          select generate_series(((now() at time zone 'utc')::date - interval '${days - 1} days'), (now() at time zone 'utc')::date, interval '1 day')::date as d
        )
        select to_char(d, 'YYYY-MM-DD') as date,
-              coalesce((select count(distinct v.ip_address)
-                        from ${VISITS_TABLE_SQL_IDENT} v
-                        where timezone('utc', v.occurred_at)::date = d
-                          and v.ip_address is not null), 0)::int as unique_visitors
+              coalesce((
+                select count(distinct v.ip_address)
+                from ${VISITS_TABLE_SQL_IDENT} v
+                where (timezone('utc', v.occurred_at))::date = d
+              ), 0)::int as unique_visitors
        from days
        order by d asc`)
     const series7d = (rows7 || []).map(r => ({ date: String(r.date), uniqueVisitors: Number(r.unique_visitors || 0) }))
