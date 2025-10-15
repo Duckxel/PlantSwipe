@@ -68,6 +68,7 @@ export const AdminPage: React.FC = () => {
   const [consoleLines, setConsoleLines] = React.useState<string[]>([])
   const [reloadReady, setReloadReady] = React.useState<boolean>(false)
   const [preRestartNotice, setPreRestartNotice] = React.useState<boolean>(false)
+  const [broadcastOpen, setBroadcastOpen] = React.useState<boolean>(false)
   const consoleRef = React.useRef<HTMLDivElement | null>(null)
   React.useEffect(() => {
     if (!consoleOpen) return
@@ -1384,9 +1385,6 @@ export const AdminPage: React.FC = () => {
           {/* Overview Tab */}
           {activeTab === 'overview' && (
           <>
-          {/* Broadcast message controls */}
-          <BroadcastControls />
-
           {/* Health monitor */}
           <Card className="rounded-2xl">
             <CardContent className="p-4">
@@ -1462,10 +1460,37 @@ export const AdminPage: React.FC = () => {
             </CardContent>
           </Card>
 
-          {/* Branch selector */}
+          {/* Actions */}
           <Card className="rounded-2xl">
             <CardContent className="p-4">
               <div className="flex items-center justify-between gap-3">
+                <div className="text-sm font-medium truncate">Actions</div>
+              </div>
+
+              {/* Collapsible: Broadcast message creation */}
+              <div className="mt-2">
+                <button
+                  type="button"
+                  className="flex items-center gap-2 text-sm font-medium"
+                  onClick={() => setBroadcastOpen(o => !o)}
+                  aria-expanded={broadcastOpen}
+                  aria-controls="broadcast-create"
+                >
+                  <ChevronDown className={`h-4 w-4 transition-transform ${broadcastOpen ? 'rotate-180' : ''}`} />
+                  Broadcast message
+                </button>
+                {broadcastOpen && (
+                  <div className="mt-2" id="broadcast-create">
+                    <BroadcastControls inline onExpired={() => setBroadcastOpen(true)} />
+                  </div>
+                )}
+              </div>
+
+              {/* Divider between Broadcast and the action controls/buttons */}
+              <div className="my-4 border-t" />
+
+              {/* Branch selection */}
+              <div className="mt-4 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2 min-w-0">
                   <GitBranch className="h-4 w-4 opacity-70" />
                   <div className="text-sm font-medium truncate">Branch</div>
@@ -1508,7 +1533,8 @@ export const AdminPage: React.FC = () => {
               <div className="text-xs opacity-60 mt-2">
                 Changing branch takes effect when you run Pull & Build.
               </div>
-              {/* Action buttons moved into Branch card */}
+
+              {/* Action buttons */}
               <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <Button className="rounded-2xl w-full" onClick={restartServer} disabled={restarting}>
                   <Server className="h-4 w-4" />
@@ -1524,6 +1550,72 @@ export const AdminPage: React.FC = () => {
                   <Database className="h-4 w-4" />
                   <span>{syncing ? 'Syncing Schema…' : 'Sync DB Schema'}</span>
                 </Button>
+              </div>
+
+              {/* Divider before Admin Console */}
+              <div className="my-4 border-t" />
+
+              {/* Admin Console (moved inside Actions card) */}
+              <div>
+                <button
+                  type="button"
+                  className="flex items-center gap-2 text-sm font-medium"
+                  onClick={() => setConsoleOpen(o => !o)}
+                  aria-expanded={consoleOpen}
+                  aria-controls="admin-console"
+                >
+                  <ChevronDown className={`h-4 w-4 transition-transform ${consoleOpen ? 'rotate-180' : ''}`} />
+                  Admin Console
+                  {consoleLines.length > 0 && (
+                    <span className="text-xs opacity-60">({consoleLines.length} lines)</span>
+                  )}
+                </button>
+                {consoleOpen && (
+                  <div className="mt-2" id="admin-console">
+                    <div
+                      ref={consoleRef}
+                      className="h-48 overflow-auto rounded-xl border bg-black text-white text-xs p-3 font-mono whitespace-pre-wrap"
+                      aria-live="polite"
+                    >
+                      {consoleLines.length === 0 ? 'No messages yet.' : consoleLines.join('\n')}
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="rounded-xl"
+                        onClick={() => setConsoleOpen(false)}
+                        title="Hide console"
+                      >Hide</Button>
+                      <Button
+                        size="sm"
+                        className="rounded-xl"
+                        onClick={() => { setConsoleLines([]); setConsoleOpen(true) }}
+                        title="Clear console"
+                      >Clear</Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="rounded-xl"
+                        onClick={async () => {
+                          const ok = await copyTextToClipboard(getAllLogsText())
+                          if (!ok) alert('Copy failed. You can still select and copy manually.')
+                        }}
+                        title="Copy all console lines to clipboard"
+                      >Copy all</Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="rounded-xl"
+                        onClick={async () => {
+                          const ok = await copyTextToClipboard(getErrorLinesText())
+                          if (!ok) alert('Copy failed. You can still select and copy manually.')
+                        }}
+                        title="Copy only error-like lines to clipboard"
+                      >Copy errors</Button>
+                    </div>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -2640,9 +2732,10 @@ export const AdminPage: React.FC = () => {
 }
 
 // --- Broadcast controls (Overview tab) ---
-const BroadcastControls: React.FC = () => {
-  const [active, setActive] = React.useState<{ id: string; message: string; expiresAt: string | null } | null>(null)
+const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void }> = ({ inline = false, onExpired }) => {
+  const [active, setActive] = React.useState<{ id: string; message: string; severity?: 'info' | 'warning' | 'danger'; expiresAt: string | null; adminName?: string | null } | null>(null)
   const [message, setMessage] = React.useState('')
+  const [severity, setSeverity] = React.useState<'info' | 'warning' | 'danger'>('info')
   const [duration, setDuration] = React.useState<string>('')
   const [submitting, setSubmitting] = React.useState(false)
   const [removing, setRemoving] = React.useState(false)
@@ -2683,6 +2776,18 @@ const BroadcastControls: React.FC = () => {
 
   React.useEffect(() => { loadActive() }, [loadActive])
 
+  // When current broadcast expires, revert to create form and notify parent (to re-open section)
+  React.useEffect(() => {
+    if (!active?.expiresAt) return
+    const remain = msRemaining(active.expiresAt)
+    if (remain === null) return
+    const id = window.setTimeout(() => {
+      setActive(null)
+      onExpired?.()
+    }, Math.max(0, remain))
+    return () => window.clearTimeout(id)
+  }, [active?.expiresAt, onExpired, msRemaining])
+
   const onSubmit = React.useCallback(async () => {
     if (submitting) return
     if (!message.trim()) return
@@ -2698,12 +2803,13 @@ const BroadcastControls: React.FC = () => {
         method: 'POST',
         headers,
         credentials: 'same-origin',
-        body: JSON.stringify({ message: message.trim(), durationMs: ms }),
+        body: JSON.stringify({ message: message.trim(), severity, durationMs: ms }),
       })
       const b = await resp.json().catch(() => ({}))
       if (!resp.ok) throw new Error(b?.error || `HTTP ${resp.status}`)
       setActive(b?.broadcast || null)
       setMessage('')
+      setSeverity('info')
       setDuration('')
     } catch (e) {
       alert((e as Error)?.message || 'Failed to create broadcast')
@@ -2742,20 +2848,29 @@ const BroadcastControls: React.FC = () => {
     { label: 'Unlimited', value: 'unlimited' },
   ]
 
-  return (
-    <Card className="rounded-2xl">
-      <CardContent className="p-4">
-        <div className="flex items-center justify-between">
-          <div className="text-sm font-medium">Global broadcast message</div>
-        </div>
+  const content = (
+    <div>
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-medium">Global broadcast message</div>
+      </div>
         {!active ? (
-          <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
+          <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto_auto]">
             <Input
               placeholder="Write a short message (single line)"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               maxLength={200}
             />
+            <select
+              className="rounded-xl border px-3 py-2 text-sm bg-white"
+              value={severity}
+              onChange={(e) => setSeverity((e.target.value as any) || 'info')}
+              aria-label="Type"
+            >
+              <option value="info">Information</option>
+              <option value="warning">Warning</option>
+              <option value="danger">Danger</option>
+            </select>
             <select
               className="rounded-xl border px-3 py-2 text-sm bg-white"
               value={duration}
@@ -2776,10 +2891,9 @@ const BroadcastControls: React.FC = () => {
             <div className="min-w-0">
               <div className="text-sm font-semibold truncate">{active.message}</div>
               <div className="text-xs opacity-60">
-                {active.expiresAt ? (
-                  <>Disappears in {formatDuration(msRemaining(active.expiresAt) || 0)}</>
-                ) : (
-                  <>Unlimited</>
+                Submitted by {active.adminName ? active.adminName : 'Admin'}
+                {active.expiresAt && (
+                  <> — Expires in {formatDuration(msRemaining(active.expiresAt) || 0)}</>
                 )}
               </div>
             </div>
@@ -2788,8 +2902,11 @@ const BroadcastControls: React.FC = () => {
             </Button>
           </div>
         )}
-      </CardContent>
-    </Card>
+    </div>
+  )
+  if (inline) return content
+  return (
+    <Card className="rounded-2xl"><CardContent className="p-4">{content}</CardContent></Card>
   )
 }
 

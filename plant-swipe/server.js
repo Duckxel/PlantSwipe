@@ -1343,12 +1343,28 @@ async function ensureBroadcastTable() {
       create table if not exists public.broadcast_messages (
         id uuid primary key default gen_random_uuid(),
         message text not null,
+        severity text not null default 'info',
         created_at timestamptz not null default now(),
         expires_at timestamptz null,
         removed_at timestamptz null,
         created_by uuid null
       );
     `
+    // Backfill/ensure severity column and constraint for older deployments
+    try { await sql`alter table if exists public.broadcast_messages add column if not exists severity text;` } catch {}
+    try { await sql`update public.broadcast_messages set severity = 'info' where severity is null;` } catch {}
+    try {
+      await sql`
+        do $$ begin
+          if not exists (
+            select 1 from pg_constraint where conname = 'broadcast_messages_severity_chk'
+          ) then
+            alter table public.broadcast_messages
+            add constraint broadcast_messages_severity_chk check (severity in ('info','warning','danger'));
+          end if;
+        end $$;
+      `
+    } catch {}
     await sql`create index if not exists broadcast_messages_created_at_idx on public.broadcast_messages (created_at desc);`
     await sql`create index if not exists broadcast_messages_active_idx on public.broadcast_messages (expires_at) where removed_at is null;`
   } catch {}
@@ -3703,10 +3719,18 @@ async function getActiveBroadcastRow() {
   if (sql) {
     try {
       const rows = await sql`
-        select id::text as id, message, created_at, expires_at
-        from public.broadcast_messages
-        where removed_at is null and (expires_at is null or expires_at > now())
-        order by created_at desc
+        select 
+          bm.id::text as id,
+          bm.message,
+          bm.severity,
+          bm.created_at,
+          bm.expires_at,
+          bm.created_by::text as created_by,
+          coalesce(p.display_name, p.email, '') as admin_name
+        from public.broadcast_messages bm
+        left join public.profiles p on p.id = bm.created_by
+        where bm.removed_at is null and (bm.expires_at is null or bm.expires_at > now())
+        order by bm.created_at desc
         limit 1
       `
       return Array.isArray(rows) && rows[0] ? rows[0] : null
@@ -3716,7 +3740,7 @@ async function getActiveBroadcastRow() {
   if (supabaseUrlEnv && supabaseAnonKey) {
     try {
       const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
-      const url = `${supabaseUrlEnv}/rest/v1/broadcast_messages?removed_at=is.null&select=id,message,created_at,expires_at&order=created_at.desc&limit=10`
+      const url = `${supabaseUrlEnv}/rest/v1/broadcast_messages?removed_at=is.null&select=id,message,severity,created_at,expires_at,created_by&order=created_at.desc&limit=10`
       const r = await fetch(url, { headers })
       if (r.ok) {
         const arr = await r.json().catch(() => [])
@@ -3756,8 +3780,11 @@ app.get('/api/broadcast/active', async (_req, res) => {
       res.json({ ok: true, broadcast: {
         id: String(row.id || ''),
         message: String(row.message || ''),
+        severity: String(row.severity || 'info'),
         createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
         expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
+        createdBy: row.created_by ? String(row.created_by) : null,
+        adminName: row.admin_name ? String(row.admin_name) : null,
       } })
     } else {
       res.json({ ok: true, broadcast: null })
@@ -3783,8 +3810,11 @@ app.get('/api/broadcast/stream', async (req, res) => {
         sseWrite(res, 'broadcast', {
           id: String(row.id || ''),
           message: String(row.message || ''),
+          severity: String(row.severity || 'info'),
           createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
           expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
+          createdBy: row.created_by ? String(row.created_by) : null,
+          adminName: row.admin_name ? String(row.admin_name) : null,
         })
       } else {
         sseWrite(res, 'clear', { ok: true })
@@ -4242,6 +4272,8 @@ app.post('/api/admin/broadcast', async (req, res) => {
     await ensureBroadcastTable()
 
     const messageRaw = (req.body?.message || '').toString().trim()
+    const severityRaw = (req.body?.severity || '').toString().trim().toLowerCase()
+    const severity = (severityRaw === 'warning' || severityRaw === 'danger') ? severityRaw : 'info'
     const durationMsRaw = Number(req.body?.durationMs || req.body?.duration_ms || req.body?.duration || 0)
     if (!messageRaw) {
       res.status(400).json({ error: 'Message is required' })
@@ -4262,16 +4294,27 @@ app.post('/api/admin/broadcast', async (req, res) => {
       expiresAt = new Date(Date.now() + Math.floor(durationMsRaw)).toISOString()
     }
     const rows = await sql`
-      insert into public.broadcast_messages (message, created_by, expires_at)
-      values (${messageRaw}, ${typeof adminId === 'string' ? adminId : null}, ${expiresAt ? expiresAt : null})
-      returning id::text as id, message, created_at, expires_at
+      insert into public.broadcast_messages (message, severity, created_by, expires_at)
+      values (${messageRaw}, ${severity}, ${typeof adminId === 'string' ? adminId : null}, ${expiresAt ? expiresAt : null})
+      returning id::text as id, message, severity, created_at, expires_at, created_by::text as created_by
     `
     const row = Array.isArray(rows) && rows[0] ? rows[0] : null
+    // Resolve admin name for SSE payload convenience
+    let adminName = null
+    if (row?.created_by && sql) {
+      try {
+        const nameRows = await sql`select coalesce(display_name, email, '') as name from public.profiles where id = ${row.created_by} limit 1`
+        adminName = nameRows?.[0]?.name || null
+      } catch {}
+    }
     const payload = row ? {
       id: String(row.id || ''),
       message: String(row.message || ''),
+      severity: String(row.severity || 'info'),
       createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
       expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
+      createdBy: row.created_by ? String(row.created_by) : null,
+      adminName: adminName ? String(adminName) : null,
     } : null
     if (payload) broadcastToAll(payload)
     res.json({ ok: true, broadcast: payload })

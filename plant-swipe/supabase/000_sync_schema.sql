@@ -2229,6 +2229,8 @@ drop function if exists public.set_updated_at() cascade;
 create table if not exists public.broadcast_messages (
   id uuid primary key default gen_random_uuid(),
   message text not null,
+  -- Severity of the broadcast for client rendering: info | warning | danger
+  severity text not null default 'info' check (severity in ('info','warning','danger')),
   created_at timestamptz not null default now(),
   expires_at timestamptz null,
   removed_at timestamptz null,
@@ -2244,6 +2246,20 @@ do $$ begin
   end if;
   create policy broadcast_admin_select on public.broadcast_messages for select to authenticated
     using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+
+-- Backfill for existing deployments where table existed without severity
+alter table if exists public.broadcast_messages
+  add column if not exists severity text;
+update public.broadcast_messages set severity = 'info' where severity is null;
+do $$ begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'broadcast_messages_severity_chk'
+  ) then
+    alter table public.broadcast_messages
+      add constraint broadcast_messages_severity_chk check (severity in ('info','warning','danger'));
+  end if;
 end $$;
 do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='broadcast_messages' and policyname='broadcast_admin_write') then

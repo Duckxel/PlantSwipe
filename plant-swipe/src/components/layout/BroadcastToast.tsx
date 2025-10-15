@@ -1,8 +1,10 @@
 import React from 'react'
+import { Info, AlertTriangle, XCircle } from 'lucide-react'
 
 export type Broadcast = {
   id: string
   message: string
+  severity?: 'info' | 'warning' | 'danger'
   createdAt: string | null
   expiresAt: string | null
 }
@@ -86,6 +88,7 @@ const BroadcastToast: React.FC = () => {
           setBroadcast({
             id: String(data?.id || ''),
             message: String(data?.message || ''),
+            severity: (data?.severity === 'warning' || data?.severity === 'danger') ? data.severity : 'info',
             createdAt: data?.createdAt || null,
             expiresAt: data?.expiresAt || null,
           })
@@ -112,7 +115,13 @@ const BroadcastToast: React.FC = () => {
 
   if (!broadcast) return null
 
-  const remaining = msRemaining(broadcast.expiresAt, now)
+  const severity = (broadcast.severity === 'warning' || broadcast.severity === 'danger') ? broadcast.severity : 'info'
+  const severityLabel = severity === 'warning' ? 'Warning' : severity === 'danger' ? 'Danger' : 'Information'
+  const borderClass = severity === 'warning' ? 'border-yellow-400' : severity === 'danger' ? 'border-red-500' : 'border-white'
+  const squareBgClass = severity === 'warning' ? 'bg-yellow-400' : severity === 'danger' ? 'bg-red-500' : 'bg-white'
+  const iconColorClass = severity === 'warning' ? 'text-yellow-600' : severity === 'danger' ? 'text-red-600' : 'text-neutral-500'
+
+  const IconComp = severity === 'warning' ? AlertTriangle : severity === 'danger' ? XCircle : Info
 
   const handleCycle = (e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault()
@@ -130,27 +139,22 @@ const BroadcastToast: React.FC = () => {
       title="Click to move between corners"
       style={{ WebkitTapHighlightColor: 'transparent' }}
     >
-      <div className="cursor-pointer select-none rounded-2xl border bg-white shadow-lg p-3 sm:p-4 text-sm text-neutral-900">
-        <div className="font-semibold mb-1">Notice</div>
-        <div className="break-words">{broadcast.message}</div>
-        {remaining !== null && (
-          <div className="mt-2 text-xs opacity-60">Disappears in {formatDuration(remaining)}</div>
-        )}
+      <div className={`select-none rounded-2xl border ${borderClass} bg-white shadow-lg text-sm text-neutral-900 overflow-hidden p-3 sm:p-4`}>
+        <div className="flex items-start gap-2">
+          <span className={`mt-[2px] ${iconColorClass}`}>
+            <IconComp className="h-4 w-4" />
+          </span>
+          <div className="break-words flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <span className={`h-3 w-3 rounded-sm border border-neutral-300 ${squareBgClass}`} aria-hidden />
+              <div className="font-semibold">{severityLabel}</div>
+            </div>
+            <div>{broadcast.message}</div>
+          </div>
+        </div>
       </div>
     </div>
   )
-}
-
-function formatDuration(ms: number): string {
-  ms = Math.max(0, Math.floor(ms))
-  const totalSeconds = Math.floor(ms / 1000)
-  const s = totalSeconds % 60
-  const totalMinutes = Math.floor(totalSeconds / 60)
-  const m = totalMinutes % 60
-  const h = Math.floor(totalMinutes / 60)
-  if (h > 0) return `${h}h ${m}m ${s}s`
-  if (m > 0) return `${m}m ${s}s`
-  return `${s}s`
 }
 
 export default BroadcastToast
