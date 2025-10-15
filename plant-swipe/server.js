@@ -3403,10 +3403,10 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
       sql.unsafe(`select count(distinct v.ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} v where v.ip_address is not null and v.occurred_at >= now() - interval '60 minutes'`),
       sql.unsafe(`select count(*)::int as c from ${VISITS_TABLE_SQL_IDENT} where occurred_at >= now() - interval '60 minutes'`),
       // Unique IPs across the last N calendar days in UTC
-      sql`select count(distinct v.ip_address)::int as c
-           from ${VISITS_TABLE_SQL_IDENT} v
-           where v.ip_address is not null
-             and timezone('utc', v.occurred_at) >= ((now() at time zone 'utc')::date - interval '${days - 1} days')`
+      sql.unsafe(`select count(distinct v.ip_address)::int as c
+                  from ${VISITS_TABLE_SQL_IDENT} v
+                  where v.ip_address is not null
+                    and timezone('utc', v.occurred_at) >= ((now() at time zone 'utc')::date - interval '${days - 1} days')`)
     ])
 
     const currentUniqueVisitors10m = rows10m?.[0]?.c ?? 0
