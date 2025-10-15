@@ -849,8 +849,10 @@ export const AdminPage: React.FC = () => {
     if (isInitial) setVisitorsLoading(true)
     else setVisitorsRefreshing(true)
     try {
-      const resp = await fetch(`/api/admin/visitors-stats?days=${visitorsWindowDays}`, {
-        headers: { 'Accept': 'application/json' },
+      const headersAdmin1: Record<string, string> = { 'Accept': 'application/json' }
+      try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) headersAdmin1['X-Admin-Token'] = String(adminToken) } catch {}
+      const resp = await fetch(`/admin/visitors-stats?days=${visitorsWindowDays}`, {
+        headers: headersAdmin1,
         credentials: 'same-origin',
       })
       const data = await safeJson(resp)
@@ -861,8 +863,10 @@ export const AdminPage: React.FC = () => {
       setVisitorsSeries(series)
       // Fetch weekly unique total from dedicated endpoint to keep requests separate
       try {
-        const totalResp = await fetch('/api/admin/visitors-unique-7d', {
-          headers: { 'Accept': 'application/json' },
+        const headersAdmin2: Record<string, string> = { 'Accept': 'application/json' }
+        try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) headersAdmin2['X-Admin-Token'] = String(adminToken) } catch {}
+        const totalResp = await fetch('/admin/visitors-unique-7d', {
+          headers: headersAdmin2,
           credentials: 'same-origin',
         })
         const totalData = await safeJson(totalResp)
@@ -873,7 +877,9 @@ export const AdminPage: React.FC = () => {
       } catch {}
       // Load sources breakdown in parallel
       try {
-        const sb = await fetch(`/api/admin/sources-breakdown?days=${visitorsWindowDays}`, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+        const headersAdmin3: Record<string, string> = { 'Accept': 'application/json' }
+        try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) headersAdmin3['X-Admin-Token'] = String(adminToken) } catch {}
+        const sb = await fetch(`/admin/sources-breakdown?days=${visitorsWindowDays}`, { headers: headersAdmin3, credentials: 'same-origin' })
         const sbd = await safeJson(sb)
         if (sb.ok) {
           const tc = Array.isArray(sbd?.topCountries)

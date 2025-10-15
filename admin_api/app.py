@@ -67,6 +67,8 @@ def _load_repo_env():
                     return
         prefer_env('DATABASE_URL', ['DB_URL', 'PG_URL', 'POSTGRES_URL', 'POSTGRES_PRISMA_URL', 'SUPABASE_DB_URL'])
         prefer_env('SUPABASE_URL', ['VITE_SUPABASE_URL', 'REACT_APP_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_URL'])
+        # Ensure the Admin API can call Supabase REST RPCs
+        prefer_env('SUPABASE_ANON_KEY', ['VITE_SUPABASE_ANON_KEY', 'REACT_APP_SUPABASE_ANON_KEY', 'NEXT_PUBLIC_SUPABASE_ANON_KEY'])
         prefer_env('SUPABASE_DB_PASSWORD', ['PGPASSWORD', 'POSTGRES_PASSWORD'])
         prefer_env('ADMIN_STATIC_TOKEN', ['VITE_ADMIN_STATIC_TOKEN'])
     except Exception:
@@ -474,6 +476,183 @@ def sync_schema():
             pass
         return jsonify({"ok": False, "error": str(e) or "Failed to run psql"}), 500
 
+
+# ===== Visitors analytics endpoints (via Supabase web_visits) =====
+
+def _get_supabase_env() -> tuple[str, str]:
+    url = os.environ.get("SUPABASE_URL", "").strip()
+    key = os.environ.get("SUPABASE_ANON_KEY", "").strip()
+    return url, key
+
+
+def _supabase_headers(include_auth: bool = True) -> dict:
+    headers: dict[str, str] = {"Accept": "application/json"}
+    url, key = _get_supabase_env()
+    if key:
+        headers["apikey"] = key
+    # Security-definer RPCs do not require a bearer; forward if caller provided
+    if include_auth:
+        token = request.headers.get("Authorization", "")
+        if token:
+            headers["Authorization"] = token
+    return headers
+
+
+@app.get("/admin/visitors-stats")
+def admin_visitors_stats():
+    _verify_request()
+    try:
+        import requests  # type: ignore
+    except Exception:
+        return jsonify({"ok": False, "error": "requests module not available"}), 500
+
+    supa_url, _ = _get_supabase_env()
+    if not supa_url:
+        return jsonify({"ok": False, "error": "Supabase not configured"}), 500
+
+    # Only two supported windows for UI simplicity
+    try:
+        days_param = int(request.args.get("days", 7))
+    except Exception:
+        days_param = 7
+    days = 30 if days_param == 30 else 7
+
+    headers = {**_supabase_headers(), "Content-Type": "application/json"}
+
+    try:
+        r10 = requests.post(f"{supa_url}/rest/v1/rpc/count_unique_ips_last_minutes", json={"_minutes": 10}, headers=headers, timeout=4)
+        r30 = requests.post(f"{supa_url}/rest/v1/rpc/count_unique_ips_last_minutes", json={"_minutes": 30}, headers=headers, timeout=4)
+        r60u = requests.post(f"{supa_url}/rest/v1/rpc/count_unique_ips_last_minutes", json={"_minutes": 60}, headers=headers, timeout=4)
+        r60v = requests.post(f"{supa_url}/rest/v1/rpc/count_visits_last_minutes", json={"_minutes": 60}, headers=headers, timeout=4)
+        rNd = requests.post(f"{supa_url}/rest/v1/rpc/count_unique_ips_last_days", json={"_days": days}, headers=headers, timeout=6)
+        rSeries = requests.post(f"{supa_url}/rest/v1/rpc/get_visitors_series_days", json={"_days": days}, headers=headers, timeout=8)
+
+        def _safe_json(resp, fallback):
+            try:
+                return resp.json()
+            except Exception:
+                return fallback
+
+        c10 = int(_safe_json(r10, 0) or 0) if r10.ok else 0
+        c30 = int(_safe_json(r30, 0) or 0) if r30.ok else 0
+        c60u = int(_safe_json(r60u, 0) or 0) if r60u.ok else 0
+        c60v = int(_safe_json(r60v, 0) or 0) if r60v.ok else 0
+        uNd = int(_safe_json(rNd, 0) or 0) if rNd.ok else 0
+        sNv = _safe_json(rSeries, []) if rSeries.ok else []
+        series7d = [
+            {"date": str(row.get("date", "")), "uniqueVisitors": int(row.get("unique_visitors", 0) or 0)}
+            for row in (sNv if isinstance(sNv, list) else [])
+        ]
+
+        return jsonify({
+            "ok": True,
+            "currentUniqueVisitors10m": c10,
+            "uniqueIpsLast30m": c30,
+            "uniqueIpsLast60m": c60u,
+            "visitsLast60m": c60v,
+            "uniqueIps7d": uNd,
+            "series7d": series7d,
+            "via": "supabase",
+            "days": days,
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e) or "Failed to load visitors stats"}), 500
+
+
+@app.get("/admin/visitors-unique-7d")
+def admin_visitors_unique_7d():
+    _verify_request()
+    try:
+        import requests  # type: ignore
+    except Exception:
+        return jsonify({"ok": False, "error": "requests module not available"}), 500
+    supa_url, _ = _get_supabase_env()
+    if not supa_url:
+        return jsonify({"ok": False, "error": "Supabase not configured"}), 500
+    headers = {**_supabase_headers(), "Content-Type": "application/json"}
+    try:
+        r = requests.post(f"{supa_url}/rest/v1/rpc/count_unique_ips_last_days", json={"_days": 7}, headers=headers, timeout=6)
+        if r.ok:
+            try:
+                val = int(r.json() or 0)
+            except Exception:
+                val = 0
+            return jsonify({"ok": True, "uniqueIps7d": val, "via": "supabase"})
+        return jsonify({"ok": False, "error": "RPC failed"}), 500
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e) or "Failed to load unique visitors"}), 500
+
+
+@app.get("/admin/sources-breakdown")
+def admin_sources_breakdown():
+    _verify_request()
+    try:
+        import requests  # type: ignore
+    except Exception:
+        return jsonify({"ok": False, "error": "requests module not available"}), 500
+    supa_url, _ = _get_supabase_env()
+    if not supa_url:
+        return jsonify({"ok": False, "error": "Supabase not configured"}), 500
+    try:
+        days_param = int(request.args.get("days", 30))
+    except Exception:
+        days_param = 30
+    days = 7 if days_param == 7 else 30
+    headers = _supabase_headers()
+    try:
+        cr = requests.post(
+            f"{supa_url}/rest/v1/rpc/get_top_countries",
+            json={"_days": days, "_limit": 10000},
+            headers={**headers, "Content-Type": "application/json"},
+            timeout=10,
+        )
+        rr = requests.post(
+            f"{supa_url}/rest/v1/rpc/get_top_referrers",
+            json={"_days": days, "_limit": 10},
+            headers={**headers, "Content-Type": "application/json"},
+            timeout=8,
+        )
+        countries_raw = cr.json() if cr.ok else []
+        referrers_raw = rr.json() if rr.ok else []
+
+        all_countries = [
+            {"country": str(r.get("country") or ""), "visits": int(r.get("visits") or 0)}
+            for r in (countries_raw if isinstance(countries_raw, list) else [])
+        ]
+        all_countries = [c for c in all_countries if c["country"]]
+        all_countries.sort(key=lambda x: x.get("visits", 0), reverse=True)
+        top_countries = all_countries[:5]
+        other_list = all_countries[5:]
+        other_countries = {
+            "count": len(other_list),
+            "visits": sum(int(c.get("visits", 0) or 0) for c in other_list),
+            "codes": [c.get("country") for c in other_list if c.get("country")],
+            "items": other_list,
+        }
+
+        all_referrers = [
+            {"source": str(r.get("source") or "direct"), "visits": int(r.get("visits") or 0)}
+            for r in (referrers_raw if isinstance(referrers_raw, list) else [])
+        ]
+        all_referrers.sort(key=lambda x: x.get("visits", 0), reverse=True)
+        top_referrers = all_referrers[:5]
+        other_ref_list = all_referrers[5:]
+        other_referrers = {
+            "count": len(other_ref_list),
+            "visits": sum(int(r.get("visits", 0) or 0) for r in other_ref_list),
+        }
+
+        return jsonify({
+            "ok": True,
+            "topCountries": top_countries,
+            "otherCountries": other_countries,
+            "topReferrers": top_referrers,
+            "otherReferrers": other_referrers,
+            "via": "supabase",
+            "days": days,
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e) or "Failed to load sources breakdown"}), 500
 
 if __name__ == "__main__":
     # Dev-only server. In production we run via gunicorn.
