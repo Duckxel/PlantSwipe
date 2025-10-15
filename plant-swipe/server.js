@@ -520,7 +520,7 @@ app.get('/api/admin/admin-logs', async (req, res) => {
     const rows = await sql`
       select occurred_at, admin_id, admin_name, action, target, detail
       from public.admin_activity_logs
-      where occurred_at >= now() - interval '${days} days'
+      where occurred_at >= (now() - make_interval(days => ${days}))
       order by occurred_at desc
       limit 2000
     `
@@ -577,7 +577,11 @@ app.post('/api/admin/log-action', async (req, res) => {
     let ok = false
     if (sql) {
       try {
-        await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, ${action}, ${target || null}, ${sql.json(detail)})`
+        // Cast to expected types to avoid parameter type ambiguity
+        await sql`
+          insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail)
+          values (${adminId || null}::uuid, ${adminName || null}::text, ${action}::text, ${target || null}::text, ${sql.json(detail)})
+        `
         ok = true
       } catch {}
     }
