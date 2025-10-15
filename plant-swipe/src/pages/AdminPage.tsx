@@ -1476,6 +1476,9 @@ export const AdminPage: React.FC = () => {
                 )}
               </div>
 
+              {/* Divider between Broadcast and the action controls/buttons */}
+              <div className="my-4 border-t" />
+
               {/* Branch selection */}
               <div className="mt-4 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2 min-w-0">
@@ -1537,6 +1540,72 @@ export const AdminPage: React.FC = () => {
                   <Database className="h-4 w-4" />
                   <span>{syncing ? 'Syncing Schema…' : 'Sync DB Schema'}</span>
                 </Button>
+              </div>
+
+              {/* Divider before Admin Console */}
+              <div className="my-4 border-t" />
+
+              {/* Admin Console (moved inside Actions card) */}
+              <div>
+                <button
+                  type="button"
+                  className="flex items-center gap-2 text-sm font-medium"
+                  onClick={() => setConsoleOpen(o => !o)}
+                  aria-expanded={consoleOpen}
+                  aria-controls="admin-console"
+                >
+                  <ChevronDown className={`h-4 w-4 transition-transform ${consoleOpen ? 'rotate-180' : ''}`} />
+                  Admin Console
+                  {consoleLines.length > 0 && (
+                    <span className="text-xs opacity-60">({consoleLines.length} lines)</span>
+                  )}
+                </button>
+                {consoleOpen && (
+                  <div className="mt-2" id="admin-console">
+                    <div
+                      ref={consoleRef}
+                      className="h-48 overflow-auto rounded-xl border bg-black text-white text-xs p-3 font-mono whitespace-pre-wrap"
+                      aria-live="polite"
+                    >
+                      {consoleLines.length === 0 ? 'No messages yet.' : consoleLines.join('\n')}
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="rounded-xl"
+                        onClick={() => setConsoleOpen(false)}
+                        title="Hide console"
+                      >Hide</Button>
+                      <Button
+                        size="sm"
+                        className="rounded-xl"
+                        onClick={() => { setConsoleLines([]); setConsoleOpen(true) }}
+                        title="Clear console"
+                      >Clear</Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="rounded-xl"
+                        onClick={async () => {
+                          const ok = await copyTextToClipboard(getAllLogsText())
+                          if (!ok) alert('Copy failed. You can still select and copy manually.')
+                        }}
+                        title="Copy all console lines to clipboard"
+                      >Copy all</Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="rounded-xl"
+                        onClick={async () => {
+                          const ok = await copyTextToClipboard(getErrorLinesText())
+                          if (!ok) alert('Copy failed. You can still select and copy manually.')
+                        }}
+                        title="Copy only error-like lines to clipboard"
+                      >Copy errors</Button>
+                    </div>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
