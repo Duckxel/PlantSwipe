@@ -103,6 +103,31 @@ export const GardenDashboardPage: React.FC = () => {
     setLoading(true)
     setError(null)
     try {
+      // Fast-path: hydrate via batched API, then continue with detailed computations
+      try {
+        const session = (await supabase.auth.getSession()).data.session
+        const token = session?.access_token
+        const headers: Record<string, string> = { 'Accept': 'application/json' }
+        if (token) headers['Authorization'] = `Bearer ${token}`
+        const resp = await fetch(`/api/garden/${id}/overview`, { headers, credentials: 'same-origin' })
+        if (resp.ok) {
+          const data = await resp.json().catch(() => ({}))
+          if (data?.ok) {
+            if (data.garden) setGarden({
+              id: String(data.garden.id),
+              name: String(data.garden.name),
+              coverImageUrl: data.garden.coverImageUrl || null,
+              createdBy: String(data.garden.createdBy || ''),
+              createdAt: String(data.garden.createdAt || ''),
+              streak: Number(data.garden.streak || 0),
+            } as any)
+            if (Array.isArray(data.plants)) setPlants(data.plants)
+            if (Array.isArray(data.members)) setMembers(data.members.map((m: any) => ({ userId: String(m.userId || m.user_id), displayName: m.displayName ?? m.display_name ?? null, email: m.email ?? null, role: m.role, joinedAt: m.joinedAt ?? m.joined_at ?? null, accentKey: m.accentKey ?? null })))
+            if (data.serverNow) setServerToday(String(data.serverNow).slice(0,10))
+          }
+        }
+      } catch {}
+
       const g0 = await getGarden(id)
       setGarden(g0)
       // Track garden creation day (YYYY-MM-DD) to avoid validating pre-creation days
@@ -284,6 +309,32 @@ export const GardenDashboardPage: React.FC = () => {
   }, [id])
 
   React.useEffect(() => { load() }, [load])
+
+  // Live updates via SSE (no reloads)
+  React.useEffect(() => {
+    let es: EventSource | null = null
+    let reloadTimer: any = null
+    ;(async () => {
+      if (!id) return
+      try {
+        const session = (await supabase.auth.getSession()).data.session
+        const token = session?.access_token
+        const url = token ? `/api/garden/${id}/stream?token=${encodeURIComponent(token)}` : `/api/garden/${id}/stream`
+        es = new EventSource(url)
+        const scheduleReload = () => {
+          setActivityRev((r) => r + 1)
+          if (reloadTimer) return
+          reloadTimer = setTimeout(() => { reloadTimer = null; load() }, 400)
+        }
+        es.addEventListener('activity', scheduleReload as any)
+        es.addEventListener('ready', () => {})
+        es.onerror = () => {
+          // allow browser to retry automatically
+        }
+      } catch {}
+    })()
+    return () => { try { es?.close() } catch {}; if (reloadTimer) { try { clearTimeout(reloadTimer) } catch {} } }
+  }, [id, load])
 
   const viewerIsOwner = React.useMemo(() => {
     // Admins can manage any garden
