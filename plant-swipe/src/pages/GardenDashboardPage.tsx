@@ -39,6 +39,7 @@ export const GardenDashboardPage: React.FC = () => {
   const [plants, setPlants] = React.useState<Array<any>>([])
   const [members, setMembers] = React.useState<Array<{ userId: string; displayName?: string | null; email?: string | null; role: 'owner' | 'member'; joinedAt?: string; accentKey?: string | null }>>([])
   const [loading, setLoading] = React.useState(true)
+  const [heavyLoading, setHeavyLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [serverToday, setServerToday] = React.useState<string | null>(null)
   const [dueToday, setDueToday] = React.useState<Set<string> | null>(null)
@@ -73,6 +74,7 @@ export const GardenDashboardPage: React.FC = () => {
   const [dragIdx, setDragIdx] = React.useState<number | null>(null)
 
   const [activityRev, setActivityRev] = React.useState(0)
+  const streakRefreshedRef = React.useRef(false)
 
   const [infoPlant, setInfoPlant] = React.useState<Plant | null>(null)
   // Favorites (liked plants)
@@ -85,6 +87,10 @@ export const GardenDashboardPage: React.FC = () => {
   }, [profile?.liked_plant_ids])
 
   const [inviteOpen, setInviteOpen] = React.useState(false)
+  // Track if any modal is open to pause reloads
+  const anyModalOpen = addOpen || addDetailsOpen || scheduleOpen || taskOpen || inviteOpen
+  const lastReloadRef = React.useRef<number>(0)
+  const pendingReloadRef = React.useRef<boolean>(false)
   const [inviteEmail, setInviteEmail] = React.useState('')
   const [inviteAny, setInviteAny] = React.useState('')
   const [inviteError, setInviteError] = React.useState<string | null>(null)
@@ -104,6 +110,9 @@ export const GardenDashboardPage: React.FC = () => {
     setError(null)
     try {
       // Fast-path: hydrate via batched API, then continue with detailed computations
+      let hydratedPlants: any[] | null = null
+      let gpsLocal: any[] | null = null
+      let hydrated = false
       try {
         const session = (await supabase.auth.getSession()).data.session
         const token = session?.access_token
@@ -121,37 +130,55 @@ export const GardenDashboardPage: React.FC = () => {
               createdAt: String(data.garden.createdAt || ''),
               streak: Number(data.garden.streak || 0),
             } as any)
-            if (Array.isArray(data.plants)) setPlants(data.plants)
+            if (Array.isArray(data.plants)) { setPlants(data.plants); hydratedPlants = data.plants }
             if (Array.isArray(data.members)) setMembers(data.members.map((m: any) => ({ userId: String(m.userId || m.user_id), displayName: m.displayName ?? m.display_name ?? null, email: m.email ?? null, role: m.role, joinedAt: m.joinedAt ?? m.joined_at ?? null, accentKey: m.accentKey ?? null })))
             if (data.serverNow) setServerToday(String(data.serverNow).slice(0,10))
+            hydrated = true
           }
         }
       } catch {}
 
-      const g0 = await getGarden(id)
-      setGarden(g0)
-      // Track garden creation day (YYYY-MM-DD) to avoid validating pre-creation days
-      let gardenCreatedDayIso: string | null = g0?.createdAt ? new Date(g0.createdAt).toISOString().slice(0,10) : null
-      const gps = await getGardenPlants(id)
-      setPlants(gps)
-      const ms = await getGardenMembers(id)
-      setMembers(ms.map(m => ({ userId: m.userId, displayName: m.displayName ?? null, email: (m as any).email ?? null, role: m.role, joinedAt: (m as any).joinedAt, accentKey: (m as any).accentKey ?? null })))
-      const nowIso = await fetchServerNowISO()
-      const today = nowIso.slice(0,10)
-      setServerToday(today)
-      // Ensure base streak is refreshed from server on reload
+      let gardenCreatedDayIso: string | null = null
+      let todayLocal: string | null = null
+      if (!hydrated) {
+        const [g0, gpsRaw, ms, nowIso] = await Promise.all([
+          getGarden(id),
+          getGardenPlants(id),
+          getGardenMembers(id),
+          fetchServerNowISO(),
+        ])
+        setGarden(g0)
+        // Track garden creation day (YYYY-MM-DD) to avoid validating pre-creation days
+        gardenCreatedDayIso = g0?.createdAt ? new Date(g0.createdAt).toISOString().slice(0,10) : null
+        gpsLocal = gpsRaw
+        setPlants(gpsRaw)
+        setMembers(ms.map(m => ({ userId: m.userId, displayName: m.displayName ?? null, email: (m as any).email ?? null, role: m.role, joinedAt: (m as any).joinedAt, accentKey: (m as any).accentKey ?? null })))
+        todayLocal = nowIso.slice(0,10)
+        setServerToday(todayLocal)
+      }
+      // Resolve 'today' for subsequent computations regardless of hydration path
+      let today = (serverToday || todayLocal || '')
+      if (!today) {
+        const nowIso2 = await fetchServerNowISO()
+        today = nowIso2.slice(0,10)
+        setServerToday(today)
+      }
+      // Ensure base streak is refreshed from server, at most once per session
       try {
-        await refreshGardenStreak(id, new Date(new Date(today).getTime() - 24*3600*1000).toISOString().slice(0,10))
-        const g1 = await getGarden(id)
-        setGarden(g1)
-        // Prefer refreshed garden's createdAt if available
-        gardenCreatedDayIso = g1?.createdAt ? new Date(g1.createdAt).toISOString().slice(0,10) : gardenCreatedDayIso
+        if (!streakRefreshedRef.current) {
+          streakRefreshedRef.current = true
+          await refreshGardenStreak(id, new Date(new Date(today).getTime() - 24*3600*1000).toISOString().slice(0,10))
+          const g1 = await getGarden(id)
+          setGarden(g1)
+          // Prefer refreshed garden's createdAt if available
+          gardenCreatedDayIso = g1?.createdAt ? new Date(g1.createdAt).toISOString().slice(0,10) : gardenCreatedDayIso
+        }
       } catch {}
       // Do not recompute today's task here to avoid overriding recent actions; rely on action-specific updates
       const start = new Date(today)
       start.setDate(start.getDate() - 29)
       const startIso = start.toISOString().slice(0,10)
-      const taskRows = await getGardenTasks(id, startIso, today)
+      // Defer heavy computations; garden_tasks fetched later for stats
       // Compute current week (Mon-Sun) in UTC based on server 'today'
       const parseUTC = (iso: string) => new Date(`${iso}T00:00:00Z`)
       const anchorUTC = parseUTC(today)
@@ -168,27 +195,164 @@ export const GardenDashboardPage: React.FC = () => {
       setWeekDays(weekDaysIso)
 
       // Derive week counts exclusively from Tasks v2 occurrences (no legacy schedule)
+      // Heavy task/occurrence computation deferred to when user opens Routine/Plants
+      const computeHeavy = false
+      if (computeHeavy) {
+        const weekStartIso = `${weekDaysIso[0]}T00:00:00.000Z`
+        const weekEndIso = `${weekDaysIso[6]}T23:59:59.999Z`
+        await syncTaskOccurrencesForGarden(id, weekStartIso, weekEndIso)
+        const allTasks = await listGardenTasks(id)
+        const occs = await listOccurrencesForTasks(allTasks.map(t => t.id), `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`)
+        const taskTypeById: Record<string, 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'> = {}
+        const taskEmojiById: Record<string, string | null> = {}
+        for (const t of allTasks) { taskTypeById[t.id] = t.type as any; taskEmojiById[t.id] = (t as any).emoji || null }
+        const occsWithType = occs.map(o => ({ ...o, taskType: taskTypeById[o.taskId] || 'custom', taskEmoji: taskEmojiById[o.taskId] || null }))
+        setTodayTaskOccurrences(occsWithType as any)
+        const taskCountMap: Record<string, number> = {}
+        for (const t of allTasks) taskCountMap[t.gardenPlantId] = (taskCountMap[t.gardenPlantId] || 0) + 1
+        setTaskCountsByPlant(taskCountMap)
+        const dueMap: Record<string, number> = {}
+        for (const o of occs) {
+          const remaining = Math.max(0, (o.requiredCount || 1) - (o.completedCount || 0))
+          if (remaining > 0) dueMap[o.gardenPlantId] = (dueMap[o.gardenPlantId] || 0) + remaining
+        }
+        setTaskOccDueToday(dueMap)
 
-      // ===== Generic tasks (v2) =====
-      // Ensure occurrences exist in our 30-day window, then load today's per-plant due counts
-      const endWindow = new Date(today)
-      endWindow.setDate(endWindow.getDate() + 30)
-      await syncTaskOccurrencesForGarden(id, startIso, endWindow.toISOString())
+        // Weekly details
+        if (weekDaysIso.length === 7) {
+          const weekOccs = await listOccurrencesForTasks(allTasks.map(t => t.id), weekStartIso, weekEndIso)
+          const typeCounts: { water: number[]; fertilize: number[]; harvest: number[]; cut: number[]; custom: number[] } = {
+            water: Array(7).fill(0), fertilize: Array(7).fill(0), harvest: Array(7).fill(0), cut: Array(7).fill(0), custom: Array(7).fill(0),
+          }
+          const tById: Record<string, 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'> = {}
+          for (const t of allTasks) tById[t.id] = t.type as any
+          for (const o of weekOccs) {
+            const dayIso = new Date(o.dueAt).toISOString().slice(0,10)
+            const idx = weekDaysIso.indexOf(dayIso)
+            if (idx >= 0) {
+              const typ = tById[o.taskId] || 'custom'
+              const inc = Math.max(1, Number(o.requiredCount || 1))
+              ;(typeCounts as any)[typ][idx] += inc
+            }
+          }
+          const totals = weekDaysIso.map((_, i) => typeCounts.water[i] + typeCounts.fertilize[i] + typeCounts.harvest[i] + typeCounts.cut[i] + typeCounts.custom[i])
+          setWeekCountsByType(typeCounts)
+          setWeekCounts(totals)
+
+          const dueMapSets: Record<string, Set<number>> = {}
+          for (const o of weekOccs) {
+            const dayIso = new Date(o.dueAt).toISOString().slice(0,10)
+            const remaining = Math.max(0, Number(o.requiredCount || 1) - Number(o.completedCount || 0))
+            if (remaining <= 0) continue
+            if (dayIso <= today) continue
+            const idx = weekDaysIso.indexOf(dayIso)
+            if (idx >= 0) {
+              const pid = String(o.gardenPlantId)
+              if (!dueMapSets[pid]) dueMapSets[pid] = new Set<number>()
+              dueMapSets[pid].add(idx)
+            }
+          }
+          const dueMapNext: Record<string, number[]> = {}
+          for (const pid of Object.keys(dueMapSets)) dueMapNext[pid] = Array.from(dueMapSets[pid]).sort((a, b) => a - b)
+          setDueThisWeekByPlant(dueMapNext)
+        }
+
+        const dueTodaySet = new Set<string>()
+        for (const o of occs) {
+          const remaining = Math.max(0, (o.requiredCount || 1) - (o.completedCount || 0))
+          if (remaining > 0) dueTodaySet.add(o.gardenPlantId)
+        }
+        setDueToday(dueTodaySet)
+      } else {
+        setTodayTaskOccurrences([])
+        setTaskCountsByPlant({})
+        setTaskOccDueToday({})
+        setWeekCountsByType({ water: Array(7).fill(0), fertilize: Array(7).fill(0), harvest: Array(7).fill(0), cut: Array(7).fill(0), custom: Array(7).fill(0) })
+        setWeekCounts(Array(7).fill(0))
+        setDueThisWeekByPlant({})
+        setDueToday(new Set<string>())
+      }
+
+
+      // Load inventory counts for display
+      // Compute per-instance counts and totals from garden_plants instances, not species-level inventory
+      const perInstanceCounts: Record<string, number> = {}
+      let total = 0
+      let species = 0
+      const seenSpecies = new Set<string>()
+      const plantsLocal = (hydratedPlants ?? gpsLocal ?? plants) as any[]
+      for (const gp of plantsLocal) {
+        const c = Number(gp.plantsOnHand || 0)
+        perInstanceCounts[String(gp.plantId)] = (perInstanceCounts[String(gp.plantId)] || 0) + c
+        total += c
+        if (c > 0 && !seenSpecies.has(String(gp.plantId))) {
+          seenSpecies.add(String(gp.plantId))
+          species += 1
+        }
+      }
+      setInstanceCounts(perInstanceCounts)
+      setTotalOnHand(total)
+      setSpeciesOnHand(species)
+      // Build last-30-days success using garden_tasks (fast, no occurrences)
+      try {
+        const statsStart = new Date(today)
+        statsStart.setDate(statsStart.getDate() - 29)
+        const statsStartIso = statsStart.toISOString().slice(0,10)
+        const rows = await getGardenTasks(id, statsStartIso, today)
+        const successByDay: Record<string, boolean> = {}
+        for (const r of rows) successByDay[r.day] = Boolean(r.success)
+        const days: Array<{ date: string; due: number; completed: number; success: boolean }> = []
+        const anchor30 = new Date(today)
+        for (let i = 29; i >= 0; i--) {
+          const d = new Date(anchor30)
+          d.setDate(d.getDate() - i)
+          const ds = d.toISOString().slice(0,10)
+          const beforeCreation = gardenCreatedDayIso ? (ds < gardenCreatedDayIso) : false
+          const success = beforeCreation ? false : Boolean(successByDay[ds])
+          days.push({ date: ds, due: 0, completed: 0, success })
+        }
+        setDailyStats(days)
+      } catch {}
+    } catch (e: any) {
+      setError(e?.message || 'Failed to load garden')
+    } finally {
+      setLoading(false)
+    }
+  }, [id])
+
+  React.useEffect(() => { load() }, [load])
+
+  // Lazy heavy loader for tabs that need it
+  const loadHeavyForCurrentTab = React.useCallback(async () => {
+    if (!id || !serverToday) return
+    setHeavyLoading(true)
+    try {
+      const parseUTC = (iso: string) => new Date(`${iso}T00:00:00Z`)
+      const anchorUTC = parseUTC(serverToday)
+      const dayUTC = anchorUTC.getUTCDay()
+      const diffToMonday = (dayUTC + 6) % 7
+      const mondayUTC = new Date(anchorUTC)
+      mondayUTC.setUTCDate(anchorUTC.getUTCDate() - diffToMonday)
+      const weekDaysIso: string[] = []
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(mondayUTC)
+        d.setUTCDate(mondayUTC.getUTCDate() + i)
+        weekDaysIso.push(d.toISOString().slice(0,10))
+      }
+      setWeekDays(weekDaysIso)
+      const today = serverToday
       const allTasks = await listGardenTasks(id)
+      const weekStartIso = `${weekDaysIso[0]}T00:00:00.000Z`
+      const weekEndIso = `${weekDaysIso[6]}T23:59:59.999Z`
+      await syncTaskOccurrencesForGarden(id, weekStartIso, weekEndIso)
       const occs = await listOccurrencesForTasks(allTasks.map(t => t.id), `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`)
-      // Annotate today's occurrences with task type and emoji for UI rendering
       const taskTypeById: Record<string, 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'> = {}
       const taskEmojiById: Record<string, string | null> = {}
-      for (const t of allTasks) {
-        taskTypeById[t.id] = t.type as any
-        taskEmojiById[t.id] = (t as any).emoji || null
-      }
+      for (const t of allTasks) { taskTypeById[t.id] = t.type as any; taskEmojiById[t.id] = (t as any).emoji || null }
       const occsWithType = occs.map(o => ({ ...o, taskType: taskTypeById[o.taskId] || 'custom', taskEmoji: taskEmojiById[o.taskId] || null }))
       setTodayTaskOccurrences(occsWithType as any)
       const taskCountMap: Record<string, number> = {}
-      for (const t of allTasks) {
-        taskCountMap[t.gardenPlantId] = (taskCountMap[t.gardenPlantId] || 0) + 1
-      }
+      for (const t of allTasks) taskCountMap[t.gardenPlantId] = (taskCountMap[t.gardenPlantId] || 0) + 1
       setTaskCountsByPlant(taskCountMap)
       const dueMap: Record<string, number> = {}
       for (const o of occs) {
@@ -196,18 +360,16 @@ export const GardenDashboardPage: React.FC = () => {
         if (remaining > 0) dueMap[o.gardenPlantId] = (dueMap[o.gardenPlantId] || 0) + remaining
       }
       setTaskOccDueToday(dueMap)
-
-      // Build current-week counts from generic task occurrences (includes water, fertilize, harvest, custom)
-      if (weekDaysIso.length === 7) {
-        const weekStart = `${weekDaysIso[0]}T00:00:00.000Z`
-        const weekEnd = `${weekDaysIso[6]}T23:59:59.999Z`
-        const weekOccs = await listOccurrencesForTasks(allTasks.map(t => t.id), weekStart, weekEnd)
+      // Update today's counts in dailyStats
+      setDailyStats(prev => {
+        const reqDone = occs.reduce((acc, o) => acc + Math.max(1, Number(o.requiredCount || 1)), 0)
+        const compDone = occs.reduce((acc, o) => acc + Math.min(Math.max(1, Number(o.requiredCount || 1)), Number(o.completedCount || 0)), 0)
+        return prev.map(d => d.date === today ? { ...d, due: reqDone, completed: compDone } : d)
+      })
+      if (tab === 'routine') {
+        const weekOccs = await listOccurrencesForTasks(allTasks.map(t => t.id), weekStartIso, weekEndIso)
         const typeCounts: { water: number[]; fertilize: number[]; harvest: number[]; cut: number[]; custom: number[] } = {
-          water: Array(7).fill(0),
-          fertilize: Array(7).fill(0),
-          harvest: Array(7).fill(0),
-          cut: Array(7).fill(0),
-          custom: Array(7).fill(0),
+          water: Array(7).fill(0), fertilize: Array(7).fill(0), harvest: Array(7).fill(0), cut: Array(7).fill(0), custom: Array(7).fill(0),
         }
         const tById: Record<string, 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'> = {}
         for (const t of allTasks) tById[t.id] = t.type as any
@@ -223,12 +385,9 @@ export const GardenDashboardPage: React.FC = () => {
         const totals = weekDaysIso.map((_, i) => typeCounts.water[i] + typeCounts.fertilize[i] + typeCounts.harvest[i] + typeCounts.cut[i] + typeCounts.custom[i])
         setWeekCountsByType(typeCounts)
         setWeekCounts(totals)
-
-        // Build per-plant upcoming days (Mon=0..Sun=6) for "Due this week"
         const dueMapSets: Record<string, Set<number>> = {}
         for (const o of weekOccs) {
           const dayIso = new Date(o.dueAt).toISOString().slice(0,10)
-          // Only consider remaining work and days from today forward (upcoming)
           const remaining = Math.max(0, Number(o.requiredCount || 1) - Number(o.completedCount || 0))
           if (remaining <= 0) continue
           if (dayIso <= today) continue
@@ -239,76 +398,28 @@ export const GardenDashboardPage: React.FC = () => {
             dueMapSets[pid].add(idx)
           }
         }
-        const dueMap: Record<string, number[]> = {}
-        for (const pid of Object.keys(dueMapSets)) {
-          dueMap[pid] = Array.from(dueMapSets[pid]).sort((a, b) => a - b)
-        }
-        setDueThisWeekByPlant(dueMap)
+        const dueMapNext: Record<string, number[]> = {}
+        for (const pid of Object.keys(dueMapSets)) dueMapNext[pid] = Array.from(dueMapSets[pid]).sort((a, b) => a - b)
+        setDueThisWeekByPlant(dueMapNext)
       }
-
-      // Determine due-today plants from task occurrences
       const dueTodaySet = new Set<string>()
-      for (const o of occs) {
+      for (const o of (occs || [])) {
         const remaining = Math.max(0, (o.requiredCount || 1) - (o.completedCount || 0))
         if (remaining > 0) dueTodaySet.add(o.gardenPlantId)
       }
       setDueToday(dueTodaySet)
-
-
-      // Load inventory counts for display
-      // Compute per-instance counts and totals from garden_plants instances, not species-level inventory
-      const perInstanceCounts: Record<string, number> = {}
-      let total = 0
-      let species = 0
-      const seenSpecies = new Set<string>()
-      for (const gp of gps as any[]) {
-        const c = Number(gp.plantsOnHand || 0)
-        perInstanceCounts[String(gp.plantId)] = (perInstanceCounts[String(gp.plantId)] || 0) + c
-        total += c
-        if (c > 0 && !seenSpecies.has(String(gp.plantId))) {
-          seenSpecies.add(String(gp.plantId))
-          species += 1
-        }
-      }
-      setInstanceCounts(perInstanceCounts)
-      setTotalOnHand(total)
-      setSpeciesOnHand(species)
-      // Build last-30-days stats from generic task occurrences
-      const statsStart = new Date(today)
-      statsStart.setDate(statsStart.getDate() - 29)
-      const statsStartIso = statsStart.toISOString().slice(0,10)
-      const statsEnd = new Date(today)
-      const statsOccs = await listOccurrencesForTasks(allTasks.map(t => t.id), `${statsStartIso}T00:00:00.000Z`, `${statsEnd.toISOString().slice(0,10)}T23:59:59.999Z`)
-      const dayAgg: Record<string, { due: number; completed: number }> = {}
-      for (const o of statsOccs) {
-        const day = new Date(o.dueAt).toISOString().slice(0,10)
-        const req = Math.max(1, Number(o.requiredCount || 1))
-        const comp = Math.min(req, Number(o.completedCount || 0))
-        if (!dayAgg[day]) dayAgg[day] = { due: 0, completed: 0 }
-        dayAgg[day].due += req
-        dayAgg[day].completed += comp
-      }
-      const days: Array<{ date: string; due: number; completed: number; success: boolean }> = []
-      const anchor30 = new Date(today)
-      for (let i = 29; i >= 0; i--) {
-        const d = new Date(anchor30)
-        d.setDate(d.getDate() - i)
-        const ds = d.toISOString().slice(0,10)
-        const entry = dayAgg[ds] || { due: 0, completed: 0 }
-        // Do not count days before the garden was created as successful
-        const beforeCreation = gardenCreatedDayIso ? (ds < gardenCreatedDayIso) : false
-        const success = beforeCreation ? false : (entry.due > 0 ? (entry.completed >= entry.due) : true)
-        days.push({ date: ds, due: entry.due, completed: entry.completed, success })
-      }
-      setDailyStats(days)
     } catch (e: any) {
-      setError(e?.message || 'Failed to load garden')
+      setError(e?.message || 'Failed to load tasks')
     } finally {
-      setLoading(false)
+      setHeavyLoading(false)
     }
-  }, [id])
+  }, [id, serverToday, tab])
 
-  React.useEffect(() => { load() }, [load])
+  React.useEffect(() => {
+    if (tab === 'plants' || tab === 'routine') {
+      loadHeavyForCurrentTab()
+    }
+  }, [tab, loadHeavyForCurrentTab])
 
   // Live updates via SSE (no reloads)
   React.useEffect(() => {
@@ -322,6 +433,21 @@ export const GardenDashboardPage: React.FC = () => {
         const url = token ? `/api/garden/${id}/stream?token=${encodeURIComponent(token)}` : `/api/garden/${id}/stream`
         es = new EventSource(url)
         const scheduleReload = () => {
+          // Debounce and pause while modals are open
+          const now = Date.now()
+          const since = now - (lastReloadRef.current || 0)
+          const minInterval = 2500
+          if (anyModalOpen) {
+            pendingReloadRef.current = true
+            return
+          }
+          if (since < minInterval) {
+            if (reloadTimer) return
+            const wait = Math.max(0, minInterval - since)
+            reloadTimer = setTimeout(() => { reloadTimer = null; lastReloadRef.current = Date.now(); setActivityRev((r) => r + 1); load() }, wait)
+            return
+          }
+          lastReloadRef.current = now
           setActivityRev((r) => r + 1)
           if (reloadTimer) return
           reloadTimer = setTimeout(() => { reloadTimer = null; load() }, 400)
@@ -334,7 +460,17 @@ export const GardenDashboardPage: React.FC = () => {
       } catch {}
     })()
     return () => { try { es?.close() } catch {}; if (reloadTimer) { try { clearTimeout(reloadTimer) } catch {} } }
-  }, [id, load])
+  }, [id, load, anyModalOpen])
+
+  // When modals close, run any pending reload once
+  React.useEffect(() => {
+    if (!anyModalOpen && pendingReloadRef.current) {
+      pendingReloadRef.current = false
+      lastReloadRef.current = Date.now()
+      setActivityRev((r) => r + 1)
+      load()
+    }
+  }, [anyModalOpen, load])
 
   const viewerIsOwner = React.useMemo(() => {
     // Admins can manage any garden
@@ -699,6 +835,7 @@ export const GardenDashboardPage: React.FC = () => {
                                 src={gp.plant.image}
                                 alt={gp.nickname || gp.plant?.name || 'Plant'}
                                 decoding="async"
+                                loading="lazy"
                                 className="absolute inset-0 h-full w-full object-cover object-center select-none"
                                 draggable={false}
                               />

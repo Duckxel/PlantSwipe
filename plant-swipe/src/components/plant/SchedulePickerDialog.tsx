@@ -19,12 +19,13 @@ export function SchedulePickerDialog(props: {
   amount: number
   onSave: (selection: ScheduleSelection) => Promise<void>
   initialSelection?: ScheduleSelection
+  onChangePeriod?: (p: Period) => void
   onChangeAmount?: (n: number) => void
   lockToYear?: boolean
   allowedPeriods?: Period[]
   modal?: boolean
 }) {
-  const { open, onOpenChange, period, amount, onSave, initialSelection, onChangeAmount, lockToYear, allowedPeriods, modal = true } = props
+  const { open, onOpenChange, period, amount, onSave, initialSelection, onChangePeriod, onChangeAmount, lockToYear, allowedPeriods, modal = true } = props
 
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -92,6 +93,23 @@ export function SchedulePickerDialog(props: {
     if (period === 'week') setWeeklyDays((cur) => cur.slice(0, next))
     if (period === 'month') setMonthlyDays((cur) => cur.slice(0, next))
     if (period === 'year') setYearlyDays((cur) => cur.slice(0, next))
+  }
+
+  const periodOptions: Period[] = (allowedPeriods && allowedPeriods.length > 0)
+    ? (allowedPeriods as Period[])
+    : (['week', 'month', 'year'] as Period[])
+
+  const handlePeriodChange = (p: Period) => {
+    if (p === period) return
+    // Clear current selections when switching period
+    setWeeklyDays([])
+    setMonthlyDays([])
+    setMonthlyNthWeekdays([])
+    setYearlyDays([])
+    // Clamp amount to the new period's maximum
+    const max = maxForPeriod(p)
+    if (onChangeAmount) onChangeAmount(Math.max(1, Math.min(amount, max)))
+    if (onChangePeriod) onChangePeriod(p)
   }
 
   // Monday-first UI: order [Mon,Tue,Wed,Thu,Fri,Sat,Sun]; underlying values use 0=Sunday mapping
@@ -223,11 +241,24 @@ export function SchedulePickerDialog(props: {
           <div className="text-sm opacity-70">Selected: {countSelected} / {amount}</div>
 
           <div className="grid grid-cols-2 gap-2">
-            <div
-              className="flex h-9 w-full items-center rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm md:text-sm capitalize"
-              aria-readonly
-            >
-              {period}
+            <div className="flex h-9 w-full items-center rounded-md border border-input bg-transparent px-1 py-1 text-base shadow-sm md:text-sm">
+              <div className="flex gap-1 w-full">
+                {(['week','month','year'] as Period[]).map((p) => {
+                  const isAllowed = periodOptions.includes(p)
+                  const isActive = period === p
+                  return (
+                    <button
+                      key={p}
+                      type="button"
+                      disabled={!isAllowed}
+                      onClick={() => isAllowed && handlePeriodChange(p)}
+                      className={`flex-1 rounded-md border text-xs capitalize h-7 px-2 ${isActive ? 'bg-black text-white' : 'bg-white hover:bg-stone-50'} ${!isAllowed ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      {p}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
             <input
               type="number"

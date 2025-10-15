@@ -176,8 +176,10 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
           }
         }}
         initialSelection={patternSelection}
+        onChangePeriod={(p) => setPatternPeriod(p)}
         onChangeAmount={(n) => setPatternAmount(n)}
-        allowedPeriods={[patternPeriod]}
+        // Allow switching across week/month/year as requested
+        allowedPeriods={[ 'week', 'month', 'year' ] as any}
         modal={false}
       />
       <TaskCreateDialog
