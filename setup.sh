@@ -253,6 +253,58 @@ else
   log "[INFO] No DATABASE_URL or SUPABASE_URL found; skipping DB egress check."
 fi
 
+# --- Render a canonical service environment from repo .env files ---
+SERVICE_ENV_DIR="/etc/plant-swipe"
+SERVICE_ENV_FILE="$SERVICE_ENV_DIR/service.env"
+$SUDO mkdir -p "$SERVICE_ENV_DIR"
+
+render_service_env() {
+  local out="$1"
+  local env_primary="$NODE_DIR/.env"
+  local env_server="$NODE_DIR/.env.server"
+  declare -A kv
+  # loader for KEY=VALUE lines (strip quotes)
+  _load_env() {
+    local f="$1"; [[ -f "$f" ]] || return 0
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      [[ "$line" =~ ^[[:space:]]*# ]] && continue
+      [[ "$line" =~ ^[[:space:]]*$ ]] && continue
+      if [[ "$line" =~ ^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+        local key="${BASH_REMATCH[1]}"; local val="${BASH_REMATCH[2]}"
+        val="${val%$'\r'}"
+        if [[ "${val:0:1}" == '"' && "${val: -1}" == '"' ]]; then val="${val:1:${#val}-2}"; fi
+        if [[ "${val:0:1}" == "'" && "${val: -1}" == "'" ]]; then val="${val:1:${#val}-2}"; fi
+        kv[$key]="$val"
+      fi
+    done < "$f"
+  }
+  _load_env "$env_primary"
+  _load_env "$env_server"
+  # alias mapping
+  [[ -z "${kv[DATABASE_URL]:-}" && -n "${kv[DB_URL]:-}" ]] && kv[DATABASE_URL]="${kv[DB_URL]}"
+  [[ -z "${kv[SUPABASE_URL]:-}" && -n "${kv[VITE_SUPABASE_URL]:-}" ]] && kv[SUPABASE_URL]="${kv[VITE_SUPABASE_URL]}"
+  [[ -z "${kv[SUPABASE_ANON_KEY]:-}" && -n "${kv[VITE_SUPABASE_ANON_KEY]:-}" ]] && kv[SUPABASE_ANON_KEY]="${kv[VITE_SUPABASE_ANON_KEY]}"
+  [[ -z "${kv[ADMIN_STATIC_TOKEN]:-}" && -n "${kv[VITE_ADMIN_STATIC_TOKEN]:-}" ]] && kv[ADMIN_STATIC_TOKEN]="${kv[VITE_ADMIN_STATIC_TOKEN]}"
+  # enforce sslmode=require
+  if [[ -n "${kv[DATABASE_URL]:-}" && "${kv[DATABASE_URL]}" != *"sslmode="* ]]; then
+    if [[ "${kv[DATABASE_URL]}" == *"?"* ]]; then kv[DATABASE_URL]="${kv[DATABASE_URL]}&sslmode=require"; else kv[DATABASE_URL]="${kv[DATABASE_URL]}?sslmode=require"; fi
+  fi
+  # TLS trust defaults
+  kv[NODE_ENV]="production"
+  kv[NODE_EXTRA_CA_CERTS]="/etc/ssl/certs/aws-rds-global.pem"
+  kv[PGSSLROOTCERT]="/etc/ssl/certs/aws-rds-global.pem"
+  # write out sorted
+  local tmp; tmp="$(mktemp)"
+  {
+    for k in "${!kv[@]}"; do printf "%s=%s\n" "$k" "${kv[$k]}"; done | sort
+  } > "$tmp"
+  $SUDO install -m 0640 "$tmp" "$out"
+  rm -f "$tmp"
+}
+
+log "Rendering service environment from $NODE_DIR/.env(.server)…"
+render_service_env "$SERVICE_ENV_FILE"
+
 # Install/upgrade Node.js (ensure >= 20; prefer Node 22 LTS)
 need_node_install=false
 if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
@@ -380,16 +432,16 @@ fi
 
 # Install systemd services
 log "Installing systemd units…"
-# Admin API unit from repo (ensure extra CA for TLS)
+# Admin API unit from repo
 ADMIN_SERVICE_FILE="/etc/systemd/system/$SERVICE_ADMIN.service"
 $SUDO install -m 0644 -D "$REPO_DIR/admin_api/admin-api.service" "$ADMIN_SERVICE_FILE"
-# Inject NODE_EXTRA_CA_CERTS into Admin API service if missing
-if ! grep -q "NODE_EXTRA_CA_CERTS" "$ADMIN_SERVICE_FILE" 2>/dev/null; then
-  tmpfile="/tmp/admin-api.service.$$"
-  awk '1; $0 ~ /^WorkingDirectory=/ && !seen { print "Environment=NODE_EXTRA_CA_CERTS=/etc/ssl/certs/aws-rds-global.pem"; seen=1 }' "$ADMIN_SERVICE_FILE" > "$tmpfile"
-  $SUDO install -m 0644 "$tmpfile" "$ADMIN_SERVICE_FILE"
-  rm -f "$tmpfile"
-fi
+# Ensure Admin API also loads service env
+$SUDO mkdir -p "/etc/systemd/system/$SERVICE_ADMIN.service.d"
+$SUDO bash -c "cat > '/etc/systemd/system/$SERVICE_ADMIN.service.d/10-env.conf' <<EOF
+[Service]
+EnvironmentFile=$SERVICE_ENV_FILE
+EOF
+"
 
 # Node API unit (WorkingDirectory points to the repo copy)
 NODE_SERVICE_FILE="/etc/systemd/system/$SERVICE_NODE.service"
@@ -402,8 +454,7 @@ After=network-online.target
 [Service]
 User=www-data
 Group=www-data
-Environment=NODE_ENV=production
-Environment=NODE_EXTRA_CA_CERTS=/etc/ssl/certs/aws-rds-global.pem
+EnvironmentFile=$SERVICE_ENV_FILE
 WorkingDirectory=$NODE_DIR
 ExecStart=/usr/bin/node server.js
 Restart=always
