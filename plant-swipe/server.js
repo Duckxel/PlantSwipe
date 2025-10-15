@@ -388,14 +388,21 @@ try {
     const isLocal = u.hostname === 'localhost' || u.hostname === '127.0.0.1'
     if (!isLocal) {
       const allowInsecure = String(process.env.ALLOW_INSECURE_DB_TLS || 'false').toLowerCase() === 'true'
-      const caPath = process.env.PGSSLROOTCERT || process.env.NODE_EXTRA_CA_CERTS || '/etc/ssl/certs/aws-rds-global.pem'
+      const candidates = [
+        process.env.PGSSLROOTCERT,
+        process.env.NODE_EXTRA_CA_CERTS,
+        '/etc/ssl/certs/aws-rds-global.pem',
+        '/etc/ssl/certs/ca-certificates.crt',
+      ].filter(Boolean)
       let ssl = undefined
-      try {
-        if (caPath && fsSync.existsSync(caPath)) {
-          const ca = fsSync.readFileSync(caPath, 'utf8')
-          ssl = { rejectUnauthorized: true, ca }
-        }
-      } catch {}
+      for (const p of candidates) {
+        try {
+          if (p && fsSync.existsSync(p)) {
+            const ca = fsSync.readFileSync(p, 'utf8')
+            if (ca && ca.length > 0) { ssl = { rejectUnauthorized: true, ca }; break }
+          }
+        } catch {}
+      }
       if (!ssl) {
         ssl = allowInsecure ? { rejectUnauthorized: false } : true
       }
