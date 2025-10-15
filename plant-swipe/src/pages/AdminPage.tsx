@@ -1472,8 +1472,8 @@ export const AdminPage: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="text-xs opacity-60 hidden sm:block">Current:</div>
-                  <Badge variant="outline" className="rounded-full max-w-[240px] truncate" title={currentBranch || undefined}>
-                    {branchesLoading ? '—' : shortenMiddle(currentBranch || 'unknown', 32)}
+                  <Badge variant="outline" className="rounded-full max-w-[360px] truncate" title={currentBranch || undefined}>
+                    {branchesLoading ? '—' : shortenMiddle(currentBranch || 'unknown', 56)}
                   </Badge>
                 </div>
               </div>
@@ -1491,7 +1491,7 @@ export const AdminPage: React.FC = () => {
                     <option value="">No branches found</option>
                   ) : (
                     branchOptions.map(b => (
-                      <option key={b} value={b} title={b}>{shortenMiddle(b, 40)}</option>
+                      <option key={b} value={b} title={b}>{shortenMiddle(b, 64)}</option>
                     ))
                   )}
                 </select>
