@@ -7,7 +7,8 @@ import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
 import { EditProfileDialog, type EditProfileValues } from "@/components/profile/EditProfileDialog"
 import { applyAccentByKey, saveAccentKey } from "@/lib/accent"
-import { MapPin, User as UserIcon } from "lucide-react"
+import { MapPin, User as UserIcon, Leaf, Edit2, Trash2, CheckCircle2, PlusCircle, MessageSquare } from "lucide-react"
+import { getAccentOption } from "@/lib/accent"
 
 type PublicProfile = {
   id: string
@@ -32,6 +33,14 @@ type PublicStats = {
 
 type DayAgg = { day: string; completed: number; any_success: boolean }
 
+type RecentItem = {
+  kind: string
+  message: string
+  plant_name?: string | null
+  task_name?: string | null
+  occurred_at: string
+}
+
 export default function PublicProfilePage() {
   const params = useParams()
   const navigate = useNavigate()
@@ -43,6 +52,7 @@ export default function PublicProfilePage() {
   const [pp, setPp] = React.useState<PublicProfile | null>(null)
   const [stats, setStats] = React.useState<PublicStats | null>(null)
   const [monthDays, setMonthDays] = React.useState<DayAgg[]>([])
+  const [recent, setRecent] = React.useState<RecentItem[]>([])
   
 
   const formatLastSeen = React.useCallback((iso: string | null | undefined) => {
@@ -80,7 +90,7 @@ export default function PublicProfilePage() {
           return
         }
         const userId = String(row.id)
-        setPp({
+        const nextPp: PublicProfile = {
           id: userId,
           username: null,
           display_name: row.display_name || null,
@@ -92,7 +102,8 @@ export default function PublicProfilePage() {
           last_seen_at: row.last_seen_at ? String(row.last_seen_at) : null,
           is_online: Boolean(row.is_online || false),
           accent_key: row.accent_key || null,
-        })
+        }
+        setPp(nextPp)
 
         // Stats (plants total, gardens count, current and best streak)
         const { data: s, error: serr } = await supabase.rpc('get_user_profile_public_stats', { _user_id: userId })
@@ -105,6 +116,12 @@ export default function PublicProfilePage() {
             bestStreak: Number(statRow.longest_streak || 0),
           })
         }
+
+        // Recent activity
+        try {
+          const { data: rec } = await supabase.rpc('get_user_recent_activity', { _user_id: userId, _limit: 20 })
+          if (Array.isArray(rec)) setRecent(rec as any)
+        } catch {}
 
         // Heatmap: last 28 days (4 rows × 7 columns)
         const today = new Date()
@@ -219,6 +236,14 @@ export default function PublicProfilePage() {
   }
   const hideTooltip = () => setTooltip(null)
 
+  const accent = React.useMemo(() => {
+    const key = pp?.accent_key || null
+    if (!key) return null
+    try { return getAccentOption(key as any) || null } catch { return null }
+  }, [pp?.accent_key])
+
+  const lastActivityIso = React.useMemo(() => (recent && recent.length > 0 ? String(recent[0].occurred_at) : null), [recent])
+
   return (
     <div className="max-w-5xl mx-auto mt-8 px-4 md:px-0">
       {loading && <div className="p-8 text-center text-sm opacity-60">Loading profile…</div>}
@@ -231,7 +256,15 @@ export default function PublicProfilePage() {
       {!loading && !error && pp && (
         <>
           <Card className="rounded-3xl">
-            <CardContent className="p-6 md:p-8 space-y-4">
+            <CardContent className="p-0 md:p-0">
+              {accent && (
+                <div
+                  className="h-2 w-full rounded-t-3xl"
+                  style={{ background: `linear-gradient(90deg, hsl(${accent.hsl}) 0%, rgba(0,0,0,0) 80%)` }}
+                  aria-hidden
+                />
+              )}
+              <div className="p-6 md:p-8 space-y-4">
               <div className="flex items-start gap-4">
                 <div className="h-16 w-16 rounded-2xl bg-stone-200 overflow-hidden flex items-center justify-center" aria-hidden>
                   <UserIcon
@@ -240,16 +273,17 @@ export default function PublicProfilePage() {
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <div className="text-2xl font-semibold truncate">{pp.display_name || pp.username || 'Member'}</div>
+                    <div className="text-2xl font-semibold truncate" style={accent ? { color: `hsl(${accent.hsl})` } : undefined}>{pp.display_name || pp.username || 'Member'}</div>
                     <span className={`text-[11px] px-2 py-0.5 rounded-full border ${pp.is_admin ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-stone-50 text-stone-700 border-stone-200'}`}>{pp.is_admin ? 'Admin' : 'Member'}</span>
                   </div>
                   <div className="text-sm opacity-70 mt-1 flex items-center gap-1">{pp.country ? (<><MapPin className="h-4 w-4" />{pp.country}</>) : ''}</div>
-                  <div className="text-xs opacity-70 mt-1 flex items-center gap-2">
+                  <div className="text-xs opacity-70 mt-1 flex items-center gap-2 flex-wrap">
                     {pp.is_online ? (
                       <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" />Currently online</span>
                     ) : (
                       <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-stone-300" />{formatLastSeen(pp.last_seen_at)}</span>
                     )}
+                    {lastActivityIso && <span>• Last activity {formatLastSeen(lastActivityIso)}</span>}
                     {pp.joined_at && <span>• Joined {new Date(pp.joined_at).toLocaleDateString()}</span>}
                   </div>
                 </div>
@@ -272,6 +306,7 @@ export default function PublicProfilePage() {
               {pp.bio && (
                 <div className="text-sm opacity-90">{pp.bio}</div>
               )}
+              </div>
             </CardContent>
           </Card>
 
@@ -337,6 +372,45 @@ export default function PublicProfilePage() {
                   </div>,
                   document.body
                 )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Recent activity */}
+          <div className="mt-4">
+            <Card className="rounded-3xl">
+              <CardContent className="p-6 md:p-8 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="text-lg font-semibold">Recent activity</div>
+                </div>
+                {recent.length === 0 && (
+                  <div className="text-sm opacity-60">No recent activity yet.</div>
+                )}
+                <div className="space-y-2">
+                  {recent.slice(0, 12).map((it, idx) => {
+                    const dt = new Date(it.occurred_at)
+                    const kind = String(it.kind || '')
+                    const icon = kind === 'plant_added' ? <PlusCircle className="h-4 w-4" />
+                      : kind === 'plant_updated' ? <Edit2 className="h-4 w-4" />
+                      : kind === 'plant_deleted' ? <Trash2 className="h-4 w-4" />
+                      : kind === 'task_completed' ? <CheckCircle2 className="h-4 w-4" />
+                      : kind === 'task_progressed' ? <Leaf className="h-4 w-4" />
+                      : <MessageSquare className="h-4 w-4" />
+                    return (
+                      <div key={idx} className="flex items-start gap-3 rounded-xl border p-2">
+                        <div className="h-7 w-7 rounded-md border flex items-center justify-center bg-white">
+                          {icon}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-sm">
+                            <span className="opacity-80">{it.message}</span>
+                          </div>
+                          <div className="text-[11px] opacity-60">{dt.toLocaleString()}</div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
               </CardContent>
             </Card>
           </div>

@@ -1326,6 +1326,37 @@ as $$
 $$;
 grant execute on function public.get_user_daily_tasks(uuid, date, date) to anon, authenticated;
 
+-- Recent public-safe user activity (sanitized; no garden_id exposed)
+drop function if exists public.get_user_recent_activity(uuid, integer);
+create or replace function public.get_user_recent_activity(
+  _user_id uuid,
+  _limit integer default 10
+)
+returns table(
+  kind text,
+  message text,
+  plant_name text,
+  task_name text,
+  occurred_at timestamptz
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select
+    l.kind,
+    l.message,
+    l.plant_name,
+    l.task_name,
+    l.occurred_at
+  from public.garden_activity_logs l
+  where l.actor_id = _user_id
+  order by l.occurred_at desc
+  limit greatest(1, coalesce(_limit, 10));
+$$;
+grant execute on function public.get_user_recent_activity(uuid, integer) to anon, authenticated;
+
 -- Public display name availability check
 drop function if exists public.is_username_available(text);
 create or replace function public.is_display_name_available(_name text)
