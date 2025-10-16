@@ -14,7 +14,7 @@ import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
 import { TaskEditorDialog } from '@/components/plant/TaskEditorDialog'
 import type { Garden } from '@/types/garden'
 import type { Plant } from '@/types/plant'
-import { getGarden, getGardenPlants, getGardenMembers, addMemberByNameOrEmail, deleteGardenPlant, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, updateGardenMemberRole, removeGardenMember, listGardenTasks, syncTaskOccurrencesForGarden, listOccurrencesForTasks, progressTaskOccurrence, updateGardenPlantsOrder, refreshGardenStreak, listGardenActivityToday, logGardenActivity } from '@/lib/gardens'
+import { getGarden, getGardenPlants, getGardenMembers, addMemberByNameOrEmail, deleteGardenPlant, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, updateGardenMemberRole, removeGardenMember, listGardenTasks, syncTaskOccurrencesForGarden, listOccurrencesForTasks, progressTaskOccurrence, updateGardenPlantsOrder, refreshGardenStreak, listGardenActivityToday, logGardenActivity, resyncTaskOccurrencesForGarden } from '@/lib/gardens'
 import { supabase } from '@/lib/supabaseClient'
 import { getAccentOption } from '@/lib/accent'
  
@@ -698,7 +698,8 @@ export const GardenDashboardPage: React.FC = () => {
           // Recompute success solely from task occurrences
           const today = serverToday
           const allTasks = await listGardenTasks(garden.id)
-          await syncTaskOccurrencesForGarden(garden.id, `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`)
+          // Use resync to purge stale occurrences first
+          await resyncTaskOccurrencesForGarden(garden.id, `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`)
           const occs = await listOccurrencesForTasks(allTasks.map(t => t.id), `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`)
           let due = 0, completed = 0
           for (const o of occs) {

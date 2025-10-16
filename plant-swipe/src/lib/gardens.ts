@@ -792,6 +792,140 @@ export async function syncTaskOccurrencesForGarden(gardenId: string, startIso: s
   }
 }
 
+/**
+ * Regenerates task occurrences for the given garden and window by:
+ * - inserting any missing occurrences that should exist per current schedules
+ * - deleting occurrences that no longer match any task's schedule (stale/ghosts)
+ * - updating required_count for existing occurrences if the schedule's requirement changed
+ */
+export async function resyncTaskOccurrencesForGarden(gardenId: string, startIso: string, endIso: string): Promise<void> {
+  const tasks = await listGardenTasks(gardenId)
+  if (tasks.length === 0) return
+  const start = new Date(startIso)
+  const end = new Date(endIso)
+
+  // Compute expected occurrences based on current task definitions
+  type Expected = { taskId: string; gardenPlantId: string; dueAtIso: string; requiredCount: number }
+  const expectedByKey = new Map<string, Expected>()
+
+  const addExpected = (taskId: string, gardenPlantId: string, due: Date, required: number) => {
+    const dueIso = due.toISOString()
+    const key = `${taskId}::${dueIso}`
+    // Only keep the highest requirement if duplicates somehow arise
+    const prev = expectedByKey.get(key)
+    if (!prev || prev.requiredCount < required) {
+      expectedByKey.set(key, { taskId, gardenPlantId, dueAtIso: dueIso, requiredCount: required })
+    }
+  }
+
+  for (const t of tasks) {
+    const reqCount = Math.max(1, Number(t.requiredCount || 1))
+    if (t.scheduleKind === 'one_time_date') {
+      if (!t.dueAt) continue
+      const due = new Date(t.dueAt)
+      if (due >= start && due <= end) addExpected(t.id, t.gardenPlantId, due, reqCount)
+    } else if (t.scheduleKind === 'one_time_duration') {
+      const anchor = new Date(t.createdAt)
+      const amount = Math.max(1, Number(t.intervalAmount || 1))
+      const unit = (t.intervalUnit || 'day') as TaskUnit
+      const due = addInterval(anchor, amount, unit)
+      if (due >= start && due <= end) addExpected(t.id, t.gardenPlantId, due, reqCount)
+    } else if (t.scheduleKind === 'repeat_duration') {
+      const amount = Math.max(1, Number(t.intervalAmount || 1))
+      const unit = (t.intervalUnit || 'week') as TaskUnit
+      if (amount <= 0) continue
+      let cur = new Date(t.createdAt)
+      while (cur < start) {
+        cur = addInterval(cur, amount, unit)
+      }
+      while (cur <= end) {
+        addExpected(t.id, t.gardenPlantId, cur, reqCount)
+        cur = addInterval(cur, amount, unit)
+      }
+    } else if (t.scheduleKind === 'repeat_pattern') {
+      const period = (t.period || 'week') as 'week' | 'month' | 'year'
+      const cur = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate(), 12, 0, 0))
+      const endDay = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate(), 12, 0, 0))
+      const weeklyDays = (t.weeklyDays || []) as number[]
+      const monthlyDays = (t.monthlyDays || []) as number[]
+      const monthlyNthWeekdays = (t.monthlyNthWeekdays || []) as string[]
+      const yearlyDays = (t.yearlyDays || []) as string[]
+      while (cur <= endDay) {
+        const m = cur.getUTCMonth() + 1
+        const d = cur.getUTCDate()
+        const weekday = cur.getUTCDay()
+        const mm = String(m).padStart(2, '0')
+        const dd = String(d).padStart(2, '0')
+        const ymd = `${mm}-${dd}`
+        let match = false
+        if (period === 'week') {
+          match = weeklyDays.includes(weekday)
+        } else if (period === 'month') {
+          if (monthlyDays.includes(d)) match = true
+          if (!match && monthlyNthWeekdays.length > 0) {
+            const weekIndex = Math.floor((d - 1) / 7) + 1
+            const key = `${weekIndex}-${weekday}`
+            if (monthlyNthWeekdays.includes(key)) match = true
+          }
+        } else if (period === 'year') {
+          if (yearlyDays.includes(ymd)) {
+            match = true
+          } else if (yearlyDays.length > 0) {
+            const weekIndex = Math.floor((d - 1) / 7) + 1
+            const key = `${mm}-${weekIndex}-${weekday}`
+            if (yearlyDays.includes(key)) match = true
+          }
+        }
+        if (match) addExpected(t.id, t.gardenPlantId, cur, reqCount)
+        cur.setUTCDate(cur.getUTCDate() + 1)
+      }
+    }
+  }
+
+  const taskIds = Array.from(new Set(tasks.map(t => t.id)))
+  const existing = await listOccurrencesForTasks(taskIds, startIso, endIso)
+  const existingByKey = new Map<string, { id: string; requiredCount: number; completedCount: number }>()
+  for (const o of existing) {
+    const key = `${o.taskId}::${o.dueAt}`
+    existingByKey.set(key, { id: o.id, requiredCount: Number(o.requiredCount || 1), completedCount: Number(o.completedCount || 0) })
+  }
+
+  // Determine operations
+  const toInsert: Expected[] = []
+  const toUpdate: Array<{ id: string; requiredCount: number; completedCount: number }> = []
+  const existingKeys = new Set(existing.map(o => `${o.taskId}::${o.dueAt}`))
+  for (const [key, exp] of expectedByKey.entries()) {
+    if (!existingKeys.has(key)) {
+      toInsert.push(exp)
+    } else {
+      const ex = existingByKey.get(key)!
+      const nextReq = Math.max(ex.completedCount, exp.requiredCount)
+      if (ex.requiredCount !== nextReq) {
+        toUpdate.push({ id: ex.id, requiredCount: nextReq, completedCount: ex.completedCount })
+      }
+    }
+  }
+  const expectedKeys = new Set(expectedByKey.keys())
+  const toDeleteIds: string[] = []
+  for (const [key, ex] of existingByKey.entries()) {
+    if (!expectedKeys.has(key)) toDeleteIds.push(ex.id)
+  }
+
+  // Apply deletes first to avoid duplicates then inserts/updates
+  if (toDeleteIds.length > 0) {
+    await supabase.from('garden_plant_task_occurrences').delete().in('id', toDeleteIds)
+  }
+  for (const ins of toInsert) {
+    await ensureTaskOccurrence(ins.taskId, ins.gardenPlantId, ins.dueAtIso, ins.requiredCount)
+  }
+  for (const upd of toUpdate) {
+    await supabase
+      .from('garden_plant_task_occurrences')
+      .update({ required_count: upd.requiredCount })
+      .eq('id', upd.id)
+  }
+}
+
 export async function createPatternTask(params: {
   gardenId: string
   gardenPlantId: string
