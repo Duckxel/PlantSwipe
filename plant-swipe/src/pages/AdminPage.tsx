@@ -2725,7 +2725,6 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void }> 
             id: String(data?.id || ''),
             message: String(data?.message || ''),
             severity: (data?.severity === 'warning' || data?.severity === 'danger') ? data.severity : 'info',
-            createdAt: data?.createdAt || null,
             expiresAt: data?.expiresAt || null,
             adminName: data?.adminName || null,
           })
