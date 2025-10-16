@@ -68,7 +68,8 @@ export const AdminPage: React.FC = () => {
   const [consoleLines, setConsoleLines] = React.useState<string[]>([])
   const [reloadReady, setReloadReady] = React.useState<boolean>(false)
   const [preRestartNotice, setPreRestartNotice] = React.useState<boolean>(false)
-  const [broadcastOpen, setBroadcastOpen] = React.useState<boolean>(false)
+  // Keep broadcast section open by default for quick access
+  const [broadcastOpen, setBroadcastOpen] = React.useState<boolean>(true)
   const consoleRef = React.useRef<HTMLDivElement | null>(null)
   React.useEffect(() => {
     if (!consoleOpen) return

@@ -3775,6 +3775,11 @@ function clearBroadcastForAll() {
 // Public: fetch current active broadcast
 app.get('/api/broadcast/active', async (_req, res) => {
   try {
+    // Prevent caches from serving stale broadcast state
+    try {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
+      res.setHeader('Pragma', 'no-cache')
+    } catch {}
     const row = await getActiveBroadcastRow()
     if (row) {
       res.json({ ok: true, broadcast: {
