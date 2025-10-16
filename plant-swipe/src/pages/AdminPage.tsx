@@ -1482,7 +1482,7 @@ export const AdminPage: React.FC = () => {
                 </button>
                 {broadcastOpen && (
                   <div className="mt-2" id="broadcast-create">
-                    <BroadcastControls inline onExpired={() => setBroadcastOpen(true)} />
+                    <BroadcastControls inline onExpired={() => setBroadcastOpen(true)} onActive={() => setBroadcastOpen(true)} />
                   </div>
                 )}
               </div>
@@ -2669,7 +2669,7 @@ export const AdminPage: React.FC = () => {
 }
 
 // --- Broadcast controls (Overview tab) ---
-const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void }> = ({ inline = false, onExpired }) => {
+const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; onActive?: () => void }> = ({ inline = false, onExpired, onActive }) => {
   const [active, setActive] = React.useState<{ id: string; message: string; severity?: 'info' | 'warning' | 'danger'; expiresAt: string | null; adminName?: string | null } | null>(null)
   const [message, setMessage] = React.useState('')
   const [severity, setSeverity] = React.useState<'info' | 'warning' | 'danger'>('info')
@@ -2713,8 +2713,8 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void }> 
           // Pre-fill edit fields so admin can immediately edit
           setMessage(b.broadcast.message || '')
           setSeverity((b.broadcast.severity as any) || 'info')
-          // Ensure the section is open when an active broadcast exists
-          setBroadcastOpen(true)
+          // Inform parent to open the section if collapsed
+          onActive?.()
         } else {
           setActive(null)
         }
@@ -2743,8 +2743,8 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void }> 
           // Pre-fill edit values if none entered yet
           setMessage((prev) => (prev && prev.trim().length > 0 ? prev : (String(data?.message || ''))))
           setSeverity(((data?.severity === 'warning' || data?.severity === 'danger') ? data.severity : 'info') as any)
-          // Open the section so admin sees edit/delete UI
-          setBroadcastOpen(true)
+          // Ask parent to open the section so admin sees edit/delete UI
+          onActive?.()
         } catch {}
       })
       es.addEventListener('clear', () => {
