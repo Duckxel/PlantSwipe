@@ -100,8 +100,15 @@ const BroadcastToast: React.FC = () => {
           const b = await r.json().catch(() => ({}))
           if (!cancelled) {
             const next: Broadcast | null = b?.broadcast || null
-            setBroadcast(next)
-            savePersistedBroadcast(next)
+            if (next) {
+              setBroadcast(next)
+              savePersistedBroadcast(next)
+            } else {
+              // If server reports none but we have a valid persisted banner, keep it
+              const persisted = loadPersistedBroadcast(Date.now())
+              setBroadcast(persisted)
+              if (!persisted) savePersistedBroadcast(null)
+            }
           }
         } else {
           // Keep previously persisted value if fetch fails

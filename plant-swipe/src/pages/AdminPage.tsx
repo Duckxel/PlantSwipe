@@ -2848,19 +2848,68 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void }> 
             </Button>
           </div>
         ) : (
-          <div className="mt-3 flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-sm font-semibold truncate">{active.message}</div>
-              <div className="text-xs opacity-60">
-                Submitted by {active.adminName ? active.adminName : 'Admin'}
-                {active.expiresAt && (
-                  <> — Expires in {formatDuration(msRemaining(active.expiresAt) || 0)}</>
-                )}
-              </div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto_auto]">
+            <Input
+              placeholder="Edit message"
+              value={message.length ? message : active.message}
+              onChange={(e) => setMessage(e.target.value)}
+              maxLength={200}
+            />
+            <select
+              className="rounded-xl border px-3 py-2 text-sm bg-white"
+              value={severity || 'info'}
+              onChange={(e) => setSeverity((e.target.value as any) || 'info')}
+              aria-label="Type"
+            >
+              <option value="info">Information</option>
+              <option value="warning">Warning</option>
+              <option value="danger">Danger</option>
+            </select>
+            <select
+              className="rounded-xl border px-3 py-2 text-sm bg-white"
+              value={duration}
+              onChange={(e) => setDuration(e.target.value)}
+              aria-label="Display time"
+            >
+              <option value="">Keep current</option>
+              {durations.map(d => (
+                <option key={d.value} value={d.value}>{d.label}</option>
+              ))}
+            </select>
+            <div className="flex gap-2">
+              <Button className="rounded-2xl" variant="secondary" onClick={async () => {
+                try {
+                  const session = (await supabase.auth.getSession()).data.session
+                  const token = session?.access_token
+                  const headers: Record<string, string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+                  if (token) headers['Authorization'] = `Bearer ${token}`
+                  try { const staticToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (staticToken) headers['X-Admin-Token'] = String(staticToken) } catch {}
+                  const ms = duration ? parseDurationToMs(duration) : null
+                  const resp = await fetch('/api/admin/broadcast', {
+                    method: 'PUT', headers, credentials: 'same-origin',
+                    body: JSON.stringify({ message: (message.length ? message : active.message).trim(), severity, durationMs: ms })
+                  })
+                  const b = await resp.json().catch(() => ({}))
+                  if (!resp.ok) throw new Error(b?.error || `HTTP ${resp.status}`)
+                  setActive(b?.broadcast || null)
+                  setMessage('')
+                  setDuration('')
+                } catch (e) {
+                  alert((e as Error)?.message || 'Failed to update broadcast')
+                }
+              }}>
+                Save
+              </Button>
+              <Button className="rounded-2xl" variant="destructive" onClick={onRemove} disabled={removing}>
+                <Trash2 className="h-4 w-4 mr-1" /> Remove
+              </Button>
             </div>
-            <Button className="rounded-2xl" variant="destructive" onClick={onRemove} disabled={removing}>
-              <Trash2 className="h-4 w-4 mr-1" /> Remove
-            </Button>
+            <div className="sm:col-span-4 text-xs opacity-60">
+              Submitted by {active.adminName ? active.adminName : 'Admin'}
+              {active.expiresAt && (
+                <> — Expires in {formatDuration(msRemaining(active.expiresAt) || 0)}</>
+              )}
+            </div>
           </div>
         )}
     </div>
