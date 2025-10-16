@@ -68,8 +68,8 @@ export const AdminPage: React.FC = () => {
   const [consoleLines, setConsoleLines] = React.useState<string[]>([])
   const [reloadReady, setReloadReady] = React.useState<boolean>(false)
   const [preRestartNotice, setPreRestartNotice] = React.useState<boolean>(false)
-  // Keep broadcast section open by default for quick access
-  const [broadcastOpen, setBroadcastOpen] = React.useState<boolean>(true)
+  // Default collapsed per request
+  const [broadcastOpen, setBroadcastOpen] = React.useState<boolean>(false)
   const consoleRef = React.useRef<HTMLDivElement | null>(null)
   React.useEffect(() => {
     if (!consoleOpen) return
@@ -2673,7 +2673,7 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void }> 
   const [active, setActive] = React.useState<{ id: string; message: string; severity?: 'info' | 'warning' | 'danger'; expiresAt: string | null; adminName?: string | null } | null>(null)
   const [message, setMessage] = React.useState('')
   const [severity, setSeverity] = React.useState<'info' | 'warning' | 'danger'>('info')
-  const [duration, setDuration] = React.useState<string>('')
+  const [duration, setDuration] = React.useState<string>('5m')
   const [submitting, setSubmitting] = React.useState(false)
   const [removing, setRemoving] = React.useState(false)
   const [now, setNow] = React.useState(() => Date.now())
@@ -2800,8 +2800,8 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void }> 
   }, [removing])
 
   const durations: Array<{ label: string; value: string }> = [
-    { label: '1 min', value: '1m' },
     { label: '5 mins', value: '5m' },
+    { label: '1 min', value: '1m' },
     { label: '30 mins', value: '30m' },
     { label: '1 hour', value: '1h' },
     { label: '5 hours', value: '5h' },
