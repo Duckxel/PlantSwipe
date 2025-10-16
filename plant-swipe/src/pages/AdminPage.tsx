@@ -2713,6 +2713,8 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void }> 
           // Pre-fill edit fields so admin can immediately edit
           setMessage(b.broadcast.message || '')
           setSeverity((b.broadcast.severity as any) || 'info')
+          // Ensure the section is open when an active broadcast exists
+          setBroadcastOpen(true)
         } else {
           setActive(null)
         }
@@ -2738,6 +2740,11 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void }> 
             expiresAt: data?.expiresAt || null,
             adminName: data?.adminName || null,
           })
+          // Pre-fill edit values if none entered yet
+          setMessage((prev) => (prev && prev.trim().length > 0 ? prev : (String(data?.message || ''))))
+          setSeverity(((data?.severity === 'warning' || data?.severity === 'danger') ? data.severity : 'info') as any)
+          // Open the section so admin sees edit/delete UI
+          setBroadcastOpen(true)
         } catch {}
       })
       es.addEventListener('clear', () => {
