@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import type { GardenPlantTask } from '@/types/garden'
-import { listPlantTasks, deletePlantTask, updatePatternTask, listGardenTasks, syncTaskOccurrencesForGarden } from '@/lib/gardens'
+import { listPlantTasks, deletePlantTask, updatePatternTask, listGardenTasks, syncTaskOccurrencesForGarden, resyncTaskOccurrencesForGarden } from '@/lib/gardens'
 import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
 import { TaskCreateDialog } from '@/components/plant/TaskCreateDialog'
 
@@ -70,13 +70,12 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
   const remove = async (taskId: string) => {
     try {
       await deletePlantTask(taskId)
-      // Ensure occurrences are regenerated and UI reflects changes
+      // Resync occurrences to purge old ones for the deleted task
       try {
-        const allTasks = await listGardenTasks(gardenId)
         const now = new Date()
         const startIso = new Date(now.getTime() - 7*24*3600*1000).toISOString()
         const endIso = new Date(now.getTime() + 60*24*3600*1000).toISOString()
-        await syncTaskOccurrencesForGarden(gardenId, startIso, endIso)
+        await resyncTaskOccurrencesForGarden(gardenId, startIso, endIso)
       } catch {}
       await load()
       if (onChanged) await onChanged()
@@ -167,6 +166,13 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
                 monthlyNthWeekdays: patternPeriod === 'month' ? (sel.monthlyNthWeekdays || []) : null,
                 requiredCount: editingTask.requiredCount || 1,
               })
+              // After updating, resync occurrences to remove stale dates
+              try {
+                const now = new Date()
+                const startIso = new Date(now.getTime() - 7*24*3600*1000).toISOString()
+                const endIso = new Date(now.getTime() + 60*24*3600*1000).toISOString()
+                await resyncTaskOccurrencesForGarden(gardenId, startIso, endIso)
+              } catch {}
               setEditingTask(null)
               await load()
               if (onChanged) await onChanged()
