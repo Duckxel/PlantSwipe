@@ -96,12 +96,19 @@ const BroadcastToast: React.FC = () => {
     const load = async () => {
       try {
         const r = await fetch('/api/broadcast/active', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
-        if (!r.ok) return
-        const b = await r.json().catch(() => ({}))
-        if (!cancelled) {
-          const next: Broadcast | null = b?.broadcast || null
-          setBroadcast(next)
-          savePersistedBroadcast(next)
+        if (r.ok) {
+          const b = await r.json().catch(() => ({}))
+          if (!cancelled) {
+            const next: Broadcast | null = b?.broadcast || null
+            setBroadcast(next)
+            savePersistedBroadcast(next)
+          }
+        } else {
+          // Keep previously persisted value if fetch fails
+          if (!cancelled) {
+            const persisted = loadPersistedBroadcast(Date.now())
+            setBroadcast(persisted)
+          }
         }
       } catch {}
     }

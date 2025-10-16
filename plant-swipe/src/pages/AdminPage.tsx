@@ -2713,6 +2713,31 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void }> 
 
   React.useEffect(() => { loadActive() }, [loadActive])
 
+  // Live updates via SSE to keep admin panel in sync with user toasts
+  React.useEffect(() => {
+    let es: EventSource | null = null
+    try {
+      es = new EventSource('/api/broadcast/stream', { withCredentials: true })
+      es.addEventListener('broadcast', (ev: MessageEvent) => {
+        try {
+          const data = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data
+          setActive({
+            id: String(data?.id || ''),
+            message: String(data?.message || ''),
+            severity: (data?.severity === 'warning' || data?.severity === 'danger') ? data.severity : 'info',
+            createdAt: data?.createdAt || null,
+            expiresAt: data?.expiresAt || null,
+            adminName: data?.adminName || null,
+          })
+        } catch {}
+      })
+      es.addEventListener('clear', () => {
+        setActive(null)
+      })
+    } catch {}
+    return () => { try { es?.close() } catch {} }
+  }, [])
+
   // When current broadcast expires, revert to create form and notify parent (to re-open section)
   React.useEffect(() => {
     if (!active?.expiresAt) return
