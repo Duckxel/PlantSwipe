@@ -3808,7 +3808,7 @@ app.get('/api/broadcast/stream', async (req, res) => {
     res.setHeader('X-Accel-Buffering', 'no')
     res.flushHeaders?.()
 
-    // Send initial state
+    // Send initial state (only broadcast if active exists; do not force-clear here)
     try {
       const row = await getActiveBroadcastRow()
       if (row) {
@@ -3821,8 +3821,6 @@ app.get('/api/broadcast/stream', async (req, res) => {
           createdBy: row.created_by ? String(row.created_by) : null,
           adminName: row.admin_name ? String(row.admin_name) : null,
         })
-      } else {
-        sseWrite(res, 'clear', { ok: true })
       }
     } catch {}
 

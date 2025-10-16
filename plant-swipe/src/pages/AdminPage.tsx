@@ -2706,11 +2706,21 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void }> 
   const loadActive = React.useCallback(async () => {
     try {
       const r = await fetch('/api/broadcast/active', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
-      const b = await r.json().catch(() => ({}))
-      setActive(b?.broadcast || null)
+      if (r.ok) {
+        const b = await r.json().catch(() => ({}))
+        if (b?.broadcast) {
+          setActive(b.broadcast)
+          // Pre-fill edit fields so admin can immediately edit
+          setMessage(b.broadcast.message || '')
+          setSeverity((b.broadcast.severity as any) || 'info')
+        } else {
+          setActive(null)
+        }
+      }
     } catch {}
   }, [])
 
+  // On load, if an active message exists, go straight to edit mode
   React.useEffect(() => { loadActive() }, [loadActive])
 
   // Live updates via SSE to keep admin panel in sync with user toasts

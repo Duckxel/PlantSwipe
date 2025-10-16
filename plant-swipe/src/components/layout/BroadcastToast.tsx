@@ -90,7 +90,7 @@ const BroadcastToast: React.FC = () => {
   const [pos, setPos] = React.useState<PositionKey>(loadPosition)
   const now = useNowTick(1000)
 
-  // Initial fetch to hydrate
+  // Initial fetch to hydrate: on load, check server for active broadcast; if none, keep persisted
   React.useEffect(() => {
     let cancelled = false
     const load = async () => {
