@@ -2684,7 +2684,7 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
   const [message, setMessage] = React.useState('')
   // Default to warning requested, but server/UI sometimes using info; keep 'warning' default selectable
   const [severity, setSeverity] = React.useState<'info' | 'warning' | 'danger'>('warning')
-  const [duration, setDuration] = React.useState<string>('5m')
+  // Duration removed; default used on send
   const [submitting, setSubmitting] = React.useState(false)
   const [removing, setRemoving] = React.useState(false)
   const [now, setNow] = React.useState(() => Date.now())
@@ -2914,17 +2914,7 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
   )
 }
 
-function parseDurationToMs(val: string): number | null {
-  const v = String(val || '').toLowerCase().trim()
-  if (!v || v === 'unlimited') return null
-  const m = v.match(/^(\d+)([smhd])$/)
-  if (!m) return null
-  const n = Number(m[1])
-  const unit = m[2]
-  if (!Number.isFinite(n) || n <= 0) return null
-  const mult = unit === 's' ? 1000 : unit === 'm' ? 60_000 : unit === 'h' ? 3_600_000 : 86_400_000
-  return n * mult
-}
+// parseDurationToMs removed
 
 export default AdminPage
 
