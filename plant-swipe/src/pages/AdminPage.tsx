@@ -69,24 +69,17 @@ export const AdminPage: React.FC = () => {
   const [reloadReady, setReloadReady] = React.useState<boolean>(false)
   const [preRestartNotice, setPreRestartNotice] = React.useState<boolean>(false)
   // Default collapsed per request
-  const [broadcastOpen, setBroadcastOpen] = React.useState<boolean>(false)
-
-  // On page load, if there's an active broadcast, auto-open the section so admin can edit/delete
+  const [broadcastOpen, setBroadcastOpen] = React.useState<boolean>(() => {
+    // Persisted preference ensures it stays open after reload when admin wants it open
+    try {
+      const v = localStorage.getItem('plantswipe.admin.broadcastOpen')
+      if (v === 'true') return true
+    } catch {}
+    return false
+  })
   React.useEffect(() => {
-    let cancelled = false
-    const check = async () => {
-      try {
-        const r = await fetch('/api/broadcast/active', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
-        if (!r.ok) return
-        const b = await r.json().catch(() => ({}))
-        if (!cancelled && b?.broadcast) {
-          setBroadcastOpen(true)
-        }
-      } catch {}
-    }
-    check()
-    return () => { cancelled = true }
-  }, [])
+    try { localStorage.setItem('plantswipe.admin.broadcastOpen', broadcastOpen ? 'true' : 'false') } catch {}
+  }, [broadcastOpen])
   const consoleRef = React.useRef<HTMLDivElement | null>(null)
   React.useEffect(() => {
     if (!consoleOpen) return
