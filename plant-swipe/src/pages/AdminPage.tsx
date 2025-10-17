@@ -2827,15 +2827,7 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
     }
   }, [removing])
 
-  const durations: Array<{ label: string; value: string }> = [
-    { label: '5 mins', value: '5m' },
-    { label: '1 min', value: '1m' },
-    { label: '30 mins', value: '30m' },
-    { label: '1 hour', value: '1h' },
-    { label: '5 hours', value: '5h' },
-    { label: '1 day', value: '1d' },
-    { label: 'Unlimited', value: 'unlimited' },
-  ]
+  // Duration selection removed; default send duration is 5 minutes
 
   const content = (
     <div>
@@ -2853,7 +2845,7 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
             <select
               className="rounded-xl border px-3 py-2 text-sm bg-white"
               value={severity}
-              onChange={(e) => setSeverity((e.target.value as any) || 'info')}
+              onChange={(e) => setSeverity((e.target.value as any) || 'warning')}
               aria-label="Type"
             >
               <option value="info">Information</option>
@@ -2874,8 +2866,8 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
             />
             <select
               className="rounded-xl border px-3 py-2 text-sm bg-white"
-              value={severity || 'info'}
-              onChange={(e) => setSeverity((e.target.value as any) || 'info')}
+              value={severity || 'warning'}
+              onChange={(e) => setSeverity((e.target.value as any) || 'warning')}
               aria-label="Type"
             >
               <option value="info">Information</option>
