@@ -2684,6 +2684,8 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
   const [message, setMessage] = React.useState('')
   // Default to warning requested, but server/UI sometimes using info; keep 'warning' default selectable
   const [severity, setSeverity] = React.useState<'info' | 'warning' | 'danger'>('warning')
+  // Duration selector (default 5 minutes for send; empty string keeps current on edit)
+  const [duration, setDuration] = React.useState<string>('5m')
   // Duration removed; default used on send
   const [submitting, setSubmitting] = React.useState(false)
   const [removing, setRemoving] = React.useState(false)
@@ -2791,7 +2793,7 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
         method: 'POST',
         headers,
         credentials: 'same-origin',
-        body: JSON.stringify({ message: message.trim(), severity, durationMs: 5 * 60 * 1000 }),
+        body: JSON.stringify({ message: message.trim(), severity, durationMs: (() => { const v = duration; if (v === 'unlimited' || !v) return null; const m = v.match(/^(\d+)([smhd])$/); if (!m) return 5*60*1000; const n = Number(m[1]); const u = m[2]; const mult = u === 's' ? 1000 : u === 'm' ? 60000 : u === 'h' ? 3600000 : 86400000; return n*mult; })() }),
       })
       const b = await resp.json().catch(() => ({}))
       if (!resp.ok) throw new Error(b?.error || `HTTP ${resp.status}`)
@@ -2833,7 +2835,7 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
         <div className="text-sm font-medium">Global broadcast message</div>
       </div>
         {!active ? (
-          <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
+          <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto_auto]">
             <Input
               placeholder="Write a short message (single line)"
               value={message}
@@ -2850,12 +2852,26 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
               <option value="warning">Warning</option>
               <option value="danger">Danger</option>
             </select>
+            <select
+              className="rounded-xl border px-3 py-2 text-sm bg-white"
+              value={duration}
+              onChange={(e) => setDuration(e.target.value)}
+              aria-label="Display time"
+            >
+              <option value="5m">5 mins</option>
+              <option value="1m">1 min</option>
+              <option value="30m">30 mins</option>
+              <option value="1h">1 hour</option>
+              <option value="5h">5 hours</option>
+              <option value="1d">1 day</option>
+              <option value="unlimited">Unlimited</option>
+            </select>
             <Button className="rounded-2xl" onClick={onSubmit} disabled={submitting || !message.trim()}>
               Send
             </Button>
           </div>
         ) : (
-          <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
+          <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto_auto]">
             <Input
               placeholder="Edit message"
               value={message.length ? message : active.message}
@@ -2872,6 +2888,21 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
               <option value="warning">Warning</option>
               <option value="danger">Danger</option>
             </select>
+            <select
+              className="rounded-xl border px-3 py-2 text-sm bg-white"
+              value={duration}
+              onChange={(e) => setDuration(e.target.value)}
+              aria-label="Display time"
+            >
+              <option value="">Keep current</option>
+              <option value="1m">1 min</option>
+              <option value="5m">5 mins</option>
+              <option value="30m">30 mins</option>
+              <option value="1h">1 hour</option>
+              <option value="5h">5 hours</option>
+              <option value="1d">1 day</option>
+              <option value="unlimited">Unlimited</option>
+            </select>
             <div className="flex gap-2">
               <Button className="rounded-2xl" variant="secondary" onClick={async () => {
                 try {
@@ -2882,7 +2913,7 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
                   try { const staticToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (staticToken) headers['X-Admin-Token'] = String(staticToken) } catch {}
                   const resp = await fetch('/api/admin/broadcast', {
                     method: 'PUT', headers, credentials: 'same-origin',
-                    body: JSON.stringify({ message: (message.length ? message : active.message).trim(), severity })
+                    body: JSON.stringify({ message: (message.length ? message : active.message).trim(), severity, durationMs: (() => { const v = duration; if (v === '' || v === 'unlimited') return null; const m = v.match(/^(\d+)([smhd])$/); if (!m) return null; const n = Number(m[1]); const u = m[2]; const mult = u === 's' ? 1000 : u === 'm' ? 60000 : u === 'h' ? 3600000 : 86400000; return n*mult; })() })
                   })
                   const b = await resp.json().catch(() => ({}))
                   if (!resp.ok) throw new Error(b?.error || `HTTP ${resp.status}`)
