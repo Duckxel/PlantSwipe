@@ -19,7 +19,7 @@ import {
   Pie,
   Cell,
 } from 'recharts'
-import { RefreshCw, Server, Database, Github, ExternalLink, ShieldCheck, ShieldX, UserSearch, AlertTriangle, Gavel, Search, ChevronDown, GitBranch, Trash2 } from "lucide-react"
+import { RefreshCw, Server, Database, Github, ExternalLink, ShieldCheck, ShieldX, UserSearch, AlertTriangle, Gavel, Search, ChevronDown, GitBranch, Trash2, EyeOff, Copy } from "lucide-react"
 import { supabase } from '@/lib/supabaseClient'
 import {
   Dialog,
@@ -100,15 +100,18 @@ export const AdminPage: React.FC = () => {
     }
   }, [])
 
+  const errorLineRx = React.useMemo(() => /(^|\b)(err|error|failed|failure|exception|traceback|fatal|npm\s+err!|^npm\s+err)/i, [])
+
   const getAllLogsText = React.useCallback((): string => {
     return consoleLines.join('\n')
   }, [consoleLines])
 
   const getErrorLinesText = React.useCallback((): string => {
-    const rx = /(^|\b)(err|error|failed|failure|exception|traceback|fatal|npm\s+err!|^npm\s+err)/i
-    const lines = consoleLines.filter(l => rx.test(l))
+    const lines = consoleLines.filter(l => errorLineRx.test(l))
     return lines.length > 0 ? lines.join('\n') : 'No error-like lines detected.'
-  }, [consoleLines])
+  }, [consoleLines, errorLineRx])
+
+  const hasConsoleError = React.useMemo(() => consoleLines.some(l => errorLineRx.test(l)), [consoleLines, errorLineRx])
 
   const appendConsole = React.useCallback((line: string) => {
     setConsoleLines(prev => [...prev, line])
@@ -1574,45 +1577,58 @@ export const AdminPage: React.FC = () => {
                   <div className="mt-2" id="admin-console">
                     <div
                       ref={consoleRef}
-                      className="h-48 overflow-auto rounded-xl border bg-black text-white text-xs p-3 font-mono whitespace-pre-wrap"
+                      className={`relative h-48 overflow-auto rounded-xl border bg-black text-white text-xs p-3 font-mono whitespace-pre-wrap ${hasConsoleError ? 'border-rose-500' : ''}`}
                       aria-live="polite"
                     >
+                      <div className="absolute top-1 right-1 flex items-center gap-1">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 rounded-md bg-white/10 text-white hover:bg-white/20"
+                          onClick={() => setConsoleOpen(false)}
+                          title="Hide console"
+                          aria-label="Hide console"
+                        >
+                          <EyeOff className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 rounded-md bg-white/10 text-white hover:bg-white/20"
+                          onClick={() => { setConsoleLines([]); setConsoleOpen(true) }}
+                          title="Clear console"
+                          aria-label="Clear console"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 rounded-md bg-white/10 text-white hover:bg-white/20"
+                          onClick={async () => {
+                            const ok = await copyTextToClipboard(getAllLogsText())
+                            if (!ok) alert('Copy failed. You can still select and copy manually.')
+                          }}
+                          title="Copy console"
+                          aria-label="Copy console"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 rounded-md bg-white/10 text-white hover:bg-white/20"
+                          onClick={async () => {
+                            const ok = await copyTextToClipboard(getErrorLinesText())
+                            if (!ok) alert('Copy failed. You can still select and copy manually.')
+                          }}
+                          title="Copy error lines"
+                          aria-label="Copy error lines"
+                        >
+                          <AlertTriangle className="h-4 w-4" />
+                        </Button>
+                      </div>
                       {consoleLines.length === 0 ? 'No messages yet.' : consoleLines.join('\n')}
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        className="rounded-xl"
-                        onClick={() => setConsoleOpen(false)}
-                        title="Hide console"
-                      >Hide</Button>
-                      <Button
-                        size="sm"
-                        className="rounded-xl"
-                        onClick={() => { setConsoleLines([]); setConsoleOpen(true) }}
-                        title="Clear console"
-                      >Clear</Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="rounded-xl"
-                        onClick={async () => {
-                          const ok = await copyTextToClipboard(getAllLogsText())
-                          if (!ok) alert('Copy failed. You can still select and copy manually.')
-                        }}
-                        title="Copy all console lines to clipboard"
-                      >Copy all</Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="rounded-xl"
-                        onClick={async () => {
-                          const ok = await copyTextToClipboard(getErrorLinesText())
-                          if (!ok) alert('Copy failed. You can still select and copy manually.')
-                        }}
-                        title="Copy only error-like lines to clipboard"
-                      >Copy errors</Button>
                     </div>
                   </div>
                 )}
