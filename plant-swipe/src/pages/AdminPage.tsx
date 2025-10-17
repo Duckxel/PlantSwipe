@@ -1575,12 +1575,15 @@ export const AdminPage: React.FC = () => {
                 </button>
                 {consoleOpen && (
                   <div className="mt-2" id="admin-console">
-                    <div
-                      ref={consoleRef}
-                      className={`relative h-48 overflow-auto rounded-xl border bg-black text-white text-xs p-3 font-mono whitespace-pre-wrap ${hasConsoleError ? 'border-rose-500' : ''}`}
-                      aria-live="polite"
-                    >
-                      <div className="absolute top-1 right-1 flex items-center gap-1">
+                    <div className={`relative rounded-xl border ${hasConsoleError ? 'border-rose-500' : ''}`}>
+                      <div
+                        ref={consoleRef}
+                        className="h-48 overflow-auto bg-black text-white text-xs p-3 font-mono whitespace-pre-wrap rounded-xl"
+                        aria-live="polite"
+                      >
+                        {consoleLines.length === 0 ? 'No messages yet.' : consoleLines.join('\n')}
+                      </div>
+                      <div className="absolute top-1 right-1 z-10 flex items-center gap-1">
                         <Button
                           size="icon"
                           variant="ghost"
@@ -1628,7 +1631,6 @@ export const AdminPage: React.FC = () => {
                           <AlertTriangle className="h-4 w-4" />
                         </Button>
                       </div>
-                      {consoleLines.length === 0 ? 'No messages yet.' : consoleLines.join('\n')}
                     </div>
                   </div>
                 )}
