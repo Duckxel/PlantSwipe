@@ -113,6 +113,12 @@ export const AdminPage: React.FC = () => {
 
   const hasConsoleError = React.useMemo(() => consoleLines.some(l => errorLineRx.test(l)), [consoleLines, errorLineRx])
 
+  const softRefreshAdmin = React.useCallback(() => {
+    try {
+      refreshHealth()
+    } catch {}
+  }, [refreshHealth])
+
   const appendConsole = React.useCallback((line: string) => {
     setConsoleLines(prev => [...prev, line])
   }, [])
@@ -1578,9 +1584,9 @@ export const AdminPage: React.FC = () => {
                     variant="outline"
                     size="sm"
                     className="rounded-xl h-8 px-3"
-                    onClick={reloadPage}
-                    aria-label="Reload page"
-                    title="Reload the page"
+                    onClick={softRefreshAdmin}
+                    aria-label="Refresh admin data"
+                    title="Soft reload (won't lose edits)"
                   >
                     <RefreshCw className="h-4 w-4" />
                     Reload
@@ -1588,7 +1594,7 @@ export const AdminPage: React.FC = () => {
                 </div>
                 {consoleOpen && (
                   <div className="mt-2" id="admin-console">
-                    <div className={`relative rounded-xl border ${hasConsoleError ? 'border-4 border-rose-600 ring-4 ring-rose-500/60 shadow-[0_0_0_8px_rgba(244,63,94,0.35)]' : ''}`}>
+                    <div className={`relative rounded-xl border ${hasConsoleError ? 'border-4 border-rose-600 ring-8 ring-rose-500/40 shadow-lg shadow-rose-500/30' : ''}`}>
                       <div
                         ref={consoleRef}
                         className="h-48 overflow-auto bg-black text-white text-xs p-3 font-mono whitespace-pre-wrap rounded-xl"
@@ -1596,11 +1602,11 @@ export const AdminPage: React.FC = () => {
                       >
                         {consoleLines.length === 0 ? 'No messages yet.' : consoleLines.join('\n')}
                       </div>
-                      <div className="absolute top-1 right-1 z-10 flex items-center gap-1">
+                      <div className="pointer-events-none absolute bottom-1 right-1 z-10 flex items-center gap-1">
                         <Button
                           size="icon"
                           variant="ghost"
-                          className="h-7 w-7 rounded-md bg-white/10 text-white hover:bg-white/20"
+                          className="pointer-events-auto h-7 w-7 rounded-md bg-white/10 text-white hover:bg-white/20"
                           onClick={() => setConsoleOpen(false)}
                           title="Hide console"
                           aria-label="Hide console"
@@ -1610,7 +1616,7 @@ export const AdminPage: React.FC = () => {
                         <Button
                           size="icon"
                           variant="ghost"
-                          className="h-7 w-7 rounded-md bg-white/10 text-white hover:bg-white/20"
+                          className="pointer-events-auto h-7 w-7 rounded-md bg-white/10 text-white hover:bg-white/20"
                           onClick={() => { setConsoleLines([]); setConsoleOpen(true) }}
                           title="Clear console"
                           aria-label="Clear console"
@@ -1620,7 +1626,7 @@ export const AdminPage: React.FC = () => {
                         <Button
                           size="icon"
                           variant="ghost"
-                          className="h-7 w-7 rounded-md bg-white/10 text-white hover:bg-white/20"
+                          className="pointer-events-auto h-7 w-7 rounded-md bg-white/10 text-white hover:bg-white/20"
                           onClick={async () => {
                             const ok = await copyTextToClipboard(getAllLogsText())
                             if (!ok) alert('Copy failed. You can still select and copy manually.')
@@ -1633,7 +1639,7 @@ export const AdminPage: React.FC = () => {
                         <Button
                           size="icon"
                           variant="ghost"
-                          className="h-7 w-7 rounded-md bg-white/10 text-white hover:bg-white/20"
+                          className="pointer-events-auto h-7 w-7 rounded-md bg-white/10 text-white hover:bg-white/20"
                           onClick={async () => {
                             const ok = await copyTextToClipboard(getErrorLinesText())
                             if (!ok) alert('Copy failed. You can still select and copy manually.')
