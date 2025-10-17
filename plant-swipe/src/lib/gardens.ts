@@ -1086,7 +1086,7 @@ export async function listGardenActivityToday(gardenId: string, todayIso?: strin
     .lte('occurred_at', end)
     .order('occurred_at', { ascending: false })
   if (error) throw new Error(error.message)
-  return (data || []).map((r: any) => ({
+  const rows = (data || []).map((r: any) => ({
     id: String(r.id),
     gardenId: String(r.garden_id),
     actorId: r.actor_id ? String(r.actor_id) : null,
@@ -1098,6 +1098,31 @@ export async function listGardenActivityToday(gardenId: string, todayIso?: strin
     taskName: r.task_name || null,
     occurredAt: String(r.occurred_at),
   }))
+  // If no activity rows are present but there were task occurrences today, synthesize a soft activity entry for visibility
+  if (rows.length === 0) {
+    try {
+      const occStart = `${today}T00:00:00.000Z`
+      const occEnd = `${today}T23:59:59.999Z`
+      const tasks = await listGardenTasks(gardenId)
+      const occs = await listOccurrencesForTasks(tasks.map(t => t.id), occStart, occEnd)
+      const totalCompleted = occs.reduce((acc, o) => acc + Math.min(Math.max(1, Number(o.requiredCount || 1)), Number(o.completedCount || 0)), 0)
+      if (totalCompleted > 0) {
+        return [{
+          id: `synthetic-${gardenId}-${today}`,
+          gardenId,
+          actorId: null,
+          actorName: null,
+          actorColor: null,
+          kind: 'note',
+          message: 'made progress on today\'s tasks',
+          plantName: null,
+          taskName: null,
+          occurredAt: new Date().toISOString(),
+        }]
+      }
+    } catch {}
+  }
+  return rows
 }
 
 export async function logGardenActivity(params: { gardenId: string; kind: GardenActivityKind; message: string; plantName?: string | null; taskName?: string | null; actorColor?: string | null }): Promise<void> {

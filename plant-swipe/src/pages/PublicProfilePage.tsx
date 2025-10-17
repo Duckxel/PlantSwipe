@@ -255,12 +255,12 @@ export default function PublicProfilePage() {
       )}
       {!loading && !error && pp && (
         <>
-          <Card className="rounded-3xl">
+          <Card className="rounded-3xl overflow-hidden">
             <CardContent className="p-0 md:p-0">
               {accent && (
                 <div
-                  className="h-2 w-full rounded-t-3xl"
-                  style={{ background: `linear-gradient(90deg, hsl(${accent.hsl}) 0%, rgba(0,0,0,0) 80%)` }}
+                  className="block"
+                  style={{ height: 8, width: '100%', background: `linear-gradient(90deg, hsl(${accent.hsl}) 0%, rgba(0,0,0,0) 80%)` }}
                   aria-hidden
                 />
               )}

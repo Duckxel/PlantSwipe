@@ -710,6 +710,15 @@ export const GardenDashboardPage: React.FC = () => {
           }
           const success = due === 0 ? true : (completed >= due)
           await upsertGardenTask({ gardenId: garden.id, day: today, gardenPlantId: null, success })
+          // Log a summarized watering activity if anything was completed
+          try {
+            const totalCompleted = occs.reduce((acc, o) => acc + Math.min(Math.max(1, Number(o.requiredCount || 1)), Number(o.completedCount || 0)), 0)
+            if (totalCompleted > 0) {
+              const actorColorCss = getActorColorCss()
+              await logGardenActivity({ gardenId: garden.id, kind: (success ? 'task_completed' : 'task_progressed') as any, message: success ? 'completed today\'s watering routine' : 'progressed today\'s watering routine', plantName: null, taskName: 'WATER', actorColor: actorColorCss || null })
+              setActivityRev((r) => r + 1)
+            }
+          } catch {}
         } catch {}
       }
       await load({ silent: true, preserveHeavy: true })
