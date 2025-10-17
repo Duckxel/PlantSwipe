@@ -1560,22 +1560,35 @@ export const AdminPage: React.FC = () => {
 
               {/* Admin Console (moved inside Actions card) */}
               <div>
-                <button
-                  type="button"
-                  className="flex items-center gap-2 text-sm font-medium"
-                  onClick={() => setConsoleOpen(o => !o)}
-                  aria-expanded={consoleOpen}
-                  aria-controls="admin-console"
-                >
-                  <ChevronDown className={`h-4 w-4 transition-transform ${consoleOpen ? 'rotate-180' : ''}`} />
-                  Admin Console
-                  {consoleLines.length > 0 && (
-                    <span className="text-xs opacity-60">({consoleLines.length} lines)</span>
-                  )}
-                </button>
+                <div className="flex items-center justify-between">
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 text-sm font-medium"
+                    onClick={() => setConsoleOpen(o => !o)}
+                    aria-expanded={consoleOpen}
+                    aria-controls="admin-console"
+                  >
+                    <ChevronDown className={`h-4 w-4 transition-transform ${consoleOpen ? 'rotate-180' : ''}`} />
+                    Admin Console
+                    {consoleLines.length > 0 && (
+                      <span className="text-xs opacity-60">({consoleLines.length} lines)</span>
+                    )}
+                  </button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-xl h-8 px-3"
+                    onClick={reloadPage}
+                    aria-label="Reload page"
+                    title="Reload the page"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    Reload
+                  </Button>
+                </div>
                 {consoleOpen && (
                   <div className="mt-2" id="admin-console">
-                    <div className={`relative rounded-xl border ${hasConsoleError ? 'border-rose-500' : ''}`}>
+                    <div className={`relative rounded-xl border ${hasConsoleError ? 'border-4 border-rose-600 ring-4 ring-rose-500/60 shadow-[0_0_0_8px_rgba(244,63,94,0.35)]' : ''}`}>
                       <div
                         ref={consoleRef}
                         className="h-48 overflow-auto bg-black text-white text-xs p-3 font-mono whitespace-pre-wrap rounded-xl"
