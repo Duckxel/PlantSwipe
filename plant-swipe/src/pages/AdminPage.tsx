@@ -2787,25 +2787,23 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
       const headers: Record<string, string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
       if (token) headers['Authorization'] = `Bearer ${token}`
       try { const staticToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (staticToken) headers['X-Admin-Token'] = String(staticToken) } catch {}
-      const ms = parseDurationToMs(duration)
       const resp = await fetch('/api/admin/broadcast', {
         method: 'POST',
         headers,
         credentials: 'same-origin',
-        body: JSON.stringify({ message: message.trim(), severity, durationMs: ms }),
+        body: JSON.stringify({ message: message.trim(), severity, durationMs: 5 * 60 * 1000 }),
       })
       const b = await resp.json().catch(() => ({}))
       if (!resp.ok) throw new Error(b?.error || `HTTP ${resp.status}`)
       setActive(b?.broadcast || null)
       setMessage('')
-      setSeverity('info')
-      setDuration('')
+      setSeverity('warning')
     } catch (e) {
       alert((e as Error)?.message || 'Failed to create broadcast')
     } finally {
       setSubmitting(false)
     }
-  }, [message, duration, submitting])
+  }, [message, submitting])
 
   const onRemove = React.useCallback(async () => {
     if (removing) return
