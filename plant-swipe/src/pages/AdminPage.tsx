@@ -2682,7 +2682,8 @@ export const AdminPage: React.FC = () => {
 const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; onActive?: () => void }> = ({ inline = false, onExpired, onActive }) => {
   const [active, setActive] = React.useState<{ id: string; message: string; severity?: 'info' | 'warning' | 'danger'; expiresAt: string | null; adminName?: string | null } | null>(null)
   const [message, setMessage] = React.useState('')
-  const [severity, setSeverity] = React.useState<'info' | 'warning' | 'danger'>('info')
+  // Default to warning requested, but server/UI sometimes using info; keep 'warning' default selectable
+  const [severity, setSeverity] = React.useState<'info' | 'warning' | 'danger'>('warning')
   const [duration, setDuration] = React.useState<string>('5m')
   const [submitting, setSubmitting] = React.useState(false)
   const [removing, setRemoving] = React.useState(false)
@@ -2842,7 +2843,7 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
         <div className="text-sm font-medium">Global broadcast message</div>
       </div>
         {!active ? (
-          <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto_auto]">
+          <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
             <Input
               placeholder="Write a short message (single line)"
               value={message}
@@ -2859,23 +2860,12 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
               <option value="warning">Warning</option>
               <option value="danger">Danger</option>
             </select>
-            <select
-              className="rounded-xl border px-3 py-2 text-sm bg-white"
-              value={duration}
-              onChange={(e) => setDuration(e.target.value)}
-              aria-label="Display time"
-            >
-              <option value="">Select duration…</option>
-              {durations.map(d => (
-                <option key={d.value} value={d.value}>{d.label}</option>
-              ))}
-            </select>
-            <Button className="rounded-2xl" onClick={onSubmit} disabled={submitting || !message.trim() || !duration}>
+            <Button className="rounded-2xl" onClick={onSubmit} disabled={submitting || !message.trim()}>
               Send
             </Button>
           </div>
         ) : (
-          <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto_auto]">
+          <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
             <Input
               placeholder="Edit message"
               value={message.length ? message : active.message}
@@ -2892,17 +2882,6 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
               <option value="warning">Warning</option>
               <option value="danger">Danger</option>
             </select>
-            <select
-              className="rounded-xl border px-3 py-2 text-sm bg-white"
-              value={duration}
-              onChange={(e) => setDuration(e.target.value)}
-              aria-label="Display time"
-            >
-              <option value="">Keep current</option>
-              {durations.map(d => (
-                <option key={d.value} value={d.value}>{d.label}</option>
-              ))}
-            </select>
             <div className="flex gap-2">
               <Button className="rounded-2xl" variant="secondary" onClick={async () => {
                 try {
@@ -2911,16 +2890,14 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
                   const headers: Record<string, string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
                   if (token) headers['Authorization'] = `Bearer ${token}`
                   try { const staticToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (staticToken) headers['X-Admin-Token'] = String(staticToken) } catch {}
-                  const ms = duration ? parseDurationToMs(duration) : null
                   const resp = await fetch('/api/admin/broadcast', {
                     method: 'PUT', headers, credentials: 'same-origin',
-                    body: JSON.stringify({ message: (message.length ? message : active.message).trim(), severity, durationMs: ms })
+                    body: JSON.stringify({ message: (message.length ? message : active.message).trim(), severity })
                   })
                   const b = await resp.json().catch(() => ({}))
                   if (!resp.ok) throw new Error(b?.error || `HTTP ${resp.status}`)
                   setActive(b?.broadcast || null)
                   setMessage('')
-                  setDuration('')
                 } catch (e) {
                   alert((e as Error)?.message || 'Failed to update broadcast')
                 }
