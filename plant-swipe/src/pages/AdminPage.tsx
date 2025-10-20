@@ -68,18 +68,45 @@ export const AdminPage: React.FC = () => {
   const [consoleLines, setConsoleLines] = React.useState<string[]>([])
   const [reloadReady, setReloadReady] = React.useState<boolean>(false)
   const [preRestartNotice, setPreRestartNotice] = React.useState<boolean>(false)
-  // Default collapsed per request
-  const [broadcastOpen, setBroadcastOpen] = React.useState<boolean>(() => {
-    // Persisted preference ensures it stays open after reload when admin wants it open
-    try {
-      const v = localStorage.getItem('plantswipe.admin.broadcastOpen')
-      if (v === 'true') return true
-    } catch {}
-    return false
-  })
+  // Default collapsed on load; will auto-open only if an active broadcast exists
+  const [broadcastOpen, setBroadcastOpen] = React.useState<boolean>(false)
+  // On initial load, if a broadcast is currently active, auto-open the section
   React.useEffect(() => {
-    try { localStorage.setItem('plantswipe.admin.broadcastOpen', broadcastOpen ? 'true' : 'false') } catch {}
-  }, [broadcastOpen])
+    let cancelled = false
+    const checkActiveBroadcast = async () => {
+      // Fast path: open if a persisted, still-valid broadcast exists
+      try {
+        const raw = localStorage.getItem('plantswipe.broadcast.active')
+        if (raw) {
+          const data = JSON.parse(raw)
+          const ex = data?.expiresAt ? Date.parse(String(data.expiresAt)) : null
+          const stillValid = !ex || ex > Date.now()
+          if (!cancelled && stillValid) setBroadcastOpen(true)
+        }
+      } catch {}
+      try {
+        const r = await fetch('/api/broadcast/active', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+        if (!cancelled && r.ok) {
+          const data = await r.json().catch(() => ({}))
+          if (data?.broadcast) setBroadcastOpen(true)
+        }
+      } catch {}
+    }
+    checkActiveBroadcast()
+    return () => { cancelled = true }
+  }, [])
+
+  // Even when collapsed, listen to broadcast SSE and auto-open when a broadcast starts
+  React.useEffect(() => {
+    let es: EventSource | null = null
+    try {
+      es = new EventSource('/api/broadcast/stream', { withCredentials: true })
+      const onBroadcast = () => { setBroadcastOpen(true) }
+      es.addEventListener('broadcast', onBroadcast as EventListener)
+      // No need to auto-close on clear; keep user preference
+    } catch {}
+    return () => { try { es?.close() } catch {} }
+  }, [])
   const consoleRef = React.useRef<HTMLDivElement | null>(null)
   React.useEffect(() => {
     if (!consoleOpen) return
@@ -2680,7 +2707,27 @@ export const AdminPage: React.FC = () => {
 
 // --- Broadcast controls (Overview tab) ---
 const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; onActive?: () => void }> = ({ inline = false, onExpired, onActive }) => {
-  const [active, setActive] = React.useState<{ id: string; message: string; severity?: 'info' | 'warning' | 'danger'; expiresAt: string | null; adminName?: string | null } | null>(null)
+  const [active, setActive] = React.useState<{ id: string; message: string; severity?: 'info' | 'warning' | 'danger'; expiresAt: string | null; adminName?: string | null } | null>(() => {
+    // Seed from persisted broadcast for instant edit UI on reload
+    try {
+      const raw = localStorage.getItem('plantswipe.broadcast.active')
+      if (raw) {
+        const data = JSON.parse(raw)
+        const ex = data?.expiresAt ? Date.parse(String(data.expiresAt)) : null
+        const stillValid = !ex || ex > Date.now()
+        if (stillValid) {
+          return {
+            id: String(data?.id || ''),
+            message: String(data?.message || ''),
+            severity: (data?.severity === 'warning' || data?.severity === 'danger') ? data.severity : 'info',
+            expiresAt: data?.expiresAt || null,
+            adminName: data?.adminName || null,
+          }
+        }
+      }
+    } catch {}
+    return null
+  })
   const [message, setMessage] = React.useState('')
   // Default to warning requested, but server/UI sometimes using info; keep 'warning' default selectable
   const [severity, setSeverity] = React.useState<'info' | 'warning' | 'danger'>('warning')
@@ -2690,6 +2737,15 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
   const [submitting, setSubmitting] = React.useState(false)
   const [removing, setRemoving] = React.useState(false)
   const [now, setNow] = React.useState(() => Date.now())
+  // Prevent flashing the create UI before we know if an active broadcast exists
+  const [initializing, setInitializing] = React.useState(true)
+
+  // Default duration behavior:
+  // - Create mode (no active): default to 5m
+  // - Edit mode (active): default to "Keep current" (empty string) so we don't override
+  React.useEffect(() => {
+    setDuration(active ? '' : '5m')
+  }, [active])
 
   React.useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000)
@@ -2729,10 +2785,14 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
           // Inform parent to open the section if collapsed
           onActive?.()
         } else {
-          setActive(null)
+          // If we already have a valid active (e.g., from persisted state), keep it
+          setActive((prev) => prev ? prev : null)
         }
       }
     } catch {}
+    finally {
+      setInitializing(false)
+    }
   }, [])
 
   // On load, if an active message exists, go straight to edit mode
@@ -2793,7 +2853,7 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
         method: 'POST',
         headers,
         credentials: 'same-origin',
-        body: JSON.stringify({ message: message.trim(), severity, durationMs: (() => { const v = duration; if (v === 'unlimited' || !v) return null; const m = v.match(/^(\d+)([smhd])$/); if (!m) return 5*60*1000; const n = Number(m[1]); const u = m[2]; const mult = u === 's' ? 1000 : u === 'm' ? 60000 : u === 'h' ? 3600000 : 86400000; return n*mult; })() }),
+        body: JSON.stringify({ message: message.trim(), severity, durationMs: (() => { const v = duration; if (v === 'unlimited' || !v) return null; const m = v.match(/^(\d+)([smhd])$/); if (!m) return null; const n = Number(m[1]); const u = m[2]; const mult = u === 's' ? 1000 : u === 'm' ? 60000 : u === 'h' ? 3600000 : 86400000; return n*mult; })() }),
       })
       const b = await resp.json().catch(() => ({}))
       if (!resp.ok) throw new Error(b?.error || `HTTP ${resp.status}`)
@@ -2805,7 +2865,7 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
     } finally {
       setSubmitting(false)
     }
-  }, [message, submitting])
+  }, [message, submitting, duration, severity])
 
   const onRemove = React.useCallback(async () => {
     if (removing) return
@@ -2834,43 +2894,9 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
       <div className="flex items-center justify-between">
         <div className="text-sm font-medium">Global broadcast message</div>
       </div>
-        {!active ? (
-          <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto_auto]">
-            <Input
-              placeholder="Write a short message (single line)"
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              maxLength={200}
-            />
-            <select
-              className="rounded-xl border px-3 py-2 text-sm bg-white"
-              value={severity}
-              onChange={(e) => setSeverity((e.target.value as any) || 'warning')}
-              aria-label="Type"
-            >
-              <option value="info">Information</option>
-              <option value="warning">Warning</option>
-              <option value="danger">Danger</option>
-            </select>
-            <select
-              className="rounded-xl border px-3 py-2 text-sm bg-white"
-              value={duration}
-              onChange={(e) => setDuration(e.target.value)}
-              aria-label="Display time"
-            >
-              <option value="5m">5 mins</option>
-              <option value="1m">1 min</option>
-              <option value="30m">30 mins</option>
-              <option value="1h">1 hour</option>
-              <option value="5h">5 hours</option>
-              <option value="1d">1 day</option>
-              <option value="unlimited">Unlimited</option>
-            </select>
-            <Button className="rounded-2xl" onClick={onSubmit} disabled={submitting || !message.trim()}>
-              Send
-            </Button>
-          </div>
-        ) : (
+        {initializing && !active ? (
+          <div className="mt-3 text-sm opacity-70">Checking current broadcast…</div>
+        ) : active ? (
           <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto_auto]">
             <Input
               placeholder="Edit message"
@@ -2935,6 +2961,43 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
                 <> — Expires in {formatDuration(msRemaining(active.expiresAt) || 0)}</>
               )}
             </div>
+          </div>
+        ) : (
+          <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto_auto]">
+            <Input
+              placeholder="Write a short message (single line)"
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              maxLength={200}
+            />
+            <select
+              className="rounded-xl border px-3 py-2 text-sm bg-white"
+              value={severity}
+              onChange={(e) => setSeverity((e.target.value as any) || 'warning')}
+              aria-label="Type"
+            >
+              <option value="info">Information</option>
+              <option value="warning">Warning</option>
+              <option value="danger">Danger</option>
+            </select>
+            <select
+              className="rounded-xl border px-3 py-2 text-sm bg-white"
+              value={duration}
+              onChange={(e) => setDuration(e.target.value)}
+              aria-label="Display time"
+            >
+              <option value="1m">1 min</option>
+              <option value="5m">5 mins</option>
+              <option value="10m">10 mins</option>
+              <option value="30m">30 mins</option>
+              <option value="1h">1 hour</option>
+              <option value="5h">5 hours</option>
+              <option value="1d">1 day</option>
+              <option value="unlimited">Unlimited</option>
+            </select>
+            <Button className="rounded-2xl" onClick={onSubmit} disabled={submitting || !message.trim()}>
+              Send
+            </Button>
           </div>
         )}
     </div>
