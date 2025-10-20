@@ -80,6 +80,21 @@ export const AdminPage: React.FC = () => {
   React.useEffect(() => {
     try { localStorage.setItem('plantswipe.admin.broadcastOpen', broadcastOpen ? 'true' : 'false') } catch {}
   }, [broadcastOpen])
+  // On initial load, if a broadcast is currently active, auto-open the section
+  React.useEffect(() => {
+    let cancelled = false
+    const checkActiveBroadcast = async () => {
+      try {
+        const r = await fetch('/api/broadcast/active', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+        if (!cancelled && r.ok) {
+          const data = await r.json().catch(() => ({}))
+          if (data?.broadcast) setBroadcastOpen(true)
+        }
+      } catch {}
+    }
+    checkActiveBroadcast()
+    return () => { cancelled = true }
+  }, [])
   const consoleRef = React.useRef<HTMLDivElement | null>(null)
   React.useEffect(() => {
     if (!consoleOpen) return
@@ -2690,6 +2705,8 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
   const [submitting, setSubmitting] = React.useState(false)
   const [removing, setRemoving] = React.useState(false)
   const [now, setNow] = React.useState(() => Date.now())
+  // Prevent flashing the create UI before we know if an active broadcast exists
+  const [initializing, setInitializing] = React.useState(true)
 
   React.useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000)
@@ -2733,6 +2750,9 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
         }
       }
     } catch {}
+    finally {
+      setInitializing(false)
+    }
   }, [])
 
   // On load, if an active message exists, go straight to edit mode
@@ -2834,7 +2854,9 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
       <div className="flex items-center justify-between">
         <div className="text-sm font-medium">Global broadcast message</div>
       </div>
-        {!active ? (
+        {initializing ? (
+          <div className="mt-3 text-sm opacity-70">Checking current broadcast…</div>
+        ) : !active ? (
           <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto_auto]">
             <Input
               placeholder="Write a short message (single line)"
