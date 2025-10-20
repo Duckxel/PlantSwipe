@@ -19,7 +19,7 @@ import {
   Pie,
   Cell,
 } from 'recharts'
-import { RefreshCw, Server, Database, Github, ExternalLink, ShieldCheck, ShieldX, UserSearch, AlertTriangle, Gavel, Search, ChevronDown, GitBranch, Trash2 } from "lucide-react"
+import { RefreshCw, Server, Database, Github, ExternalLink, ShieldCheck, ShieldX, UserSearch, AlertTriangle, Gavel, Search, ChevronDown, GitBranch, Trash2, EyeOff, Copy } from "lucide-react"
 import { supabase } from '@/lib/supabaseClient'
 import {
   Dialog,
@@ -138,15 +138,13 @@ export const AdminPage: React.FC = () => {
     }
   }, [])
 
+  const errorLineRx = React.useMemo(() => /(^|\b)(err|error|failed|failure|exception|traceback|fatal|npm\s+err!|^npm\s+err)/i, [])
+
   const getAllLogsText = React.useCallback((): string => {
     return consoleLines.join('\n')
   }, [consoleLines])
 
-  const getErrorLinesText = React.useCallback((): string => {
-    const rx = /(^|\b)(err|error|failed|failure|exception|traceback|fatal|npm\s+err!|^npm\s+err)/i
-    const lines = consoleLines.filter(l => rx.test(l))
-    return lines.length > 0 ? lines.join('\n') : 'No error-like lines detected.'
-  }, [consoleLines])
+  const hasConsoleError = React.useMemo(() => consoleLines.some(l => errorLineRx.test(l)), [consoleLines, errorLineRx])
 
   const appendConsole = React.useCallback((line: string) => {
     setConsoleLines(prev => [...prev, line])
@@ -533,6 +531,12 @@ export const AdminPage: React.FC = () => {
       if (isMountedRef.current) setHealthRefreshing(false)
     }
   }, [healthRefreshing, runHealthProbes])
+
+  const softRefreshAdmin = React.useCallback(() => {
+    try {
+      refreshHealth()
+    } catch {}
+  }, [refreshHealth])
 
   React.useEffect(() => {
     // Initial probe and auto-refresh every 60s
@@ -1595,62 +1599,77 @@ export const AdminPage: React.FC = () => {
 
               {/* Admin Console (moved inside Actions card) */}
               <div>
-                <button
-                  type="button"
-                  className="flex items-center gap-2 text-sm font-medium"
-                  onClick={() => setConsoleOpen(o => !o)}
-                  aria-expanded={consoleOpen}
-                  aria-controls="admin-console"
-                >
-                  <ChevronDown className={`h-4 w-4 transition-transform ${consoleOpen ? 'rotate-180' : ''}`} />
-                  Admin Console
-                  {consoleLines.length > 0 && (
-                    <span className="text-xs opacity-60">({consoleLines.length} lines)</span>
-                  )}
-                </button>
+                <div className="flex items-center justify-between">
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 text-sm font-medium"
+                    onClick={() => setConsoleOpen(o => !o)}
+                    aria-expanded={consoleOpen}
+                    aria-controls="admin-console"
+                  >
+                    <ChevronDown className={`h-4 w-4 transition-transform ${consoleOpen ? 'rotate-180' : ''}`} />
+                    Admin Console
+                    {consoleLines.length > 0 && (
+                      <span className="text-xs opacity-60">({consoleLines.length} lines)</span>
+                    )}
+                  </button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-xl h-8 px-3"
+                    onClick={softRefreshAdmin}
+                    aria-label="Refresh admin data"
+                    title="Soft reload (won't lose edits)"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    Reload
+                  </Button>
+                </div>
                 {consoleOpen && (
                   <div className="mt-2" id="admin-console">
-                    <div
-                      ref={consoleRef}
-                      className="h-48 overflow-auto rounded-xl border bg-black text-white text-xs p-3 font-mono whitespace-pre-wrap"
-                      aria-live="polite"
-                    >
-                      {consoleLines.length === 0 ? 'No messages yet.' : consoleLines.join('\n')}
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        className="rounded-xl"
-                        onClick={() => setConsoleOpen(false)}
-                        title="Hide console"
-                      >Hide</Button>
-                      <Button
-                        size="sm"
-                        className="rounded-xl"
-                        onClick={() => { setConsoleLines([]); setConsoleOpen(true) }}
-                        title="Clear console"
-                      >Clear</Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="rounded-xl"
-                        onClick={async () => {
-                          const ok = await copyTextToClipboard(getAllLogsText())
-                          if (!ok) alert('Copy failed. You can still select and copy manually.')
-                        }}
-                        title="Copy all console lines to clipboard"
-                      >Copy all</Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="rounded-xl"
-                        onClick={async () => {
-                          const ok = await copyTextToClipboard(getErrorLinesText())
-                          if (!ok) alert('Copy failed. You can still select and copy manually.')
-                        }}
-                        title="Copy only error-like lines to clipboard"
-                      >Copy errors</Button>
+                    <div className={`relative rounded-xl border ${hasConsoleError ? 'border-4 border-rose-600 ring-8 ring-rose-500/40 shadow-lg shadow-rose-500/30' : ''}`}>
+                      <div
+                        ref={consoleRef}
+                        className="h-48 overflow-auto bg-black text-white text-xs p-3 pr-8 font-mono whitespace-pre-wrap rounded-xl"
+                        aria-live="polite"
+                      >
+                        {consoleLines.length === 0 ? 'No messages yet.' : consoleLines.join('\n')}
+                      </div>
+                      <div className="pointer-events-none absolute bottom-2 right-3 z-10 flex items-center gap-1">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="pointer-events-auto h-7 w-7 rounded-md bg-white/10 text-white hover:bg-white/20"
+                          onClick={() => setConsoleOpen(false)}
+                          title="Hide console"
+                          aria-label="Hide console"
+                        >
+                          <EyeOff className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="pointer-events-auto h-7 w-7 rounded-md bg-white/10 text-white hover:bg-white/20"
+                          onClick={() => { setConsoleLines([]); setConsoleOpen(true) }}
+                          title="Clear console"
+                          aria-label="Clear console"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="pointer-events-auto h-7 w-7 rounded-md bg-white/10 text-white hover:bg-white/20"
+                          onClick={async () => {
+                            const ok = await copyTextToClipboard(getAllLogsText())
+                            if (!ok) alert('Copy failed. You can still select and copy manually.')
+                          }}
+                          title="Copy console"
+                          aria-label="Copy console"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 )}
