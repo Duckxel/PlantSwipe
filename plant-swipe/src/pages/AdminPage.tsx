@@ -113,12 +113,6 @@ export const AdminPage: React.FC = () => {
 
   const hasConsoleError = React.useMemo(() => consoleLines.some(l => errorLineRx.test(l)), [consoleLines, errorLineRx])
 
-  const softRefreshAdmin = React.useCallback(() => {
-    try {
-      refreshHealth()
-    } catch {}
-  }, [refreshHealth])
-
   const appendConsole = React.useCallback((line: string) => {
     setConsoleLines(prev => [...prev, line])
   }, [])
@@ -504,6 +498,12 @@ export const AdminPage: React.FC = () => {
       if (isMountedRef.current) setHealthRefreshing(false)
     }
   }, [healthRefreshing, runHealthProbes])
+
+  const softRefreshAdmin = React.useCallback(() => {
+    try {
+      refreshHealth()
+    } catch {}
+  }, [refreshHealth])
 
   React.useEffect(() => {
     // Initial probe and auto-refresh every 60s
