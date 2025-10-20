@@ -138,7 +138,13 @@ export const AdminPage: React.FC = () => {
     }
   }, [])
 
-  const errorLineRx = React.useMemo(() => /(^|\b)(err|error|failed|failure|exception|traceback|fatal|npm\s+err!|^npm\s+err)/i, [])
+  // Heuristic to mark the console as error. Keep strict to avoid false positives
+  // from JSON keys like "error" or benign words. Prefer lines that clearly
+  // signal errors (severity prefixes) and common failure words.
+  const errorLineRx = React.useMemo(
+    () => /(^\s*\[?(ERROR|FATAL)\]?|^\s*(error:|fatal:)|npm\s+ERR!|\b(failed|failure|exception|traceback)\b)/i,
+    [],
+  )
 
   const getAllLogsText = React.useCallback((): string => {
     return consoleLines.join('\n')
