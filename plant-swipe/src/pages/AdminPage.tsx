@@ -106,11 +106,6 @@ export const AdminPage: React.FC = () => {
     return consoleLines.join('\n')
   }, [consoleLines])
 
-  const getErrorLinesText = React.useCallback((): string => {
-    const lines = consoleLines.filter(l => errorLineRx.test(l))
-    return lines.length > 0 ? lines.join('\n') : 'No error-like lines detected.'
-  }, [consoleLines, errorLineRx])
-
   const hasConsoleError = React.useMemo(() => consoleLines.some(l => errorLineRx.test(l)), [consoleLines, errorLineRx])
 
   const appendConsole = React.useCallback((line: string) => {
@@ -1597,12 +1592,12 @@ export const AdminPage: React.FC = () => {
                     <div className={`relative rounded-xl border ${hasConsoleError ? 'border-4 border-rose-600 ring-8 ring-rose-500/40 shadow-lg shadow-rose-500/30' : ''}`}>
                       <div
                         ref={consoleRef}
-                        className="h-48 overflow-auto bg-black text-white text-xs p-3 font-mono whitespace-pre-wrap rounded-xl"
+                        className="h-48 overflow-auto bg-black text-white text-xs p-3 pr-8 font-mono whitespace-pre-wrap rounded-xl"
                         aria-live="polite"
                       >
                         {consoleLines.length === 0 ? 'No messages yet.' : consoleLines.join('\n')}
                       </div>
-                      <div className="pointer-events-none absolute bottom-1 right-1 z-10 flex items-center gap-1">
+                      <div className="pointer-events-none absolute bottom-2 right-3 z-10 flex items-center gap-1">
                         <Button
                           size="icon"
                           variant="ghost"
@@ -1635,19 +1630,6 @@ export const AdminPage: React.FC = () => {
                           aria-label="Copy console"
                         >
                           <Copy className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="pointer-events-auto h-7 w-7 rounded-md bg-white/10 text-white hover:bg-white/20"
-                          onClick={async () => {
-                            const ok = await copyTextToClipboard(getErrorLinesText())
-                            if (!ok) alert('Copy failed. You can still select and copy manually.')
-                          }}
-                          title="Copy error lines"
-                          aria-label="Copy error lines"
-                        >
-                          <AlertTriangle className="h-4 w-4" />
                         </Button>
                       </div>
                     </div>
