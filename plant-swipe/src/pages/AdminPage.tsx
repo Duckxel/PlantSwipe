@@ -68,18 +68,8 @@ export const AdminPage: React.FC = () => {
   const [consoleLines, setConsoleLines] = React.useState<string[]>([])
   const [reloadReady, setReloadReady] = React.useState<boolean>(false)
   const [preRestartNotice, setPreRestartNotice] = React.useState<boolean>(false)
-  // Default collapsed per request
-  const [broadcastOpen, setBroadcastOpen] = React.useState<boolean>(() => {
-    // Persisted preference ensures it stays open after reload when admin wants it open
-    try {
-      const v = localStorage.getItem('plantswipe.admin.broadcastOpen')
-      if (v === 'true') return true
-    } catch {}
-    return false
-  })
-  React.useEffect(() => {
-    try { localStorage.setItem('plantswipe.admin.broadcastOpen', broadcastOpen ? 'true' : 'false') } catch {}
-  }, [broadcastOpen])
+  // Default collapsed on load; will auto-open only if an active broadcast exists
+  const [broadcastOpen, setBroadcastOpen] = React.useState<boolean>(false)
   // On initial load, if a broadcast is currently active, auto-open the section
   React.useEffect(() => {
     let cancelled = false
