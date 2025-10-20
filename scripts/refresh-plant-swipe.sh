@@ -334,61 +334,116 @@ else
 fi
 
 if [[ "$UPSTREAM_OK" != "true" ]]; then
-  DEFAULT_BRANCH="${PLANTSWIPE_DEFAULT_BRANCH:-}"
-  if [[ -z "$DEFAULT_BRANCH" ]]; then
-    # Prefer origin/HEAD if available
-    remote_head_short="$(${GIT_LOCAL_CMD[@]} symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null || ${GIT_CMD[@]} symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null || true)"
-    if [[ -n "$remote_head_short" ]]; then
-      DEFAULT_BRANCH="${remote_head_short#origin/}"
+  # If a target branch was explicitly requested, prefer that over default fallback.
+  if [[ -n "$TARGET_BRANCH" ]]; then
+    if [[ "$TARGET_BRANCH" != "$BRANCH_NAME" ]]; then
+      log "Upstream missing for '$BRANCH_NAME'. Switching to requested branch '$TARGET_BRANCH'…"
+      if ${GIT_LOCAL_CMD[@]} show-ref --verify --quiet "refs/heads/$TARGET_BRANCH"; then
+        if ! ${GIT_LOCAL_CMD[@]} checkout "$TARGET_BRANCH"; then
+          if [[ ${#RUN_AS_PREFIX[@]} -gt 0 && "$CAN_SUDO" == "true" ]]; then
+            if ! ${GIT_CMD[@]} checkout "$TARGET_BRANCH"; then
+              echo "[ERROR] Failed to checkout local branch $TARGET_BRANCH" >&2
+              exit 1
+            fi
+          else
+            echo "[ERROR] Failed to checkout local branch $TARGET_BRANCH (no sudo)" >&2
+            exit 1
+          fi
+        fi
+      else
+        # Verify the remote branch exists, then create/reset local branch and set upstream
+        if ${GIT_LOCAL_CMD[@]} ls-remote --exit-code --heads origin "$TARGET_BRANCH" >/dev/null 2>&1; then
+          if ! ${GIT_LOCAL_CMD[@]} checkout -B "$TARGET_BRANCH" "origin/$TARGET_BRANCH"; then
+            if [[ ${#RUN_AS_PREFIX[@]} -gt 0 && "$CAN_SUDO" == "true" ]]; then
+              if ! ${GIT_CMD[@]} checkout -B "$TARGET_BRANCH" "origin/$TARGET_BRANCH"; then
+                echo "[ERROR] Failed to create local branch from origin/$TARGET_BRANCH" >&2
+                exit 1
+              fi
+            else
+              echo "[ERROR] Failed to create local branch from origin/$TARGET_BRANCH (no sudo)" >&2
+              exit 1
+            fi
+          fi
+          ${GIT_LOCAL_CMD[@]} branch --set-upstream-to="origin/$TARGET_BRANCH" "$TARGET_BRANCH" >/dev/null 2>&1 || true
+        else
+          echo "[ERROR] Target branch '$TARGET_BRANCH' not found on remote 'origin'." >&2
+          exit 1
+        fi
+      fi
+      BRANCH_NAME="$TARGET_BRANCH"
+      UPSTREAM_OK=true
+      log "Switched to branch: $BRANCH_NAME"
     else
-      # Try common defaults
-      if ${GIT_LOCAL_CMD[@]} ls-remote --exit-code --heads origin main >/dev/null 2>&1; then
-        DEFAULT_BRANCH="main"
-      elif ${GIT_LOCAL_CMD[@]} ls-remote --exit-code --heads origin master >/dev/null 2>&1; then
-        DEFAULT_BRANCH="master"
+      # TARGET_BRANCH equals current branch; attempt to repair upstream if remote exists
+      if ${GIT_LOCAL_CMD[@]} ls-remote --exit-code --heads origin "$TARGET_BRANCH" >/dev/null 2>&1; then
+        ${GIT_LOCAL_CMD[@]} branch --set-upstream-to="origin/$TARGET_BRANCH" "$TARGET_BRANCH" >/dev/null 2>&1 || true
+        UPSTREAM_REF="$(${GIT_LOCAL_CMD[@]} rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || true)"
+        if [[ -n "$UPSTREAM_REF" ]] && ${GIT_LOCAL_CMD[@]} show-ref --verify --quiet "refs/remotes/${UPSTREAM_REF}"; then
+          UPSTREAM_OK=true
+          log "Set upstream of '$BRANCH_NAME' to 'origin/$TARGET_BRANCH'."
+        fi
       fi
     fi
   fi
 
-  if [[ -z "$DEFAULT_BRANCH" ]]; then
-    echo "[ERROR] Current branch '$BRANCH_NAME' has no valid upstream and no default branch could be determined. Set PLANTSWIPE_DEFAULT_BRANCH or supply a target branch." >&2
-    exit 1
-  fi
-
-  if [[ "$DEFAULT_BRANCH" == "$BRANCH_NAME" ]]; then
-    # Already on the default branch; clear any stale upstream silently
-    ${GIT_LOCAL_CMD[@]} branch --unset-upstream >/dev/null 2>&1 || true
-  else
-    log "Upstream missing for '$BRANCH_NAME'. Switching to default branch '$DEFAULT_BRANCH'…"
-    if ${GIT_LOCAL_CMD[@]} show-ref --verify --quiet "refs/heads/$DEFAULT_BRANCH"; then
-      if ! ${GIT_LOCAL_CMD[@]} checkout "$DEFAULT_BRANCH"; then
-        if [[ ${#RUN_AS_PREFIX[@]} -gt 0 && "$CAN_SUDO" == "true" ]]; then
-          if ! ${GIT_CMD[@]} checkout "$DEFAULT_BRANCH"; then
-            echo "[ERROR] Failed to checkout $DEFAULT_BRANCH" >&2
-            exit 1
-          fi
-        else
-          echo "[ERROR] Failed to checkout $DEFAULT_BRANCH (no sudo)" >&2
-          exit 1
-        fi
-      fi
-    else
-      if ! ${GIT_LOCAL_CMD[@]} checkout -B "$DEFAULT_BRANCH" "origin/$DEFAULT_BRANCH"; then
-        if [[ ${#RUN_AS_PREFIX[@]} -gt 0 && "$CAN_SUDO" == "true" ]]; then
-          if ! ${GIT_CMD[@]} checkout -B "$DEFAULT_BRANCH" "origin/$DEFAULT_BRANCH"; then
-            echo "[ERROR] Failed to create local $DEFAULT_BRANCH from origin/$DEFAULT_BRANCH" >&2
-            exit 1
-          fi
-        else
-          echo "[ERROR] Failed to create local $DEFAULT_BRANCH from origin/$DEFAULT_BRANCH (no sudo)" >&2
-          exit 1
+  # If still no valid upstream, fall back to a sane default branch.
+  if [[ "$UPSTREAM_OK" != "true" ]]; then
+    DEFAULT_BRANCH="${PLANTSWIPE_DEFAULT_BRANCH:-}"
+    if [[ -z "$DEFAULT_BRANCH" ]]; then
+      # Prefer origin/HEAD if available
+      remote_head_short="$(${GIT_LOCAL_CMD[@]} symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null || ${GIT_CMD[@]} symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null || true)"
+      if [[ -n "$remote_head_short" ]]; then
+        DEFAULT_BRANCH="${remote_head_short#origin/}"
+      else
+        # Try common defaults
+        if ${GIT_LOCAL_CMD[@]} ls-remote --exit-code --heads origin main >/dev/null 2>&1; then
+          DEFAULT_BRANCH="main"
+        elif ${GIT_LOCAL_CMD[@]} ls-remote --exit-code --heads origin master >/dev/null 2>&1; then
+          DEFAULT_BRANCH="master"
         fi
       fi
     fi
-    # Best-effort: set upstream to origin/DEFAULT_BRANCH for future pulls
-    ${GIT_LOCAL_CMD[@]} branch --set-upstream-to="origin/$DEFAULT_BRANCH" "$DEFAULT_BRANCH" >/dev/null 2>&1 || true
-    BRANCH_NAME="$DEFAULT_BRANCH"
-    log "Switched to branch: $BRANCH_NAME"
+
+    if [[ -z "$DEFAULT_BRANCH" ]]; then
+      echo "[ERROR] Current branch '$BRANCH_NAME' has no valid upstream and no default branch could be determined. Set PLANTSWIPE_DEFAULT_BRANCH or supply a target branch." >&2
+      exit 1
+    fi
+
+    if [[ "$DEFAULT_BRANCH" == "$BRANCH_NAME" ]]; then
+      # Already on the default branch; clear any stale upstream silently
+      ${GIT_LOCAL_CMD[@]} branch --unset-upstream >/dev/null 2>&1 || true
+    else
+      log "Upstream missing for '$BRANCH_NAME'. Switching to default branch '$DEFAULT_BRANCH'…"
+      if ${GIT_LOCAL_CMD[@]} show-ref --verify --quiet "refs/heads/$DEFAULT_BRANCH"; then
+        if ! ${GIT_LOCAL_CMD[@]} checkout "$DEFAULT_BRANCH"; then
+          if [[ ${#RUN_AS_PREFIX[@]} -gt 0 && "$CAN_SUDO" == "true" ]]; then
+            if ! ${GIT_CMD[@]} checkout "$DEFAULT_BRANCH"; then
+              echo "[ERROR] Failed to checkout $DEFAULT_BRANCH" >&2
+              exit 1
+            fi
+          else
+            echo "[ERROR] Failed to checkout $DEFAULT_BRANCH (no sudo)" >&2
+            exit 1
+          fi
+        fi
+      else
+        if ! ${GIT_LOCAL_CMD[@]} checkout -B "$DEFAULT_BRANCH" "origin/$DEFAULT_BRANCH"; then
+          if [[ ${#RUN_AS_PREFIX[@]} -gt 0 && "$CAN_SUDO" == "true" ]]; then
+            if ! ${GIT_CMD[@]} checkout -B "$DEFAULT_BRANCH" "origin/$DEFAULT_BRANCH"; then
+              echo "[ERROR] Failed to create local $DEFAULT_BRANCH from origin/$DEFAULT_BRANCH" >&2
+              exit 1
+            fi
+          else
+            echo "[ERROR] Failed to create local $DEFAULT_BRANCH from origin/$DEFAULT_BRANCH (no sudo)" >&2
+            exit 1
+          fi
+        fi
+      fi
+      # Best-effort: set upstream to origin/DEFAULT_BRANCH for future pulls
+      ${GIT_LOCAL_CMD[@]} branch --set-upstream-to="origin/$DEFAULT_BRANCH" "$DEFAULT_BRANCH" >/dev/null 2>&1 || true
+      BRANCH_NAME="$DEFAULT_BRANCH"
+      log "Switched to branch: $BRANCH_NAME"
+    fi
   fi
 fi
 
