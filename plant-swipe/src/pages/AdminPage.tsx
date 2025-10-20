@@ -84,6 +84,16 @@ export const AdminPage: React.FC = () => {
   React.useEffect(() => {
     let cancelled = false
     const checkActiveBroadcast = async () => {
+      // Fast path: open if a persisted, still-valid broadcast exists
+      try {
+        const raw = localStorage.getItem('plantswipe.broadcast.active')
+        if (raw) {
+          const data = JSON.parse(raw)
+          const ex = data?.expiresAt ? Date.parse(String(data.expiresAt)) : null
+          const stillValid = !ex || ex > Date.now()
+          if (!cancelled && stillValid) setBroadcastOpen(true)
+        }
+      } catch {}
       try {
         const r = await fetch('/api/broadcast/active', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
         if (!cancelled && r.ok) {
@@ -2695,7 +2705,27 @@ export const AdminPage: React.FC = () => {
 
 // --- Broadcast controls (Overview tab) ---
 const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; onActive?: () => void }> = ({ inline = false, onExpired, onActive }) => {
-  const [active, setActive] = React.useState<{ id: string; message: string; severity?: 'info' | 'warning' | 'danger'; expiresAt: string | null; adminName?: string | null } | null>(null)
+  const [active, setActive] = React.useState<{ id: string; message: string; severity?: 'info' | 'warning' | 'danger'; expiresAt: string | null; adminName?: string | null } | null>(() => {
+    // Seed from persisted broadcast for instant edit UI on reload
+    try {
+      const raw = localStorage.getItem('plantswipe.broadcast.active')
+      if (raw) {
+        const data = JSON.parse(raw)
+        const ex = data?.expiresAt ? Date.parse(String(data.expiresAt)) : null
+        const stillValid = !ex || ex > Date.now()
+        if (stillValid) {
+          return {
+            id: String(data?.id || ''),
+            message: String(data?.message || ''),
+            severity: (data?.severity === 'warning' || data?.severity === 'danger') ? data.severity : 'info',
+            expiresAt: data?.expiresAt || null,
+            adminName: data?.adminName || null,
+          }
+        }
+      }
+    } catch {}
+    return null
+  })
   const [message, setMessage] = React.useState('')
   // Default to warning requested, but server/UI sometimes using info; keep 'warning' default selectable
   const [severity, setSeverity] = React.useState<'info' | 'warning' | 'danger'>('warning')
@@ -2854,45 +2884,9 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
       <div className="flex items-center justify-between">
         <div className="text-sm font-medium">Global broadcast message</div>
       </div>
-        {initializing ? (
+        {initializing && !active ? (
           <div className="mt-3 text-sm opacity-70">Checking current broadcast…</div>
-        ) : !active ? (
-          <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto_auto]">
-            <Input
-              placeholder="Write a short message (single line)"
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              maxLength={200}
-            />
-            <select
-              className="rounded-xl border px-3 py-2 text-sm bg-white"
-              value={severity}
-              onChange={(e) => setSeverity((e.target.value as any) || 'warning')}
-              aria-label="Type"
-            >
-              <option value="info">Information</option>
-              <option value="warning">Warning</option>
-              <option value="danger">Danger</option>
-            </select>
-            <select
-              className="rounded-xl border px-3 py-2 text-sm bg-white"
-              value={duration}
-              onChange={(e) => setDuration(e.target.value)}
-              aria-label="Display time"
-            >
-              <option value="5m">5 mins</option>
-              <option value="1m">1 min</option>
-              <option value="30m">30 mins</option>
-              <option value="1h">1 hour</option>
-              <option value="5h">5 hours</option>
-              <option value="1d">1 day</option>
-              <option value="unlimited">Unlimited</option>
-            </select>
-            <Button className="rounded-2xl" onClick={onSubmit} disabled={submitting || !message.trim()}>
-              Send
-            </Button>
-          </div>
-        ) : (
+        ) : active ? (
           <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto_auto]">
             <Input
               placeholder="Edit message"
@@ -2957,6 +2951,42 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
                 <> — Expires in {formatDuration(msRemaining(active.expiresAt) || 0)}</>
               )}
             </div>
+          </div>
+        ) : (
+          <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto_auto]">
+            <Input
+              placeholder="Write a short message (single line)"
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              maxLength={200}
+            />
+            <select
+              className="rounded-xl border px-3 py-2 text-sm bg-white"
+              value={severity}
+              onChange={(e) => setSeverity((e.target.value as any) || 'warning')}
+              aria-label="Type"
+            >
+              <option value="info">Information</option>
+              <option value="warning">Warning</option>
+              <option value="danger">Danger</option>
+            </select>
+            <select
+              className="rounded-xl border px-3 py-2 text-sm bg-white"
+              value={duration}
+              onChange={(e) => setDuration(e.target.value)}
+              aria-label="Display time"
+            >
+              <option value="5m">5 mins</option>
+              <option value="1m">1 min</option>
+              <option value="30m">30 mins</option>
+              <option value="1h">1 hour</option>
+              <option value="5h">5 hours</option>
+              <option value="1d">1 day</option>
+              <option value="unlimited">Unlimited</option>
+            </select>
+            <Button className="rounded-2xl" onClick={onSubmit} disabled={submitting || !message.trim()}>
+              Send
+            </Button>
           </div>
         )}
     </div>
