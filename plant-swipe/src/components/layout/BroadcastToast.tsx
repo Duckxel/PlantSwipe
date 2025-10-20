@@ -57,20 +57,66 @@ function savePosition(pos: PositionKey) {
   try { localStorage.setItem('plantswipe.broadcast.pos', pos) } catch {}
 }
 
+// Persist the last active broadcast so it survives reloads while still valid
+function loadPersistedBroadcast(nowMs: number): Broadcast | null {
+  try {
+    const raw = localStorage.getItem('plantswipe.broadcast.active')
+    if (!raw) return null
+    const data = JSON.parse(raw)
+    if (!data || typeof data !== 'object') return null
+    const b: Broadcast = {
+      id: String((data as any).id || ''),
+      message: String((data as any).message || ''),
+      severity: ((data as any).severity === 'warning' || (data as any).severity === 'danger') ? (data as any).severity : 'info',
+      createdAt: (data as any).createdAt || null,
+      expiresAt: (data as any).expiresAt || null,
+    }
+    const remaining = msRemaining(b.expiresAt, nowMs)
+    if (remaining !== null && remaining <= 0) return null
+    return b
+  } catch {}
+  return null
+}
+
+function savePersistedBroadcast(b: Broadcast | null) {
+  try {
+    if (!b) localStorage.removeItem('plantswipe.broadcast.active')
+    else localStorage.setItem('plantswipe.broadcast.active', JSON.stringify(b))
+  } catch {}
+}
+
 const BroadcastToast: React.FC = () => {
-  const [broadcast, setBroadcast] = React.useState<Broadcast | null>(null)
+  const [broadcast, setBroadcast] = React.useState<Broadcast | null>(() => loadPersistedBroadcast(Date.now()))
   const [pos, setPos] = React.useState<PositionKey>(loadPosition)
   const now = useNowTick(1000)
 
-  // Initial fetch to hydrate
+  // Initial fetch to hydrate: on load, check server for active broadcast; if none, keep persisted
   React.useEffect(() => {
     let cancelled = false
     const load = async () => {
       try {
         const r = await fetch('/api/broadcast/active', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
-        if (!r.ok) return
-        const b = await r.json().catch(() => ({}))
-        if (!cancelled) setBroadcast(b?.broadcast || null)
+        if (r.ok) {
+          const b = await r.json().catch(() => ({}))
+          if (!cancelled) {
+            const next: Broadcast | null = b?.broadcast || null
+            if (next) {
+              setBroadcast(next)
+              savePersistedBroadcast(next)
+            } else {
+              // If server reports none but we have a valid persisted banner, keep it
+              const persisted = loadPersistedBroadcast(Date.now())
+              setBroadcast(persisted)
+              if (!persisted) savePersistedBroadcast(null)
+            }
+          }
+        } else {
+          // Keep previously persisted value if fetch fails
+          if (!cancelled) {
+            const persisted = loadPersistedBroadcast(Date.now())
+            setBroadcast(persisted)
+          }
+        }
       } catch {}
     }
     load()
@@ -85,17 +131,20 @@ const BroadcastToast: React.FC = () => {
       es.addEventListener('broadcast', (ev: MessageEvent) => {
         try {
           const data = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data
-          setBroadcast({
+          const next: Broadcast = {
             id: String(data?.id || ''),
             message: String(data?.message || ''),
             severity: (data?.severity === 'warning' || data?.severity === 'danger') ? data.severity : 'info',
             createdAt: data?.createdAt || null,
             expiresAt: data?.expiresAt || null,
-          })
+          }
+          setBroadcast(next)
+          savePersistedBroadcast(next)
         } catch {}
       })
       es.addEventListener('clear', () => {
         setBroadcast(null)
+        savePersistedBroadcast(null)
       })
       es.onerror = () => {
         // Let browser retry; also keep UI stable
@@ -110,6 +159,7 @@ const BroadcastToast: React.FC = () => {
     const remaining = msRemaining(broadcast.expiresAt, now)
     if (remaining !== null && remaining <= 0) {
       setBroadcast(null)
+      savePersistedBroadcast(null)
     }
   }, [broadcast?.expiresAt, now])
 

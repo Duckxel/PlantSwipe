@@ -68,7 +68,45 @@ export const AdminPage: React.FC = () => {
   const [consoleLines, setConsoleLines] = React.useState<string[]>([])
   const [reloadReady, setReloadReady] = React.useState<boolean>(false)
   const [preRestartNotice, setPreRestartNotice] = React.useState<boolean>(false)
+  // Default collapsed on load; will auto-open only if an active broadcast exists
   const [broadcastOpen, setBroadcastOpen] = React.useState<boolean>(false)
+  // On initial load, if a broadcast is currently active, auto-open the section
+  React.useEffect(() => {
+    let cancelled = false
+    const checkActiveBroadcast = async () => {
+      // Fast path: open if a persisted, still-valid broadcast exists
+      try {
+        const raw = localStorage.getItem('plantswipe.broadcast.active')
+        if (raw) {
+          const data = JSON.parse(raw)
+          const ex = data?.expiresAt ? Date.parse(String(data.expiresAt)) : null
+          const stillValid = !ex || ex > Date.now()
+          if (!cancelled && stillValid) setBroadcastOpen(true)
+        }
+      } catch {}
+      try {
+        const r = await fetch('/api/broadcast/active', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+        if (!cancelled && r.ok) {
+          const data = await r.json().catch(() => ({}))
+          if (data?.broadcast) setBroadcastOpen(true)
+        }
+      } catch {}
+    }
+    checkActiveBroadcast()
+    return () => { cancelled = true }
+  }, [])
+
+  // Even when collapsed, listen to broadcast SSE and auto-open when a broadcast starts
+  React.useEffect(() => {
+    let es: EventSource | null = null
+    try {
+      es = new EventSource('/api/broadcast/stream', { withCredentials: true })
+      const onBroadcast = () => { setBroadcastOpen(true) }
+      es.addEventListener('broadcast', onBroadcast as EventListener)
+      // No need to auto-close on clear; keep user preference
+    } catch {}
+    return () => { try { es?.close() } catch {} }
+  }, [])
   const consoleRef = React.useRef<HTMLDivElement | null>(null)
   React.useEffect(() => {
     if (!consoleOpen) return
@@ -1481,7 +1519,7 @@ export const AdminPage: React.FC = () => {
                 </button>
                 {broadcastOpen && (
                   <div className="mt-2" id="broadcast-create">
-                    <BroadcastControls inline onExpired={() => setBroadcastOpen(true)} />
+                    <BroadcastControls inline onExpired={() => setBroadcastOpen(true)} onActive={() => setBroadcastOpen(true)} />
                   </div>
                 )}
               </div>
@@ -2668,14 +2706,46 @@ export const AdminPage: React.FC = () => {
 }
 
 // --- Broadcast controls (Overview tab) ---
-const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void }> = ({ inline = false, onExpired }) => {
-  const [active, setActive] = React.useState<{ id: string; message: string; severity?: 'info' | 'warning' | 'danger'; expiresAt: string | null; adminName?: string | null } | null>(null)
+const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; onActive?: () => void }> = ({ inline = false, onExpired, onActive }) => {
+  const [active, setActive] = React.useState<{ id: string; message: string; severity?: 'info' | 'warning' | 'danger'; expiresAt: string | null; adminName?: string | null } | null>(() => {
+    // Seed from persisted broadcast for instant edit UI on reload
+    try {
+      const raw = localStorage.getItem('plantswipe.broadcast.active')
+      if (raw) {
+        const data = JSON.parse(raw)
+        const ex = data?.expiresAt ? Date.parse(String(data.expiresAt)) : null
+        const stillValid = !ex || ex > Date.now()
+        if (stillValid) {
+          return {
+            id: String(data?.id || ''),
+            message: String(data?.message || ''),
+            severity: (data?.severity === 'warning' || data?.severity === 'danger') ? data.severity : 'info',
+            expiresAt: data?.expiresAt || null,
+            adminName: data?.adminName || null,
+          }
+        }
+      }
+    } catch {}
+    return null
+  })
   const [message, setMessage] = React.useState('')
-  const [severity, setSeverity] = React.useState<'info' | 'warning' | 'danger'>('info')
-  const [duration, setDuration] = React.useState<string>('')
+  // Default to warning requested, but server/UI sometimes using info; keep 'warning' default selectable
+  const [severity, setSeverity] = React.useState<'info' | 'warning' | 'danger'>('warning')
+  // Duration selector (default 5 minutes for send; empty string keeps current on edit)
+  const [duration, setDuration] = React.useState<string>('5m')
+  // Duration removed; default used on send
   const [submitting, setSubmitting] = React.useState(false)
   const [removing, setRemoving] = React.useState(false)
   const [now, setNow] = React.useState(() => Date.now())
+  // Prevent flashing the create UI before we know if an active broadcast exists
+  const [initializing, setInitializing] = React.useState(true)
+
+  // Default duration behavior:
+  // - Create mode (no active): default to 5m
+  // - Edit mode (active): default to "Keep current" (empty string) so we don't override
+  React.useEffect(() => {
+    setDuration(active ? '' : '5m')
+  }, [active])
 
   React.useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000)
@@ -2705,12 +2775,57 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void }> 
   const loadActive = React.useCallback(async () => {
     try {
       const r = await fetch('/api/broadcast/active', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
-      const b = await r.json().catch(() => ({}))
-      setActive(b?.broadcast || null)
+      if (r.ok) {
+        const b = await r.json().catch(() => ({}))
+        if (b?.broadcast) {
+          setActive(b.broadcast)
+          // Pre-fill edit fields so admin can immediately edit
+          setMessage(b.broadcast.message || '')
+          setSeverity((b.broadcast.severity as any) || 'info')
+          // Inform parent to open the section if collapsed
+          onActive?.()
+        } else {
+          // If we already have a valid active (e.g., from persisted state), keep it
+          setActive((prev) => prev ? prev : null)
+        }
+      }
     } catch {}
+    finally {
+      setInitializing(false)
+    }
   }, [])
 
+  // On load, if an active message exists, go straight to edit mode
   React.useEffect(() => { loadActive() }, [loadActive])
+
+  // Live updates via SSE to keep admin panel in sync with user toasts
+  React.useEffect(() => {
+    let es: EventSource | null = null
+    try {
+      es = new EventSource('/api/broadcast/stream', { withCredentials: true })
+      es.addEventListener('broadcast', (ev: MessageEvent) => {
+        try {
+          const data = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data
+          setActive({
+            id: String(data?.id || ''),
+            message: String(data?.message || ''),
+            severity: (data?.severity === 'warning' || data?.severity === 'danger') ? data.severity : 'info',
+            expiresAt: data?.expiresAt || null,
+            adminName: data?.adminName || null,
+          })
+          // Pre-fill edit values if none entered yet
+          setMessage((prev) => (prev && prev.trim().length > 0 ? prev : (String(data?.message || ''))))
+          setSeverity(((data?.severity === 'warning' || data?.severity === 'danger') ? data.severity : 'info') as any)
+          // Ask parent to open the section so admin sees edit/delete UI
+          onActive?.()
+        } catch {}
+      })
+      es.addEventListener('clear', () => {
+        setActive(null)
+      })
+    } catch {}
+    return () => { try { es?.close() } catch {} }
+  }, [])
 
   // When current broadcast expires, revert to create form and notify parent (to re-open section)
   React.useEffect(() => {
@@ -2734,25 +2849,23 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void }> 
       const headers: Record<string, string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
       if (token) headers['Authorization'] = `Bearer ${token}`
       try { const staticToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (staticToken) headers['X-Admin-Token'] = String(staticToken) } catch {}
-      const ms = parseDurationToMs(duration)
       const resp = await fetch('/api/admin/broadcast', {
         method: 'POST',
         headers,
         credentials: 'same-origin',
-        body: JSON.stringify({ message: message.trim(), severity, durationMs: ms }),
+        body: JSON.stringify({ message: message.trim(), severity, durationMs: (() => { const v = duration; if (v === 'unlimited' || !v) return null; const m = v.match(/^(\d+)([smhd])$/); if (!m) return null; const n = Number(m[1]); const u = m[2]; const mult = u === 's' ? 1000 : u === 'm' ? 60000 : u === 'h' ? 3600000 : 86400000; return n*mult; })() }),
       })
       const b = await resp.json().catch(() => ({}))
       if (!resp.ok) throw new Error(b?.error || `HTTP ${resp.status}`)
       setActive(b?.broadcast || null)
       setMessage('')
-      setSeverity('info')
-      setDuration('')
+      setSeverity('warning')
     } catch (e) {
       alert((e as Error)?.message || 'Failed to create broadcast')
     } finally {
       setSubmitting(false)
     }
-  }, [message, duration, submitting])
+  }, [message, submitting, duration, severity])
 
   const onRemove = React.useCallback(async () => {
     if (removing) return
@@ -2774,33 +2887,27 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void }> 
     }
   }, [removing])
 
-  const durations: Array<{ label: string; value: string }> = [
-    { label: '1 min', value: '1m' },
-    { label: '5 mins', value: '5m' },
-    { label: '30 mins', value: '30m' },
-    { label: '1 hour', value: '1h' },
-    { label: '5 hours', value: '5h' },
-    { label: '1 day', value: '1d' },
-    { label: 'Unlimited', value: 'unlimited' },
-  ]
+  // Duration selection removed; default send duration is 5 minutes
 
   const content = (
     <div>
       <div className="flex items-center justify-between">
         <div className="text-sm font-medium">Global broadcast message</div>
       </div>
-        {!active ? (
+        {initializing && !active ? (
+          <div className="mt-3 text-sm opacity-70">Checking current broadcast…</div>
+        ) : active ? (
           <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto_auto]">
             <Input
-              placeholder="Write a short message (single line)"
-              value={message}
+              placeholder="Edit message"
+              value={message.length ? message : active.message}
               onChange={(e) => setMessage(e.target.value)}
               maxLength={200}
             />
             <select
               className="rounded-xl border px-3 py-2 text-sm bg-white"
-              value={severity}
-              onChange={(e) => setSeverity((e.target.value as any) || 'info')}
+              value={severity || 'warning'}
+              onChange={(e) => setSeverity((e.target.value as any) || 'warning')}
               aria-label="Type"
             >
               <option value="info">Information</option>
@@ -2813,28 +2920,83 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void }> 
               onChange={(e) => setDuration(e.target.value)}
               aria-label="Display time"
             >
-              <option value="">Select duration…</option>
-              {durations.map(d => (
-                <option key={d.value} value={d.value}>{d.label}</option>
-              ))}
+              <option value="">Keep current</option>
+              <option value="1m">1 min</option>
+              <option value="5m">5 mins</option>
+              <option value="30m">30 mins</option>
+              <option value="1h">1 hour</option>
+              <option value="5h">5 hours</option>
+              <option value="1d">1 day</option>
+              <option value="unlimited">Unlimited</option>
             </select>
-            <Button className="rounded-2xl" onClick={onSubmit} disabled={submitting || !message.trim() || !duration}>
-              Send
-            </Button>
+            <div className="flex gap-2">
+              <Button className="rounded-2xl" variant="secondary" onClick={async () => {
+                try {
+                  const session = (await supabase.auth.getSession()).data.session
+                  const token = session?.access_token
+                  const headers: Record<string, string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+                  if (token) headers['Authorization'] = `Bearer ${token}`
+                  try { const staticToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (staticToken) headers['X-Admin-Token'] = String(staticToken) } catch {}
+                  const resp = await fetch('/api/admin/broadcast', {
+                    method: 'PUT', headers, credentials: 'same-origin',
+                    body: JSON.stringify({ message: (message.length ? message : active.message).trim(), severity, durationMs: (() => { const v = duration; if (v === '' || v === 'unlimited') return null; const m = v.match(/^(\d+)([smhd])$/); if (!m) return null; const n = Number(m[1]); const u = m[2]; const mult = u === 's' ? 1000 : u === 'm' ? 60000 : u === 'h' ? 3600000 : 86400000; return n*mult; })() })
+                  })
+                  const b = await resp.json().catch(() => ({}))
+                  if (!resp.ok) throw new Error(b?.error || `HTTP ${resp.status}`)
+                  setActive(b?.broadcast || null)
+                  setMessage('')
+                } catch (e) {
+                  alert((e as Error)?.message || 'Failed to update broadcast')
+                }
+              }}>
+                Save
+              </Button>
+              <Button className="rounded-2xl" variant="destructive" onClick={onRemove} disabled={removing}>
+                <Trash2 className="h-4 w-4 mr-1" /> Remove
+              </Button>
+            </div>
+            <div className="sm:col-span-4 text-xs opacity-60">
+              Submitted by {active.adminName ? active.adminName : 'Admin'}
+              {active.expiresAt && (
+                <> — Expires in {formatDuration(msRemaining(active.expiresAt) || 0)}</>
+              )}
+            </div>
           </div>
         ) : (
-          <div className="mt-3 flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-sm font-semibold truncate">{active.message}</div>
-              <div className="text-xs opacity-60">
-                Submitted by {active.adminName ? active.adminName : 'Admin'}
-                {active.expiresAt && (
-                  <> — Expires in {formatDuration(msRemaining(active.expiresAt) || 0)}</>
-                )}
-              </div>
-            </div>
-            <Button className="rounded-2xl" variant="destructive" onClick={onRemove} disabled={removing}>
-              <Trash2 className="h-4 w-4 mr-1" /> Remove
+          <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto_auto]">
+            <Input
+              placeholder="Write a short message (single line)"
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              maxLength={200}
+            />
+            <select
+              className="rounded-xl border px-3 py-2 text-sm bg-white"
+              value={severity}
+              onChange={(e) => setSeverity((e.target.value as any) || 'warning')}
+              aria-label="Type"
+            >
+              <option value="info">Information</option>
+              <option value="warning">Warning</option>
+              <option value="danger">Danger</option>
+            </select>
+            <select
+              className="rounded-xl border px-3 py-2 text-sm bg-white"
+              value={duration}
+              onChange={(e) => setDuration(e.target.value)}
+              aria-label="Display time"
+            >
+              <option value="1m">1 min</option>
+              <option value="5m">5 mins</option>
+              <option value="10m">10 mins</option>
+              <option value="30m">30 mins</option>
+              <option value="1h">1 hour</option>
+              <option value="5h">5 hours</option>
+              <option value="1d">1 day</option>
+              <option value="unlimited">Unlimited</option>
+            </select>
+            <Button className="rounded-2xl" onClick={onSubmit} disabled={submitting || !message.trim()}>
+              Send
             </Button>
           </div>
         )}
@@ -2846,17 +3008,7 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void }> 
   )
 }
 
-function parseDurationToMs(val: string): number | null {
-  const v = String(val || '').toLowerCase().trim()
-  if (!v || v === 'unlimited') return null
-  const m = v.match(/^(\d+)([smhd])$/)
-  if (!m) return null
-  const n = Number(m[1])
-  const unit = m[2]
-  if (!Number.isFinite(n) || n <= 0) return null
-  const mult = unit === 's' ? 1000 : unit === 'm' ? 60_000 : unit === 'h' ? 3_600_000 : 86_400_000
-  return n * mult
-}
+// parseDurationToMs removed
 
 export default AdminPage
 

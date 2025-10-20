@@ -3775,6 +3775,11 @@ function clearBroadcastForAll() {
 // Public: fetch current active broadcast
 app.get('/api/broadcast/active', async (_req, res) => {
   try {
+    // Prevent caches from serving stale broadcast state
+    try {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
+      res.setHeader('Pragma', 'no-cache')
+    } catch {}
     const row = await getActiveBroadcastRow()
     if (row) {
       res.json({ ok: true, broadcast: {
@@ -3803,7 +3808,7 @@ app.get('/api/broadcast/stream', async (req, res) => {
     res.setHeader('X-Accel-Buffering', 'no')
     res.flushHeaders?.()
 
-    // Send initial state
+    // Send initial state (only broadcast if active exists; do not force-clear here)
     try {
       const row = await getActiveBroadcastRow()
       if (row) {
@@ -3816,8 +3821,6 @@ app.get('/api/broadcast/stream', async (req, res) => {
           createdBy: row.created_by ? String(row.created_by) : null,
           adminName: row.admin_name ? String(row.admin_name) : null,
         })
-      } else {
-        sseWrite(res, 'clear', { ok: true })
       }
     } catch {}
 
@@ -4320,6 +4323,71 @@ app.post('/api/admin/broadcast', async (req, res) => {
     res.json({ ok: true, broadcast: payload })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to create broadcast' })
+  }
+})
+
+// Admin: update current broadcast message (edit message or severity, optionally extend/shorten duration)
+app.put('/api/admin/broadcast', async (req, res) => {
+  try {
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
+    if (!sql) {
+      res.status(500).json({ error: 'Database not configured' })
+      return
+    }
+    await ensureBroadcastTable()
+    // Find current active
+    const rows = await sql`
+      select id, message, severity, created_at, expires_at, created_by::text as created_by
+      from public.broadcast_messages
+      where removed_at is null and (expires_at is null or expires_at > now())
+      order by created_at desc
+      limit 1
+    `
+    const cur = Array.isArray(rows) && rows[0] ? rows[0] : null
+    if (!cur) {
+      res.status(404).json({ error: 'No active broadcast' })
+      return
+    }
+    const nextMessage = (req.body?.message ?? cur.message)?.toString()?.trim()
+    const sevRaw = (req.body?.severity ?? cur.severity)?.toString()?.trim()?.toLowerCase()
+    const nextSeverity = (sevRaw === 'warning' || sevRaw === 'danger') ? sevRaw : 'info'
+    const durationMsRaw = req.body?.durationMs ?? req.body?.duration_ms ?? null
+    let nextExpires = cur.expires_at ? new Date(cur.expires_at) : null
+    if (durationMsRaw === null) {
+      // keep as is
+    } else {
+      const n = Number(durationMsRaw)
+      if (Number.isFinite(n) && n > 0) nextExpires = new Date(Date.now() + Math.floor(n))
+      else nextExpires = null
+    }
+    const upd = await sql`
+      update public.broadcast_messages
+      set message = ${nextMessage}, severity = ${nextSeverity}, expires_at = ${nextExpires ? nextExpires.toISOString() : null}
+      where id = ${cur.id}
+      returning id::text as id, message, severity, created_at, expires_at, created_by::text as created_by
+    `
+    const row = upd?.[0]
+    let adminName = null
+    if (row?.created_by && sql) {
+      try {
+        const nameRows = await sql`select coalesce(display_name, email, '') as name from public.profiles where id = ${row.created_by} limit 1`
+        adminName = nameRows?.[0]?.name || null
+      } catch {}
+    }
+    const payload = row ? {
+      id: String(row.id || ''),
+      message: String(row.message || ''),
+      severity: String(row.severity || 'info'),
+      createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
+      expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
+      createdBy: row.created_by ? String(row.created_by) : null,
+      adminName: adminName ? String(adminName) : null,
+    } : null
+    if (payload) broadcastToAll(payload)
+    res.json({ ok: true, broadcast: payload })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to update broadcast' })
   }
 })
 
