@@ -43,6 +43,28 @@ export const AdminPage: React.FC = () => {
       return `${left}...${right}`
     } catch { return value }
   }, [])
+
+  // Compute a responsive max character count for branch names based on viewport width
+  const computeBranchMaxChars = React.useCallback((viewportWidth: number): number => {
+    const w = Math.max(0, viewportWidth || 0)
+    if (w < 340) return 18
+    if (w < 380) return 22
+    if (w < 420) return 26
+    if (w < 640) return 32
+    if (w < 768) return 42
+    if (w < 1024) return 56
+    return 64
+  }, [])
+
+  const [branchMaxChars, setBranchMaxChars] = React.useState<number>(() =>
+    typeof window !== 'undefined' ? computeBranchMaxChars(window.innerWidth) : 56,
+  )
+
+  React.useEffect(() => {
+    const onResize = () => setBranchMaxChars(computeBranchMaxChars(window.innerWidth))
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [computeBranchMaxChars])
   const countryCodeToName = React.useCallback((code: string): string => {
     try {
       const c = String(code || '').toUpperCase()
@@ -1546,7 +1568,7 @@ export const AdminPage: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <div className="text-xs opacity-60 hidden sm:block">Current:</div>
                   <Badge variant="outline" className="rounded-full max-w-[360px] truncate" title={currentBranch || undefined}>
-                    {branchesLoading ? '—' : shortenMiddle(currentBranch || 'unknown', 56)}
+                    {branchesLoading ? '—' : shortenMiddle(currentBranch || 'unknown', branchMaxChars)}
                   </Badge>
                 </div>
               </div>
@@ -1564,7 +1586,7 @@ export const AdminPage: React.FC = () => {
                     <option value="">No branches found</option>
                   ) : (
                     branchOptions.map(b => (
-                      <option key={b} value={b} title={b}>{shortenMiddle(b, 64)}</option>
+                      <option key={b} value={b} title={b}>{shortenMiddle(b, branchMaxChars)}</option>
                     ))
                   )}
                 </select>
