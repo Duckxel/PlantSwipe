@@ -2853,7 +2853,7 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
         method: 'POST',
         headers,
         credentials: 'same-origin',
-        body: JSON.stringify({ message: message.trim(), severity, durationMs: (() => { const v = duration; if (v === 'unlimited' || !v) return null; const m = v.match(/^(\d+)([smhd])$/); if (!m) return 5*60*1000; const n = Number(m[1]); const u = m[2]; const mult = u === 's' ? 1000 : u === 'm' ? 60000 : u === 'h' ? 3600000 : 86400000; return n*mult; })() }),
+        body: JSON.stringify({ message: message.trim(), severity, durationMs: (() => { const v = duration; if (v === 'unlimited' || !v) return null; const m = v.match(/^(\d+)([smhd])$/); if (!m) return null; const n = Number(m[1]); const u = m[2]; const mult = u === 's' ? 1000 : u === 'm' ? 60000 : u === 'h' ? 3600000 : 86400000; return n*mult; })() }),
       })
       const b = await resp.json().catch(() => ({}))
       if (!resp.ok) throw new Error(b?.error || `HTTP ${resp.status}`)
@@ -2865,7 +2865,7 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
     } finally {
       setSubmitting(false)
     }
-  }, [message, submitting])
+  }, [message, submitting, duration, severity])
 
   const onRemove = React.useCallback(async () => {
     if (removing) return
@@ -2986,8 +2986,9 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
               onChange={(e) => setDuration(e.target.value)}
               aria-label="Display time"
             >
-              <option value="5m">5 mins</option>
               <option value="1m">1 min</option>
+              <option value="5m">5 mins</option>
+              <option value="10m">10 mins</option>
               <option value="30m">30 mins</option>
               <option value="1h">1 hour</option>
               <option value="5h">5 hours</option>
