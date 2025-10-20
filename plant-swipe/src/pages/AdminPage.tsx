@@ -2776,7 +2776,8 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
           // Inform parent to open the section if collapsed
           onActive?.()
         } else {
-          setActive(null)
+          // If we already have a valid active (e.g., from persisted state), keep it
+          setActive((prev) => prev ? prev : null)
         }
       }
     } catch {}
