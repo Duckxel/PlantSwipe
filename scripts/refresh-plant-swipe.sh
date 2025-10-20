@@ -175,6 +175,19 @@ case "${SKIP_SERVICE_RESTARTS:-}" in
     ;;
 esac
 
+# Control behavior when the current branch has no valid upstream
+# - PLANTSWIPE_DISABLE_DEFAULT_BRANCH_FALLBACK=true|1 to stay on the current branch
+#   instead of switching to a default branch (e.g., main) when upstream is missing
+DISABLE_DEFAULT_FALLBACK=false
+case "${PLANTSWIPE_DISABLE_DEFAULT_BRANCH_FALLBACK:-}" in
+  1|true|TRUE|yes|YES)
+    DISABLE_DEFAULT_FALLBACK=true
+    ;;
+esac
+
+# Internal flag: when true, skip the git pull step (e.g., no upstream and fallback disabled)
+SKIP_PULL=false
+
 log "Repo (cwd): $WORK_DIR"
 log "Node app: $NODE_DIR"
 
@@ -387,7 +400,29 @@ if [[ "$UPSTREAM_OK" != "true" ]]; then
   fi
 
   # If still no valid upstream, fall back to a sane default branch.
+  # Before falling back, try to auto-set upstream to origin/$BRANCH_NAME if that
+  # remote branch exists (even when no explicit TARGET_BRANCH was provided).
   if [[ "$UPSTREAM_OK" != "true" ]]; then
+    if ${GIT_LOCAL_CMD[@]} ls-remote --exit-code --heads origin "$BRANCH_NAME" >/dev/null 2>&1; then
+      ${GIT_LOCAL_CMD[@]} branch --set-upstream-to="origin/$BRANCH_NAME" "$BRANCH_NAME" >/dev/null 2>&1 || true
+      UPSTREAM_REF="$(${GIT_LOCAL_CMD[@]} rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || true)"
+      if [[ -n "$UPSTREAM_REF" ]] && ${GIT_LOCAL_CMD[@]} show-ref --verify --quiet "refs/remotes/${UPSTREAM_REF}"; then
+        UPSTREAM_OK=true
+        log "Set upstream of '$BRANCH_NAME' to 'origin/$BRANCH_NAME'."
+      fi
+    fi
+  fi
+
+  # Respect explicit request to stay on current branch when upstream is missing
+  if [[ "$UPSTREAM_OK" != "true" && "$DISABLE_DEFAULT_FALLBACK" == "true" ]]; then
+    log "Upstream missing for '$BRANCH_NAME' and default fallback is disabled; staying on current branch."
+    # Ensure no stale upstream is configured and skip pull to avoid failure
+    ${GIT_LOCAL_CMD[@]} branch --unset-upstream >/dev/null 2>&1 || true
+    SKIP_PULL=true
+  fi
+
+  # If still no valid upstream and fallback not disabled, fall back to a default branch.
+  if [[ "$UPSTREAM_OK" != "true" && "$DISABLE_DEFAULT_FALLBACK" != "true" ]]; then
     DEFAULT_BRANCH="${PLANTSWIPE_DEFAULT_BRANCH:-}"
     if [[ -z "$DEFAULT_BRANCH" ]]; then
       # Prefer origin/HEAD if available
@@ -447,17 +482,21 @@ if [[ "$UPSTREAM_OK" != "true" ]]; then
   fi
 fi
 
-log "Pulling latest (fast-forward only) on current branch…"
-# Try pull as current user first
-if ! "${GIT_LOCAL_CMD[@]}" pull --ff-only; then
-  if [[ ${#RUN_AS_PREFIX[@]} -gt 0 && "$CAN_SUDO" == "true" ]]; then
-    if ! "${GIT_CMD[@]}" pull --ff-only; then
-      echo "[ERROR] git pull failed. Check remote access and repository permissions. If needed, run as $REPO_OWNER." >&2
-      exit 1
+if [[ "$SKIP_PULL" == "true" ]]; then
+  log "Skipping git pull due to missing upstream while staying on current branch."
+else
+  log "Pulling latest (fast-forward only) on current branch…"
+  # Try pull as current user first
+  if ! "${GIT_LOCAL_CMD[@]}" pull --ff-only; then
+    if [[ ${#RUN_AS_PREFIX[@]} -gt 0 && "$CAN_SUDO" == "true" ]]; then
+      if ! "${GIT_CMD[@]}" pull --ff-only; then
+        echo "[ERROR] git pull failed. Check remote access and repository permissions. If needed, run as $REPO_OWNER." >&2
+        exit 1
+      fi
+    else
+    echo "[ERROR] git pull failed. Check remote access and repository permissions. If needed, run as $REPO_OWNER." >&2
+    exit 1
     fi
-  else
-  echo "[ERROR] git pull failed. Check remote access and repository permissions. If needed, run as $REPO_OWNER." >&2
-  exit 1
   fi
 fi
 
