@@ -95,6 +95,18 @@ export const AdminPage: React.FC = () => {
     checkActiveBroadcast()
     return () => { cancelled = true }
   }, [])
+
+  // Even when collapsed, listen to broadcast SSE and auto-open when a broadcast starts
+  React.useEffect(() => {
+    let es: EventSource | null = null
+    try {
+      es = new EventSource('/api/broadcast/stream', { withCredentials: true })
+      const onBroadcast = () => { setBroadcastOpen(true) }
+      es.addEventListener('broadcast', onBroadcast as EventListener)
+      // No need to auto-close on clear; keep user preference
+    } catch {}
+    return () => { try { es?.close() } catch {} }
+  }, [])
   const consoleRef = React.useRef<HTMLDivElement | null>(null)
   React.useEffect(() => {
     if (!consoleOpen) return
@@ -2727,6 +2739,13 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
   const [now, setNow] = React.useState(() => Date.now())
   // Prevent flashing the create UI before we know if an active broadcast exists
   const [initializing, setInitializing] = React.useState(true)
+
+  // Default duration behavior:
+  // - Create mode (no active): default to 5m
+  // - Edit mode (active): default to "Keep current" (empty string) so we don't override
+  React.useEffect(() => {
+    setDuration(active ? '' : '5m')
+  }, [active])
 
   React.useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000)
