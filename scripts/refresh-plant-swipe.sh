@@ -138,7 +138,8 @@ attempt_git_permission_repair() {
 }
 
 # Determine repository owner and, when running as root, run git as owner
-REPO_OWNER="$(stat -c '%U' "$WORK_DIR/.git" 2>/dev/null || stat -c '%U' "$WORK_DIR" 2>/dev/null || echo root)"
+# Allow explicit override to force operations as a specific user (e.g., www-data)
+REPO_OWNER="${PLANTSWIPE_REPO_OWNER:-$(stat -c '%U' "$WORK_DIR/.git" 2>/dev/null || stat -c '%U' "$WORK_DIR" 2>/dev/null || echo root)}"
 RUN_AS_PREFIX=()
 CURRENT_USER="$(id -un 2>/dev/null || echo "")"
 if [[ -n "$(command -v sudo 2>/dev/null)" && -n "$REPO_OWNER" && "$REPO_OWNER" != "$CURRENT_USER" ]]; then
@@ -156,7 +157,12 @@ log "Git user: $REPO_OWNER"
 # Determine if we can sudo non-interactively (for better error messages)
 CAN_SUDO=false
 if [[ -n "$SUDO" ]]; then
-  if $SUDO -n true >/dev/null 2>&1; then CAN_SUDO=true; fi
+  if $SUDO -n true >/dev/null 2>&1; then
+    CAN_SUDO=true
+  elif [[ -n "${SUDO_ASKPASS:-}" ]]; then
+    # Askpass helper is available; treat as non-interactive capability
+    CAN_SUDO=true
+  fi
 fi
 
 # Optional: skip restarting services (useful for streaming logs via SSE)
@@ -230,7 +236,7 @@ log "Fetching/pruning remotes…"
 # Try as current user first to avoid sudo
 if ! "${GIT_LOCAL_CMD[@]}" fetch --all --prune; then
   log "Local fetch failed; will try as repo owner if possible (can_sudo=$CAN_SUDO)"
-  if [[ ${#RUN_AS_PREFIX[@]} -gt 0 && "$CAN_SUDO" == "true" ]]; then
+  if [[ ${#RUN_AS_PREFIX[@]} -gt 0 ]]; then
     if ! "${GIT_CMD[@]}" fetch --all --prune; then
       # Try to self-heal common permission problems, then retry once
       attempt_git_permission_repair
@@ -262,7 +268,7 @@ if ! "${GIT_LOCAL_CMD[@]}" fetch --all --prune; then
       fi
     fi
   else
-    echo "[ERROR] git fetch failed and cannot escalate privileges non-interactively." >&2
+    echo "[ERROR] git fetch failed and cannot escalate privileges (RUN_AS_PREFIX not set)." >&2
     echo "Diagnostics:" >&2
     echo "- current user: $CURRENT_USER (euid=$EUID)" >&2
     echo "- repo owner: $REPO_OWNER" >&2
@@ -297,7 +303,7 @@ if [[ -n "$TARGET_BRANCH" && "$TARGET_BRANCH" != "$BRANCH_NAME" ]]; then
   # If local branch already exists, try checking it out
   if ${GIT_LOCAL_CMD[@]} show-ref --verify --quiet "refs/heads/$TARGET_BRANCH"; then
     if ! ${GIT_LOCAL_CMD[@]} checkout "$TARGET_BRANCH"; then
-      if [[ ${#RUN_AS_PREFIX[@]} -gt 0 && "$CAN_SUDO" == "true" ]]; then
+      if [[ ${#RUN_AS_PREFIX[@]} -gt 0 ]]; then
         if ! ${GIT_CMD[@]} checkout "$TARGET_BRANCH"; then
           echo "[ERROR] Failed to checkout local branch $TARGET_BRANCH" >&2
           exit 1
@@ -312,7 +318,7 @@ if [[ -n "$TARGET_BRANCH" && "$TARGET_BRANCH" != "$BRANCH_NAME" ]]; then
     if ${GIT_LOCAL_CMD[@]} ls-remote --exit-code --heads origin "$TARGET_BRANCH" >/dev/null 2>&1; then
       # Create/reset local branch from remote and set upstream
       if ! ${GIT_LOCAL_CMD[@]} checkout -B "$TARGET_BRANCH" "origin/$TARGET_BRANCH"; then
-        if [[ ${#RUN_AS_PREFIX[@]} -gt 0 && "$CAN_SUDO" == "true" ]]; then
+        if [[ ${#RUN_AS_PREFIX[@]} -gt 0 ]]; then
           if ! ${GIT_CMD[@]} checkout -B "$TARGET_BRANCH" "origin/$TARGET_BRANCH"; then
             echo "[ERROR] Failed to create local branch from origin/$TARGET_BRANCH" >&2
             exit 1
@@ -353,7 +359,7 @@ if [[ "$UPSTREAM_OK" != "true" ]]; then
       log "Upstream missing for '$BRANCH_NAME'. Switching to requested branch '$TARGET_BRANCH'…"
       if ${GIT_LOCAL_CMD[@]} show-ref --verify --quiet "refs/heads/$TARGET_BRANCH"; then
         if ! ${GIT_LOCAL_CMD[@]} checkout "$TARGET_BRANCH"; then
-          if [[ ${#RUN_AS_PREFIX[@]} -gt 0 && "$CAN_SUDO" == "true" ]]; then
+          if [[ ${#RUN_AS_PREFIX[@]} -gt 0 ]]; then
             if ! ${GIT_CMD[@]} checkout "$TARGET_BRANCH"; then
               echo "[ERROR] Failed to checkout local branch $TARGET_BRANCH" >&2
               exit 1
@@ -367,7 +373,7 @@ if [[ "$UPSTREAM_OK" != "true" ]]; then
         # Verify the remote branch exists, then create/reset local branch and set upstream
         if ${GIT_LOCAL_CMD[@]} ls-remote --exit-code --heads origin "$TARGET_BRANCH" >/dev/null 2>&1; then
           if ! ${GIT_LOCAL_CMD[@]} checkout -B "$TARGET_BRANCH" "origin/$TARGET_BRANCH"; then
-            if [[ ${#RUN_AS_PREFIX[@]} -gt 0 && "$CAN_SUDO" == "true" ]]; then
+            if [[ ${#RUN_AS_PREFIX[@]} -gt 0 ]]; then
               if ! ${GIT_CMD[@]} checkout -B "$TARGET_BRANCH" "origin/$TARGET_BRANCH"; then
                 echo "[ERROR] Failed to create local branch from origin/$TARGET_BRANCH" >&2
                 exit 1
@@ -451,7 +457,7 @@ if [[ "$UPSTREAM_OK" != "true" ]]; then
       log "Upstream missing for '$BRANCH_NAME'. Switching to default branch '$DEFAULT_BRANCH'…"
       if ${GIT_LOCAL_CMD[@]} show-ref --verify --quiet "refs/heads/$DEFAULT_BRANCH"; then
         if ! ${GIT_LOCAL_CMD[@]} checkout "$DEFAULT_BRANCH"; then
-          if [[ ${#RUN_AS_PREFIX[@]} -gt 0 && "$CAN_SUDO" == "true" ]]; then
+          if [[ ${#RUN_AS_PREFIX[@]} -gt 0 ]]; then
             if ! ${GIT_CMD[@]} checkout "$DEFAULT_BRANCH"; then
               echo "[ERROR] Failed to checkout $DEFAULT_BRANCH" >&2
               exit 1
@@ -463,7 +469,7 @@ if [[ "$UPSTREAM_OK" != "true" ]]; then
         fi
       else
         if ! ${GIT_LOCAL_CMD[@]} checkout -B "$DEFAULT_BRANCH" "origin/$DEFAULT_BRANCH"; then
-          if [[ ${#RUN_AS_PREFIX[@]} -gt 0 && "$CAN_SUDO" == "true" ]]; then
+          if [[ ${#RUN_AS_PREFIX[@]} -gt 0 ]]; then
             if ! ${GIT_CMD[@]} checkout -B "$DEFAULT_BRANCH" "origin/$DEFAULT_BRANCH"; then
               echo "[ERROR] Failed to create local $DEFAULT_BRANCH from origin/$DEFAULT_BRANCH" >&2
               exit 1
@@ -487,17 +493,26 @@ if [[ "$SKIP_PULL" == "true" ]]; then
 else
   log "Pulling latest (fast-forward only) on current branch…"
   # Try pull as current user first
-  if ! "${GIT_LOCAL_CMD[@]}" pull --ff-only; then
-    if [[ ${#RUN_AS_PREFIX[@]} -gt 0 && "$CAN_SUDO" == "true" ]]; then
+if ! "${GIT_LOCAL_CMD[@]}" pull --ff-only; then
+  log "git pull as current user failed; retrying as repo owner if possible"
+  if [[ ${#RUN_AS_PREFIX[@]} -gt 0 ]]; then
+    if ! "${GIT_CMD[@]}" pull --ff-only; then
+      # Attempt permission repair and retry once
+      attempt_git_permission_repair
       if ! "${GIT_CMD[@]}" pull --ff-only; then
         echo "[ERROR] git pull failed. Check remote access and repository permissions. If needed, run as $REPO_OWNER." >&2
         exit 1
       fi
-    else
-    echo "[ERROR] git pull failed. Check remote access and repository permissions. If needed, run as $REPO_OWNER." >&2
-    exit 1
+    fi
+  else
+    # No ability to run as repo owner; try permission repair and one more local attempt
+    attempt_git_permission_repair
+    if ! "${GIT_LOCAL_CMD[@]}" pull --ff-only; then
+      echo "[ERROR] git pull failed. Check remote access and repository permissions. If needed, run as $REPO_OWNER." >&2
+      exit 1
     fi
   fi
+fi
 fi
 
 # Install and build Node app
