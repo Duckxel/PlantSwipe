@@ -1875,7 +1875,7 @@ export const AdminPage: React.FC = () => {
                           <ResponsiveContainer width="100%" height="100%">
                             <ComposedChart
                               data={visitorsSeries}
-                              margin={{ top: 10, right: 16, bottom: 14, left: 16 }}
+                              margin={{ top: 10, right: 8, bottom: 14, left: 8 }}
                             >
                               <defs>
                                 <linearGradient id="visitsLineGrad" x1="0" y1="0" x2="1" y2="0">
@@ -1896,7 +1896,7 @@ export const AdminPage: React.FC = () => {
                                 axisLine={false}
                                 tickLine={false}
                                 interval={0}
-                                padding={{ left: 12, right: 12 }}
+                                padding={{ left: 0, right: 0 }}
                               />
                               <YAxis
                                 allowDecimals={false}
@@ -1904,6 +1904,7 @@ export const AdminPage: React.FC = () => {
                                 tick={{ fontSize: 11, fill: '#525252' }}
                                 axisLine={false}
                                 tickLine={false}
+                                width={28}
                               />
                               <Tooltip content={<TooltipContent />} cursor={{ stroke: 'rgba(0,0,0,0.1)' }} />
                               <ReferenceLine
@@ -1934,10 +1935,10 @@ export const AdminPage: React.FC = () => {
                             {topCountries.length === 0 ? (
                               <div className="text-sm opacity-60">No data.</div>
                             ) : (
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                <div className="col-span-2 min-h-[150px]">
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                                <div className="col-span-2 min-h-[150px] pr-2 md:pr-0">
                                   <ResponsiveContainer width="100%" height={150}>
-                                    <PieChart>
+                                    <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
                                       {(() => {
                                         const pieData: Array<{ country: string; visits: number; pct?: number; isOther?: boolean }> = [...topCountries]
                                         if (otherCountries && otherCountries.visits > 0) {
@@ -1991,6 +1992,7 @@ export const AdminPage: React.FC = () => {
                                               innerRadius={36}
                                               outerRadius={64}
                                               paddingAngle={3}
+                                              cx="42%"
                                             >
                                               {pieData.map((entry, index) => (
                                                 <Cell key={`cell-${entry.country}-${index}`} fill={countryColors[index % countryColors.length]} />
@@ -2003,10 +2005,10 @@ export const AdminPage: React.FC = () => {
                                     </PieChart>
                                   </ResponsiveContainer>
                                 </div>
-                                <div className="flex flex-col gap-2">
+                                <div className="flex flex-col gap-1.5">
                                   {topCountries.slice(0, 5).map((c, idx) => (
                                     <div key={c.country} className="flex items-center justify-between">
-                                      <div className="flex-1 flex items-center gap-2 min-w-0">
+                                      <div className="flex-1 flex items-center gap-1.5 min-w-0">
                                         <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: countryColors[idx % countryColors.length] }} />
                                         <span className="text-sm truncate">{countryCodeToName(c.country)}</span>
                                       </div>
@@ -2016,7 +2018,7 @@ export const AdminPage: React.FC = () => {
                                   {otherCountries && otherCountries.visits > 0 && (
                                     <div className="flex items-center justify-between">
                                       <div
-                                        className="flex-1 flex items-center gap-2 min-w-0"
+                                        className="flex-1 flex items-center gap-1.5 min-w-0"
                                         onMouseEnter={(e) => showOtherCountriesTooltip(e.currentTarget as HTMLElement)}
                                         onMouseLeave={hideOtherCountriesTooltip}
                                         onFocus={(e) => showOtherCountriesTooltip(e.currentTarget as HTMLElement)}
