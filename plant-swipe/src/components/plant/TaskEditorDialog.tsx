@@ -193,7 +193,12 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
         onOpenChange={(o) => setCreateOpen(o)}
         gardenId={gardenId}
         gardenPlantId={gardenPlantId}
-        onCreated={async () => { await load(); if (onChanged) await onChanged() }}
+        onCreated={async () => {
+          await load()
+          // Notify global UI to refresh nav badges immediately on task creation
+          try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
+          if (onChanged) await onChanged()
+        }}
       />
     </Dialog>
   )

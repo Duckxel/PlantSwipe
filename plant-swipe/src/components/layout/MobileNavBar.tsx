@@ -73,17 +73,19 @@ export const MobileNavBar: React.FC<MobileNavBarProps> = ({ canCreate }) => {
               <Sparkles className="h-6 w-6" />
             </NavLink>
           </Button>
-          <Button asChild variant={"secondary"} size={"icon"} className={currentView === 'gardens' ? "h-12 w-12 rounded-2xl bg-black text-white hover:bg-black/90" : "h-12 w-12 rounded-2xl bg-white text-black hover:bg-stone-100"}>
-            <NavLink to="/gardens" aria-label="Garden" className="no-underline flex items-center justify-center relative">
-              <Sprout className="h-6 w-6" />
-              {hasUnfinished && (
-                <span
-                  className="pointer-events-none absolute top-0 right-0 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white translate-x-1/2 -translate-y-1/2"
-                  aria-hidden="true"
-                />
-              )}
-            </NavLink>
-          </Button>
+          <div className="relative">
+            <Button asChild variant={"secondary"} size={"icon"} className={currentView === 'gardens' ? "h-12 w-12 rounded-2xl bg-black text-white hover:bg-black/90" : "h-12 w-12 rounded-2xl bg-white text-black hover:bg-stone-100"}>
+              <NavLink to="/gardens" aria-label="Garden" className="no-underline flex items-center justify-center">
+                <Sprout className="h-6 w-6" />
+              </NavLink>
+            </Button>
+            {hasUnfinished && (
+              <span
+                className="pointer-events-none absolute -top-1 -right-1 z-10 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white"
+                aria-hidden="true"
+              />
+            )}
+          </div>
           <Button asChild variant={"secondary"} size={"icon"} className={currentView === 'search' ? "h-12 w-12 rounded-2xl bg-black text-white hover:bg-black/90" : "h-12 w-12 rounded-2xl bg-white text-black hover:bg-stone-100"}>
             <NavLink to="/search" aria-label="Search" className="no-underline flex items-center justify-center">
               <Search className="h-6 w-6" />

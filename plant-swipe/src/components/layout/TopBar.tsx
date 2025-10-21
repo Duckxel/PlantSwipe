@@ -160,23 +160,25 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
 
 function NavPill({ to, isActive, icon, label, showDot }: { to: string; isActive: boolean; icon: React.ReactNode; label: string; showDot?: boolean }) {
   return (
-    <Button
-      asChild
-      variant={'secondary'}
-      className={isActive ? "rounded-2xl bg-black text-white hover:bg-black/90 hover:text-white" : "rounded-2xl bg-white text-black hover:bg-stone-100 hover:text-black"}
-    >
-      <Link to={to} className="no-underline relative">
-        <span className="inline-flex items-center gap-2">
-          {icon}
-          <span>{label}</span>
-        </span>
-        {showDot && (
-          <span
-            className="pointer-events-none absolute top-0 right-0 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white translate-x-1/2 -translate-y-1/2"
-            aria-hidden="true"
-          />
-        )}
-      </Link>
-    </Button>
+    <div className="relative inline-block align-middle">
+      <Button
+        asChild
+        variant={'secondary'}
+        className={isActive ? "rounded-2xl bg-black text-white hover:bg-black/90 hover:text-white" : "rounded-2xl bg-white text-black hover:bg-stone-100 hover:text-black"}
+      >
+        <Link to={to} className="no-underline">
+          <span className="inline-flex items-center gap-2">
+            {icon}
+            <span>{label}</span>
+          </span>
+        </Link>
+      </Button>
+      {showDot && (
+        <span
+          className="pointer-events-none absolute -top-1 -right-1 z-10 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white"
+          aria-hidden="true"
+        />
+      )}
+    </div>
   )
 }
