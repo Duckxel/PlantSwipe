@@ -788,6 +788,7 @@ export const GardenDashboardPage: React.FC = () => {
         }
       } catch {}
       await load()
+      await loadHeavyForCurrentTab()
       // Signal other UI (nav bars) to refresh notification badges
       notifyTasksChanged()
     } catch (e) {
@@ -1037,7 +1038,7 @@ export const GardenDashboardPage: React.FC = () => {
                 await loadHeavyForCurrentTab()
                 notifyTasksChanged()
               }
-              }} />} />
+              }} onCompleteAllForPlant={completeAllTodayForPlant} />} />
               <Route path="settings" element={(
                 <div className="space-y-6">
                   <div className="space-y-3">
@@ -1176,7 +1177,7 @@ export const GardenDashboardPage: React.FC = () => {
   )
 }
 
-function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts, weekCountsByType, serverToday, dueThisWeekByPlant, todayTaskOccurrences, onProgressOccurrence }: { plants: any[]; duePlantIds: Set<string> | null; onLogWater: (id: string) => Promise<void>; weekDays: string[]; weekCounts: number[]; weekCountsByType: { water: number[]; fertilize: number[]; harvest: number[]; cut: number[]; custom: number[] }; serverToday: string | null; dueThisWeekByPlant: Record<string, number[]>; todayTaskOccurrences: Array<{ id: string; taskId: string; gardenPlantId: string; dueAt: string; requiredCount: number; completedCount: number; completedAt: string | null; taskType?: 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom' }>; onProgressOccurrence: (id: string, inc: number) => Promise<void> }) {
+function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts, weekCountsByType, serverToday, dueThisWeekByPlant, todayTaskOccurrences, onProgressOccurrence, onCompleteAllForPlant }: { plants: any[]; duePlantIds: Set<string> | null; onLogWater: (id: string) => Promise<void>; weekDays: string[]; weekCounts: number[]; weekCountsByType: { water: number[]; fertilize: number[]; harvest: number[]; cut: number[]; custom: number[] }; serverToday: string | null; dueThisWeekByPlant: Record<string, number[]>; todayTaskOccurrences: Array<{ id: string; taskId: string; gardenPlantId: string; dueAt: string; requiredCount: number; completedCount: number; completedAt: string | null; taskType?: 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom' }>; onProgressOccurrence: (id: string, inc: number) => Promise<void>; onCompleteAllForPlant: (gardenPlantId: string) => Promise<void> }) {
   const duePlants = React.useMemo(() => {
     if (!duePlantIds) return []
     return plants.filter((gp: any) => duePlantIds.has(gp.id))
@@ -1280,7 +1281,12 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
               <Card key={gp.id} className="rounded-2xl p-4">
                 <div className="font-medium">{gp.nickname || gp.plant?.name}</div>
                 {gp.nickname && <div className="text-xs opacity-60">{gp.plant?.name}</div>}
-                <div className="text-sm opacity-70">Tasks due: {totalDone} / {totalReq}</div>
+                <div className="flex items-center justify-between">
+                  <div className="text-sm opacity-70">Tasks due: {totalDone} / {totalReq}</div>
+                  {totalDone < totalReq && (
+                    <Button size="sm" className="rounded-xl" onClick={() => onCompleteAllForPlant(gp.id)}>Complete all</Button>
+                  )}
+                </div>
                 <div className="mt-2 flex flex-col gap-2">
                   {occs.map((o) => {
                     const tt = (o as any).taskType || 'custom'
