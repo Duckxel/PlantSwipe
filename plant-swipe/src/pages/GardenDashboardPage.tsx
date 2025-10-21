@@ -9,7 +9,6 @@ import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { PlantDetails } from '@/components/plant/PlantDetails'
-import { TasksSidebar } from '@/components/garden/TasksSidebar'
 import { Info, ArrowUpRight } from 'lucide-react'
 import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
 import { TaskEditorDialog } from '@/components/plant/TaskEditorDialog'
@@ -70,9 +69,19 @@ export const GardenDashboardPage: React.FC = () => {
   const [addDetailsOpen, setAddDetailsOpen] = React.useState(false)
   const [addNickname, setAddNickname] = React.useState('')
   const [addCount, setAddCount] = React.useState<number>(1)
+  const countInputRef = React.useRef<HTMLInputElement | null>(null)
   const [scheduleLockYear, setScheduleLockYear] = React.useState<boolean>(false)
   const [scheduleAllowedPeriods, setScheduleAllowedPeriods] = React.useState<Array<'week'|'month'|'year'> | undefined>(undefined)
   const [dragIdx, setDragIdx] = React.useState<number | null>(null)
+
+  React.useEffect(() => {
+    if (addDetailsOpen) {
+      const t = setTimeout(() => {
+        try { countInputRef.current?.focus(); countInputRef.current?.select() } catch {}
+      }, 0)
+      return () => { try { clearTimeout(t) } catch {} }
+    }
+  }, [addDetailsOpen])
 
   const [activityRev, setActivityRev] = React.useState(0)
   const streakRefreshedRef = React.useRef(false)
@@ -555,6 +564,8 @@ export const GardenDashboardPage: React.FC = () => {
     setAdding(true)
     try {
       // Open details modal to capture count and nickname
+      // Prefill the editable name field with the plant's species name
+      setAddNickname(selectedPlant.name)
       setAddDetailsOpen(true)
       return
     } catch (e: any) {
@@ -596,7 +607,9 @@ export const GardenDashboardPage: React.FC = () => {
             .upsert({ garden_id: id, garden_plant_id: existingId, plants_on_hand: speciesCount, seeds_on_hand: 0 }, { onConflict: 'garden_plant_id' })
         }
       }
-      const nicknameVal = addNickname.trim().length > 0 ? addNickname.trim() : null
+      // Treat unchanged name (same as species name) as no custom nickname
+      const trimmedName = addNickname.trim()
+      const nicknameVal = trimmedName.length > 0 && trimmedName !== (selectedPlant.name || '').trim() ? trimmedName : null
       const qty = Math.max(0, Number(addCount || 0))
       // Create a new instance and set its own count; do not merge into species inventory
       const gp = await addPlantToGarden({ gardenId: id, plantId: selectedPlant.id, seedsPlanted: 0, nickname: nicknameVal || undefined })
@@ -812,7 +825,7 @@ export const GardenDashboardPage: React.FC = () => {
   }, [todayTaskOccurrences, id, plants, getActorColorCss, load, loadHeavyForCurrentTab, notifyTasksChanged])
 
   return (
-    <div className="max-w-6xl mx-auto mt-6 grid grid-cols-1 md:grid-cols-[220px_1fr] lg:grid-cols-[220px_1fr_360px] gap-6">
+    <div className="max-w-6xl mx-auto mt-6 grid grid-cols-1 md:grid-cols-[220px_1fr] lg:grid-cols-[220px_1fr] gap-6">
       {loading && <div className="p-6 text-sm opacity-60">Loading…</div>}
       {error && <div className="p-6 text-sm text-red-600">{error}</div>}
       {!loading && garden && (
@@ -898,9 +911,6 @@ export const GardenDashboardPage: React.FC = () => {
                         <div className="text-xs opacity-60">Tasks: {taskCountsByPlant[gp.id] || 0}</div>
                         <div className="flex items-center justify-between">
                           <div className="text-xs opacity-60">Due today: {taskOccDueToday[gp.id] || 0}</div>
-                          {(taskOccDueToday[gp.id] || 0) > 0 && (
-                            <Button size="sm" className="rounded-xl" onClick={() => completeAllTodayForPlant(gp.id)}>Complete all</Button>
-                          )}
                         </div>
                             <div className="mt-2 flex gap-2 flex-wrap">
                               <Button
@@ -965,6 +975,7 @@ export const GardenDashboardPage: React.FC = () => {
                   )}
                 </div>
               )} />
+              {/* Routine route kept for weekly chart; item rows show completers instead of button */}
               <Route path="routine" element={<RoutineSection plants={plants} duePlantIds={dueToday} onLogWater={logWater} weekDays={weekDays} weekCounts={weekCounts} weekCountsByType={weekCountsByType} serverToday={serverToday} dueThisWeekByPlant={dueThisWeekByPlant} todayTaskOccurrences={todayTaskOccurrences} onProgressOccurrence={async (occId: string, inc: number) => {
                 try {
                   await progressTaskOccurrence(occId, inc)
@@ -1024,15 +1035,7 @@ export const GardenDashboardPage: React.FC = () => {
             </Routes>
           </main>
           
-          {/* Right-side Tasks sidebar (stacks below on small screens) */}
-          <TasksSidebar
-            className="md:col-span-2 lg:col-span-1 lg:sticky lg:top-4 self-start"
-            gardenName={garden.name}
-            plants={plants}
-            todayTaskOccurrences={todayTaskOccurrences}
-            onProgressOccurrence={progressOccurrenceHandler}
-            onCompleteAllForPlant={completeAllTodayForPlant}
-          />
+          {/* Tasks sidebar removed per requirement: tasks now on Garden list page */}
 
           {/* Add Plant Dialog */}
           <Dialog open={addOpen} onOpenChange={setAddOpen}>
@@ -1073,8 +1076,8 @@ export const GardenDashboardPage: React.FC = () => {
                   <Input value={addNickname} maxLength={30} onChange={(e: any) => setAddNickname(e.target.value)} placeholder="Optional nickname" />
                 </div>
                 <div>
-                  <label className="text-sm font-medium">Number of plants</label>
-                  <Input type="number" min={0} value={String(addCount)} onChange={(e: any) => setAddCount(Number(e.target.value))} />
+                  <label className="text-sm font-medium">Number of flowers</label>
+                  <Input ref={countInputRef} autoFocus type="number" min={0} value={String(addCount)} onChange={(e: any) => setAddCount(Number(e.target.value))} />
                 </div>
                 <div className="flex justify-end gap-2 pt-2">
                   <Button variant="secondary" className="rounded-2xl" onClick={() => setAddDetailsOpen(false)}>Back</Button>
@@ -1169,6 +1172,21 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
     if (!occsByPlant[o.gardenPlantId]) occsByPlant[o.gardenPlantId] = [] as any
     occsByPlant[o.gardenPlantId].push(o)
   }
+  // Fetch completions for done occurrences to display actor names
+  const [completionsByOcc, setCompletionsByOcc] = React.useState<Record<string, Array<{ userId: string; displayName: string | null }>>>({})
+  React.useEffect(() => {
+    let ignore = false
+    ;(async () => {
+      try {
+        const doneOccIds = (todayTaskOccurrences || []).filter(o => (Number(o.completedCount || 0) >= Math.max(1, Number(o.requiredCount || 1)))).map(o => o.id)
+        if (doneOccIds.length === 0) { if (!ignore) setCompletionsByOcc({}); return }
+        const { listCompletionsForOccurrences } = await import('@/lib/gardens')
+        const map = await listCompletionsForOccurrences(doneOccIds)
+        if (!ignore) setCompletionsByOcc(map)
+      } catch {}
+    })()
+    return () => { ignore = true }
+  }, [todayTaskOccurrences])
   const typeToColor: Record<'water'|'fertilize'|'harvest'|'cut'|'custom', string> = {
     water: 'bg-blue-500',
     fertilize: 'bg-green-500',
@@ -1235,15 +1253,24 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
                     const badgeClass = `${typeToColor[tt]} ${tt === 'harvest' ? 'text-black' : 'text-white'}`
                     const customEmoji = (o as any).taskEmoji || null
                     const icon = customEmoji || (tt === 'water' ? '💧' : tt === 'fertilize' ? '🍽️' : tt === 'harvest' ? '🌾' : tt === 'cut' ? '✂️' : '🪴')
+                    const isDone = (Number(o.completedCount || 0) >= Math.max(1, Number(o.requiredCount || 1)))
+                    const completions = completionsByOcc[o.id] || []
                     return (
-                      <div key={o.id} className="flex items-center justify-between gap-3 text-sm rounded-xl border p-2">
+                      <div key={o.id} className={`flex items-center justify-between gap-3 text-sm rounded-xl border p-2 ${isDone ? 'bg-stone-50' : ''}`}>
                         <div className="flex items-center gap-2">
                           <span className={`h-6 w-6 flex items-center justify-center rounded-md border`}>{icon}</span>
                           <span className={`text-[10px] px-2 py-0.5 rounded-full ${badgeClass}`}>{String(tt).toUpperCase()}</span>
-                          {/* Time removed per request */}
                         </div>
-                        <div className="opacity-80">{o.completedCount} / {o.requiredCount}</div>
-                        <Button className="rounded-xl" size="sm" onClick={() => onProgressOccurrence(o.id, 1)} disabled={(o.completedCount || 0) >= (o.requiredCount || 1)}>Complete +1</Button>
+                        {!isDone ? (
+                          <>
+                            <div className="opacity-80">{o.completedCount} / {o.requiredCount}</div>
+                            <Button className="rounded-xl" size="sm" onClick={() => onProgressOccurrence(o.id, 1)} disabled={(o.completedCount || 0) >= (o.requiredCount || 1)}>Complete +1</Button>
+                          </>
+                        ) : (
+                          <div className="text-xs opacity-70 truncate max-w-[50%]">
+                            {completions.length === 0 ? 'Completed' : `Done by ${completions.map(c => c.displayName || 'Someone').join(', ')}`}
+                          </div>
+                        )}
                       </div>
                     )
                   })}
@@ -1371,8 +1398,17 @@ function OverviewSection({ gardenId, activityRev, plants, membersCount, serverTo
         <div className="space-y-2">
           {activity.map((a) => {
             const color = a.actorColor || null
+            const ts = (() => {
+              try {
+                return new Date(a.occurredAt).toLocaleTimeString([], { hour12: false })
+              } catch {
+                return ''
+              }
+            })()
             return (
               <div key={a.id} className="text-sm flex items-start gap-2">
+                {ts && <span className="text-xs opacity-60 tabular-nums">{ts}</span>}
+                {ts && <span className="text-xs opacity-40">//</span>}
                 <span className="font-semibold" style={color ? { color } : undefined}>{a.actorName || 'Someone'}</span>
                 <span className="opacity-80">{a.message}</span>
               </div>

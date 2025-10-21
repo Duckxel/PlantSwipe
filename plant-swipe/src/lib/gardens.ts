@@ -1127,6 +1127,40 @@ export async function listOccurrencesForTasks(taskIds: string[], startIso: strin
   }))
 }
 
+// Return a mapping from occurrenceId -> list of users who progressed/completed it
+export async function listCompletionsForOccurrences(occurrenceIds: string[]): Promise<Record<string, Array<{ userId: string; displayName: string | null }>>> {
+  if (occurrenceIds.length === 0) return {}
+  // Fetch raw completion rows
+  const { data: rows, error } = await supabase
+    .from('garden_task_user_completions')
+    .select('occurrence_id, user_id')
+    .in('occurrence_id', occurrenceIds)
+  if (error) throw new Error(error.message)
+  const uniquePairs = new Map<string, { occurrenceId: string; userId: string }>()
+  for (const r of (rows || []) as any[]) {
+    const occId = String((r as any).occurrence_id)
+    const uid = String((r as any).user_id)
+    uniquePairs.set(`${occId}::${uid}`, { occurrenceId: occId, userId: uid })
+  }
+  const pairs = Array.from(uniquePairs.values())
+  const userIds = Array.from(new Set(pairs.map(p => p.userId)))
+  // Resolve display names from profiles
+  const { data: profs } = await supabase
+    .from('profiles')
+    .select('id, display_name')
+    .in('id', userIds)
+  const idToName: Record<string, string | null> = {}
+  for (const p of (profs || []) as any[]) {
+    idToName[String(p.id)] = (p as any).display_name || null
+  }
+  const map: Record<string, Array<{ userId: string; displayName: string | null }>> = {}
+  for (const { occurrenceId, userId } of pairs) {
+    if (!map[occurrenceId]) map[occurrenceId] = []
+    map[occurrenceId].push({ userId, displayName: idToName[userId] ?? null })
+  }
+  return map
+}
+
 
 // ===== Activity logs =====
 export type GardenActivityKind = 'plant_added' | 'plant_updated' | 'plant_deleted' | 'task_completed' | 'task_progressed' | 'note'
