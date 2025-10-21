@@ -73,7 +73,7 @@ export const MobileNavBar: React.FC<MobileNavBarProps> = ({ canCreate }) => {
               <Sparkles className="h-6 w-6" />
             </NavLink>
           </Button>
-          <div className="relative">
+          <div className="relative overflow-visible">
             <Button asChild variant={"secondary"} size={"icon"} className={currentView === 'gardens' ? "h-12 w-12 rounded-2xl bg-black text-white hover:bg-black/90" : "h-12 w-12 rounded-2xl bg-white text-black hover:bg-stone-100"}>
               <NavLink to="/gardens" aria-label="Garden" className="no-underline flex items-center justify-center">
                 <Sprout className="h-6 w-6" />
@@ -81,7 +81,7 @@ export const MobileNavBar: React.FC<MobileNavBarProps> = ({ canCreate }) => {
             </Button>
             {hasUnfinished && (
               <span
-                className="pointer-events-none absolute -top-1 -right-1 z-10 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white"
+                className="pointer-events-none absolute -top-[2px] -right-[2px] z-20 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white"
                 aria-hidden="true"
               />
             )}

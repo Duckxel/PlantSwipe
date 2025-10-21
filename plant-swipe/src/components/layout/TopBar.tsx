@@ -160,7 +160,7 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
 
 function NavPill({ to, isActive, icon, label, showDot }: { to: string; isActive: boolean; icon: React.ReactNode; label: string; showDot?: boolean }) {
   return (
-    <div className="relative inline-block align-middle">
+    <div className="relative inline-block align-middle overflow-visible">
       <Button
         asChild
         variant={'secondary'}
@@ -175,7 +175,7 @@ function NavPill({ to, isActive, icon, label, showDot }: { to: string; isActive:
       </Button>
       {showDot && (
         <span
-          className="pointer-events-none absolute -top-1 -right-1 z-10 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white"
+          className="pointer-events-none absolute -top-[2px] -right-[2px] z-20 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white"
           aria-hidden="true"
         />
       )}
