@@ -554,6 +554,8 @@ export const GardenDashboardPage: React.FC = () => {
     setAdding(true)
     try {
       // Open details modal to capture count and nickname
+      // Prefill the editable name field with the plant's species name
+      setAddNickname(selectedPlant.name)
       setAddDetailsOpen(true)
       return
     } catch (e: any) {
@@ -595,7 +597,9 @@ export const GardenDashboardPage: React.FC = () => {
             .upsert({ garden_id: id, garden_plant_id: existingId, plants_on_hand: speciesCount, seeds_on_hand: 0 }, { onConflict: 'garden_plant_id' })
         }
       }
-      const nicknameVal = addNickname.trim().length > 0 ? addNickname.trim() : null
+      // Treat unchanged name (same as species name) as no custom nickname
+      const trimmedName = addNickname.trim()
+      const nicknameVal = trimmedName.length > 0 && trimmedName !== (selectedPlant.name || '').trim() ? trimmedName : null
       const qty = Math.max(0, Number(addCount || 0))
       // Create a new instance and set its own count; do not merge into species inventory
       const gp = await addPlantToGarden({ gardenId: id, plantId: selectedPlant.id, seedsPlanted: 0, nickname: nicknameVal || undefined })
