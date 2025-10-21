@@ -2424,4 +2424,40 @@ grant execute on function public.log_garden_activity(uuid, text, text, text, tex
 create index if not exists gp_garden_idx on public.garden_plants (garden_id);
 create index if not exists gm_garden_user_idx on public.garden_members (garden_id, user_id);
 create index if not exists gpt_garden_idx on public.garden_plant_tasks (garden_id);
-create index if not exists gpto_task_due_idx on public.garden_plant_task_occurrences (task_id, due_at);
+-- Dedupe any accidental duplicate occurrences before enforcing uniqueness
+do $$
+declare r record; v_keep uuid; v_req int; v_done int; has_user_compl boolean; begin
+  select exists (
+    select 1 from information_schema.tables
+    where table_schema = 'public' and table_name = 'garden_task_user_completions'
+  ) into has_user_compl;
+  for r in (
+    select task_id, due_at, array_agg(id order by id) as ids
+    from public.garden_plant_task_occurrences
+    group by task_id, due_at
+    having count(*) > 1
+  ) loop
+    v_keep := (r.ids)[1];
+    select max(required_count), sum(least(required_count, coalesce(completed_count,0)))
+      into v_req, v_done
+    from public.garden_plant_task_occurrences where id = any(r.ids);
+    v_req := greatest(1, coalesce(v_req, 1));
+    v_done := least(v_req, greatest(0, coalesce(v_done, 0)));
+    update public.garden_plant_task_occurrences
+      set required_count = v_req,
+          completed_count = v_done
+      where id = v_keep;
+    -- Reattach user completion attributions to keeper to preserve history (if table exists)
+    if has_user_compl then
+      update public.garden_task_user_completions
+        set occurrence_id = v_keep
+        where occurrence_id = any(r.ids) and occurrence_id <> v_keep;
+    end if;
+    -- Remove the rest
+    delete from public.garden_plant_task_occurrences where id = any(r.ids) and id <> v_keep;
+  end loop;
+end $$;
+
+-- Replace non-unique index with a unique index to enforce idempotency
+drop index if exists gpto_task_due_idx;
+create unique index if not exists gpto_task_due_unq on public.garden_plant_task_occurrences (task_id, due_at);

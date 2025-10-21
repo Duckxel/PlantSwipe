@@ -208,7 +208,7 @@ export const GardenDashboardPage: React.FC = () => {
       if (computeHeavy) {
         const weekStartIso = `${weekDaysIso[0]}T00:00:00.000Z`
         const weekEndIso = `${weekDaysIso[6]}T23:59:59.999Z`
-        await syncTaskOccurrencesForGarden(id, weekStartIso, weekEndIso)
+        await resyncTaskOccurrencesForGarden(id, weekStartIso, weekEndIso)
         const allTasks = await listGardenTasks(id)
         const occs = await listOccurrencesForTasks(allTasks.map(t => t.id), `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`)
         const taskTypeById: Record<string, 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'> = {}
@@ -355,7 +355,7 @@ export const GardenDashboardPage: React.FC = () => {
       const allTasks = await listGardenTasks(id)
       const weekStartIso = `${weekDaysIso[0]}T00:00:00.000Z`
       const weekEndIso = `${weekDaysIso[6]}T23:59:59.999Z`
-      await syncTaskOccurrencesForGarden(id, weekStartIso, weekEndIso)
+      await resyncTaskOccurrencesForGarden(id, weekStartIso, weekEndIso)
       const occs = await listOccurrencesForTasks(allTasks.map(t => t.id), `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`)
       const taskTypeById: Record<string, 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'> = {}
       const taskEmojiById: Record<string, string | null> = {}
@@ -899,7 +899,7 @@ export const GardenDashboardPage: React.FC = () => {
                                     // Recompute success from occurrences only
                                     const today = serverToday
                                     const allTasks = await listGardenTasks(id)
-                                    await syncTaskOccurrencesForGarden(id, `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`)
+                                    await resyncTaskOccurrencesForGarden(id, `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`)
                                     const occs = await listOccurrencesForTasks(allTasks.map(t => t.id), `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`)
                                     let due = 0, completed = 0
                                     for (const o of occs) {
