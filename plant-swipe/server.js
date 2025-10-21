@@ -1390,6 +1390,11 @@ async function verifySchemaAfterSync() {
     'get_user_profile_public_stats',
     'count_unique_ips_last_minutes',
     'count_unique_ips_last_days',
+    'get_user_last_visit_info',
+    'get_user_referrers_counts',
+    'get_user_countries_counts',
+    'get_user_user_agents_counts',
+    'count_user_visits_last_minutes',
   ]
   const requiredExtensions = [
     'pgcrypto',
@@ -1541,7 +1546,12 @@ app.get('/api/admin/stats', async (req, res) => {
 // Admin: lookup member by email (returns user, profile, and known IPs)
 app.get('/api/admin/member', async (req, res) => {
   try {
-    // Admin check disabled to ensure member lookup works universally
+    // Require admin to view member lookup details
+    const isAdmin = await isAdminFromRequest(req)
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Admin privileges required' })
+      return
+    }
     const rawParam = (req.query.q || req.query.email || req.query.username || req.query.name || '').toString().trim()
     if (!rawParam) {
       res.status(400).json({ error: 'Missing query' })
