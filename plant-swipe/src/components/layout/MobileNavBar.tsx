@@ -28,6 +28,21 @@ export const MobileNavBar: React.FC<MobileNavBarProps> = ({ canCreate }) => {
     run()
     return () => { cancelled = true }
   }, [user?.id])
+
+  // Auto-refresh the Garden notification dot when tasks change without page reload
+  React.useEffect(() => {
+    const handler = async () => {
+      try {
+        if (!user?.id) { setHasUnfinished(false); return }
+        const has = await userHasUnfinishedTasksToday(user.id)
+        setHasUnfinished(has)
+      } catch {
+        setHasUnfinished(false)
+      }
+    }
+    try { window.addEventListener('garden:tasks_changed', handler as EventListener) } catch {}
+    return () => { try { window.removeEventListener('garden:tasks_changed', handler as EventListener) } catch {} }
+  }, [user?.id])
   const currentView: "discovery" | "gardens" | "search" | "create" =
     location.pathname === "/" ? "discovery" :
     location.pathname.startsWith("/gardens") || location.pathname.startsWith('/garden/') ? "gardens" :
@@ -60,12 +75,13 @@ export const MobileNavBar: React.FC<MobileNavBarProps> = ({ canCreate }) => {
           </Button>
           <Button asChild variant={"secondary"} size={"icon"} className={currentView === 'gardens' ? "h-12 w-12 rounded-2xl bg-black text-white hover:bg-black/90" : "h-12 w-12 rounded-2xl bg-white text-black hover:bg-stone-100"}>
             <NavLink to="/gardens" aria-label="Garden" className="no-underline flex items-center justify-center relative">
-              <div className="relative">
-                <Sprout className="h-6 w-6" />
-                {hasUnfinished && (
-                  <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white" aria-hidden="true" />)
-                }
-              </div>
+              <Sprout className="h-6 w-6" />
+              {hasUnfinished && (
+                <span
+                  className="pointer-events-none absolute top-0 right-0 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white translate-x-1/2 -translate-y-1/2"
+                  aria-hidden="true"
+                />
+              )}
             </NavLink>
           </Button>
           <Button asChild variant={"secondary"} size={"icon"} className={currentView === 'search' ? "h-12 w-12 rounded-2xl bg-black text-white hover:bg-black/90" : "h-12 w-12 rounded-2xl bg-white text-black hover:bg-stone-100"}>
