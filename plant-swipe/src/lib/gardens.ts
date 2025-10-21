@@ -896,7 +896,6 @@ export async function resyncTaskOccurrencesForGarden(gardenId: string, startIso:
       continue
     }
     // Merge counts across duplicates
-    const [taskId] = key.split('::')
     const exp = expectedByKey.get(key)
     const maxRequiredFromExisting = rows.reduce((m, r) => Math.max(m, Number(r.requiredCount || 1)), 1)
     const expectedRequired = exp ? Math.max(1, Number(exp.requiredCount || 1)) : 1
