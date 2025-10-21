@@ -75,6 +75,21 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
     run()
     return () => { cancelled = true }
   }, [user?.id])
+
+  // Auto-refresh the Garden notification dot when tasks change without full reload
+  React.useEffect(() => {
+    const handler = async () => {
+      try {
+        if (!user?.id) { setHasUnfinished(false); return }
+        const has = await userHasUnfinishedTasksToday(user.id)
+        setHasUnfinished(has)
+      } catch {
+        setHasUnfinished(false)
+      }
+    }
+    try { window.addEventListener('garden:tasks_changed', handler as EventListener) } catch {}
+    return () => { try { window.removeEventListener('garden:tasks_changed', handler as EventListener) } catch {} }
+  }, [user?.id])
   const label = displayName && displayName.trim().length > 0 ? displayName : 'Profile'
   return (
     <header className="max-w-6xl mx-auto w-full flex items-center gap-3 px-2 overflow-x-hidden">
@@ -145,20 +160,25 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
 
 function NavPill({ to, isActive, icon, label, showDot }: { to: string; isActive: boolean; icon: React.ReactNode; label: string; showDot?: boolean }) {
   return (
-    <Button
-      asChild
-      variant={'secondary'}
-      className={isActive ? "rounded-2xl bg-black text-white hover:bg-black/90 hover:text-white" : "rounded-2xl bg-white text-black hover:bg-stone-100 hover:text-black"}
-    >
-      <Link to={to} className="no-underline">
-        <span className="relative inline-flex items-center gap-2">
-          {icon}
-          <span>{label}</span>
-          {showDot && (
-            <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white" aria-hidden="true" />
-          )}
-        </span>
-      </Link>
-    </Button>
+    <div className="relative inline-block align-middle overflow-visible">
+      <Button
+        asChild
+        variant={'secondary'}
+        className={isActive ? "rounded-2xl bg-black text-white hover:bg-black/90 hover:text-white" : "rounded-2xl bg-white text-black hover:bg-stone-100 hover:text-black"}
+      >
+        <Link to={to} className="no-underline">
+          <span className="inline-flex items-center gap-2">
+            {icon}
+            <span>{label}</span>
+          </span>
+        </Link>
+      </Button>
+      {showDot && (
+        <span
+          className="pointer-events-none absolute -top-[2px] -right-[2px] z-20 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white"
+          aria-hidden="true"
+        />
+      )}
+    </div>
   )
 }

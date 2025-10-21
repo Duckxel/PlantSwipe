@@ -95,6 +95,11 @@ export const GardenDashboardPage: React.FC = () => {
   const [inviteAny, setInviteAny] = React.useState('')
   const [inviteError, setInviteError] = React.useState<string | null>(null)
 
+  // Notify global UI components to refresh Garden badge without page reload
+  const notifyTasksChanged = React.useCallback(() => {
+    try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
+  }, [])
+
   const currentUserId = user?.id || null
   const isOwner = React.useMemo(() => {
     // Admins have full owner-level access across all gardens
@@ -678,6 +683,7 @@ export const GardenDashboardPage: React.FC = () => {
         await loadHeavyForCurrentTab()
       }
       if (id) navigate(`/garden/${id}/plants`)
+      notifyTasksChanged()
     } catch (e: any) {
       setError(e?.message || 'Failed to save schedule')
       throw e
@@ -717,6 +723,7 @@ export const GardenDashboardPage: React.FC = () => {
         await loadHeavyForCurrentTab()
       }
       if (id) navigate(`/garden/${id}/routine`)
+      notifyTasksChanged()
     } catch (e: any) {
       setError(e?.message || 'Failed to log watering')
     }
@@ -742,6 +749,8 @@ export const GardenDashboardPage: React.FC = () => {
         }
       } catch {}
       await load()
+      // Signal other UI (nav bars) to refresh notification badges
+      notifyTasksChanged()
     } catch (e) {
       // swallow; global error display exists
     }
@@ -903,6 +912,8 @@ export const GardenDashboardPage: React.FC = () => {
                                     await upsertGardenTask({ gardenId: id, day: today, gardenPlantId: null, success })
                                   } catch {}
                                 }
+                                // Signal other UI (nav bars) to refresh notification badges
+                                notifyTasksChanged()
                                 try {
                                   const actorColorCss = getActorColorCss()
                                   await logGardenActivity({ gardenId: id!, kind: 'plant_deleted' as any, message: `deleted "${gp.nickname || gp.plant?.name || 'Plant'}"`, plantName: gp.nickname || gp.plant?.name || null, actorColor: actorColorCss || null })
@@ -949,6 +960,7 @@ export const GardenDashboardPage: React.FC = () => {
               } finally {
                 await load({ silent: true, preserveHeavy: true })
                 await loadHeavyForCurrentTab()
+                notifyTasksChanged()
               }
               }} />} />
               <Route path="settings" element={(
