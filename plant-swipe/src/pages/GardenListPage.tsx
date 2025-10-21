@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useAuth } from '@/context/AuthContext'
-import { getUserGardens, createGarden, fetchServerNowISO, getGardenTodayProgress, getGardenPlants, listGardenTasks, listOccurrencesForTasks, resyncTaskOccurrencesForGarden, progressTaskOccurrence } from '@/lib/gardens'
+import { getUserGardens, createGarden, fetchServerNowISO, getGardenTodayProgress, getGardenPlants, listGardenTasks, listOccurrencesForTasks, resyncTaskOccurrencesForGarden, progressTaskOccurrence, listCompletionsForOccurrences } from '@/lib/gardens'
 import type { Garden } from '@/types/garden'
 import { useNavigate } from 'react-router-dom'
 
@@ -25,6 +25,7 @@ export const GardenListPage: React.FC = () => {
   const [loadingTasks, setLoadingTasks] = React.useState(false)
   const [allPlants, setAllPlants] = React.useState<any[]>([])
   const [todayTaskOccurrences, setTodayTaskOccurrences] = React.useState<Array<{ id: string; taskId: string; gardenPlantId: string; dueAt: string; requiredCount: number; completedCount: number; completedAt: string | null; taskType?: 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'; taskEmoji?: string | null }>>([])
+  const [completionsByOcc, setCompletionsByOcc] = React.useState<Record<string, Array<{ userId: string; displayName: string | null }>>>({})
 
   const notifyTasksChanged = React.useCallback(() => {
     try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
@@ -100,6 +101,10 @@ export const GardenListPage: React.FC = () => {
         }
       }
       setTodayTaskOccurrences(occsAugmented)
+      // Fetch completions for all occurrences
+      const ids = occsAugmented.map(o => o.id)
+      const compMap = await listCompletionsForOccurrences(ids)
+      setCompletionsByOcc(compMap)
       // 4) Load plants for all gardens for display and mapping
       const plantsPerGarden = await Promise.all(gardens.map(g => getGardenPlants(g.id)))
       const idToGardenName = gardens.reduce<Record<string, string>>((acc, g) => { acc[g.id] = g.name; return acc }, {})
@@ -143,6 +148,21 @@ export const GardenListPage: React.FC = () => {
     }
   }, [todayTaskOccurrences, load, loadAllTodayOccurrences, notifyTasksChanged])
 
+  const onMarkAllCompleted = React.useCallback(async () => {
+    try {
+      const ops: Promise<any>[] = []
+      for (const o of todayTaskOccurrences) {
+        const remaining = Math.max(0, Number(o.requiredCount || 1) - Number(o.completedCount || 0))
+        if (remaining > 0) ops.push(progressTaskOccurrence(o.id, remaining))
+      }
+      if (ops.length > 0) await Promise.all(ops)
+    } finally {
+      await load()
+      await loadAllTodayOccurrences()
+      notifyTasksChanged()
+    }
+  }, [todayTaskOccurrences, load, loadAllTodayOccurrences, notifyTasksChanged])
+
   const onCreate = async () => {
     if (!user?.id) return
     if (!name.trim() || submitting) return
@@ -171,17 +191,30 @@ export const GardenListPage: React.FC = () => {
     return map
   }, [todayTaskOccurrences])
 
-  const plantsWithTasks = React.useMemo(() => {
-    return allPlants.filter((gp: any) => (occsByPlant[gp.id] || []).length > 0)
-  }, [allPlants, occsByPlant])
+  const gardensWithTasks = React.useMemo(() => {
+    const byGarden: Array<{ gardenId: string; gardenName: string; plants: any[]; req: number; done: number }> = []
+    const idToGardenName = gardens.reduce<Record<string, string>>((acc, g) => { acc[g.id] = g.name; return acc }, {})
+    for (const g of gardens) {
+      const plants = allPlants.filter((gp: any) => gp.gardenId === g.id && (occsByPlant[gp.id] || []).length > 0)
+      if (plants.length === 0) continue
+      let req = 0, done = 0
+      for (const gp of plants) {
+        const occs = occsByPlant[gp.id] || []
+        req += occs.reduce((a: number, o: any) => a + Math.max(1, Number(o.requiredCount || 1)), 0)
+        done += occs.reduce((a: number, o: any) => a + Math.min(Math.max(1, Number(o.requiredCount || 1)), Number(o.completedCount || 0)), 0)
+      }
+      byGarden.push({ gardenId: g.id, gardenName: idToGardenName[g.id] || '', plants, req, done })
+    }
+    return byGarden
+  }, [gardens, allPlants, occsByPlant])
 
   const totalTasks = React.useMemo(() => todayTaskOccurrences.reduce((a, o) => a + Math.max(1, Number(o.requiredCount || 1)), 0), [todayTaskOccurrences])
   const totalDone = React.useMemo(() => todayTaskOccurrences.reduce((a, o) => a + Math.min(Math.max(1, Number(o.requiredCount || 1)), Number(o.completedCount || 0)), 0), [todayTaskOccurrences])
 
   return (
     <div className="max-w-6xl mx-auto px-4 md:px-0">
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-6">
-        <div>
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-6">
+        <div className="max-w-3xl mx-auto w-full">
           <div className="flex items-center justify-between mt-6 mb-4">
             <h1 className="text-2xl font-semibold">Your Gardens</h1>
             {user && (
@@ -254,7 +287,7 @@ export const GardenListPage: React.FC = () => {
         </div>
 
         {/* Right-side Tasks sidebar for all gardens */}
-        <aside className="mt-6 lg:mt-6">
+        <aside className="mt-6 lg:mt-6 lg:border-l lg:border-stone-200 lg:pl-6">
           <div className="space-y-3">
             <div className="text-lg font-semibold">Tasks</div>
             <Card className="rounded-2xl p-4">
@@ -264,49 +297,73 @@ export const GardenListPage: React.FC = () => {
               </div>
               <div className="text-xs opacity-70 mt-1">Today: {totalDone} / {totalTasks}</div>
             </Card>
+            {totalTasks > totalDone && (
+              <div>
+                <Button className="rounded-2xl w-full" onClick={onMarkAllCompleted}>MARK ALL AS COMPLETED</Button>
+              </div>
+            )}
             {loadingTasks && (
               <Card className="rounded-2xl p-4 text-sm opacity-70">Loading tasks…</Card>
             )}
-            {!loadingTasks && plantsWithTasks.length === 0 && (
+            {!loadingTasks && gardensWithTasks.length === 0 && (
               <Card className="rounded-2xl p-4 text-sm opacity-70">No tasks due today. 🌿</Card>
             )}
-            {!loadingTasks && plantsWithTasks.map((gp: any) => {
-              const occs = occsByPlant[gp.id] || []
-              const req = occs.reduce((a: number, o: any) => a + Math.max(1, Number(o.requiredCount || 1)), 0)
-              const done = occs.reduce((a: number, o: any) => a + Math.min(Math.max(1, Number(o.requiredCount || 1)), Number(o.completedCount || 0)), 0)
-              return (
-                <Card key={gp.id} className="rounded-2xl p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="font-medium">{gp.nickname || gp.plant?.name}</div>
-                      <div className="text-xs opacity-60">{gp.gardenName}{gp.nickname ? ` • ${gp.plant?.name || ''}` : ''}</div>
-                      <div className="text-xs opacity-70">{done} / {req} done</div>
-                    </div>
-                    {(done < req) && (
-                      <Button size="sm" className="rounded-xl" onClick={() => onCompleteAllForPlant(gp.id)}>Complete all</Button>
-                    )}
+            {!loadingTasks && gardensWithTasks.map((gw) => (
+              <Card key={gw.gardenId} className="rounded-2xl p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="font-medium">{gw.gardenName}</div>
+                    <div className="text-xs opacity-70">{gw.done} / {gw.req} done</div>
                   </div>
-                  <div className="mt-2 space-y-2">
-                    {occs.map((o: any) => {
-                      const tt = (o as any).taskType || 'custom'
-                      const badgeClass = `${tt === 'water' ? 'bg-blue-500' : tt === 'fertilize' ? 'bg-green-500' : tt === 'harvest' ? 'bg-yellow-400' : tt === 'cut' ? 'bg-orange-500' : 'bg-purple-500'} ${tt === 'harvest' ? 'text-black' : 'text-white'}`
-                      const icon = (o as any).taskEmoji || (tt === 'water' ? '💧' : tt === 'fertilize' ? '🍽️' : tt === 'harvest' ? '🌾' : tt === 'cut' ? '✂️' : '🪴')
-                      return (
-                        <div key={o.id} className="flex items-center justify-between gap-3 text-sm rounded-xl border p-2">
-                          <div className="flex items-center gap-2">
-                            <span className={`h-6 w-6 flex items-center justify-center rounded-md border`}>{icon}</span>
-                            <span className={`text-[10px] px-2 py-0.5 rounded-full ${badgeClass}`}>{String(tt).toUpperCase()}</span>
-                            <span className="text-xs opacity-70">{gp.nickname || gp.plant?.name}</span>
-                          </div>
-                          <div className="opacity-80">{o.completedCount} / {o.requiredCount}</div>
-                          <Button className="rounded-xl" size="sm" onClick={() => onProgressOccurrence(o.id, 1)} disabled={(o.completedCount || 0) >= (o.requiredCount || 1)}>+1</Button>
+                </div>
+                <div className="mt-3 space-y-3">
+                  {gw.plants.map((gp: any) => {
+                    const occs = occsByPlant[gp.id] || []
+                    const req = occs.reduce((a: number, o: any) => a + Math.max(1, Number(o.requiredCount || 1)), 0)
+                    const done = occs.reduce((a: number, o: any) => a + Math.min(Math.max(1, Number(o.requiredCount || 1)), Number(o.completedCount || 0)), 0)
+                    return (
+                      <Card key={gp.id} className="rounded-2xl p-3">
+                        <div className="flex items-center justify-between">
+                          <div className="text-sm font-medium">{gp.nickname || gp.plant?.name}</div>
+                          {done < req && (
+                            <Button size="sm" className="rounded-xl" onClick={() => onCompleteAllForPlant(gp.id)}>Complete all</Button>
+                          )}
                         </div>
-                      )
-                    })}
-                  </div>
-                </Card>
-              )
-            })}
+                        <div className="text-[11px] opacity-60">{done} / {req} done</div>
+                        <div className="mt-2 space-y-2">
+                          {occs.map((o: any) => {
+                            const tt = (o as any).taskType || 'custom'
+                            const badgeClass = `${tt === 'water' ? 'bg-blue-500' : tt === 'fertilize' ? 'bg-green-500' : tt === 'harvest' ? 'bg-yellow-400' : tt === 'cut' ? 'bg-orange-500' : 'bg-purple-500'} ${tt === 'harvest' ? 'text-black' : 'text-white'}`
+                            const icon = (o as any).taskEmoji || (tt === 'water' ? '💧' : tt === 'fertilize' ? '🍽️' : tt === 'harvest' ? '🌾' : tt === 'cut' ? '✂️' : '🪴')
+                            const isDone = (Number(o.completedCount || 0) >= Number(o.requiredCount || 1))
+                            const completions = completionsByOcc[o.id] || []
+                            return (
+                              <div key={o.id} className={`flex items-center justify-between gap-3 text-sm rounded-xl border p-2 ${isDone ? 'bg-stone-50' : ''}`}>
+                                <div className="flex items-center gap-2">
+                                  <span className={`h-6 w-6 flex items-center justify-center rounded-md border`}>{icon}</span>
+                                  <span className={`text-[10px] px-2 py-0.5 rounded-full ${badgeClass}`}>{String(tt).toUpperCase()}</span>
+                                  <span className="text-xs opacity-70">{gp.nickname || gp.plant?.name}</span>
+                                </div>
+                                {!isDone ? (
+                                  <>
+                                    <div className="opacity-80">{o.completedCount} / {o.requiredCount}</div>
+                                    <Button className="rounded-xl" size="sm" onClick={() => onProgressOccurrence(o.id, 1)} disabled={(o.completedCount || 0) >= (o.requiredCount || 1)}>+1</Button>
+                                  </>
+                                ) : (
+                                  <div className="text-xs opacity-70 truncate max-w-[50%]">
+                                    {completions.length === 0 ? 'Completed' : `Done by ${completions.map(c => c.displayName || 'Someone').join(', ')}`}
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </Card>
+                    )
+                  })}
+                </div>
+              </Card>
+            ))}
           </div>
         </aside>
       </div>

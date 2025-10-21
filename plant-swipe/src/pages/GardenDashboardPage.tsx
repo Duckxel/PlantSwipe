@@ -896,9 +896,6 @@ export const GardenDashboardPage: React.FC = () => {
                         <div className="text-xs opacity-60">Tasks: {taskCountsByPlant[gp.id] || 0}</div>
                         <div className="flex items-center justify-between">
                           <div className="text-xs opacity-60">Due today: {taskOccDueToday[gp.id] || 0}</div>
-                          {(taskOccDueToday[gp.id] || 0) > 0 && (
-                            <Button size="sm" className="rounded-xl" onClick={() => completeAllTodayForPlant(gp.id)}>Complete all</Button>
-                          )}
                         </div>
                             <div className="mt-2 flex gap-2 flex-wrap">
                               <Button
@@ -963,6 +960,7 @@ export const GardenDashboardPage: React.FC = () => {
                   )}
                 </div>
               )} />
+              {/* Routine route kept for weekly chart; item rows show completers instead of button */}
               <Route path="routine" element={<RoutineSection plants={plants} duePlantIds={dueToday} onLogWater={logWater} weekDays={weekDays} weekCounts={weekCounts} weekCountsByType={weekCountsByType} serverToday={serverToday} dueThisWeekByPlant={dueThisWeekByPlant} todayTaskOccurrences={todayTaskOccurrences} onProgressOccurrence={async (occId: string, inc: number) => {
                 try {
                   await progressTaskOccurrence(occId, inc)
@@ -1159,6 +1157,21 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
     if (!occsByPlant[o.gardenPlantId]) occsByPlant[o.gardenPlantId] = [] as any
     occsByPlant[o.gardenPlantId].push(o)
   }
+  // Fetch completions for done occurrences to display actor names
+  const [completionsByOcc, setCompletionsByOcc] = React.useState<Record<string, Array<{ userId: string; displayName: string | null }>>>({})
+  React.useEffect(() => {
+    let ignore = false
+    ;(async () => {
+      try {
+        const doneOccIds = (todayTaskOccurrences || []).filter(o => (Number(o.completedCount || 0) >= Math.max(1, Number(o.requiredCount || 1)))).map(o => o.id)
+        if (doneOccIds.length === 0) { if (!ignore) setCompletionsByOcc({}); return }
+        const { listCompletionsForOccurrences } = await import('@/lib/gardens')
+        const map = await listCompletionsForOccurrences(doneOccIds)
+        if (!ignore) setCompletionsByOcc(map)
+      } catch {}
+    })()
+    return () => { ignore = true }
+  }, [todayTaskOccurrences])
   const typeToColor: Record<'water'|'fertilize'|'harvest'|'cut'|'custom', string> = {
     water: 'bg-blue-500',
     fertilize: 'bg-green-500',
@@ -1225,15 +1238,24 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
                     const badgeClass = `${typeToColor[tt]} ${tt === 'harvest' ? 'text-black' : 'text-white'}`
                     const customEmoji = (o as any).taskEmoji || null
                     const icon = customEmoji || (tt === 'water' ? '💧' : tt === 'fertilize' ? '🍽️' : tt === 'harvest' ? '🌾' : tt === 'cut' ? '✂️' : '🪴')
+                    const isDone = (Number(o.completedCount || 0) >= Math.max(1, Number(o.requiredCount || 1)))
+                    const completions = completionsByOcc[o.id] || []
                     return (
-                      <div key={o.id} className="flex items-center justify-between gap-3 text-sm rounded-xl border p-2">
+                      <div key={o.id} className={`flex items-center justify-between gap-3 text-sm rounded-xl border p-2 ${isDone ? 'bg-stone-50' : ''}`}>
                         <div className="flex items-center gap-2">
                           <span className={`h-6 w-6 flex items-center justify-center rounded-md border`}>{icon}</span>
                           <span className={`text-[10px] px-2 py-0.5 rounded-full ${badgeClass}`}>{String(tt).toUpperCase()}</span>
-                          {/* Time removed per request */}
                         </div>
-                        <div className="opacity-80">{o.completedCount} / {o.requiredCount}</div>
-                        <Button className="rounded-xl" size="sm" onClick={() => onProgressOccurrence(o.id, 1)} disabled={(o.completedCount || 0) >= (o.requiredCount || 1)}>Complete +1</Button>
+                        {!isDone ? (
+                          <>
+                            <div className="opacity-80">{o.completedCount} / {o.requiredCount}</div>
+                            <Button className="rounded-xl" size="sm" onClick={() => onProgressOccurrence(o.id, 1)} disabled={(o.completedCount || 0) >= (o.requiredCount || 1)}>Complete +1</Button>
+                          </>
+                        ) : (
+                          <div className="text-xs opacity-70 truncate max-w-[50%]">
+                            {completions.length === 0 ? 'Completed' : `Done by ${completions.map(c => c.displayName || 'Someone').join(', ')}`}
+                          </div>
+                        )}
                       </div>
                     )
                   })}
