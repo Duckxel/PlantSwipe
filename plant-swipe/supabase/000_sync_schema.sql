@@ -2159,6 +2159,114 @@ as $$
 $$;
 grant execute on function public.get_user_visits_series_days(uuid, integer) to anon, authenticated;
 
+-- Per-user analytics helpers (security definer) to support admin lookup without exposing table rows
+-- Last visit info for a user (occurred_at, ip, country, referrer)
+create or replace function public.get_user_last_visit_info(_user_id uuid)
+returns table(occurred_at timestamptz, ip_address text, geo_country text, referrer text)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select v.occurred_at,
+         v.ip_address::text as ip_address,
+         v.geo_country,
+         v.referrer
+  from public.web_visits v
+  where v.user_id = _user_id
+  order by v.occurred_at desc
+  limit 1;
+$$;
+grant execute on function public.get_user_last_visit_info(uuid) to anon, authenticated;
+
+-- Top referrers for a user in last N days
+create or replace function public.get_user_referrers_counts(_user_id uuid, _days integer default 30, _limit integer default 200)
+returns table(source text, visits integer)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with cutoff as (
+    select (now() at time zone 'utc')::date - make_interval(days => greatest(0, coalesce(_days, 30) - 1)) as d
+  )
+  select case
+           when v.referrer is null or v.referrer = '' then 'direct'
+           when v.referrer ilike 'http%' then split_part(split_part(v.referrer, '://', 2), '/', 1)
+           else v.referrer
+         end as source,
+         count(*)::int as visits
+  from public.web_visits v
+  where v.user_id = _user_id
+    and timezone('utc', v.occurred_at) >= (select d from cutoff)
+  group by 1
+  order by visits desc
+  limit greatest(1, coalesce(_limit, 200));
+$$;
+grant execute on function public.get_user_referrers_counts(uuid, integer, integer) to anon, authenticated;
+
+-- Top countries for a user in last N days
+create or replace function public.get_user_countries_counts(_user_id uuid, _days integer default 30, _limit integer default 200)
+returns table(country text, visits integer)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with cutoff as (
+    select (now() at time zone 'utc')::date - make_interval(days => greatest(0, coalesce(_days, 30) - 1)) as d
+  )
+  select upper(v.geo_country) as country,
+         count(*)::int as visits
+  from public.web_visits v
+  where v.user_id = _user_id
+    and v.geo_country is not null and v.geo_country <> ''
+    and timezone('utc', v.occurred_at) >= (select d from cutoff)
+  group by 1
+  order by visits desc
+  limit greatest(1, coalesce(_limit, 200));
+$$;
+grant execute on function public.get_user_countries_counts(uuid, integer, integer) to anon, authenticated;
+
+-- Raw user agents with counts for a user in last N days (server categorizes devices)
+create or replace function public.get_user_user_agents_counts(_user_id uuid, _days integer default 30, _limit integer default 500)
+returns table(user_agent text, visits integer)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with cutoff as (
+    select (now() at time zone 'utc')::date - make_interval(days => greatest(0, coalesce(_days, 30) - 1)) as d
+  )
+  select v.user_agent,
+         count(*)::int as visits
+  from public.web_visits v
+  where v.user_id = _user_id
+    and timezone('utc', v.occurred_at) >= (select d from cutoff)
+  group by v.user_agent
+  order by visits desc
+  limit greatest(1, coalesce(_limit, 500));
+$$;
+grant execute on function public.get_user_user_agents_counts(uuid, integer, integer) to anon, authenticated;
+
+-- Count of visits for a user in the last N minutes (default 5)
+create or replace function public.count_user_visits_last_minutes(_user_id uuid, _minutes integer default 5)
+returns integer
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce((
+    select count(*)::int
+    from public.web_visits v
+    where v.user_id = _user_id
+      and v.occurred_at >= (now() - make_interval(mins => greatest(0, coalesce(_minutes, 5))))
+  ), 0);
+$$;
+grant execute on function public.count_user_visits_last_minutes(uuid, integer) to anon, authenticated;
+
 -- ========== Ban system ==========
 -- Records account-level bans and IP-level bans, including metadata for auditing
 create table if not exists public.banned_accounts (

@@ -1624,24 +1624,43 @@ app.get('/api/admin/member', async (req, res) => {
         }
       } catch {}
 
-      // Last online and last IP/country/referrer (best-effort; requires Authorization due to RLS)
+      // Last online and last IP/country/referrer (first try RPC to bypass RLS; fallback to REST table)
       let lastOnlineAt = null
       let lastIp = null
       let lastCountry = null
       let lastReferrer = null
       try {
-        const lr = await fetch(`${supabaseUrlEnv}/rest/v1/${tablePath}?user_id=eq.${encodeURIComponent(targetId)}&select=occurred_at,ip_address,geo_country,referrer&order=occurred_at.desc&limit=1`, {
-          headers: baseHeaders,
+        // Prefer RPC which runs as SECURITY DEFINER
+        const lrpc = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_user_last_visit_info`, {
+          method: 'POST',
+          headers: { ...baseHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ _user_id: targetId }),
         })
-        if (lr.ok) {
-          const arr = await lr.json().catch(() => [])
-          if (Array.isArray(arr) && arr[0]) {
-            lastOnlineAt = arr[0].occurred_at || null
-            lastIp = (arr[0].ip_address || '').toString().replace(/\/[0-9]{1,3}$/, '') || null
-            lastCountry = arr[0].geo_country ? String(arr[0].geo_country).toUpperCase() : null
-            const ref = arr[0].referrer || ''
+        if (lrpc.ok) {
+          const row = await lrpc.json().catch(() => null)
+          if (row) {
+            lastOnlineAt = row.occurred_at || null
+            lastIp = (row.ip_address || '').toString().replace(/\/[0-9]{1,3}$/, '') || null
+            lastCountry = row.geo_country ? String(row.geo_country).toUpperCase() : null
+            const ref = row.referrer || ''
             const domain = extractHostname(ref)
             lastReferrer = domain || (ref ? String(ref) : 'direct')
+          }
+        } else {
+          // Fallback to direct REST table (requires admin Authorization due to RLS)
+          const lr = await fetch(`${supabaseUrlEnv}/rest/v1/${tablePath}?user_id=eq.${encodeURIComponent(targetId)}&select=occurred_at,ip_address,geo_country,referrer&order=occurred_at.desc&limit=1`, {
+            headers: baseHeaders,
+          })
+          if (lr.ok) {
+            const arr = await lr.json().catch(() => [])
+            if (Array.isArray(arr) && arr[0]) {
+              lastOnlineAt = arr[0].occurred_at || null
+              lastIp = (arr[0].ip_address || '').toString().replace(/\/[0-9]{1,3}$/, '') || null
+              lastCountry = arr[0].geo_country ? String(arr[0].geo_country).toUpperCase() : null
+              const ref = arr[0].referrer || ''
+              const domain = extractHostname(ref)
+              lastReferrer = domain || (ref ? String(ref) : 'direct')
+            }
           }
         }
       } catch {}
@@ -1733,40 +1752,72 @@ app.get('/api/admin/member', async (req, res) => {
         }
       } catch {}
 
-      // Aggregates (REST fallback): pull recent visits and compute locally
+      // Aggregates (REST fallback): prefer RPCs to avoid RLS, else pull recent visits and compute locally
       let memberTopReferrers = []
       let memberTopCountries = []
       let memberTopDevices = []
       let meanRpm5m = null
       try {
-        const cutoff30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
-        const cutoff5m = Date.now() - 5 * 60 * 1000
-        const r = await fetch(`${supabaseUrlEnv}/rest/v1/${tablePath}?user_id=eq.${encodeURIComponent(targetId)}&occurred_at=gte.${encodeURIComponent(cutoff30d)}&select=referrer,geo_country,user_agent,occurred_at&order=occurred_at.desc`, {
-          headers: { ...baseHeaders },
-        })
-        if (r.ok) {
-          const arr = await r.json().catch(() => [])
-          const refCounts = new Map()
-          const countryCounts = new Map()
-          const deviceCounts = new Map()
-          let last5mCount = 0
-          for (const v of Array.isArray(arr) ? arr : []) {
-            const domain = extractHostname(v?.referrer || '')
-            const src = domain || (v?.referrer ? String(v.referrer) : '') || 'direct'
-            refCounts.set(src, (refCounts.get(src) || 0) + 1)
-            const cc = (v?.geo_country ? String(v.geo_country).toUpperCase() : '')
-            if (cc) countryCounts.set(cc, (countryCounts.get(cc) || 0) + 1)
-            const dev = categorizeDeviceFromUa(v?.user_agent || '')
-            deviceCounts.set(dev, (deviceCounts.get(dev) || 0) + 1)
-            try { if (v?.occurred_at && new Date(v.occurred_at).getTime() >= cutoff5m) last5mCount++ } catch {}
+        // Try RPCs first (security definer)
+        const [refResp, countryResp, uaResp, rpmResp] = await Promise.all([
+          fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_user_referrers_counts`, { method: 'POST', headers: { ...baseHeaders, 'Content-Type': 'application/json' }, body: JSON.stringify({ _user_id: targetId, _days: 30, _limit: 200 }) }),
+          fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_user_countries_counts`, { method: 'POST', headers: { ...baseHeaders, 'Content-Type': 'application/json' }, body: JSON.stringify({ _user_id: targetId, _days: 30, _limit: 200 }) }),
+          fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_user_user_agents_counts`, { method: 'POST', headers: { ...baseHeaders, 'Content-Type': 'application/json' }, body: JSON.stringify({ _user_id: targetId, _days: 30, _limit: 500 }) }),
+          fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_user_visits_last_minutes`, { method: 'POST', headers: { ...baseHeaders, 'Content-Type': 'application/json' }, body: JSON.stringify({ _user_id: targetId, _minutes: 5 }) }),
+        ])
+        let usedRpc = false
+        if (refResp.ok && countryResp.ok && uaResp.ok && rpmResp.ok) {
+          usedRpc = true
+          const [refRows, countryRows, uaRows, rpmCount] = await Promise.all([
+            refResp.json().catch(() => []),
+            countryResp.json().catch(() => []),
+            uaResp.json().catch(() => []),
+            rpmResp.json().catch(() => 0),
+          ])
+          memberTopReferrers = (Array.isArray(refRows) ? refRows : []).map((r) => ({ source: String(r.source || 'direct'), visits: Number(r.visits || 0) }))
+          memberTopCountries = (Array.isArray(countryRows) ? countryRows : []).map((r) => ({ country: String(r.country || ''), visits: Number(r.visits || 0) }))
+          const deviceMap = new Map()
+          for (const r of (Array.isArray(uaRows) ? uaRows : [])) {
+            const key = categorizeDeviceFromUa(r?.user_agent || '')
+            deviceMap.set(key, (deviceMap.get(key) || 0) + Number(r?.visits || 0))
           }
-          memberTopReferrers = Array.from(refCounts.entries()).map(([source, visits]) => ({ source, visits: Number(visits) }))
-          memberTopCountries = Array.from(countryCounts.entries()).map(([country, visits]) => ({ country, visits: Number(visits) }))
-          memberTopDevices = Array.from(deviceCounts.entries()).map(([device, visits]) => ({ device, visits: Number(visits) }))
+          memberTopDevices = Array.from(deviceMap.entries()).map(([device, visits]) => ({ device, visits: Number(visits) }))
           memberTopReferrers.sort((a, b) => (b.visits || 0) - (a.visits || 0))
           memberTopCountries.sort((a, b) => (b.visits || 0) - (a.visits || 0))
           memberTopDevices.sort((a, b) => (b.visits || 0) - (a.visits || 0))
-          meanRpm5m = Number((last5mCount / 5).toFixed(2))
+          meanRpm5m = Number((((rpmCount ?? 0) / 5)).toFixed(2))
+        }
+        // If RPCs weren't available, fall back to direct REST query (RLS may block)
+        if (!usedRpc) {
+          const cutoff30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+          const cutoff5m = Date.now() - 5 * 60 * 1000
+          const r = await fetch(`${supabaseUrlEnv}/rest/v1/${tablePath}?user_id=eq.${encodeURIComponent(targetId)}&occurred_at=gte.${encodeURIComponent(cutoff30d)}&select=referrer,geo_country,user_agent,occurred_at&order=occurred_at.desc`, {
+            headers: { ...baseHeaders },
+          })
+          if (r.ok) {
+            const arr = await r.json().catch(() => [])
+            const refCounts = new Map()
+            const countryCounts = new Map()
+            const deviceCounts = new Map()
+            let last5mCount = 0
+            for (const v of Array.isArray(arr) ? arr : []) {
+              const domain = extractHostname(v?.referrer || '')
+              const src = domain || (v?.referrer ? String(v.referrer) : '') || 'direct'
+              refCounts.set(src, (refCounts.get(src) || 0) + 1)
+              const cc = (v?.geo_country ? String(v.geo_country).toUpperCase() : '')
+              if (cc) countryCounts.set(cc, (countryCounts.get(cc) || 0) + 1)
+              const dev = categorizeDeviceFromUa(v?.user_agent || '')
+              deviceCounts.set(dev, (deviceCounts.get(dev) || 0) + 1)
+              try { if (v?.occurred_at && new Date(v.occurred_at).getTime() >= cutoff5m) last5mCount++ } catch {}
+            }
+            memberTopReferrers = Array.from(refCounts.entries()).map(([source, visits]) => ({ source, visits: Number(visits) }))
+            memberTopCountries = Array.from(countryCounts.entries()).map(([country, visits]) => ({ country, visits: Number(visits) }))
+            memberTopDevices = Array.from(deviceCounts.entries()).map(([device, visits]) => ({ device, visits: Number(visits) }))
+            memberTopReferrers.sort((a, b) => (b.visits || 0) - (a.visits || 0))
+            memberTopCountries.sort((a, b) => (b.visits || 0) - (a.visits || 0))
+            memberTopDevices.sort((a, b) => (b.visits || 0) - (a.visits || 0))
+            meanRpm5m = Number((last5mCount / 5).toFixed(2))
+          }
         }
       } catch {}
 
