@@ -1572,14 +1572,15 @@ export const AdminPage: React.FC = () => {
                   </Badge>
                 </div>
               </div>
-              <div className="mt-3 flex items-center gap-2">
-                <select
-                  className="rounded-xl border px-3 py-2 text-sm bg-white"
-                  value={selectedBranch}
-                  onChange={(e) => setSelectedBranch(e.target.value)}
-                  disabled={branchesLoading || branchesRefreshing}
-                  aria-label="Select branch"
-                >
+              <div className="mt-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <div className="flex-1 min-w-0">
+                  <select
+                    className="w-full rounded-xl border px-3 py-2 text-sm bg-white"
+                    value={selectedBranch}
+                    onChange={(e) => setSelectedBranch(e.target.value)}
+                    disabled={branchesLoading || branchesRefreshing}
+                    aria-label="Select branch"
+                  >
                   {branchesLoading ? (
                     <option value="">Loading…</option>
                   ) : branchOptions.length === 0 ? (
@@ -1589,15 +1590,18 @@ export const AdminPage: React.FC = () => {
                       <option key={b} value={b} title={b}>{shortenMiddle(b, branchMaxChars)}</option>
                     ))
                   )}
-                </select>
+                  </select>
+                </div>
                 <Button
                   variant="outline"
-                  className="rounded-xl"
+                  className="rounded-xl w-full sm:w-auto px-2 sm:px-3"
                   onClick={() => loadBranches({ initial: false })}
                   disabled={branchesLoading || branchesRefreshing}
+                  aria-label="Refresh branches"
                 >
                   <RefreshCw className={`h-4 w-4 ${branchesRefreshing ? 'animate-spin' : ''}`} />
-                  Refresh branches
+                  <span className="hidden sm:inline">Refresh branches</span>
+                  <span className="sm:hidden inline">Refresh</span>
                 </Button>
               </div>
               <div className="text-xs opacity-60 mt-2">
