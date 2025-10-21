@@ -1564,6 +1564,8 @@ app.get('/api/admin/member', async (req, res) => {
       }
       const baseHeaders = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
       if (token) Object.assign(baseHeaders, { 'Authorization': `Bearer ${token}` })
+      // Resolve visits table path once for the entire function scope
+      const tablePath = (process.env.VISITS_TABLE_REST || VISITS_TABLE_ENV || 'web_visits')
       // Resolve user id via RPC (security definer) using email or display name
       let targetId = null
       let resolvedEmail = emailParam || null
@@ -1628,7 +1630,6 @@ app.get('/api/admin/member', async (req, res) => {
       let lastCountry = null
       let lastReferrer = null
       try {
-        const tablePath = (process.env.VISITS_TABLE_REST || VISITS_TABLE_ENV || 'web_visits')
         const lr = await fetch(`${supabaseUrlEnv}/rest/v1/${tablePath}?user_id=eq.${encodeURIComponent(targetId)}&select=occurred_at,ip_address,geo_country,referrer&order=occurred_at.desc&limit=1`, {
           headers: baseHeaders,
         })

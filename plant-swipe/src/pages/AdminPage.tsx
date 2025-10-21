@@ -2422,7 +2422,7 @@ export const AdminPage: React.FC = () => {
                       )}
                     </div>
                     <div className="rounded-xl border p-3">
-                      <div className="text-[11px] opacity-60 mb-1">Top countries</div>
+                      <div className="text-[11px] opacity-60 mb-1">Top country</div>
                       {(!memberData.topCountries || memberData.topCountries.length === 0) ? (
                         <div className="text-xs opacity-60">—</div>
                       ) : (
@@ -2669,8 +2669,8 @@ export const AdminPage: React.FC = () => {
                         <div className="text-[11px] opacity-60">Mean RPM (5m)</div>
                         <div className="text-base font-semibold tabular-nums">{typeof ipMeanRpm5m === 'number' ? ipMeanRpm5m.toFixed(2) : '—'}</div>
                       </div>
-                      <div className="rounded-xl border p-3 text-center">
-                        <div className="text-[11px] opacity-60">Country</div>
+                    <div className="rounded-xl border p-3 text-center">
+                      <div className="text-[11px] opacity-60">Top country</div>
                         <div className="text-base font-semibold tabular-nums">{ipCountry ? countryCodeToName(ipCountry) : '—'}</div>
                       </div>
                       <div className="rounded-xl border p-3">
