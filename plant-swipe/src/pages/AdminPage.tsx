@@ -1957,8 +1957,8 @@ export const AdminPage: React.FC = () => {
                             {topCountries.length === 0 ? (
                               <div className="text-sm opacity-60">No data.</div>
                             ) : (
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                                <div className="col-span-2 min-h-[150px] pr-2 md:pr-0">
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-1">
+                                <div className="col-span-2 min-h-[150px]">
                                   <ResponsiveContainer width="100%" height={150}>
                                     <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
                                       {(() => {
@@ -2014,7 +2014,7 @@ export const AdminPage: React.FC = () => {
                                               innerRadius={36}
                                               outerRadius={64}
                                               paddingAngle={3}
-                                              cx="42%"
+                                              cx="40%"
                                             >
                                               {pieData.map((entry, index) => (
                                                 <Cell key={`cell-${entry.country}-${index}`} fill={countryColors[index % countryColors.length]} />
@@ -2027,7 +2027,7 @@ export const AdminPage: React.FC = () => {
                                     </PieChart>
                                   </ResponsiveContainer>
                                 </div>
-                                <div className="flex flex-col gap-1.5">
+                                <div className="flex flex-col gap-1">
                                   {topCountries.slice(0, 5).map((c, idx) => (
                                     <div key={c.country} className="flex items-center justify-between">
                                       <div className="flex-1 flex items-center gap-1.5 min-w-0">
