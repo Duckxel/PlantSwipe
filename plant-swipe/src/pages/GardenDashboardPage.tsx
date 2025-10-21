@@ -14,7 +14,7 @@ import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
 import { TaskEditorDialog } from '@/components/plant/TaskEditorDialog'
 import type { Garden } from '@/types/garden'
 import type { Plant } from '@/types/plant'
-import { getGarden, getGardenPlants, getGardenMembers, addMemberByNameOrEmail, deleteGardenPlant, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, updateGardenMemberRole, removeGardenMember, listGardenTasks, syncTaskOccurrencesForGarden, listOccurrencesForTasks, progressTaskOccurrence, updateGardenPlantsOrder, refreshGardenStreak, listGardenActivityToday, logGardenActivity, resyncTaskOccurrencesForGarden, computeGardenTaskForDay } from '@/lib/gardens'
+import { getGarden, getGardenPlants, getGardenMembers, addMemberByNameOrEmail, deleteGardenPlant, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, updateGardenMemberRole, removeGardenMember, listGardenTasks, syncTaskOccurrencesForGarden, listOccurrencesForTasks, progressTaskOccurrence, updateGardenPlantsOrder, refreshGardenStreak, listGardenActivityToday, logGardenActivity, resyncTaskOccurrencesForGarden, computeGardenTaskForDay, listCompletionsForOccurrences } from '@/lib/gardens'
 import { supabase } from '@/lib/supabaseClient'
 import { getAccentOption } from '@/lib/accent'
  
@@ -464,7 +464,16 @@ export const GardenDashboardPage: React.FC = () => {
         const token = session?.access_token
         const url = token ? `/api/garden/${id}/stream?token=${encodeURIComponent(token)}` : `/api/garden/${id}/stream`
         es = new EventSource(url)
-        const scheduleReload = () => {
+        const scheduleReload = (ev?: MessageEvent) => {
+          // If server sent JSON activity payload, handle optimistically
+          try {
+            if (ev && typeof ev.data === 'string' && ev.data.trim().startsWith('{')) {
+              const payload = JSON.parse(ev.data)
+              if (payload && payload.kind && payload.occurredAt) {
+                setActivityRev((r) => r + 1)
+              }
+            }
+          } catch {}
           // Debounce and pause while modals are open
           const now = Date.now()
           const since = now - (lastReloadRef.current || 0)
