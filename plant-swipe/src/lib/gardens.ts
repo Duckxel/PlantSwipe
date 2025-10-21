@@ -829,17 +829,22 @@ export async function resyncTaskOccurrencesForGarden(gardenId: string, startIso:
   const start = new Date(startIso)
   const end = new Date(endIso)
 
+  // Normalize keys by day (YYYY-MM-DD) to avoid time drift causing duplicates or lost progress
+  const toDay = (d: Date) => new Date(d).toISOString().slice(0, 10)
+  const dayToNoonIso = (day: string) => `${day}T12:00:00.000Z`
+
   // Compute expected occurrences based on current task definitions
-  type Expected = { taskId: string; gardenPlantId: string; dueAtIso: string; requiredCount: number }
+  type Expected = { taskId: string; gardenPlantId: string; dueAtIso: string; requiredCount: number; dayKey: string }
   const expectedByKey = new Map<string, Expected>()
 
   const addExpected = (taskId: string, gardenPlantId: string, due: Date, required: number) => {
-    const dueIso = due.toISOString()
-    const key = `${taskId}::${dueIso}`
+    const day = toDay(due)
+    const dueIso = dayToNoonIso(day)
+    const key = `${taskId}::${day}`
     // Only keep the highest requirement if duplicates somehow arise
     const prev = expectedByKey.get(key)
     if (!prev || prev.requiredCount < required) {
-      expectedByKey.set(key, { taskId, gardenPlantId, dueAtIso: dueIso, requiredCount: required })
+      expectedByKey.set(key, { taskId, gardenPlantId, dueAtIso: dueIso, requiredCount: required, dayKey: key })
     }
   }
 
@@ -912,7 +917,8 @@ export async function resyncTaskOccurrencesForGarden(gardenId: string, startIso:
   const existingByKey = new Map<string, { id: string; requiredCount: number; completedCount: number }>()
   const dupGroups = new Map<string, Array<{ id: string; requiredCount: number; completedCount: number }>>()
   for (const o of existing) {
-    const key = `${o.taskId}::${o.dueAt}`
+    const day = toDay(new Date(o.dueAt))
+    const key = `${o.taskId}::${day}`
     const entry = { id: o.id, requiredCount: Number(o.requiredCount || 1), completedCount: Number(o.completedCount || 0) }
     if (!dupGroups.has(key)) dupGroups.set(key, [])
     dupGroups.get(key)!.push(entry)
@@ -920,7 +926,8 @@ export async function resyncTaskOccurrencesForGarden(gardenId: string, startIso:
   // Dedupe: for keys with multiple rows, consolidate progress and keep a single row
   for (const [key, rows] of dupGroups.entries()) {
     if (rows.length <= 1) {
-      existingByKey.set(key, rows[0] || ({} as any))
+      const r0 = rows[0]
+      if (r0) existingByKey.set(key, { id: r0.id, requiredCount: r0.requiredCount, completedCount: r0.completedCount })
       continue
     }
     // Merge counts across duplicates
@@ -946,7 +953,10 @@ export async function resyncTaskOccurrencesForGarden(gardenId: string, startIso:
   }
   // Ensure singletons are recorded in existingByKey
   for (const [key, rows] of dupGroups.entries()) {
-    if (rows.length === 1 && !existingByKey.has(key)) existingByKey.set(key, rows[0])
+    if (rows.length === 1 && !existingByKey.has(key)) {
+      const r0 = rows[0]
+      existingByKey.set(key, { id: r0.id, requiredCount: r0.requiredCount, completedCount: r0.completedCount })
+    }
   }
 
   // Determine operations
