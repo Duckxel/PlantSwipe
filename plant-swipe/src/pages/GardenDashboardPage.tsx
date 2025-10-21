@@ -9,7 +9,6 @@ import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { PlantDetails } from '@/components/plant/PlantDetails'
-import { TasksSidebar } from '@/components/garden/TasksSidebar'
 import { Info, ArrowUpRight } from 'lucide-react'
 import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
 import { TaskEditorDialog } from '@/components/plant/TaskEditorDialog'
@@ -812,7 +811,7 @@ export const GardenDashboardPage: React.FC = () => {
   }, [todayTaskOccurrences, id, plants, getActorColorCss, load, loadHeavyForCurrentTab, notifyTasksChanged])
 
   return (
-    <div className="max-w-6xl mx-auto mt-6 grid grid-cols-1 md:grid-cols-[220px_1fr] lg:grid-cols-[220px_1fr_360px] gap-6">
+    <div className="max-w-6xl mx-auto mt-6 grid grid-cols-1 md:grid-cols-[220px_1fr] lg:grid-cols-[220px_1fr] gap-6">
       {loading && <div className="p-6 text-sm opacity-60">Loading…</div>}
       {error && <div className="p-6 text-sm text-red-600">{error}</div>}
       {!loading && garden && (
@@ -820,12 +819,11 @@ export const GardenDashboardPage: React.FC = () => {
           <aside className="space-y-2 md:sticky md:top-4 self-start">
             <div className="text-xl font-semibold">{garden.name}</div>
             <nav className="flex flex-wrap md:flex-col gap-2">
-              {([
+              {(([
                 ['overview','Overview'],
                 ['plants','Plants'],
-                ['routine','Routine'],
                 ['settings','Settings'],
-              ] as Array<[TabKey, string]>).map(([k, label]) => (
+              ] as Array<[TabKey, string]>)).map(([k, label]) => (
                 <Button key={k} asChild variant={tab === k ? 'default' : 'secondary'} className="rounded-2xl md:w-full">
                   <NavLink to={`/garden/${id}/${k}`} className="no-underline">{label}</NavLink>
                 </Button>
@@ -1024,15 +1022,7 @@ export const GardenDashboardPage: React.FC = () => {
             </Routes>
           </main>
           
-          {/* Right-side Tasks sidebar (stacks below on small screens) */}
-          <TasksSidebar
-            className="md:col-span-2 lg:col-span-1 lg:sticky lg:top-4 self-start"
-            gardenName={garden.name}
-            plants={plants}
-            todayTaskOccurrences={todayTaskOccurrences}
-            onProgressOccurrence={progressOccurrenceHandler}
-            onCompleteAllForPlant={completeAllTodayForPlant}
-          />
+          {/* Tasks sidebar removed per requirement: tasks now on Garden list page */}
 
           {/* Add Plant Dialog */}
           <Dialog open={addOpen} onOpenChange={setAddOpen}>
