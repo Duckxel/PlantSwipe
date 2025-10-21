@@ -1637,7 +1637,8 @@ app.get('/api/admin/member', async (req, res) => {
           body: JSON.stringify({ _user_id: targetId }),
         })
         if (lrpc.ok) {
-          const row = await lrpc.json().catch(() => null)
+          const arr = await lrpc.json().catch(() => [])
+          const row = Array.isArray(arr) ? arr[0] : null
           if (row) {
             lastOnlineAt = row.occurred_at || null
             lastIp = (row.ip_address || '').toString().replace(/\/[0-9]{1,3}$/, '') || null

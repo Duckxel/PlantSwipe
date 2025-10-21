@@ -2427,7 +2427,7 @@ export const AdminPage: React.FC = () => {
                         <div className="text-xs opacity-60">—</div>
                       ) : (
                         <div className="space-y-0.5">
-                          {memberData.topCountries.slice(0,3).map((c, idx) => (
+                          {memberData.topCountries.slice(0,1).map((c, idx) => (
                             <div key={`${c.country}-${idx}`} className="flex items-center justify-between text-sm">
                               <div className="truncate mr-2">{countryCodeToName(c.country)}</div>
                               <div className="tabular-nums">{c.visits}</div>
