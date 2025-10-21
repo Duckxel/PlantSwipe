@@ -819,11 +819,12 @@ export const GardenDashboardPage: React.FC = () => {
           <aside className="space-y-2 md:sticky md:top-4 self-start">
             <div className="text-xl font-semibold">{garden.name}</div>
             <nav className="flex flex-wrap md:flex-col gap-2">
-              {(([
+              {([
                 ['overview','Overview'],
                 ['plants','Plants'],
+                ['routine','Routine'],
                 ['settings','Settings'],
-              ] as Array<[TabKey, string]>)).map(([k, label]) => (
+              ] as Array<[TabKey, string]>).map(([k, label]) => (
                 <Button key={k} asChild variant={tab === k ? 'default' : 'secondary'} className="rounded-2xl md:w-full">
                   <NavLink to={`/garden/${id}/${k}`} className="no-underline">{label}</NavLink>
                 </Button>
