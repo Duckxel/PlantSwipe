@@ -1388,8 +1388,17 @@ function OverviewSection({ gardenId, activityRev, plants, membersCount, serverTo
         <div className="space-y-2">
           {activity.map((a) => {
             const color = a.actorColor || null
+            const ts = (() => {
+              try {
+                return new Date(a.occurredAt).toLocaleTimeString([], { hour12: false })
+              } catch {
+                return ''
+              }
+            })()
             return (
               <div key={a.id} className="text-sm flex items-start gap-2">
+                {ts && <span className="text-xs opacity-60 tabular-nums">{ts}</span>}
+                {ts && <span className="text-xs opacity-40">//</span>}
                 <span className="font-semibold" style={color ? { color } : undefined}>{a.actorName || 'Someone'}</span>
                 <span className="opacity-80">{a.message}</span>
               </div>
