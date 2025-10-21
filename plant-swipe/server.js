@@ -1820,6 +1820,56 @@ app.get('/api/admin/member', async (req, res) => {
             meanRpm5m = Number((last5mCount / 5).toFixed(2))
           }
         }
+
+        // If user-bound data is empty, fall back to aggregating across known IPs (similar to IP lookup)
+        try {
+          if ((memberTopReferrers.length === 0 && memberTopCountries.length === 0 && memberTopDevices.length === 0) || meanRpm5m === null) {
+            if (Array.isArray(ips) && ips.length > 0) {
+              const cutoff30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+              const cutoff5m = Date.now() - 5 * 60 * 1000
+              const refCounts = new Map()
+              const countryCounts = new Map()
+              const deviceCounts = new Map()
+              let last5mCount = 0
+              // Fetch per IP to avoid complex IN encodings for inet
+              for (const ip of ips) {
+                const url = `${supabaseUrlEnv}/rest/v1/${tablePath}?ip_address=eq.${encodeURIComponent(ip)}&occurred_at=gte.${encodeURIComponent(cutoff30d)}&select=referrer,user_agent,geo_country,occurred_at&order=occurred_at.desc`
+                const r = await fetch(url, { headers: { ...baseHeaders } })
+                if (!r.ok) continue
+                const arr = await r.json().catch(() => [])
+                for (const v of Array.isArray(arr) ? arr : []) {
+                  const domain = extractHostname(v?.referrer || '')
+                  const src = domain || (v?.referrer ? String(v.referrer) : '') || 'direct'
+                  refCounts.set(src, (refCounts.get(src) || 0) + 1)
+                  const cc = (v?.geo_country ? String(v.geo_country).toUpperCase() : '')
+                  if (cc) countryCounts.set(cc, (countryCounts.get(cc) || 0) + 1)
+                  const dev = categorizeDeviceFromUa(v?.user_agent || '')
+                  deviceCounts.set(dev, (deviceCounts.get(dev) || 0) + 1)
+                  try { if (v?.occurred_at && new Date(v.occurred_at).getTime() >= cutoff5m) last5mCount++ } catch {}
+                }
+              }
+              if (memberTopReferrers.length === 0) memberTopReferrers = Array.from(refCounts.entries()).map(([source, visits]) => ({ source, visits: Number(visits) }))
+              if (memberTopCountries.length === 0) memberTopCountries = Array.from(countryCounts.entries()).map(([country, visits]) => ({ country, visits: Number(visits) }))
+              if (memberTopDevices.length === 0) memberTopDevices = Array.from(deviceCounts.entries()).map(([device, visits]) => ({ device, visits: Number(visits) }))
+              memberTopReferrers.sort((a, b) => (b.visits || 0) - (a.visits || 0))
+              memberTopCountries.sort((a, b) => (b.visits || 0) - (a.visits || 0))
+              memberTopDevices.sort((a, b) => (b.visits || 0) - (a.visits || 0))
+              if (meanRpm5m === null) meanRpm5m = Number((last5mCount / 5).toFixed(2))
+              // Also fallback lastIp if missing
+              if (!lastIp) {
+                try {
+                  for (const ip of ips) {
+                    const r = await fetch(`${supabaseUrlEnv}/rest/v1/${tablePath}?ip_address=eq.${encodeURIComponent(ip)}&select=ip_address,occurred_at&order=occurred_at.desc&limit=1`, { headers: { ...baseHeaders } })
+                    if (r.ok) {
+                      const arr = await r.json().catch(() => [])
+                      if (Array.isArray(arr) && arr[0]?.ip_address) { lastIp = String(arr[0].ip_address).replace(/\/[0-9]{1,3}$/, ''); break }
+                    }
+                  }
+                } catch {}
+              }
+            }
+          }
+        } catch {}
       } catch {}
 
       // Load admin notes via REST (admin-only via RLS)
@@ -2047,6 +2097,71 @@ app.get('/api/admin/member', async (req, res) => {
       topDevices = Array.from(deviceMap.entries()).map(([device, visits]) => ({ device, visits: Number(visits) }))
       topDevices.sort((a, b) => (b.visits || 0) - (a.visits || 0))
       meanRpm5m = Number((((rpmRows?.[0]?.c ?? 0) / 5)).toFixed(2))
+    } catch {}
+
+    // If no user-bound data, fall back to aggregating across known IPs (similar to IP lookup)
+    try {
+      if (((topReferrers.length === 0 && topCountries.length === 0 && topDevices.length === 0) || meanRpm5m === null) && Array.isArray(ips) && ips.length > 0) {
+        const ipArray = ips
+        const [refRows2, countryRows2, uaRows2, rpmRows2, lastIpRow] = await Promise.all([
+          sql`
+            select source, visits from (
+              select case
+                       when v.referrer is null or v.referrer = '' then 'direct'
+                       when v.referrer ilike 'http%' then split_part(split_part(v.referrer, '://', 2), '/', 1)
+                       else v.referrer
+                     end as source,
+                     count(*)::int as visits
+              from ${VISITS_TABLE_SQL_IDENT} v
+              where v.ip_address = any(${sql.array(ipArray)}::inet[])
+                and v.occurred_at >= now() - interval '30 days'
+              group by 1
+            ) s
+            order by visits desc
+            limit 10
+          `,
+          sql`
+            select upper(v.geo_country) as country, count(*)::int as visits
+            from ${VISITS_TABLE_SQL_IDENT} v
+            where v.ip_address = any(${sql.array(ipArray)}::inet[])
+              and v.geo_country is not null and v.geo_country <> ''
+              and v.occurred_at >= now() - interval '30 days'
+            group by 1
+            order by visits desc
+            limit 10
+          `,
+          sql`
+            select v.user_agent, count(*)::int as visits
+            from ${VISITS_TABLE_SQL_IDENT} v
+            where v.ip_address = any(${sql.array(ipArray)}::inet[])
+              and v.occurred_at >= now() - interval '30 days'
+            group by v.user_agent
+            order by visits desc
+            limit 200
+          `,
+          sql.unsafe(`select count(*)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address = any($1::inet[]) and occurred_at >= now() - interval '5 minutes'`, [ipArray]),
+          sql`
+            select ip_address::text as ip
+            from ${VISITS_TABLE_SQL_IDENT}
+            where ip_address = any(${sql.array(ipArray)}::inet[])
+            order by occurred_at desc
+            limit 1
+          `,
+        ])
+        if (topReferrers.length === 0) topReferrers = (Array.isArray(refRows2) ? refRows2 : []).map(r => ({ source: String(r.source || 'direct'), visits: Number(r.visits || 0) }))
+        if (topCountries.length === 0) topCountries = (Array.isArray(countryRows2) ? countryRows2 : []).map(r => ({ country: String(r.country || ''), visits: Number(r.visits || 0) }))
+        if (topDevices.length === 0) {
+          const deviceMap2 = new Map()
+          for (const r of Array.isArray(uaRows2) ? uaRows2 : []) {
+            const key = categorizeDeviceFromUa(r?.user_agent || '')
+            deviceMap2.set(key, (deviceMap2.get(key) || 0) + Number(r?.visits || 0))
+          }
+          topDevices = Array.from(deviceMap2.entries()).map(([device, visits]) => ({ device, visits: Number(visits) }))
+          topDevices.sort((a, b) => (b.visits || 0) - (a.visits || 0))
+        }
+        if (meanRpm5m === null) meanRpm5m = Number((((rpmRows2?.[0]?.c ?? 0) / 5)).toFixed(2))
+        if (!lastIp) lastIp = (lastIpRow?.[0]?.ip || null) ? String(lastIpRow[0].ip).replace(/\/[0-9]{1,3}$/, '') : lastIp
+      }
     } catch {}
 
     try {
