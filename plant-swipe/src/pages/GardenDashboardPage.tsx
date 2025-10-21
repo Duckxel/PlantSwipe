@@ -14,7 +14,7 @@ import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
 import { TaskEditorDialog } from '@/components/plant/TaskEditorDialog'
 import type { Garden } from '@/types/garden'
 import type { Plant } from '@/types/plant'
-import { getGarden, getGardenPlants, getGardenMembers, addMemberByNameOrEmail, deleteGardenPlant, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, updateGardenMemberRole, removeGardenMember, listGardenTasks, syncTaskOccurrencesForGarden, listOccurrencesForTasks, progressTaskOccurrence, updateGardenPlantsOrder, refreshGardenStreak, listGardenActivityToday, logGardenActivity, resyncTaskOccurrencesForGarden } from '@/lib/gardens'
+import { getGarden, getGardenPlants, getGardenMembers, addMemberByNameOrEmail, deleteGardenPlant, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, updateGardenMemberRole, removeGardenMember, listGardenTasks, syncTaskOccurrencesForGarden, listOccurrencesForTasks, progressTaskOccurrence, updateGardenPlantsOrder, refreshGardenStreak, listGardenActivityToday, logGardenActivity, resyncTaskOccurrencesForGarden, computeGardenTaskForDay } from '@/lib/gardens'
 import { supabase } from '@/lib/supabaseClient'
 import { getAccentOption } from '@/lib/accent'
  
@@ -343,6 +343,18 @@ export const GardenDashboardPage: React.FC = () => {
 
   React.useEffect(() => { load() }, [load])
 
+  // Listen for global plant updates (from Plant edit page) to refresh live
+  React.useEffect(() => {
+    const handler = () => {
+      ;(async () => {
+        await load({ silent: true, preserveHeavy: true })
+        await loadHeavyForCurrentTab()
+      })()
+    }
+    try { window.addEventListener('plants:refresh', handler) } catch {}
+    return () => { try { window.removeEventListener('plants:refresh', handler) } catch {} }
+  }, [load, loadHeavyForCurrentTab])
+
   // Lazy heavy loader for tabs that need it
   const loadHeavyForCurrentTab = React.useCallback(async () => {
     if (!id || !serverToday) return
@@ -464,13 +476,25 @@ export const GardenDashboardPage: React.FC = () => {
           if (since < minInterval) {
             if (reloadTimer) return
             const wait = Math.max(0, minInterval - since)
-            reloadTimer = setTimeout(() => { reloadTimer = null; lastReloadRef.current = Date.now(); setActivityRev((r) => r + 1); load({ silent: true, preserveHeavy: true }) }, wait)
+            reloadTimer = setTimeout(async () => {
+              reloadTimer = null
+              lastReloadRef.current = Date.now()
+              setActivityRev((r) => r + 1)
+              await load({ silent: true, preserveHeavy: true })
+              // Refresh heavy data so task counts/due update on Plants/Routine without reload
+              await loadHeavyForCurrentTab()
+            }, wait)
             return
           }
           lastReloadRef.current = now
           setActivityRev((r) => r + 1)
           if (reloadTimer) return
-          reloadTimer = setTimeout(() => { reloadTimer = null; load({ silent: true, preserveHeavy: true }) }, 1000)
+          reloadTimer = setTimeout(async () => {
+            reloadTimer = null
+            await load({ silent: true, preserveHeavy: true })
+            // Refresh heavy data so task counts/due update on Plants/Routine without reload
+            await loadHeavyForCurrentTab()
+          }, 1000)
         }
         es.addEventListener('activity', scheduleReload as any)
         es.addEventListener('ready', () => {})
@@ -488,9 +512,13 @@ export const GardenDashboardPage: React.FC = () => {
       pendingReloadRef.current = false
       lastReloadRef.current = Date.now()
       setActivityRev((r) => r + 1)
-      load({ silent: true })
+      ;(async () => {
+        await load({ silent: true })
+        // Ensure heavy data refresh so counts/badges reflect latest state
+        await loadHeavyForCurrentTab()
+      })()
     }
-  }, [anyModalOpen, load])
+  }, [anyModalOpen, load, loadHeavyForCurrentTab])
 
   const viewerIsOwner = React.useMemo(() => {
     // Admins can manage any garden
@@ -692,9 +720,8 @@ export const GardenDashboardPage: React.FC = () => {
         await computeGardenTaskForDay({ gardenId: garden.id, dayIso: serverToday })
       }
       await load({ silent: true, preserveHeavy: true })
-      if (tab === 'routine') {
-        await loadHeavyForCurrentTab()
-      }
+      // Always refresh heavy data so plant cards reflect latest task counts/due
+      await loadHeavyForCurrentTab()
       if (id) navigate(`/garden/${id}/plants`)
       notifyTasksChanged()
     } catch (e: any) {
@@ -732,9 +759,8 @@ export const GardenDashboardPage: React.FC = () => {
         } catch {}
       }
       await load({ silent: true, preserveHeavy: true })
-      if (tab === 'routine') {
-        await loadHeavyForCurrentTab()
-      }
+      // Always refresh heavy data so Plants and Routine reflect updates instantly
+      await loadHeavyForCurrentTab()
       if (id) navigate(`/garden/${id}/routine`)
       notifyTasksChanged()
     } catch (e: any) {
@@ -923,7 +949,16 @@ export const GardenDashboardPage: React.FC = () => {
                               >
                                 Tasks
                               </Button>
-                              <EditPlantButton gp={gp} gardenId={id!} onChanged={load} serverToday={serverToday} actorColorCss={getActorColorCss()} />
+                              <EditPlantButton
+                                gp={gp}
+                                gardenId={id!}
+                                onChanged={async () => {
+                                  await load({ silent: true, preserveHeavy: true })
+                                  await loadHeavyForCurrentTab()
+                                }}
+                                serverToday={serverToday}
+                                actorColorCss={getActorColorCss()}
+                              />
                               <Button
                                 variant="secondary"
                                 className="rounded-2xl"
@@ -958,6 +993,7 @@ export const GardenDashboardPage: React.FC = () => {
                                   setActivityRev((r) => r + 1)
                                 } catch {}
                                 await load()
+                                await loadHeavyForCurrentTab()
                                 }}
                               >
                                 Delete
@@ -1111,10 +1147,8 @@ export const GardenDashboardPage: React.FC = () => {
               // Ensure page reflects latest tasks after create/update/delete
               // Silent lightweight reload to keep UI stable
               await load({ silent: true, preserveHeavy: true })
-              // If routine tab is visible, refresh heavy data immediately
-              if (tab === 'routine') {
-                await loadHeavyForCurrentTab()
-              }
+              // Refresh heavy data so task counts/due update on Plants and Routine
+              await loadHeavyForCurrentTab()
             }}
           />
 

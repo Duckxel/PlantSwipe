@@ -115,6 +115,8 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
       if (uerr) { setError(uerr.message); return }
       setOk('Saved')
       onSaved && onSaved(id)
+      // Notify other views (e.g., Garden page) to refresh species data live
+      try { window.dispatchEvent(new CustomEvent('plants:refresh')) } catch {}
     } finally {
       setSaving(false)
     }
