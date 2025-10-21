@@ -69,9 +69,19 @@ export const GardenDashboardPage: React.FC = () => {
   const [addDetailsOpen, setAddDetailsOpen] = React.useState(false)
   const [addNickname, setAddNickname] = React.useState('')
   const [addCount, setAddCount] = React.useState<number>(1)
+  const countInputRef = React.useRef<HTMLInputElement | null>(null)
   const [scheduleLockYear, setScheduleLockYear] = React.useState<boolean>(false)
   const [scheduleAllowedPeriods, setScheduleAllowedPeriods] = React.useState<Array<'week'|'month'|'year'> | undefined>(undefined)
   const [dragIdx, setDragIdx] = React.useState<number | null>(null)
+
+  React.useEffect(() => {
+    if (addDetailsOpen) {
+      const t = setTimeout(() => {
+        try { countInputRef.current?.focus(); countInputRef.current?.select() } catch {}
+      }, 0)
+      return () => { try { clearTimeout(t) } catch {} }
+    }
+  }, [addDetailsOpen])
 
   const [activityRev, setActivityRev] = React.useState(0)
   const streakRefreshedRef = React.useRef(false)
@@ -1066,8 +1076,8 @@ export const GardenDashboardPage: React.FC = () => {
                   <Input value={addNickname} maxLength={30} onChange={(e: any) => setAddNickname(e.target.value)} placeholder="Optional nickname" />
                 </div>
                 <div>
-                  <label className="text-sm font-medium">Number of plants</label>
-                  <Input type="number" min={0} value={String(addCount)} onChange={(e: any) => setAddCount(Number(e.target.value))} />
+                  <label className="text-sm font-medium">Number of flowers</label>
+                  <Input ref={countInputRef} autoFocus type="number" min={0} value={String(addCount)} onChange={(e: any) => setAddCount(Number(e.target.value))} />
                 </div>
                 <div className="flex justify-end gap-2 pt-2">
                   <Button variant="secondary" className="rounded-2xl" onClick={() => setAddDetailsOpen(false)}>Back</Button>
