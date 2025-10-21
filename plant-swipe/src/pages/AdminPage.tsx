@@ -43,6 +43,28 @@ export const AdminPage: React.FC = () => {
       return `${left}...${right}`
     } catch { return value }
   }, [])
+
+  // Compute a responsive max character count for branch names based on viewport width
+  const computeBranchMaxChars = React.useCallback((viewportWidth: number): number => {
+    const w = Math.max(0, viewportWidth || 0)
+    if (w < 340) return 18
+    if (w < 380) return 22
+    if (w < 420) return 26
+    if (w < 640) return 32
+    if (w < 768) return 42
+    if (w < 1024) return 56
+    return 64
+  }, [])
+
+  const [branchMaxChars, setBranchMaxChars] = React.useState<number>(() =>
+    typeof window !== 'undefined' ? computeBranchMaxChars(window.innerWidth) : 56,
+  )
+
+  React.useEffect(() => {
+    const onResize = () => setBranchMaxChars(computeBranchMaxChars(window.innerWidth))
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [computeBranchMaxChars])
   const countryCodeToName = React.useCallback((code: string): string => {
     try {
       const c = String(code || '').toUpperCase()
@@ -1546,36 +1568,40 @@ export const AdminPage: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <div className="text-xs opacity-60 hidden sm:block">Current:</div>
                   <Badge variant="outline" className="rounded-full max-w-[360px] truncate" title={currentBranch || undefined}>
-                    {branchesLoading ? '—' : shortenMiddle(currentBranch || 'unknown', 56)}
+                    {branchesLoading ? '—' : shortenMiddle(currentBranch || 'unknown', branchMaxChars)}
                   </Badge>
                 </div>
               </div>
-              <div className="mt-3 flex items-center gap-2">
-                <select
-                  className="rounded-xl border px-3 py-2 text-sm bg-white"
-                  value={selectedBranch}
-                  onChange={(e) => setSelectedBranch(e.target.value)}
-                  disabled={branchesLoading || branchesRefreshing}
-                  aria-label="Select branch"
-                >
+              <div className="mt-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <div className="flex-1 min-w-0">
+                  <select
+                    className="w-full rounded-xl border px-3 py-2 text-sm bg-white"
+                    value={selectedBranch}
+                    onChange={(e) => setSelectedBranch(e.target.value)}
+                    disabled={branchesLoading || branchesRefreshing}
+                    aria-label="Select branch"
+                  >
                   {branchesLoading ? (
                     <option value="">Loading…</option>
                   ) : branchOptions.length === 0 ? (
                     <option value="">No branches found</option>
                   ) : (
                     branchOptions.map(b => (
-                      <option key={b} value={b} title={b}>{shortenMiddle(b, 64)}</option>
+                      <option key={b} value={b} title={b}>{shortenMiddle(b, branchMaxChars)}</option>
                     ))
                   )}
-                </select>
+                  </select>
+                </div>
                 <Button
                   variant="outline"
-                  className="rounded-xl"
+                  className="rounded-xl w-full sm:w-auto px-2 sm:px-3"
                   onClick={() => loadBranches({ initial: false })}
                   disabled={branchesLoading || branchesRefreshing}
+                  aria-label="Refresh branches"
                 >
                   <RefreshCw className={`h-4 w-4 ${branchesRefreshing ? 'animate-spin' : ''}`} />
-                  Refresh branches
+                  <span className="hidden sm:inline">Refresh branches</span>
+                  <span className="sm:hidden inline">Refresh</span>
                 </Button>
               </div>
               <div className="text-xs opacity-60 mt-2">
@@ -1875,7 +1901,7 @@ export const AdminPage: React.FC = () => {
                           <ResponsiveContainer width="100%" height="100%">
                             <ComposedChart
                               data={visitorsSeries}
-                              margin={{ top: 10, right: 16, bottom: 14, left: 16 }}
+                              margin={{ top: 10, right: 8, bottom: 14, left: 8 }}
                             >
                               <defs>
                                 <linearGradient id="visitsLineGrad" x1="0" y1="0" x2="1" y2="0">
@@ -1896,7 +1922,7 @@ export const AdminPage: React.FC = () => {
                                 axisLine={false}
                                 tickLine={false}
                                 interval={0}
-                                padding={{ left: 12, right: 12 }}
+                                padding={{ left: 0, right: 0 }}
                               />
                               <YAxis
                                 allowDecimals={false}
@@ -1904,6 +1930,7 @@ export const AdminPage: React.FC = () => {
                                 tick={{ fontSize: 11, fill: '#525252' }}
                                 axisLine={false}
                                 tickLine={false}
+                                width={28}
                               />
                               <Tooltip content={<TooltipContent />} cursor={{ stroke: 'rgba(0,0,0,0.1)' }} />
                               <ReferenceLine
@@ -1934,10 +1961,10 @@ export const AdminPage: React.FC = () => {
                             {topCountries.length === 0 ? (
                               <div className="text-sm opacity-60">No data.</div>
                             ) : (
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-1">
                                 <div className="col-span-2 min-h-[150px]">
                                   <ResponsiveContainer width="100%" height={150}>
-                                    <PieChart>
+                                    <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
                                       {(() => {
                                         const pieData: Array<{ country: string; visits: number; pct?: number; isOther?: boolean }> = [...topCountries]
                                         if (otherCountries && otherCountries.visits > 0) {
@@ -1991,6 +2018,7 @@ export const AdminPage: React.FC = () => {
                                               innerRadius={36}
                                               outerRadius={64}
                                               paddingAngle={3}
+                                              cx="40%"
                                             >
                                               {pieData.map((entry, index) => (
                                                 <Cell key={`cell-${entry.country}-${index}`} fill={countryColors[index % countryColors.length]} />
@@ -2003,10 +2031,10 @@ export const AdminPage: React.FC = () => {
                                     </PieChart>
                                   </ResponsiveContainer>
                                 </div>
-                                <div className="flex flex-col gap-2">
+                                <div className="flex flex-col gap-1">
                                   {topCountries.slice(0, 5).map((c, idx) => (
                                     <div key={c.country} className="flex items-center justify-between">
-                                      <div className="flex-1 flex items-center gap-2 min-w-0">
+                                      <div className="flex-1 flex items-center gap-1.5 min-w-0">
                                         <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: countryColors[idx % countryColors.length] }} />
                                         <span className="text-sm truncate">{countryCodeToName(c.country)}</span>
                                       </div>
@@ -2016,7 +2044,7 @@ export const AdminPage: React.FC = () => {
                                   {otherCountries && otherCountries.visits > 0 && (
                                     <div className="flex items-center justify-between">
                                       <div
-                                        className="flex-1 flex items-center gap-2 min-w-0"
+                                        className="flex-1 flex items-center gap-1.5 min-w-0"
                                         onMouseEnter={(e) => showOtherCountriesTooltip(e.currentTarget as HTMLElement)}
                                         onMouseLeave={hideOtherCountriesTooltip}
                                         onFocus={(e) => showOtherCountriesTooltip(e.currentTarget as HTMLElement)}
