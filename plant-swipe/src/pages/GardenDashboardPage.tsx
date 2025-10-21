@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { PlantDetails } from '@/components/plant/PlantDetails'
+import { TasksSidebar } from '@/components/garden/TasksSidebar'
 import { Info, ArrowUpRight } from 'lucide-react'
 import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
 import { TaskEditorDialog } from '@/components/plant/TaskEditorDialog'
@@ -427,9 +428,8 @@ export const GardenDashboardPage: React.FC = () => {
   }, [id, serverToday, tab])
 
   React.useEffect(() => {
-    if (tab === 'plants' || tab === 'routine') {
-      loadHeavyForCurrentTab()
-    }
+    // Always load today's occurrences for the Tasks sidebar; compute weekly only on Routine
+    loadHeavyForCurrentTab()
   }, [tab, loadHeavyForCurrentTab])
 
   // Live updates via SSE (no reloads)
@@ -783,8 +783,36 @@ export const GardenDashboardPage: React.FC = () => {
 
   // invite by email only (implemented in submitInvite)
 
+  // Shared progress handler for Task occurrences (used by Routine and Tasks sidebar)
+  const progressOccurrenceHandler = React.useCallback(async (occId: string, inc: number) => {
+    try {
+      await progressTaskOccurrence(occId, inc)
+      const o = todayTaskOccurrences.find((x: any) => x.id === occId)
+      if (o && id) {
+        const gp = (plants as any[]).find((p: any) => p.id === o.gardenPlantId)
+        const type = (o as any).taskType || 'custom'
+        const label = String(type).toUpperCase()
+        const plantName = gp?.nickname || gp?.plant?.name || null
+        const newCount = Number(o.completedCount || 0) + inc
+        const required = Number(o.requiredCount || 1)
+        const done = newCount >= required
+        const kind = done ? 'task_completed' : 'task_progressed'
+        const msg = done
+          ? `has completed "${label}" Task on "${plantName || 'Plant'}"`
+          : `has progressed "${label}" Task on "${plantName || 'Plant'}" (${Math.min(newCount, required)}/${required})`
+        const actorColorCss = getActorColorCss()
+        await logGardenActivity({ gardenId: id!, kind: kind as any, message: msg, plantName: plantName || null, taskName: label, actorColor: actorColorCss || null })
+        setActivityRev((r) => r + 1)
+      }
+    } finally {
+      await load({ silent: true, preserveHeavy: true })
+      await loadHeavyForCurrentTab()
+      notifyTasksChanged()
+    }
+  }, [todayTaskOccurrences, id, plants, getActorColorCss, load, loadHeavyForCurrentTab, notifyTasksChanged])
+
   return (
-    <div className="max-w-6xl mx-auto mt-6 grid grid-cols-1 md:grid-cols-[220px_1fr] gap-6">
+    <div className="max-w-6xl mx-auto mt-6 grid grid-cols-1 md:grid-cols-[220px_1fr] lg:grid-cols-[220px_1fr_360px] gap-6">
       {loading && <div className="p-6 text-sm opacity-60">Loading…</div>}
       {error && <div className="p-6 text-sm text-red-600">{error}</div>}
       {!loading && garden && (
@@ -995,6 +1023,16 @@ export const GardenDashboardPage: React.FC = () => {
               <Route path="*" element={<Navigate to={`overview`} replace />} />
             </Routes>
           </main>
+          
+          {/* Right-side Tasks sidebar (stacks below on small screens) */}
+          <TasksSidebar
+            className="md:col-span-2 lg:col-span-1 lg:sticky lg:top-4 self-start"
+            gardenName={garden.name}
+            plants={plants}
+            todayTaskOccurrences={todayTaskOccurrences}
+            onProgressOccurrence={progressOccurrenceHandler}
+            onCompleteAllForPlant={completeAllTodayForPlant}
+          />
 
           {/* Add Plant Dialog */}
           <Dialog open={addOpen} onOpenChange={setAddOpen}>
