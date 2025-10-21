@@ -701,14 +701,42 @@ function addInterval(date: Date, amount: number, unit: TaskUnit): Date {
 }
 
 export async function ensureTaskOccurrence(taskId: string, gardenPlantId: string, dueAtIso: string, requiredCount: number): Promise<void> {
-  // Idempotent upsert by (task_id, due_at). Requires a unique index on these columns.
-  const { error } = await supabase
-    .from('garden_plant_task_occurrences')
-    .upsert(
-      { task_id: taskId, garden_plant_id: gardenPlantId, due_at: dueAtIso, required_count: requiredCount },
-      { onConflict: 'task_id, due_at' }
-    )
-  if (error) throw new Error(error.message)
+  // Prefer idempotent upsert by (task_id, due_at). If the unique index doesn't
+  // exist yet server-side, gracefully fall back to a manual ensure.
+  try {
+    const { error } = await supabase
+      .from('garden_plant_task_occurrences')
+      .upsert(
+        { task_id: taskId, garden_plant_id: gardenPlantId, due_at: dueAtIso, required_count: requiredCount },
+        { onConflict: 'task_id, due_at' }
+      )
+    if (error) throw error
+  } catch (e: any) {
+    const msg = String(e?.message || '')
+    const noConstraint = /no unique|no exclusion constraint|ON CONFLICT specification/i.test(msg)
+    if (!noConstraint) throw e
+    // Fallback: pick an existing row (keep the one with the highest completed_count),
+    // update its required_count to at least requiredCount, or insert if none exists.
+    const { data: rows } = await supabase
+      .from('garden_plant_task_occurrences')
+      .select('id, completed_count, required_count')
+      .eq('task_id', taskId)
+      .eq('due_at', dueAtIso)
+      .order('completed_count', { ascending: false, nullsFirst: false })
+    if (Array.isArray(rows) && rows.length > 0) {
+      const keeper = rows[0] as any
+      const nextReq = Math.max(Number(keeper.required_count || 1), Math.max(1, Number(requiredCount || 1)))
+      await supabase
+        .from('garden_plant_task_occurrences')
+        .update({ required_count: nextReq, garden_plant_id: gardenPlantId })
+        .eq('id', String(keeper.id))
+    } else {
+      const { error: insErr } = await supabase
+        .from('garden_plant_task_occurrences')
+        .insert({ task_id: taskId, garden_plant_id: gardenPlantId, due_at: dueAtIso, required_count: requiredCount })
+      if (insErr) throw new Error(insErr.message)
+    }
+  }
 }
 
 export async function syncTaskOccurrencesForGarden(gardenId: string, startIso: string, endIso: string): Promise<void> {
