@@ -2168,14 +2168,16 @@ stable
 security definer
 set search_path = public
 as $$
-  select v.occurred_at,
-         v.ip_address::text as ip_address,
-         v.geo_country,
-         v.referrer
-  from public.web_visits v
-  where v.user_id = _user_id
-  order by v.occurred_at desc
-  limit 1;
+  select * from (
+    select v.occurred_at,
+           v.ip_address::text as ip_address,
+           v.geo_country,
+           v.referrer
+    from public.web_visits v
+    where v.user_id = _user_id
+    order by v.occurred_at desc
+    limit 1
+  ) s;
 $$;
 grant execute on function public.get_user_last_visit_info(uuid) to anon, authenticated;
 

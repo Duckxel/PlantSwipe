@@ -1546,6 +1546,14 @@ app.get('/api/admin/stats', async (req, res) => {
 // Admin: lookup member by email (returns user, profile, and known IPs)
 app.get('/api/admin/member', async (req, res) => {
   try {
+    // Allow admin tokens via query for flexibility (SSE-style)
+    try {
+      const adminTokenQ = (req.query?.admin_token ? String(req.query.admin_token) : '')
+      if (adminTokenQ) { try { req.headers['x-admin-token'] = adminTokenQ } catch {} }
+      const bearerQ = (req.query?.token ? String(req.query.token) : '')
+      if (bearerQ) { try { req.headers['authorization'] = `Bearer ${bearerQ}` } catch {} }
+    } catch {}
+
     // Require admin to view member lookup details
     const isAdmin = await isAdminFromRequest(req)
     if (!isAdmin) {

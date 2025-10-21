@@ -1123,7 +1123,14 @@ export const AdminPage: React.FC = () => {
         const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
         if (adminToken) headers['X-Admin-Token'] = String(adminToken)
       } catch {}
-      const resp = await fetch(url, { headers, credentials: 'same-origin' })
+      // Also pass tokens in query to accommodate environments dropping headers
+      const urlWithTokens = (() => {
+        const qs: string[] = []
+        try { if (token) qs.push(`token=${encodeURIComponent(token)}`) } catch {}
+        try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) qs.push(`admin_token=${encodeURIComponent(String(adminToken))}`) } catch {}
+        return qs.length ? `${url}${url.includes('?') ? '&' : '?'}${qs.join('&')}` : url
+      })()
+      const resp = await fetch(urlWithTokens, { headers, credentials: 'same-origin' })
       const data = await safeJson(resp)
       if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`)
       setMemberData({
