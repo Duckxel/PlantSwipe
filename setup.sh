@@ -253,6 +253,38 @@ else
   log "[INFO] No DATABASE_URL or SUPABASE_URL found; skipping DB egress check."
 fi
 
+# Also ensure outbound HTTPS to Supabase realtime host for WebSocket (if UFW blocks outgoing)
+if [[ -n "$SUPA_URL" ]]; then
+  SUPA_HOST="$(python3 - <<'PY'
+import os
+from urllib.parse import urlparse
+u = urlparse(os.environ.get('SUPA_URL',''))
+print(u.hostname or '')
+PY
+)"
+  if [[ -n "$SUPA_HOST" ]]; then
+    ufw_status="$($SUDO ufw status verbose 2>/dev/null || true)"
+    need_out_rule=false
+    if echo "$ufw_status" | grep -qiE "Status: active"; then
+      if echo "$ufw_status" | grep -qiE "outgoing\s+deny|Default:.*outgoing.*deny"; then
+        need_out_rule=true
+      fi
+    fi
+    if $need_out_rule; then
+      ips="$(getent ahostsv4 "$SUPA_HOST" 2>/dev/null | awk '{print $1}' | sort -u)"
+      if [[ -n "$ips" ]]; then
+        for ip in $ips; do
+          $SUDO ufw allow out to "$ip" port 443 proto tcp >/dev/null 2>&1 || true
+        done
+        log "UFW: allowed outbound TCP 443 to $SUPA_HOST ($ips) for realtime"
+      else
+        $SUDO ufw allow out to any port 443 proto tcp >/dev/null 2>&1 || true
+        log "UFW: allowed outbound TCP 443 to any (could not resolve $SUPA_HOST)"
+      fi
+    fi
+  fi
+fi
+
 # --- Render a canonical service environment from repo .env files ---
 SERVICE_ENV_DIR="/etc/plant-swipe"
 SERVICE_ENV_FILE="$SERVICE_ENV_DIR/service.env"
@@ -374,6 +406,32 @@ fi
 # Remove legacy site filenames if present
 $SUDO rm -f /etc/nginx/sites-available/plant-swipe || true
 $SUDO rm -f /etc/nginx/sites-enabled/plant-swipe || true
+
+# Ensure SSE for garden activity stream is not buffered by nginx
+if ! grep -q "garden/.\*/stream" "$NGINX_SITE_AVAIL" 2>/dev/null; then
+  log "Injecting SSE location for /api/garden/:id/stream into nginx site…"
+  tmp_nginx="$(mktemp)"
+  awk '
+    BEGIN {inserted=0}
+    /location \/ \{/ && inserted==0 {
+      print "    # SSE stream for garden activity (disable buffering)";
+      print "    location ~ ^/api/garden/.*/stream$ {";
+      print "        proxy_pass http://127.0.0.1:3000;";
+      print "        proxy_http_version 1.1;";
+      print "        proxy_set_header Connection \"\";";
+      print "        proxy_set_header Host $host;";
+      print "        proxy_set_header X-Real-IP $remote_addr;";
+      print "        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;";
+      print "        proxy_set_header X-Forwarded-Proto $scheme;";
+      print "        proxy_buffering off;";
+      print "        proxy_read_timeout 1h;";
+      print "        proxy_send_timeout 1h;";
+      print "    }";
+      inserted=1
+    }
+    { print }
+  ' "$NGINX_SITE_AVAIL" > "$tmp_nginx" && $SUDO install -m 0644 "$tmp_nginx" "$NGINX_SITE_AVAIL" && rm -f "$tmp_nginx"
+fi
 
 log "Testing nginx configuration…"
 $SUDO nginx -t
@@ -508,6 +566,21 @@ $SUDO systemctl restart "$SERVICE_ADMIN" "$SERVICE_NODE"
 # Final nginx reload to apply site links
 log "Reloading nginx…"
 $SUDO systemctl reload "$SERVICE_NGINX"
+
+# Sanity checks for API endpoints to avoid HTML/JSON mismatches
+log "Sanity check: /api/plants returns JSON…"
+if command -v curl >/dev/null 2>&1; then
+  code="$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1/api/plants || echo 000)"
+  ct="$(curl -sS -D - -o /dev/null http://127.0.0.1/api/plants 2>/dev/null | awk -F': ' 'tolower($1)=="content-type"{print tolower($2)}' | tr -d '\r')"
+  if [[ "$code" != "200" || "$ct" != application/json* ]]; then
+    log "[WARN] /api/plants responded with code=$code content-type=$ct; ensure Node service is running and nginx proxies /api/* to it before SPA fallback."
+  fi
+  log "Sanity check: /api/env.js returns JS…"
+  ct_env="$(curl -sS -D - -o /dev/null http://127.0.0.1/api/env.js 2>/dev/null | awk -F': ' 'tolower($1)=="content-type"{print tolower($2)}' | tr -d '\r')"
+  if [[ "$ct_env" != application/javascript* && "$ct_env" != text/javascript* ]]; then
+    log "[WARN] /api/env.js content-type=$ct_env; environment loader may fail."
+  fi
+fi
 
 # Install out-of-band restart helper
 RESTART_HELPER_DST="/usr/local/bin/plantswipe-restart"
