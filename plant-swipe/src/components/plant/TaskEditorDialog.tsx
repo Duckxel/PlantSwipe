@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import type { GardenPlantTask } from '@/types/garden'
-import { listPlantTasks, deletePlantTask, updatePatternTask, listGardenTasks, syncTaskOccurrencesForGarden, resyncTaskOccurrencesForGarden } from '@/lib/gardens'
+import { listPlantTasks, deletePlantTask, updatePatternTask, listGardenTasks, syncTaskOccurrencesForGarden, resyncTaskOccurrencesForGarden, logGardenActivity } from '@/lib/gardens'
 import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
 import { TaskCreateDialog } from '@/components/plant/TaskCreateDialog'
 
@@ -76,6 +76,13 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
         const startIso = new Date(now.getTime() - 7*24*3600*1000).toISOString()
         const endIso = new Date(now.getTime() + 60*24*3600*1000).toISOString()
         await resyncTaskOccurrencesForGarden(gardenId, startIso, endIso)
+      } catch {}
+      // Log activity so other clients refresh via SSE
+      try {
+        const t = tasks.find((x) => x.id === taskId)
+        const label = t ? (t.type === 'custom' ? (t.customName || 'CUSTOM') : String(t.type).toUpperCase()) : 'TASK'
+        await logGardenActivity({ gardenId, kind: 'note' as any, message: `deleted "${label}" Task`, taskName: label, actorColor: null })
+        try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
       } catch {}
       await load()
       if (onChanged) await onChanged()
@@ -172,6 +179,12 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
                 const startIso = new Date(now.getTime() - 7*24*3600*1000).toISOString()
                 const endIso = new Date(now.getTime() + 60*24*3600*1000).toISOString()
                 await resyncTaskOccurrencesForGarden(gardenId, startIso, endIso)
+              } catch {}
+              // Log activity so other clients refresh via SSE
+              try {
+                const label = editingTask.type === 'custom' ? (editingTask.customName || 'CUSTOM') : String(editingTask.type).toUpperCase()
+                await logGardenActivity({ gardenId, kind: 'note' as any, message: `updated "${label}" Task`, taskName: label, actorColor: null })
+                try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
               } catch {}
               setEditingTask(null)
               await load()
