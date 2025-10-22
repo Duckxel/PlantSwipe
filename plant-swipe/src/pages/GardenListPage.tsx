@@ -65,6 +65,24 @@ export const GardenListPage: React.FC = () => {
 
   React.useEffect(() => { load() }, [load])
 
+  // SSE: listen for server-driven membership updates for instant garden list refresh
+  React.useEffect(() => {
+    let es: EventSource | null = null
+    let t: any = null
+    if (!user?.id) return
+    try {
+      es = new EventSource('/api/self/memberships/stream', { withCredentials: true })
+      const schedule = () => {
+        if (t) return
+        t = setTimeout(async () => { t = null; await load(); await loadAllTodayOccurrences() }, 400)
+      }
+      es.addEventListener('ready', () => {})
+      es.addEventListener('memberships', schedule as any)
+      es.onerror = () => { /* allow reconnect */ }
+    } catch {}
+    return () => { try { es?.close() } catch {}; if (t) { try { clearTimeout(t) } catch {} } }
+  }, [user?.id, load, loadAllTodayOccurrences])
+
   // Load all gardens' tasks due today for the sidebar
   const loadAllTodayOccurrences = React.useCallback(async () => {
     if (!serverToday) return

@@ -3832,6 +3832,65 @@ app.get('/api/broadcast/stream', async (req, res) => {
   }
 })
 
+// User membership SSE: notify when the current user's garden memberships change
+app.get('/api/self/memberships/stream', async (req, res) => {
+  try {
+    const user = await getUserFromRequest(req)
+    if (!user?.id) { res.status(401).json({ error: 'Unauthorized' }); return }
+
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache, no-transform')
+    res.setHeader('Connection', 'keep-alive')
+    res.setHeader('X-Accel-Buffering', 'no')
+    res.flushHeaders?.()
+
+    sseWrite(res, 'ready', { ok: true })
+
+    const getSig = async () => {
+      try {
+        if (sql) {
+          const rows = await sql`
+            select gm.garden_id::text as garden_id
+            from public.garden_members gm
+            where gm.user_id = ${user.id}
+            order by gm.garden_id asc
+          `
+          const list = (rows || []).map((r) => String(r.garden_id))
+          return list.join(',')
+        } else if (supabaseUrlEnv && supabaseAnonKey) {
+          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const bearer = getBearerTokenFromRequest(req)
+          if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
+          const url = `${supabaseUrlEnv}/rest/v1/garden_members?user_id=eq.${encodeURIComponent(user.id)}&select=garden_id&order=garden_id.asc`
+          const r = await fetch(url, { headers })
+          const arr = r.ok ? (await r.json().catch(() => [])) : []
+          const list = (arr || []).map((row) => String(row.garden_id))
+          return list.join(',')
+        }
+      } catch {}
+      return ''
+    }
+
+    let lastSig = await getSig()
+
+    const poll = async () => {
+      try {
+        const next = await getSig()
+        if (next !== lastSig) {
+          lastSig = next
+          sseWrite(res, 'memberships', { changed: true })
+        }
+      } catch {}
+    }
+
+    const iv = setInterval(poll, 2000)
+    const hb = setInterval(() => { try { res.write(': ping\n\n') } catch {} }, 15000)
+    req.on('close', () => { try { clearInterval(iv); clearInterval(hb) } catch {} })
+  } catch (e) {
+    try { res.status(500).json({ error: e?.message || 'stream failed' }) } catch {}
+  }
+})
+
 // ---- Garden overview + realtime (SSE) ----
 
 async function isGardenMember(req, gardenId, userIdOverride = null) {
