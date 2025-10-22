@@ -234,6 +234,7 @@ export const GardenListPage: React.FC = () => {
         }
       } catch {}
     } finally {
+      // Always refresh gardens and occurrences so UI counts update immediately
       await load()
       await loadAllTodayOccurrences()
       notifyTasksChanged()

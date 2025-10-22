@@ -1218,12 +1218,11 @@ export const GardenDashboardPage: React.FC = () => {
             gardenPlantId={pendingGardenPlantId || ''}
             onChanged={async () => {
               // Ensure page reflects latest tasks after create/update/delete
-              // Silent lightweight reload to keep UI stable
               await load({ silent: true, preserveHeavy: true })
-              // If routine tab is visible, refresh heavy data immediately
-              if (tab === 'routine') {
-                await loadHeavyForCurrentTab()
-              }
+              // Always refresh heavy data so counts and badges update immediately
+              await loadHeavyForCurrentTab()
+              // Notify global UI components (badges) to refresh
+              try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
             }}
           />
 
@@ -1626,9 +1625,7 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner, ownerCount, cu
     setBusy(true)
     try {
       await updateGardenMemberRole({ gardenId, userId: member.userId, role: 'owner' })
-      try {
-        await logGardenActivity({ gardenId, kind: 'note' as any, message: `promoted ${member.displayName || 'a member'} to owner`, actorColor: actorColorCss || null })
-      } catch {}
+      try { await logGardenActivity({ gardenId, kind: 'note' as any, message: `promoted ${member.displayName || 'a member'} to owner`, actorColor: null }) } catch {}
       await onChanged()
     } finally {
       setBusy(false)
@@ -1642,9 +1639,7 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner, ownerCount, cu
     setBusy(true)
     try {
       await updateGardenMemberRole({ gardenId, userId: member.userId, role: 'member' })
-      try {
-        await logGardenActivity({ gardenId, kind: 'note' as any, message: `demoted ${member.displayName || 'an owner'} to member`, actorColor: actorColorCss || null })
-      } catch {}
+      try { await logGardenActivity({ gardenId, kind: 'note' as any, message: `demoted ${member.displayName || 'an owner'} to member`, actorColor: null }) } catch {}
       await onChanged()
     } catch (e) {
       // swallow; page has global error
@@ -1659,9 +1654,7 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner, ownerCount, cu
     setBusy(true)
     try {
       await removeGardenMember({ gardenId, userId: member.userId })
-      try {
-        await logGardenActivity({ gardenId, kind: 'note' as any, message: `removed ${member.displayName || 'a member'}`, actorColor: actorColorCss || null })
-      } catch {}
+      try { await logGardenActivity({ gardenId, kind: 'note' as any, message: `removed ${member.displayName || 'a member'}`, actorColor: null }) } catch {}
       await onChanged()
     } finally {
       setBusy(false)
