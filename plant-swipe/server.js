@@ -3835,7 +3835,16 @@ app.get('/api/broadcast/stream', async (req, res) => {
 // User membership SSE: notify when the current user's garden memberships change
 app.get('/api/self/memberships/stream', async (req, res) => {
   try {
-    const user = await getUserFromRequest(req)
+    // Allow token via query param for EventSource
+    let user = null
+    try {
+      const qToken = (req.query?.token || req.query?.access_token)
+      if (qToken && supabaseServer) {
+        const { data, error } = await supabaseServer.auth.getUser(String(qToken))
+        if (!error && data?.user?.id) user = { id: data.user.id, email: data.user.email || null }
+      }
+    } catch {}
+    if (!user) user = await getUserFromRequest(req)
     if (!user?.id) { res.status(401).json({ error: 'Unauthorized' }); return }
 
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
@@ -3883,7 +3892,7 @@ app.get('/api/self/memberships/stream', async (req, res) => {
       } catch {}
     }
 
-    const iv = setInterval(poll, 2000)
+    const iv = setInterval(poll, 1000)
     const hb = setInterval(() => { try { res.write(': ping\n\n') } catch {} }, 15000)
     req.on('close', () => { try { clearInterval(iv); clearInterval(hb) } catch {} })
   } catch (e) {

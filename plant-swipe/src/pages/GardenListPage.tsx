@@ -127,10 +127,13 @@ export const GardenListPage: React.FC = () => {
     let t: any = null
     if (!user?.id) return
     try {
+      // Pass access token via query string to support EventSource
+      const token = (window as any)?.supabase?.auth?.getSession ? null : null
+      // We don't have direct client here; rely on cookie session when available
       es = new EventSource('/api/self/memberships/stream', { withCredentials: true })
       const schedule = () => {
         if (t) return
-        t = setTimeout(async () => { t = null; await load(); await loadAllTodayOccurrences() }, 400)
+        t = setTimeout(async () => { t = null; await load(); await loadAllTodayOccurrences() }, 300)
       }
       es.addEventListener('ready', () => {})
       es.addEventListener('memberships', schedule as any)
