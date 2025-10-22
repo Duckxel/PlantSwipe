@@ -160,10 +160,12 @@ export const GardenListPage: React.FC = () => {
       .channel(`rt-gardens-for-${user.id}`)
       // When current user's membership rows change (added/removed), refresh list
       .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_members', filter: `user_id=eq.${user.id}` }, () => scheduleReload())
-      // Garden metadata changes (rename, cover)
+      // Garden metadata changes (rename, cover). Also watch deletes to drop immediately.
       .on('postgres_changes', { event: '*', schema: 'public', table: 'gardens' }, () => scheduleReload())
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'gardens' }, () => scheduleReload())
       // Plants/Tasks changes across any garden (kept broad to ensure immediacy)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plants' }, () => scheduleReload())
+      // Watch both scoped and unscoped task changes to ensure updates reflect
       .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_tasks' }, () => scheduleReload())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_task_occurrences' }, () => scheduleReload())
       .subscribe()

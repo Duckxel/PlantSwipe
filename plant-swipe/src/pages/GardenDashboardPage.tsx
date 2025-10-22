@@ -487,6 +487,16 @@ export const GardenDashboardPage: React.FC = () => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plants', filter: `garden_id=eq.${id}` }, () => scheduleReload())
       // Task definition changes affecting counts and due badges
       .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_tasks', filter: `garden_id=eq.${id}` }, () => scheduleReload())
+      // Also watch task edits scoped by plant (fallback when garden_id is missing on row level)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_tasks' }, (payload) => {
+        try {
+          const row = (payload as any)?.new || (payload as any)?.old || {}
+          const gpId = String(row.garden_plant_id || '')
+          if (!gpId) { scheduleReload(); return }
+          // Minimal reload; our load() covers the whole garden
+          scheduleReload()
+        } catch { scheduleReload() }
+      })
       // Occurrence progress/completion updates (affects Routine and Today counts)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_task_occurrences' }, () => scheduleReload())
       // Global plant library changes (name/image updates)
