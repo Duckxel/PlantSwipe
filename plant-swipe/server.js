@@ -3868,7 +3868,8 @@ app.get('/api/self/memberships/stream', async (req, res) => {
           return list.join(',')
         } else if (supabaseUrlEnv && supabaseAnonKey) {
           const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
-          const bearer = getBearerTokenFromRequest(req)
+          // Include Authorization from bearer header or token query param (EventSource)
+          const bearer = getBearerTokenFromRequest(req) || (req.query?.token ? String(req.query.token) : (req.query?.access_token ? String(req.query.access_token) : null))
           if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
           const url = `${supabaseUrlEnv}/rest/v1/garden_members?user_id=eq.${encodeURIComponent(user.id)}&select=garden_id&order=garden_id.asc`
           const r = await fetch(url, { headers })
@@ -3977,7 +3978,8 @@ app.get('/api/self/gardens/activity/stream', async (req, res) => {
           }
         } else if (supabaseUrlEnv && supabaseAnonKey) {
           const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
-          const bearer = getBearerTokenFromRequest(req)
+          // Include Authorization from bearer header or token query param (EventSource)
+          const bearer = getBearerTokenFromRequest(req) || (req.query?.token ? String(req.query.token) : (req.query?.access_token ? String(req.query.access_token) : null))
           if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
           // Build OR filter for multiple garden_ids: or=(garden_id.eq.id1,garden_id.eq.id2,...)
           const orExpr = gardenIds.length > 0 ? `or=(${gardenIds.map(id => `garden_id.eq.${id}`).join(',')})` : ''
@@ -4301,6 +4303,9 @@ app.get('/api/garden/:id/stream', async (req, res) => {
           }
         } else if (supabaseUrlEnv && supabaseAnonKey) {
           const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          // Include Authorization from bearer header or token query param (EventSource)
+          const bearer = getBearerTokenFromRequest(req) || (req.query?.token ? String(req.query.token) : (req.query?.access_token ? String(req.query.access_token) : null))
+          if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
           const url = `${supabaseUrlEnv}/rest/v1/garden_activity_logs?garden_id=eq.${encodeURIComponent(gardenId)}&occurred_at=gt.${encodeURIComponent(lastSeen)}&select=id,garden_id,actor_id,actor_name,actor_color,kind,message,plant_name,task_name,occurred_at&order=occurred_at.asc&limit=500`
           const r = await fetch(url, { headers })
           if (r.ok) {

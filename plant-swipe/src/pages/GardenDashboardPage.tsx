@@ -14,7 +14,7 @@ import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
 import { TaskEditorDialog } from '@/components/plant/TaskEditorDialog'
 import type { Garden } from '@/types/garden'
 import type { Plant } from '@/types/plant'
-import { getGarden, getGardenPlants, getGardenMembers, addMemberByNameOrEmail, deleteGardenPlant, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, updateGardenMemberRole, removeGardenMember, listGardenTasks, syncTaskOccurrencesForGarden, listOccurrencesForTasks, progressTaskOccurrence, updateGardenPlantsOrder, refreshGardenStreak, listGardenActivityToday, logGardenActivity, resyncTaskOccurrencesForGarden } from '@/lib/gardens'
+import { getGarden, getGardenPlants, getGardenMembers, addMemberByNameOrEmail, deleteGardenPlant, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, updateGardenMemberRole, removeGardenMember, listGardenTasks, syncTaskOccurrencesForGarden, listOccurrencesForTasks, progressTaskOccurrence, updateGardenPlantsOrder, refreshGardenStreak, listGardenActivityToday, logGardenActivity, resyncTaskOccurrencesForGarden, computeGardenTaskForDay } from '@/lib/gardens'
 import { supabase } from '@/lib/supabaseClient'
 import { getAccentOption } from '@/lib/accent'
  
@@ -640,6 +640,12 @@ export const GardenDashboardPage: React.FC = () => {
       setInviteError(res.reason === 'no_account' ? 'No account found' : 'Failed to add member')
       return
     }
+    // Log membership change so other clients update via SSE
+    try {
+      const actorColorCss = getActorColorCss()
+      await logGardenActivity({ gardenId: id, kind: 'note' as any, message: 'added a member', actorColor: actorColorCss || null })
+      setActivityRev((r) => r + 1)
+    } catch {}
     setInviteOpen(false)
     setInviteAny('')
     await load()
@@ -773,6 +779,15 @@ export const GardenDashboardPage: React.FC = () => {
         yearlyDays: selection.yearlyDays || null,
         monthlyNthWeekdays: selection.monthlyNthWeekdays || null,
       })
+      // Log schedule change so other clients refresh via SSE
+      try {
+        const gp = (plants as any[]).find((p: any) => p.id === pendingGardenPlantId)
+        const plantName = gp?.nickname || gp?.plant?.name || 'Plant'
+        const actorColorCss = getActorColorCss()
+        const per = String(pendingPeriod).toUpperCase()
+        await logGardenActivity({ gardenId: id, kind: 'note' as any, message: `updated schedule on "${plantName}" (${pendingAmount}/${per})`, plantName, actorColor: actorColorCss || null })
+        setActivityRev((r) => r + 1)
+      } catch {}
       if (serverToday && garden?.id) {
         // Recompute today's task for this garden to reflect new schedule
         await computeGardenTaskForDay({ gardenId: garden.id, dayIso: serverToday })
@@ -966,6 +981,11 @@ export const GardenDashboardPage: React.FC = () => {
                           setDragIdx(null)
                           try {
                             await updateGardenPlantsOrder({ gardenId: id!, orderedIds: next.map((p: any) => p.id) })
+                            try {
+                              const actorColorCss = getActorColorCss()
+                              await logGardenActivity({ gardenId: id!, kind: 'note' as any, message: 'reordered plants', actorColor: actorColorCss || null })
+                              setActivityRev((r) => r + 1)
+                            } catch {}
                           } catch {}
                         }}
                       >
@@ -1606,6 +1626,9 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner, ownerCount, cu
     setBusy(true)
     try {
       await updateGardenMemberRole({ gardenId, userId: member.userId, role: 'owner' })
+      try {
+        await logGardenActivity({ gardenId, kind: 'note' as any, message: `promoted ${member.displayName || 'a member'} to owner`, actorColor: actorColorCss || null })
+      } catch {}
       await onChanged()
     } finally {
       setBusy(false)
@@ -1619,6 +1642,9 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner, ownerCount, cu
     setBusy(true)
     try {
       await updateGardenMemberRole({ gardenId, userId: member.userId, role: 'member' })
+      try {
+        await logGardenActivity({ gardenId, kind: 'note' as any, message: `demoted ${member.displayName || 'an owner'} to member`, actorColor: actorColorCss || null })
+      } catch {}
       await onChanged()
     } catch (e) {
       // swallow; page has global error
@@ -1633,6 +1659,9 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner, ownerCount, cu
     setBusy(true)
     try {
       await removeGardenMember({ gardenId, userId: member.userId })
+      try {
+        await logGardenActivity({ gardenId, kind: 'note' as any, message: `removed ${member.displayName || 'a member'}`, actorColor: actorColorCss || null })
+      } catch {}
       await onChanged()
     } finally {
       setBusy(false)
@@ -1728,6 +1757,17 @@ function GardenDetailsEditor({ garden, onSaved, canEdit }: { garden: Garden; onS
         return
       }
       setErr(null)
+      // Log garden details update so other clients refresh via SSE
+      try {
+        const changedName = (garden.name || '') !== (name.trim() || '')
+        const changedCover = (garden.coverImageUrl || '') !== (imageUrl.trim() || '')
+        const parts: string[] = []
+        if (changedName) parts.push(`name → "${name.trim() || '—'}"`)
+        if (changedCover) parts.push('cover image updated')
+        if (parts.length > 0) {
+          await logGardenActivity({ gardenId: garden.id, kind: 'note' as any, message: `updated garden: ${parts.join(', ')}`, actorColor: null })
+        }
+      } catch {}
       await onSaved()
     } finally {
       setSubmitting(false)
