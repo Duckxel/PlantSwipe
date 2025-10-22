@@ -463,6 +463,7 @@ export const GardenDashboardPage: React.FC = () => {
           setActivityRev((r) => r + 1)
           load({ silent: true, preserveHeavy: true })
           loadHeavyForCurrentTab()
+          try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
         }, wait)
         return
       }
@@ -473,6 +474,7 @@ export const GardenDashboardPage: React.FC = () => {
         reloadTimer = null
         load({ silent: true, preserveHeavy: true })
         loadHeavyForCurrentTab()
+        try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
       }, 500)
     }
 
@@ -501,6 +503,8 @@ export const GardenDashboardPage: React.FC = () => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_task_occurrences' }, () => scheduleReload())
       // Global plant library changes (name/image updates)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'plants' }, () => scheduleReload())
+      // Garden activity log changes (authoritative cross-client signal)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_activity_logs', filter: `garden_id=eq.${id}` }, () => { scheduleReload(); try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {} })
       .subscribe()
 
     return () => {
@@ -539,6 +543,7 @@ export const GardenDashboardPage: React.FC = () => {
               load({ silent: true, preserveHeavy: true })
               // Also refresh heavy task state so counts update immediately
               loadHeavyForCurrentTab()
+              try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
             }, wait)
             return
           }
@@ -549,6 +554,7 @@ export const GardenDashboardPage: React.FC = () => {
             reloadTimer = null
             load({ silent: true, preserveHeavy: true })
             loadHeavyForCurrentTab()
+            try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
           }, 1000)
         }
         es.addEventListener('activity', scheduleReload as any)
