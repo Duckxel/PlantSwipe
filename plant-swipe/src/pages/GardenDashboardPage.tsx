@@ -441,7 +441,7 @@ export const GardenDashboardPage: React.FC = () => {
     loadHeavyForCurrentTab()
   }, [tab, loadHeavyForCurrentTab])
 
-  // Realtime updates via Supabase (tables: garden_plants, garden_plant_tasks, plants)
+  // Realtime updates via Supabase (tables: gardens, garden_members, garden_plants, garden_plant_tasks, garden_plant_task_occurrences, plants)
   React.useEffect(() => {
     if (!id) return
     // Throttled reload helper copied from SSE effect
@@ -477,6 +477,10 @@ export const GardenDashboardPage: React.FC = () => {
     }
 
     const channel = supabase.channel(`rt-garden-${id}`)
+      // Garden row changes (name, cover image, streak)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'gardens', filter: `id=eq.${id}` }, () => scheduleReload())
+      // Member changes (add/remove/promote/demote)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_members', filter: `garden_id=eq.${id}` }, () => scheduleReload())
       // Garden instance edits (nickname, on-hand count, reorder, add/remove)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plants', filter: `garden_id=eq.${id}` }, () => scheduleReload())
       // Task definition changes affecting counts and due badges
