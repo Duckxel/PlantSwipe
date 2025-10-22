@@ -3979,8 +3979,13 @@ app.get('/api/self/gardens/activity/stream', async (req, res) => {
           const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
           const bearer = getBearerTokenFromRequest(req)
           if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
-          const idParam = gardenIds.map(id => `garden_id=eq.${encodeURIComponent(id)}`).join('&')
-          const url = `${supabaseUrlEnv}/rest/v1/garden_activity_logs?${idParam}&occurred_at=gt.${encodeURIComponent(lastSeen)}&select=id,garden_id,actor_id,actor_name,actor_color,kind,message,plant_name,task_name,occurred_at&order=occurred_at.asc&limit=500`
+          // Build OR filter for multiple garden_ids: or=(garden_id.eq.id1,garden_id.eq.id2,...)
+          const orExpr = gardenIds.length > 0 ? `or=(${gardenIds.map(id => `garden_id.eq.${id}`).join(',')})` : ''
+          const qp = [orExpr, `occurred_at=gt.${lastSeen}`, 'select=id,garden_id,actor_id,actor_name,actor_color,kind,message,plant_name,task_name,occurred_at', 'order=occurred_at.asc', 'limit=500']
+            .filter(Boolean)
+            .map(s => encodeURI(s))
+            .join('&')
+          const url = `${supabaseUrlEnv}/rest/v1/garden_activity_logs?${qp}`
           const r = await fetch(url, { headers })
           if (r.ok) {
             const arr = await r.json().catch(() => [])

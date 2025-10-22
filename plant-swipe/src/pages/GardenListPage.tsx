@@ -137,7 +137,12 @@ export const GardenListPage: React.FC = () => {
         es = new EventSource(url, { withCredentials: true })
         const schedule = () => {
           if (t) return
-          t = setTimeout(async () => { t = null; await load(); await loadAllTodayOccurrences() }, 300)
+          t = setTimeout(async () => {
+            t = null
+            await load()
+            await loadAllTodayOccurrences()
+            try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
+          }, 200)
         }
         es.addEventListener('ready', () => {})
         es.addEventListener('memberships', schedule as any)
