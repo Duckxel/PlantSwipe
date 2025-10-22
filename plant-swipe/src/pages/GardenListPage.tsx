@@ -65,35 +65,6 @@ export const GardenListPage: React.FC = () => {
 
   React.useEffect(() => { load() }, [load])
 
-  // Realtime: reflect membership changes and garden/task updates instantly
-  React.useEffect(() => {
-    if (!user?.id) return
-    let reloadTimer: any = null
-    const scheduleReload = () => {
-      if (reloadTimer) return
-      reloadTimer = setTimeout(async () => {
-        reloadTimer = null
-        await load()
-        await loadAllTodayOccurrences()
-      }, 600)
-    }
-    const ch = supabase
-      .channel(`rt-gardens-for-${user.id}`)
-      // When current user's membership rows change (added/removed), refresh list
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_members', filter: `user_id=eq.${user.id}` }, () => scheduleReload())
-      // Garden metadata changes (rename, cover)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'gardens' }, () => scheduleReload())
-      // Plants/Tasks changes across any garden (kept broad to ensure immediacy)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plants' }, () => scheduleReload())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_tasks' }, () => scheduleReload())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_task_occurrences' }, () => scheduleReload())
-      .subscribe()
-    return () => {
-      try { supabase.removeChannel(ch) } catch {}
-      if (reloadTimer) { try { clearTimeout(reloadTimer) } catch {} }
-    }
-  }, [user?.id, load, loadAllTodayOccurrences])
-
   // Load all gardens' tasks due today for the sidebar
   const loadAllTodayOccurrences = React.useCallback(async () => {
     if (!serverToday) return
@@ -149,6 +120,35 @@ export const GardenListPage: React.FC = () => {
       setLoadingTasks(false)
     }
   }, [gardens, serverToday])
+
+  // Realtime: reflect membership changes and garden/task updates instantly
+  React.useEffect(() => {
+    if (!user?.id) return
+    let reloadTimer: any = null
+    const scheduleReload = () => {
+      if (reloadTimer) return
+      reloadTimer = setTimeout(async () => {
+        reloadTimer = null
+        await load()
+        await loadAllTodayOccurrences()
+      }, 600)
+    }
+    const ch = supabase
+      .channel(`rt-gardens-for-${user.id}`)
+      // When current user's membership rows change (added/removed), refresh list
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_members', filter: `user_id=eq.${user.id}` }, () => scheduleReload())
+      // Garden metadata changes (rename, cover)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'gardens' }, () => scheduleReload())
+      // Plants/Tasks changes across any garden (kept broad to ensure immediacy)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plants' }, () => scheduleReload())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_tasks' }, () => scheduleReload())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_task_occurrences' }, () => scheduleReload())
+      .subscribe()
+    return () => {
+      try { supabase.removeChannel(ch) } catch {}
+      if (reloadTimer) { try { clearTimeout(reloadTimer) } catch {} }
+    }
+  }, [user?.id, load, loadAllTodayOccurrences])
 
   React.useEffect(() => { loadAllTodayOccurrences() }, [loadAllTodayOccurrences])
 
