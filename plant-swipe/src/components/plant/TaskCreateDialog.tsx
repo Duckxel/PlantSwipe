@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import type { TaskType } from '@/types/garden'
-import { createPatternTask } from '@/lib/gardens'
+import { createPatternTask, logGardenActivity } from '@/lib/gardens'
 
 type Period = 'week' | 'month' | 'year'
 
@@ -89,6 +89,11 @@ export function TaskCreateDialog({
         yearlyDays: period === 'year' ? [...yearlyDays].sort() : null,
         monthlyNthWeekdays: period === 'month' ? [...monthlyNthWeekdays].sort() : null,
       })
+      // Log activity so other clients' SSE streams trigger reloads
+      try {
+        const label = (type === 'custom' ? (customName || 'CUSTOM') : String(type || '').toUpperCase())
+        await logGardenActivity({ gardenId, kind: 'note' as any, message: `added "${label}" Task`, taskName: label, actorColor: null })
+      } catch {}
       if (onCreated) await onCreated()
       onOpenChange(false)
     } catch (e: any) {

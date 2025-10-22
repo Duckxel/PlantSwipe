@@ -43,16 +43,16 @@ export const GardenListPage: React.FC = () => {
       const nowIso = await fetchServerNowISO()
       const today = nowIso.slice(0,10)
       setServerToday(today)
-      const entries = await Promise.all(
-        data.map(async (g) => {
-          try {
-            const prog = await getGardenTodayProgress(g.id, today)
-            return [g.id, prog] as const
-          } catch {
-            return [g.id, { due: 0, completed: 0 }] as const
-          }
-        })
-      )
+      // compute progress sequentially to avoid hammering backend on frequent realtime updates
+      const entries: Array<[string, { due: number; completed: number }]> = []
+      for (const g of data) {
+        try {
+          const prog = await getGardenTodayProgress(g.id, today)
+          entries.push([g.id, prog])
+        } catch {
+          entries.push([g.id, { due: 0, completed: 0 }])
+        }
+      }
       const map: Record<string, { due: number; completed: number }> = {}
       for (const [gid, prog] of entries) map[gid] = prog
       setProgressByGarden(map)
@@ -73,8 +73,11 @@ export const GardenListPage: React.FC = () => {
     try {
       const startIso = `${serverToday}T00:00:00.000Z`
       const endIso = `${serverToday}T23:59:59.999Z`
-      // 1) Fetch tasks per garden
-      const tasksPerGarden = await Promise.all(gardens.map(g => listGardenTasks(g.id)))
+      // 1) Fetch tasks per garden sequentially (reduce contention during rapid realtime)
+      const tasksPerGarden: any[] = []
+      for (const g of gardens) {
+        tasksPerGarden.push(await listGardenTasks(g.id))
+      }
       const taskTypeById: Record<string, 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'> = {}
       const taskEmojiById: Record<string, string | null> = {}
       const taskIdsByGarden: Record<string, string[]> = {}
