@@ -441,6 +441,58 @@ export const GardenDashboardPage: React.FC = () => {
     loadHeavyForCurrentTab()
   }, [tab, loadHeavyForCurrentTab])
 
+  // Realtime updates via Supabase (tables: garden_plants, garden_plant_tasks, plants)
+  React.useEffect(() => {
+    if (!id) return
+    // Throttled reload helper copied from SSE effect
+    let reloadTimer: any = null
+    const scheduleReload = () => {
+      const now = Date.now()
+      const since = now - (lastReloadRef.current || 0)
+      const minInterval = 8000
+      if (anyModalOpen) {
+        pendingReloadRef.current = true
+        return
+      }
+      if (since < minInterval) {
+        if (reloadTimer) return
+        const wait = Math.max(0, minInterval - since)
+        reloadTimer = setTimeout(() => {
+          reloadTimer = null
+          lastReloadRef.current = Date.now()
+          setActivityRev((r) => r + 1)
+          load({ silent: true, preserveHeavy: true })
+          loadHeavyForCurrentTab()
+        }, wait)
+        return
+      }
+      lastReloadRef.current = now
+      setActivityRev((r) => r + 1)
+      if (reloadTimer) return
+      reloadTimer = setTimeout(() => {
+        reloadTimer = null
+        load({ silent: true, preserveHeavy: true })
+        loadHeavyForCurrentTab()
+      }, 500)
+    }
+
+    const channel = supabase.channel(`rt-garden-${id}`)
+      // Garden instance edits (nickname, on-hand count, reorder, add/remove)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plants', filter: `garden_id=eq.${id}` }, () => scheduleReload())
+      // Task definition changes affecting counts and due badges
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_tasks', filter: `garden_id=eq.${id}` }, () => scheduleReload())
+      // Occurrence progress/completion updates (affects Routine and Today counts)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_task_occurrences' }, () => scheduleReload())
+      // Global plant library changes (name/image updates)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'plants' }, () => scheduleReload())
+      .subscribe()
+
+    return () => {
+      try { supabase.removeChannel(channel) } catch {}
+      if (reloadTimer) { try { clearTimeout(reloadTimer) } catch {} }
+    }
+  }, [id, anyModalOpen, load])
+
   // Live updates via SSE (no reloads)
   React.useEffect(() => {
     let es: EventSource | null = null
@@ -464,13 +516,24 @@ export const GardenDashboardPage: React.FC = () => {
           if (since < minInterval) {
             if (reloadTimer) return
             const wait = Math.max(0, minInterval - since)
-            reloadTimer = setTimeout(() => { reloadTimer = null; lastReloadRef.current = Date.now(); setActivityRev((r) => r + 1); load({ silent: true, preserveHeavy: true }) }, wait)
+            reloadTimer = setTimeout(() => {
+              reloadTimer = null
+              lastReloadRef.current = Date.now()
+              setActivityRev((r) => r + 1)
+              load({ silent: true, preserveHeavy: true })
+              // Also refresh heavy task state so counts update immediately
+              loadHeavyForCurrentTab()
+            }, wait)
             return
           }
           lastReloadRef.current = now
           setActivityRev((r) => r + 1)
           if (reloadTimer) return
-          reloadTimer = setTimeout(() => { reloadTimer = null; load({ silent: true, preserveHeavy: true }) }, 1000)
+          reloadTimer = setTimeout(() => {
+            reloadTimer = null
+            load({ silent: true, preserveHeavy: true })
+            loadHeavyForCurrentTab()
+          }, 1000)
         }
         es.addEventListener('activity', scheduleReload as any)
         es.addEventListener('ready', () => {})
@@ -489,6 +552,7 @@ export const GardenDashboardPage: React.FC = () => {
       lastReloadRef.current = Date.now()
       setActivityRev((r) => r + 1)
       load({ silent: true })
+      loadHeavyForCurrentTab()
     }
   }, [anyModalOpen, load])
 
@@ -745,12 +809,15 @@ export const GardenDashboardPage: React.FC = () => {
   const completeAllTodayForPlant = async (gardenPlantId: string) => {
     try {
       const occs = todayTaskOccurrences.filter(o => o.gardenPlantId === gardenPlantId)
-      const ops: Promise<any>[] = []
       for (const o of occs) {
-        const remaining = Math.max(0, (Number(o.requiredCount || 1)) - Number(o.completedCount || 0))
-        if (remaining > 0) ops.push(progressTaskOccurrence(o.id, remaining))
+        const remaining = Math.max(0, Number(o.requiredCount || 1) - Number(o.completedCount || 0))
+        if (remaining <= 0) continue
+        // Some backends increment by exactly 1 regardless of provided amount.
+        // Perform deterministic 1-step increments to guarantee full completion.
+        for (let i = 0; i < remaining; i++) {
+          await progressTaskOccurrence(o.id, 1)
+        }
       }
-      if (ops.length > 0) await Promise.all(ops)
       // Log summary activity for this plant
       try {
         if (id) {

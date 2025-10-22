@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useAuth } from '@/context/AuthContext'
-import { getUserGardens, createGarden, fetchServerNowISO, getGardenTodayProgress, getGardenPlants, listGardenTasks, listOccurrencesForTasks, resyncTaskOccurrencesForGarden, progressTaskOccurrence, listCompletionsForOccurrences } from '@/lib/gardens'
+import { getUserGardens, createGarden, fetchServerNowISO, getGardenTodayProgress, getGardenPlants, listGardenTasks, listOccurrencesForTasks, resyncTaskOccurrencesForGarden, progressTaskOccurrence, listCompletionsForOccurrences, logGardenActivity } from '@/lib/gardens'
 import type { Garden } from '@/types/garden'
 import { useNavigate } from 'react-router-dom'
 
@@ -125,28 +125,58 @@ export const GardenListPage: React.FC = () => {
   const onProgressOccurrence = React.useCallback(async (occId: string, inc: number) => {
     try {
       await progressTaskOccurrence(occId, inc)
+      // Log activity for the appropriate garden
+      try {
+        const o = todayTaskOccurrences.find((x: any) => x.id === occId)
+        if (o) {
+          const gp = allPlants.find((p: any) => p.id === o.gardenPlantId)
+          const gardenId = gp?.gardenId
+          if (gardenId) {
+            const type = (o as any).taskType || 'custom'
+            const label = String(type).toUpperCase()
+            const plantName = gp?.nickname || gp?.plant?.name || null
+            const newCount = Number(o.completedCount || 0) + inc
+            const required = Math.max(1, Number(o.requiredCount || 1))
+            const done = newCount >= required
+            const kind = done ? 'task_completed' : 'task_progressed'
+            const msg = done
+              ? `has completed "${label}" Task on "${plantName || 'Plant'}"`
+              : `has progressed "${label}" Task on "${plantName || 'Plant'}" (${Math.min(newCount, required)}/${required})`
+            await logGardenActivity({ gardenId, kind: kind as any, message: msg, plantName: plantName || null, taskName: label, actorColor: null })
+          }
+        }
+      } catch {}
     } finally {
       await load()
       await loadAllTodayOccurrences()
       notifyTasksChanged()
     }
-  }, [load, loadAllTodayOccurrences, notifyTasksChanged])
+  }, [todayTaskOccurrences, allPlants, load, loadAllTodayOccurrences, notifyTasksChanged])
 
   const onCompleteAllForPlant = React.useCallback(async (gardenPlantId: string) => {
     try {
       const occs = todayTaskOccurrences.filter(o => o.gardenPlantId === gardenPlantId)
-      const ops: Promise<any>[] = []
       for (const o of occs) {
         const remaining = Math.max(0, Number(o.requiredCount || 1) - Number(o.completedCount || 0))
-        if (remaining > 0) ops.push(progressTaskOccurrence(o.id, remaining))
+        if (remaining <= 0) continue
+        for (let i = 0; i < remaining; i++) {
+          await progressTaskOccurrence(o.id, 1)
+        }
       }
-      if (ops.length > 0) await Promise.all(ops)
+      // Log summary activity for this plant/garden
+      try {
+        const gp = allPlants.find((p: any) => p.id === gardenPlantId)
+        if (gp?.gardenId) {
+          const plantName = gp?.nickname || gp?.plant?.name || 'Plant'
+          await logGardenActivity({ gardenId: gp.gardenId, kind: 'task_completed' as any, message: `completed all due tasks on "${plantName}"`, plantName, actorColor: null })
+        }
+      } catch {}
     } finally {
       await load()
       await loadAllTodayOccurrences()
       notifyTasksChanged()
     }
-  }, [todayTaskOccurrences, load, loadAllTodayOccurrences, notifyTasksChanged])
+  }, [todayTaskOccurrences, allPlants, load, loadAllTodayOccurrences, notifyTasksChanged])
 
   const onMarkAllCompleted = React.useCallback(async () => {
     try {
