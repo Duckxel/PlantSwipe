@@ -126,19 +126,21 @@ export const GardenListPage: React.FC = () => {
     let es: EventSource | null = null
     let t: any = null
     if (!user?.id) return
-    try {
-      // Pass access token via query string to support EventSource
-      const token = (window as any)?.supabase?.auth?.getSession ? null : null
-      // We don't have direct client here; rely on cookie session when available
-      es = new EventSource('/api/self/memberships/stream', { withCredentials: true })
-      const schedule = () => {
-        if (t) return
-        t = setTimeout(async () => { t = null; await load(); await loadAllTodayOccurrences() }, 300)
-      }
-      es.addEventListener('ready', () => {})
-      es.addEventListener('memberships', schedule as any)
-      es.onerror = () => { /* allow reconnect */ }
-    } catch {}
+    ;(async () => {
+      try {
+        const session = (await supabase.auth.getSession()).data.session
+        const token = session?.access_token
+        const url = token ? `/api/self/memberships/stream?token=${encodeURIComponent(token)}` : '/api/self/memberships/stream'
+        es = new EventSource(url, { withCredentials: true })
+        const schedule = () => {
+          if (t) return
+          t = setTimeout(async () => { t = null; await load(); await loadAllTodayOccurrences() }, 300)
+        }
+        es.addEventListener('ready', () => {})
+        es.addEventListener('memberships', schedule as any)
+        es.onerror = () => { /* allow reconnect */ }
+      } catch {}
+    })()
     return () => { try { es?.close() } catch {}; if (t) { try { clearTimeout(t) } catch {} } }
   }, [user?.id, load, loadAllTodayOccurrences])
 
