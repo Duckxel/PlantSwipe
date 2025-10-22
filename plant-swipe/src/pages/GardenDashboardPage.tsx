@@ -449,7 +449,7 @@ export const GardenDashboardPage: React.FC = () => {
     const scheduleReload = () => {
       const now = Date.now()
       const since = now - (lastReloadRef.current || 0)
-      const minInterval = 8000
+      const minInterval = 1000
       if (anyModalOpen) {
         pendingReloadRef.current = true
         return
@@ -479,6 +479,8 @@ export const GardenDashboardPage: React.FC = () => {
     const channel = supabase.channel(`rt-garden-${id}`)
       // Garden row changes (name, cover image, streak)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'gardens', filter: `id=eq.${id}` }, () => scheduleReload())
+      // Immediate redirect if garden is deleted by another user
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'gardens', filter: `id=eq.${id}` }, () => { try { navigate('/gardens') } catch {} })
       // Member changes (add/remove/promote/demote)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_members', filter: `garden_id=eq.${id}` }, () => scheduleReload())
       // Garden instance edits (nickname, on-hand count, reorder, add/remove)
@@ -495,7 +497,7 @@ export const GardenDashboardPage: React.FC = () => {
       try { supabase.removeChannel(channel) } catch {}
       if (reloadTimer) { try { clearTimeout(reloadTimer) } catch {} }
     }
-  }, [id, anyModalOpen, load])
+  }, [id, anyModalOpen, load, navigate])
 
   // Live updates via SSE (no reloads)
   React.useEffect(() => {
@@ -512,7 +514,7 @@ export const GardenDashboardPage: React.FC = () => {
           // Debounce and pause while modals are open
           const now = Date.now()
           const since = now - (lastReloadRef.current || 0)
-          const minInterval = 8000
+          const minInterval = 1000
           if (anyModalOpen) {
             pendingReloadRef.current = true
             return
