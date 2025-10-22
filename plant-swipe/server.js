@@ -4312,7 +4312,7 @@ app.get('/api/garden/:id/stream', async (req, res) => {
       } catch {}
     }
 
-    const iv = setInterval(poll, 2500)
+    const iv = setInterval(poll, 1000)
     const hb = setInterval(() => { try { res.write(': ping\n\n') } catch {} }, 15000)
     req.on('close', () => { try { clearInterval(iv); clearInterval(hb) } catch {} })
   } catch (e) {
