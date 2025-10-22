@@ -147,6 +147,30 @@ export const GardenListPage: React.FC = () => {
     return () => { try { es?.close() } catch {}; if (t) { try { clearTimeout(t) } catch {} } }
   }, [user?.id, load, loadAllTodayOccurrences])
 
+  // SSE: listen to all-gardens activity and refresh on any activity event
+  React.useEffect(() => {
+    let es: EventSource | null = null
+    let t: any = null
+    if (!user?.id) return
+    ;(async () => {
+      try {
+        const session = (await supabase.auth.getSession()).data.session
+        const token = session?.access_token
+        const url = token ? `/api/self/gardens/activity/stream?token=${encodeURIComponent(token)}` : '/api/self/gardens/activity/stream'
+        es = new EventSource(url, { withCredentials: true })
+        const schedule = () => {
+          if (t) return
+          t = setTimeout(async () => { t = null; await load(); await loadAllTodayOccurrences() }, 300)
+        }
+        es.addEventListener('ready', () => {})
+        es.addEventListener('membership', schedule as any)
+        es.addEventListener('activity', schedule as any)
+        es.onerror = () => { /* allow reconnect */ }
+      } catch {}
+    })()
+    return () => { try { es?.close() } catch {}; if (t) { try { clearTimeout(t) } catch {} } }
+  }, [user?.id, load, loadAllTodayOccurrences])
+
   // Realtime: reflect membership changes and garden/task updates instantly
   React.useEffect(() => {
     if (!user?.id) return
