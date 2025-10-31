@@ -38,51 +38,6 @@ export const GardenListPage: React.FC = () => {
     broadcastGardenUpdate({ gardenId, kind, metadata, actorId: user?.id ?? null }).catch(() => {})
   }, [user?.id])
 
-  const scheduleReload = React.useCallback(() => {
-    const execute = () => {
-      lastReloadRef.current = Date.now()
-      load()
-      loadAllTodayOccurrences()
-    }
-
-    const now = Date.now()
-    const since = now - (lastReloadRef.current || 0)
-    const minInterval = 750
-
-    if (since < minInterval) {
-      if (reloadTimerRef.current) return
-      const wait = Math.max(0, minInterval - since)
-      reloadTimerRef.current = setTimeout(() => {
-        reloadTimerRef.current = null
-        execute()
-      }, wait)
-      return
-    }
-
-    if (reloadTimerRef.current) return
-    reloadTimerRef.current = setTimeout(() => {
-      reloadTimerRef.current = null
-      execute()
-    }, 50)
-  }, [load, loadAllTodayOccurrences])
-
-  React.useEffect(() => {
-    return () => {
-      if (reloadTimerRef.current) {
-        try { clearTimeout(reloadTimerRef.current) } catch {}
-        reloadTimerRef.current = null
-      }
-    }
-  }, [])
-
-  React.useEffect(() => {
-    gardenIdsRef.current = new Set(gardens.map((g) => g.id))
-  }, [gardens])
-
-  const notifyTasksChanged = React.useCallback(() => {
-    try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
-  }, [])
-
   const load = React.useCallback(async () => {
     if (!user?.id) { setGardens([]); setLoading(false); return }
     setLoading(true)
@@ -174,6 +129,51 @@ export const GardenListPage: React.FC = () => {
       setLoadingTasks(false)
     }
   }, [gardens, serverToday])
+
+  const scheduleReload = React.useCallback(() => {
+    const execute = () => {
+      lastReloadRef.current = Date.now()
+      load()
+      loadAllTodayOccurrences()
+    }
+
+    const now = Date.now()
+    const since = now - (lastReloadRef.current || 0)
+    const minInterval = 750
+
+    if (since < minInterval) {
+      if (reloadTimerRef.current) return
+      const wait = Math.max(0, minInterval - since)
+      reloadTimerRef.current = setTimeout(() => {
+        reloadTimerRef.current = null
+        execute()
+      }, wait)
+      return
+    }
+
+    if (reloadTimerRef.current) return
+    reloadTimerRef.current = setTimeout(() => {
+      reloadTimerRef.current = null
+      execute()
+    }, 50)
+  }, [load, loadAllTodayOccurrences])
+
+  React.useEffect(() => {
+    return () => {
+      if (reloadTimerRef.current) {
+        try { clearTimeout(reloadTimerRef.current) } catch {}
+        reloadTimerRef.current = null
+      }
+    }
+  }, [])
+
+  React.useEffect(() => {
+    gardenIdsRef.current = new Set(gardens.map((g) => g.id))
+  }, [gardens])
+
+  const notifyTasksChanged = React.useCallback(() => {
+    try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
+  }, [])
 
   // SSE: listen for server-driven membership updates for instant garden list refresh
   React.useEffect(() => {
@@ -399,7 +399,7 @@ export const GardenListPage: React.FC = () => {
               <Button className="rounded-2xl" onClick={() => setOpen(true)}>Create Garden</Button>
             )}
           </div>
-          {loading && <div className="p-6 opacity-60 text-sm">Loading…</div>}
+          {loading && <div className="p-6 opacity-60 text-sm">Loading?</div>}
           {error && <div className="p-6 text-sm text-red-600">{error}</div>}
           {!loading && !error && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
