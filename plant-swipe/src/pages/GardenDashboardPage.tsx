@@ -16,6 +16,7 @@ import type { Garden } from '@/types/garden'
 import type { Plant } from '@/types/plant'
 import { getGarden, getGardenPlants, getGardenMembers, addMemberByNameOrEmail, deleteGardenPlant, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, updateGardenMemberRole, removeGardenMember, listGardenTasks, syncTaskOccurrencesForGarden, listOccurrencesForTasks, progressTaskOccurrence, updateGardenPlantsOrder, refreshGardenStreak, listGardenActivityToday, logGardenActivity, resyncTaskOccurrencesForGarden, computeGardenTaskForDay } from '@/lib/gardens'
 import { supabase } from '@/lib/supabaseClient'
+import { addGardenBroadcastListener, broadcastGardenUpdate, type GardenRealtimeKind } from '@/lib/realtime'
 import { getAccentOption } from '@/lib/accent'
  
 
@@ -99,6 +100,7 @@ export const GardenDashboardPage: React.FC = () => {
   const [inviteOpen, setInviteOpen] = React.useState(false)
   // Track if any modal is open to pause reloads
   const anyModalOpen = addOpen || addDetailsOpen || scheduleOpen || taskOpen || inviteOpen
+  const reloadTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastReloadRef = React.useRef<number>(0)
   const pendingReloadRef = React.useRef<boolean>(false)
   const [inviteEmail, setInviteEmail] = React.useState('')
@@ -106,8 +108,54 @@ export const GardenDashboardPage: React.FC = () => {
   const [inviteError, setInviteError] = React.useState<string | null>(null)
 
   // Notify global UI components to refresh Garden badge without page reload
-  const notifyTasksChanged = React.useCallback(() => {
+  const emitGardenRealtime = React.useCallback((kind: GardenRealtimeKind = 'tasks', metadata?: Record<string, unknown>) => {
     try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
+    if (!id) return
+    broadcastGardenUpdate({ gardenId: id, kind, metadata, actorId: user?.id ?? null }).catch(() => {})
+  }, [id, user?.id])
+
+  const scheduleReload = React.useCallback(() => {
+    const executeReload = () => {
+      pendingReloadRef.current = false
+      lastReloadRef.current = Date.now()
+      setActivityRev((r) => r + 1)
+      load({ silent: true, preserveHeavy: true })
+      loadHeavyForCurrentTab()
+    }
+
+    if (anyModalOpen) {
+      pendingReloadRef.current = true
+      return
+    }
+
+    const now = Date.now()
+    const since = now - (lastReloadRef.current || 0)
+    const minInterval = 750
+
+    if (since < minInterval) {
+      if (reloadTimerRef.current) return
+      const wait = Math.max(0, minInterval - since)
+      reloadTimerRef.current = setTimeout(() => {
+        reloadTimerRef.current = null
+        executeReload()
+      }, wait)
+      return
+    }
+
+    if (reloadTimerRef.current) return
+    reloadTimerRef.current = setTimeout(() => {
+      reloadTimerRef.current = null
+      executeReload()
+    }, 50)
+  }, [anyModalOpen, load, loadHeavyForCurrentTab])
+
+  React.useEffect(() => {
+    return () => {
+      if (reloadTimerRef.current) {
+        try { clearTimeout(reloadTimerRef.current) } catch {}
+        reloadTimerRef.current = null
+      }
+    }
   }, [])
 
   const currentUserId = user?.id || null
@@ -444,39 +492,6 @@ export const GardenDashboardPage: React.FC = () => {
   // Realtime updates via Supabase (tables: gardens, garden_members, garden_plants, garden_plant_tasks, garden_plant_task_occurrences, plants)
   React.useEffect(() => {
     if (!id) return
-    // Throttled reload helper copied from SSE effect
-    let reloadTimer: any = null
-    const scheduleReload = () => {
-      const now = Date.now()
-      const since = now - (lastReloadRef.current || 0)
-      const minInterval = 1000
-      if (anyModalOpen) {
-        pendingReloadRef.current = true
-        return
-      }
-      if (since < minInterval) {
-        if (reloadTimer) return
-        const wait = Math.max(0, minInterval - since)
-        reloadTimer = setTimeout(() => {
-          reloadTimer = null
-          lastReloadRef.current = Date.now()
-          setActivityRev((r) => r + 1)
-          load({ silent: true, preserveHeavy: true })
-          loadHeavyForCurrentTab()
-          try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
-        }, wait)
-        return
-      }
-      lastReloadRef.current = now
-      setActivityRev((r) => r + 1)
-      if (reloadTimer) return
-      reloadTimer = setTimeout(() => {
-        reloadTimer = null
-        load({ silent: true, preserveHeavy: true })
-        loadHeavyForCurrentTab()
-        try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
-      }, 500)
-    }
 
     const channel = supabase.channel(`rt-garden-${id}`)
       // Garden row changes (name, cover image, streak)
@@ -504,79 +519,47 @@ export const GardenDashboardPage: React.FC = () => {
       // Global plant library changes (name/image updates)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'plants' }, () => scheduleReload())
       // Garden activity log changes (authoritative cross-client signal)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_activity_logs', filter: `garden_id=eq.${id}` }, () => { scheduleReload(); try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {} })
-      .subscribe()
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_activity_logs', filter: `garden_id=eq.${id}` }, () => scheduleReload())
+
+    channel.subscribe().catch(() => {})
 
     return () => {
       try { supabase.removeChannel(channel) } catch {}
-      if (reloadTimer) { try { clearTimeout(reloadTimer) } catch {} }
     }
-  }, [id, anyModalOpen, load, navigate])
+  }, [id, navigate, scheduleReload])
 
-  // Live updates via SSE (no reloads)
   React.useEffect(() => {
-    let es: EventSource | null = null
-    let reloadTimer: any = null
-    ;(async () => {
-      if (!id) return
-      try {
-        const session = (await supabase.auth.getSession()).data.session
-        const token = session?.access_token
-        const url = token ? `/api/garden/${id}/stream?token=${encodeURIComponent(token)}` : `/api/garden/${id}/stream`
-        es = new EventSource(url)
-        const scheduleReload = () => {
-          // Debounce and pause while modals are open
-          const now = Date.now()
-          const since = now - (lastReloadRef.current || 0)
-          const minInterval = 1000
-          if (anyModalOpen) {
-            pendingReloadRef.current = true
-            return
-          }
-          if (since < minInterval) {
-            if (reloadTimer) return
-            const wait = Math.max(0, minInterval - since)
-            reloadTimer = setTimeout(() => {
-              reloadTimer = null
-              lastReloadRef.current = Date.now()
-              setActivityRev((r) => r + 1)
-              load({ silent: true, preserveHeavy: true })
-              // Also refresh heavy task state so counts update immediately
-              loadHeavyForCurrentTab()
-              try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
-            }, wait)
-            return
-          }
-          lastReloadRef.current = now
-          setActivityRev((r) => r + 1)
-          if (reloadTimer) return
-          reloadTimer = setTimeout(() => {
-            reloadTimer = null
-            load({ silent: true, preserveHeavy: true })
-            loadHeavyForCurrentTab()
-            try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
-          }, 1000)
+    if (!id) return
+    let active = true
+    let teardown: (() => Promise<void>) | null = null
+
+    addGardenBroadcastListener((message) => {
+      if (message.gardenId !== id) return
+      if (message.actorId && message.actorId === currentUserId) return
+      scheduleReload()
+    })
+      .then((unsubscribe) => {
+        if (!active) {
+          unsubscribe().catch(() => {})
+        } else {
+          teardown = unsubscribe
         }
-        es.addEventListener('activity', scheduleReload as any)
-        es.addEventListener('ready', () => {})
-        es.onerror = () => {
-          // allow browser to retry automatically
-        }
-      } catch {}
-    })()
-    return () => { try { es?.close() } catch {}; if (reloadTimer) { try { clearTimeout(reloadTimer) } catch {} } }
-  }, [id, load, anyModalOpen])
+      })
+      .catch(() => {})
+
+    return () => {
+      active = false
+      if (teardown) teardown().catch(() => {})
+    }
+  }, [currentUserId, id, scheduleReload])
 
   // When modals close, run any pending reload once
   React.useEffect(() => {
     if (!anyModalOpen && pendingReloadRef.current) {
       pendingReloadRef.current = false
-      lastReloadRef.current = Date.now()
-      setActivityRev((r) => r + 1)
-      load({ silent: true })
-      loadHeavyForCurrentTab()
+      scheduleReload()
     }
-  }, [anyModalOpen, load])
+  }, [anyModalOpen, scheduleReload])
 
   const viewerIsOwner = React.useMemo(() => {
     // Admins can manage any garden
@@ -649,6 +632,7 @@ export const GardenDashboardPage: React.FC = () => {
     setInviteOpen(false)
     setInviteAny('')
     await load()
+    emitGardenRealtime('members')
   }
 
   const addSelectedPlant = async () => {
@@ -729,6 +713,7 @@ export const GardenDashboardPage: React.FC = () => {
       // Open Tasks with default watering 2x (user can change unit)
       setPendingGardenPlantId(gp.id)
       setTaskOpen(true)
+      emitGardenRealtime('plants')
     } catch (e: any) {
       setError(e?.message || 'Failed to add plant')
     }
@@ -797,7 +782,7 @@ export const GardenDashboardPage: React.FC = () => {
         await loadHeavyForCurrentTab()
       }
       if (id) navigate(`/garden/${id}/plants`)
-      notifyTasksChanged()
+      emitGardenRealtime('tasks')
     } catch (e: any) {
       setError(e?.message || 'Failed to save schedule')
       throw e
@@ -837,7 +822,7 @@ export const GardenDashboardPage: React.FC = () => {
         await loadHeavyForCurrentTab()
       }
       if (id) navigate(`/garden/${id}/routine`)
-      notifyTasksChanged()
+      emitGardenRealtime('tasks')
     } catch (e: any) {
       setError(e?.message || 'Failed to log watering')
     }
@@ -867,7 +852,7 @@ export const GardenDashboardPage: React.FC = () => {
       } catch {}
       await load()
       // Signal other UI (nav bars) to refresh notification badges
-      notifyTasksChanged()
+      emitGardenRealtime('tasks')
     } catch (e) {
       // swallow; global error display exists
     }
@@ -924,9 +909,9 @@ export const GardenDashboardPage: React.FC = () => {
     } finally {
       await load({ silent: true, preserveHeavy: true })
       await loadHeavyForCurrentTab()
-      notifyTasksChanged()
+      emitGardenRealtime('tasks')
     }
-  }, [todayTaskOccurrences, id, plants, getActorColorCss, load, loadHeavyForCurrentTab, notifyTasksChanged])
+  }, [todayTaskOccurrences, id, plants, getActorColorCss, load, loadHeavyForCurrentTab, emitGardenRealtime])
 
   return (
     <div className="max-w-6xl mx-auto mt-6 grid grid-cols-1 md:grid-cols-[220px_1fr] lg:grid-cols-[220px_1fr] gap-6">
@@ -986,6 +971,7 @@ export const GardenDashboardPage: React.FC = () => {
                               await logGardenActivity({ gardenId: id!, kind: 'note' as any, message: 'reordered plants', actorColor: actorColorCss || null })
                               setActivityRev((r) => r + 1)
                             } catch {}
+                            emitGardenRealtime('plants')
                           } catch {}
                         }}
                       >
@@ -1060,7 +1046,7 @@ export const GardenDashboardPage: React.FC = () => {
                                   } catch {}
                                 }
                                 // Signal other UI (nav bars) to refresh notification badges
-                                notifyTasksChanged()
+                                emitGardenRealtime('tasks')
                                 try {
                                   const actorColorCss = getActorColorCss()
                                   await logGardenActivity({ gardenId: id!, kind: 'plant_deleted' as any, message: `deleted "${gp.nickname || gp.plant?.name || 'Plant'}"`, plantName: gp.nickname || gp.plant?.name || null, actorColor: actorColorCss || null })
@@ -1108,7 +1094,7 @@ export const GardenDashboardPage: React.FC = () => {
               } finally {
                 await load({ silent: true, preserveHeavy: true })
                 await loadHeavyForCurrentTab()
-                notifyTasksChanged()
+                emitGardenRealtime('tasks')
               }
               }} />} />
               <Route path="settings" element={(
