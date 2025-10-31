@@ -114,59 +114,6 @@ export const GardenDashboardPage: React.FC = () => {
     broadcastGardenUpdate({ gardenId: id, kind, metadata, actorId: user?.id ?? null }).catch(() => {})
   }, [id, user?.id])
 
-  const scheduleReload = React.useCallback(() => {
-    const executeReload = () => {
-      pendingReloadRef.current = false
-      lastReloadRef.current = Date.now()
-      setActivityRev((r) => r + 1)
-      load({ silent: true, preserveHeavy: true })
-      loadHeavyForCurrentTab()
-    }
-
-    if (anyModalOpen) {
-      pendingReloadRef.current = true
-      return
-    }
-
-    const now = Date.now()
-    const since = now - (lastReloadRef.current || 0)
-    const minInterval = 750
-
-    if (since < minInterval) {
-      if (reloadTimerRef.current) return
-      const wait = Math.max(0, minInterval - since)
-      reloadTimerRef.current = setTimeout(() => {
-        reloadTimerRef.current = null
-        executeReload()
-      }, wait)
-      return
-    }
-
-    if (reloadTimerRef.current) return
-    reloadTimerRef.current = setTimeout(() => {
-      reloadTimerRef.current = null
-      executeReload()
-    }, 50)
-  }, [anyModalOpen, load, loadHeavyForCurrentTab])
-
-  React.useEffect(() => {
-    return () => {
-      if (reloadTimerRef.current) {
-        try { clearTimeout(reloadTimerRef.current) } catch {}
-        reloadTimerRef.current = null
-      }
-    }
-  }, [])
-
-  const currentUserId = user?.id || null
-  const isOwner = React.useMemo(() => {
-    // Admins have full owner-level access across all gardens
-    if (profile?.is_admin) return true
-    if (!currentUserId) return false
-    const self = members.find(m => m.userId === currentUserId)
-    return self?.role === 'owner'
-  }, [members, currentUserId, profile?.is_admin])
-
   const load = React.useCallback(async (opts?: { silent?: boolean; preserveHeavy?: boolean }) => {
     if (!id) return
     // Keep UI visible on subsequent reloads to avoid blink
@@ -388,6 +335,59 @@ export const GardenDashboardPage: React.FC = () => {
       if (!silent) setLoading(false)
     }
   }, [id, garden])
+
+  const scheduleReload = React.useCallback(() => {
+    const executeReload = () => {
+      pendingReloadRef.current = false
+      lastReloadRef.current = Date.now()
+      setActivityRev((r) => r + 1)
+      load({ silent: true, preserveHeavy: true })
+      loadHeavyForCurrentTab()
+    }
+
+    if (anyModalOpen) {
+      pendingReloadRef.current = true
+      return
+    }
+
+    const now = Date.now()
+    const since = now - (lastReloadRef.current || 0)
+    const minInterval = 750
+
+    if (since < minInterval) {
+      if (reloadTimerRef.current) return
+      const wait = Math.max(0, minInterval - since)
+      reloadTimerRef.current = setTimeout(() => {
+        reloadTimerRef.current = null
+        executeReload()
+      }, wait)
+      return
+    }
+
+    if (reloadTimerRef.current) return
+    reloadTimerRef.current = setTimeout(() => {
+      reloadTimerRef.current = null
+      executeReload()
+    }, 50)
+  }, [anyModalOpen, load, loadHeavyForCurrentTab])
+
+  React.useEffect(() => {
+    return () => {
+      if (reloadTimerRef.current) {
+        try { clearTimeout(reloadTimerRef.current) } catch {}
+        reloadTimerRef.current = null
+      }
+    }
+  }, [])
+
+  const currentUserId = user?.id || null
+  const isOwner = React.useMemo(() => {
+    // Admins have full owner-level access across all gardens
+    if (profile?.is_admin) return true
+    if (!currentUserId) return false
+    const self = members.find(m => m.userId === currentUserId)
+    return self?.role === 'owner'
+  }, [members, currentUserId, profile?.is_admin])
 
   React.useEffect(() => { load() }, [load])
 
