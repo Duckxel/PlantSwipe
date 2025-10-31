@@ -521,7 +521,8 @@ export const GardenDashboardPage: React.FC = () => {
       // Garden activity log changes (authoritative cross-client signal)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_activity_logs', filter: `garden_id=eq.${id}` }, () => scheduleReload())
 
-    channel.subscribe().catch(() => {})
+    const subscription = channel.subscribe()
+    if (subscription instanceof Promise) subscription.catch(() => {})
 
     return () => {
       try { supabase.removeChannel(channel) } catch {}

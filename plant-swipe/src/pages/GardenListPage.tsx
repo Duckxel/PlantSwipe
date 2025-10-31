@@ -230,7 +230,8 @@ export const GardenListPage: React.FC = () => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_tasks' }, () => scheduleReload())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_task_occurrences' }, () => scheduleReload())
 
-    ch.subscribe().catch(() => {})
+    const subscription = ch.subscribe()
+    if (subscription instanceof Promise) subscription.catch(() => {})
     return () => {
       try { supabase.removeChannel(ch) } catch {}
     }
