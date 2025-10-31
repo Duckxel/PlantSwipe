@@ -23,7 +23,7 @@ type Listener = (message: GardenBroadcastMessage) => void
 const listeners = new Set<Listener>()
 
 let broadcastChannel: RealtimeChannel = createChannel()
-let subscribePromise: Promise<RealtimeChannel> | null = null
+let isSubscribed = false
 
 function createChannel(): RealtimeChannel {
   const channel = supabase.channel('garden-broadcast', {
@@ -48,20 +48,23 @@ function createChannel(): RealtimeChannel {
   return channel
 }
 
-async function ensureSubscribed(): Promise<RealtimeChannel> {
-  if (!subscribePromise) {
-    subscribePromise = broadcastChannel.subscribe((status) => {
-      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-        subscribePromise = null
-      }
-    })
+function ensureSubscribed(): void {
+  if (isSubscribed) return
+  const channel = broadcastChannel.subscribe((status) => {
+    if (status === 'SUBSCRIBED') {
+      isSubscribed = true
+    } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+      isSubscribed = false
+    }
+  })
+  if (channel.state === 'joined') {
+    isSubscribed = true
   }
-  return subscribePromise
 }
 
 export async function addGardenBroadcastListener(listener: Listener): Promise<() => Promise<void>> {
   listeners.add(listener)
-  await ensureSubscribed()
+  ensureSubscribed()
   return async () => {
     listeners.delete(listener)
     if (listeners.size === 0) {
@@ -69,13 +72,13 @@ export async function addGardenBroadcastListener(listener: Listener): Promise<()
         await supabase.removeChannel(broadcastChannel)
       } catch {}
       broadcastChannel = createChannel()
-      subscribePromise = null
+      isSubscribed = false
     }
   }
 }
 
 export async function broadcastGardenUpdate(message: Omit<GardenBroadcastMessage, 'timestamp'>): Promise<void> {
-  await ensureSubscribed()
+  ensureSubscribed()
   const payload: GardenBroadcastMessage = {
     ...message,
     timestamp: new Date().toISOString(),

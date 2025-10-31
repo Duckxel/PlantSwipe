@@ -399,7 +399,7 @@ export const GardenListPage: React.FC = () => {
               <Button className="rounded-2xl" onClick={() => setOpen(true)}>Create Garden</Button>
             )}
           </div>
-          {loading && <div className="p-6 opacity-60 text-sm">Loading?</div>}
+          {loading && <div className="p-6 opacity-60 text-sm">Loading…</div>}
           {error && <div className="p-6 text-sm text-red-600">{error}</div>}
           {!loading && !error && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
