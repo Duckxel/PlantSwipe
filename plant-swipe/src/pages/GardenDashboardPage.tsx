@@ -430,12 +430,12 @@ export const GardenDashboardPage: React.FC = () => {
   }, [id, serverToday, tab])
 
   const scheduleReload = React.useCallback(() => {
-    const executeReload = () => {
+    const executeReload = async () => {
       pendingReloadRef.current = false
       lastReloadRef.current = Date.now()
+      await load({ silent: true, preserveHeavy: true })
+      await loadHeavyForCurrentTab()
       setActivityRev((r) => r + 1)
-      load({ silent: true, preserveHeavy: true })
-      loadHeavyForCurrentTab()
     }
 
     if (anyModalOpen) {
@@ -452,7 +452,7 @@ export const GardenDashboardPage: React.FC = () => {
       const wait = Math.max(0, minInterval - since)
       reloadTimerRef.current = setTimeout(() => {
         reloadTimerRef.current = null
-        executeReload()
+        executeReload().catch(() => {})
       }, wait)
       return
     }
@@ -460,7 +460,7 @@ export const GardenDashboardPage: React.FC = () => {
     if (reloadTimerRef.current) return
     reloadTimerRef.current = setTimeout(() => {
       reloadTimerRef.current = null
-      executeReload()
+      executeReload().catch(() => {})
     }, 50)
   }, [anyModalOpen, load, loadHeavyForCurrentTab])
 
@@ -916,7 +916,7 @@ export const GardenDashboardPage: React.FC = () => {
 
   return (
     <div className="max-w-6xl mx-auto mt-6 grid grid-cols-1 md:grid-cols-[220px_1fr] lg:grid-cols-[220px_1fr] gap-6">
-      {loading && <div className="p-6 text-sm opacity-60">Loading…</div>}
+      {loading && <div className="p-6 text-sm opacity-60">Loading?</div>}
       {error && <div className="p-6 text-sm text-red-600">{error}</div>}
       {!loading && garden && (
         <>
@@ -1140,7 +1140,7 @@ export const GardenDashboardPage: React.FC = () => {
                 <DialogTitle>Add plant to garden</DialogTitle>
               </DialogHeader>
               <div className="space-y-3">
-                <Input placeholder="Search plants by name…" value={plantQuery} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPlantQuery(e.target.value)} />
+                <Input placeholder="Search plants by name?" value={plantQuery} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPlantQuery(e.target.value)} />
                 <div className="max-h-60 overflow-auto rounded-xl border">
                   {plantResults.map(p => (
                     <button key={p.id} onClick={() => setSelectedPlant(p)} className={`w-full text-left px-3 py-2 hover:bg-stone-50 ${selectedPlant?.id === p.id ? 'bg-stone-100' : ''}`}>
@@ -1154,7 +1154,7 @@ export const GardenDashboardPage: React.FC = () => {
                 </div>
                 <div className="flex justify-end gap-2 pt-2">
                   <Button variant="secondary" className="rounded-2xl" onClick={() => setAddOpen(false)}>Cancel</Button>
-                  <Button className="rounded-2xl" disabled={!selectedPlant || adding} onClick={addSelectedPlant}>{adding ? 'Adding…' : 'Next'}</Button>
+                  <Button className="rounded-2xl" disabled={!selectedPlant || adding} onClick={addSelectedPlant}>{adding ? 'Adding?' : 'Next'}</Button>
                 </div>
               </div>
             </DialogContent>
@@ -1244,18 +1244,18 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
   }, [plants, duePlantIds])
   const hasTodayTasks = (todayTaskOccurrences || []).length > 0
   const emptyPhrases = React.useMemo(() => [
-    'Bored? Maybe it\'s time to get more plants… 🪴',
-    'All quiet in the garden today. Enjoy the calm! 🌿',
-    'Nothing due today — your plants salute you. 🫡',
-    'Free day! Maybe browse for a new leafy friend? 🌱',
-    'Rest day. Hydrate yourself instead of the plants. 💧',
-    'No tasks now. Perfect time to plan your next bloom. 🌼',
-    'Garden\'s on cruise control. You earned it. 😌',
-    'No chores today — maybe prune your playlist? 🎧',
-    'Nothing to do! Consider a new herb for the kitchen. 🌿🍃',
-    'Feet up, gloves off. Tomorrow\'s another grow day. 🧤',
-    'Zero tasks. Maximum vibes. ✨',
-    'Your routine is empty — your cart doesn\'t have to be. 🛒🪴',
+    'Bored? Maybe it\'s time to get more plants? ??',
+    'All quiet in the garden today. Enjoy the calm! ??',
+    'Nothing due today ? your plants salute you. ??',
+    'Free day! Maybe browse for a new leafy friend? ??',
+    'Rest day. Hydrate yourself instead of the plants. ??',
+    'No tasks now. Perfect time to plan your next bloom. ??',
+    'Garden\'s on cruise control. You earned it. ??',
+    'No chores today ? maybe prune your playlist? ??',
+    'Nothing to do! Consider a new herb for the kitchen. ????',
+    'Feet up, gloves off. Tomorrow\'s another grow day. ??',
+    'Zero tasks. Maximum vibes. ?',
+    'Your routine is empty ? your cart doesn\'t have to be. ????',
   ], [])
   const randomEmptyPhrase = React.useMemo(() => {
     const idx = Math.floor(Math.random() * emptyPhrases.length)
@@ -1293,7 +1293,7 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
     <div className="space-y-4">
       <div className="text-lg font-medium">This week</div>
       <Card className="rounded-2xl p-4">
-        <div className="text-sm opacity-60 mb-3">Monday → Sunday</div>
+        <div className="text-sm opacity-60 mb-3">Monday ? Sunday</div>
         <div className="grid grid-cols-7 gap-2">
           {weekDays.map((ds, idx) => {
             const count = weekCounts[idx] || 0
@@ -1347,7 +1347,7 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
                     const tt = (o as any).taskType || 'custom'
                     const badgeClass = `${typeToColor[tt]} ${tt === 'harvest' ? 'text-black' : 'text-white'}`
                     const customEmoji = (o as any).taskEmoji || null
-                    const icon = customEmoji || (tt === 'water' ? '💧' : tt === 'fertilize' ? '🍽️' : tt === 'harvest' ? '🌾' : tt === 'cut' ? '✂️' : '🪴')
+                    const icon = customEmoji || (tt === 'water' ? '??' : tt === 'fertilize' ? '???' : tt === 'harvest' ? '??' : tt === 'cut' ? '??' : '??')
                     const isDone = (Number(o.completedCount || 0) >= Math.max(1, Number(o.requiredCount || 1)))
                     const completions = completionsByOcc[o.id] || []
                     return (
@@ -1388,7 +1388,7 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
             <div className="font-medium">{gp.nickname || gp.plant?.name}</div>
             {gp.nickname && <div className="text-xs opacity-60">{gp.plant?.name}</div>}
             <div className="text-sm opacity-70">Water need: {gp.plant?.care.water}</div>
-            <div className="text-xs opacity-70">Due this week: {dueThisWeekByPlant[gp.id]?.map((i) => ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][i]).join(', ') || '—'}</div>
+            <div className="text-xs opacity-70">Due this week: {dueThisWeekByPlant[gp.id]?.map((i) => ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][i]).join(', ') || '?'}</div>
             <div className="mt-2 flex items-center gap-2">
               <Button className="rounded-2xl opacity-60" variant="secondary" disabled>Upcoming</Button>
             </div>
@@ -1487,7 +1487,7 @@ function OverviewSection({ gardenId, activityRev, plants, membersCount, serverTo
       {/* Activity (today) */}
       <Card className="rounded-2xl p-4">
         <div className="font-medium mb-2">Activity (today)</div>
-        {loadingAct && <div className="text-sm opacity-60">Loading…</div>}
+        {loadingAct && <div className="text-sm opacity-60">Loading?</div>}
         {errAct && <div className="text-sm text-red-600">{errAct}</div>}
         {!loadingAct && activity.length === 0 && <div className="text-sm opacity-60">No activity yet today.</div>}
         <div className="space-y-2">
@@ -1555,8 +1555,8 @@ function EditPlantButton({ gp, gardenId, onChanged, serverToday, actorColorCss }
         const changedCount = Number(gp.plantsOnHand || 0) !== Math.max(0, Number(count || 0))
         if (changedName || changedCount) {
           const parts: string[] = []
-          if (changedName) parts.push(`name → "${nickname.trim() || '—'}"`)
-          if (changedCount) parts.push(`count → ${Math.max(0, Number(count || 0))}`)
+          if (changedName) parts.push(`name ? "${nickname.trim() || '?'}"`)
+          if (changedCount) parts.push(`count ? ${Math.max(0, Number(count || 0))}`)
           const plantName = nickname.trim() || gp.nickname || gp.plant?.name || 'Plant'
           await logGardenActivity({ gardenId, kind: 'plant_updated' as any, message: `updated ${plantName}: ${parts.join(', ')}`, plantName, actorColor: actorColorCss || null })
         }
@@ -1589,7 +1589,7 @@ function EditPlantButton({ gp, gardenId, onChanged, serverToday, actorColorCss }
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="secondary" className="rounded-2xl" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button className="rounded-2xl" onClick={save} disabled={submitting}>{submitting ? 'Saving…' : 'Save'}</Button>
+              <Button className="rounded-2xl" onClick={save} disabled={submitting}>{submitting ? 'Saving?' : 'Save'}</Button>
             </div>
           </div>
         </DialogContent>
@@ -1672,7 +1672,7 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner, ownerCount, cu
               onClick={(e: any) => { e.stopPropagation(); setOpen((o) => !o) }}
               aria-label="Open member actions"
             >
-              ⋯
+              ?
             </Button>
             {open && (
               <div className="absolute right-0 mt-2 w-48 bg-white border rounded-xl shadow-lg z-10">
@@ -1694,7 +1694,7 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner, ownerCount, cu
         <div>
           <div className="font-medium max-w-[60vw] truncate" style={member.accentKey ? (() => { const opt = getAccentOption(member.accentKey as any); return opt ? { color: `hsl(${opt.hsl})` } : undefined })() : undefined}>{member.displayName || member.userId}</div>
           {member.email && <div className="text-xs opacity-60">{member.email}</div>}
-          <div className="text-xs opacity-60">{member.role}{member.joinedAt ? ` • Joined ${new Date(member.joinedAt).toLocaleString()}` : ''}</div>
+          <div className="text-xs opacity-60">{member.role}{member.joinedAt ? ` ? Joined ${new Date(member.joinedAt).toLocaleString()}` : ''}</div>
         </div>
       </div>
       {/* Self actions for non-owners: Quit button */}
@@ -1742,7 +1742,7 @@ function GardenDetailsEditor({ garden, onSaved, canEdit }: { garden: Garden; onS
         const changedName = (garden.name || '') !== (name.trim() || '')
         const changedCover = (garden.coverImageUrl || '') !== (imageUrl.trim() || '')
         const parts: string[] = []
-        if (changedName) parts.push(`name → "${name.trim() || '—'}"`)
+        if (changedName) parts.push(`name ? "${name.trim() || '?'}"`)
         if (changedCover) parts.push('cover image updated')
         if (parts.length > 0) {
           await logGardenActivity({ gardenId: garden.id, kind: 'note' as any, message: `updated garden: ${parts.join(', ')}`, actorColor: null })
@@ -1761,11 +1761,11 @@ function GardenDetailsEditor({ garden, onSaved, canEdit }: { garden: Garden; onS
       </div>
       <div>
         <label className="text-sm font-medium">Cover image URL</label>
-        <Input value={imageUrl} onChange={(e: any) => setImageUrl(e.target.value)} placeholder="https://…" disabled={!canEdit} />
+        <Input value={imageUrl} onChange={(e: any) => setImageUrl(e.target.value)} placeholder="https://?" disabled={!canEdit} />
       </div>
       {err && <div className="text-sm text-red-600">{err}</div>}
       <div className="flex justify-end gap-2 pt-2">
-        <Button className="rounded-2xl" onClick={save} disabled={submitting || !canEdit}>{submitting ? 'Saving…' : 'Save changes'}</Button>
+        <Button className="rounded-2xl" onClick={save} disabled={submitting || !canEdit}>{submitting ? 'Saving?' : 'Save changes'}</Button>
       </div>
     </div>
   )

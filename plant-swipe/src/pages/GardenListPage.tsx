@@ -131,10 +131,10 @@ export const GardenListPage: React.FC = () => {
   }, [gardens, serverToday])
 
   const scheduleReload = React.useCallback(() => {
-    const execute = () => {
+    const execute = async () => {
       lastReloadRef.current = Date.now()
-      load()
-      loadAllTodayOccurrences()
+      await load()
+      await loadAllTodayOccurrences()
     }
 
     const now = Date.now()
@@ -146,7 +146,7 @@ export const GardenListPage: React.FC = () => {
       const wait = Math.max(0, minInterval - since)
       reloadTimerRef.current = setTimeout(() => {
         reloadTimerRef.current = null
-        execute()
+        execute().catch(() => {})
       }, wait)
       return
     }
@@ -154,7 +154,7 @@ export const GardenListPage: React.FC = () => {
     if (reloadTimerRef.current) return
     reloadTimerRef.current = setTimeout(() => {
       reloadTimerRef.current = null
-      execute()
+      execute().catch(() => {})
     }, 50)
   }, [load, loadAllTodayOccurrences])
 
