@@ -32,6 +32,8 @@ export const GardenListPage: React.FC = () => {
   const reloadTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastReloadRef = React.useRef<number>(0)
   const gardenIdsRef = React.useRef<Set<string>>(new Set())
+  const gardensRef = React.useRef<typeof gardens>([])
+  const serverTodayRef = React.useRef<string | null>(null)
 
   const emitGardenRealtime = React.useCallback((gardenId: string, kind: GardenRealtimeKind = 'tasks', metadata?: Record<string, unknown>) => {
     try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
@@ -39,16 +41,23 @@ export const GardenListPage: React.FC = () => {
   }, [user?.id])
 
   const load = React.useCallback(async () => {
-    if (!user?.id) { setGardens([]); setLoading(false); return }
+    if (!user?.id) {
+      setGardens([])
+      gardensRef.current = []
+      setLoading(false)
+      return
+    }
     setLoading(true)
     setError(null)
     try {
       const data = await getUserGardens(user.id)
       setGardens(data)
+      gardensRef.current = data
       // Fetch server 'today' and compute per-garden progress
       const nowIso = await fetchServerNowISO()
       const today = nowIso.slice(0,10)
       setServerToday(today)
+      serverTodayRef.current = today
       // compute progress sequentially to avoid hammering backend on frequent realtime updates
       const entries: Array<[string, { due: number; completed: number }]> = []
       for (const g of data) {
@@ -62,7 +71,6 @@ export const GardenListPage: React.FC = () => {
       const map: Record<string, { due: number; completed: number }> = {}
       for (const [gid, prog] of entries) map[gid] = prog
       setProgressByGarden(map)
-      return { gardens: data, today }
     } catch (e: any) {
       setError(e?.message || 'Failed to load gardens')
     } finally {
@@ -77,8 +85,8 @@ export const GardenListPage: React.FC = () => {
     gardensOverride?: typeof gardens,
     todayOverride?: string | null,
   ) => {
-    const today = todayOverride ?? serverToday
-    const gardensList = gardensOverride ?? gardens
+    const today = todayOverride ?? serverTodayRef.current ?? serverToday
+    const gardensList = gardensOverride ?? gardensRef.current ?? gardens
     if (!today) return
     if (gardensList.length === 0) { setAllPlants([]); setTodayTaskOccurrences([]); return }
     setLoadingTasks(true)
@@ -139,8 +147,8 @@ export const GardenListPage: React.FC = () => {
   const scheduleReload = React.useCallback(() => {
     const execute = async () => {
       lastReloadRef.current = Date.now()
-      const result = await load()
-      await loadAllTodayOccurrences(result?.gardens, result?.today)
+      await load()
+      await loadAllTodayOccurrences()
     }
 
     const now = Date.now()

@@ -43,6 +43,7 @@ export const GardenDashboardPage: React.FC = () => {
   const [heavyLoading, setHeavyLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [serverToday, setServerToday] = React.useState<string | null>(null)
+  const serverTodayRef = React.useRef<string | null>(null)
   const [dueToday, setDueToday] = React.useState<Set<string> | null>(null)
   const [dailyStats, setDailyStats] = React.useState<Array<{ date: string; due: number; completed: number; success: boolean }>>([])
   const [taskOccDueToday, setTaskOccDueToday] = React.useState<Record<string, number>>({})
@@ -144,7 +145,11 @@ export const GardenDashboardPage: React.FC = () => {
             } as any)
             if (Array.isArray(data.plants)) { setPlants(data.plants); hydratedPlants = data.plants }
             if (Array.isArray(data.members)) setMembers(data.members.map((m: any) => ({ userId: String(m.userId || m.user_id), displayName: m.displayName ?? m.display_name ?? null, email: m.email ?? null, role: m.role, joinedAt: m.joinedAt ?? m.joined_at ?? null, accentKey: m.accentKey ?? null })))
-            if (data.serverNow) setServerToday(String(data.serverNow).slice(0,10))
+          if (data.serverNow) {
+            const todayIso = String(data.serverNow).slice(0,10)
+            setServerToday(todayIso)
+            serverTodayRef.current = todayIso
+          }
             hydrated = true
           }
         }
@@ -167,6 +172,7 @@ export const GardenDashboardPage: React.FC = () => {
         setMembers(ms.map(m => ({ userId: m.userId, displayName: m.displayName ?? null, email: (m as any).email ?? null, role: m.role, joinedAt: (m as any).joinedAt, accentKey: (m as any).accentKey ?? null })))
         todayLocal = nowIso.slice(0,10)
         setServerToday(todayLocal)
+        serverTodayRef.current = todayLocal
       }
       // Resolve 'today' for subsequent computations regardless of hydration path
       let today = (serverToday || todayLocal || '')
@@ -174,6 +180,7 @@ export const GardenDashboardPage: React.FC = () => {
         const nowIso2 = await fetchServerNowISO()
         today = nowIso2.slice(0,10)
         setServerToday(today)
+        serverTodayRef.current = today
       }
       // Ensure base streak is refreshed from server, at most once per session
       try {
@@ -329,7 +336,7 @@ export const GardenDashboardPage: React.FC = () => {
         }
         setDailyStats(days)
       } catch {}
-      return { today }
+      serverTodayRef.current = today
     } catch (e: any) {
       setError(e?.message || 'Failed to load garden')
     } finally {
@@ -339,7 +346,7 @@ export const GardenDashboardPage: React.FC = () => {
 
   // Lazy heavy loader for tabs that need it
   const loadHeavyForCurrentTab = React.useCallback(async (todayOverride?: string | null) => {
-    const todayValue = todayOverride ?? serverToday
+    const todayValue = todayOverride ?? serverTodayRef.current ?? serverToday
     if (!id || !todayValue) return
     setHeavyLoading(true)
     try {
@@ -435,8 +442,8 @@ export const GardenDashboardPage: React.FC = () => {
     const executeReload = async () => {
       pendingReloadRef.current = false
       lastReloadRef.current = Date.now()
-      const result = await load({ silent: true, preserveHeavy: true })
-      await loadHeavyForCurrentTab(result?.today ?? serverToday)
+      await load({ silent: true, preserveHeavy: true })
+      await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday)
       setActivityRev((r) => r + 1)
     }
 
@@ -488,8 +495,8 @@ export const GardenDashboardPage: React.FC = () => {
 
   React.useEffect(() => {
     // Always load today's occurrences for the Tasks sidebar; compute weekly only on Routine
-    loadHeavyForCurrentTab()
-  }, [tab, loadHeavyForCurrentTab])
+    loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday)
+  }, [tab, loadHeavyForCurrentTab, serverToday])
 
   // Realtime updates via Supabase (tables: gardens, garden_members, garden_plants, garden_plant_tasks, garden_plant_task_occurrences, plants)
   React.useEffect(() => {
@@ -782,7 +789,7 @@ export const GardenDashboardPage: React.FC = () => {
       }
       await load({ silent: true, preserveHeavy: true })
       if (tab === 'routine') {
-        await loadHeavyForCurrentTab()
+        await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday)
       }
       if (id) navigate(`/garden/${id}/plants`)
       emitGardenRealtime('tasks')
@@ -822,7 +829,7 @@ export const GardenDashboardPage: React.FC = () => {
       }
       await load({ silent: true, preserveHeavy: true })
       if (tab === 'routine') {
-        await loadHeavyForCurrentTab()
+        await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday)
       }
       if (id) navigate(`/garden/${id}/routine`)
       emitGardenRealtime('tasks')
@@ -911,7 +918,7 @@ export const GardenDashboardPage: React.FC = () => {
       }
     } finally {
       await load({ silent: true, preserveHeavy: true })
-      await loadHeavyForCurrentTab()
+      await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday)
       emitGardenRealtime('tasks')
     }
   }, [todayTaskOccurrences, id, plants, getActorColorCss, load, loadHeavyForCurrentTab, emitGardenRealtime])
@@ -1096,7 +1103,7 @@ export const GardenDashboardPage: React.FC = () => {
                   }
               } finally {
                 await load({ silent: true, preserveHeavy: true })
-                await loadHeavyForCurrentTab()
+                await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday)
                 emitGardenRealtime('tasks')
               }
               }} />} />
@@ -1209,7 +1216,7 @@ export const GardenDashboardPage: React.FC = () => {
               // Ensure page reflects latest tasks after create/update/delete
               await load({ silent: true, preserveHeavy: true })
               // Always refresh heavy data so counts and badges update immediately
-              await loadHeavyForCurrentTab()
+              await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday)
               // Notify global UI components (badges) to refresh
               try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
             }}
