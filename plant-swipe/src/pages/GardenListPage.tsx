@@ -62,6 +62,7 @@ export const GardenListPage: React.FC = () => {
       const map: Record<string, { due: number; completed: number }> = {}
       for (const [gid, prog] of entries) map[gid] = prog
       setProgressByGarden(map)
+      return { gardens: data, today }
     } catch (e: any) {
       setError(e?.message || 'Failed to load gardens')
     } finally {
@@ -72,23 +73,28 @@ export const GardenListPage: React.FC = () => {
   React.useEffect(() => { load() }, [load])
 
   // Load all gardens' tasks due today for the sidebar
-  const loadAllTodayOccurrences = React.useCallback(async () => {
-    if (!serverToday) return
-    if (gardens.length === 0) { setAllPlants([]); setTodayTaskOccurrences([]); return }
+  const loadAllTodayOccurrences = React.useCallback(async (
+    gardensOverride?: typeof gardens,
+    todayOverride?: string | null,
+  ) => {
+    const today = todayOverride ?? serverToday
+    const gardensList = gardensOverride ?? gardens
+    if (!today) return
+    if (gardensList.length === 0) { setAllPlants([]); setTodayTaskOccurrences([]); return }
     setLoadingTasks(true)
     try {
-      const startIso = `${serverToday}T00:00:00.000Z`
-      const endIso = `${serverToday}T23:59:59.999Z`
+      const startIso = `${today}T00:00:00.000Z`
+      const endIso = `${today}T23:59:59.999Z`
       // 1) Fetch tasks per garden sequentially (reduce contention during rapid realtime)
       const tasksPerGarden: any[] = []
-      for (const g of gardens) {
+      for (const g of gardensList) {
         tasksPerGarden.push(await listGardenTasks(g.id))
       }
       const taskTypeById: Record<string, 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'> = {}
       const taskEmojiById: Record<string, string | null> = {}
       const taskIdsByGarden: Record<string, string[]> = {}
-      for (let i = 0; i < gardens.length; i++) {
-        const g = gardens[i]
+      for (let i = 0; i < gardensList.length; i++) {
+        const g = gardensList[i]
         const tasks = tasksPerGarden[i] || []
         taskIdsByGarden[g.id] = tasks.map(t => t.id)
         for (const t of tasks) {
@@ -97,9 +103,9 @@ export const GardenListPage: React.FC = () => {
         }
       }
       // 2) Resync occurrences per garden in parallel
-      await Promise.all(gardens.map(g => resyncTaskOccurrencesForGarden(g.id, startIso, endIso)))
+      await Promise.all(gardensList.map(g => resyncTaskOccurrencesForGarden(g.id, startIso, endIso)))
       // 3) Load occurrences per garden
-      const occsPerGarden = await Promise.all(gardens.map(g => listOccurrencesForTasks(taskIdsByGarden[g.id] || [], startIso, endIso)))
+      const occsPerGarden = await Promise.all(gardensList.map(g => listOccurrencesForTasks(taskIdsByGarden[g.id] || [], startIso, endIso)))
       const occsAugmented: Array<any> = []
       for (const arr of occsPerGarden) {
         for (const o of (arr || [])) {
@@ -116,8 +122,8 @@ export const GardenListPage: React.FC = () => {
       const compMap = await listCompletionsForOccurrences(ids)
       setCompletionsByOcc(compMap)
       // 4) Load plants for all gardens for display and mapping
-      const plantsPerGarden = await Promise.all(gardens.map(g => getGardenPlants(g.id)))
-      const idToGardenName = gardens.reduce<Record<string, string>>((acc, g) => { acc[g.id] = g.name; return acc }, {})
+      const plantsPerGarden = await Promise.all(gardensList.map(g => getGardenPlants(g.id)))
+      const idToGardenName = gardensList.reduce<Record<string, string>>((acc, g) => { acc[g.id] = g.name; return acc }, {})
       const all = plantsPerGarden.flat().map((gp: any) => ({
         ...gp,
         gardenName: idToGardenName[gp.gardenId] || '',
@@ -133,8 +139,8 @@ export const GardenListPage: React.FC = () => {
   const scheduleReload = React.useCallback(() => {
     const execute = async () => {
       lastReloadRef.current = Date.now()
-      await load()
-      await loadAllTodayOccurrences()
+      const result = await load()
+      await loadAllTodayOccurrences(result?.gardens, result?.today)
     }
 
     const now = Date.now()

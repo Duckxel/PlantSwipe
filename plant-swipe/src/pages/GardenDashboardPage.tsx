@@ -329,6 +329,7 @@ export const GardenDashboardPage: React.FC = () => {
         }
         setDailyStats(days)
       } catch {}
+      return { today }
     } catch (e: any) {
       setError(e?.message || 'Failed to load garden')
     } finally {
@@ -337,12 +338,13 @@ export const GardenDashboardPage: React.FC = () => {
   }, [id, garden])
 
   // Lazy heavy loader for tabs that need it
-  const loadHeavyForCurrentTab = React.useCallback(async () => {
-    if (!id || !serverToday) return
+  const loadHeavyForCurrentTab = React.useCallback(async (todayOverride?: string | null) => {
+    const todayValue = todayOverride ?? serverToday
+    if (!id || !todayValue) return
     setHeavyLoading(true)
     try {
       const parseUTC = (iso: string) => new Date(`${iso}T00:00:00Z`)
-      const anchorUTC = parseUTC(serverToday)
+      const anchorUTC = parseUTC(todayValue)
       const dayUTC = anchorUTC.getUTCDay()
       const diffToMonday = (dayUTC + 6) % 7
       const mondayUTC = new Date(anchorUTC)
@@ -354,7 +356,7 @@ export const GardenDashboardPage: React.FC = () => {
         weekDaysIso.push(d.toISOString().slice(0,10))
       }
       setWeekDays(weekDaysIso)
-      const today = serverToday
+      const today = todayValue
       const allTasks = await listGardenTasks(id)
       const weekStartIso = `${weekDaysIso[0]}T00:00:00.000Z`
       const weekEndIso = `${weekDaysIso[6]}T23:59:59.999Z`
@@ -433,8 +435,8 @@ export const GardenDashboardPage: React.FC = () => {
     const executeReload = async () => {
       pendingReloadRef.current = false
       lastReloadRef.current = Date.now()
-      await load({ silent: true, preserveHeavy: true })
-      await loadHeavyForCurrentTab()
+      const result = await load({ silent: true, preserveHeavy: true })
+      await loadHeavyForCurrentTab(result?.today ?? serverToday)
       setActivityRev((r) => r + 1)
     }
 
@@ -816,7 +818,7 @@ export const GardenDashboardPage: React.FC = () => {
           }
           const success = due === 0 ? true : (completed >= due)
           await upsertGardenTask({ gardenId: garden.id, day: today, gardenPlantId: null, success })
-        } catch {}
+      } catch {}
       }
       await load({ silent: true, preserveHeavy: true })
       if (tab === 'routine') {
