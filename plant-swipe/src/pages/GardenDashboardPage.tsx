@@ -1266,7 +1266,7 @@ export const GardenDashboardPage: React.FC = () => {
 
   return (
     <div className="max-w-6xl mx-auto mt-6 grid grid-cols-1 md:grid-cols-[220px_1fr] lg:grid-cols-[220px_1fr] gap-6">
-      {loading && <div className="p-6 text-sm opacity-60">Loading?</div>}
+      {loading && <div className="p-6 text-sm opacity-60">Loading...</div>}
       {error && <div className="p-6 text-sm text-red-600">{error}</div>}
       {!loading && garden && (
         <>
@@ -1479,7 +1479,7 @@ export const GardenDashboardPage: React.FC = () => {
                 </div>
                 <div className="flex justify-end gap-2 pt-2">
                   <Button variant="secondary" className="rounded-2xl" onClick={() => setAddOpen(false)}>Cancel</Button>
-                  <Button className="rounded-2xl" disabled={!selectedPlant || adding} onClick={addSelectedPlant}>{adding ? 'Adding?' : 'Next'}</Button>
+                  <Button className="rounded-2xl" disabled={!selectedPlant || adding} onClick={addSelectedPlant}>{adding ? 'Adding...' : 'Next'}</Button>
                 </div>
               </div>
             </DialogContent>
@@ -1856,7 +1856,7 @@ function OverviewSection({ gardenId, activityRev, plants, membersCount, serverTo
       {/* Activity (today) */}
       <Card className="rounded-2xl p-4">
         <div className="font-medium mb-2">Activity (today)</div>
-        {loadingAct && <div className="text-sm opacity-60">Loading?</div>}
+        {loadingAct && <div className="text-sm opacity-60">Loading...</div>}
         {errAct && <div className="text-sm text-red-600">{errAct}</div>}
         {!loadingAct && activity.length === 0 && <div className="text-sm opacity-60">No activity yet today.</div>}
         <div className="space-y-2">
@@ -1958,7 +1958,7 @@ function EditPlantButton({ gp, gardenId, onChanged, serverToday, actorColorCss }
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="secondary" className="rounded-2xl" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button className="rounded-2xl" onClick={save} disabled={submitting}>{submitting ? 'Saving?' : 'Save'}</Button>
+              <Button className="rounded-2xl" onClick={save} disabled={submitting}>{submitting ? 'Saving...' : 'Save'}</Button>
             </div>
           </div>
         </DialogContent>
@@ -2063,7 +2063,7 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner, ownerCount, cu
         <div>
           <div className="font-medium max-w-[60vw] truncate" style={member.accentKey ? (() => { const opt = getAccentOption(member.accentKey as any); return opt ? { color: `hsl(${opt.hsl})` } : undefined })() : undefined}>{member.displayName || member.userId}</div>
           {member.email && <div className="text-xs opacity-60">{member.email}</div>}
-          <div className="text-xs opacity-60">{member.role}{member.joinedAt ? ` • Joined ${new Date(member.joinedAt).toLocaleString()}` : ''}</div>
+          <div className="text-xs opacity-60">{member.role}{member.joinedAt ? ` ? Joined ${new Date(member.joinedAt).toLocaleString()}` : ''}</div>
         </div>
       </div>
       {/* Self actions for non-owners: Quit button */}
@@ -2134,7 +2134,7 @@ function GardenDetailsEditor({ garden, onSaved, canEdit }: { garden: Garden; onS
       </div>
       {err && <div className="text-sm text-red-600">{err}</div>}
       <div className="flex justify-end gap-2 pt-2">
-        <Button className="rounded-2xl" onClick={save} disabled={submitting || !canEdit}>{submitting ? 'Saving?' : 'Save changes'}</Button>
+        <Button className="rounded-2xl" onClick={save} disabled={submitting || !canEdit}>{submitting ? 'Saving...' : 'Save changes'}</Button>
       </div>
     </div>
   )

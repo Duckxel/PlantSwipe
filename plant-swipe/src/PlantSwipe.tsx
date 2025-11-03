@@ -598,7 +598,7 @@ export default function PlantSwipe() {
 
         {/* Main content area */}
         <main className="min-h-[60vh]" aria-live="polite">
-          {loading && <div className="p-8 text-center text-sm opacity-60">Loading from Supabase?</div>}
+          {loading && <div className="p-8 text-center text-sm opacity-60">Loading from Supabase...</div>}
           {loadError && <div className="p-8 text-center text-sm text-red-600">Supabase error: {loadError}</div>}
           {!loading && !loadError && (
             <>

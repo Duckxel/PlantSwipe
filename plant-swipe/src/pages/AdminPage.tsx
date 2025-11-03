@@ -1622,7 +1622,7 @@ export const AdminPage: React.FC = () => {
                     aria-label="Select branch"
                   >
                   {branchesLoading ? (
-                    <option value="">Loading?</option>
+                    <option value="">Loading...</option>
                   ) : branchOptions.length === 0 ? (
                     <option value="">No branches found</option>
                   ) : (
@@ -1790,7 +1790,7 @@ export const AdminPage: React.FC = () => {
                       <div className="mt-2" id="connected-ips">
                         <div className="rounded-xl border bg-white p-3 max-h-48 overflow-auto">
                           {ipsLoading ? (
-                            <div className="text-sm opacity-60">Loading?</div>
+                            <div className="text-sm opacity-60">Loading...</div>
                           ) : ips.length === 0 ? (
                             <div className="text-sm opacity-60">No IPs.</div>
                           ) : (
@@ -1878,7 +1878,7 @@ export const AdminPage: React.FC = () => {
                 </div>
 
                 {visitorsLoading ? (
-                  <div className="text-sm opacity-60">Loading?</div>
+                  <div className="text-sm opacity-60">Loading...</div>
                 ) : visitorsSeries.length === 0 ? (
                   <div className="text-sm opacity-60">No data yet.</div>
                 ) : (
@@ -2236,7 +2236,7 @@ export const AdminPage: React.FC = () => {
                             </button>
                           ))}
                           {suggestLoading && (
-                            <div className="px-3 py-2 text-xs opacity-60">Loading?</div>
+                            <div className="px-3 py-2 text-xs opacity-60">Loading...</div>
                           )}
                         </div>
                       )}
@@ -2548,7 +2548,7 @@ export const AdminPage: React.FC = () => {
                       </div>
 
                       {memberVisitsLoading ? (
-                        <div className="text-sm opacity-60">Loading?</div>
+                        <div className="text-sm opacity-60">Loading...</div>
                       ) : memberVisitsSeries.length === 0 ? (
                         <div className="text-sm opacity-60">No data yet.</div>
                       ) : (
@@ -3349,7 +3349,7 @@ const AdminLogs: React.FC = () => {
         </div>
         {error && <div className="text-sm text-rose-600">{error}</div>}
         {loading ? (
-          <div className="text-sm opacity-60">Loading?</div>
+          <div className="text-sm opacity-60">Loading...</div>
         ) : logs.length === 0 ? (
           <div className="text-sm opacity-60">No admin activity logged.</div>
         ) : (
