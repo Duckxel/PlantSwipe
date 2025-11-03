@@ -1,6 +1,6 @@
 import React from "react"
 import { motion, AnimatePresence, type MotionValue } from "framer-motion"
-import { ChevronLeft, ChevronRight, Heart, Sparkles } from "lucide-react"
+import { ChevronLeft, ChevronRight, Heart, Sparkles, ArrowUp } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -132,27 +132,38 @@ export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, 
                       <Badge key={c} variant="secondary" className="rounded-xl">{c}</Badge>
                     ))}
                   </div>
-                  <div className="mt-auto flex items-center justify-between">
+                  <div className="mt-auto flex items-center justify-between gap-2">
                     <Button 
                       variant="secondary" 
-                      className="rounded-2xl" 
+                      className="rounded-2xl flex-1" 
                       onClick={(e) => {
                         e.stopPropagation()
-                        handlePass()
+                        handlePrevious()
                       }}
                       onPointerDown={(e) => e.stopPropagation()}
                     >
-                      <ChevronLeft className="h-4 w-4 mr-1" /> Pass
+                      <ChevronLeft className="h-4 w-4 mr-1" /> Previous
                     </Button>
                     <Button 
-                      className="rounded-2xl" 
+                      className="rounded-2xl flex-1" 
                       onClick={(e) => {
                         e.stopPropagation()
                         handleInfo()
                       }}
                       onPointerDown={(e) => e.stopPropagation()}
                     >
-                      More info <ChevronRight className="h-4 w-4 ml-1" />
+                      More info <ArrowUp className="h-4 w-4 ml-1" />
+                    </Button>
+                    <Button 
+                      variant="secondary" 
+                      className="rounded-2xl flex-1" 
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handlePass()
+                      }}
+                      onPointerDown={(e) => e.stopPropagation()}
+                    >
+                      Next <ChevronRight className="h-4 w-4 ml-1" />
                     </Button>
                   </div>
                 </CardContent>
