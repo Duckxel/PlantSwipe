@@ -125,7 +125,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, 
                       }}
                       onPointerDown={(e) => e.stopPropagation()}
                     >
-                      <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+                      <ChevronLeft className="h-4 w-4 mr-1" /> Back
                     </Button>
                     <Button 
                       className="rounded-2xl flex-1" 
