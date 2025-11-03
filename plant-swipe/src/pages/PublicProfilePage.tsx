@@ -36,7 +36,7 @@ type DayAgg = { day: string; completed: number; any_success: boolean }
 export default function PublicProfilePage() {
   const params = useParams()
   const navigate = useNavigate()
-  const { user, profile, refreshProfile, signOut } = useAuth()
+  const { user, profile, refreshProfile, signOut, deleteAccount } = useAuth()
   const displayParam = String(params.username || '')
 
   const [loading, setLoading] = React.useState(true)
@@ -44,6 +44,7 @@ export default function PublicProfilePage() {
   const [pp, setPp] = React.useState<PublicProfile | null>(null)
   const [stats, setStats] = React.useState<PublicStats | null>(null)
   const [monthDays, setMonthDays] = React.useState<DayAgg[]>([])
+  const [privateInfo, setPrivateInfo] = React.useState<{ id: string; email: string | null } | null>(null)
   
 
   const formatLastSeen = React.useCallback((iso: string | null | undefined) => {
@@ -71,10 +72,31 @@ export default function PublicProfilePage() {
       setLoading(true)
       setError(null)
       try {
-        // Basic profile by display name
-        const { data: rows, error: perr } = await supabase.rpc('get_profile_public_by_display_name', { _name: displayParam })
-        if (perr) throw perr
-        const row = Array.isArray(rows) ? rows[0] : rows
+        // Handle special case: if displayParam is "_me", look up by user ID
+        let row: any = null
+        if (displayParam === '_me' && user?.id) {
+          // Look up current user by ID
+          const { data: profileData, error: pErr } = await supabase
+            .from('profiles')
+            .select('id, display_name, country, bio, avatar_url, is_admin, accent_key')
+            .eq('id', user.id)
+            .maybeSingle()
+          if (!pErr && profileData) {
+            const { data: authUser } = await supabase.auth.getUser()
+            row = {
+              ...profileData,
+              joined_at: authUser?.user?.created_at || null,
+              last_seen_at: null,
+              is_online: false,
+            }
+          }
+        } else {
+          // Basic profile by display name
+          const { data: rows, error: perr } = await supabase.rpc('get_profile_public_by_display_name', { _name: displayParam })
+          if (perr) throw perr
+          row = Array.isArray(rows) ? rows[0] : rows
+        }
+        
         if (!row) {
           setError('User not found')
           setLoading(false)
@@ -137,9 +159,27 @@ export default function PublicProfilePage() {
     }
     run()
     return () => { cancelled = true }
-  }, [displayParam])
+  }, [displayParam, user?.id])
 
   const isOwner = user?.id && pp?.id && user.id === pp.id
+
+  // Load private info for owners
+  React.useEffect(() => {
+    let cancelled = false
+    const loadPrivate = async () => {
+      try {
+        if (!isOwner || !user?.id) { setPrivateInfo(null); return }
+        const { data, error } = await supabase.rpc('get_user_private_info', { _user_id: user.id })
+        if (!error) {
+          const row = Array.isArray(data) ? data[0] : data
+          if (!cancelled) setPrivateInfo(row ? { id: String(row.id), email: row.email || null } : null)
+        }
+      } catch {}
+    }
+    loadPrivate()
+    return () => { cancelled = true }
+  }, [isOwner, user?.id])
+
   const [menuOpen, setMenuOpen] = React.useState(false)
   const anchorRef = React.useRef<HTMLDivElement | null>(null)
   const menuRef = React.useRef<HTMLDivElement | null>(null)
@@ -148,6 +188,13 @@ export default function PublicProfilePage() {
   const [editOpen, setEditOpen] = React.useState(false)
   const [editSubmitting, setEditSubmitting] = React.useState(false)
   const [editError, setEditError] = React.useState<string | null>(null)
+
+  // Auto-open edit dialog if user has no display_name
+  React.useEffect(() => {
+    if (isOwner && !pp?.display_name && displayParam === '_me') {
+      setEditOpen(true)
+    }
+  }, [isOwner, pp?.display_name, displayParam])
 
   // Friend request state
   const [friendStatus, setFriendStatus] = React.useState<'none' | 'friends' | 'request_sent' | 'request_received'>('none')
@@ -437,7 +484,7 @@ export default function PublicProfilePage() {
                         <div ref={menuRef} className="w-40 rounded-xl border bg-white shadow z-[60] p-1" style={{ position: 'fixed', top: menuPos.top, right: menuPos.right }}>
                           <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50" onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); setEditOpen(true) }}>Edit</button>
                           <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50" onMouseDown={async (e) => { e.stopPropagation(); setMenuOpen(false); await signOut(); navigate('/') }}>Log out</button>
-                          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 text-red-600" onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/profile') }}>Delete account</button>
+                          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 text-red-600" onMouseDown={async (e) => { e.stopPropagation(); setMenuOpen(false); await deleteAccount() }}>Delete account</button>
                         </div>,
                         document.body
                       )}
@@ -556,6 +603,27 @@ export default function PublicProfilePage() {
               </CardContent>
             </Card>
           </div>
+
+          {isOwner && privateInfo && (
+            <div className="mt-4">
+              <Card className="rounded-3xl">
+                <CardContent className="p-6 md:p-8 space-y-2">
+                  <div className="text-lg font-semibold">Private Info</div>
+                  <div className="text-sm opacity-60">Only visible to you (and admins)</div>
+                  <div className="grid sm:grid-cols-2 gap-3 mt-2">
+                    <div className="rounded-xl border p-3">
+                      <div className="text-[11px] opacity-60">User ID</div>
+                      <div className="text-xs break-all">{privateInfo.id || '?'}</div>
+                    </div>
+                    <div className="rounded-xl border p-3">
+                      <div className="text-[11px] opacity-60">Email</div>
+                      <div className="text-sm">{privateInfo.email || (user as any)?.email || '?'}</div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
 
 
           {isOwner && (

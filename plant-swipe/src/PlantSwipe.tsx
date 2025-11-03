@@ -23,7 +23,6 @@ import type { Plant } from "@/types/plant";
 // PlantDetails imported in PlantInfoPage route component
 import PlantInfoPage from "@/pages/PlantInfoPage";
 import { useAuth } from "@/context/AuthContext";
-import { ProfilePage } from "@/pages/ProfilePage";
 import PublicProfilePage from "@/pages/PublicProfilePage";
 import { AdminPage } from "@/pages/AdminPage";
 import RequireAdmin from "@/pages/RequireAdmin";
@@ -640,7 +639,7 @@ export default function PlantSwipe() {
                     />
                   }
                 />
-                <Route path="/profile" element={user ? (profile?.display_name ? <Navigate to={`/u/${encodeURIComponent(profile.display_name)}`} replace /> : <ProfilePage />) : <Navigate to="/" replace />} />
+                <Route path="/profile" element={user ? (profile?.display_name ? <Navigate to={`/u/${encodeURIComponent(profile.display_name)}`} replace /> : <Navigate to="/u/_me" replace />) : <Navigate to="/" replace />} />
                 <Route path="/u/:username" element={<PublicProfilePage />} />
                 <Route path="/friends" element={user ? <FriendsPage /> : <Navigate to="/" replace />} />
                 <Route path="/admin" element={<RequireAdmin><AdminPage /></RequireAdmin>} />
