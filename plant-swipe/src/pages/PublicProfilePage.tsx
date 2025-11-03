@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
 import { EditProfileDialog, type EditProfileValues } from "@/components/profile/EditProfileDialog"
 import { applyAccentByKey, saveAccentKey } from "@/lib/accent"
-import { MapPin, User as UserIcon, UserPlus, Check } from "lucide-react"
+import { MapPin, User as UserIcon, UserPlus, Check, Lock } from "lucide-react"
 
 type PublicProfile = {
   id: string
@@ -580,6 +580,19 @@ export default function PublicProfilePage() {
               </div>
               {canViewProfile && pp.bio && (
                 <div className="text-sm opacity-90">{pp.bio}</div>
+              )}
+              {!canViewProfile && !isOwner && pp.is_private && (
+                <div className="mt-4 p-4 rounded-xl bg-stone-50 border border-stone-200 flex items-start gap-3">
+                  <Lock className="h-5 w-5 mt-0.5 text-stone-600 shrink-0" />
+                  <div>
+                    <div className="text-sm font-medium text-stone-900 mb-1">
+                      This profile is private
+                    </div>
+                    <div className="text-xs opacity-70 text-stone-700">
+                      Only friends can see this profile and activity.
+                    </div>
+                  </div>
+                </div>
               )}
             </CardContent>
           </Card>
