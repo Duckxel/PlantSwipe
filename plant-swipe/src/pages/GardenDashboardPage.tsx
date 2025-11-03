@@ -14,7 +14,7 @@ import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
 import { TaskEditorDialog } from '@/components/plant/TaskEditorDialog'
 import type { Garden } from '@/types/garden'
 import type { Plant } from '@/types/plant'
-import { getGarden, getGardenPlants, getGardenMembers, addMemberByNameOrEmail, deleteGardenPlant, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, updateGardenMemberRole, removeGardenMember, listGardenTasks, syncTaskOccurrencesForGarden, listOccurrencesForTasks, progressTaskOccurrence, updateGardenPlantsOrder, refreshGardenStreak, listGardenActivityToday, logGardenActivity, resyncTaskOccurrencesForGarden, computeGardenTaskForDay } from '@/lib/gardens'
+import { getGarden, getGardenPlants, getGardenMembers, addMemberByNameOrEmail, deleteGardenPlant, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, updateGardenMemberRole, removeGardenMember, listGardenTasks, listOccurrencesForTasks, progressTaskOccurrence, updateGardenPlantsOrder, refreshGardenStreak, listGardenActivityToday, logGardenActivity, resyncTaskOccurrencesForGarden, computeGardenTaskForDay } from '@/lib/gardens'
 import { supabase } from '@/lib/supabaseClient'
 import { addGardenBroadcastListener, broadcastGardenUpdate, type GardenRealtimeKind } from '@/lib/realtime'
 import { getAccentOption } from '@/lib/accent'
@@ -1266,7 +1266,7 @@ export const GardenDashboardPage: React.FC = () => {
 
   return (
     <div className="max-w-6xl mx-auto mt-6 grid grid-cols-1 md:grid-cols-[220px_1fr] lg:grid-cols-[220px_1fr] gap-6">
-      {loading && <div className="p-6 text-sm opacity-60">Loading?</div>}
+      {loading && <div className="p-6 text-sm opacity-60">Loading...</div>}
       {error && <div className="p-6 text-sm text-red-600">{error}</div>}
       {!loading && garden && (
         <>
@@ -1422,37 +1422,7 @@ export const GardenDashboardPage: React.FC = () => {
                 </div>
               )} />
               {/* Routine route kept for weekly chart; item rows show completers instead of button */}
-              <Route path="routine" element={<RoutineSection plants={plants} duePlantIds={dueToday} onLogWater={logWater} weekDays={weekDays} weekCounts={weekCounts} weekCountsByType={weekCountsByType} serverToday={serverToday} dueThisWeekByPlant={dueThisWeekByPlant} todayTaskOccurrences={todayTaskOccurrences} onProgressOccurrence={async (occId: string, inc: number) => {
-                try {
-                  await progressTaskOccurrence(occId, inc)
-                  const o = todayTaskOccurrences.find((x: any) => x.id === occId)
-                  if (o && id) {
-                    const gp = (plants as any[]).find((p: any) => p.id === o.gardenPlantId)
-                    const type = (o as any).taskType || 'custom'
-                    const label = String(type).toUpperCase()
-                    const plantName = gp?.nickname || gp?.plant?.name || null
-                    const newCount = Number(o.completedCount || 0) + inc
-                    const required = Number(o.requiredCount || 1)
-                    const done = newCount >= required
-                    const kind = done ? 'task_completed' : 'task_progressed'
-                    const msg = done
-                      ? `has completed "${label}" Task on "${plantName || 'Plant'}"`
-                      : `has progressed "${label}" Task on "${plantName || 'Plant'}" (${Math.min(newCount, required)}/${required})`
-                    const actorColorCss = getActorColorCss()
-                    await logGardenActivity({ gardenId: id, kind: kind as any, message: msg, plantName: plantName || null, taskName: label, actorColor: actorColorCss || null })
-                    setActivityRev((r) => r + 1)
-                    // Broadcast update BEFORE reload to ensure other clients receive it
-                    await broadcastGardenUpdate({ gardenId: id, kind: 'tasks', actorId: user?.id ?? null }).catch((err) => {
-                      console.warn('[GardenDashboard] Failed to broadcast task update:', err)
-                    })
-                  }
-              } finally {
-                await load({ silent: true, preserveHeavy: true })
-                await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday)
-                // Also emit local event for immediate UI updates
-                emitGardenRealtime('tasks')
-              }
-              }} />} />
+              <Route path="routine" element={<RoutineSection plants={plants} duePlantIds={dueToday} onLogWater={logWater} weekDays={weekDays} weekCounts={weekCounts} weekCountsByType={weekCountsByType} serverToday={serverToday} dueThisWeekByPlant={dueThisWeekByPlant} todayTaskOccurrences={todayTaskOccurrences} onProgressOccurrence={progressOccurrenceHandler} />} />
               <Route path="settings" element={(
                 <div className="space-y-6">
                   <div className="space-y-3">
@@ -1509,7 +1479,7 @@ export const GardenDashboardPage: React.FC = () => {
                 </div>
                 <div className="flex justify-end gap-2 pt-2">
                   <Button variant="secondary" className="rounded-2xl" onClick={() => setAddOpen(false)}>Cancel</Button>
-                  <Button className="rounded-2xl" disabled={!selectedPlant || adding} onClick={addSelectedPlant}>{adding ? 'Adding?' : 'Next'}</Button>
+                  <Button className="rounded-2xl" disabled={!selectedPlant || adding} onClick={addSelectedPlant}>{adding ? 'Adding...' : 'Next'}</Button>
                 </div>
               </div>
             </DialogContent>
@@ -1746,7 +1716,7 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
                     const tt = (o as any).taskType || 'custom'
                     const badgeClass = `${typeToColor[tt]} ${tt === 'harvest' ? 'text-black' : 'text-white'}`
                     const customEmoji = (o as any).taskEmoji || null
-                    const icon = customEmoji || (tt === 'water' ? '💧' : tt === 'fertilize' ? '🍽️' : tt === 'harvest' ? '🌾' : tt === 'cut' ? '✂️' : '🪴')
+                    const icon = customEmoji || (tt === 'water' ? '??' : tt === 'fertilize' ? '???' : tt === 'harvest' ? '??' : tt === 'cut' ? '??' : '??')
                     const isDone = (Number(o.completedCount || 0) >= Math.max(1, Number(o.requiredCount || 1)))
                     const completions = completionsByOcc[o.id] || []
                     return (
@@ -1787,7 +1757,7 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
             <div className="font-medium">{gp.nickname || gp.plant?.name}</div>
             {gp.nickname && <div className="text-xs opacity-60">{gp.plant?.name}</div>}
             <div className="text-sm opacity-70">Water need: {gp.plant?.care.water}</div>
-            <div className="text-xs opacity-70">Due this week: {dueThisWeekByPlant[gp.id]?.map((i) => ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][i]).join(', ') || '?'}</div>
+            <div className="text-xs opacity-70">Due this week: {dueThisWeekByPlant[gp.id]?.map((i) => ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][i]).join(', ') || '-'}</div>
             <div className="mt-2 flex items-center gap-2">
               <Button className="rounded-2xl opacity-60" variant="secondary" disabled>Upcoming</Button>
             </div>
@@ -1886,7 +1856,7 @@ function OverviewSection({ gardenId, activityRev, plants, membersCount, serverTo
       {/* Activity (today) */}
       <Card className="rounded-2xl p-4">
         <div className="font-medium mb-2">Activity (today)</div>
-        {loadingAct && <div className="text-sm opacity-60">Loading?</div>}
+        {loadingAct && <div className="text-sm opacity-60">Loading...</div>}
         {errAct && <div className="text-sm text-red-600">{errAct}</div>}
         {!loadingAct && activity.length === 0 && <div className="text-sm opacity-60">No activity yet today.</div>}
         <div className="space-y-2">
@@ -1954,8 +1924,8 @@ function EditPlantButton({ gp, gardenId, onChanged, serverToday, actorColorCss }
         const changedCount = Number(gp.plantsOnHand || 0) !== Math.max(0, Number(count || 0))
         if (changedName || changedCount) {
           const parts: string[] = []
-          if (changedName) parts.push(`name ? "${nickname.trim() || '?'}"`)
-          if (changedCount) parts.push(`count ? ${Math.max(0, Number(count || 0))}`)
+          if (changedName) parts.push(`name: "${nickname.trim() || '-'}"`)
+          if (changedCount) parts.push(`count: ${Math.max(0, Number(count || 0))}`)
           const plantName = nickname.trim() || gp.nickname || gp.plant?.name || 'Plant'
           await logGardenActivity({ gardenId, kind: 'plant_updated' as any, message: `updated ${plantName}: ${parts.join(', ')}`, plantName, actorColor: actorColorCss || null })
         }
@@ -1988,7 +1958,7 @@ function EditPlantButton({ gp, gardenId, onChanged, serverToday, actorColorCss }
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="secondary" className="rounded-2xl" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button className="rounded-2xl" onClick={save} disabled={submitting}>{submitting ? 'Saving?' : 'Save'}</Button>
+              <Button className="rounded-2xl" onClick={save} disabled={submitting}>{submitting ? 'Saving...' : 'Save'}</Button>
             </div>
           </div>
         </DialogContent>
@@ -2141,7 +2111,7 @@ function GardenDetailsEditor({ garden, onSaved, canEdit }: { garden: Garden; onS
         const changedName = (garden.name || '') !== (name.trim() || '')
         const changedCover = (garden.coverImageUrl || '') !== (imageUrl.trim() || '')
         const parts: string[] = []
-        if (changedName) parts.push(`name ? "${name.trim() || '?'}"`)
+        if (changedName) parts.push(`name: "${name.trim() || '-'}"`)
         if (changedCover) parts.push('cover image updated')
         if (parts.length > 0) {
           await logGardenActivity({ gardenId: garden.id, kind: 'note' as any, message: `updated garden: ${parts.join(', ')}`, actorColor: null })
@@ -2164,7 +2134,7 @@ function GardenDetailsEditor({ garden, onSaved, canEdit }: { garden: Garden; onS
       </div>
       {err && <div className="text-sm text-red-600">{err}</div>}
       <div className="flex justify-end gap-2 pt-2">
-        <Button className="rounded-2xl" onClick={save} disabled={submitting || !canEdit}>{submitting ? 'Saving?' : 'Save changes'}</Button>
+        <Button className="rounded-2xl" onClick={save} disabled={submitting || !canEdit}>{submitting ? 'Saving...' : 'Save changes'}</Button>
       </div>
     </div>
   )

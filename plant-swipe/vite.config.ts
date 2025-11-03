@@ -17,6 +17,19 @@ export default defineConfig({
   plugins: [react()],
   envPrefix: ['VITE_'],
   resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          'recharts': ['recharts'],
+          'supabase': ['@supabase/supabase-js'],
+          'ui-components': ['@radix-ui/react-dialog', '@radix-ui/react-label', '@radix-ui/react-slot'],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 1000,
+  },
   server: {
     host: process.env.VITE_DEV_HOST || '127.0.0.1',
     port: Number(process.env.VITE_DEV_PORT || 5173),
@@ -25,7 +38,7 @@ export default defineConfig({
         target: 'http://localhost:3000',
         changeOrigin: true,
         // Do not rewrite, keep /api so Express route matches
-      }
-    }
-  }
+      },
+    },
+  },
 })

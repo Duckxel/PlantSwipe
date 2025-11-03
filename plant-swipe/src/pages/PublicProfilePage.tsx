@@ -613,11 +613,11 @@ export default function PublicProfilePage() {
                   <div className="grid sm:grid-cols-2 gap-3 mt-2">
                     <div className="rounded-xl border p-3">
                       <div className="text-[11px] opacity-60">User ID</div>
-                      <div className="text-xs break-all">{privateInfo.id || '?'}</div>
+                      <div className="text-xs break-all">{privateInfo.id || '-'}</div>
                     </div>
                     <div className="rounded-xl border p-3">
                       <div className="text-[11px] opacity-60">Email</div>
-                      <div className="text-sm">{privateInfo.email || (user as any)?.email || '?'}</div>
+                      <div className="text-sm">{privateInfo.email || (user as any)?.email || '-'}</div>
                     </div>
                   </div>
                 </CardContent>
