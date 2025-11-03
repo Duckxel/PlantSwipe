@@ -1164,8 +1164,14 @@ export const AdminPage: React.FC = () => {
       const total = Number(data?.total30d || 0)
       setMemberVisitsTotal30d(Number.isFinite(total) ? total : 0)
       setMemberVisitsUpdatedAt(Date.now())
-    } catch {
-      // keep last
+    } catch (e: unknown) {
+      // Reset on error so user knows something failed
+      if (isInitial) {
+        setMemberVisitsSeries([])
+        setMemberVisitsTotal30d(0)
+        setMemberVisitsUpdatedAt(null)
+      }
+      console.error('Failed to load member visits series:', e)
     } finally {
       if (isInitial) setMemberVisitsLoading(false)
     }
@@ -2701,27 +2707,29 @@ export const AdminPage: React.FC = () => {
                             <div>
                               <div className="text-sm font-medium mb-2">Total last 30 days: <span className="tabular-nums">{memberVisitsTotal30d}</span></div>
                               <div className="h-64">
-                                <ResponsiveContainer width="100%" height="100%">
-                                  <ComposedChart data={memberVisitsSeries} margin={{ top: 10, right: 16, bottom: 14, left: 16 }}>
-                                    <defs>
-                                      <linearGradient id="mVisitsLine" x1="0" y1="0" x2="1" y2="0">
-                                        <stop offset="0%" stopColor="#065f46" />
-                                        <stop offset="100%" stopColor="#10b981" />
-                                      </linearGradient>
-                                      <linearGradient id="mVisitsArea" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="0%" stopColor="#10b981" stopOpacity={0.3} />
-                                        <stop offset="100%" stopColor="#10b981" stopOpacity={0.06} />
-                                      </linearGradient>
-                                    </defs>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
-                                    <XAxis dataKey="date" tickFormatter={formatShort} tick={{ fontSize: 11, fill: '#525252' }} axisLine={false} tickLine={false} interval={4} padding={{ left: 12, right: 12 }} />
-                                    <YAxis allowDecimals={false} domain={[0, Math.max(maxVal, 5)]} tick={{ fontSize: 11, fill: '#525252' }} axisLine={false} tickLine={false} />
-                                    <Tooltip content={<TooltipContent />} cursor={{ stroke: 'rgba(0,0,0,0.1)' }} />
-                                    <ReferenceLine y={avgVal} stroke="#a3a3a3" strokeDasharray="4 4" ifOverflow="extendDomain" label={{ value: 'avg', position: 'insideRight', fill: '#737373', fontSize: 11, dx: -6 }} />
-                                    <Area type="monotone" dataKey="visits" fill="url(#mVisitsArea)" stroke="none" animationDuration={600} />
-                                    <Line type="monotone" dataKey="visits" stroke="url(#mVisitsLine)" strokeWidth={3} dot={false} activeDot={{ r: 5, strokeWidth: 2, stroke: '#065f46', fill: '#ffffff' }} animationDuration={700} />
-                                  </ComposedChart>
-                                </ResponsiveContainer>
+                                <ChartSuspense fallback={<div className="h-full w-full flex items-center justify-center text-sm text-gray-400">Loading chart...</div>}>
+                                  <ResponsiveContainer width="100%" height="100%">
+                                    <ComposedChart data={memberVisitsSeries} margin={{ top: 10, right: 16, bottom: 14, left: 16 }}>
+                                      <defs>
+                                        <linearGradient id="mVisitsLine" x1="0" y1="0" x2="1" y2="0">
+                                          <stop offset="0%" stopColor="#065f46" />
+                                          <stop offset="100%" stopColor="#10b981" />
+                                        </linearGradient>
+                                        <linearGradient id="mVisitsArea" x1="0" y1="0" x2="0" y2="1">
+                                          <stop offset="0%" stopColor="#10b981" stopOpacity={0.3} />
+                                          <stop offset="100%" stopColor="#10b981" stopOpacity={0.06} />
+                                        </linearGradient>
+                                      </defs>
+                                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
+                                      <XAxis dataKey="date" tickFormatter={formatShort} tick={{ fontSize: 11, fill: '#525252' }} axisLine={false} tickLine={false} interval={4} padding={{ left: 12, right: 12 }} />
+                                      <YAxis allowDecimals={false} domain={[0, Math.max(maxVal, 5)]} tick={{ fontSize: 11, fill: '#525252' }} axisLine={false} tickLine={false} />
+                                      <Tooltip content={<TooltipContent />} cursor={{ stroke: 'rgba(0,0,0,0.1)' }} />
+                                      <ReferenceLine y={avgVal} stroke="#a3a3a3" strokeDasharray="4 4" ifOverflow="extendDomain" label={{ value: 'avg', position: 'insideRight', fill: '#737373', fontSize: 11, dx: -6 }} />
+                                      <Area type="monotone" dataKey="visits" fill="url(#mVisitsArea)" stroke="none" animationDuration={600} />
+                                      <Line type="monotone" dataKey="visits" stroke="url(#mVisitsLine)" strokeWidth={3} dot={false} activeDot={{ r: 5, strokeWidth: 2, stroke: '#065f46', fill: '#ffffff' }} animationDuration={700} />
+                                    </ComposedChart>
+                                  </ResponsiveContainer>
+                                </ChartSuspense>
                               </div>
                             </div>
                           )
