@@ -469,8 +469,8 @@ export default function PublicProfilePage() {
                     {pp.joined_at && (
                       <span>
                         • Joined {new Date(pp.joined_at).toLocaleDateString()}
-                        {stats?.friendsCount != null && (
-                          <span className="ml-2">{stats.friendsCount} Friend{(stats.friendsCount !== 1 ? 's' : '')}</span>
+                        {stats?.friendsCount != null && stats.friendsCount > 0 && (
+                          <span className="ml-2">• {stats.friendsCount} Friend{(stats.friendsCount !== 1 ? 's' : '')}</span>
                         )}
                       </span>
                     )}
