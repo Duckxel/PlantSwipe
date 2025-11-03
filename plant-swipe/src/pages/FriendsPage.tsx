@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabaseClient"
 import { User, Search, UserPlus, Check, X, ArrowRight, ArrowUpRight } from "lucide-react"
@@ -36,6 +37,8 @@ type Friend = {
 type SearchResult = {
   id: string
   display_name: string | null
+  email?: string | null
+  is_friend?: boolean
 }
 
 export const FriendsPage: React.FC = () => {
@@ -51,6 +54,10 @@ export const FriendsPage: React.FC = () => {
   const [menuOpenFriendId, setMenuOpenFriendId] = React.useState<string | null>(null)
   const [menuPos, setMenuPos] = React.useState<{ top: number; right: number } | null>(null)
   const [confirmingRemove, setConfirmingRemove] = React.useState<string | null>(null)
+  const [addFriendDialogOpen, setAddFriendDialogOpen] = React.useState(false)
+  const [dialogSearchQuery, setDialogSearchQuery] = React.useState("")
+  const [dialogSearchResults, setDialogSearchResults] = React.useState<SearchResult[]>([])
+  const [dialogSearching, setDialogSearching] = React.useState(false)
   const menuRefs = React.useRef<Map<string, HTMLDivElement>>(new Map())
   const anchorRefs = React.useRef<Map<string, HTMLDivElement>>(new Map())
 
@@ -174,27 +181,68 @@ export const FriendsPage: React.FC = () => {
     })
   }, [user?.id, loadFriends, loadPendingRequests])
 
-  const handleSearch = React.useCallback(async () => {
-    if (!searchQuery.trim() || !user?.id) {
-      setSearchResults([])
+  const handleDialogSearch = React.useCallback(async () => {
+    if (!dialogSearchQuery.trim() || !user?.id) {
+      setDialogSearchResults([])
       return
     }
-    setSearching(true)
+    setDialogSearching(true)
     try {
-      // Search for users by display name
+      const query = dialogSearchQuery.trim()
+      
+      // Search by display_name (username)
+      // Note: Email search would require server endpoint, so we search by username
       const { data, error: err } = await supabase
         .from('profiles')
         .select('id, display_name')
-        .ilike('display_name', `%${searchQuery.trim()}%`)
+        .ilike('display_name', `%${query}%`)
         .neq('id', user.id)
-        .limit(10)
+        .limit(3)
       
       if (err) throw err
       
-      // Filter out users who are already friends or have pending requests
+      let results: SearchResult[] = []
+      if (data) {
+        results = data.map(p => ({
+          id: p.id,
+          display_name: p.display_name || null,
+          email: null,
+          is_friend: false
+        }))
+      }
+      
+      // If query looks like an email, try to find user by email via server endpoint
+      if (query.includes('@')) {
+        try {
+          const response = await fetch(`/api/admin/member?q=${encodeURIComponent(query)}`, {
+            credentials: 'same-origin'
+          })
+          if (response.ok) {
+            const memberData = await response.json()
+            if (memberData.id && memberData.id !== user.id) {
+              // Check if already in results
+              const existingIndex = results.findIndex(r => r.id === memberData.id)
+              if (existingIndex >= 0) {
+                results[existingIndex].email = memberData.email || null
+              } else {
+                results.unshift({
+                  id: memberData.id,
+                  display_name: memberData.profile?.display_name || null,
+                  email: memberData.email || null,
+                  is_friend: false
+                })
+              }
+            }
+          }
+        } catch (e) {
+          // Ignore email search errors
+        }
+      }
+      
+      // Get friend IDs and check which results are already friends
       const friendIds = new Set(friends.map(f => f.friend_id))
       
-      // Get pending requests sent by current user (not rejected ones)
+      // Get pending request IDs
       const { data: sentRequests } = await supabase
         .from('friend_requests')
         .select('recipient_id')
@@ -206,26 +254,29 @@ export const FriendsPage: React.FC = () => {
         ...(sentRequests?.map(r => r.recipient_id) || [])
       ])
       
-      const filtered = (data || []).filter(p => 
-        !friendIds.has(p.id) && 
-        !requestIds.has(p.id) &&
-        p.id !== user.id
-      )
+      // Mark friends and filter out already requested users
+      const filteredResults = results
+        .filter(r => !requestIds.has(r.id) && r.id !== user.id)
+        .map(r => ({
+          ...r,
+          is_friend: friendIds.has(r.id)
+        }))
+        .slice(0, 3) // Limit to top 3
       
-      setSearchResults(filtered as SearchResult[])
+      setDialogSearchResults(filteredResults)
     } catch (e: any) {
       setError(e?.message || 'Search failed')
     } finally {
-      setSearching(false)
+      setDialogSearching(false)
     }
-  }, [searchQuery, user?.id, friends, pendingRequests])
+  }, [dialogSearchQuery, user?.id, friends, pendingRequests])
 
   React.useEffect(() => {
     const timeout = setTimeout(() => {
-      handleSearch()
+      handleDialogSearch()
     }, 300)
     return () => clearTimeout(timeout)
-  }, [searchQuery, handleSearch])
+  }, [dialogSearchQuery, handleDialogSearch])
 
   const sendFriendRequest = React.useCallback(async (recipientId: string) => {
     if (!user?.id) return
@@ -265,7 +316,8 @@ export const FriendsPage: React.FC = () => {
           
           if (err) throw err
           // Refresh search results
-          handleSearch()
+          handleDialogSearch()
+          await loadPendingRequests()
           setError(null)
           return
         }
@@ -282,13 +334,16 @@ export const FriendsPage: React.FC = () => {
       
       if (err) throw err
       
-      // Refresh search results
-      handleSearch()
+      // Refresh search results and pending requests
+      handleDialogSearch()
+      await loadPendingRequests()
       setError(null)
+      // Optionally close dialog after successful send
+      // setAddFriendDialogOpen(false)
     } catch (e: any) {
       setError(e?.message || 'Failed to send friend request')
     }
-  }, [user?.id, handleSearch])
+  }, [user?.id, handleDialogSearch, loadPendingRequests])
 
   const acceptRequest = React.useCallback(async (requestId: string) => {
     try {
@@ -406,45 +461,19 @@ export const FriendsPage: React.FC = () => {
             <div className="text-sm text-red-600 bg-red-50 p-3 rounded-xl">{error}</div>
           )}
 
-          {/* Search for new friends */}
-          <div className="space-y-2">
-            <div className="text-sm font-medium">Search for people</div>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-60" />
-              <Input
-                className="pl-9"
-                placeholder="Search by display name..."
-                value={searchQuery}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
-              />
-            </div>
-            {searching && <div className="text-xs opacity-60">Searching...</div>}
-            {searchResults.length > 0 && (
-              <div className="space-y-2 mt-2">
-                {searchResults.map((result) => (
-                  <div
-                    key={result.id}
-                    className="flex items-center justify-between p-3 rounded-xl border bg-white"
-                  >
-                    <div className="flex items-center gap-2">
-                      <User className="h-5 w-5 opacity-60" />
-                      <span className="font-medium">{result.display_name || 'Unknown'}</span>
-                    </div>
-                    <Button
-                      className="rounded-xl"
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => sendFriendRequest(result.id)}
-                    >
-                      <UserPlus className="h-4 w-4 mr-1" /> Send Request
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
-            {searchQuery && !searching && searchResults.length === 0 && (
-              <div className="text-xs opacity-60 mt-2">No users found</div>
-            )}
+          {/* Add Friend Button */}
+          <div>
+            <Button
+              className="rounded-xl"
+              variant="default"
+              onClick={() => {
+                setAddFriendDialogOpen(true)
+                setDialogSearchQuery("")
+                setDialogSearchResults([])
+              }}
+            >
+              <UserPlus className="h-4 w-4 mr-2" /> Add Friend
+            </Button>
           </div>
 
           {/* Pending friend requests */}
@@ -603,6 +632,70 @@ export const FriendsPage: React.FC = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Add Friend Dialog */}
+      <Dialog open={addFriendDialogOpen} onOpenChange={setAddFriendDialogOpen}>
+        <DialogContent className="rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Add Friend</DialogTitle>
+            <DialogDescription>
+              Search for users by username or email
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-60" />
+              <Input
+                className="pl-9"
+                placeholder="Search by username or email..."
+                value={dialogSearchQuery}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDialogSearchQuery(e.target.value)}
+              />
+            </div>
+            {dialogSearching && <div className="text-xs opacity-60">Searching...</div>}
+            {dialogSearchResults.length > 0 && (
+              <div className="space-y-2">
+                {dialogSearchResults.map((result) => (
+                  <div
+                    key={result.id}
+                    className="flex items-center justify-between p-3 rounded-xl border bg-white"
+                  >
+                    <div className="flex flex-col gap-1 flex-1">
+                      <div className="flex items-center gap-2">
+                        <User className="h-5 w-5 opacity-60" />
+                        <span className="font-medium">{result.display_name || 'Unknown'}</span>
+                      </div>
+                      {result.email && (
+                        <div className="text-xs opacity-60 pl-7">{result.email}</div>
+                      )}
+                    </div>
+                    <Button
+                      className="rounded-xl"
+                      variant={result.is_friend ? "secondary" : "default"}
+                      size="sm"
+                      onClick={() => !result.is_friend && sendFriendRequest(result.id)}
+                      disabled={result.is_friend}
+                    >
+                      {result.is_friend ? (
+                        <>
+                          <Check className="h-4 w-4 mr-1" /> Friends
+                        </>
+                      ) : (
+                        <>
+                          <UserPlus className="h-4 w-4 mr-1" /> Add Friend
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {dialogSearchQuery && !dialogSearching && dialogSearchResults.length === 0 && (
+              <div className="text-xs opacity-60 text-center py-4">No users found</div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
