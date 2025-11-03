@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
 import { EditProfileDialog, type EditProfileValues } from "@/components/profile/EditProfileDialog"
 import { applyAccentByKey, saveAccentKey } from "@/lib/accent"
-import { MapPin, User as UserIcon } from "lucide-react"
+import { MapPin, User as UserIcon, UserPlus, Check } from "lucide-react"
 
 type PublicProfile = {
   id: string
@@ -28,6 +28,7 @@ type PublicStats = {
   gardensCount: number
   currentStreak: number
   bestStreak: number
+  friendsCount?: number
 }
 
 type DayAgg = { day: string; completed: number; any_success: boolean }
@@ -35,7 +36,7 @@ type DayAgg = { day: string; completed: number; any_success: boolean }
 export default function PublicProfilePage() {
   const params = useParams()
   const navigate = useNavigate()
-  const { user, profile, refreshProfile, signOut } = useAuth()
+  const { user, profile, refreshProfile, signOut, deleteAccount } = useAuth()
   const displayParam = String(params.username || '')
 
   const [loading, setLoading] = React.useState(true)
@@ -43,6 +44,7 @@ export default function PublicProfilePage() {
   const [pp, setPp] = React.useState<PublicProfile | null>(null)
   const [stats, setStats] = React.useState<PublicStats | null>(null)
   const [monthDays, setMonthDays] = React.useState<DayAgg[]>([])
+  const [privateInfo, setPrivateInfo] = React.useState<{ id: string; email: string | null } | null>(null)
   
 
   const formatLastSeen = React.useCallback((iso: string | null | undefined) => {
@@ -70,10 +72,31 @@ export default function PublicProfilePage() {
       setLoading(true)
       setError(null)
       try {
-        // Basic profile by display name
-        const { data: rows, error: perr } = await supabase.rpc('get_profile_public_by_display_name', { _name: displayParam })
-        if (perr) throw perr
-        const row = Array.isArray(rows) ? rows[0] : rows
+        // Handle special case: if displayParam is "_me", look up by user ID
+        let row: any = null
+        if (displayParam === '_me' && user?.id) {
+          // Look up current user by ID
+          const { data: profileData, error: pErr } = await supabase
+            .from('profiles')
+            .select('id, display_name, country, bio, avatar_url, is_admin, accent_key')
+            .eq('id', user.id)
+            .maybeSingle()
+          if (!pErr && profileData) {
+            const { data: authUser } = await supabase.auth.getUser()
+            row = {
+              ...profileData,
+              joined_at: authUser?.user?.created_at || null,
+              last_seen_at: null,
+              is_online: false,
+            }
+          }
+        } else {
+          // Basic profile by display name
+          const { data: rows, error: perr } = await supabase.rpc('get_profile_public_by_display_name', { _name: displayParam })
+          if (perr) throw perr
+          row = Array.isArray(rows) ? rows[0] : rows
+        }
+        
         if (!row) {
           setError('User not found')
           setLoading(false)
@@ -106,6 +129,14 @@ export default function PublicProfilePage() {
           })
         }
 
+        // Friend count
+        const { data: friendCount, error: ferr } = await supabase.rpc('get_friend_count', { _user_id: userId })
+        if (!ferr && typeof friendCount === 'number') {
+          setStats((prev) => prev ? { ...prev, friendsCount: friendCount } : null)
+        } else {
+          setStats((prev) => prev ? { ...prev, friendsCount: 0 } : null)
+        }
+
         // Heatmap: last 28 days (4 rows × 7 columns)
         const today = new Date()
         const end = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()))
@@ -128,9 +159,27 @@ export default function PublicProfilePage() {
     }
     run()
     return () => { cancelled = true }
-  }, [displayParam])
+  }, [displayParam, user?.id])
 
   const isOwner = user?.id && pp?.id && user.id === pp.id
+
+  // Load private info for owners
+  React.useEffect(() => {
+    let cancelled = false
+    const loadPrivate = async () => {
+      try {
+        if (!isOwner || !user?.id) { setPrivateInfo(null); return }
+        const { data, error } = await supabase.rpc('get_user_private_info', { _user_id: user.id })
+        if (!error) {
+          const row = Array.isArray(data) ? data[0] : data
+          if (!cancelled) setPrivateInfo(row ? { id: String(row.id), email: row.email || null } : null)
+        }
+      } catch {}
+    }
+    loadPrivate()
+    return () => { cancelled = true }
+  }, [isOwner, user?.id])
+
   const [menuOpen, setMenuOpen] = React.useState(false)
   const anchorRef = React.useRef<HTMLDivElement | null>(null)
   const menuRef = React.useRef<HTMLDivElement | null>(null)
@@ -139,6 +188,172 @@ export default function PublicProfilePage() {
   const [editOpen, setEditOpen] = React.useState(false)
   const [editSubmitting, setEditSubmitting] = React.useState(false)
   const [editError, setEditError] = React.useState<string | null>(null)
+
+  // Auto-open edit dialog if user has no display_name
+  React.useEffect(() => {
+    if (isOwner && !pp?.display_name && displayParam === '_me') {
+      setEditOpen(true)
+    }
+  }, [isOwner, pp?.display_name, displayParam])
+
+  // Friend request state
+  const [friendStatus, setFriendStatus] = React.useState<'none' | 'friends' | 'request_sent' | 'request_received'>('none')
+  const [friendRequestId, setFriendRequestId] = React.useState<string | null>(null)
+  const [friendRequestLoading, setFriendRequestLoading] = React.useState(false)
+  const [friendsSince, setFriendsSince] = React.useState<string | null>(null)
+
+  // Check friend status
+  React.useEffect(() => {
+    if (!user?.id || !pp?.id || isOwner) {
+      setFriendStatus('none')
+      setFriendsSince(null)
+      return
+    }
+    let cancelled = false
+    const checkStatus = async () => {
+      try {
+        // Check if already friends
+        const { data: friendCheck } = await supabase
+          .from('friends')
+          .select('id, created_at')
+          .eq('user_id', user.id)
+          .eq('friend_id', pp.id)
+          .maybeSingle()
+        
+        if (friendCheck && !cancelled) {
+          setFriendStatus('friends')
+          setFriendsSince(friendCheck.created_at ? String(friendCheck.created_at) : null)
+          return
+        }
+
+        // Check for pending requests
+        const { data: sentRequest } = await supabase
+          .from('friend_requests')
+          .select('id')
+          .eq('requester_id', user.id)
+          .eq('recipient_id', pp.id)
+          .eq('status', 'pending')
+          .maybeSingle()
+        
+        if (sentRequest && !cancelled) {
+          setFriendStatus('request_sent')
+          setFriendRequestId(sentRequest.id)
+          setFriendsSince(null)
+          return
+        }
+
+        const { data: receivedRequest } = await supabase
+          .from('friend_requests')
+          .select('id')
+          .eq('requester_id', pp.id)
+          .eq('recipient_id', user.id)
+          .eq('status', 'pending')
+          .maybeSingle()
+        
+        if (receivedRequest && !cancelled) {
+          setFriendStatus('request_received')
+          setFriendRequestId(receivedRequest.id)
+          setFriendsSince(null)
+          return
+        }
+
+        if (!cancelled) {
+          setFriendStatus('none')
+          setFriendsSince(null)
+        }
+      } catch {}
+    }
+    checkStatus()
+    return () => { cancelled = true }
+  }, [user?.id, pp?.id, isOwner])
+
+  const sendFriendRequest = React.useCallback(async () => {
+    if (!user?.id || !pp?.id || isOwner) return
+    setFriendRequestLoading(true)
+    try {
+      // Check if there's an existing request (including rejected/accepted ones)
+      const { data: existingRequest } = await supabase
+        .from('friend_requests')
+        .select('id, status')
+        .eq('requester_id', user.id)
+        .eq('recipient_id', pp.id)
+        .maybeSingle()
+      
+      if (existingRequest) {
+        if (existingRequest.status === 'pending') {
+          setFriendStatus('request_sent')
+          setFriendRequestId(existingRequest.id)
+          setFriendRequestLoading(false)
+          return
+        }
+        // If rejected or accepted, update it to pending (allows resending after removal/rejection)
+        if (existingRequest.status === 'rejected' || existingRequest.status === 'accepted') {
+          const { data, error: err } = await supabase
+            .from('friend_requests')
+            .update({ status: 'pending' })
+            .eq('id', existingRequest.id)
+            .select('id')
+            .single()
+          
+          if (err) throw err
+          setFriendStatus('request_sent')
+          setFriendRequestId(data.id)
+          setFriendRequestLoading(false)
+          return
+        }
+      }
+      
+      // No existing request, create a new one
+      const { data, error: err } = await supabase
+        .from('friend_requests')
+        .insert({
+          requester_id: user.id,
+          recipient_id: pp.id,
+          status: 'pending'
+        })
+        .select('id')
+        .single()
+      
+      if (err) throw err
+      setFriendStatus('request_sent')
+      setFriendRequestId(data.id)
+    } catch (e: any) {
+      setEditError(e?.message || 'Failed to send friend request')
+    } finally {
+      setFriendRequestLoading(false)
+    }
+  }, [user?.id, pp?.id, isOwner])
+
+  const acceptFriendRequest = React.useCallback(async () => {
+    if (!friendRequestId || !user?.id || !pp?.id) return
+    setFriendRequestLoading(true)
+    try {
+      const { error: err } = await supabase.rpc('accept_friend_request', {
+        _request_id: friendRequestId
+      })
+      
+      if (err) throw err
+      
+      // Fetch the friendship record to get the created_at date
+      const { data: friendship } = await supabase
+        .from('friends')
+        .select('created_at')
+        .eq('user_id', user.id)
+        .eq('friend_id', pp.id)
+        .maybeSingle()
+      
+      setFriendStatus('friends')
+      if (friendship?.created_at) {
+        setFriendsSince(String(friendship.created_at))
+      } else {
+        setFriendsSince(new Date().toISOString())
+      }
+    } catch (e: any) {
+      setEditError(e?.message || 'Failed to accept friend request')
+    } finally {
+      setFriendRequestLoading(false)
+    }
+  }, [friendRequestId, user?.id, pp?.id])
 
   React.useEffect(() => {
     if (!menuOpen) return
@@ -198,9 +413,10 @@ export default function PublicProfilePage() {
 
   const colorFor = (cell: { value: number; success: boolean } | null) => {
     if (!cell) return 'bg-stone-200'
-    // If the day wasn't successful, render as neutral gray
+    // Grey: Tasks were not accomplished that day (tasks were due but not all completed)
     if (!cell.success) return 'bg-stone-200'
-    // Successful day with no counts (e.g., no tasks due) should still be green
+    // Green: Either no tasks were needed OR all tasks were done
+    // Stronger color = more tasks completed that day
     if (maxCount <= 0) return 'bg-emerald-400'
     const ratio = (cell.value || 0) / maxCount
     if (ratio <= 0) return 'bg-emerald-300'
@@ -250,10 +466,17 @@ export default function PublicProfilePage() {
                     ) : (
                       <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-stone-300" />{formatLastSeen(pp.last_seen_at)}</span>
                     )}
-                    {pp.joined_at && <span>• Joined {new Date(pp.joined_at).toLocaleDateString()}</span>}
+                    {pp.joined_at && (
+                      <span>
+                        • Joined {new Date(pp.joined_at).toLocaleDateString()}
+                        {stats?.friendsCount != null && stats.friendsCount > 0 && (
+                          <span className="ml-2">• {stats.friendsCount} Friend{(stats.friendsCount !== 1 ? 's' : '')}</span>
+                        )}
+                      </span>
+                    )}
                   </div>
                 </div>
-                <div className="ml-auto flex items-center" ref={anchorRef}>
+                <div className="ml-auto flex items-center gap-2" ref={anchorRef}>
                   {isOwner ? (
                     <>
                       <Button className="rounded-2xl" variant="secondary" onClick={() => setMenuOpen((o) => !o)}>⋯</Button>
@@ -261,12 +484,52 @@ export default function PublicProfilePage() {
                         <div ref={menuRef} className="w-40 rounded-xl border bg-white shadow z-[60] p-1" style={{ position: 'fixed', top: menuPos.top, right: menuPos.right }}>
                           <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50" onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); setEditOpen(true) }}>Edit</button>
                           <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50" onMouseDown={async (e) => { e.stopPropagation(); setMenuOpen(false); await signOut(); navigate('/') }}>Log out</button>
-                          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 text-red-600" onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/profile') }}>Delete account</button>
+                          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 text-red-600" onMouseDown={async (e) => { e.stopPropagation(); setMenuOpen(false); await deleteAccount() }}>Delete account</button>
                         </div>,
                         document.body
                       )}
                     </>
-                  ) : null}
+                  ) : user?.id && (
+                    <>
+                      {friendStatus === 'none' && (
+                        <Button 
+                          className="rounded-2xl" 
+                          variant="default" 
+                          onClick={sendFriendRequest}
+                          disabled={friendRequestLoading}
+                        >
+                          <UserPlus className="h-4 w-4 mr-2" /> Friend Request
+                        </Button>
+                      )}
+                      {friendStatus === 'request_sent' && (
+                        <Button className="rounded-2xl" variant="secondary" disabled>
+                          Request Sent
+                        </Button>
+                      )}
+                      {friendStatus === 'request_received' && (
+                        <Button 
+                          className="rounded-2xl" 
+                          variant="default" 
+                          onClick={acceptFriendRequest}
+                          disabled={friendRequestLoading}
+                        >
+                          <Check className="h-4 w-4 mr-2" /> Accept Request
+                        </Button>
+                      )}
+                      {friendStatus === 'friends' && (
+                        <div className="flex flex-col items-end gap-1">
+                          <Button className="rounded-2xl" variant="secondary" disabled>
+                            Friends
+                          </Button>
+                          {friendsSince && (
+                            <div className="text-[10px] opacity-60">
+                              since {new Date(friendsSince).toLocaleDateString()}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               </div>
               {pp.bio && (
@@ -340,6 +603,27 @@ export default function PublicProfilePage() {
               </CardContent>
             </Card>
           </div>
+
+          {isOwner && privateInfo && (
+            <div className="mt-4">
+              <Card className="rounded-3xl">
+                <CardContent className="p-6 md:p-8 space-y-2">
+                  <div className="text-lg font-semibold">Private Info</div>
+                  <div className="text-sm opacity-60">Only visible to you (and admins)</div>
+                  <div className="grid sm:grid-cols-2 gap-3 mt-2">
+                    <div className="rounded-xl border p-3">
+                      <div className="text-[11px] opacity-60">User ID</div>
+                      <div className="text-xs break-all">{privateInfo.id || '-'}</div>
+                    </div>
+                    <div className="rounded-xl border p-3">
+                      <div className="text-[11px] opacity-60">Email</div>
+                      <div className="text-sm">{privateInfo.email || (user as any)?.email || '-'}</div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
 
 
           {isOwner && (

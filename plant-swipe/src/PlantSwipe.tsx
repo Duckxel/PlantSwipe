@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, lazy, Suspense } from "react";
 import { Routes, Route, useLocation, useNavigate, Navigate } from "react-router-dom";
 import { useMotionValue } from "framer-motion";
 import { Search } from "lucide-react";
@@ -23,11 +23,13 @@ import type { Plant } from "@/types/plant";
 // PlantDetails imported in PlantInfoPage route component
 import PlantInfoPage from "@/pages/PlantInfoPage";
 import { useAuth } from "@/context/AuthContext";
-import { ProfilePage } from "@/pages/ProfilePage";
 import PublicProfilePage from "@/pages/PublicProfilePage";
-import { AdminPage } from "@/pages/AdminPage";
 import RequireAdmin from "@/pages/RequireAdmin";
+import { FriendsPage } from "@/pages/FriendsPage";
 import { supabase } from "@/lib/supabaseClient";
+
+// Lazy load heavy pages for code splitting
+const AdminPage = lazy(() => import("@/pages/AdminPage").then(module => ({ default: module.AdminPage })));
 
 // --- Main Component ---
 export default function PlantSwipe() {
@@ -492,7 +494,7 @@ export default function PlantSwipe() {
                 <Input
                   id="plant-search"
                   className="pl-9 md:pl-9"
-                  placeholder="Search name, meaning, color…"
+                  placeholder="Search name, meaning, color?"
                   value={query}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                     setQuery(e.target.value)
@@ -598,7 +600,7 @@ export default function PlantSwipe() {
 
         {/* Main content area */}
         <main className="min-h-[60vh]" aria-live="polite">
-          {loading && <div className="p-8 text-center text-sm opacity-60">Loading from Supabase…</div>}
+          {loading && <div className="p-8 text-center text-sm opacity-60">Loading from Supabase...</div>}
           {loadError && <div className="p-8 text-center text-sm text-red-600">Supabase error: {loadError}</div>}
           {!loading && !loadError && (
             <>
@@ -639,9 +641,16 @@ export default function PlantSwipe() {
                     />
                   }
                 />
-                <Route path="/profile" element={user ? (profile?.display_name ? <Navigate to={`/u/${encodeURIComponent(profile.display_name)}`} replace /> : <ProfilePage />) : <Navigate to="/" replace />} />
+                <Route path="/profile" element={user ? (profile?.display_name ? <Navigate to={`/u/${encodeURIComponent(profile.display_name)}`} replace /> : <Navigate to="/u/_me" replace />) : <Navigate to="/" replace />} />
                 <Route path="/u/:username" element={<PublicProfilePage />} />
-                <Route path="/admin" element={<RequireAdmin><AdminPage /></RequireAdmin>} />
+                <Route path="/friends" element={user ? <FriendsPage /> : <Navigate to="/" replace />} />
+                <Route path="/admin" element={
+                  <RequireAdmin>
+                    <Suspense fallback={<div className="p-8 text-center text-sm opacity-60">Loading admin panel...</div>}>
+                      <AdminPage />
+                    </Suspense>
+                  </RequireAdmin>
+                } />
                 <Route path="/create" element={user ? (
                   <CreatePlantPage
                     onCancel={() => navigate('/')}
@@ -699,19 +708,18 @@ export default function PlantSwipe() {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" placeholder="••••••••" value={authPassword} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword(e.target.value)} disabled={authSubmitting} />
+              <Input id="password" type="password" placeholder="Password" value={authPassword} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword(e.target.value)} disabled={authSubmitting} />
             </div>
             {authMode === 'signup' && (
               <div className="grid gap-2">
                 <Label htmlFor="confirm">Confirm password</Label>
-                <Input id="confirm" type="password" placeholder="••••••••" value={authPassword2} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword2(e.target.value)} disabled={authSubmitting} />
+                <Input id="confirm" type="password" placeholder="Confirm password" value={authPassword2} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword2(e.target.value)} disabled={authSubmitting} />
               </div>
             )}
             {authError && <div className="text-sm text-red-600">{authError}</div>}
             <Button className="w-full rounded-2xl" onClick={submitAuth}>
               {authMode === 'login' ? 'Continue' : 'Create account'}
             </Button>
-            <div className="text-center text-xs opacity-60">Demo only – hook up to your auth later (e.g., Supabase, Clerk, Auth.js)</div>
             <div className="text-center text-sm">
               {authMode === 'login' ? (
                 <button className="underline" onClick={() => setAuthMode('signup')}>No account? Sign up</button>

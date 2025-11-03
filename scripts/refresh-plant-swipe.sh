@@ -689,4 +689,25 @@ else
   fi
 fi
 
+# Write the current time to TIME file on successful completion
+log "Recording successful update time…"
+TIME_FILE="$WORK_DIR/TIME"
+CURRENT_TIME="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+if [[ -n "$REPO_OWNER" ]]; then
+  if [[ $EUID -eq 0 ]]; then
+    echo "$CURRENT_TIME" | sudo -u "$REPO_OWNER" tee "$TIME_FILE" >/dev/null
+  elif [[ "$REPO_OWNER" != "$CURRENT_USER" && -n "$SUDO" ]]; then
+    if $SUDO -n true >/dev/null 2>&1; then
+      echo "$CURRENT_TIME" | $SUDO -u "$REPO_OWNER" tee "$TIME_FILE" >/dev/null || echo "$CURRENT_TIME" > "$TIME_FILE"
+    else
+      echo "$CURRENT_TIME" > "$TIME_FILE"
+    fi
+  else
+    echo "$CURRENT_TIME" > "$TIME_FILE"
+  fi
+else
+  echo "$CURRENT_TIME" > "$TIME_FILE"
+fi
+log "Update time recorded: $CURRENT_TIME"
+
 log "Done."

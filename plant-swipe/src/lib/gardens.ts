@@ -334,7 +334,8 @@ export async function getGardenTodayProgress(gardenId: string, dayIso: string): 
   if (tasks.length === 0) return { due: 0, completed: 0 }
   const start = `${dayIso}T00:00:00.000Z`
   const end = `${dayIso}T23:59:59.999Z`
-  await syncTaskOccurrencesForGarden(gardenId, start, end)
+  // Use full resync to avoid duplicate occurrences inflating counts
+  await resyncTaskOccurrencesForGarden(gardenId, start, end)
   const occs = await listOccurrencesForTasks(tasks.map(t => t.id), start, end)
   let due = 0
   let completed = 0
@@ -700,18 +701,42 @@ function addInterval(date: Date, amount: number, unit: TaskUnit): Date {
 }
 
 export async function ensureTaskOccurrence(taskId: string, gardenPlantId: string, dueAtIso: string, requiredCount: number): Promise<void> {
-  // Check existence by task_id + due_at
-  const { data: existing } = await supabase
-    .from('garden_plant_task_occurrences')
-    .select('id')
-    .eq('task_id', taskId)
-    .eq('due_at', dueAtIso)
-    .maybeSingle()
-  if (existing?.id) return
-  const { error } = await supabase
-    .from('garden_plant_task_occurrences')
-    .insert({ task_id: taskId, garden_plant_id: gardenPlantId, due_at: dueAtIso, required_count: requiredCount })
-  if (error) throw new Error(error.message)
+  // Prefer idempotent upsert by (task_id, due_at). If the unique index doesn't
+  // exist yet server-side, gracefully fall back to a manual ensure.
+  try {
+    const { error } = await supabase
+      .from('garden_plant_task_occurrences')
+      .upsert(
+        { task_id: taskId, garden_plant_id: gardenPlantId, due_at: dueAtIso, required_count: requiredCount },
+        { onConflict: 'task_id, due_at' }
+      )
+    if (error) throw error
+  } catch (e: any) {
+    const msg = String(e?.message || '')
+    const noConstraint = /no unique|no exclusion constraint|ON CONFLICT specification/i.test(msg)
+    if (!noConstraint) throw e
+    // Fallback: pick an existing row (keep the one with the highest completed_count),
+    // update its required_count to at least requiredCount, or insert if none exists.
+    const { data: rows } = await supabase
+      .from('garden_plant_task_occurrences')
+      .select('id, completed_count, required_count')
+      .eq('task_id', taskId)
+      .eq('due_at', dueAtIso)
+      .order('completed_count', { ascending: false, nullsFirst: false })
+    if (Array.isArray(rows) && rows.length > 0) {
+      const keeper = rows[0] as any
+      const nextReq = Math.max(Number(keeper.required_count || 1), Math.max(1, Number(requiredCount || 1)))
+      await supabase
+        .from('garden_plant_task_occurrences')
+        .update({ required_count: nextReq, garden_plant_id: gardenPlantId })
+        .eq('id', String(keeper.id))
+    } else {
+      const { error: insErr } = await supabase
+        .from('garden_plant_task_occurrences')
+        .insert({ task_id: taskId, garden_plant_id: gardenPlantId, due_at: dueAtIso, required_count: requiredCount })
+      if (insErr) throw new Error(insErr.message)
+    }
+  }
 }
 
 export async function syncTaskOccurrencesForGarden(gardenId: string, startIso: string, endIso: string): Promise<void> {
@@ -804,17 +829,22 @@ export async function resyncTaskOccurrencesForGarden(gardenId: string, startIso:
   const start = new Date(startIso)
   const end = new Date(endIso)
 
+  // Normalize keys by day (YYYY-MM-DD) to avoid time drift causing duplicates or lost progress
+  const toDay = (d: Date) => new Date(d).toISOString().slice(0, 10)
+  const dayToNoonIso = (day: string) => `${day}T12:00:00.000Z`
+
   // Compute expected occurrences based on current task definitions
-  type Expected = { taskId: string; gardenPlantId: string; dueAtIso: string; requiredCount: number }
+  type Expected = { taskId: string; gardenPlantId: string; dueAtIso: string; requiredCount: number; dayKey: string }
   const expectedByKey = new Map<string, Expected>()
 
   const addExpected = (taskId: string, gardenPlantId: string, due: Date, required: number) => {
-    const dueIso = due.toISOString()
-    const key = `${taskId}::${dueIso}`
+    const day = toDay(due)
+    const dueIso = dayToNoonIso(day)
+    const key = `${taskId}::${day}`
     // Only keep the highest requirement if duplicates somehow arise
     const prev = expectedByKey.get(key)
     if (!prev || prev.requiredCount < required) {
-      expectedByKey.set(key, { taskId, gardenPlantId, dueAtIso: dueIso, requiredCount: required })
+      expectedByKey.set(key, { taskId, gardenPlantId, dueAtIso: dueIso, requiredCount: required, dayKey: key })
     }
   }
 
@@ -885,15 +915,54 @@ export async function resyncTaskOccurrencesForGarden(gardenId: string, startIso:
   const taskIds = Array.from(new Set(tasks.map(t => t.id)))
   const existing = await listOccurrencesForTasks(taskIds, startIso, endIso)
   const existingByKey = new Map<string, { id: string; requiredCount: number; completedCount: number }>()
+  const dupGroups = new Map<string, Array<{ id: string; requiredCount: number; completedCount: number }>>()
   for (const o of existing) {
-    const key = `${o.taskId}::${o.dueAt}`
-    existingByKey.set(key, { id: o.id, requiredCount: Number(o.requiredCount || 1), completedCount: Number(o.completedCount || 0) })
+    const day = toDay(new Date(o.dueAt))
+    const key = `${o.taskId}::${day}`
+    const entry = { id: o.id, requiredCount: Number(o.requiredCount || 1), completedCount: Number(o.completedCount || 0) }
+    if (!dupGroups.has(key)) dupGroups.set(key, [])
+    dupGroups.get(key)!.push(entry)
+  }
+  // Dedupe: for keys with multiple rows, consolidate progress and keep a single row
+  for (const [key, rows] of dupGroups.entries()) {
+    if (rows.length <= 1) {
+      const r0 = rows[0]
+      if (r0) existingByKey.set(key, { id: r0.id, requiredCount: r0.requiredCount, completedCount: r0.completedCount })
+      continue
+    }
+    // Merge counts across duplicates
+    const exp = expectedByKey.get(key)
+    const maxRequiredFromExisting = rows.reduce((m, r) => Math.max(m, Number(r.requiredCount || 1)), 1)
+    const expectedRequired = exp ? Math.max(1, Number(exp.requiredCount || 1)) : 1
+    const mergedRequired = Math.max(maxRequiredFromExisting, expectedRequired)
+    const sumCompleted = rows.reduce((s, r) => s + Math.min(Number(r.requiredCount || 1), Number(r.completedCount || 0)), 0)
+    const mergedCompleted = Math.min(mergedRequired, sumCompleted)
+    // Choose keeper: the one with highest completedCount, fallback to first
+    const keeper = rows.slice().sort((a, b) => (b.completedCount - a.completedCount) || (b.requiredCount - a.requiredCount))[0]
+    const dupIds = rows.filter(r => r.id !== keeper.id).map(r => r.id)
+    // Update keeper to merged values
+    await supabase
+      .from('garden_plant_task_occurrences')
+      .update({ required_count: mergedRequired, completed_count: mergedCompleted })
+      .eq('id', keeper.id)
+    // Delete duplicates
+    if (dupIds.length > 0) {
+      await supabase.from('garden_plant_task_occurrences').delete().in('id', dupIds)
+    }
+    existingByKey.set(key, { id: keeper.id, requiredCount: mergedRequired, completedCount: mergedCompleted })
+  }
+  // Ensure singletons are recorded in existingByKey
+  for (const [key, rows] of dupGroups.entries()) {
+    if (rows.length === 1 && !existingByKey.has(key)) {
+      const r0 = rows[0]
+      existingByKey.set(key, { id: r0.id, requiredCount: r0.requiredCount, completedCount: r0.completedCount })
+    }
   }
 
   // Determine operations
   const toInsert: Expected[] = []
   const toUpdate: Array<{ id: string; requiredCount: number; completedCount: number }> = []
-  const existingKeys = new Set(existing.map(o => `${o.taskId}::${o.dueAt}`))
+  const existingKeys = new Set(Array.from(existingByKey.keys()))
   for (const [key, exp] of expectedByKey.entries()) {
     if (!existingKeys.has(key)) {
       toInsert.push(exp)
@@ -1056,6 +1125,40 @@ export async function listOccurrencesForTasks(taskIds: string[], startIso: strin
     completedCount: Number(r.completed_count ?? 0),
     completedAt: r.completed_at || null,
   }))
+}
+
+// Return a mapping from occurrenceId -> list of users who progressed/completed it
+export async function listCompletionsForOccurrences(occurrenceIds: string[]): Promise<Record<string, Array<{ userId: string; displayName: string | null }>>> {
+  if (occurrenceIds.length === 0) return {}
+  // Fetch raw completion rows
+  const { data: rows, error } = await supabase
+    .from('garden_task_user_completions')
+    .select('occurrence_id, user_id')
+    .in('occurrence_id', occurrenceIds)
+  if (error) throw new Error(error.message)
+  const uniquePairs = new Map<string, { occurrenceId: string; userId: string }>()
+  for (const r of (rows || []) as any[]) {
+    const occId = String((r as any).occurrence_id)
+    const uid = String((r as any).user_id)
+    uniquePairs.set(`${occId}::${uid}`, { occurrenceId: occId, userId: uid })
+  }
+  const pairs = Array.from(uniquePairs.values())
+  const userIds = Array.from(new Set(pairs.map(p => p.userId)))
+  // Resolve display names from profiles
+  const { data: profs } = await supabase
+    .from('profiles')
+    .select('id, display_name')
+    .in('id', userIds)
+  const idToName: Record<string, string | null> = {}
+  for (const p of (profs || []) as any[]) {
+    idToName[String(p.id)] = (p as any).display_name || null
+  }
+  const map: Record<string, Array<{ userId: string; displayName: string | null }>> = {}
+  for (const { occurrenceId, userId } of pairs) {
+    if (!map[occurrenceId]) map[occurrenceId] = []
+    map[occurrenceId].push({ userId, displayName: idToName[userId] ?? null })
+  }
+  return map
 }
 
 

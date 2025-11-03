@@ -1,7 +1,7 @@
 import React from "react"
 import { createPortal } from "react-dom"
 import { useNavigate, Link, useLocation } from "react-router-dom"
-import { Leaf, Sprout, Sparkles, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Plus, Shield } from "lucide-react"
+import { Leaf, Sprout, Sparkles, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Plus, Shield, HeartHandshake } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 interface TopBarProps {
@@ -15,6 +15,8 @@ interface TopBarProps {
 
 import { useAuth } from "@/context/AuthContext"
 import { userHasUnfinishedTasksToday } from "@/lib/gardens"
+import { addGardenBroadcastListener } from "@/lib/realtime"
+import { supabase } from "@/lib/supabaseClient"
 
 export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, displayName, onProfile, onLogout }) => {
   const navigate = useNavigate()
@@ -25,6 +27,17 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
   const menuRef = React.useRef<HTMLDivElement | null>(null)
   const [menuPosition, setMenuPosition] = React.useState<{ top: number; right: number } | null>(null)
   const [hasUnfinished, setHasUnfinished] = React.useState(false)
+  
+  // Refresh notification state
+  const refreshNotification = React.useCallback(async () => {
+    try {
+      if (!user?.id) { setHasUnfinished(false); return }
+      const has = await userHasUnfinishedTasksToday(user.id)
+      setHasUnfinished(has)
+    } catch {
+      setHasUnfinished(false)
+    }
+  }, [user?.id])
 
   const recomputeMenuPosition = React.useCallback(() => {
     const anchor = anchorRef.current
@@ -61,35 +74,68 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
     }
   }, [menuOpen, recomputeMenuPosition])
 
+  // Initial load
   React.useEffect(() => {
-    let cancelled = false
-    const run = async () => {
-      try {
-        if (!user?.id) { if (!cancelled) setHasUnfinished(false); return }
-        const has = await userHasUnfinishedTasksToday(user.id)
-        if (!cancelled) setHasUnfinished(has)
-      } catch {
-        if (!cancelled) setHasUnfinished(false)
-      }
-    }
-    run()
-    return () => { cancelled = true }
-  }, [user?.id])
+    refreshNotification()
+  }, [refreshNotification])
 
-  // Auto-refresh the Garden notification dot when tasks change without full reload
+  // Listen to local events (for when user is on garden page)
   React.useEffect(() => {
-    const handler = async () => {
-      try {
-        if (!user?.id) { setHasUnfinished(false); return }
-        const has = await userHasUnfinishedTasksToday(user.id)
-        setHasUnfinished(has)
-      } catch {
-        setHasUnfinished(false)
-      }
-    }
+    const handler = () => { refreshNotification() }
     try { window.addEventListener('garden:tasks_changed', handler as EventListener) } catch {}
     return () => { try { window.removeEventListener('garden:tasks_changed', handler as EventListener) } catch {} }
-  }, [user?.id])
+  }, [refreshNotification])
+
+  // Listen to realtime broadcasts (works from any page)
+  React.useEffect(() => {
+    if (!user?.id) return
+    let active = true
+    let teardown: (() => Promise<void>) | null = null
+
+    addGardenBroadcastListener((message) => {
+      if (!active) return
+      // Refresh notification when tasks change in any garden
+      if (message.kind === 'tasks' || message.kind === 'general') {
+        refreshNotification()
+      }
+    })
+      .then((unsubscribe) => {
+        if (!active) {
+          unsubscribe().catch(() => {})
+        } else {
+          teardown = unsubscribe
+        }
+      })
+      .catch(() => {})
+
+    return () => {
+      active = false
+      if (teardown) teardown().catch(() => {})
+    }
+  }, [user?.id, refreshNotification])
+
+  // Also listen to postgres changes for task occurrences (direct fallback)
+  React.useEffect(() => {
+    if (!user?.id) return
+    let active = true
+    
+    const channel = supabase.channel('rt-navbar-tasks')
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'garden_plant_task_occurrences' 
+      }, () => {
+        if (active) refreshNotification()
+      })
+    
+    const subscription = channel.subscribe()
+    if (subscription instanceof Promise) subscription.catch(() => {})
+
+    return () => {
+      active = false
+      try { supabase.removeChannel(channel) } catch {}
+    }
+  }, [user?.id, refreshNotification])
   const label = displayName && displayName.trim().length > 0 ? displayName : 'Profile'
   return (
     <header className="max-w-6xl mx-auto w-full flex items-center gap-3 px-2 overflow-x-hidden">
@@ -144,6 +190,9 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
                 )}
                 <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); (onProfile ? onProfile : () => navigate('/profile'))() }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 flex items-center gap-2" role="menuitem">
                   <User className="h-4 w-4" /> Profile
+                </button>
+                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/friends') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 flex items-center gap-2" role="menuitem">
+                  <HeartHandshake className="h-4 w-4" /> Friends
                 </button>
                 <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); if (onLogout) { onLogout() } }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 text-red-600 flex items-center gap-2" role="menuitem">
                   <LogOut className="h-4 w-4" /> Logout

@@ -279,7 +279,18 @@ def list_branches():
         cur = subprocess.run(shlex.split(f"{git_base} rev-parse --abbrev-ref HEAD"), capture_output=True, text=True, timeout=10, check=False)
         current = (cur.stdout or "").strip()
         branches = sorted(set(branches))
-        return jsonify({"branches": branches, "current": current})
+        
+        # Read the last update time from TIME file if it exists
+        last_update_time = None
+        try:
+            time_file = Path(repo_root) / "TIME"
+            if time_file.exists():
+                last_update_time = time_file.read_text(encoding="utf-8").strip() or None
+        except Exception:
+            # TIME file doesn't exist or can't be read, which is fine
+            pass
+        
+        return jsonify({"branches": branches, "current": current, "lastUpdateTime": last_update_time})
     except Exception as e:
         return jsonify({"error": str(e) or "Failed to list branches"}), 500
 
@@ -301,7 +312,7 @@ def _run_refresh(branch: Optional[str], stream: bool):
     if stream:
         # Stream stdout/stderr as SSE
         def generate():
-            yield "event: open\n" "data: {\"ok\": true, \"message\": \"Starting refresh…\"}\n\n"
+            yield "event: open\n" "data: {\"ok\": true, \"message\": \"Starting refresh?\"}\n\n"
             try:
                 p = subprocess.Popen(
                     [script_path],
@@ -325,7 +336,7 @@ def _run_refresh(branch: Optional[str], stream: bool):
                         continue
                     # Basic safety: truncate very long lines
                     if len(txt) > 4000:
-                        txt = txt[:4000] + "…"
+                        txt = txt[:4000] + "?"
                     yield f"data: {txt}\n\n"
             finally:
                 code = p.wait()

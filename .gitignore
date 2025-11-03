@@ -38,6 +38,9 @@ Thumbs.db
 tmp/
 temp/
 
+# deployment tracking
+TIME
+
 # hosting/platform folders (if you use them)
 .vercel/
 .netlify/
