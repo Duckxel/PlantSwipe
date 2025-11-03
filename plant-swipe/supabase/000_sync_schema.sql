@@ -63,6 +63,23 @@ do $$ begin
     using (
       id = (select auth.uid())
       or public.is_admin_user((select auth.uid()))
+      or exists (
+        select 1 from public.friends f
+        where (f.user_id = (select auth.uid()) and f.friend_id = profiles.id)
+        or (f.friend_id = (select auth.uid()) and f.user_id = profiles.id)
+      )
+      or exists (
+        select 1 from public.friend_requests fr
+        where fr.requester_id = profiles.id
+        and fr.recipient_id = (select auth.uid())
+        and fr.status = 'pending'
+      )
+      or exists (
+        select 1 from public.friend_requests fr
+        where fr.recipient_id = profiles.id
+        and fr.requester_id = (select auth.uid())
+        and fr.status = 'pending'
+      )
     );
 end $$;
 do $$ begin
@@ -2468,3 +2485,230 @@ end $$;
 -- Replace non-unique index with a unique index to enforce idempotency
 drop index if exists gpto_task_due_idx;
 create unique index if not exists gpto_task_due_unq on public.garden_plant_task_occurrences (task_id, due_at);
+
+-- ========== Friends system ==========
+-- Friend requests table
+create table if not exists public.friend_requests (
+  id uuid primary key default gen_random_uuid(),
+  requester_id uuid not null references public.profiles(id) on delete cascade,
+  recipient_id uuid not null references public.profiles(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  status text not null default 'pending' check (status in ('pending', 'accepted', 'rejected')),
+  unique(requester_id, recipient_id),
+  check (requester_id <> recipient_id)
+);
+
+-- Friends table (bidirectional friendships)
+create table if not exists public.friends (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  friend_id uuid not null references public.profiles(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  unique(user_id, friend_id),
+  check (user_id <> friend_id)
+);
+
+-- Indexes for efficient queries
+create index if not exists friend_requests_requester_idx on public.friend_requests(requester_id);
+create index if not exists friend_requests_recipient_idx on public.friend_requests(recipient_id);
+create index if not exists friend_requests_status_idx on public.friend_requests(status);
+create index if not exists friends_user_idx on public.friends(user_id);
+create index if not exists friends_friend_idx on public.friends(friend_id);
+
+-- Enable RLS
+alter table public.friend_requests enable row level security;
+alter table public.friends enable row level security;
+
+-- RLS policies for friend_requests
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='friend_requests' and policyname='friend_requests_select_own') then
+    drop policy friend_requests_select_own on public.friend_requests;
+  end if;
+  create policy friend_requests_select_own on public.friend_requests for select to authenticated
+    using (
+      requester_id = (select auth.uid())
+      or recipient_id = (select auth.uid())
+      or public.is_admin_user((select auth.uid()))
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='friend_requests' and policyname='friend_requests_insert_own') then
+    drop policy friend_requests_insert_own on public.friend_requests;
+  end if;
+  create policy friend_requests_insert_own on public.friend_requests for insert to authenticated
+    with check (requester_id = (select auth.uid()));
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='friend_requests' and policyname='friend_requests_update_own') then
+    drop policy friend_requests_update_own on public.friend_requests;
+  end if;
+  create policy friend_requests_update_own on public.friend_requests for update to authenticated
+    using (
+      recipient_id = (select auth.uid())
+      or public.is_admin_user((select auth.uid()))
+    )
+    with check (
+      recipient_id = (select auth.uid())
+      or public.is_admin_user((select auth.uid()))
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='friend_requests' and policyname='friend_requests_delete_own') then
+    drop policy friend_requests_delete_own on public.friend_requests;
+  end if;
+  create policy friend_requests_delete_own on public.friend_requests for delete to authenticated
+    using (
+      requester_id = (select auth.uid())
+      or recipient_id = (select auth.uid())
+      or public.is_admin_user((select auth.uid()))
+    );
+end $$;
+
+-- RLS policies for friends
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='friends' and policyname='friends_select_own') then
+    drop policy friends_select_own on public.friends;
+  end if;
+  create policy friends_select_own on public.friends for select to authenticated
+    using (
+      user_id = (select auth.uid())
+      or friend_id = (select auth.uid())
+      or public.is_admin_user((select auth.uid()))
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='friends' and policyname='friends_insert_own') then
+    drop policy friends_insert_own on public.friends;
+  end if;
+  create policy friends_insert_own on public.friends for insert to authenticated
+    with check (
+      user_id = (select auth.uid())
+      or public.is_admin_user((select auth.uid()))
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='friends' and policyname='friends_delete_own') then
+    drop policy friends_delete_own on public.friends;
+  end if;
+  create policy friends_delete_own on public.friends for delete to authenticated
+    using (
+      user_id = (select auth.uid())
+      or friend_id = (select auth.uid())
+      or public.is_admin_user((select auth.uid()))
+    );
+end $$;
+
+-- Function to accept a friend request (creates bidirectional friendship)
+create or replace function public.accept_friend_request(_request_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_requester uuid;
+  v_recipient uuid;
+begin
+  -- Get request details
+  select requester_id, recipient_id into v_requester, v_recipient
+  from public.friend_requests
+  where id = _request_id and status = 'pending' and recipient_id = (select auth.uid());
+  
+  if v_requester is null or v_recipient is null then
+    raise exception 'Friend request not found or not authorized';
+  end if;
+  
+  -- Create bidirectional friendship
+  insert into public.friends (user_id, friend_id) values (v_requester, v_recipient)
+  on conflict do nothing;
+  insert into public.friends (user_id, friend_id) values (v_recipient, v_requester)
+  on conflict do nothing;
+  
+  -- Update request status
+  update public.friend_requests set status = 'accepted' where id = _request_id;
+end;
+$$;
+
+grant execute on function public.accept_friend_request(uuid) to authenticated;
+
+-- Function to get friend count for a user
+create or replace function public.get_friend_count(_user_id uuid)
+returns integer
+language sql
+security definer
+set search_path = public
+as $$
+  select count(*)::int from public.friends where user_id = _user_id;
+$$;
+
+grant execute on function public.get_friend_count(uuid) to authenticated, anon;
+
+-- Function to get email for users who sent friend requests to you
+create or replace function public.get_friend_request_requester_email(_requester_id uuid)
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_caller uuid;
+  v_has_request boolean;
+begin
+  v_caller := auth.uid();
+  if v_caller is null then
+    return null;
+  end if;
+  -- Check if this requester sent a friend request to the caller
+  select exists (
+    select 1 from public.friend_requests
+    where requester_id = _requester_id
+    and recipient_id = v_caller
+    and status = 'pending'
+  ) into v_has_request;
+  
+  if v_has_request then
+    return (select email from auth.users where id = _requester_id);
+  else
+    return null;
+  end if;
+end;
+$$;
+
+grant execute on function public.get_friend_request_requester_email(uuid) to authenticated;
+
+-- Function to get email for users who are your friends
+create or replace function public.get_friend_email(_friend_id uuid)
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_caller uuid;
+  v_is_friend boolean;
+begin
+  v_caller := auth.uid();
+  if v_caller is null then
+    return null;
+  end if;
+  -- Check if this user is a friend of the caller
+  select exists (
+    select 1 from public.friends
+    where (user_id = v_caller and friend_id = _friend_id)
+    or (user_id = _friend_id and friend_id = v_caller)
+  ) into v_is_friend;
+  
+  if v_is_friend then
+    return (select email from auth.users where id = _friend_id);
+  else
+    return null;
+  end if;
+end;
+$$;
+
+grant execute on function public.get_friend_email(uuid) to authenticated;

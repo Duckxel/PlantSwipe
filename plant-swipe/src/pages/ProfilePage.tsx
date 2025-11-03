@@ -17,6 +17,7 @@ type FunStats = {
   gardensCount: number | null
   currentStreak: number | null
   bestStreak: number | null
+  friendsCount: number | null
 }
 
 type DayAgg = { day: string; completed: number; any_success: boolean }
@@ -42,6 +43,7 @@ export const ProfilePage: React.FC = () => {
     gardensCount: null,
     currentStreak: null,
     bestStreak: null,
+    friendsCount: null,
   })
   const [monthDays, setMonthDays] = React.useState<DayAgg[]>([])
   const [tooltip, setTooltip] = React.useState<{ top: number; left: number; date: string; value: number; success: boolean } | null>(null)
@@ -175,6 +177,13 @@ export const ProfilePage: React.FC = () => {
           }
         }
 
+        // Friend count
+        let friendsCount = 0
+        if (uid) {
+          const { data: friendCount, error: ferr } = await supabase.rpc('get_friend_count', { _user_id: uid })
+          if (!ferr && typeof friendCount === 'number') friendsCount = friendCount
+        }
+
         if (!cancelled) {
           setFunStats({
             loading: false,
@@ -185,6 +194,7 @@ export const ProfilePage: React.FC = () => {
             gardensCount,
             currentStreak,
             bestStreak,
+            friendsCount,
           })
         }
       } catch {
@@ -294,6 +304,25 @@ export const ProfilePage: React.FC = () => {
     <div className="max-w-3xl mx-auto mt-8 px-4 md:px-0">
       <Card className="rounded-3xl">
         <CardContent className="p-6 md:p-8 space-y-4">
+          {/* Profile Header with Name and Stats */}
+          <div className="border-b pb-4 mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <div className="text-2xl font-semibold">{displayName || 'Profile'}</div>
+                <div className="text-xs opacity-70 mt-1 flex items-center gap-2">
+                  {funStats.createdAt && (
+                    <span>Joined {new Date(funStats.createdAt).toLocaleDateString()}</span>
+                  )}
+                  {!funStats.loading && funStats.friendsCount != null && (
+                    <>
+                      {funStats.createdAt && <span>?</span>}
+                      <span>{funStats.friendsCount} Friend{((funStats.friendsCount ?? 0) !== 1 ? 's' : '')}</span>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
           
           <div className="grid gap-2">
             <Label htmlFor="profile-email">Email</Label>
