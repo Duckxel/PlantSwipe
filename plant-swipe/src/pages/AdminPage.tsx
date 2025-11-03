@@ -2089,9 +2089,19 @@ export const AdminPage: React.FC = () => {
                                               paddingAngle={3}
                                               cx="40%"
                                             >
-                                              {pieData.map((entry, index) => (
-                                                <Cell key={`cell-${entry.country}-${index}`} fill={countryColors[index % countryColors.length]} />
-                                              ))}
+                                              {pieData.map((entry, index) => {
+                                                // Use color index 5 for "Other", otherwise use the index (0-4 for top countries)
+                                                const colorIndex = entry.isOther ? 5 : index
+                                                const color = countryColors[colorIndex % countryColors.length]
+                                                return (
+                                                  <Cell 
+                                                    key={`cell-${entry.country}-${index}`} 
+                                                    fill={color}
+                                                    stroke={color}
+                                                    strokeWidth={1}
+                                                  />
+                                                )
+                                              })}
                                             </Pie>
                                             <Tooltip content={<CountryPieTooltip />} cursor={{ stroke: 'rgba(0,0,0,0.1)' }} />
                                           </>
