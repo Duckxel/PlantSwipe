@@ -1,5 +1,6 @@
 import React from "react"
 import { createPortal } from "react-dom"
+import { useNavigate } from "react-router-dom"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -2268,6 +2269,18 @@ export const AdminPage: React.FC = () => {
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
+                          {memberData.profile?.display_name && (
+                            <Button
+                              variant="secondary"
+                              size="icon"
+                              className="rounded-xl"
+                              title="View profile"
+                              aria-label="View profile"
+                              onClick={() => navigate(`/u/${encodeURIComponent(memberData.profile.display_name)}`)}
+                            >
+                              <ArrowUpRight className="h-4 w-4" />
+                            </Button>
+                          )}
                           {memberData.profile?.is_admin ? (
                             <Dialog open={demoteOpen} onOpenChange={setDemoteOpen}>
                               <DialogTrigger asChild>
@@ -2412,7 +2425,7 @@ export const AdminPage: React.FC = () => {
                         <div className="text-xs opacity-60">—</div>
                       ) : (
                         <div className="space-y-0.5">
-                          {memberData.topReferrers.slice(0,3).map((r, idx) => (
+                          {memberData.topReferrers.slice(0,1).map((r, idx) => (
                             <div key={`${r.source}-${idx}`} className="flex items-center justify-between text-sm">
                               <div className="truncate mr-2">{r.source || 'direct'}</div>
                               <div className="tabular-nums">{r.visits}</div>
@@ -2427,7 +2440,7 @@ export const AdminPage: React.FC = () => {
                         <div className="text-xs opacity-60">—</div>
                       ) : (
                         <div className="space-y-0.5">
-                          {memberData.topCountries.slice(0,3).map((c, idx) => (
+                          {memberData.topCountries.slice(0,1).map((c, idx) => (
                             <div key={`${c.country}-${idx}`} className="flex items-center justify-between text-sm">
                               <div className="truncate mr-2">{countryCodeToName(c.country)}</div>
                               <div className="tabular-nums">{c.visits}</div>
@@ -2442,7 +2455,7 @@ export const AdminPage: React.FC = () => {
                         <div className="text-xs opacity-60">—</div>
                       ) : (
                         <div className="space-y-0.5">
-                          {memberData.topDevices.slice(0,3).map((d, idx) => (
+                          {memberData.topDevices.slice(0,1).map((d, idx) => (
                             <div key={`${d.device}-${idx}`} className="flex items-center justify-between text-sm">
                               <div className="truncate mr-2">{d.device}</div>
                               <div className="tabular-nums">{d.visits}</div>
@@ -2679,7 +2692,7 @@ export const AdminPage: React.FC = () => {
                           <div className="text-xs opacity-60">—</div>
                         ) : (
                           <div className="space-y-0.5">
-                            {ipTopReferrers.slice(0,3).map((r, idx) => (
+                            {ipTopReferrers.slice(0,1).map((r, idx) => (
                               <div key={`${r.source}-${idx}`} className="flex items-center justify-between text-sm">
                                 <div className="truncate mr-2">{r.source || 'direct'}</div>
                                 <div className="tabular-nums">{r.visits}</div>
@@ -2711,7 +2724,7 @@ export const AdminPage: React.FC = () => {
                         <div className="text-xs opacity-60">—</div>
                       ) : (
                         <div className="space-y-0.5">
-                          {ipTopDevices.slice(0,4).map((d, idx) => (
+                          {ipTopDevices.slice(0,1).map((d, idx) => (
                             <div key={`${d.device}-${idx}`} className="flex items-center justify-between text-sm">
                               <div className="truncate mr-2">{d.device}</div>
                               <div className="tabular-nums">{d.visits}</div>

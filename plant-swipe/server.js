@@ -1740,8 +1740,9 @@ app.get('/api/admin/member', async (req, res) => {
       try {
         const cutoff30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
         const cutoff5m = Date.now() - 5 * 60 * 1000
-        const r = await fetch(`${supabaseUrlEnv}/rest/v1/${tablePath}?user_id=eq.${encodeURIComponent(targetId)}&occurred_at=gte.${encodeURIComponent(cutoff30d)}&select=referrer,geo_country,user_agent,occurred_at&order=occurred_at.desc`, {
-          headers: { ...baseHeaders },
+        // Request up to 5000 visits (Supabase REST default limit is 1000, but we can request more)
+        const r = await fetch(`${supabaseUrlEnv}/rest/v1/${tablePath}?user_id=eq.${encodeURIComponent(targetId)}&occurred_at=gte.${encodeURIComponent(cutoff30d)}&select=referrer,geo_country,user_agent,occurred_at&order=occurred_at.desc&limit=5000`, {
+          headers: { ...baseHeaders, 'Range': '0-4999' },
         })
         if (r.ok) {
           const arr = await r.json().catch(() => [])
