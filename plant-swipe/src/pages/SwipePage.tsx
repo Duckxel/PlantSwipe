@@ -16,11 +16,42 @@ interface SwipePageProps {
   onDragEnd: (_: unknown, info: { offset: { x: number; y: number }; velocity: { x: number; y: number } }) => void
   handleInfo: () => void
   handlePass: () => void
+  handlePrevious: () => void
   liked?: boolean
   onToggleLike?: () => void
 }
 
-export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, x, y, onDragEnd, handleInfo, handlePass, liked = false, onToggleLike }) => {
+export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, x, y, onDragEnd, handleInfo, handlePass, handlePrevious, liked = false, onToggleLike }) => {
+  // Keyboard navigation
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle arrow keys when not typing in an input/textarea
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return
+      }
+      
+      switch (e.key) {
+        case 'ArrowLeft':
+          e.preventDefault()
+          handlePass() // Swipe left = Next
+          break
+        case 'ArrowRight':
+          e.preventDefault()
+          handlePrevious() // Swipe right = Previous
+          break
+        case 'ArrowUp':
+          e.preventDefault()
+          handleInfo() // Swipe up = Info
+          break
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [handleInfo, handlePass, handlePrevious])
+
   return (
     <div className="max-w-3xl mx-auto mt-8 px-4 md:px-0">
       <div className="relative h-[520px]">
@@ -29,6 +60,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, 
             <motion.div
               key={current.id + index}
               drag
+              dragElastic={0.2}
               style={{ x, y }}
               dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
               onDragEnd={onDragEnd}
@@ -36,7 +68,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, 
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
               transition={{ type: "spring", stiffness: 400, damping: 30 }}
-              className="absolute inset-0"
+              className="absolute inset-0 cursor-grab active:cursor-grabbing"
             >
               <Card className="h-full rounded-3xl overflow-hidden shadow-xl">
                 <div className="h-2/3 relative">
