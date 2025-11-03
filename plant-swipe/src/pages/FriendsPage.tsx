@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input"
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabaseClient"
 import { User, Search, UserPlus, Check, X, ArrowRight, ArrowUpRight } from "lucide-react"
+import { createPortal } from "react-dom"
 
 type FriendRequest = {
   id: string
@@ -47,6 +48,11 @@ export const FriendsPage: React.FC = () => {
   const [loading, setLoading] = React.useState(true)
   const [searching, setSearching] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  const [menuOpenFriendId, setMenuOpenFriendId] = React.useState<string | null>(null)
+  const [menuPos, setMenuPos] = React.useState<{ top: number; right: number } | null>(null)
+  const [confirmingRemove, setConfirmingRemove] = React.useState<string | null>(null)
+  const menuRefs = React.useRef<Map<string, HTMLDivElement>>(new Map())
+  const anchorRefs = React.useRef<Map<string, HTMLDivElement>>(new Map())
 
   const loadFriends = React.useCallback(async () => {
     if (!user?.id) return
@@ -319,6 +325,8 @@ export const FriendsPage: React.FC = () => {
 
   const removeFriend = React.useCallback(async (friendId: string) => {
     if (!user?.id) return
+    setConfirmingRemove(null)
+    setMenuOpenFriendId(null)
     try {
       // Remove bidirectional friendship - delete both directions
       await Promise.all([
@@ -338,6 +346,43 @@ export const FriendsPage: React.FC = () => {
       setError(e?.message || 'Failed to remove friend')
     }
   }, [user?.id, loadFriends])
+
+  // Handle menu positioning and click outside
+  React.useEffect(() => {
+    if (!menuOpenFriendId) return
+    const menuRef = menuRefs.current.get(menuOpenFriendId)
+    const anchorRef = anchorRefs.current.get(menuOpenFriendId)
+    
+    const onDoc = (e: MouseEvent) => {
+      const t = e.target as Node
+      if (menuRef && menuRef.contains(t)) return
+      if (anchorRef && anchorRef.contains(t)) return
+      setMenuOpenFriendId(null)
+      setConfirmingRemove(null)
+    }
+    const onKey = (e: KeyboardEvent) => { 
+      if (e.key === 'Escape') {
+        setMenuOpenFriendId(null)
+        setConfirmingRemove(null)
+      }
+    }
+    const recompute = () => {
+      if (!anchorRef) return
+      const r = anchorRef.getBoundingClientRect()
+      setMenuPos({ top: r.bottom + 8, right: Math.max(0, window.innerWidth - r.right) })
+    }
+    document.addEventListener('click', onDoc)
+    document.addEventListener('keydown', onKey)
+    window.addEventListener('resize', recompute)
+    window.addEventListener('scroll', recompute, true)
+    recompute()
+    return () => {
+      document.removeEventListener('click', onDoc)
+      document.removeEventListener('keydown', onKey)
+      window.removeEventListener('resize', recompute)
+      window.removeEventListener('scroll', recompute, true)
+    }
+  }, [menuOpenFriendId])
 
   if (!user) {
     return (
@@ -498,14 +543,58 @@ export const FriendsPage: React.FC = () => {
                           <ArrowUpRight className="h-4 w-4" />
                         </Button>
                       )}
-                      <Button
-                        className="rounded-xl"
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => removeFriend(friend.friend_id)}
-                      >
-                        Remove
-                      </Button>
+                      <div ref={(el) => { if (el) anchorRefs.current.set(friend.id, el) }}>
+                        <Button
+                          variant="secondary"
+                          size="icon"
+                          className="rounded-full h-8 w-8"
+                          aria-label="Friend options"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setMenuOpenFriendId(menuOpenFriendId === friend.id ? null : friend.id)
+                            setConfirmingRemove(null)
+                          }}
+                        >
+                          ?
+                        </Button>
+                        {menuOpenFriendId === friend.id && menuPos && createPortal(
+                          <div 
+                            ref={(el) => { if (el) menuRefs.current.set(friend.id, el) }}
+                            className="w-40 rounded-xl border bg-white shadow z-[60] p-1" 
+                            style={{ position: 'fixed', top: menuPos.top, right: menuPos.right }}
+                          >
+                            {confirmingRemove === friend.id ? (
+                              <>
+                                <div className="px-3 py-2 text-xs text-red-600 mb-1">
+                                  Remove {friend.friend_profile?.display_name || 'friend'}?
+                                </div>
+                                <div className="flex gap-1">
+                                  <button 
+                                    className="flex-1 px-2 py-1.5 rounded-lg hover:bg-red-50 text-red-600 text-xs font-medium"
+                                    onMouseDown={(e) => { e.stopPropagation(); removeFriend(friend.friend_id) }}
+                                  >
+                                    Confirm
+                                  </button>
+                                  <button 
+                                    className="flex-1 px-2 py-1.5 rounded-lg hover:bg-stone-50 text-xs"
+                                    onMouseDown={(e) => { e.stopPropagation(); setConfirmingRemove(null); setMenuOpenFriendId(null) }}
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </>
+                            ) : (
+                              <button 
+                                className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 text-red-600"
+                                onMouseDown={(e) => { e.stopPropagation(); setConfirmingRemove(friend.id) }}
+                              >
+                                Remove friend
+                              </button>
+                            )}
+                          </div>,
+                          document.body
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
