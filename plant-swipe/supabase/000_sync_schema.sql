@@ -63,6 +63,11 @@ do $$ begin
     using (
       id = (select auth.uid())
       or public.is_admin_user((select auth.uid()))
+      or exists (
+        select 1 from public.friends f
+        where (f.user_id = (select auth.uid()) and f.friend_id = profiles.id)
+        or (f.friend_id = (select auth.uid()) and f.user_id = profiles.id)
+      )
     );
 end $$;
 do $$ begin

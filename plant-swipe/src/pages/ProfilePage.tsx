@@ -220,15 +220,17 @@ export const ProfilePage: React.FC = () => {
             <div className="flex items-center justify-between mb-2">
               <div>
                 <div className="text-2xl font-semibold">{displayName || 'Profile'}</div>
-                {funStats.createdAt && (
-                  <div className="text-sm opacity-60 mt-1">
-                    Joined {new Date(funStats.createdAt).toLocaleDateString()}
-                  </div>
-                )}
-              </div>
-              <div className="text-right">
-                <div className="text-lg font-semibold">{funStats.loading ? '...' : (funStats.friendsCount ?? 0)}</div>
-                <div className="text-xs opacity-60">Friend{((funStats.friendsCount ?? 0) !== 1 ? 's' : '')}</div>
+                <div className="text-xs opacity-70 mt-1 flex items-center gap-2">
+                  {funStats.createdAt && (
+                    <span>Joined {new Date(funStats.createdAt).toLocaleDateString()}</span>
+                  )}
+                  {!funStats.loading && funStats.friendsCount != null && (
+                    <>
+                      {funStats.createdAt && <span>?</span>}
+                      <span>{funStats.friendsCount} Friend{((funStats.friendsCount ?? 0) !== 1 ? 's' : '')}</span>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           </div>
