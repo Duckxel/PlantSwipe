@@ -700,19 +700,19 @@ export default function PlantSwipe() {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" placeholder="????????" value={authPassword} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword(e.target.value)} disabled={authSubmitting} />
+              <Input id="password" type="password" placeholder="Password" value={authPassword} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword(e.target.value)} disabled={authSubmitting} />
             </div>
             {authMode === 'signup' && (
               <div className="grid gap-2">
                 <Label htmlFor="confirm">Confirm password</Label>
-                <Input id="confirm" type="password" placeholder="????????" value={authPassword2} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword2(e.target.value)} disabled={authSubmitting} />
+                <Input id="confirm" type="password" placeholder="Confirm password" value={authPassword2} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword2(e.target.value)} disabled={authSubmitting} />
               </div>
             )}
             {authError && <div className="text-sm text-red-600">{authError}</div>}
             <Button className="w-full rounded-2xl" onClick={submitAuth}>
               {authMode === 'login' ? 'Continue' : 'Create account'}
             </Button>
-            <div className="text-center text-xs opacity-60">Demo only ? hook up to your auth later (e.g., Supabase, Clerk, Auth.js)</div>
+            <div className="text-center text-xs opacity-60">Demo only - hook up to your auth later (e.g., Supabase, Clerk, Auth.js)</div>
             <div className="text-center text-sm">
               {authMode === 'login' ? (
                 <button className="underline" onClick={() => setAuthMode('signup')}>No account? Sign up</button>
