@@ -1529,7 +1529,7 @@ export const AdminPage: React.FC = () => {
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="text-xs tabular-nums opacity-60">
-                      {apiProbe.latencyMs !== null ? `${apiProbe.latencyMs} ms` : '?'}
+                      {apiProbe.latencyMs !== null ? `${apiProbe.latencyMs} ms` : '-'}
                     </div>
                     <StatusDot ok={apiProbe.ok} title={!apiProbe.ok ? (apiProbe.errorCode || undefined) : undefined} />
                     {!apiProbe?.ok && <ErrorBadge code={apiProbe.errorCode} />}
@@ -1542,7 +1542,7 @@ export const AdminPage: React.FC = () => {
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="text-xs tabular-nums opacity-60">
-                      {adminProbe.latencyMs !== null ? `${adminProbe.latencyMs} ms` : '?'}
+                      {adminProbe.latencyMs !== null ? `${adminProbe.latencyMs} ms` : '-'}
                     </div>
                     <StatusDot ok={adminProbe.ok} title={!adminProbe.ok ? (adminProbe.errorCode || undefined) : undefined} />
                     {!adminProbe?.ok && <ErrorBadge code={adminProbe.errorCode} />}
@@ -1555,7 +1555,7 @@ export const AdminPage: React.FC = () => {
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="text-xs tabular-nums opacity-60">
-                      {dbProbe.latencyMs !== null ? `${dbProbe.latencyMs} ms` : '?'}
+                      {dbProbe.latencyMs !== null ? `${dbProbe.latencyMs} ms` : '-'}
                     </div>
                     <StatusDot ok={dbProbe.ok} title={!dbProbe.ok ? (dbProbe.errorCode || undefined) : undefined} />
                     {!dbProbe?.ok && <ErrorBadge code={dbProbe.errorCode} />}
@@ -1755,7 +1755,7 @@ export const AdminPage: React.FC = () => {
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       <div className="text-sm opacity-60">Currently online</div>
-                      <div className="text-xs opacity-60">{onlineUpdatedAt ? `Updated ${formatTimeAgo(onlineUpdatedAt)}` : 'Updated ?'}</div>
+                      <div className="text-xs opacity-60">{onlineUpdatedAt ? `Updated ${formatTimeAgo(onlineUpdatedAt)}` : 'Updated -'}</div>
                     </div>
                     <Button
                       variant="outline"
@@ -1769,7 +1769,7 @@ export const AdminPage: React.FC = () => {
                     </Button>
                   </div>
                   <div className="text-2xl font-semibold tabular-nums mt-1">
-                    {onlineLoading ? '?' : onlineUsers}
+                    {onlineLoading ? '-' : onlineUsers}
                   </div>
                   {/* Collapsible Connected IPs under Currently online */}
                   <div className="mt-3">
@@ -1823,7 +1823,7 @@ export const AdminPage: React.FC = () => {
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       <div className="text-sm opacity-60">Registered accounts</div>
-                      <div className="text-xs opacity-60">{registeredUpdatedAt ? `Updated ${formatTimeAgo(registeredUpdatedAt)}` : 'Updated ?'}</div>
+                      <div className="text-xs opacity-60">{registeredUpdatedAt ? `Updated ${formatTimeAgo(registeredUpdatedAt)}` : 'Updated -'}</div>
                     </div>
                     <Button
                       variant="outline"
@@ -1837,7 +1837,7 @@ export const AdminPage: React.FC = () => {
                     </Button>
                   </div>
                   <div className="text-2xl font-semibold tabular-nums mt-1">
-                    {registeredLoading ? '?' : (registeredCount ?? '?')}
+                    {registeredLoading ? '-' : (registeredCount ?? '-')}
                   </div>
                 </CardContent>
               </Card>
@@ -1863,7 +1863,7 @@ export const AdminPage: React.FC = () => {
                         >30d</button>
                       </div>
                     </div>
-                    <div className="text-xs opacity-60">{visitorsUpdatedAt ? `Updated ${formatTimeAgo(visitorsUpdatedAt)}` : 'Updated ?'}</div>
+                    <div className="text-xs opacity-60">{visitorsUpdatedAt ? `Updated ${formatTimeAgo(visitorsUpdatedAt)}` : 'Updated -'}</div>
                   </div>
                   <Button
                     variant="outline"
@@ -2269,7 +2269,7 @@ export const AdminPage: React.FC = () => {
                 <div className="space-y-4">
                   {(() => {
                     const nameOrEmail = (memberData.profile?.display_name || memberData.user?.email || '').trim()
-                    const initial = (nameOrEmail[0] || '?').toUpperCase()
+                    const initial = (nameOrEmail[0] || '-').toUpperCase()
                     return (
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-center gap-3 min-w-0">
@@ -2278,10 +2278,10 @@ export const AdminPage: React.FC = () => {
                           </div>
                           <div className="min-w-0">
                             <div className="text-base md:text-lg font-semibold truncate">
-                              {memberData.profile?.display_name || memberData.user?.email || '?'}
+                              {memberData.profile?.display_name || memberData.user?.email || '-'}
                             </div>
                             <div className="text-xs opacity-70 truncate">
-                              {memberData.user?.email || '?'}{memberData.user?.id ? (<span className="opacity-60"> ? id {memberData.user.id}</span>) : null}
+                              {memberData.user?.email || '-'}{memberData.user?.id ? (<span className="opacity-60"> ? id {memberData.user.id}</span>) : null}
                             </div>
                             <div className="flex flex-wrap gap-1 mt-1">
                               {memberData.profile?.is_admin && (
@@ -2443,20 +2443,20 @@ export const AdminPage: React.FC = () => {
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     <div className="rounded-xl border p-3 text-center">
                       <div className="text-[11px] opacity-60">Visits</div>
-                      <div className="text-base font-semibold tabular-nums">{memberData.visitsCount ?? '?'}</div>
+                      <div className="text-base font-semibold tabular-nums">{memberData.visitsCount ?? '-'}</div>
                     </div>
                     
                     <div className="rounded-xl border p-3 text-center">
                       <div className="text-[11px] opacity-60">Total plants</div>
-                      <div className="text-base font-semibold tabular-nums">{memberData.plantsTotal ?? '?'}</div>
+                      <div className="text-base font-semibold tabular-nums">{memberData.plantsTotal ?? '-'}</div>
                     </div>
                     <div className="rounded-xl border p-3 text-center">
                       <div className="text-[11px] opacity-60">Last IP</div>
-                      <div className="text-base font-semibold tabular-nums truncate" title={memberData.lastIp || undefined}>{memberData.lastIp || '?'}</div>
+                      <div className="text-base font-semibold tabular-nums truncate" title={memberData.lastIp || undefined}>{memberData.lastIp || '-'}</div>
                     </div>
                     <div className="rounded-xl border p-3 text-center">
                       <div className="text-[11px] opacity-60">Mean RPM (5m)</div>
-                      <div className="text-base font-semibold tabular-nums">{typeof memberData.meanRpm5m === 'number' ? memberData.meanRpm5m.toFixed(2) : '?'}</div>
+                      <div className="text-base font-semibold tabular-nums">{typeof memberData.meanRpm5m === 'number' ? memberData.meanRpm5m.toFixed(2) : '-'}</div>
                     </div>
                     <div className="rounded-xl border p-3">
                       <div className="text-[11px] opacity-60 mb-1">Top referrers</div>
@@ -2476,7 +2476,7 @@ export const AdminPage: React.FC = () => {
                     <div className="rounded-xl border p-3">
                       <div className="text-[11px] opacity-60 mb-1">Top countries</div>
                       {(!memberData.topCountries || memberData.topCountries.length === 0) ? (
-                        <div className="text-xs opacity-60">?</div>
+                        <div className="text-xs opacity-60">-</div>
                       ) : (
                         <div className="space-y-0.5">
                           {memberData.topCountries.slice(0,1).map((c, idx) => (
@@ -2491,7 +2491,7 @@ export const AdminPage: React.FC = () => {
                     <div className="rounded-xl border p-3">
                       <div className="text-[11px] opacity-60 mb-1">Top devices</div>
                       {(!memberData.topDevices || memberData.topDevices.length === 0) ? (
-                        <div className="text-xs opacity-60">?</div>
+                        <div className="text-xs opacity-60">-</div>
                       ) : (
                         <div className="space-y-0.5">
                           {memberData.topDevices.slice(0,1).map((d, idx) => (
@@ -2533,7 +2533,7 @@ export const AdminPage: React.FC = () => {
                       <div className="flex items-center justify-between gap-2 mb-2">
                         <div>
                           <div className="text-sm font-medium">Visits ? last 30 days</div>
-                          <div className="text-xs opacity-60">{memberVisitsUpdatedAt ? `Updated ${formatTimeAgo(memberVisitsUpdatedAt)}` : 'Updated ?'}</div>
+                          <div className="text-xs opacity-60">{memberVisitsUpdatedAt ? `Updated ${formatTimeAgo(memberVisitsUpdatedAt)}` : 'Updated -'}</div>
                         </div>
                         <Button
                           variant="outline"
@@ -2705,7 +2705,7 @@ export const AdminPage: React.FC = () => {
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                       <div className="rounded-xl border p-3 text-center">
                         <div className="text-[11px] opacity-60">IP</div>
-                        <div className="text-base font-semibold tabular-nums truncate" title={ipUsed || undefined}>{ipUsed || '?'}</div>
+                        <div className="text-base font-semibold tabular-nums truncate" title={ipUsed || undefined}>{ipUsed || '-'}</div>
                       </div>
                       <div className="rounded-xl border p-3 text-center">
                         <div className="text-[11px] opacity-60">Users</div>
@@ -2713,22 +2713,22 @@ export const AdminPage: React.FC = () => {
                       </div>
                       <div className="rounded-xl border p-3 text-center">
                         <div className="text-[11px] opacity-60">Connections</div>
-                        <div className="text-base font-semibold tabular-nums">{ipConnectionsCount ?? '?'}</div>
+                        <div className="text-base font-semibold tabular-nums">{ipConnectionsCount ?? '-'}</div>
                       </div>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                       <div className="rounded-xl border p-3 text-center">
                         <div className="text-[11px] opacity-60">Mean RPM (5m)</div>
-                        <div className="text-base font-semibold tabular-nums">{typeof ipMeanRpm5m === 'number' ? ipMeanRpm5m.toFixed(2) : '?'}</div>
+                        <div className="text-base font-semibold tabular-nums">{typeof ipMeanRpm5m === 'number' ? ipMeanRpm5m.toFixed(2) : '-'}</div>
                       </div>
                       <div className="rounded-xl border p-3 text-center">
                         <div className="text-[11px] opacity-60">Country</div>
-                        <div className="text-base font-semibold tabular-nums">{ipCountry ? countryCodeToName(ipCountry) : '?'}</div>
+                        <div className="text-base font-semibold tabular-nums">{ipCountry ? countryCodeToName(ipCountry) : '-'}</div>
                       </div>
                       <div className="rounded-xl border p-3">
                         <div className="text-[11px] opacity-60 mb-1">Top referrers</div>
                         {(ipTopReferrers.length === 0) ? (
-                          <div className="text-xs opacity-60">?</div>
+                          <div className="text-xs opacity-60">-</div>
                         ) : (
                           <div className="space-y-0.5">
                             {ipTopReferrers.slice(0,1).map((r, idx) => (
@@ -2760,7 +2760,7 @@ export const AdminPage: React.FC = () => {
                     <div className="rounded-xl border p-3">
                       <div className="text-[11px] opacity-60 mb-1">Top devices</div>
                       {(ipTopDevices.length === 0) ? (
-                        <div className="text-xs opacity-60">?</div>
+                        <div className="text-xs opacity-60">-</div>
                       ) : (
                         <div className="space-y-0.5">
                           {ipTopDevices.slice(0,1).map((d, idx) => (
@@ -2772,7 +2772,7 @@ export const AdminPage: React.FC = () => {
                         </div>
                       )}
                     </div>
-                    <div className="text-xs opacity-60">Last seen: {ipLastSeenAt ? new Date(ipLastSeenAt).toLocaleString() : '?'}</div>
+                    <div className="text-xs opacity-60">Last seen: {ipLastSeenAt ? new Date(ipLastSeenAt).toLocaleString() : '-'}</div>
                     {ipResults.length === 0 ? (
                       <div className="text-sm opacity-60">No users found for this IP.</div>
                     ) : (
@@ -2790,7 +2790,7 @@ export const AdminPage: React.FC = () => {
                             }}
                           >
                             <div className="text-sm font-semibold truncate">{u.display_name || u.email || 'User'}</div>
-                            <div className="text-xs opacity-70 truncate">{u.email || '?'}</div>
+                            <div className="text-xs opacity-70 truncate">{u.email || '-'}</div>
                             {u.last_seen_at && (
                               <div className="text-[11px] opacity-60 mt-0.5">Last seen {new Date(u.last_seen_at).toLocaleString()}</div>
                             )}
