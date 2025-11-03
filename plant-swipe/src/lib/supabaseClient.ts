@@ -36,6 +36,7 @@ export type ProfileRow = {
   timezone?: string | null
   experience_years?: number | null
   accent_key?: string | null
+  is_private?: boolean | null
 }
 
 // Garden-related table row types matching Supabase schema expectations
