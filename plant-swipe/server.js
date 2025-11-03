@@ -119,6 +119,7 @@ function withTimeout(promise, ms, label = 'TIMEOUT') {
 // Support both runtime server env and Vite-style public envs
 const supabaseUrlEnv = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.REACT_APP_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SERVICE_ROLE_KEY || null
 const supabaseServer = (supabaseUrlEnv && supabaseAnonKey)
   ? createSupabaseClient(supabaseUrlEnv, supabaseAnonKey, { auth: { persistSession: false, autoRefreshToken: false } })
   : null
@@ -2201,6 +2202,144 @@ app.delete('/api/admin/member-note/:id', async (req, res) => {
     res.status(500).json({ error: e?.message || 'Failed to delete note' })
   }
 })
+
+// Admin: update member email
+app.post('/api/admin/member-email', async (req, res) => {
+  try {
+    const adminUserId = await ensureAdmin(req, res)
+    if (!adminUserId) return
+    const { userId, email } = req.body || {}
+    const uid = typeof userId === 'string' ? userId.trim() : ''
+    const emailStr = typeof email === 'string' ? email.trim().toLowerCase() : ''
+    if (!uid || !emailStr || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailStr)) {
+      res.status(400).json({ error: 'Invalid userId or email' })
+      return
+    }
+    if (!supabaseUrlEnv || !supabaseServiceKey) {
+      res.status(500).json({ error: 'Supabase not configured' })
+      return
+    }
+    // Update email via Supabase Admin API
+    try {
+      const resp = await fetch(`${supabaseUrlEnv}/auth/v1/admin/users/${encodeURIComponent(uid)}`, {
+        method: 'PUT',
+        headers: {
+          'apikey': supabaseServiceKey,
+          'Authorization': `Bearer ${supabaseServiceKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email: emailStr }),
+      })
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}))
+        res.status(resp.status).json({ error: err?.message || err?.error_description || 'Failed to update email' })
+        return
+      }
+      // Log admin action
+      try {
+        if (sql) {
+          await sql`insert into public.admin_activity_logs (admin_id, action, target, detail) values (${adminUserId}, 'update_email', ${uid}, ${sql.json({ email: emailStr })})`
+        }
+      } catch {}
+      res.json({ ok: true })
+    } catch (e) {
+      res.status(500).json({ error: e?.message || 'Failed to update email' })
+    }
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to update email' })
+  }
+})
+
+// Admin: update member password
+app.post('/api/admin/member-password', async (req, res) => {
+  try {
+    const adminUserId = await ensureAdmin(req, res)
+    if (!adminUserId) return
+    const { userId, currentPassword, newPassword } = req.body || {}
+    const uid = typeof userId === 'string' ? userId.trim() : ''
+    const currPwd = typeof currentPassword === 'string' ? currentPassword : ''
+    const newPwd = typeof newPassword === 'string' ? newPassword : ''
+    if (!uid || !currPwd || !newPwd) {
+      res.status(400).json({ error: 'Missing userId, currentPassword, or newPassword' })
+      return
+    }
+    if (newPwd.length < 6) {
+      res.status(400).json({ error: 'New password must be at least 6 characters' })
+      return
+    }
+    if (!supabaseUrlEnv || !supabaseServiceKey) {
+      res.status(500).json({ error: 'Supabase not configured' })
+      return
+    }
+    // Verify current password by attempting to sign in
+    try {
+      const signInResp = await fetch(`${supabaseUrlEnv}/auth/v1/token?grant_type=password`, {
+        method: 'POST',
+        headers: {
+          'apikey': supabaseAnonKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: (await getUserEmailById(uid)) || '',
+          password: currPwd,
+        }),
+      })
+      if (!signInResp.ok) {
+        res.status(401).json({ error: 'Current password is incorrect' })
+        return
+      }
+    } catch (e) {
+      res.status(500).json({ error: 'Failed to verify current password' })
+      return
+    }
+    // Update password via Supabase Admin API
+    try {
+      const resp = await fetch(`${supabaseUrlEnv}/auth/v1/admin/users/${encodeURIComponent(uid)}`, {
+        method: 'PUT',
+        headers: {
+          'apikey': supabaseServiceKey,
+          'Authorization': `Bearer ${supabaseServiceKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ password: newPwd }),
+      })
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}))
+        res.status(resp.status).json({ error: err?.message || err?.error_description || 'Failed to update password' })
+        return
+      }
+      // Log admin action
+      try {
+        if (sql) {
+          await sql`insert into public.admin_activity_logs (admin_id, action, target, detail) values (${adminUserId}, 'update_password', ${uid}, ${sql.json({})})`
+        }
+      } catch {}
+      res.json({ ok: true })
+    } catch (e) {
+      res.status(500).json({ error: e?.message || 'Failed to update password' })
+    }
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to update password' })
+  }
+})
+
+// Helper function to get user email by ID
+async function getUserEmailById(userId: string): Promise<string | null> {
+  if (!userId || !supabaseUrlEnv || !supabaseServiceKey) return null
+  try {
+    const resp = await fetch(`${supabaseUrlEnv}/auth/v1/admin/users/${encodeURIComponent(userId)}`, {
+      headers: {
+        'apikey': supabaseServiceKey,
+        'Authorization': `Bearer ${supabaseServiceKey}`,
+      },
+    })
+    if (resp.ok) {
+      const data = await resp.json().catch(() => ({}))
+      return data?.email || null
+    }
+  } catch {}
+  return null
+}
 
 // Admin: list users who have connected from a specific IP address
 app.get('/api/admin/members-by-ip', async (req, res) => {

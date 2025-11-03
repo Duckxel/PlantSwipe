@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { LazyCharts, ChartSuspense } from '@/components/admin/LazyChart'
 // Re-export for convenience
@@ -1135,6 +1136,18 @@ export const AdminPage: React.FC = () => {
   // Ref to focus the IP input when jumping from overview
   const memberIpInputRef = React.useRef<HTMLInputElement | null>(null)
 
+  // Email and Password edit state
+  const [emailExpanded, setEmailExpanded] = React.useState(false)
+  const [passwordExpanded, setPasswordExpanded] = React.useState(false)
+  const [newEmail, setNewEmail] = React.useState('')
+  const [currentPassword, setCurrentPassword] = React.useState('')
+  const [newPassword, setNewPassword] = React.useState('')
+  const [confirmPassword, setConfirmPassword] = React.useState('')
+  const [emailSubmitting, setEmailSubmitting] = React.useState(false)
+  const [passwordSubmitting, setPasswordSubmitting] = React.useState(false)
+  const [emailError, setEmailError] = React.useState<string | null>(null)
+  const [passwordError, setPasswordError] = React.useState<string | null>(null)
+
   // Member visits (last 30 days)
   const [memberVisitsLoading, setMemberVisitsLoading] = React.useState<boolean>(false)
   const [memberVisitsSeries, setMemberVisitsSeries] = React.useState<Array<{ date: string; visits: number }>>([])
@@ -1206,6 +1219,15 @@ export const AdminPage: React.FC = () => {
         meanRpm5m: typeof data?.meanRpm5m === 'number' ? data.meanRpm5m : null,
         adminNotes: Array.isArray(data?.adminNotes) ? data.adminNotes.map((n: any) => ({ id: String(n.id), admin_id: n?.admin_id || null, admin_name: n?.admin_name || null, message: String(n?.message || ''), created_at: n?.created_at || null })) : [],
       })
+      // Reset email/password form state when member data changes
+      setEmailExpanded(false)
+      setPasswordExpanded(false)
+      setNewEmail('')
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+      setEmailError(null)
+      setPasswordError(null)
       // Log lookup success (UI)
       try {
         const headers2: Record<string,string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
@@ -1484,6 +1506,76 @@ export const AdminPage: React.FC = () => {
     }, 0)
     return () => clearTimeout(t)
   }, [activeTab])
+
+  const updateEmail = React.useCallback(async () => {
+    if (!memberData?.user?.id || !newEmail.trim() || emailSubmitting) return
+    setEmailSubmitting(true)
+    setEmailError(null)
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      const headers: Record<string, string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ? ${token}`
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+        if (adminToken) headers['X-Admin-Token'] = String(adminToken)
+      } catch {}
+      const resp = await fetch('/api/admin/member-email', {
+        method: 'POST',
+        headers,
+        credentials: 'same-origin',
+        body: JSON.stringify({ userId: memberData.user.id, email: newEmail.trim() }),
+      })
+      const data = await safeJson(resp)
+      if (!resp.ok) throw new Error(data?.error || `HTTP ? ${resp.status}`)
+      setEmailExpanded(false)
+      setNewEmail('')
+      // Refresh member data
+      await lookupMember()
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setEmailError(msg || 'Failed to update email')
+    } finally {
+      setEmailSubmitting(false)
+    }
+  }, [memberData?.user?.id, newEmail, emailSubmitting, safeJson, lookupMember])
+
+  const updatePassword = React.useCallback(async () => {
+    if (!memberData?.user?.id || !currentPassword.trim() || !newPassword.trim() || passwordSubmitting) return
+    if (newPassword !== confirmPassword) {
+      setPasswordError('New passwords do not match')
+      return
+    }
+    setPasswordSubmitting(true)
+    setPasswordError(null)
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      const headers: Record<string, string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ? ${token}`
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+        if (adminToken) headers['X-Admin-Token'] = String(adminToken)
+      } catch {}
+      const resp = await fetch('/api/admin/member-password', {
+        method: 'POST',
+        headers,
+        credentials: 'same-origin',
+        body: JSON.stringify({ userId: memberData.user.id, currentPassword: currentPassword.trim(), newPassword: newPassword.trim() }),
+      })
+      const data = await safeJson(resp)
+      if (!resp.ok) throw new Error(data?.error || `HTTP ? ${resp.status}`)
+      setPasswordExpanded(false)
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setPasswordError(msg || 'Failed to update password')
+    } finally {
+      setPasswordSubmitting(false)
+    }
+  }, [memberData?.user?.id, currentPassword, newPassword, confirmPassword, passwordSubmitting, safeJson])
 
   return (
     <div className="max-w-3xl mx-auto mt-8 px-4 md:px-0">
@@ -2555,6 +2647,169 @@ export const AdminPage: React.FC = () => {
                       )}
                     </div>
                   </div>
+
+                  {/* Email Collapsible Section */}
+                  <Card className="rounded-2xl">
+                    <CardContent className="p-4">
+                      <button
+                        type="button"
+                        onClick={() => setEmailExpanded(!emailExpanded)}
+                        className="w-full flex items-center justify-between gap-2 text-left"
+                        aria-expanded={emailExpanded}
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className="text-sm font-medium">Email Address</div>
+                          {!emailExpanded && memberData.user?.email && (
+                            <div className="text-sm opacity-60">{memberData.user.email}</div>
+                          )}
+                        </div>
+                        <ChevronDown className={`h-4 w-4 transition-transform ${emailExpanded ? 'rotate-180' : ''}`} />
+                      </button>
+                      {emailExpanded && (
+                        <div className="mt-4 space-y-3">
+                          <div className="grid gap-2">
+                            <Label htmlFor="current-email">Current Email</Label>
+                            <Input
+                              id="current-email"
+                              type="email"
+                              value={memberData.user?.email || ''}
+                              disabled
+                              className="bg-neutral-50"
+                            />
+                          </div>
+                          <div className="grid gap-2">
+                            <Label htmlFor="new-email">New Email</Label>
+                            <Input
+                              id="new-email"
+                              name="new-email"
+                              type="email"
+                              autoComplete="off"
+                              placeholder="new@example.com"
+                              value={newEmail}
+                              onChange={(e) => {
+                                setNewEmail(e.target.value)
+                                setEmailError(null)
+                              }}
+                            />
+                          </div>
+                          {emailError && (
+                            <div className="text-sm text-rose-600">{emailError}</div>
+                          )}
+                          <div className="flex gap-2">
+                            <Button
+                              variant="secondary"
+                              onClick={() => {
+                                setEmailExpanded(false)
+                                setNewEmail('')
+                                setEmailError(null)
+                              }}
+                              disabled={emailSubmitting}
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              onClick={updateEmail}
+                              disabled={emailSubmitting || !newEmail.trim() || newEmail.trim() === memberData.user?.email}
+                            >
+                              {emailSubmitting ? 'Updating...' : 'Update Email'}
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Password Collapsible Section */}
+                  <Card className="rounded-2xl">
+                    <CardContent className="p-4">
+                      <button
+                        type="button"
+                        onClick={() => setPasswordExpanded(!passwordExpanded)}
+                        className="w-full flex items-center justify-between gap-2 text-left"
+                        aria-expanded={passwordExpanded}
+                      >
+                        <div className="text-sm font-medium">Password</div>
+                        <ChevronDown className={`h-4 w-4 transition-transform ${passwordExpanded ? 'rotate-180' : ''}`} />
+                      </button>
+                      {passwordExpanded && (
+                        <div className="mt-4 space-y-3">
+                          <div className="grid gap-2">
+                            <Label htmlFor="current-password">Current Password</Label>
+                            <Input
+                              id="current-password"
+                              name="current-password"
+                              type="password"
+                              autoComplete="off"
+                              placeholder="Enter current password"
+                              value={currentPassword}
+                              onChange={(e) => {
+                                setCurrentPassword(e.target.value)
+                                setPasswordError(null)
+                              }}
+                            />
+                          </div>
+                          {currentPassword.trim() && (
+                            <>
+                              <div className="grid gap-2">
+                                <Label htmlFor="new-password">New Password</Label>
+                                <Input
+                                  id="new-password"
+                                  name="new-password"
+                                  type="password"
+                                  autoComplete="new-password"
+                                  placeholder="Enter new password"
+                                  value={newPassword}
+                                  onChange={(e) => {
+                                    setNewPassword(e.target.value)
+                                    setPasswordError(null)
+                                  }}
+                                />
+                              </div>
+                              <div className="grid gap-2">
+                                <Label htmlFor="confirm-password">Confirm New Password</Label>
+                                <Input
+                                  id="confirm-password"
+                                  name="confirm-password"
+                                  type="password"
+                                  autoComplete="new-password"
+                                  placeholder="Confirm new password"
+                                  value={confirmPassword}
+                                  onChange={(e) => {
+                                    setConfirmPassword(e.target.value)
+                                    setPasswordError(null)
+                                  }}
+                                />
+                              </div>
+                            </>
+                          )}
+                          {passwordError && (
+                            <div className="text-sm text-rose-600">{passwordError}</div>
+                          )}
+                          <div className="flex gap-2">
+                            <Button
+                              variant="secondary"
+                              onClick={() => {
+                                setPasswordExpanded(false)
+                                setCurrentPassword('')
+                                setNewPassword('')
+                                setConfirmPassword('')
+                                setPasswordError(null)
+                              }}
+                              disabled={passwordSubmitting}
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              onClick={updatePassword}
+                              disabled={passwordSubmitting || !currentPassword.trim() || !newPassword.trim() || newPassword !== confirmPassword}
+                            >
+                              {passwordSubmitting ? 'Updating...' : 'Update Password'}
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
 
                   <div className="space-y-1">
                     <div className="text-xs font-medium uppercase tracking-wide opacity-60">Known IPs</div>
