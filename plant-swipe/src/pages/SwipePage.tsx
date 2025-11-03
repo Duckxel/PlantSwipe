@@ -1,6 +1,6 @@
 import React from "react"
 import { motion, AnimatePresence, type MotionValue } from "framer-motion"
-import { ChevronLeft, ChevronRight, Heart, Sparkles, ArrowUp } from "lucide-react"
+import { ChevronLeft, ChevronRight, ChevronUp, Heart, Sparkles } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -78,29 +78,12 @@ export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, 
                   {/* Upward arrow indicator - minimalist geometric */}
                   <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
                     <div className="relative flex flex-col items-center">
-                      {/* Minimalist white arrow - solid fill, geometric, thick line, triangular head */}
-                      <svg 
-                        width="40" 
-                        height="40" 
-                        viewBox="0 0 40 40"
-                        className="text-white"
+                      {/* Minimalist white chevron pointing up */}
+                      <ChevronUp 
+                        className="h-10 w-10 text-white" 
+                        strokeWidth={3}
                         style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.9))' }}
-                      >
-                        {/* Thick vertical stem */}
-                        <rect
-                          x="17"
-                          y="20"
-                          width="6"
-                          height="16"
-                          fill="white"
-                          rx="3"
-                        />
-                        {/* Triangular arrowhead pointing up */}
-                        <path
-                          d="M20 6 L10 20 L30 20 Z"
-                          fill="white"
-                        />
-                      </svg>
+                      />
                     </div>
                   </div>
                   <div className="absolute top-2 right-2 z-10">
@@ -152,7 +135,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, 
                       }}
                       onPointerDown={(e) => e.stopPropagation()}
                     >
-                      More info <ArrowUp className="h-4 w-4 ml-1" />
+                      More info <ChevronUp className="h-4 w-4 ml-1" />
                     </Button>
                     <Button 
                       variant="secondary" 
