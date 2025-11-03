@@ -1688,7 +1688,7 @@ export const AdminPage: React.FC = () => {
                 </Button>
                 <Button className="rounded-2xl w-full" variant="destructive" onClick={runSyncSchema} disabled={syncing}>
                   <Database className="h-4 w-4" />
-                  <span>{syncing ? 'Syncing Schema?' : 'Sync DB Schema'}</span>
+                  <span>{syncing ? 'Syncing...' : 'Sync DB Schema'}</span>
                 </Button>
               </div>
 
