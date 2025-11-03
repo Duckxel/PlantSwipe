@@ -2035,9 +2035,18 @@ export const AdminPage: React.FC = () => {
                                     <ResponsiveContainer width="100%" height={150}>
                                       <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
                                       {(() => {
-                                        const pieData: Array<{ country: string; visits: number; pct?: number; isOther?: boolean }> = [...topCountries.slice(0, 5)]
+                                        const pieData: Array<{ country: string; visits: number; pct?: number; isOther?: boolean; fill?: string }> = topCountries.slice(0, 5).map((c, idx) => ({
+                                          ...c,
+                                          fill: countryColors[idx % countryColors.length]
+                                        }))
                                         if (otherCountries && otherCountries.visits > 0) {
-                                          pieData.push({ country: 'Other', visits: otherCountries.visits, pct: otherCountries.pct, isOther: true })
+                                          pieData.push({ 
+                                            country: 'Other', 
+                                            visits: otherCountries.visits, 
+                                            pct: otherCountries.pct, 
+                                            isOther: true,
+                                            fill: countryColors[5 % countryColors.length]
+                                          })
                                         }
                                         const totalVisits = pieData.reduce((s, x) => s + (x.visits || 0), 0)
                                         const CountryPieTooltip = ({ active, payload }: { active?: boolean; payload?: any[] }) => {
@@ -2088,17 +2097,19 @@ export const AdminPage: React.FC = () => {
                                               outerRadius={64}
                                               paddingAngle={3}
                                               cx="40%"
+                                              cy="50%"
+                                              isAnimationActive={false}
                                             >
                                               {pieData.map((entry, index) => {
                                                 // Use color index 5 for "Other", otherwise use the index (0-4 for top countries)
                                                 const colorIndex = entry.isOther ? 5 : index
-                                                const color = countryColors[colorIndex % countryColors.length]
+                                                const color = entry.fill || countryColors[colorIndex % countryColors.length]
                                                 return (
                                                   <Cell 
-                                                    key={`cell-${entry.country}-${index}`} 
+                                                    key={`cell-${entry.country}-${index}-${color}`} 
                                                     fill={color}
                                                     stroke={color}
-                                                    strokeWidth={1}
+                                                    strokeWidth={2}
                                                   />
                                                 )
                                               })}
