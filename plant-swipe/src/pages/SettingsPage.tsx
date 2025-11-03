@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
-import { Settings, Mail, Lock, Trash2, AlertTriangle, Check } from "lucide-react"
+import { Settings, Mail, Lock, Trash2, AlertTriangle, Check, ChevronDown, ChevronUp } from "lucide-react"
 
 export default function SettingsPage() {
   const { user, profile, refreshProfile, deleteAccount, signOut } = useAuth()
@@ -14,9 +14,12 @@ export default function SettingsPage() {
 
   const [email, setEmail] = React.useState("")
   const [newEmail, setNewEmail] = React.useState("")
+  const [currentPassword, setCurrentPassword] = React.useState("")
   const [newPassword, setNewPassword] = React.useState("")
   const [confirmPassword, setConfirmPassword] = React.useState("")
   const [isPrivate, setIsPrivate] = React.useState(false)
+  const [emailExpanded, setEmailExpanded] = React.useState(false)
+  const [passwordExpanded, setPasswordExpanded] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -100,6 +103,11 @@ export default function SettingsPage() {
   }
 
   const handleUpdatePassword = async () => {
+    if (!currentPassword) {
+      setError("Please enter your current password")
+      return
+    }
+
     if (!newPassword || newPassword.length < 6) {
       setError("Password must be at least 6 characters")
       return
@@ -115,6 +123,17 @@ export default function SettingsPage() {
     setSuccess(null)
 
     try {
+      // Verify current password by attempting to sign in
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: email,
+        password: currentPassword
+      })
+
+      if (signInError) {
+        throw new Error("Current password is incorrect")
+      }
+
+      // If sign in succeeds, update the password
       const { error: updateError } = await supabase.auth.updateUser({
         password: newPassword
       })
@@ -122,6 +141,7 @@ export default function SettingsPage() {
       if (updateError) throw updateError
 
       setSuccess("Password updated successfully!")
+      setCurrentPassword("")
       setNewPassword("")
       setConfirmPassword("")
     } catch (e: any) {
@@ -217,84 +237,135 @@ export default function SettingsPage() {
       {/* Account Information */}
       <Card className="rounded-3xl mb-4">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Mail className="h-5 w-5" />
-            Email Address
-          </CardTitle>
-          <CardDescription>Change your email address. You'll need to confirm the new email.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-2">
-            <Label htmlFor="current-email">Current Email</Label>
-            <Input
-              id="current-email"
-              type="email"
-              value={email}
-              disabled
-              className="bg-stone-50"
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="new-email">New Email</Label>
-            <Input
-              id="new-email"
-              type="email"
-              placeholder="newemail@example.com"
-              value={newEmail}
-              onChange={(e) => setNewEmail(e.target.value)}
-              disabled={saving}
-            />
-          </div>
-          <Button
-            onClick={handleUpdateEmail}
-            disabled={saving || !newEmail || newEmail === email}
-            className="rounded-2xl"
+          <button
+            onClick={() => setEmailExpanded(!emailExpanded)}
+            className="w-full text-left flex items-center justify-between gap-2 hover:opacity-80 transition-opacity"
           >
-            {saving ? "Updating..." : "Update Email"}
-          </Button>
-        </CardContent>
+            <div className="flex items-center gap-2">
+              <Mail className="h-5 w-5" />
+              <CardTitle>Email Address</CardTitle>
+            </div>
+            {emailExpanded ? (
+              <ChevronUp className="h-5 w-5 opacity-60" />
+            ) : (
+              <ChevronDown className="h-5 w-5 opacity-60" />
+            )}
+          </button>
+          {!emailExpanded ? (
+            <CardDescription className="mt-2">
+              Email Address: <span className="font-medium">{email}</span>
+            </CardDescription>
+          ) : (
+            <CardDescription className="mt-2">
+              Change your email address. You'll need to confirm the new email.
+            </CardDescription>
+          )}
+        </CardHeader>
+        {emailExpanded && (
+          <CardContent className="space-y-4">
+            <div className="grid gap-2">
+              <Label htmlFor="current-email">Current Email</Label>
+              <Input
+                id="current-email"
+                type="email"
+                value={email}
+                disabled
+                className="bg-stone-50"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="new-email">New Email</Label>
+              <Input
+                id="new-email"
+                type="email"
+                placeholder="newemail@example.com"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                disabled={saving}
+              />
+            </div>
+            <Button
+              onClick={handleUpdateEmail}
+              disabled={saving || !newEmail || newEmail === email}
+              className="rounded-2xl"
+            >
+              {saving ? "Updating..." : "Update Email"}
+            </Button>
+          </CardContent>
+        )}
       </Card>
 
       {/* Password */}
       <Card className="rounded-3xl mb-4">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Lock className="h-5 w-5" />
-            Password
-          </CardTitle>
-          <CardDescription>Change your password to keep your account secure.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-2">
-            <Label htmlFor="new-password">New Password</Label>
-            <Input
-              id="new-password"
-              type="password"
-              placeholder="Enter new password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              disabled={saving}
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="confirm-password">Confirm Password</Label>
-            <Input
-              id="confirm-password"
-              type="password"
-              placeholder="Confirm new password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              disabled={saving}
-            />
-          </div>
-          <Button
-            onClick={handleUpdatePassword}
-            disabled={saving || !newPassword || newPassword !== confirmPassword}
-            className="rounded-2xl"
+          <button
+            onClick={() => setPasswordExpanded(!passwordExpanded)}
+            className="w-full text-left flex items-center justify-between gap-2 hover:opacity-80 transition-opacity"
           >
-            {saving ? "Updating..." : "Update Password"}
-          </Button>
-        </CardContent>
+            <div className="flex items-center gap-2">
+              <Lock className="h-5 w-5" />
+              <CardTitle>Password</CardTitle>
+            </div>
+            {passwordExpanded ? (
+              <ChevronUp className="h-5 w-5 opacity-60" />
+            ) : (
+              <ChevronDown className="h-5 w-5 opacity-60" />
+            )}
+          </button>
+          {!passwordExpanded ? (
+            <CardDescription className="mt-2">
+              Password: <span className="font-medium">••••••••</span>
+            </CardDescription>
+          ) : (
+            <CardDescription className="mt-2">
+              Change your password to keep your account secure.
+            </CardDescription>
+          )}
+        </CardHeader>
+        {passwordExpanded && (
+          <CardContent className="space-y-4">
+            <div className="grid gap-2">
+              <Label htmlFor="current-password">Current Password</Label>
+              <Input
+                id="current-password"
+                type="password"
+                placeholder="Enter your current password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                disabled={saving}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="new-password">New Password</Label>
+              <Input
+                id="new-password"
+                type="password"
+                placeholder="Enter new password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                disabled={saving}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="confirm-password">Confirm Password</Label>
+              <Input
+                id="confirm-password"
+                type="password"
+                placeholder="Confirm new password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                disabled={saving}
+              />
+            </div>
+            <Button
+              onClick={handleUpdatePassword}
+              disabled={saving || !currentPassword || !newPassword || newPassword !== confirmPassword}
+              className="rounded-2xl"
+            >
+              {saving ? "Updating..." : "Update Password"}
+            </Button>
+          </CardContent>
+        )}
       </Card>
 
       {/* Privacy Settings */}
