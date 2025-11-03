@@ -198,9 +198,10 @@ export default function PublicProfilePage() {
 
   const colorFor = (cell: { value: number; success: boolean } | null) => {
     if (!cell) return 'bg-stone-200'
-    // If the day wasn't successful, render as neutral gray
+    // Grey: Tasks were not accomplished that day (tasks were due but not all completed)
     if (!cell.success) return 'bg-stone-200'
-    // Successful day with no counts (e.g., no tasks due) should still be green
+    // Green: Either no tasks were needed OR all tasks were done
+    // Stronger color = more tasks completed that day
     if (maxCount <= 0) return 'bg-emerald-400'
     const ratio = (cell.value || 0) / maxCount
     if (ratio <= 0) return 'bg-emerald-300'

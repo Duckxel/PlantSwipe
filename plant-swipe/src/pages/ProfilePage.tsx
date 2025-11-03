@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabaseClient"
 import { useNavigate } from "react-router-dom"
+import { createPortal } from "react-dom"
 
 type FunStats = {
   loading: boolean
@@ -17,6 +18,8 @@ type FunStats = {
   currentStreak: number | null
   bestStreak: number | null
 }
+
+type DayAgg = { day: string; completed: number; any_success: boolean }
 
 export const ProfilePage: React.FC = () => {
   const { user, profile, refreshProfile, signOut, deleteAccount } = useAuth()
@@ -40,6 +43,8 @@ export const ProfilePage: React.FC = () => {
     currentStreak: null,
     bestStreak: null,
   })
+  const [monthDays, setMonthDays] = React.useState<DayAgg[]>([])
+  const [tooltip, setTooltip] = React.useState<{ top: number; left: number; date: string; value: number; success: boolean } | null>(null)
 
   React.useEffect(() => {
     setDisplayName(profile?.display_name || "")
@@ -190,6 +195,38 @@ export const ProfilePage: React.FC = () => {
     return () => { cancelled = true }
   }, [user?.id, profile?.liked_plant_ids])
 
+  // Load task cubes data for past 28 days
+  React.useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      try {
+        const uid = user?.id || null
+        if (!uid) {
+          setMonthDays([])
+          return
+        }
+        // Heatmap: last 28 days (4 rows ? 7 columns)
+        const today = new Date()
+        const end = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()))
+        const start = new Date(end)
+        start.setUTCDate(end.getUTCDate() - 27)
+        const startIso = start.toISOString().slice(0,10)
+        const endIso = end.toISOString().slice(0,10)
+        const { data: series, error: herr } = await supabase.rpc('get_user_daily_tasks', { _user_id: uid, _start: startIso, _end: endIso })
+        if (!herr && Array.isArray(series)) {
+          const days: DayAgg[] = series.map((r: any) => ({ day: String(r.day).slice(0,10), completed: Number(r.completed || 0), any_success: Boolean(r.any_success) }))
+          if (!cancelled) setMonthDays(days)
+        } else {
+          if (!cancelled) setMonthDays([])
+        }
+      } catch {
+        if (!cancelled) setMonthDays([])
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [user?.id])
+
   // Realtime: apply live profile changes (display name, accent, etc.)
   React.useEffect(() => {
     if (!user?.id) return
@@ -200,6 +237,58 @@ export const ProfilePage: React.FC = () => {
       .subscribe()
     return () => { try { supabase.removeChannel(channel) } catch {} }
   }, [user?.id, refreshProfile])
+
+  // Build cubes data for past 28 days
+  const daysFlat = React.useMemo(() => {
+    // Build a fixed 28-day window (UTC)
+    // Render as GitHub-like packed columns: 4 rows, 7 columns (top?bottom flow)
+    const end = new Date(Date.UTC(
+      new Date().getUTCFullYear(),
+      new Date().getUTCMonth(),
+      new Date().getUTCDate()
+    ))
+    const start = new Date(end)
+    start.setUTCDate(end.getUTCDate() - 27)
+
+    const dayToAgg = new Map<string, DayAgg>()
+    for (const d of monthDays) dayToAgg.set(d.day, d)
+
+    const items: Array<{ date: string; value: number; success: boolean }> = []
+    for (let i = 0; i < 28; i++) {
+      const cur = new Date(start)
+      cur.setUTCDate(start.getUTCDate() + i)
+      const ymd = cur.toISOString().slice(0, 10)
+      const agg = dayToAgg.get(ymd)
+      items.push(agg ? { date: ymd, value: agg.completed, success: agg.any_success } : { date: ymd, value: 0, success: false })
+    }
+    return items
+  }, [monthDays])
+
+  // Compute max value to scale color intensity like GitHub contributions
+  const maxCount = React.useMemo(() => monthDays.reduce((m, d) => Math.max(m, d.completed || 0), 0), [monthDays])
+
+  const colorFor = (cell: { value: number; success: boolean } | null) => {
+    if (!cell) return 'bg-stone-200'
+    // Grey: Tasks were not accomplished that day (tasks were due but not all completed)
+    if (!cell.success) return 'bg-stone-200'
+    // Green: Either no tasks were needed OR all tasks were done
+    // Stronger color = more tasks completed that day
+    if (maxCount <= 0) return 'bg-emerald-400'
+    const ratio = (cell.value || 0) / maxCount
+    if (ratio <= 0) return 'bg-emerald-300'
+    if (ratio <= 0.25) return 'bg-emerald-400'
+    if (ratio <= 0.5) return 'bg-emerald-500'
+    if (ratio <= 0.75) return 'bg-emerald-600'
+    return 'bg-emerald-700'
+  }
+
+  const showTooltip = (el: HTMLElement, cell: { date: string; value: number; success: boolean }) => {
+    const r = el.getBoundingClientRect()
+    const top = Math.max(8, r.top - 8)
+    const left = r.left + r.width / 2
+    setTooltip({ top, left, date: cell.date, value: cell.value, success: cell.success })
+  }
+  const hideTooltip = () => setTooltip(null)
 
   return (
     <div className="max-w-3xl mx-auto mt-8 px-4 md:px-0">
@@ -251,11 +340,11 @@ export const ProfilePage: React.FC = () => {
             <div className="grid sm:grid-cols-2 gap-3 mt-2">
               <div className="rounded-xl border p-3">
                 <div className="text-[11px] opacity-60">User ID</div>
-                <div className="text-xs break-all">{privateInfo?.id || '—'}</div>
+                <div className="text-xs break-all">{privateInfo?.id || '?'}</div>
               </div>
               <div className="rounded-xl border p-3">
                 <div className="text-[11px] opacity-60">Email</div>
-                <div className="text-sm">{privateInfo?.email || (user as any)?.email || '—'}</div>
+                <div className="text-sm">{privateInfo?.email || (user as any)?.email || '?'}</div>
               </div>
             </div>
           </CardContent>
@@ -269,34 +358,73 @@ export const ProfilePage: React.FC = () => {
               <div className="rounded-xl border p-3 text-center">
                 <div className="text-[11px] opacity-60">Member since</div>
                 <div className="text-base font-semibold">
-                  {funStats.loading ? '—' : (funStats.createdAt ? new Date(funStats.createdAt).toLocaleDateString() : '—')}
+                  {funStats.loading ? '?' : (funStats.createdAt ? new Date(funStats.createdAt).toLocaleDateString() : '?')}
                 </div>
               </div>
               <div className="rounded-xl border p-3 text-center">
                 <div className="text-[11px] opacity-60">Days in the garden</div>
-                <div className="text-base font-semibold tabular-nums">{funStats.loading ? '—' : (funStats.daysHere ?? '—')}</div>
+                <div className="text-base font-semibold tabular-nums">{funStats.loading ? '?' : (funStats.daysHere ?? '?')}</div>
               </div>
               <div className="rounded-xl border p-3 text-center">
                 <div className="text-[11px] opacity-60">Plants you're tending</div>
-                <div className="text-base font-semibold tabular-nums">{funStats.loading ? '—' : (funStats.plantsTotal ?? '—')}</div>
+                <div className="text-base font-semibold tabular-nums">{funStats.loading ? '?' : (funStats.plantsTotal ?? '?')}</div>
               </div>
               <div className="rounded-xl border p-3 text-center">
                 <div className="text-[11px] opacity-60">Favorites saved</div>
-                <div className="text-base font-semibold tabular-nums">{funStats.loading ? '—' : (funStats.favorites ?? 0)}</div>
+                <div className="text-base font-semibold tabular-nums">{funStats.loading ? '?' : (funStats.favorites ?? 0)}</div>
               </div>
                   <div className="rounded-xl border p-3 text-center">
                     <div className="text-[11px] opacity-60">Gardens</div>
-                    <div className="text-base font-semibold tabular-nums">{funStats.loading ? '—' : (funStats.gardensCount ?? 0)}</div>
+                    <div className="text-base font-semibold tabular-nums">{funStats.loading ? '?' : (funStats.gardensCount ?? 0)}</div>
                   </div>
                   <div className="rounded-xl border p-3 text-center">
                     <div className="text-[11px] opacity-60">Current streak</div>
-                    <div className="text-base font-semibold tabular-nums">{funStats.loading ? '—' : (funStats.currentStreak ?? 0)}</div>
+                    <div className="text-base font-semibold tabular-nums">{funStats.loading ? '?' : (funStats.currentStreak ?? 0)}</div>
                   </div>
               <div className="rounded-xl border p-3 text-center">
                     <div className="text-[11px] opacity-60">Longest streak</div>
-                    <div className="text-base font-semibold tabular-nums">{funStats.loading ? '—' : (funStats.bestStreak ?? '—')}</div>
+                    <div className="text-base font-semibold tabular-nums">{funStats.loading ? '?' : (funStats.bestStreak ?? '?')}</div>
               </div>
             </div>
+          </CardContent>
+        </Card>
+      </div>
+      <div className="mt-4">
+        <Card className="rounded-3xl">
+          <CardContent className="p-6 md:p-8 space-y-4">
+            <div className="text-lg font-semibold">Past 28 days</div>
+            <div className="w-full">
+              <div className="flex justify-center">
+                <div className="grid grid-rows-4 grid-flow-col auto-cols-max gap-1 sm:gap-1.5">
+                {daysFlat.map((item: { date: string; value: number; success: boolean }, idx: number) => (
+                  <div
+                    key={idx}
+                    tabIndex={0}
+                    className={`h-6 w-6 sm:h-8 sm:w-8 rounded-[4px] ${colorFor(item)}`}
+                    onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => showTooltip(e.currentTarget as HTMLDivElement, item)}
+                    onMouseLeave={hideTooltip}
+                    onFocus={(e: React.FocusEvent<HTMLDivElement>) => showTooltip(e.currentTarget as HTMLDivElement, item)}
+                    onBlur={hideTooltip}
+                    title={`${item.value} tasks on ${new Date(item.date).toLocaleDateString()}`}
+                    aria-label={`${new Date(item.date).toLocaleDateString()}: ${item.value} tasks${item.success ? ', completed day' : ''}`}
+                  />
+                ))}
+                </div>
+              </div>
+            </div>
+            
+            {tooltip && createPortal(
+              <div
+                className="fixed z-[70] pointer-events-none"
+                style={{ top: tooltip.top, left: tooltip.left, transform: 'translate(-50%, -100%)' }}
+              >
+                <div className="rounded-xl border bg-white shadow px-3 py-2">
+                  <div className="text-xs font-medium">{new Date(tooltip.date).toLocaleDateString()}</div>
+                  <div className="text-[11px] opacity-70">{tooltip.value} tasks{tooltip.success ? ' ? Completed day' : ''}</div>
+                </div>
+              </div>,
+              document.body
+            )}
           </CardContent>
         </Card>
       </div>
