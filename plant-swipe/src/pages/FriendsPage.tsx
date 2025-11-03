@@ -520,236 +520,260 @@ export const FriendsPage: React.FC = () => {
   }
 
   return (
-    <div className="max-w-3xl mx-auto mt-8 px-4 md:px-0">
-      <Card className="rounded-3xl">
-        <CardContent className="p-6 md:p-8 space-y-6">
-          <div className="text-2xl font-semibold">Friends</div>
-          
-          {error && (
-            <div className="text-sm text-red-600 bg-red-50 p-3 rounded-xl">{error}</div>
-          )}
-
-          {/* Add Friend Button */}
-          <div>
-            <Button
-              className="rounded-xl"
-              variant="default"
-              onClick={() => {
-                setAddFriendDialogOpen(true)
-                setDialogSearchQuery("")
-                setDialogSearchResults([])
-              }}
-            >
-              <UserPlus className="h-4 w-4 mr-2" /> Add Friend
-            </Button>
-          </div>
-
-          {/* Sent Pending Requests */}
-          {sentPendingRequests.length > 0 && (
-            <div className="space-y-2">
-              <div className="text-sm font-medium">Sent Requests</div>
-              {sentPendingRequests.map((request) => (
-                <div
-                  key={request.id}
-                  className="flex items-center justify-between p-3 rounded-xl border bg-white"
-                >
-                  <div className="flex flex-col gap-1 flex-1">
-                    <div className="flex items-center gap-2">
-                      <User className="h-5 w-5 opacity-60" />
-                      <span className="font-medium">
-                        {request.recipient_profile?.display_name || 'Unknown'}
-                      </span>
-                    </div>
-                    {request.recipient_profile?.email && (
-                      <div className="text-xs opacity-60 pl-7">
-                        {request.recipient_profile.email}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {request.recipient_profile?.display_name && (
-                      <Button
-                        variant="secondary"
-                        size="icon"
-                        className="rounded-full h-8 w-8"
-                        aria-label="View profile"
-                        onClick={() => navigate(`/u/${encodeURIComponent(request.recipient_profile?.display_name || '')}`)}
-                      >
-                        <ArrowUpRight className="h-4 w-4" />
-                      </Button>
-                    )}
-                    <Button
-                      className="rounded-xl"
-                      variant="secondary"
-                      size="sm"
-                      disabled
-                    >
-                      Pending
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Pending friend requests */}
-          {pendingRequests.length > 0 && (
-            <div className="space-y-2">
-              <div className="text-sm font-medium">Pending Requests</div>
-              {pendingRequests.map((request) => (
-                <div
-                  key={request.id}
-                  className="flex items-center justify-between p-3 rounded-xl border bg-white"
-                >
-                  <div className="flex flex-col gap-1 flex-1">
-                    <div className="flex items-center gap-2">
-                      <User className="h-5 w-5 opacity-60" />
-                      <span className="font-medium">
-                        {request.requester_profile?.display_name || 'Unknown'}
-                      </span>
-                    </div>
-                    {request.requester_profile?.email && (
-                      <div className="text-xs opacity-60 pl-7">
-                        {request.requester_profile.email}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {request.requester_profile?.display_name && (
-                      <Button
-                        className="rounded-xl"
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => navigate(`/u/${encodeURIComponent(request.requester_profile?.display_name || '')}`)}
-                      >
-                        <ArrowRight className="h-4 w-4" />
-                      </Button>
-                    )}
-                    <Button
-                      className="rounded-xl"
-                      variant="default"
-                      size="sm"
-                      onClick={() => acceptRequest(request.id)}
-                    >
-                      <Check className="h-4 w-4 mr-1" /> Accept
-                    </Button>
-                    <Button
-                      className="rounded-xl"
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => rejectRequest(request.id)}
-                    >
-                      <X className="h-4 w-4 mr-1" /> Reject
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Friends list */}
-          <div className="space-y-2">
-            <div className="text-sm font-medium">
-              Your Friends ({friends.length})
-            </div>
-            {loading ? (
-              <div className="text-xs opacity-60">Loading...</div>
-            ) : friends.length === 0 ? (
-              <div className="text-xs opacity-60 p-4 rounded-xl border text-center">
-                No friends yet. Search for people above to add friends!
-              </div>
-            ) : (
+    <div className="max-w-6xl mx-auto mt-8 px-4 md:px-0">
+      <div className={`flex flex-col lg:grid gap-6 items-stretch ${
+        pendingRequests.length > 0 || sentPendingRequests.length > 0 
+          ? 'lg:grid-cols-[300px_1fr_300px]' 
+          : 'lg:grid-cols-1'
+      }`}>
+        {/* Spacer for left side when received requests don't exist */}
+        {pendingRequests.length === 0 && sentPendingRequests.length > 0 && (
+          <div className="hidden lg:block"></div>
+        )}
+        
+        {/* Pending Requests I Received - Top on mobile, Left on desktop */}
+        {pendingRequests.length > 0 && (
+          <Card className="rounded-3xl w-full lg:w-[300px] lg:flex-shrink-0 order-1 lg:order-1 h-full">
+            <CardContent className="p-6 md:p-8 space-y-4 h-full flex flex-col">
+              <div className="text-xl font-semibold">Pending Invitations</div>
               <div className="space-y-2">
-                {friends.map((friend) => (
+                {pendingRequests.map((request) => (
                   <div
-                    key={friend.id}
+                    key={request.id}
                     className="flex items-center justify-between p-3 rounded-xl border bg-white"
                   >
                     <div className="flex flex-col gap-1 flex-1">
                       <div className="flex items-center gap-2">
                         <User className="h-5 w-5 opacity-60" />
                         <span className="font-medium">
-                          {friend.friend_profile?.display_name || 'Unknown'}
+                          {request.requester_profile?.display_name || 'Unknown'}
                         </span>
                       </div>
-                      {friend.friend_profile?.email && (
+                      {request.requester_profile?.email && (
                         <div className="text-xs opacity-60 pl-7">
-                          {friend.friend_profile.email}
+                          {request.requester_profile.email}
                         </div>
                       )}
                     </div>
                     <div className="flex items-center gap-2">
-                      {friend.friend_profile?.display_name && (
+                      {request.requester_profile?.display_name && (
+                        <Button
+                          className="rounded-xl"
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => navigate(`/u/${encodeURIComponent(request.requester_profile?.display_name || '')}`)}
+                        >
+                          <ArrowUpRight className="h-4 w-4" />
+                        </Button>
+                      )}
+                      <Button
+                        className="rounded-xl"
+                        variant="default"
+                        size="sm"
+                        onClick={() => acceptRequest(request.id)}
+                      >
+                        <Check className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        className="rounded-xl"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => rejectRequest(request.id)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+        
+        {/* Friends List Card - Middle */}
+        <Card className="rounded-3xl w-full lg:max-w-2xl lg:mx-auto order-2 lg:order-2 h-full">
+          <CardContent className="p-6 md:p-8 space-y-6 h-full flex flex-col">
+            {/* Title and Add Friend Button */}
+            <div className="flex items-center justify-between">
+              <div className="text-2xl font-semibold">Friends</div>
+              <Button
+                className="rounded-xl"
+                variant="default"
+                onClick={() => {
+                  setAddFriendDialogOpen(true)
+                  setDialogSearchQuery("")
+                  setDialogSearchResults([])
+                }}
+              >
+                <UserPlus className="h-4 w-4 mr-2" /> Add Friend
+              </Button>
+            </div>
+            
+            {error && (
+              <div className="text-sm text-red-600 bg-red-50 p-3 rounded-xl">{error}</div>
+            )}
+
+            {/* Friends list */}
+            <div className="space-y-2">
+              <div className="text-sm font-medium">
+                Your Friends ({friends.length})
+              </div>
+              {loading ? (
+                <div className="text-xs opacity-60">Loading...</div>
+              ) : friends.length === 0 ? (
+                <div className="text-xs opacity-60 p-4 rounded-xl border text-center">
+                  No friends yet. Search for people above to add friends!
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {friends.map((friend) => (
+                    <div
+                      key={friend.id}
+                      className="flex items-center justify-between p-3 rounded-xl border bg-white"
+                    >
+                      <div className="flex flex-col gap-1 flex-1">
+                        <div className="flex items-center gap-2">
+                          <User className="h-5 w-5 opacity-60" />
+                          <span className="font-medium">
+                            {friend.friend_profile?.display_name || 'Unknown'}
+                          </span>
+                        </div>
+                        {friend.friend_profile?.email && (
+                          <div className="text-xs opacity-60 pl-7">
+                            {friend.friend_profile.email}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {friend.friend_profile?.display_name && (
+                          <Button
+                            variant="secondary"
+                            size="icon"
+                            className="rounded-full h-8 w-8"
+                            aria-label="View profile"
+                            onClick={() => navigate(`/u/${encodeURIComponent(friend.friend_profile?.display_name || '')}`)}
+                          >
+                            <ArrowUpRight className="h-4 w-4" />
+                          </Button>
+                        )}
+                        <div ref={(el) => { if (el) anchorRefs.current.set(friend.id, el) }}>
+                          <Button
+                            variant="secondary"
+                            size="icon"
+                            className="rounded-full h-8 w-8"
+                            aria-label="Friend options"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setMenuOpenFriendId(menuOpenFriendId === friend.id ? null : friend.id)
+                              setConfirmingRemove(null)
+                            }}
+                          >
+                            ?
+                          </Button>
+                          {menuOpenFriendId === friend.id && menuPos && createPortal(
+                            <div 
+                              ref={(el) => { if (el) menuRefs.current.set(friend.id, el) }}
+                              className="w-40 rounded-xl border bg-white shadow z-[60] p-1" 
+                              style={{ position: 'fixed', top: menuPos.top, right: menuPos.right }}
+                            >
+                              {confirmingRemove === friend.id ? (
+                                <>
+                                  <div className="px-3 py-2 text-xs text-red-600 mb-1">
+                                    Remove {friend.friend_profile?.display_name || 'friend'}?
+                                  </div>
+                                  <div className="flex gap-1">
+                                    <button 
+                                      className="flex-1 px-2 py-1.5 rounded-lg hover:bg-red-50 text-red-600 text-xs font-medium"
+                                      onMouseDown={(e) => { e.stopPropagation(); removeFriend(friend.friend_id) }}
+                                    >
+                                      Confirm
+                                    </button>
+                                    <button 
+                                      className="flex-1 px-2 py-1.5 rounded-lg hover:bg-stone-50 text-xs"
+                                      onMouseDown={(e) => { e.stopPropagation(); setConfirmingRemove(null); setMenuOpenFriendId(null) }}
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </>
+                              ) : (
+                                <button 
+                                  className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 text-red-600"
+                                  onMouseDown={(e) => { e.stopPropagation(); setConfirmingRemove(friend.id) }}
+                                >
+                                  Remove friend
+                                </button>
+                              )}
+                            </div>,
+                            document.body
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Pending Requests I Sent - Bottom on mobile, Right on desktop */}
+        {sentPendingRequests.length > 0 && (
+          <Card className="rounded-3xl w-full lg:w-[300px] lg:flex-shrink-0 order-3 lg:order-3 h-full">
+            <CardContent className="p-6 md:p-8 space-y-4 h-full flex flex-col">
+              <div className="text-xl font-semibold">Sent Requests</div>
+              <div className="space-y-2">
+                {sentPendingRequests.map((request) => (
+                  <div
+                    key={request.id}
+                    className="flex items-center justify-between p-3 rounded-xl border bg-white"
+                  >
+                    <div className="flex flex-col gap-1 flex-1">
+                      <div className="flex items-center gap-2">
+                        <User className="h-5 w-5 opacity-60" />
+                        <span className="font-medium">
+                          {request.recipient_profile?.display_name || 'Unknown'}
+                        </span>
+                      </div>
+                      {request.recipient_profile?.email && (
+                        <div className="text-xs opacity-60 pl-7">
+                          {request.recipient_profile.email}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {request.recipient_profile?.display_name && (
                         <Button
                           variant="secondary"
                           size="icon"
                           className="rounded-full h-8 w-8"
                           aria-label="View profile"
-                          onClick={() => navigate(`/u/${encodeURIComponent(friend.friend_profile?.display_name || '')}`)}
+                          onClick={() => navigate(`/u/${encodeURIComponent(request.recipient_profile?.display_name || '')}`)}
                         >
                           <ArrowUpRight className="h-4 w-4" />
                         </Button>
                       )}
-                      <div ref={(el) => { if (el) anchorRefs.current.set(friend.id, el) }}>
-                        <Button
-                          variant="secondary"
-                          size="icon"
-                          className="rounded-full h-8 w-8"
-                          aria-label="Friend options"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setMenuOpenFriendId(menuOpenFriendId === friend.id ? null : friend.id)
-                            setConfirmingRemove(null)
-                          }}
-                        >
-                          ?
-                        </Button>
-                        {menuOpenFriendId === friend.id && menuPos && createPortal(
-                          <div 
-                            ref={(el) => { if (el) menuRefs.current.set(friend.id, el) }}
-                            className="w-40 rounded-xl border bg-white shadow z-[60] p-1" 
-                            style={{ position: 'fixed', top: menuPos.top, right: menuPos.right }}
-                          >
-                            {confirmingRemove === friend.id ? (
-                              <>
-                                <div className="px-3 py-2 text-xs text-red-600 mb-1">
-                                  Remove {friend.friend_profile?.display_name || 'friend'}?
-                                </div>
-                                <div className="flex gap-1">
-                                  <button 
-                                    className="flex-1 px-2 py-1.5 rounded-lg hover:bg-red-50 text-red-600 text-xs font-medium"
-                                    onMouseDown={(e) => { e.stopPropagation(); removeFriend(friend.friend_id) }}
-                                  >
-                                    Confirm
-                                  </button>
-                                  <button 
-                                    className="flex-1 px-2 py-1.5 rounded-lg hover:bg-stone-50 text-xs"
-                                    onMouseDown={(e) => { e.stopPropagation(); setConfirmingRemove(null); setMenuOpenFriendId(null) }}
-                                  >
-                                    Cancel
-                                  </button>
-                                </div>
-                              </>
-                            ) : (
-                              <button 
-                                className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 text-red-600"
-                                onMouseDown={(e) => { e.stopPropagation(); setConfirmingRemove(friend.id) }}
-                              >
-                                Remove friend
-                              </button>
-                            )}
-                          </div>,
-                          document.body
-                        )}
-                      </div>
+                      <Button
+                        className="rounded-xl"
+                        variant="secondary"
+                        size="sm"
+                        disabled
+                      >
+                        Pending
+                      </Button>
                     </div>
                   </div>
                 ))}
               </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        )}
+        
+        {/* Spacer for right side when sent requests don't exist */}
+        {sentPendingRequests.length === 0 && pendingRequests.length > 0 && (
+          <div className="hidden lg:block"></div>
+        )}
+      </div>
 
       {/* Add Friend Dialog */}
       <Dialog open={addFriendDialogOpen} onOpenChange={setAddFriendDialogOpen}>
