@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
 import { EditProfileDialog, type EditProfileValues } from "@/components/profile/EditProfileDialog"
 import { applyAccentByKey, saveAccentKey } from "@/lib/accent"
-import { MapPin, User as UserIcon, UserPlus, Check, Lock } from "lucide-react"
+import { MapPin, User as UserIcon, UserPlus, Check } from "lucide-react"
 
 type PublicProfile = {
   id: string
@@ -47,7 +47,6 @@ export default function PublicProfilePage() {
   const [monthDays, setMonthDays] = React.useState<DayAgg[]>([])
   const [privateInfo, setPrivateInfo] = React.useState<{ id: string; email: string | null } | null>(null)
   const [canViewProfile, setCanViewProfile] = React.useState(true)
-  const [isFriend, setIsFriend] = React.useState(false)
   
 
   const formatLastSeen = React.useCallback((iso: string | null | undefined) => {
@@ -137,7 +136,6 @@ export default function PublicProfilePage() {
         }
         
         setCanViewProfile(viewerCanSee)
-        setIsFriend(viewerCanSee && !isOwnerViewing && !viewerIsAdmin)
         
         setPp({
           id: userId,
