@@ -563,7 +563,7 @@ export const FriendsPage: React.FC = () => {
                           size="sm"
                           onClick={() => navigate(`/u/${encodeURIComponent(request.requester_profile?.display_name || '')}`)}
                         >
-                          <ArrowRight className="h-4 w-4" />
+                          <ArrowUpRight className="h-4 w-4" />
                         </Button>
                       )}
                       <Button
