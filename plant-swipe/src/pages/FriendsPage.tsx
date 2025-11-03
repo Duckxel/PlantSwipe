@@ -46,6 +46,7 @@ export const FriendsPage: React.FC = () => {
   const navigate = useNavigate()
   const [friends, setFriends] = React.useState<Friend[]>([])
   const [pendingRequests, setPendingRequests] = React.useState<FriendRequest[]>([])
+  const [sentPendingRequests, setSentPendingRequests] = React.useState<FriendRequest[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [menuOpenFriendId, setMenuOpenFriendId] = React.useState<string | null>(null)
@@ -111,6 +112,62 @@ export const FriendsPage: React.FC = () => {
     }
   }, [user?.id])
 
+  const loadSentPendingRequests = React.useCallback(async () => {
+    if (!user?.id) return
+    try {
+      const { data, error: err } = await supabase
+        .from('friend_requests')
+        .select(`
+          id,
+          requester_id,
+          recipient_id,
+          created_at,
+          status
+        `)
+        .eq('requester_id', user.id)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+      
+      if (err) throw err
+      
+      // Fetch recipient profiles separately
+      const recipientIds = (data || []).map(r => r.recipient_id)
+      if (recipientIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, display_name')
+          .in('id', recipientIds)
+        
+        // Fetch emails using RPC function for friends
+        const emailPromises = recipientIds.map(async (id) => {
+          try {
+            const { data: emailData } = await supabase.rpc('get_friend_email', { _friend_id: id })
+            return { id, email: emailData || null }
+          } catch {
+            return { id, email: null }
+          }
+        })
+        const emails = await Promise.all(emailPromises)
+        const emailMap = new Map(emails.map(e => [e.id, e.email]))
+        
+        const profileMap = new Map((profiles || []).map(p => [p.id, p]))
+        const requestsWithProfiles = (data || []).map(r => ({
+          ...r,
+          recipient_profile: {
+            id: r.recipient_id,
+            display_name: profileMap.get(r.recipient_id)?.display_name || null,
+            email: emailMap.get(r.recipient_id) || null
+          }
+        }))
+        setSentPendingRequests(requestsWithProfiles as FriendRequest[])
+      } else {
+        setSentPendingRequests([])
+      }
+    } catch (e: any) {
+      setError(e?.message || 'Failed to load sent pending requests')
+    }
+  }, [user?.id])
+
   const loadPendingRequests = React.useCallback(async () => {
     if (!user?.id) return
     try {
@@ -173,10 +230,10 @@ export const FriendsPage: React.FC = () => {
       return
     }
     setLoading(true)
-    Promise.all([loadFriends(), loadPendingRequests()]).finally(() => {
+    Promise.all([loadFriends(), loadPendingRequests(), loadSentPendingRequests()]).finally(() => {
       setLoading(false)
     })
-  }, [user?.id, loadFriends, loadPendingRequests])
+  }, [user?.id, loadFriends, loadPendingRequests, loadSentPendingRequests])
 
   const handleDialogSearch = React.useCallback(async () => {
     if (!dialogSearchQuery.trim() || !user?.id) {
@@ -251,12 +308,13 @@ export const FriendsPage: React.FC = () => {
         ...(sentRequests?.map(r => r.recipient_id) || [])
       ])
       
-      // Mark friends and filter out already requested users
+      // Mark friends and pending requests
       const filteredResults = results
-        .filter(r => !requestIds.has(r.id) && r.id !== user.id)
+        .filter(r => r.id !== user.id)
         .map(r => ({
           ...r,
-          is_friend: friendIds.has(r.id)
+          is_friend: friendIds.has(r.id),
+          is_pending: requestIds.has(r.id)
         }))
         .slice(0, 3) // Limit to top 3
       
@@ -333,14 +391,14 @@ export const FriendsPage: React.FC = () => {
       
       // Refresh search results and pending requests
       handleDialogSearch()
-      await loadPendingRequests()
+      await Promise.all([loadPendingRequests(), loadSentPendingRequests()])
       setError(null)
       // Optionally close dialog after successful send
       // setAddFriendDialogOpen(false)
     } catch (e: any) {
       setError(e?.message || 'Failed to send friend request')
     }
-  }, [user?.id, handleDialogSearch, loadPendingRequests])
+  }, [user?.id, handleDialogSearch, loadPendingRequests, loadSentPendingRequests])
 
   const acceptRequest = React.useCallback(async (requestId: string) => {
     try {
@@ -351,12 +409,12 @@ export const FriendsPage: React.FC = () => {
       if (err) throw err
       
       // Refresh both lists
-      await Promise.all([loadFriends(), loadPendingRequests()])
+      await Promise.all([loadFriends(), loadPendingRequests(), loadSentPendingRequests()])
       setError(null)
     } catch (e: any) {
       setError(e?.message || 'Failed to accept friend request')
     }
-  }, [loadFriends, loadPendingRequests])
+  }, [loadFriends, loadPendingRequests, loadSentPendingRequests])
 
   const rejectRequest = React.useCallback(async (requestId: string) => {
     try {
@@ -367,12 +425,12 @@ export const FriendsPage: React.FC = () => {
       
       if (err) throw err
       
-      await loadPendingRequests()
+      await Promise.all([loadPendingRequests(), loadSentPendingRequests()])
       setError(null)
     } catch (e: any) {
       setError(e?.message || 'Failed to reject friend request')
     }
-  }, [loadPendingRequests])
+  }, [loadPendingRequests, loadSentPendingRequests])
 
   const removeFriend = React.useCallback(async (friendId: string) => {
     if (!user?.id) return
@@ -471,6 +529,54 @@ export const FriendsPage: React.FC = () => {
               <UserPlus className="h-4 w-4 mr-2" /> Add Friend
             </Button>
           </div>
+
+          {/* Sent Pending Requests */}
+          {sentPendingRequests.length > 0 && (
+            <div className="space-y-2">
+              <div className="text-sm font-medium">Sent Requests</div>
+              {sentPendingRequests.map((request) => (
+                <div
+                  key={request.id}
+                  className="flex items-center justify-between p-3 rounded-xl border bg-white"
+                >
+                  <div className="flex flex-col gap-1 flex-1">
+                    <div className="flex items-center gap-2">
+                      <User className="h-5 w-5 opacity-60" />
+                      <span className="font-medium">
+                        {request.recipient_profile?.display_name || 'Unknown'}
+                      </span>
+                    </div>
+                    {request.recipient_profile?.email && (
+                      <div className="text-xs opacity-60 pl-7">
+                        {request.recipient_profile.email}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {request.recipient_profile?.display_name && (
+                      <Button
+                        variant="secondary"
+                        size="icon"
+                        className="rounded-full h-8 w-8"
+                        aria-label="View profile"
+                        onClick={() => navigate(`/u/${encodeURIComponent(request.recipient_profile?.display_name || '')}`)}
+                      >
+                        <ArrowUpRight className="h-4 w-4" />
+                      </Button>
+                    )}
+                    <Button
+                      className="rounded-xl"
+                      variant="secondary"
+                      size="sm"
+                      disabled
+                    >
+                      Pending
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Pending friend requests */}
           {pendingRequests.length > 0 && (
@@ -667,14 +773,18 @@ export const FriendsPage: React.FC = () => {
                     </div>
                     <Button
                       className="rounded-xl"
-                      variant={result.is_friend ? "secondary" : "default"}
+                      variant={result.is_friend ? "secondary" : result.is_pending ? "secondary" : "default"}
                       size="sm"
-                      onClick={() => !result.is_friend && sendFriendRequest(result.id)}
-                      disabled={result.is_friend}
+                      onClick={() => !result.is_friend && !result.is_pending && sendFriendRequest(result.id)}
+                      disabled={result.is_friend || result.is_pending}
                     >
                       {result.is_friend ? (
                         <>
                           <Check className="h-4 w-4 mr-1" /> Friends
+                        </>
+                      ) : result.is_pending ? (
+                        <>
+                          Pending
                         </>
                       ) : (
                         <>
