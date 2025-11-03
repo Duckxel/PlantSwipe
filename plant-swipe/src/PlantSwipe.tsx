@@ -27,6 +27,7 @@ import { ProfilePage } from "@/pages/ProfilePage";
 import PublicProfilePage from "@/pages/PublicProfilePage";
 import { AdminPage } from "@/pages/AdminPage";
 import RequireAdmin from "@/pages/RequireAdmin";
+import { FriendsPage } from "@/pages/FriendsPage";
 import { supabase } from "@/lib/supabaseClient";
 
 // --- Main Component ---
