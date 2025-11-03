@@ -53,8 +53,8 @@ export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, 
   }, [handleInfo, handlePass, handlePrevious])
 
   return (
-    <div className="max-w-3xl mx-auto mt-8 px-4 md:px-0">
-      <div className="relative" style={{ height: 'min(650px, calc(100vh - 8rem))' }}>
+    <div className="max-w-3xl mx-auto mt-8 px-4 md:px-0 mb-4">
+      <div className="relative" style={{ height: 'min(650px, calc(100vh - 16rem))' }}>
         <AnimatePresence initial={false} mode="wait">
           {current ? (
             <motion.div
