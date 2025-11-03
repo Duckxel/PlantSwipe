@@ -438,6 +438,237 @@ export const GardenDashboardPage: React.FC = () => {
     }
   }, [id, serverToday, tab])
 
+  // Targeted update function that only refreshes specific parts to avoid flashing
+  const updateTargeted = React.useCallback(async (kind: GardenRealtimeKind = 'general') => {
+    if (!id) return
+    if (anyModalOpen) {
+      pendingReloadRef.current = true
+      return
+    }
+
+    const now = Date.now()
+    const since = now - (lastReloadRef.current || 0)
+    const minInterval = 300 // Reduced debounce for smoother updates
+
+    if (since < minInterval) {
+      if (reloadTimerRef.current) return
+      const wait = Math.max(0, minInterval - since)
+      reloadTimerRef.current = setTimeout(() => {
+        reloadTimerRef.current = null
+        updateTargeted(kind).catch(() => {})
+      }, wait)
+      return
+    }
+
+    if (reloadTimerRef.current) {
+      clearTimeout(reloadTimerRef.current)
+      reloadTimerRef.current = null
+    }
+
+    lastReloadRef.current = Date.now()
+
+    try {
+      const today = serverTodayRef.current ?? serverToday
+      
+      // Update only what's needed based on kind
+      if (kind === 'tasks' || kind === 'general') {
+        // Tasks: Update task occurrences and counts without touching plants
+        const allTasks = await listGardenTasks(id)
+        if (today) {
+          const weekStartIso = (() => {
+            const parseUTC = (iso: string) => new Date(`${iso}T00:00:00Z`)
+            const anchorUTC = parseUTC(today)
+            const dayUTC = anchorUTC.getUTCDay()
+            const diffToMonday = (dayUTC + 6) % 7
+            const mondayUTC = new Date(anchorUTC)
+            mondayUTC.setUTCDate(anchorUTC.getUTCDate() - diffToMonday)
+            return mondayUTC.toISOString().slice(0,10) + 'T00:00:00.000Z'
+          })()
+          const weekEndIso = (() => {
+            const parseUTC = (iso: string) => new Date(`${iso}T00:00:00Z`)
+            const anchorUTC = parseUTC(today)
+            const dayUTC = anchorUTC.getUTCDay()
+            const diffToMonday = (dayUTC + 6) % 7
+            const mondayUTC = new Date(anchorUTC)
+            mondayUTC.setUTCDate(anchorUTC.getUTCDate() - diffToMonday)
+            mondayUTC.setUTCDate(mondayUTC.getUTCDate() + 6)
+            return mondayUTC.toISOString().slice(0,10) + 'T23:59:59.999Z'
+          })()
+          await resyncTaskOccurrencesForGarden(id, weekStartIso, weekEndIso)
+          const occs = await listOccurrencesForTasks(allTasks.map(t => t.id), `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`)
+          const taskTypeById: Record<string, 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'> = {}
+          const taskEmojiById: Record<string, string | null> = {}
+          for (const t of allTasks) { taskTypeById[t.id] = t.type as any; taskEmojiById[t.id] = (t as any).emoji || null }
+          const occsWithType = occs.map(o => ({ ...o, taskType: taskTypeById[o.taskId] || 'custom', taskEmoji: taskEmojiById[o.taskId] || null }))
+          
+          // Update state using functional updates to preserve existing items
+          setTodayTaskOccurrences(prev => {
+            // Replace with new data but preserve object references for unchanged items to avoid re-renders
+            const prevMap = new Map(prev.map(o => [o.id, o]))
+            const newMap = new Map(occsWithType.map(o => [o.id, o]))
+            const result: any[] = []
+            
+            // Use new data order, but keep existing object references when data hasn't changed
+            for (const newOcc of occsWithType) {
+              const existing = prevMap.get(newOcc.id)
+              if (existing && 
+                  existing.completedCount === newOcc.completedCount &&
+                  existing.requiredCount === newOcc.requiredCount &&
+                  existing.taskId === newOcc.taskId &&
+                  existing.gardenPlantId === newOcc.gardenPlantId) {
+                // Keep existing reference to avoid React re-render
+                result.push(existing)
+              } else {
+                result.push(newOcc)
+              }
+            }
+            
+            return result
+          })
+          
+          const taskCountMap: Record<string, number> = {}
+          for (const t of allTasks) taskCountMap[t.gardenPlantId] = (taskCountMap[t.gardenPlantId] || 0) + 1
+          setTaskCountsByPlant(prev => ({ ...prev, ...taskCountMap }))
+          
+          const dueMap: Record<string, number> = {}
+          for (const o of occs) {
+            const remaining = Math.max(0, (o.requiredCount || 1) - (o.completedCount || 0))
+            if (remaining > 0) dueMap[o.gardenPlantId] = (dueMap[o.gardenPlantId] || 0) + remaining
+          }
+          setTaskOccDueToday(prev => ({ ...prev, ...dueMap }))
+          
+          const dueTodaySet = new Set<string>()
+          for (const o of occs) {
+            const remaining = Math.max(0, (o.requiredCount || 1) - (o.completedCount || 0))
+            if (remaining > 0) dueTodaySet.add(o.gardenPlantId)
+          }
+          setDueToday(prev => {
+            const next = new Set(prev || new Set())
+            // Update set: add new due items, remove items that are no longer due
+            for (const pid of dueTodaySet) next.add(pid)
+            for (const pid of Array.from(next)) {
+              if (!dueTodaySet.has(pid)) next.delete(pid)
+            }
+            return next
+          })
+
+          if (tab === 'routine' && today) {
+            const weekOccs = await listOccurrencesForTasks(allTasks.map(t => t.id), weekStartIso, weekEndIso)
+            const typeCounts: { water: number[]; fertilize: number[]; harvest: number[]; cut: number[]; custom: number[] } = {
+              water: Array(7).fill(0), fertilize: Array(7).fill(0), harvest: Array(7).fill(0), cut: Array(7).fill(0), custom: Array(7).fill(0),
+            }
+            const tById: Record<string, 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'> = {}
+            for (const t of allTasks) tById[t.id] = t.type as any
+            for (const o of weekOccs) {
+              const dayIso = new Date(o.dueAt).toISOString().slice(0,10)
+              const idx = weekDays.indexOf(dayIso)
+              if (idx >= 0) {
+                const typ = tById[o.taskId] || 'custom'
+                const inc = Math.max(1, Number(o.requiredCount || 1))
+                ;(typeCounts as any)[typ][idx] += inc
+              }
+            }
+            const totals = weekDays.map((_, i) => typeCounts.water[i] + typeCounts.fertilize[i] + typeCounts.harvest[i] + typeCounts.cut[i] + typeCounts.custom[i])
+            setWeekCountsByType(typeCounts)
+            setWeekCounts(totals)
+
+            const dueMapSets: Record<string, Set<number>> = {}
+            for (const o of weekOccs) {
+              const dayIso = new Date(o.dueAt).toISOString().slice(0,10)
+              const remaining = Math.max(0, Number(o.requiredCount || 1) - Number(o.completedCount || 0))
+              if (remaining <= 0) continue
+              if (dayIso <= today) continue
+              const idx = weekDays.indexOf(dayIso)
+              if (idx >= 0) {
+                const pid = String(o.gardenPlantId)
+                if (!dueMapSets[pid]) dueMapSets[pid] = new Set<number>()
+                dueMapSets[pid].add(idx)
+              }
+            }
+            const dueMapNext: Record<string, number[]> = {}
+            for (const pid of Object.keys(dueMapSets)) dueMapNext[pid] = Array.from(dueMapSets[pid]).sort((a, b) => a - b)
+            setDueThisWeekByPlant(dueMapNext)
+          }
+
+          // Update daily stats for today only
+          if (today) {
+            setDailyStats(prev => {
+              const reqDone = occs.reduce((acc, o) => acc + Math.max(1, Number(o.requiredCount || 1)), 0)
+              const compDone = occs.reduce((acc, o) => acc + Math.min(Math.max(1, Number(o.requiredCount || 1)), Number(o.completedCount || 0)), 0)
+              return prev.map(d => d.date === today ? { ...d, due: reqDone, completed: compDone } : d)
+            })
+          }
+        }
+      }
+
+      if (kind === 'plants' || kind === 'general') {
+        // Plants: Update plants array while preserving existing items
+        const gpsRaw = await getGardenPlants(id)
+        setPlants(prev => {
+          // Merge: preserve order and existing items, update changed ones
+          const prevMap = new Map(prev.map((p: any) => [p.id, p]))
+          const merged: any[] = []
+          // Use new order but preserve existing objects where possible
+          for (const newP of gpsRaw) {
+            const existing = prevMap.get(newP.id)
+            // Compare key fields that matter for rendering to avoid unnecessary re-renders
+            if (existing && 
+                existing.nickname === newP.nickname &&
+                existing.plantsOnHand === newP.plantsOnHand &&
+                existing.plantId === newP.plantId &&
+                existing.id === newP.id) {
+              // Keep existing reference to avoid React re-render
+              merged.push(existing)
+            } else {
+              merged.push(newP)
+            }
+          }
+          return merged
+        })
+
+        // Update inventory counts
+        const perInstanceCounts: Record<string, number> = {}
+        let total = 0
+        let species = 0
+        const seenSpecies = new Set<string>()
+        for (const gp of gpsRaw) {
+          const c = Number(gp.plantsOnHand || 0)
+          perInstanceCounts[String(gp.plantId)] = (perInstanceCounts[String(gp.plantId)] || 0) + c
+          total += c
+          if (c > 0 && !seenSpecies.has(String(gp.plantId))) {
+            seenSpecies.add(String(gp.plantId))
+            species += 1
+          }
+        }
+        setInstanceCounts(perInstanceCounts)
+        setTotalOnHand(total)
+        setSpeciesOnHand(species)
+      }
+
+      if (kind === 'members' || kind === 'general') {
+        // Members: Update members array
+        const ms = await getGardenMembers(id)
+        setMembers(ms.map(m => ({ userId: m.userId, displayName: m.displayName ?? null, email: (m as any).email ?? null, role: m.role, joinedAt: (m as any).joinedAt, accentKey: (m as any).accentKey ?? null })))
+      }
+
+      if (kind === 'activity' || kind === 'general') {
+        // Activity: Just trigger refresh
+        setActivityRev((r) => r + 1)
+      }
+
+      if (kind === 'settings' || kind === 'general') {
+        // Settings: Update garden info
+        const g0 = await getGarden(id)
+        if (g0) setGarden(g0)
+      }
+    } catch (e) {
+      // Fallback to full reload on error
+      console.warn('[GardenDashboard] Targeted update failed, falling back to full reload:', e)
+      await load({ silent: true, preserveHeavy: true })
+      await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday)
+    }
+  }, [id, anyModalOpen, serverToday, tab, weekDays, load, loadHeavyForCurrentTab])
+
   const scheduleReload = React.useCallback(() => {
     const executeReload = async () => {
       pendingReloadRef.current = false
@@ -503,32 +734,45 @@ export const GardenDashboardPage: React.FC = () => {
     if (!id) return
 
     const channel = supabase.channel(`rt-garden-${id}`)
-      // Garden row changes (name, cover image, streak)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'gardens', filter: `id=eq.${id}` }, () => scheduleReload())
+      // Garden row changes (name, cover image, streak) - use targeted update
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'gardens', filter: `id=eq.${id}` }, () => {
+        updateTargeted('settings').catch(() => {})
+      })
       // Immediate redirect if garden is deleted by another user
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'gardens', filter: `id=eq.${id}` }, () => { try { navigate('/gardens') } catch {} })
-      // Member changes (add/remove/promote/demote)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_members', filter: `garden_id=eq.${id}` }, () => scheduleReload())
-      // Garden instance edits (nickname, on-hand count, reorder, add/remove)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plants', filter: `garden_id=eq.${id}` }, () => scheduleReload())
-      // Task definition changes affecting counts and due badges
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_tasks', filter: `garden_id=eq.${id}` }, () => scheduleReload())
-      // Also watch task edits scoped by plant (fallback when garden_id is missing on row level)
+      // Member changes (add/remove/promote/demote) - use targeted update
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_members', filter: `garden_id=eq.${id}` }, () => {
+        updateTargeted('members').catch(() => {})
+      })
+      // Garden instance edits (nickname, on-hand count, reorder, add/remove) - use targeted update
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plants', filter: `garden_id=eq.${id}` }, () => {
+        updateTargeted('plants').catch(() => {})
+      })
+      // Task definition changes affecting counts and due badges - use targeted update
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_tasks', filter: `garden_id=eq.${id}` }, () => {
+        updateTargeted('tasks').catch(() => {})
+      })
+      // Also watch task edits scoped by plant (fallback when garden_id is missing on row level) - use targeted update
       .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_tasks' }, (payload) => {
         try {
           const row = (payload as any)?.new || (payload as any)?.old || {}
           const gpId = String(row.garden_plant_id || '')
-          if (!gpId) { scheduleReload(); return }
-          // Minimal reload; our load() covers the whole garden
-          scheduleReload()
-        } catch { scheduleReload() }
+          if (!gpId) { updateTargeted('tasks').catch(() => {}); return }
+          updateTargeted('tasks').catch(() => {})
+        } catch { updateTargeted('tasks').catch(() => {}) }
       })
-      // Occurrence progress/completion updates (affects Routine and Today counts)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_task_occurrences' }, () => scheduleReload())
-      // Global plant library changes (name/image updates)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'plants' }, () => scheduleReload())
-      // Garden activity log changes (authoritative cross-client signal)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_activity_logs', filter: `garden_id=eq.${id}` }, () => scheduleReload())
+      // Occurrence progress/completion updates (affects Routine and Today counts) - use targeted update
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_task_occurrences' }, () => {
+        updateTargeted('tasks').catch(() => {})
+      })
+      // Global plant library changes (name/image updates) - use targeted update
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'plants' }, () => {
+        updateTargeted('plants').catch(() => {})
+      })
+      // Garden activity log changes (authoritative cross-client signal) - use targeted update
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_activity_logs', filter: `garden_id=eq.${id}` }, () => {
+        updateTargeted('activity').catch(() => {})
+      })
 
     const subscription = channel.subscribe()
     if (subscription instanceof Promise) subscription.catch(() => {})
@@ -536,7 +780,7 @@ export const GardenDashboardPage: React.FC = () => {
     return () => {
       try { supabase.removeChannel(channel) } catch {}
     }
-  }, [id, navigate, scheduleReload])
+  }, [id, navigate, updateTargeted])
 
   React.useEffect(() => {
     if (!id) return
@@ -546,7 +790,8 @@ export const GardenDashboardPage: React.FC = () => {
     addGardenBroadcastListener((message) => {
       if (message.gardenId !== id) return
       if (message.actorId && message.actorId === currentUserId) return
-      scheduleReload()
+      // Use targeted update based on broadcast kind to avoid flashing
+      updateTargeted(message.kind || 'general').catch(() => {})
     })
       .then((unsubscribe) => {
         if (!active) {
@@ -561,7 +806,7 @@ export const GardenDashboardPage: React.FC = () => {
       active = false
       if (teardown) teardown().catch(() => {})
     }
-  }, [currentUserId, id, scheduleReload])
+  }, [currentUserId, id, updateTargeted])
 
   // When modals close, run any pending reload once
   React.useEffect(() => {
