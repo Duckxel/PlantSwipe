@@ -18,6 +18,7 @@ export default function SettingsPage() {
   const [newPassword, setNewPassword] = React.useState("")
   const [confirmPassword, setConfirmPassword] = React.useState("")
   const [isPrivate, setIsPrivate] = React.useState(false)
+  const [disableFriendRequests, setDisableFriendRequests] = React.useState(false)
   const [emailExpanded, setEmailExpanded] = React.useState(false)
   const [passwordExpanded, setPasswordExpanded] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
@@ -46,15 +47,17 @@ export default function SettingsPage() {
         // Load profile privacy setting
         if (profile) {
           setIsPrivate(Boolean((profile as any).is_private || false))
+          setDisableFriendRequests(Boolean((profile as any).disable_friend_requests || false))
         } else {
           // Fetch profile if not loaded
           const { data } = await supabase
             .from('profiles')
-            .select('is_private')
+            .select('is_private, disable_friend_requests')
             .eq('id', user.id)
             .maybeSingle()
           if (data) {
             setIsPrivate(Boolean(data.is_private || false))
+            setDisableFriendRequests(Boolean(data.disable_friend_requests || false))
           }
         }
       } catch (e: any) {
@@ -173,6 +176,33 @@ export default function SettingsPage() {
     } catch (e: any) {
       setError(e?.message || 'Failed to update privacy setting')
       setIsPrivate(!newPrivacyValue) // Revert on error
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleToggleFriendRequests = async () => {
+    if (!user?.id) return
+
+    const newValue = !disableFriendRequests
+    setSaving(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ disable_friend_requests: newValue })
+        .eq('id', user.id)
+
+      if (updateError) throw updateError
+
+      setDisableFriendRequests(newValue)
+      setSuccess(`Friend requests are now ${newValue ? 'disabled' : 'enabled'}`)
+      await refreshProfile()
+    } catch (e: any) {
+      setError(e?.message || 'Failed to update friend request setting')
+      setDisableFriendRequests(!newValue) // Revert on error
     } finally {
       setSaving(false)
     }
@@ -390,6 +420,34 @@ export default function SettingsPage() {
               </Label>
               <p className="text-sm opacity-70 mt-1">
                 When enabled, only your friends can see your profile and activity. Your profile will be hidden from public searches.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Friend Requests Settings */}
+      <Card className="rounded-3xl mb-4">
+        <CardHeader>
+          <CardTitle>Friend Requests</CardTitle>
+          <CardDescription>Control who can send you friend requests.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-start gap-3">
+            <input
+              type="checkbox"
+              id="disable-friend-requests"
+              checked={disableFriendRequests}
+              onChange={handleToggleFriendRequests}
+              disabled={saving}
+              className="mt-1 h-4 w-4 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
+            />
+            <div className="flex-1">
+              <Label htmlFor="disable-friend-requests" className="font-medium cursor-pointer">
+                Disable Friend Requests
+              </Label>
+              <p className="text-sm opacity-70 mt-1">
+                When enabled, other users will not be able to send you friend requests. This helps prevent unwanted invitations. Works for both public and private profiles.
               </p>
             </div>
           </div>

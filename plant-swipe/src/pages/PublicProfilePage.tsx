@@ -22,6 +22,7 @@ type PublicProfile = {
   is_online?: boolean | null
   accent_key?: string | null
   is_private?: boolean | null
+  disable_friend_requests?: boolean | null
 }
 
 type PublicStats = {
@@ -80,7 +81,7 @@ export default function PublicProfilePage() {
           // Look up current user by ID
           const { data: profileData, error: pErr } = await supabase
             .from('profiles')
-            .select('id, display_name, country, bio, avatar_url, is_admin, accent_key, is_private')
+            .select('id, display_name, country, bio, avatar_url, is_admin, accent_key, is_private, disable_friend_requests')
             .eq('id', user.id)
             .maybeSingle()
           if (!pErr && profileData) {
@@ -150,6 +151,7 @@ export default function PublicProfilePage() {
           is_online: Boolean(row.is_online || false),
           accent_key: row.accent_key || null,
           is_private: profileIsPrivate,
+          disable_friend_requests: Boolean(row.disable_friend_requests || false),
         })
 
         // Only load stats and data if user can view profile
@@ -535,7 +537,7 @@ export default function PublicProfilePage() {
                         document.body
                       )}
                     </>
-                  ) : user?.id && (
+                  ) : user?.id && !pp.disable_friend_requests && (
                     <>
                       {friendStatus === 'none' && (
                         <Button 

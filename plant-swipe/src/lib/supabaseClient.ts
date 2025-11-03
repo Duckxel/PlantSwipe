@@ -37,6 +37,7 @@ export type ProfileRow = {
   experience_years?: number | null
   accent_key?: string | null
   is_private?: boolean | null
+  disable_friend_requests?: boolean | null
 }
 
 // Garden-related table row types matching Supabase schema expectations
