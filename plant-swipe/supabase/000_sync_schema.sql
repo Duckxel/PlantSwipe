@@ -370,6 +370,13 @@ alter table if exists public.garden_plant_tasks
   add constraint garden_plant_tasks_schedule_kind_check
   check (schedule_kind in ('one_time_date','one_time_duration','repeat_duration','repeat_pattern'));
 
+-- Ensure type check constraint is correct on existing deployments
+alter table if exists public.garden_plant_tasks
+  drop constraint if exists garden_plant_tasks_type_check;
+alter table if exists public.garden_plant_tasks
+  add constraint garden_plant_tasks_type_check
+  check (type in ('water','fertilize','harvest','cut','custom'));
+
 create table if not exists public.garden_plant_task_occurrences (
   id uuid primary key default gen_random_uuid(),
   task_id uuid not null references public.garden_plant_tasks(id) on delete cascade,

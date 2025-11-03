@@ -5,7 +5,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useAuth } from '@/context/AuthContext'
-import { getUserGardens, createGarden, fetchServerNowISO, getGardenTodayProgress, getGardenPlants, listGardenTasks, listOccurrencesForTasks, resyncTaskOccurrencesForGarden, progressTaskOccurrence, listCompletionsForOccurrences } from '@/lib/gardens'
+import { getUserGardens, createGarden, fetchServerNowISO, getGardenTodayProgress, getGardenPlants, listGardenTasks, listOccurrencesForTasks, resyncTaskOccurrencesForGarden, progressTaskOccurrence, listCompletionsForOccurrences, logGardenActivity } from '@/lib/gardens'
+import { supabase } from '@/lib/supabaseClient'
+import { addGardenBroadcastListener, broadcastGardenUpdate, type GardenRealtimeKind } from '@/lib/realtime'
 import type { Garden } from '@/types/garden'
 import { useNavigate } from 'react-router-dom'
 
@@ -27,31 +29,45 @@ export const GardenListPage: React.FC = () => {
   const [todayTaskOccurrences, setTodayTaskOccurrences] = React.useState<Array<{ id: string; taskId: string; gardenPlantId: string; dueAt: string; requiredCount: number; completedCount: number; completedAt: string | null; taskType?: 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'; taskEmoji?: string | null }>>([])
   const [completionsByOcc, setCompletionsByOcc] = React.useState<Record<string, Array<{ userId: string; displayName: string | null }>>>({})
 
-  const notifyTasksChanged = React.useCallback(() => {
+  const reloadTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastReloadRef = React.useRef<number>(0)
+  const gardenIdsRef = React.useRef<Set<string>>(new Set())
+  const gardensRef = React.useRef<typeof gardens>([])
+  const serverTodayRef = React.useRef<string | null>(null)
+
+  const emitGardenRealtime = React.useCallback((gardenId: string, kind: GardenRealtimeKind = 'tasks', metadata?: Record<string, unknown>) => {
     try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
-  }, [])
+    broadcastGardenUpdate({ gardenId, kind, metadata, actorId: user?.id ?? null }).catch(() => {})
+  }, [user?.id])
 
   const load = React.useCallback(async () => {
-    if (!user?.id) { setGardens([]); setLoading(false); return }
+    if (!user?.id) {
+      setGardens([])
+      gardensRef.current = []
+      setLoading(false)
+      return
+    }
     setLoading(true)
     setError(null)
     try {
       const data = await getUserGardens(user.id)
       setGardens(data)
+      gardensRef.current = data
       // Fetch server 'today' and compute per-garden progress
       const nowIso = await fetchServerNowISO()
       const today = nowIso.slice(0,10)
       setServerToday(today)
-      const entries = await Promise.all(
-        data.map(async (g) => {
-          try {
-            const prog = await getGardenTodayProgress(g.id, today)
-            return [g.id, prog] as const
-          } catch {
-            return [g.id, { due: 0, completed: 0 }] as const
-          }
-        })
-      )
+      serverTodayRef.current = today
+      // compute progress sequentially to avoid hammering backend on frequent realtime updates
+      const entries: Array<[string, { due: number; completed: number }]> = []
+      for (const g of data) {
+        try {
+          const prog = await getGardenTodayProgress(g.id, today)
+          entries.push([g.id, prog])
+        } catch {
+          entries.push([g.id, { due: 0, completed: 0 }])
+        }
+      }
       const map: Record<string, { due: number; completed: number }> = {}
       for (const [gid, prog] of entries) map[gid] = prog
       setProgressByGarden(map)
@@ -65,20 +81,28 @@ export const GardenListPage: React.FC = () => {
   React.useEffect(() => { load() }, [load])
 
   // Load all gardens' tasks due today for the sidebar
-  const loadAllTodayOccurrences = React.useCallback(async () => {
-    if (!serverToday) return
-    if (gardens.length === 0) { setAllPlants([]); setTodayTaskOccurrences([]); return }
+  const loadAllTodayOccurrences = React.useCallback(async (
+    gardensOverride?: typeof gardens,
+    todayOverride?: string | null,
+  ) => {
+    const today = todayOverride ?? serverTodayRef.current ?? serverToday
+    const gardensList = gardensOverride ?? gardensRef.current ?? gardens
+    if (!today) return
+    if (gardensList.length === 0) { setAllPlants([]); setTodayTaskOccurrences([]); return }
     setLoadingTasks(true)
     try {
-      const startIso = `${serverToday}T00:00:00.000Z`
-      const endIso = `${serverToday}T23:59:59.999Z`
-      // 1) Fetch tasks per garden
-      const tasksPerGarden = await Promise.all(gardens.map(g => listGardenTasks(g.id)))
+      const startIso = `${today}T00:00:00.000Z`
+      const endIso = `${today}T23:59:59.999Z`
+      // 1) Fetch tasks per garden sequentially (reduce contention during rapid realtime)
+      const tasksPerGarden: any[] = []
+      for (const g of gardensList) {
+        tasksPerGarden.push(await listGardenTasks(g.id))
+      }
       const taskTypeById: Record<string, 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'> = {}
       const taskEmojiById: Record<string, string | null> = {}
       const taskIdsByGarden: Record<string, string[]> = {}
-      for (let i = 0; i < gardens.length; i++) {
-        const g = gardens[i]
+      for (let i = 0; i < gardensList.length; i++) {
+        const g = gardensList[i]
         const tasks = tasksPerGarden[i] || []
         taskIdsByGarden[g.id] = tasks.map(t => t.id)
         for (const t of tasks) {
@@ -87,9 +111,9 @@ export const GardenListPage: React.FC = () => {
         }
       }
       // 2) Resync occurrences per garden in parallel
-      await Promise.all(gardens.map(g => resyncTaskOccurrencesForGarden(g.id, startIso, endIso)))
+      await Promise.all(gardensList.map(g => resyncTaskOccurrencesForGarden(g.id, startIso, endIso)))
       // 3) Load occurrences per garden
-      const occsPerGarden = await Promise.all(gardens.map(g => listOccurrencesForTasks(taskIdsByGarden[g.id] || [], startIso, endIso)))
+      const occsPerGarden = await Promise.all(gardensList.map(g => listOccurrencesForTasks(taskIdsByGarden[g.id] || [], startIso, endIso)))
       const occsAugmented: Array<any> = []
       for (const arr of occsPerGarden) {
         for (const o of (arr || [])) {
@@ -106,8 +130,8 @@ export const GardenListPage: React.FC = () => {
       const compMap = await listCompletionsForOccurrences(ids)
       setCompletionsByOcc(compMap)
       // 4) Load plants for all gardens for display and mapping
-      const plantsPerGarden = await Promise.all(gardens.map(g => getGardenPlants(g.id)))
-      const idToGardenName = gardens.reduce<Record<string, string>>((acc, g) => { acc[g.id] = g.name; return acc }, {})
+      const plantsPerGarden = await Promise.all(gardensList.map(g => getGardenPlants(g.id)))
+      const idToGardenName = gardensList.reduce<Record<string, string>>((acc, g) => { acc[g.id] = g.name; return acc }, {})
       const all = plantsPerGarden.flat().map((gp: any) => ({
         ...gp,
         gardenName: idToGardenName[gp.gardenId] || '',
@@ -120,48 +144,231 @@ export const GardenListPage: React.FC = () => {
     }
   }, [gardens, serverToday])
 
+  const scheduleReload = React.useCallback(() => {
+    const execute = async () => {
+      lastReloadRef.current = Date.now()
+      await load()
+      await loadAllTodayOccurrences()
+    }
+
+    const now = Date.now()
+    const since = now - (lastReloadRef.current || 0)
+    const minInterval = 750
+
+    if (since < minInterval) {
+      if (reloadTimerRef.current) return
+      const wait = Math.max(0, minInterval - since)
+      reloadTimerRef.current = setTimeout(() => {
+        reloadTimerRef.current = null
+        execute().catch(() => {})
+      }, wait)
+      return
+    }
+
+    if (reloadTimerRef.current) return
+    reloadTimerRef.current = setTimeout(() => {
+      reloadTimerRef.current = null
+      execute().catch(() => {})
+    }, 50)
+  }, [load, loadAllTodayOccurrences])
+
+  React.useEffect(() => {
+    return () => {
+      if (reloadTimerRef.current) {
+        try { clearTimeout(reloadTimerRef.current) } catch {}
+        reloadTimerRef.current = null
+      }
+    }
+  }, [])
+
+  React.useEffect(() => {
+    gardenIdsRef.current = new Set(gardens.map((g) => g.id))
+  }, [gardens])
+
+  const notifyTasksChanged = React.useCallback(() => {
+    try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
+  }, [])
+
+  // SSE: listen for server-driven membership updates for instant garden list refresh
+  React.useEffect(() => {
+    if (!user?.id) return
+    let es: EventSource | null = null
+    ;(async () => {
+      try {
+        const session = (await supabase.auth.getSession()).data.session
+        const token = session?.access_token
+        const url = token ? `/api/self/memberships/stream?token=${encodeURIComponent(token)}` : '/api/self/memberships/stream'
+        es = new EventSource(url, { withCredentials: true })
+        const handler = () => scheduleReload()
+        es.addEventListener('ready', () => {})
+        es.addEventListener('memberships', handler as any)
+        es.onerror = () => {}
+      } catch {}
+    })()
+    return () => { try { es?.close() } catch {} }
+  }, [scheduleReload, user?.id])
+
+  // SSE: listen to all-gardens activity and refresh on any activity event
+  React.useEffect(() => {
+    if (!user?.id) return
+    let es: EventSource | null = null
+    ;(async () => {
+      try {
+        const session = (await supabase.auth.getSession()).data.session
+        const token = session?.access_token
+        const url = token ? `/api/self/gardens/activity/stream?token=${encodeURIComponent(token)}` : '/api/self/gardens/activity/stream'
+        es = new EventSource(url, { withCredentials: true })
+        const handler = () => scheduleReload()
+        es.addEventListener('ready', () => {})
+        es.addEventListener('membership', handler as any)
+        es.addEventListener('activity', handler as any)
+        es.onerror = () => {}
+      } catch {}
+    })()
+    return () => { try { es?.close() } catch {} }
+  }, [scheduleReload, user?.id])
+
+  // Realtime: reflect membership changes and garden/task updates instantly
+  React.useEffect(() => {
+    if (!user?.id) return
+    const ch = supabase
+      .channel(`rt-gardens-for-${user.id}`)
+      // When current user's membership rows change (added/removed), refresh list
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_members', filter: `user_id=eq.${user.id}` }, () => scheduleReload())
+      // Garden metadata changes (rename, cover). Also watch deletes to drop immediately.
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'gardens' }, () => scheduleReload())
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'gardens' }, () => scheduleReload())
+      // Plants/Tasks changes across any garden (kept broad to ensure immediacy)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plants' }, () => scheduleReload())
+      // Watch both scoped and unscoped task changes to ensure updates reflect
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_tasks' }, () => scheduleReload())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_task_occurrences' }, () => scheduleReload())
+
+    const subscription = ch.subscribe()
+    if (subscription instanceof Promise) subscription.catch(() => {})
+    return () => {
+      try { supabase.removeChannel(ch) } catch {}
+    }
+  }, [scheduleReload, user?.id])
+
   React.useEffect(() => { loadAllTodayOccurrences() }, [loadAllTodayOccurrences])
 
+  React.useEffect(() => {
+    let active = true
+    let teardown: (() => Promise<void>) | null = null
+
+    addGardenBroadcastListener((message) => {
+      if (message.actorId && user?.id && message.actorId === user.id) return
+      if (!gardenIdsRef.current.has(message.gardenId)) return
+      scheduleReload()
+    })
+      .then((unsubscribe) => {
+        if (!active) {
+          unsubscribe().catch(() => {})
+        } else {
+          teardown = unsubscribe
+        }
+      })
+      .catch(() => {})
+
+    return () => {
+      active = false
+      if (teardown) teardown().catch(() => {})
+    }
+  }, [scheduleReload, user?.id])
+
   const onProgressOccurrence = React.useCallback(async (occId: string, inc: number) => {
+    let broadcastGardenId: string | null = null
     try {
       await progressTaskOccurrence(occId, inc)
+      // Log activity for the appropriate garden
+      try {
+        const o = todayTaskOccurrences.find((x: any) => x.id === occId)
+        if (o) {
+          const gp = allPlants.find((p: any) => p.id === o.gardenPlantId)
+          const gardenId = gp?.gardenId
+          if (gardenId) broadcastGardenId = gardenId
+          if (gardenId) {
+            const type = (o as any).taskType || 'custom'
+            const label = String(type).toUpperCase()
+            const plantName = gp?.nickname || gp?.plant?.name || null
+            const newCount = Number(o.completedCount || 0) + inc
+            const required = Math.max(1, Number(o.requiredCount || 1))
+            const done = newCount >= required
+            const kind = done ? 'task_completed' : 'task_progressed'
+            const msg = done
+              ? `has completed "${label}" Task on "${plantName || 'Plant'}"`
+              : `has progressed "${label}" Task on "${plantName || 'Plant'}" (${Math.min(newCount, required)}/${required})`
+            await logGardenActivity({ gardenId, kind: kind as any, message: msg, plantName: plantName || null, taskName: label, actorColor: null })
+            // Broadcast update BEFORE reload to ensure other clients receive it
+            await broadcastGardenUpdate({ gardenId, kind: 'tasks', actorId: user?.id ?? null }).catch((err) => {
+              console.warn('[GardenList] Failed to broadcast task update:', err)
+            })
+          }
+        }
+      } catch {}
     } finally {
+      // Always refresh gardens and occurrences so UI counts update immediately
       await load()
       await loadAllTodayOccurrences()
-      notifyTasksChanged()
+      if (broadcastGardenId) emitGardenRealtime(broadcastGardenId, 'tasks')
     }
-  }, [load, loadAllTodayOccurrences, notifyTasksChanged])
+  }, [allPlants, emitGardenRealtime, load, loadAllTodayOccurrences, todayTaskOccurrences, user?.id])
 
   const onCompleteAllForPlant = React.useCallback(async (gardenPlantId: string) => {
+    const gp = allPlants.find((p: any) => p.id === gardenPlantId)
+    const gardenId = gp?.gardenId ? String(gp.gardenId) : null
     try {
       const occs = todayTaskOccurrences.filter(o => o.gardenPlantId === gardenPlantId)
-      const ops: Promise<any>[] = []
       for (const o of occs) {
         const remaining = Math.max(0, Number(o.requiredCount || 1) - Number(o.completedCount || 0))
-        if (remaining > 0) ops.push(progressTaskOccurrence(o.id, remaining))
+        if (remaining <= 0) continue
+        for (let i = 0; i < remaining; i++) {
+          await progressTaskOccurrence(o.id, 1)
+        }
       }
-      if (ops.length > 0) await Promise.all(ops)
+      // Log summary activity for this plant/garden
+      try {
+        const gp = allPlants.find((p: any) => p.id === gardenPlantId)
+        if (gp?.gardenId) {
+          const plantName = gp?.nickname || gp?.plant?.name || 'Plant'
+          await logGardenActivity({ gardenId: gp.gardenId, kind: 'task_completed' as any, message: `completed all due tasks on "${plantName}"`, plantName, actorColor: null })
+          // Broadcast update AFTER all task completions finish, BEFORE reload to ensure other clients receive it
+          await broadcastGardenUpdate({ gardenId: gp.gardenId, kind: 'tasks', actorId: user?.id ?? null }).catch((err) => {
+            console.warn('[GardenList] Failed to broadcast task update:', err)
+          })
+        }
+      } catch {}
     } finally {
       await load()
       await loadAllTodayOccurrences()
-      notifyTasksChanged()
+      if (gardenId) emitGardenRealtime(gardenId, 'tasks')
     }
-  }, [todayTaskOccurrences, load, loadAllTodayOccurrences, notifyTasksChanged])
+  }, [allPlants, emitGardenRealtime, load, loadAllTodayOccurrences, todayTaskOccurrences, user?.id])
 
   const onMarkAllCompleted = React.useCallback(async () => {
+    const affectedGardenIds = new Set<string>()
     try {
       const ops: Promise<any>[] = []
       for (const o of todayTaskOccurrences) {
         const remaining = Math.max(0, Number(o.requiredCount || 1) - Number(o.completedCount || 0))
         if (remaining > 0) ops.push(progressTaskOccurrence(o.id, remaining))
+        const gp = allPlants.find((p: any) => p.id === o.gardenPlantId)
+        if (gp?.gardenId) affectedGardenIds.add(String(gp.gardenId))
       }
       if (ops.length > 0) await Promise.all(ops)
+      // Broadcast updates for all affected gardens BEFORE reload
+      await Promise.all(Array.from(affectedGardenIds).map((gid) => 
+        broadcastGardenUpdate({ gardenId: gid, kind: 'tasks', actorId: user?.id ?? null }).catch((err) => {
+          console.warn('[GardenList] Failed to broadcast task update for garden:', gid, err)
+        })
+      ))
     } finally {
       await load()
       await loadAllTodayOccurrences()
-      notifyTasksChanged()
+      affectedGardenIds.forEach((gid) => emitGardenRealtime(gid, 'tasks'))
     }
-  }, [todayTaskOccurrences, load, loadAllTodayOccurrences, notifyTasksChanged])
+  }, [allPlants, emitGardenRealtime, load, loadAllTodayOccurrences, todayTaskOccurrences, user?.id])
 
   const onCreate = async () => {
     if (!user?.id) return
@@ -221,7 +428,7 @@ export const GardenListPage: React.FC = () => {
               <Button className="rounded-2xl" onClick={() => setOpen(true)}>Create Garden</Button>
             )}
           </div>
-          {loading && <div className="p-6 opacity-60 text-sm">Loading…</div>}
+          {loading && <div className="p-6 opacity-60 text-sm">Loading?</div>}
           {error && <div className="p-6 text-sm text-red-600">{error}</div>}
           {!loading && !error && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -275,11 +482,11 @@ export const GardenListPage: React.FC = () => {
                 </div>
                 <div className="grid gap-2">
                   <label className="text-sm font-medium">Cover image URL (optional)</label>
-                  <Input value={imageUrl} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setImageUrl(e.target.value)} placeholder="https://…" />
+                  <Input value={imageUrl} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setImageUrl(e.target.value)} placeholder="https://?" />
                 </div>
                 <div className="flex gap-2 justify-end pt-2">
                   <Button variant="secondary" className="rounded-2xl" onClick={() => setOpen(false)}>Cancel</Button>
-                  <Button className="rounded-2xl" onClick={onCreate} disabled={!name.trim() || submitting}>{submitting ? 'Creating…' : 'Create'}</Button>
+                  <Button className="rounded-2xl" onClick={onCreate} disabled={!name.trim() || submitting}>{submitting ? 'Creating?' : 'Create'}</Button>
                 </div>
               </div>
             </DialogContent>
@@ -303,10 +510,10 @@ export const GardenListPage: React.FC = () => {
               </div>
             )}
             {loadingTasks && (
-              <Card className="rounded-2xl p-4 text-sm opacity-70">Loading tasks…</Card>
+              <Card className="rounded-2xl p-4 text-sm opacity-70">Loading tasks?</Card>
             )}
             {!loadingTasks && gardensWithTasks.length === 0 && (
-              <Card className="rounded-2xl p-4 text-sm opacity-70">No tasks due today. 🌿</Card>
+              <Card className="rounded-2xl p-4 text-sm opacity-70">No tasks due today. ??</Card>
             )}
             {!loadingTasks && gardensWithTasks.map((gw) => (
               <Card key={gw.gardenId} className="rounded-2xl p-4">
@@ -334,7 +541,7 @@ export const GardenListPage: React.FC = () => {
                           {occs.map((o: any) => {
                             const tt = (o as any).taskType || 'custom'
                             const badgeClass = `${tt === 'water' ? 'bg-blue-500' : tt === 'fertilize' ? 'bg-green-500' : tt === 'harvest' ? 'bg-yellow-400' : tt === 'cut' ? 'bg-orange-500' : 'bg-purple-500'} ${tt === 'harvest' ? 'text-black' : 'text-white'}`
-                            const icon = (o as any).taskEmoji || (tt === 'water' ? '💧' : tt === 'fertilize' ? '🍽️' : tt === 'harvest' ? '🌾' : tt === 'cut' ? '✂️' : '🪴')
+                            const icon = (o as any).taskEmoji || (tt === 'water' ? '??' : tt === 'fertilize' ? '???' : tt === 'harvest' ? '??' : tt === 'cut' ? '??' : '??')
                             const isDone = (Number(o.completedCount || 0) >= Number(o.requiredCount || 1))
                             const completions = completionsByOcc[o.id] || []
                             return (

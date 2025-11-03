@@ -4,11 +4,15 @@ import { createPortal } from 'react-dom'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import type { GardenPlantTask } from '@/types/garden'
-import { listPlantTasks, deletePlantTask, updatePatternTask, listGardenTasks, syncTaskOccurrencesForGarden, resyncTaskOccurrencesForGarden } from '@/lib/gardens'
+import { listPlantTasks, deletePlantTask, updatePatternTask, listGardenTasks, syncTaskOccurrencesForGarden, resyncTaskOccurrencesForGarden, logGardenActivity } from '@/lib/gardens'
+import { broadcastGardenUpdate, addGardenBroadcastListener } from '@/lib/realtime'
+import { useAuth } from '@/context/AuthContext'
 import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
 import { TaskCreateDialog } from '@/components/plant/TaskCreateDialog'
+import { supabase } from '@/lib/supabaseClient'
 
 export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, onChanged }: { open: boolean; onOpenChange: (o: boolean) => void; gardenId: string; gardenPlantId: string; onChanged?: () => Promise<void> | void }) {
+  const { user } = useAuth()
   const [tasks, setTasks] = React.useState<GardenPlantTask[]>([])
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -58,7 +62,66 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
     }
   }, [gardenPlantId])
 
+  const emitTasksRealtime = React.useCallback(async (metadata?: Record<string, unknown>) => {
+    await broadcastGardenUpdate({ gardenId, kind: 'tasks', metadata, actorId: user?.id ?? null }).catch(() => {})
+  }, [gardenId, user?.id])
+
   React.useEffect(() => { if (open) load() }, [open, load])
+
+  // Listen for task completion broadcasts from other users
+  React.useEffect(() => {
+    if (!open || !gardenId) return
+    let active = true
+    let teardown: (() => Promise<void>) | null = null
+
+    addGardenBroadcastListener((message) => {
+      if (!active) return
+      if (message.gardenId !== gardenId) return
+      if (message.kind !== 'tasks') return
+      if (message.actorId && message.actorId === user?.id) return
+      // Reload tasks when other users complete tasks or make changes
+      load().catch(() => {})
+    })
+      .then((unsubscribe) => {
+        if (!active) {
+          unsubscribe().catch(() => {})
+        } else {
+          teardown = unsubscribe
+        }
+      })
+      .catch(() => {})
+
+    return () => {
+      active = false
+      if (teardown) teardown().catch(() => {})
+    }
+  }, [open, gardenId, load, user?.id])
+
+  // Also listen to postgres changes for immediate updates
+  React.useEffect(() => {
+    if (!open || !gardenId) return
+
+    const channel = supabase.channel(`rt-tasks-editor-${gardenId}`)
+      // Task definition changes
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_tasks' }, () => {
+        load().catch(() => {})
+      })
+      // Task occurrence changes (completions)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_task_occurrences' }, () => {
+        load().catch(() => {})
+      })
+      // Garden activity changes (may indicate task completions)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_activity_logs', filter: `garden_id=eq.${gardenId}` }, () => {
+        load().catch(() => {})
+      })
+
+    const subscription = channel.subscribe()
+    if (subscription instanceof Promise) subscription.catch(() => {})
+
+    return () => {
+      try { supabase.removeChannel(channel) } catch {}
+    }
+  }, [open, gardenId, load])
 
   const resetEditor = () => {
     setPatternPeriod('week')
@@ -77,6 +140,15 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
         const endIso = new Date(now.getTime() + 60*24*3600*1000).toISOString()
         await resyncTaskOccurrencesForGarden(gardenId, startIso, endIso)
       } catch {}
+      // Log activity so other clients refresh via SSE
+      try {
+        const t = tasks.find((x) => x.id === taskId)
+        const label = t ? (t.type === 'custom' ? (t.customName || 'CUSTOM') : String(t.type).toUpperCase()) : 'TASK'
+        await logGardenActivity({ gardenId, kind: 'note' as any, message: `deleted "${label}" Task`, taskName: label, actorColor: null })
+        try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
+      } catch {}
+      // Broadcast update BEFORE reload to ensure other clients receive it
+      await emitTasksRealtime({ action: 'delete', taskId })
       await load()
       if (onChanged) await onChanged()
     } catch (e: any) {
@@ -173,6 +245,14 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
                 const endIso = new Date(now.getTime() + 60*24*3600*1000).toISOString()
                 await resyncTaskOccurrencesForGarden(gardenId, startIso, endIso)
               } catch {}
+              // Log activity so other clients refresh via SSE
+              try {
+                const label = editingTask.type === 'custom' ? (editingTask.customName || 'CUSTOM') : String(editingTask.type).toUpperCase()
+                await logGardenActivity({ gardenId, kind: 'note' as any, message: `updated "${label}" Task`, taskName: label, actorColor: null })
+                try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
+              } catch {}
+              // Broadcast update BEFORE reload to ensure other clients receive it
+              await emitTasksRealtime({ action: 'update', taskId: editingTask.id })
               setEditingTask(null)
               await load()
               if (onChanged) await onChanged()
@@ -194,6 +274,8 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
         gardenId={gardenId}
         gardenPlantId={gardenPlantId}
         onCreated={async () => {
+          // Broadcast update BEFORE reload to ensure other clients receive it
+          await emitTasksRealtime({ action: 'create', gardenPlantId })
           await load()
           // Notify global UI to refresh nav badges immediately on task creation
           try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}

@@ -4,7 +4,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import type { TaskType } from '@/types/garden'
-import { createPatternTask } from '@/lib/gardens'
+import { createPatternTask, logGardenActivity, resyncTaskOccurrencesForGarden } from '@/lib/gardens'
+import { broadcastGardenUpdate } from '@/lib/realtime'
+import { useAuth } from '@/context/AuthContext'
 
 type Period = 'week' | 'month' | 'year'
 
@@ -21,6 +23,7 @@ export function TaskCreateDialog({
   gardenPlantId: string
   onCreated?: () => Promise<void> | void
 }) {
+  const { user } = useAuth()
   const [type, setType] = React.useState<TaskType>('water')
   const [customName, setCustomName] = React.useState('')
   const [emoji, setEmoji] = React.useState<string>('')
@@ -88,6 +91,21 @@ export function TaskCreateDialog({
         monthlyDays: period === 'month' ? [] : null,
         yearlyDays: period === 'year' ? [...yearlyDays].sort() : null,
         monthlyNthWeekdays: period === 'month' ? [...monthlyNthWeekdays].sort() : null,
+      })
+      try {
+        const now = new Date()
+        const startIso = new Date(now.getTime() - 7 * 24 * 3600 * 1000).toISOString()
+        const endIso = new Date(now.getTime() + 60 * 24 * 3600 * 1000).toISOString()
+        await resyncTaskOccurrencesForGarden(gardenId, startIso, endIso)
+      } catch {}
+      // Log activity so other clients' SSE streams trigger reloads
+      try {
+        const label = (type === 'custom' ? (customName || 'CUSTOM') : String(type || '').toUpperCase())
+        await logGardenActivity({ gardenId, kind: 'note' as any, message: `added "${label}" Task`, taskName: label, actorColor: null })
+      } catch {}
+      // Broadcast update BEFORE onCreated callback to ensure other clients receive it
+      await broadcastGardenUpdate({ gardenId, kind: 'tasks', metadata: { action: 'create', gardenPlantId }, actorId: user?.id ?? null }).catch((err) => {
+        console.warn('[TaskCreateDialog] Failed to broadcast task update:', err)
       })
       if (onCreated) await onCreated()
       onOpenChange(false)

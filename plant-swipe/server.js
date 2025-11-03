@@ -3832,6 +3832,185 @@ app.get('/api/broadcast/stream', async (req, res) => {
   }
 })
 
+// User membership SSE: notify when the current user's garden memberships change
+app.get('/api/self/memberships/stream', async (req, res) => {
+  try {
+    // Allow token via query param for EventSource
+    let user = null
+    try {
+      const qToken = (req.query?.token || req.query?.access_token)
+      if (qToken && supabaseServer) {
+        const { data, error } = await supabaseServer.auth.getUser(String(qToken))
+        if (!error && data?.user?.id) user = { id: data.user.id, email: data.user.email || null }
+      }
+    } catch {}
+    if (!user) user = await getUserFromRequest(req)
+    if (!user?.id) { res.status(401).json({ error: 'Unauthorized' }); return }
+
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache, no-transform')
+    res.setHeader('Connection', 'keep-alive')
+    res.setHeader('X-Accel-Buffering', 'no')
+    res.flushHeaders?.()
+
+    sseWrite(res, 'ready', { ok: true })
+
+    const getSig = async () => {
+      try {
+        if (sql) {
+          const rows = await sql`
+            select gm.garden_id::text as garden_id
+            from public.garden_members gm
+            where gm.user_id = ${user.id}
+            order by gm.garden_id asc
+          `
+          const list = (rows || []).map((r) => String(r.garden_id))
+          return list.join(',')
+        } else if (supabaseUrlEnv && supabaseAnonKey) {
+          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          // Include Authorization from bearer header or token query param (EventSource)
+          const bearer = getBearerTokenFromRequest(req) || (req.query?.token ? String(req.query.token) : (req.query?.access_token ? String(req.query.access_token) : null))
+          if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
+          const url = `${supabaseUrlEnv}/rest/v1/garden_members?user_id=eq.${encodeURIComponent(user.id)}&select=garden_id&order=garden_id.asc`
+          const r = await fetch(url, { headers })
+          const arr = r.ok ? (await r.json().catch(() => [])) : []
+          const list = (arr || []).map((row) => String(row.garden_id))
+          return list.join(',')
+        }
+      } catch {}
+      return ''
+    }
+
+    let lastSig = await getSig()
+
+    const poll = async () => {
+      try {
+        const next = await getSig()
+        if (next !== lastSig) {
+          lastSig = next
+          sseWrite(res, 'memberships', { changed: true })
+        }
+      } catch {}
+    }
+
+    const iv = setInterval(poll, 1000)
+    const hb = setInterval(() => { try { res.write(': ping\n\n') } catch {} }, 15000)
+    req.on('close', () => { try { clearInterval(iv); clearInterval(hb) } catch {} })
+  } catch (e) {
+    try { res.status(500).json({ error: e?.message || 'stream failed' }) } catch {}
+  }
+})
+
+// User-wide Garden Activity SSE: pushes activity from all gardens the user belongs to
+app.get('/api/self/gardens/activity/stream', async (req, res) => {
+  try {
+    // Resolve user from token param or cookie session
+    let user = null
+    try {
+      const qToken = (req.query?.token || req.query?.access_token)
+      if (qToken && supabaseServer) {
+        const { data, error } = await supabaseServer.auth.getUser(String(qToken))
+        if (!error && data?.user?.id) user = { id: data.user.id, email: data.user.email || null }
+      }
+    } catch {}
+    if (!user) user = await getUserFromRequest(req)
+    if (!user?.id) { res.status(401).json({ error: 'Unauthorized' }); return }
+
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache, no-transform')
+    res.setHeader('Connection', 'keep-alive')
+    res.setHeader('X-Accel-Buffering', 'no')
+    res.flushHeaders?.()
+
+    sseWrite(res, 'ready', { ok: true })
+
+    const getGardenIdsCsv = async () => {
+      try {
+        if (sql) {
+          const rows = await sql`
+            select garden_id::text as garden_id from public.garden_members where user_id = ${user.id}
+          `
+          const list = (rows || []).map((r) => String(r.garden_id))
+          return list
+        } else if (supabaseUrlEnv && supabaseAnonKey) {
+          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const bearer = getBearerTokenFromRequest(req)
+          if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
+          const url = `${supabaseUrlEnv}/rest/v1/garden_members?user_id=eq.${encodeURIComponent(user.id)}&select=garden_id`
+          const r = await fetch(url, { headers })
+          const arr = r.ok ? (await r.json().catch(() => [])) : []
+          const list = (arr || []).map((row) => String(row.garden_id))
+          return list
+        }
+      } catch {}
+      return []
+    }
+
+    let gardenIds = await getGardenIdsCsv()
+    let lastSig = gardenIds.slice().sort().join(',')
+    let lastSeen = new Date(Date.now() - 2 * 60 * 1000).toISOString()
+
+    const poll = async () => {
+      try {
+        // Refresh membership set
+        const nextIds = await getGardenIdsCsv()
+        const nextSig = nextIds.slice().sort().join(',')
+        if (nextSig !== lastSig) {
+          gardenIds = nextIds
+          lastSig = nextSig
+          sseWrite(res, 'membership', { changed: true })
+        }
+        if (!gardenIds || gardenIds.length === 0) return
+        if (sql) {
+          const rows = await sql`
+            select id::text as id, garden_id::text as garden_id, actor_id::text as actor_id, actor_name, actor_color, kind, message, plant_name, task_name, occurred_at
+            from public.garden_activity_logs
+            where garden_id = any(${sql.array(gardenIds)}) and occurred_at > ${lastSeen}
+            order by occurred_at asc
+            limit 500
+          `
+          for (const r of rows || []) {
+            lastSeen = new Date(r.occurred_at).toISOString()
+            sseWrite(res, 'activity', {
+              id: String(r.id), gardenId: String(r.garden_id), actorId: r.actor_id || null, actorName: r.actor_name || null, actorColor: r.actor_color || null,
+              kind: r.kind, message: r.message, plantName: r.plant_name || null, taskName: r.task_name || null, occurredAt: new Date(r.occurred_at).toISOString(),
+            })
+          }
+        } else if (supabaseUrlEnv && supabaseAnonKey) {
+          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          // Include Authorization from bearer header or token query param (EventSource)
+          const bearer = getBearerTokenFromRequest(req) || (req.query?.token ? String(req.query.token) : (req.query?.access_token ? String(req.query.access_token) : null))
+          if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
+          // Build OR filter for multiple garden_ids: or=(garden_id.eq.id1,garden_id.eq.id2,...)
+          const orExpr = gardenIds.length > 0 ? `or=(${gardenIds.map(id => `garden_id.eq.${id}`).join(',')})` : ''
+          const qp = [orExpr, `occurred_at=gt.${lastSeen}`, 'select=id,garden_id,actor_id,actor_name,actor_color,kind,message,plant_name,task_name,occurred_at', 'order=occurred_at.asc', 'limit=500']
+            .filter(Boolean)
+            .map(s => encodeURI(s))
+            .join('&')
+          const url = `${supabaseUrlEnv}/rest/v1/garden_activity_logs?${qp}`
+          const r = await fetch(url, { headers })
+          if (r.ok) {
+            const arr = await r.json().catch(() => [])
+            for (const row of arr || []) {
+              lastSeen = new Date(row.occurred_at).toISOString()
+              sseWrite(res, 'activity', {
+                id: String(row.id), gardenId: String(row.garden_id), actorId: row.actor_id || null, actorName: row.actor_name || null, actorColor: row.actor_color || null,
+                kind: row.kind, message: row.message, plantName: row.plant_name || null, taskName: row.task_name || null, occurredAt: new Date(row.occurred_at).toISOString(),
+              })
+            }
+          }
+        }
+      } catch {}
+    }
+
+    const iv = setInterval(poll, 1000)
+    const hb = setInterval(() => { try { res.write(': ping\n\n') } catch {} }, 15000)
+    req.on('close', () => { try { clearInterval(iv); clearInterval(hb) } catch {} })
+  } catch (e) {
+    try { res.status(500).json({ error: e?.message || 'stream failed' }) } catch {}
+  }
+})
+
 // ---- Garden overview + realtime (SSE) ----
 
 async function isGardenMember(req, gardenId, userIdOverride = null) {
@@ -4124,6 +4303,9 @@ app.get('/api/garden/:id/stream', async (req, res) => {
           }
         } else if (supabaseUrlEnv && supabaseAnonKey) {
           const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          // Include Authorization from bearer header or token query param (EventSource)
+          const bearer = getBearerTokenFromRequest(req) || (req.query?.token ? String(req.query.token) : (req.query?.access_token ? String(req.query.access_token) : null))
+          if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
           const url = `${supabaseUrlEnv}/rest/v1/garden_activity_logs?garden_id=eq.${encodeURIComponent(gardenId)}&occurred_at=gt.${encodeURIComponent(lastSeen)}&select=id,garden_id,actor_id,actor_name,actor_color,kind,message,plant_name,task_name,occurred_at&order=occurred_at.asc&limit=500`
           const r = await fetch(url, { headers })
           if (r.ok) {
@@ -4140,7 +4322,7 @@ app.get('/api/garden/:id/stream', async (req, res) => {
       } catch {}
     }
 
-    const iv = setInterval(poll, 2500)
+    const iv = setInterval(poll, 1000)
     const hb = setInterval(() => { try { res.write(': ping\n\n') } catch {} }, 15000)
     req.on('close', () => { try { clearInterval(iv); clearInterval(hb) } catch {} })
   } catch (e) {

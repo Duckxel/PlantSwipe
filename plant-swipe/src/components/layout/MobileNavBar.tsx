@@ -4,6 +4,8 @@ import { Sparkles, Sprout, Search, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/context/AuthContext"
 import { userHasUnfinishedTasksToday } from "@/lib/gardens"
+import { addGardenBroadcastListener } from "@/lib/realtime"
+import { supabase } from "@/lib/supabaseClient"
 
 interface MobileNavBarProps {
   canCreate?: boolean
@@ -14,35 +16,79 @@ export const MobileNavBar: React.FC<MobileNavBarProps> = ({ canCreate }) => {
   const { user } = useAuth()
   const [hasUnfinished, setHasUnfinished] = React.useState(false)
 
-  React.useEffect(() => {
-    let cancelled = false
-    const run = async () => {
-      try {
-        if (!user?.id) { if (!cancelled) setHasUnfinished(false); return }
-        const has = await userHasUnfinishedTasksToday(user.id)
-        if (!cancelled) setHasUnfinished(has)
-      } catch {
-        if (!cancelled) setHasUnfinished(false)
-      }
+  // Refresh notification state
+  const refreshNotification = React.useCallback(async () => {
+    try {
+      if (!user?.id) { setHasUnfinished(false); return }
+      const has = await userHasUnfinishedTasksToday(user.id)
+      setHasUnfinished(has)
+    } catch {
+      setHasUnfinished(false)
     }
-    run()
-    return () => { cancelled = true }
   }, [user?.id])
 
-  // Auto-refresh the Garden notification dot when tasks change without page reload
+  // Initial load
   React.useEffect(() => {
-    const handler = async () => {
-      try {
-        if (!user?.id) { setHasUnfinished(false); return }
-        const has = await userHasUnfinishedTasksToday(user.id)
-        setHasUnfinished(has)
-      } catch {
-        setHasUnfinished(false)
-      }
-    }
+    refreshNotification()
+  }, [refreshNotification])
+
+  // Listen to local events (for when user is on garden page)
+  React.useEffect(() => {
+    const handler = () => { refreshNotification() }
     try { window.addEventListener('garden:tasks_changed', handler as EventListener) } catch {}
     return () => { try { window.removeEventListener('garden:tasks_changed', handler as EventListener) } catch {} }
-  }, [user?.id])
+  }, [refreshNotification])
+
+  // Listen to realtime broadcasts (works from any page)
+  React.useEffect(() => {
+    if (!user?.id) return
+    let active = true
+    let teardown: (() => Promise<void>) | null = null
+
+    addGardenBroadcastListener((message) => {
+      if (!active) return
+      // Refresh notification when tasks change in any garden
+      if (message.kind === 'tasks' || message.kind === 'general') {
+        refreshNotification()
+      }
+    })
+      .then((unsubscribe) => {
+        if (!active) {
+          unsubscribe().catch(() => {})
+        } else {
+          teardown = unsubscribe
+        }
+      })
+      .catch(() => {})
+
+    return () => {
+      active = false
+      if (teardown) teardown().catch(() => {})
+    }
+  }, [user?.id, refreshNotification])
+
+  // Also listen to postgres changes for task occurrences (direct fallback)
+  React.useEffect(() => {
+    if (!user?.id) return
+    let active = true
+    
+    const channel = supabase.channel('rt-navbar-tasks-mobile')
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'garden_plant_task_occurrences' 
+      }, () => {
+        if (active) refreshNotification()
+      })
+    
+    const subscription = channel.subscribe()
+    if (subscription instanceof Promise) subscription.catch(() => {})
+
+    return () => {
+      active = false
+      try { supabase.removeChannel(channel) } catch {}
+    }
+  }, [user?.id, refreshNotification])
   const currentView: "discovery" | "gardens" | "search" | "create" =
     location.pathname === "/" ? "discovery" :
     location.pathname.startsWith("/gardens") || location.pathname.startsWith('/garden/') ? "gardens" :
