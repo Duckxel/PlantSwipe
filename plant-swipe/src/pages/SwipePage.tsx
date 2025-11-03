@@ -54,7 +54,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, 
 
   return (
     <div className="max-w-3xl mx-auto mt-8 px-4 md:px-0">
-      <div className="relative h-[650px]">
+      <div className="relative" style={{ height: 'min(650px, calc(100vh - 8rem))' }}>
         <AnimatePresence initial={false} mode="wait">
           {current ? (
             <motion.div
@@ -135,7 +135,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, 
                       }}
                       onPointerDown={(e) => e.stopPropagation()}
                     >
-                      More info <ChevronUp className="h-4 w-4 ml-1" />
+                      Info <ChevronUp className="h-4 w-4 ml-1" />
                     </Button>
                     <Button 
                       variant="secondary" 
