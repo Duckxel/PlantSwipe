@@ -26,6 +26,7 @@ import { useAuth } from "@/context/AuthContext";
 import PublicProfilePage from "@/pages/PublicProfilePage";
 import RequireAdmin from "@/pages/RequireAdmin";
 import { FriendsPage } from "@/pages/FriendsPage";
+import SettingsPage from "@/pages/SettingsPage";
 import { supabase } from "@/lib/supabaseClient";
 
 // Lazy load heavy pages for code splitting
@@ -709,6 +710,7 @@ export default function PlantSwipe() {
                 <Route path="/profile" element={user ? (profile?.display_name ? <Navigate to={`/u/${encodeURIComponent(profile.display_name)}`} replace /> : <Navigate to="/u/_me" replace />) : <Navigate to="/" replace />} />
                 <Route path="/u/:username" element={<PublicProfilePage />} />
                 <Route path="/friends" element={user ? <FriendsPage /> : <Navigate to="/" replace />} />
+                <Route path="/settings" element={user ? <SettingsPage /> : <Navigate to="/" replace />} />
                 <Route path="/admin" element={
                   <RequireAdmin>
                     <Suspense fallback={<div className="p-8 text-center text-sm opacity-60">Loading admin panel...</div>}>
