@@ -1636,6 +1636,20 @@ app.get('/api/admin/member', async (req, res) => {
         }
       } catch {}
 
+      // Distinct IPs via security-definer RPC to ensure completeness (fetch early for fallback check)
+      let ips = []
+      try {
+        const ipRes = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_user_distinct_ips`, {
+          method: 'POST',
+          headers: { ...baseHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ _user_id: targetId }),
+        })
+        if (ipRes.ok) {
+          const arr = await ipRes.json().catch(() => [])
+          ips = Array.isArray(arr) ? arr.map((r) => String(r.ip).replace(/\/[0-9]{1,3}$/, '')).filter(Boolean) : []
+        }
+      } catch {}
+
       // Last online and last IP/country/referrer (best-effort; requires Authorization due to RLS)
       let lastOnlineAt = null
       let lastIp = null
@@ -1658,7 +1672,7 @@ app.get('/api/admin/member', async (req, res) => {
           }
         }
         // If lastIp is null but we have IPs, get the most recent visit with a non-null IP
-        if (!lastIp) {
+        if (!lastIp && ips.length > 0) {
           try {
             const lr2 = await fetch(`${supabaseUrlEnv}/rest/v1/${tablePath}?user_id=eq.${encodeURIComponent(targetId)}&ip_address=not.is.null&select=occurred_at,ip_address,geo_country,referrer&order=occurred_at.desc&limit=1`, {
               headers: baseHeaders,
@@ -1677,20 +1691,6 @@ app.get('/api/admin/member', async (req, res) => {
               }
             }
           } catch {}
-        }
-      } catch {}
-
-      // Distinct IPs via security-definer RPC to ensure completeness
-      let ips = []
-      try {
-        const ipRes = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_user_distinct_ips`, {
-          method: 'POST',
-          headers: { ...baseHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ _user_id: targetId }),
-        })
-        if (ipRes.ok) {
-          const arr = await ipRes.json().catch(() => [])
-          ips = Array.isArray(arr) ? arr.map((r) => String(r.ip).replace(/\/[0-9]{1,3}$/, '')).filter(Boolean) : []
         }
       } catch {}
 
