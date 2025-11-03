@@ -220,7 +220,7 @@ export const FriendsPage: React.FC = () => {
         return
       }
       
-      // Check if request already exists (including rejected ones)
+      // Check if request already exists (including rejected/accepted ones)
       const { data: existingRequest } = await supabase
         .from('friend_requests')
         .select('id, status')
@@ -233,8 +233,8 @@ export const FriendsPage: React.FC = () => {
           setError('Friend request already sent')
           return
         }
-        // If rejected, update it to pending
-        if (existingRequest.status === 'rejected') {
+        // If rejected or accepted, update it to pending (allows resending after removal/rejection)
+        if (existingRequest.status === 'rejected' || existingRequest.status === 'accepted') {
           const { error: err } = await supabase
             .from('friend_requests')
             .update({ status: 'pending' })
@@ -307,6 +307,12 @@ export const FriendsPage: React.FC = () => {
       await Promise.all([
         supabase.from('friends').delete().eq('user_id', user.id).eq('friend_id', friendId),
         supabase.from('friends').delete().eq('user_id', friendId).eq('friend_id', user.id)
+      ])
+      
+      // Clean up old friend_request records (both directions) to allow resending requests
+      await Promise.all([
+        supabase.from('friend_requests').delete().eq('requester_id', user.id).eq('recipient_id', friendId),
+        supabase.from('friend_requests').delete().eq('requester_id', friendId).eq('recipient_id', user.id)
       ])
       
       await loadFriends()

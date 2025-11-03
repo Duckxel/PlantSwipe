@@ -216,7 +216,7 @@ export default function PublicProfilePage() {
     if (!user?.id || !pp?.id || isOwner) return
     setFriendRequestLoading(true)
     try {
-      // Check if there's an existing request (including rejected ones)
+      // Check if there's an existing request (including rejected/accepted ones)
       const { data: existingRequest } = await supabase
         .from('friend_requests')
         .select('id, status')
@@ -231,8 +231,8 @@ export default function PublicProfilePage() {
           setFriendRequestLoading(false)
           return
         }
-        // If rejected, update it to pending
-        if (existingRequest.status === 'rejected') {
+        // If rejected or accepted, update it to pending (allows resending after removal/rejection)
+        if (existingRequest.status === 'rejected' || existingRequest.status === 'accepted') {
           const { data, error: err } = await supabase
             .from('friend_requests')
             .update({ status: 'pending' })
