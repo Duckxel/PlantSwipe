@@ -523,7 +523,7 @@ export const FriendsPage: React.FC = () => {
     <div className="max-w-6xl mx-auto mt-8 px-4 md:px-0">
       <div className={`flex flex-col lg:grid gap-6 items-stretch ${
         pendingRequests.length > 0 || sentPendingRequests.length > 0 
-          ? 'lg:grid-cols-[400px_1fr_400px]' 
+          ? 'lg:grid-cols-[300px_1fr_300px]' 
           : 'lg:grid-cols-1'
       }`}>
         {/* Spacer for left side when received requests don't exist */}
@@ -533,7 +533,7 @@ export const FriendsPage: React.FC = () => {
         
         {/* Pending Requests I Received - Top on mobile, Left on desktop */}
         {pendingRequests.length > 0 && (
-          <Card className="rounded-3xl w-full lg:w-[400px] lg:flex-shrink-0 order-1 lg:order-1 h-full">
+          <Card className="rounded-3xl w-full lg:w-[300px] lg:flex-shrink-0 order-1 lg:order-1 h-full">
             <CardContent className="p-6 md:p-8 space-y-4 h-full flex flex-col">
               <div className="text-xl font-semibold">Pending Invitations</div>
               <div className="space-y-2">
@@ -572,7 +572,7 @@ export const FriendsPage: React.FC = () => {
                         size="sm"
                         onClick={() => acceptRequest(request.id)}
                       >
-                        <Check className="h-4 w-4 mr-1" /> Accept
+                        <Check className="h-4 w-4" />
                       </Button>
                       <Button
                         className="rounded-xl"
@@ -580,7 +580,7 @@ export const FriendsPage: React.FC = () => {
                         size="sm"
                         onClick={() => rejectRequest(request.id)}
                       >
-                        <X className="h-4 w-4 mr-1" /> Reject
+                        <X className="h-4 w-4" />
                       </Button>
                     </div>
                   </div>
@@ -719,7 +719,7 @@ export const FriendsPage: React.FC = () => {
 
         {/* Pending Requests I Sent - Bottom on mobile, Right on desktop */}
         {sentPendingRequests.length > 0 && (
-          <Card className="rounded-3xl w-full lg:w-[400px] lg:flex-shrink-0 order-3 lg:order-3 h-full">
+          <Card className="rounded-3xl w-full lg:w-[300px] lg:flex-shrink-0 order-3 lg:order-3 h-full">
             <CardContent className="p-6 md:p-8 space-y-4 h-full flex flex-col">
               <div className="text-xl font-semibold">Sent Requests</div>
               <div className="space-y-2">
