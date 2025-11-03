@@ -550,7 +550,9 @@ export default function PublicProfilePage() {
                       <div className="flex items-center gap-2">
                         <div className="text-2xl font-semibold truncate">{pp.display_name || pp.username || 'Member'}</div>
                         {pp.isAdminViewingPrivateNonFriend && (
-                          <EyeOff className="h-5 w-5 text-stone-500 opacity-70" title="Private profile viewed by admin" />
+                          <div title="Private profile viewed by admin">
+                            <EyeOff className="h-5 w-5 text-stone-500 opacity-70" />
+                          </div>
                         )}
                         <span className={`text-[11px] px-2 py-0.5 rounded-full border ${pp.is_admin ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-stone-50 text-stone-700 border-stone-200'}`}>{pp.is_admin ? 'Admin' : 'Member'}</span>
                       </div>
