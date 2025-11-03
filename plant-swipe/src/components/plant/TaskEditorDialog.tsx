@@ -5,10 +5,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button'
 import type { GardenPlantTask } from '@/types/garden'
 import { listPlantTasks, deletePlantTask, updatePatternTask, listGardenTasks, syncTaskOccurrencesForGarden, resyncTaskOccurrencesForGarden, logGardenActivity } from '@/lib/gardens'
+import { broadcastGardenUpdate } from '@/lib/realtime'
+import { useAuth } from '@/context/AuthContext'
 import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
 import { TaskCreateDialog } from '@/components/plant/TaskCreateDialog'
 
 export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, onChanged }: { open: boolean; onOpenChange: (o: boolean) => void; gardenId: string; gardenPlantId: string; onChanged?: () => Promise<void> | void }) {
+  const { user } = useAuth()
   const [tasks, setTasks] = React.useState<GardenPlantTask[]>([])
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -58,6 +61,10 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
     }
   }, [gardenPlantId])
 
+  const emitTasksRealtime = React.useCallback((metadata?: Record<string, unknown>) => {
+    broadcastGardenUpdate({ gardenId, kind: 'tasks', metadata, actorId: user?.id ?? null }).catch(() => {})
+  }, [gardenId, user?.id])
+
   React.useEffect(() => { if (open) load() }, [open, load])
 
   const resetEditor = () => {
@@ -86,6 +93,7 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
       } catch {}
       await load()
       if (onChanged) await onChanged()
+      emitTasksRealtime({ action: 'delete', taskId })
     } catch (e: any) {
       setError(e?.message || 'Failed to delete task')
     }
@@ -189,6 +197,7 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
               setEditingTask(null)
               await load()
               if (onChanged) await onChanged()
+              emitTasksRealtime({ action: 'update', taskId: editingTask.id })
             } catch (e: any) {
               setError(e?.message || 'Failed to update task')
             }
@@ -211,6 +220,7 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
           // Notify global UI to refresh nav badges immediately on task creation
           try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
           if (onChanged) await onChanged()
+          emitTasksRealtime({ action: 'create', gardenPlantId })
         }}
       />
     </Dialog>

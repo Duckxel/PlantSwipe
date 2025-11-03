@@ -16,6 +16,7 @@ import type { Garden } from '@/types/garden'
 import type { Plant } from '@/types/plant'
 import { getGarden, getGardenPlants, getGardenMembers, addMemberByNameOrEmail, deleteGardenPlant, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, updateGardenMemberRole, removeGardenMember, listGardenTasks, syncTaskOccurrencesForGarden, listOccurrencesForTasks, progressTaskOccurrence, updateGardenPlantsOrder, refreshGardenStreak, listGardenActivityToday, logGardenActivity, resyncTaskOccurrencesForGarden, computeGardenTaskForDay } from '@/lib/gardens'
 import { supabase } from '@/lib/supabaseClient'
+import { addGardenBroadcastListener, broadcastGardenUpdate, type GardenRealtimeKind } from '@/lib/realtime'
 import { getAccentOption } from '@/lib/accent'
  
 
@@ -42,6 +43,7 @@ export const GardenDashboardPage: React.FC = () => {
   const [heavyLoading, setHeavyLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [serverToday, setServerToday] = React.useState<string | null>(null)
+  const serverTodayRef = React.useRef<string | null>(null)
   const [dueToday, setDueToday] = React.useState<Set<string> | null>(null)
   const [dailyStats, setDailyStats] = React.useState<Array<{ date: string; due: number; completed: number; success: boolean }>>([])
   const [taskOccDueToday, setTaskOccDueToday] = React.useState<Record<string, number>>({})
@@ -99,6 +101,7 @@ export const GardenDashboardPage: React.FC = () => {
   const [inviteOpen, setInviteOpen] = React.useState(false)
   // Track if any modal is open to pause reloads
   const anyModalOpen = addOpen || addDetailsOpen || scheduleOpen || taskOpen || inviteOpen
+  const reloadTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastReloadRef = React.useRef<number>(0)
   const pendingReloadRef = React.useRef<boolean>(false)
   const [inviteEmail, setInviteEmail] = React.useState('')
@@ -106,18 +109,11 @@ export const GardenDashboardPage: React.FC = () => {
   const [inviteError, setInviteError] = React.useState<string | null>(null)
 
   // Notify global UI components to refresh Garden badge without page reload
-  const notifyTasksChanged = React.useCallback(() => {
+  const emitGardenRealtime = React.useCallback((kind: GardenRealtimeKind = 'tasks', metadata?: Record<string, unknown>) => {
     try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
-  }, [])
-
-  const currentUserId = user?.id || null
-  const isOwner = React.useMemo(() => {
-    // Admins have full owner-level access across all gardens
-    if (profile?.is_admin) return true
-    if (!currentUserId) return false
-    const self = members.find(m => m.userId === currentUserId)
-    return self?.role === 'owner'
-  }, [members, currentUserId, profile?.is_admin])
+    if (!id) return
+    broadcastGardenUpdate({ gardenId: id, kind, metadata, actorId: user?.id ?? null }).catch(() => {})
+  }, [id, user?.id])
 
   const load = React.useCallback(async (opts?: { silent?: boolean; preserveHeavy?: boolean }) => {
     if (!id) return
@@ -149,7 +145,11 @@ export const GardenDashboardPage: React.FC = () => {
             } as any)
             if (Array.isArray(data.plants)) { setPlants(data.plants); hydratedPlants = data.plants }
             if (Array.isArray(data.members)) setMembers(data.members.map((m: any) => ({ userId: String(m.userId || m.user_id), displayName: m.displayName ?? m.display_name ?? null, email: m.email ?? null, role: m.role, joinedAt: m.joinedAt ?? m.joined_at ?? null, accentKey: m.accentKey ?? null })))
-            if (data.serverNow) setServerToday(String(data.serverNow).slice(0,10))
+          if (data.serverNow) {
+            const todayIso = String(data.serverNow).slice(0,10)
+            setServerToday(todayIso)
+            serverTodayRef.current = todayIso
+          }
             hydrated = true
           }
         }
@@ -172,6 +172,7 @@ export const GardenDashboardPage: React.FC = () => {
         setMembers(ms.map(m => ({ userId: m.userId, displayName: m.displayName ?? null, email: (m as any).email ?? null, role: m.role, joinedAt: (m as any).joinedAt, accentKey: (m as any).accentKey ?? null })))
         todayLocal = nowIso.slice(0,10)
         setServerToday(todayLocal)
+        serverTodayRef.current = todayLocal
       }
       // Resolve 'today' for subsequent computations regardless of hydration path
       let today = (serverToday || todayLocal || '')
@@ -179,6 +180,7 @@ export const GardenDashboardPage: React.FC = () => {
         const nowIso2 = await fetchServerNowISO()
         today = nowIso2.slice(0,10)
         setServerToday(today)
+        serverTodayRef.current = today
       }
       // Ensure base streak is refreshed from server, at most once per session
       try {
@@ -334,6 +336,7 @@ export const GardenDashboardPage: React.FC = () => {
         }
         setDailyStats(days)
       } catch {}
+      serverTodayRef.current = today
     } catch (e: any) {
       setError(e?.message || 'Failed to load garden')
     } finally {
@@ -341,15 +344,14 @@ export const GardenDashboardPage: React.FC = () => {
     }
   }, [id, garden])
 
-  React.useEffect(() => { load() }, [load])
-
   // Lazy heavy loader for tabs that need it
-  const loadHeavyForCurrentTab = React.useCallback(async () => {
-    if (!id || !serverToday) return
+  const loadHeavyForCurrentTab = React.useCallback(async (todayOverride?: string | null) => {
+    const todayValue = todayOverride ?? serverTodayRef.current ?? serverToday
+    if (!id || !todayValue) return
     setHeavyLoading(true)
     try {
       const parseUTC = (iso: string) => new Date(`${iso}T00:00:00Z`)
-      const anchorUTC = parseUTC(serverToday)
+      const anchorUTC = parseUTC(todayValue)
       const dayUTC = anchorUTC.getUTCDay()
       const diffToMonday = (dayUTC + 6) % 7
       const mondayUTC = new Date(anchorUTC)
@@ -361,7 +363,7 @@ export const GardenDashboardPage: React.FC = () => {
         weekDaysIso.push(d.toISOString().slice(0,10))
       }
       setWeekDays(weekDaysIso)
-      const today = serverToday
+      const today = todayValue
       const allTasks = await listGardenTasks(id)
       const weekStartIso = `${weekDaysIso[0]}T00:00:00.000Z`
       const weekEndIso = `${weekDaysIso[6]}T23:59:59.999Z`
@@ -436,47 +438,69 @@ export const GardenDashboardPage: React.FC = () => {
     }
   }, [id, serverToday, tab])
 
+  const scheduleReload = React.useCallback(() => {
+    const executeReload = async () => {
+      pendingReloadRef.current = false
+      lastReloadRef.current = Date.now()
+      await load({ silent: true, preserveHeavy: true })
+      await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday)
+      setActivityRev((r) => r + 1)
+    }
+
+    if (anyModalOpen) {
+      pendingReloadRef.current = true
+      return
+    }
+
+    const now = Date.now()
+    const since = now - (lastReloadRef.current || 0)
+    const minInterval = 750
+
+    if (since < minInterval) {
+      if (reloadTimerRef.current) return
+      const wait = Math.max(0, minInterval - since)
+      reloadTimerRef.current = setTimeout(() => {
+        reloadTimerRef.current = null
+        executeReload().catch(() => {})
+      }, wait)
+      return
+    }
+
+    if (reloadTimerRef.current) return
+    reloadTimerRef.current = setTimeout(() => {
+      reloadTimerRef.current = null
+      executeReload().catch(() => {})
+    }, 50)
+  }, [anyModalOpen, load, loadHeavyForCurrentTab])
+
+  React.useEffect(() => {
+    return () => {
+      if (reloadTimerRef.current) {
+        try { clearTimeout(reloadTimerRef.current) } catch {}
+        reloadTimerRef.current = null
+      }
+    }
+  }, [])
+
+  const currentUserId = user?.id || null
+  const isOwner = React.useMemo(() => {
+    // Admins have full owner-level access across all gardens
+    if (profile?.is_admin) return true
+    if (!currentUserId) return false
+    const self = members.find(m => m.userId === currentUserId)
+    return self?.role === 'owner'
+  }, [members, currentUserId, profile?.is_admin])
+
+  React.useEffect(() => { load() }, [load])
+
   React.useEffect(() => {
     // Always load today's occurrences for the Tasks sidebar; compute weekly only on Routine
-    loadHeavyForCurrentTab()
-  }, [tab, loadHeavyForCurrentTab])
+    loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday)
+  }, [tab, loadHeavyForCurrentTab, serverToday])
 
   // Realtime updates via Supabase (tables: gardens, garden_members, garden_plants, garden_plant_tasks, garden_plant_task_occurrences, plants)
   React.useEffect(() => {
     if (!id) return
-    // Throttled reload helper copied from SSE effect
-    let reloadTimer: any = null
-    const scheduleReload = () => {
-      const now = Date.now()
-      const since = now - (lastReloadRef.current || 0)
-      const minInterval = 1000
-      if (anyModalOpen) {
-        pendingReloadRef.current = true
-        return
-      }
-      if (since < minInterval) {
-        if (reloadTimer) return
-        const wait = Math.max(0, minInterval - since)
-        reloadTimer = setTimeout(() => {
-          reloadTimer = null
-          lastReloadRef.current = Date.now()
-          setActivityRev((r) => r + 1)
-          load({ silent: true, preserveHeavy: true })
-          loadHeavyForCurrentTab()
-          try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
-        }, wait)
-        return
-      }
-      lastReloadRef.current = now
-      setActivityRev((r) => r + 1)
-      if (reloadTimer) return
-      reloadTimer = setTimeout(() => {
-        reloadTimer = null
-        load({ silent: true, preserveHeavy: true })
-        loadHeavyForCurrentTab()
-        try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
-      }, 500)
-    }
 
     const channel = supabase.channel(`rt-garden-${id}`)
       // Garden row changes (name, cover image, streak)
@@ -504,79 +528,48 @@ export const GardenDashboardPage: React.FC = () => {
       // Global plant library changes (name/image updates)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'plants' }, () => scheduleReload())
       // Garden activity log changes (authoritative cross-client signal)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_activity_logs', filter: `garden_id=eq.${id}` }, () => { scheduleReload(); try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {} })
-      .subscribe()
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_activity_logs', filter: `garden_id=eq.${id}` }, () => scheduleReload())
+
+    const subscription = channel.subscribe()
+    if (subscription instanceof Promise) subscription.catch(() => {})
 
     return () => {
       try { supabase.removeChannel(channel) } catch {}
-      if (reloadTimer) { try { clearTimeout(reloadTimer) } catch {} }
     }
-  }, [id, anyModalOpen, load, navigate])
+  }, [id, navigate, scheduleReload])
 
-  // Live updates via SSE (no reloads)
   React.useEffect(() => {
-    let es: EventSource | null = null
-    let reloadTimer: any = null
-    ;(async () => {
-      if (!id) return
-      try {
-        const session = (await supabase.auth.getSession()).data.session
-        const token = session?.access_token
-        const url = token ? `/api/garden/${id}/stream?token=${encodeURIComponent(token)}` : `/api/garden/${id}/stream`
-        es = new EventSource(url)
-        const scheduleReload = () => {
-          // Debounce and pause while modals are open
-          const now = Date.now()
-          const since = now - (lastReloadRef.current || 0)
-          const minInterval = 1000
-          if (anyModalOpen) {
-            pendingReloadRef.current = true
-            return
-          }
-          if (since < minInterval) {
-            if (reloadTimer) return
-            const wait = Math.max(0, minInterval - since)
-            reloadTimer = setTimeout(() => {
-              reloadTimer = null
-              lastReloadRef.current = Date.now()
-              setActivityRev((r) => r + 1)
-              load({ silent: true, preserveHeavy: true })
-              // Also refresh heavy task state so counts update immediately
-              loadHeavyForCurrentTab()
-              try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
-            }, wait)
-            return
-          }
-          lastReloadRef.current = now
-          setActivityRev((r) => r + 1)
-          if (reloadTimer) return
-          reloadTimer = setTimeout(() => {
-            reloadTimer = null
-            load({ silent: true, preserveHeavy: true })
-            loadHeavyForCurrentTab()
-            try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
-          }, 1000)
+    if (!id) return
+    let active = true
+    let teardown: (() => Promise<void>) | null = null
+
+    addGardenBroadcastListener((message) => {
+      if (message.gardenId !== id) return
+      if (message.actorId && message.actorId === currentUserId) return
+      scheduleReload()
+    })
+      .then((unsubscribe) => {
+        if (!active) {
+          unsubscribe().catch(() => {})
+        } else {
+          teardown = unsubscribe
         }
-        es.addEventListener('activity', scheduleReload as any)
-        es.addEventListener('ready', () => {})
-        es.onerror = () => {
-          // allow browser to retry automatically
-        }
-      } catch {}
-    })()
-    return () => { try { es?.close() } catch {}; if (reloadTimer) { try { clearTimeout(reloadTimer) } catch {} } }
-  }, [id, load, anyModalOpen])
+      })
+      .catch(() => {})
+
+    return () => {
+      active = false
+      if (teardown) teardown().catch(() => {})
+    }
+  }, [currentUserId, id, scheduleReload])
 
   // When modals close, run any pending reload once
   React.useEffect(() => {
     if (!anyModalOpen && pendingReloadRef.current) {
       pendingReloadRef.current = false
-      lastReloadRef.current = Date.now()
-      setActivityRev((r) => r + 1)
-      load({ silent: true })
-      loadHeavyForCurrentTab()
+      scheduleReload()
     }
-  }, [anyModalOpen, load])
+  }, [anyModalOpen, scheduleReload])
 
   const viewerIsOwner = React.useMemo(() => {
     // Admins can manage any garden
@@ -649,6 +642,7 @@ export const GardenDashboardPage: React.FC = () => {
     setInviteOpen(false)
     setInviteAny('')
     await load()
+    emitGardenRealtime('members')
   }
 
   const addSelectedPlant = async () => {
@@ -729,6 +723,7 @@ export const GardenDashboardPage: React.FC = () => {
       // Open Tasks with default watering 2x (user can change unit)
       setPendingGardenPlantId(gp.id)
       setTaskOpen(true)
+      emitGardenRealtime('plants')
     } catch (e: any) {
       setError(e?.message || 'Failed to add plant')
     }
@@ -794,10 +789,10 @@ export const GardenDashboardPage: React.FC = () => {
       }
       await load({ silent: true, preserveHeavy: true })
       if (tab === 'routine') {
-        await loadHeavyForCurrentTab()
+        await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday)
       }
       if (id) navigate(`/garden/${id}/plants`)
-      notifyTasksChanged()
+      emitGardenRealtime('tasks')
     } catch (e: any) {
       setError(e?.message || 'Failed to save schedule')
       throw e
@@ -830,14 +825,14 @@ export const GardenDashboardPage: React.FC = () => {
           }
           const success = due === 0 ? true : (completed >= due)
           await upsertGardenTask({ gardenId: garden.id, day: today, gardenPlantId: null, success })
-        } catch {}
+      } catch {}
       }
       await load({ silent: true, preserveHeavy: true })
       if (tab === 'routine') {
-        await loadHeavyForCurrentTab()
+        await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday)
       }
       if (id) navigate(`/garden/${id}/routine`)
-      notifyTasksChanged()
+      emitGardenRealtime('tasks')
     } catch (e: any) {
       setError(e?.message || 'Failed to log watering')
     }
@@ -867,7 +862,7 @@ export const GardenDashboardPage: React.FC = () => {
       } catch {}
       await load()
       // Signal other UI (nav bars) to refresh notification badges
-      notifyTasksChanged()
+      emitGardenRealtime('tasks')
     } catch (e) {
       // swallow; global error display exists
     }
@@ -923,14 +918,14 @@ export const GardenDashboardPage: React.FC = () => {
       }
     } finally {
       await load({ silent: true, preserveHeavy: true })
-      await loadHeavyForCurrentTab()
-      notifyTasksChanged()
+      await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday)
+      emitGardenRealtime('tasks')
     }
-  }, [todayTaskOccurrences, id, plants, getActorColorCss, load, loadHeavyForCurrentTab, notifyTasksChanged])
+  }, [todayTaskOccurrences, id, plants, getActorColorCss, load, loadHeavyForCurrentTab, emitGardenRealtime])
 
   return (
     <div className="max-w-6xl mx-auto mt-6 grid grid-cols-1 md:grid-cols-[220px_1fr] lg:grid-cols-[220px_1fr] gap-6">
-      {loading && <div className="p-6 text-sm opacity-60">Loading…</div>}
+      {loading && <div className="p-6 text-sm opacity-60">Loading?</div>}
       {error && <div className="p-6 text-sm text-red-600">{error}</div>}
       {!loading && garden && (
         <>
@@ -986,6 +981,7 @@ export const GardenDashboardPage: React.FC = () => {
                               await logGardenActivity({ gardenId: id!, kind: 'note' as any, message: 'reordered plants', actorColor: actorColorCss || null })
                               setActivityRev((r) => r + 1)
                             } catch {}
+                            emitGardenRealtime('plants')
                           } catch {}
                         }}
                       >
@@ -1060,7 +1056,7 @@ export const GardenDashboardPage: React.FC = () => {
                                   } catch {}
                                 }
                                 // Signal other UI (nav bars) to refresh notification badges
-                                notifyTasksChanged()
+                                emitGardenRealtime('tasks')
                                 try {
                                   const actorColorCss = getActorColorCss()
                                   await logGardenActivity({ gardenId: id!, kind: 'plant_deleted' as any, message: `deleted "${gp.nickname || gp.plant?.name || 'Plant'}"`, plantName: gp.nickname || gp.plant?.name || null, actorColor: actorColorCss || null })
@@ -1107,8 +1103,8 @@ export const GardenDashboardPage: React.FC = () => {
                   }
               } finally {
                 await load({ silent: true, preserveHeavy: true })
-                await loadHeavyForCurrentTab()
-                notifyTasksChanged()
+                await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday)
+                emitGardenRealtime('tasks')
               }
               }} />} />
               <Route path="settings" element={(
@@ -1153,7 +1149,7 @@ export const GardenDashboardPage: React.FC = () => {
                 <DialogTitle>Add plant to garden</DialogTitle>
               </DialogHeader>
               <div className="space-y-3">
-                <Input placeholder="Search plants by name…" value={plantQuery} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPlantQuery(e.target.value)} />
+                <Input placeholder="Search plants by name?" value={plantQuery} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPlantQuery(e.target.value)} />
                 <div className="max-h-60 overflow-auto rounded-xl border">
                   {plantResults.map(p => (
                     <button key={p.id} onClick={() => setSelectedPlant(p)} className={`w-full text-left px-3 py-2 hover:bg-stone-50 ${selectedPlant?.id === p.id ? 'bg-stone-100' : ''}`}>
@@ -1167,7 +1163,7 @@ export const GardenDashboardPage: React.FC = () => {
                 </div>
                 <div className="flex justify-end gap-2 pt-2">
                   <Button variant="secondary" className="rounded-2xl" onClick={() => setAddOpen(false)}>Cancel</Button>
-                  <Button className="rounded-2xl" disabled={!selectedPlant || adding} onClick={addSelectedPlant}>{adding ? 'Adding…' : 'Next'}</Button>
+                  <Button className="rounded-2xl" disabled={!selectedPlant || adding} onClick={addSelectedPlant}>{adding ? 'Adding?' : 'Next'}</Button>
                 </div>
               </div>
             </DialogContent>
@@ -1220,7 +1216,7 @@ export const GardenDashboardPage: React.FC = () => {
               // Ensure page reflects latest tasks after create/update/delete
               await load({ silent: true, preserveHeavy: true })
               // Always refresh heavy data so counts and badges update immediately
-              await loadHeavyForCurrentTab()
+              await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday)
               // Notify global UI components (badges) to refresh
               try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
             }}
@@ -1257,18 +1253,18 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
   }, [plants, duePlantIds])
   const hasTodayTasks = (todayTaskOccurrences || []).length > 0
   const emptyPhrases = React.useMemo(() => [
-    'Bored? Maybe it\'s time to get more plants… 🪴',
-    'All quiet in the garden today. Enjoy the calm! 🌿',
-    'Nothing due today — your plants salute you. 🫡',
-    'Free day! Maybe browse for a new leafy friend? 🌱',
-    'Rest day. Hydrate yourself instead of the plants. 💧',
-    'No tasks now. Perfect time to plan your next bloom. 🌼',
-    'Garden\'s on cruise control. You earned it. 😌',
-    'No chores today — maybe prune your playlist? 🎧',
-    'Nothing to do! Consider a new herb for the kitchen. 🌿🍃',
-    'Feet up, gloves off. Tomorrow\'s another grow day. 🧤',
-    'Zero tasks. Maximum vibes. ✨',
-    'Your routine is empty — your cart doesn\'t have to be. 🛒🪴',
+    'Bored? Maybe it\'s time to get more plants? ??',
+    'All quiet in the garden today. Enjoy the calm! ??',
+    'Nothing due today ? your plants salute you. ??',
+    'Free day! Maybe browse for a new leafy friend? ??',
+    'Rest day. Hydrate yourself instead of the plants. ??',
+    'No tasks now. Perfect time to plan your next bloom. ??',
+    'Garden\'s on cruise control. You earned it. ??',
+    'No chores today ? maybe prune your playlist? ??',
+    'Nothing to do! Consider a new herb for the kitchen. ????',
+    'Feet up, gloves off. Tomorrow\'s another grow day. ??',
+    'Zero tasks. Maximum vibes. ?',
+    'Your routine is empty ? your cart doesn\'t have to be. ????',
   ], [])
   const randomEmptyPhrase = React.useMemo(() => {
     const idx = Math.floor(Math.random() * emptyPhrases.length)
@@ -1306,7 +1302,7 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
     <div className="space-y-4">
       <div className="text-lg font-medium">This week</div>
       <Card className="rounded-2xl p-4">
-        <div className="text-sm opacity-60 mb-3">Monday → Sunday</div>
+        <div className="text-sm opacity-60 mb-3">Monday ? Sunday</div>
         <div className="grid grid-cols-7 gap-2">
           {weekDays.map((ds, idx) => {
             const count = weekCounts[idx] || 0
@@ -1360,7 +1356,7 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
                     const tt = (o as any).taskType || 'custom'
                     const badgeClass = `${typeToColor[tt]} ${tt === 'harvest' ? 'text-black' : 'text-white'}`
                     const customEmoji = (o as any).taskEmoji || null
-                    const icon = customEmoji || (tt === 'water' ? '💧' : tt === 'fertilize' ? '🍽️' : tt === 'harvest' ? '🌾' : tt === 'cut' ? '✂️' : '🪴')
+                    const icon = customEmoji || (tt === 'water' ? '??' : tt === 'fertilize' ? '???' : tt === 'harvest' ? '??' : tt === 'cut' ? '??' : '??')
                     const isDone = (Number(o.completedCount || 0) >= Math.max(1, Number(o.requiredCount || 1)))
                     const completions = completionsByOcc[o.id] || []
                     return (
@@ -1401,7 +1397,7 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
             <div className="font-medium">{gp.nickname || gp.plant?.name}</div>
             {gp.nickname && <div className="text-xs opacity-60">{gp.plant?.name}</div>}
             <div className="text-sm opacity-70">Water need: {gp.plant?.care.water}</div>
-            <div className="text-xs opacity-70">Due this week: {dueThisWeekByPlant[gp.id]?.map((i) => ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][i]).join(', ') || '—'}</div>
+            <div className="text-xs opacity-70">Due this week: {dueThisWeekByPlant[gp.id]?.map((i) => ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][i]).join(', ') || '?'}</div>
             <div className="mt-2 flex items-center gap-2">
               <Button className="rounded-2xl opacity-60" variant="secondary" disabled>Upcoming</Button>
             </div>
@@ -1500,7 +1496,7 @@ function OverviewSection({ gardenId, activityRev, plants, membersCount, serverTo
       {/* Activity (today) */}
       <Card className="rounded-2xl p-4">
         <div className="font-medium mb-2">Activity (today)</div>
-        {loadingAct && <div className="text-sm opacity-60">Loading…</div>}
+        {loadingAct && <div className="text-sm opacity-60">Loading?</div>}
         {errAct && <div className="text-sm text-red-600">{errAct}</div>}
         {!loadingAct && activity.length === 0 && <div className="text-sm opacity-60">No activity yet today.</div>}
         <div className="space-y-2">
@@ -1568,8 +1564,8 @@ function EditPlantButton({ gp, gardenId, onChanged, serverToday, actorColorCss }
         const changedCount = Number(gp.plantsOnHand || 0) !== Math.max(0, Number(count || 0))
         if (changedName || changedCount) {
           const parts: string[] = []
-          if (changedName) parts.push(`name → "${nickname.trim() || '—'}"`)
-          if (changedCount) parts.push(`count → ${Math.max(0, Number(count || 0))}`)
+          if (changedName) parts.push(`name ? "${nickname.trim() || '?'}"`)
+          if (changedCount) parts.push(`count ? ${Math.max(0, Number(count || 0))}`)
           const plantName = nickname.trim() || gp.nickname || gp.plant?.name || 'Plant'
           await logGardenActivity({ gardenId, kind: 'plant_updated' as any, message: `updated ${plantName}: ${parts.join(', ')}`, plantName, actorColor: actorColorCss || null })
         }
@@ -1602,7 +1598,7 @@ function EditPlantButton({ gp, gardenId, onChanged, serverToday, actorColorCss }
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="secondary" className="rounded-2xl" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button className="rounded-2xl" onClick={save} disabled={submitting}>{submitting ? 'Saving…' : 'Save'}</Button>
+              <Button className="rounded-2xl" onClick={save} disabled={submitting}>{submitting ? 'Saving?' : 'Save'}</Button>
             </div>
           </div>
         </DialogContent>
@@ -1685,7 +1681,7 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner, ownerCount, cu
               onClick={(e: any) => { e.stopPropagation(); setOpen((o) => !o) }}
               aria-label="Open member actions"
             >
-              ⋯
+              ?
             </Button>
             {open && (
               <div className="absolute right-0 mt-2 w-48 bg-white border rounded-xl shadow-lg z-10">
@@ -1707,7 +1703,7 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner, ownerCount, cu
         <div>
           <div className="font-medium max-w-[60vw] truncate" style={member.accentKey ? (() => { const opt = getAccentOption(member.accentKey as any); return opt ? { color: `hsl(${opt.hsl})` } : undefined })() : undefined}>{member.displayName || member.userId}</div>
           {member.email && <div className="text-xs opacity-60">{member.email}</div>}
-          <div className="text-xs opacity-60">{member.role}{member.joinedAt ? ` • Joined ${new Date(member.joinedAt).toLocaleString()}` : ''}</div>
+          <div className="text-xs opacity-60">{member.role}{member.joinedAt ? ` ? Joined ${new Date(member.joinedAt).toLocaleString()}` : ''}</div>
         </div>
       </div>
       {/* Self actions for non-owners: Quit button */}
@@ -1755,7 +1751,7 @@ function GardenDetailsEditor({ garden, onSaved, canEdit }: { garden: Garden; onS
         const changedName = (garden.name || '') !== (name.trim() || '')
         const changedCover = (garden.coverImageUrl || '') !== (imageUrl.trim() || '')
         const parts: string[] = []
-        if (changedName) parts.push(`name → "${name.trim() || '—'}"`)
+        if (changedName) parts.push(`name ? "${name.trim() || '?'}"`)
         if (changedCover) parts.push('cover image updated')
         if (parts.length > 0) {
           await logGardenActivity({ gardenId: garden.id, kind: 'note' as any, message: `updated garden: ${parts.join(', ')}`, actorColor: null })
@@ -1774,11 +1770,11 @@ function GardenDetailsEditor({ garden, onSaved, canEdit }: { garden: Garden; onS
       </div>
       <div>
         <label className="text-sm font-medium">Cover image URL</label>
-        <Input value={imageUrl} onChange={(e: any) => setImageUrl(e.target.value)} placeholder="https://…" disabled={!canEdit} />
+        <Input value={imageUrl} onChange={(e: any) => setImageUrl(e.target.value)} placeholder="https://?" disabled={!canEdit} />
       </div>
       {err && <div className="text-sm text-red-600">{err}</div>}
       <div className="flex justify-end gap-2 pt-2">
-        <Button className="rounded-2xl" onClick={save} disabled={submitting || !canEdit}>{submitting ? 'Saving…' : 'Save changes'}</Button>
+        <Button className="rounded-2xl" onClick={save} disabled={submitting || !canEdit}>{submitting ? 'Saving?' : 'Save changes'}</Button>
       </div>
     </div>
   )
