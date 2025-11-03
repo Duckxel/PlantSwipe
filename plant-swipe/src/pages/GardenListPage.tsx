@@ -333,6 +333,10 @@ export const GardenListPage: React.FC = () => {
         if (gp?.gardenId) {
           const plantName = gp?.nickname || gp?.plant?.name || 'Plant'
           await logGardenActivity({ gardenId: gp.gardenId, kind: 'task_completed' as any, message: `completed all due tasks on "${plantName}"`, plantName, actorColor: null })
+          // Broadcast update AFTER all task completions finish, BEFORE reload to ensure other clients receive it
+          await broadcastGardenUpdate({ gardenId: gp.gardenId, kind: 'tasks', actorId: user?.id ?? null }).catch((err) => {
+            console.warn('[GardenList] Failed to broadcast task update:', err)
+          })
         }
       } catch {}
     } finally {
