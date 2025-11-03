@@ -2700,7 +2700,10 @@ export const AdminPage: React.FC = () => {
                     </div>
                   </div>
                 )}
-                {!ipLoading && ipResults && (
+                {!ipLoading && !ipError && !ipUsed && (
+                  <div className="text-sm opacity-60">Search for an IP address to see details.</div>
+                )}
+                {!ipLoading && ipUsed && (
                   <div className="space-y-2">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                       <div className="rounded-xl border p-3 text-center">
