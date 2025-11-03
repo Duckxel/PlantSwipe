@@ -1,6 +1,6 @@
 import React, { useMemo, useState, lazy, Suspense } from "react";
 import { Routes, Route, useLocation, useNavigate, Navigate } from "react-router-dom";
-import { useMotionValue } from "framer-motion";
+import { useMotionValue, animate } from "framer-motion";
 import { Search } from "lucide-react";
 // Sheet is used for plant info overlay
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -364,19 +364,82 @@ export default function PlantSwipe() {
     })
   }
 
+  const handlePrevious = () => {
+    if (swipeList.length === 0) return
+    setIndex((i) => {
+      const prev = i - 1
+      // Wrap around to the end if going back from the start
+      return prev < 0 ? swipeList.length - 1 : prev
+    })
+  }
+
   const handleInfo = () => {
     if (current) navigate(`/plants/${current.id}`, { state: { backgroundLocation: location } })
   }
 
   // Swipe logic
   const x = useMotionValue(0)
-  const threshold = 120
-  const onDragEnd = (_: unknown, info: { offset: { x: number }; velocity: { x: number } }) => {
-    const dx = info.offset.x + info.velocity.x * 0.2
-    if (dx <= -threshold) {
-      handlePass()
-    } else if (dx >= threshold) {
-      handleInfo()
+  const y = useMotionValue(0)
+  const threshold = 100
+  const velocityThreshold = 500
+  
+  // Reset motion values immediately when index changes
+  React.useEffect(() => {
+    // Animate smoothly back to center
+    animate(x, 0, { duration: 0.1 })
+    animate(y, 0, { duration: 0.1 })
+  }, [index, x, y])
+  
+  const onDragEnd = (_: unknown, info: { offset: { x: number; y: number }; velocity: { x: number; y: number } }) => {
+    const dx = info.offset.x
+    const dy = info.offset.y
+    const vx = info.velocity.x
+    const vy = info.velocity.y
+    
+    // Calculate effective movement considering both offset and velocity
+    const effectiveX = dx + vx * 0.1
+    const effectiveY = dy + vy * 0.1
+    
+    // Check for significant movement or velocity
+    const absX = Math.abs(effectiveX)
+    const absY = Math.abs(effectiveY)
+    const absVx = Math.abs(vx)
+    const absVy = Math.abs(vy)
+    
+    let actionTaken = false
+    
+    // Prioritize vertical swipe over horizontal if both are significant
+    if ((absY > absX && absY > threshold) || (absVy > absVx && absVy > velocityThreshold)) {
+      if (effectiveY < -threshold || vy < -velocityThreshold) {
+        // Swipe up (bottom to top) = open info
+        animate(x, 0, { duration: 0.1 })
+        animate(y, 0, { duration: 0.1 })
+        handleInfo()
+        actionTaken = true
+      }
+    }
+    
+    // Horizontal swipe detection
+    if (!actionTaken && ((absX > absY && absX > threshold) || (absVx > absVy && absVx > velocityThreshold))) {
+      if (effectiveX < -threshold || vx < -velocityThreshold) {
+        // Swipe left (right to left) = next
+        animate(x, 0, { duration: 0.1 })
+        animate(y, 0, { duration: 0.1 })
+        handlePass()
+        actionTaken = true
+      } else if (effectiveX > threshold || vx > velocityThreshold) {
+        // Swipe right (left to right) = previous
+        animate(x, 0, { duration: 0.1 })
+        animate(y, 0, { duration: 0.1 })
+        handlePrevious()
+        actionTaken = true
+      }
+    }
+    
+    // No action, snap back to center smoothly
+    if (!actionTaken) {
+      animate(x, 0, { duration: 0.2, type: "spring", stiffness: 300, damping: 30 })
+      animate(y, 0, { duration: 0.2, type: "spring", stiffness: 300, damping: 30 })
     }
   }
 
@@ -619,9 +682,11 @@ export default function PlantSwipe() {
                       index={index}
                       setIndex={setIndex}
                       x={x}
+                      y={y}
                       onDragEnd={onDragEnd}
                       handleInfo={handleInfo}
                       handlePass={handlePass}
+                      handlePrevious={handlePrevious}
                       liked={current ? likedIds.includes(current.id) : false}
                       onToggleLike={() => { if (current) toggleLiked(current.id) }}
                     />
