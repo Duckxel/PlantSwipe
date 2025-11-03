@@ -1656,6 +1656,27 @@ app.get('/api/admin/member', async (req, res) => {
             lastReferrer = domain || (ref ? String(ref) : 'direct')
           }
         }
+        // If lastIp is null but we have IPs, get the most recent visit with a non-null IP
+        if (!lastIp) {
+          try {
+            const lr2 = await fetch(`${supabaseUrlEnv}/rest/v1/${tablePath}?user_id=eq.${encodeURIComponent(targetId)}&ip_address=not.is.null&select=occurred_at,ip_address,geo_country,referrer&order=occurred_at.desc&limit=1`, {
+              headers: baseHeaders,
+            })
+            if (lr2.ok) {
+              const arr = await lr2.json().catch(() => [])
+              if (Array.isArray(arr) && arr[0]) {
+                lastIp = (arr[0].ip_address || '').toString().replace(/\/[0-9]{1,3}$/, '') || null
+                if (!lastOnlineAt) lastOnlineAt = arr[0].occurred_at || null
+                if (!lastCountry && arr[0].geo_country) lastCountry = String(arr[0].geo_country).toUpperCase() || null
+                if (!lastReferrer) {
+                  const ref = arr[0].referrer || ''
+                  const domain = extractHostname(ref)
+                  lastReferrer = domain || (ref ? String(ref) : 'direct')
+                }
+              }
+            }
+          } catch {}
+        }
       } catch {}
 
       // Distinct IPs via security-definer RPC to ensure completeness
@@ -1910,6 +1931,29 @@ app.get('/api/admin/member', async (req, res) => {
         const ref = lastRows[0].referrer || ''
         const domain = extractHostname(ref)
         lastReferrer = domain || (ref ? String(ref) : 'direct')
+      }
+      // If lastIp is null but we have IPs, get the most recent visit with a non-null IP
+      if (!lastIp && ips.length > 0) {
+        try {
+          const lastIpRows = await sql`
+            select occurred_at, ip_address::text as ip, geo_country, referrer
+            from ${visitsTableId}
+            where user_id = ${user.id}
+              and ip_address is not null
+            order by occurred_at desc
+            limit 1
+          `
+          if (Array.isArray(lastIpRows) && lastIpRows[0]) {
+            lastIp = (lastIpRows[0].ip || '').toString().replace(/\/[0-9]{1,3}$/, '') || null
+            if (!lastOnlineAt) lastOnlineAt = lastIpRows[0].occurred_at || null
+            if (!lastCountry && lastIpRows[0].geo_country) lastCountry = String(lastIpRows[0].geo_country).toUpperCase() || null
+            if (!lastReferrer) {
+              const ref = lastIpRows[0].referrer || ''
+              const domain = extractHostname(ref)
+              lastReferrer = domain || (ref ? String(ref) : 'direct')
+            }
+          }
+        } catch {}
       }
     } catch {}
     try {
