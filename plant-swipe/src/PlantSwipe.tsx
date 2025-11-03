@@ -364,19 +364,37 @@ export default function PlantSwipe() {
     })
   }
 
+  const handlePrevious = () => {
+    if (swipeList.length === 0) return
+    setIndex((i) => {
+      const prev = i - 1
+      // Wrap around to the end if going back from the start
+      return prev < 0 ? swipeList.length - 1 : prev
+    })
+  }
+
   const handleInfo = () => {
     if (current) navigate(`/plants/${current.id}`, { state: { backgroundLocation: location } })
   }
 
   // Swipe logic
   const x = useMotionValue(0)
+  const y = useMotionValue(0)
   const threshold = 120
-  const onDragEnd = (_: unknown, info: { offset: { x: number }; velocity: { x: number } }) => {
+  const onDragEnd = (_: unknown, info: { offset: { x: number; y: number }; velocity: { x: number; y: number } }) => {
     const dx = info.offset.x + info.velocity.x * 0.2
-    if (dx <= -threshold) {
+    const dy = info.offset.y + info.velocity.y * 0.2
+    
+    // Prioritize vertical swipe over horizontal if both are significant
+    if (Math.abs(dy) > Math.abs(dx) && dy <= -threshold) {
+      // Swipe up (bottom to top) = open info
+      handleInfo()
+    } else if (dx <= -threshold) {
+      // Swipe left (right to left) = next
       handlePass()
     } else if (dx >= threshold) {
-      handleInfo()
+      // Swipe right (left to right) = previous
+      handlePrevious()
     }
   }
 
@@ -619,6 +637,7 @@ export default function PlantSwipe() {
                       index={index}
                       setIndex={setIndex}
                       x={x}
+                      y={y}
                       onDragEnd={onDragEnd}
                       handleInfo={handleInfo}
                       handlePass={handlePass}

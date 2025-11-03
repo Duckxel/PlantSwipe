@@ -12,14 +12,15 @@ interface SwipePageProps {
   index: number
   setIndex: (i: number) => void
   x: MotionValue<number>
-  onDragEnd: (_: unknown, info: { offset: { x: number }; velocity: { x: number } }) => void
+  y: MotionValue<number>
+  onDragEnd: (_: unknown, info: { offset: { x: number; y: number }; velocity: { x: number; y: number } }) => void
   handleInfo: () => void
   handlePass: () => void
   liked?: boolean
   onToggleLike?: () => void
 }
 
-export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, x, onDragEnd, handleInfo, handlePass, liked = false, onToggleLike }) => {
+export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, x, y, onDragEnd, handleInfo, handlePass, liked = false, onToggleLike }) => {
   return (
     <div className="max-w-3xl mx-auto mt-8 px-4 md:px-0">
       <div className="relative h-[520px]">
@@ -27,9 +28,9 @@ export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, 
           {current ? (
             <motion.div
               key={current.id + index}
-              drag="x"
-              style={{ x }}
-              dragConstraints={{ left: 0, right: 0 }}
+              drag
+              style={{ x, y }}
+              dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
               onDragEnd={onDragEnd}
               initial={{ scale: 0.98, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
