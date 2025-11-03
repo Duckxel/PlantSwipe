@@ -75,44 +75,28 @@ export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, 
                 <div className="h-2/3 relative">
                   <div className="absolute inset-0 bg-cover bg-center rounded-t-3xl" style={{ backgroundImage: `url(${current.image})` }} />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent rounded-t-3xl" />
-                  {/* Upward arrow indicator - apple branch style */}
+                  {/* Upward arrow indicator */}
                   <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
                     <div className="relative flex flex-col items-center">
-                      {/* Branch-like upward arrow */}
+                      {/* Simple upward arrow */}
                       <svg 
-                        width="40" 
-                        height="40" 
-                        viewBox="0 0 40 40"
+                        width="32" 
+                        height="32" 
+                        viewBox="0 0 32 32"
                         className="text-white"
                         style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.9))' }}
                       >
-                        {/* Main stem */}
+                        {/* Arrow stem */}
                         <path
-                          d="M20 8 L20 32"
+                          d="M16 8 L16 24"
                           stroke="white"
                           strokeWidth="3"
                           strokeLinecap="round"
                           strokeLinejoin="round"
                         />
-                        {/* Left branch */}
+                        {/* Arrowhead pointing up */}
                         <path
-                          d="M20 12 L17 18 M20 16 L16 22"
-                          stroke="white"
-                          strokeWidth="2.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                        {/* Right branch */}
-                        <path
-                          d="M20 12 L23 18 M20 16 L24 22"
-                          stroke="white"
-                          strokeWidth="2.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                        {/* Arrowhead at top */}
-                        <path
-                          d="M20 8 L16 14 L20 12 L24 14 Z"
+                          d="M16 8 L10 16 L16 14 L22 16 Z"
                           fill="white"
                           stroke="white"
                           strokeWidth="1.5"
