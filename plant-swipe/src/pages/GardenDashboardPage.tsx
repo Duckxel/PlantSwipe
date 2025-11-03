@@ -107,6 +107,9 @@ export const GardenDashboardPage: React.FC = () => {
   const [inviteEmail, setInviteEmail] = React.useState('')
   const [inviteAny, setInviteAny] = React.useState('')
   const [inviteError, setInviteError] = React.useState<string | null>(null)
+  const [friends, setFriends] = React.useState<Array<{ id: string; display_name: string | null; email: string | null }>>([])
+  const [friendSuggestions, setFriendSuggestions] = React.useState<Array<{ id: string; display_name: string | null; email: string | null }>>([])
+  const [suggestionsOpen, setSuggestionsOpen] = React.useState(false)
 
   // Notify global UI components to refresh Garden badge without page reload
   const emitGardenRealtime = React.useCallback((kind: GardenRealtimeKind = 'tasks', metadata?: Record<string, unknown>) => {
@@ -870,6 +873,88 @@ export const GardenDashboardPage: React.FC = () => {
     return () => { ignore = true }
   }, [plantQuery])
 
+  const loadFriends = React.useCallback(async () => {
+    if (!user?.id) return
+    try {
+      const { data, error: err } = await supabase
+        .from('friends')
+        .select('id, user_id, friend_id, created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+      
+      if (err) throw err
+      
+      const friendIds = (data || []).map(f => f.friend_id)
+      if (friendIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, display_name')
+          .in('id', friendIds)
+        
+        const emailPromises = friendIds.map(async (id) => {
+          try {
+            const { data: emailData } = await supabase.rpc('get_friend_email', { _friend_id: id })
+            return { id, email: emailData || null }
+          } catch {
+            return { id, email: null }
+          }
+        })
+        const emails = await Promise.all(emailPromises)
+        const emailMap = new Map(emails.map(e => [e.id, e.email]))
+        
+        const profileMap = new Map((profiles || []).map(p => [p.id, p]))
+        const friendsWithProfiles = (data || []).map(f => {
+          const profile = profileMap.get(f.friend_id)
+          return {
+            id: f.friend_id,
+            display_name: profile?.display_name || null,
+            email: emailMap.get(f.friend_id) || null
+          }
+        })
+        setFriends(friendsWithProfiles)
+      } else {
+        setFriends([])
+      }
+    } catch (e: any) {
+      console.error('Failed to load friends:', e)
+    }
+  }, [user?.id])
+
+  // Load friends when invite dialog opens
+  React.useEffect(() => {
+    if (inviteOpen && user?.id) {
+      loadFriends()
+      setInviteAny('')
+      setFriendSuggestions([])
+      setSuggestionsOpen(false)
+      setInviteError(null)
+    }
+  }, [inviteOpen, user?.id, loadFriends])
+
+  // Filter friend suggestions based on input
+  React.useEffect(() => {
+    const memberIds = new Set(members.map(m => m.userId))
+    
+    // Filter out already members
+    let filtered = friends.filter(f => !memberIds.has(f.id))
+    
+    // If there's input, filter by display name or email
+    if (inviteAny.trim()) {
+      const query = inviteAny.trim().toLowerCase()
+      filtered = filtered.filter(f => {
+        const displayNameMatch = f.display_name?.toLowerCase().includes(query)
+        const emailMatch = f.email?.toLowerCase().includes(query)
+        return displayNameMatch || emailMatch
+      })
+    }
+    
+    // Limit to top 5
+    filtered = filtered.slice(0, 5)
+    
+    setFriendSuggestions(filtered)
+    setSuggestionsOpen(filtered.length > 0 && inviteOpen)
+  }, [inviteAny, friends, members, inviteOpen])
+
   const submitInvite = async () => {
     if (!id || !inviteAny.trim()) return
     setInviteError(null)
@@ -886,6 +971,8 @@ export const GardenDashboardPage: React.FC = () => {
     } catch {}
     setInviteOpen(false)
     setInviteAny('')
+    setFriendSuggestions([])
+    setSuggestionsOpen(false)
     await load()
     emitGardenRealtime('members')
   }
@@ -1490,10 +1577,54 @@ export const GardenDashboardPage: React.FC = () => {
                 <DialogTitle>Add member</DialogTitle>
               </DialogHeader>
               <div className="space-y-3">
-                <Input placeholder="Enter display name or email" value={inviteAny} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInviteAny(e.target.value)} />
+                <div className="relative">
+                  <Input 
+                    placeholder="Enter display name or email" 
+                    value={inviteAny} 
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      setInviteAny(e.target.value)
+                      setSuggestionsOpen(true)
+                    }}
+                    onFocus={() => {
+                      if (friendSuggestions.length > 0) setSuggestionsOpen(true)
+                    }}
+                    onBlur={() => setTimeout(() => setSuggestionsOpen(false), 200)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        setSuggestionsOpen(false)
+                      }
+                    }}
+                  />
+                  {suggestionsOpen && friendSuggestions.length > 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border rounded-xl shadow-lg max-h-60 overflow-auto">
+                      {friendSuggestions.map((friend) => (
+                        <button
+                          key={friend.id}
+                          type="button"
+                          className="w-full text-left px-3 py-2 hover:bg-stone-50 flex flex-col gap-1"
+                          onClick={() => {
+                            setInviteAny(friend.display_name || friend.email || '')
+                            setSuggestionsOpen(false)
+                          }}
+                        >
+                          <div className="font-medium">{friend.display_name || 'Unknown'}</div>
+                          {friend.email && (
+                            <div className="text-xs opacity-60">{friend.email}</div>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 {inviteError && <div className="text-sm text-red-600">{inviteError}</div>}
                 <div className="flex justify-end gap-2">
-                  <Button variant="secondary" className="rounded-2xl" onClick={() => setInviteOpen(false)}>Cancel</Button>
+                  <Button variant="secondary" className="rounded-2xl" onClick={() => {
+                    setInviteOpen(false)
+                    setInviteAny('')
+                    setFriendSuggestions([])
+                    setSuggestionsOpen(false)
+                    setInviteError(null)
+                  }}>Cancel</Button>
                   <Button className="rounded-2xl" onClick={submitInvite} disabled={!inviteAny.trim()}>Add member</Button>
                 </div>
               </div>

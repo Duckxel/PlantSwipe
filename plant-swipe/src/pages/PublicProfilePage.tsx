@@ -153,11 +153,13 @@ export default function PublicProfilePage() {
   const [friendStatus, setFriendStatus] = React.useState<'none' | 'friends' | 'request_sent' | 'request_received'>('none')
   const [friendRequestId, setFriendRequestId] = React.useState<string | null>(null)
   const [friendRequestLoading, setFriendRequestLoading] = React.useState(false)
+  const [friendsSince, setFriendsSince] = React.useState<string | null>(null)
 
   // Check friend status
   React.useEffect(() => {
     if (!user?.id || !pp?.id || isOwner) {
       setFriendStatus('none')
+      setFriendsSince(null)
       return
     }
     let cancelled = false
@@ -166,13 +168,14 @@ export default function PublicProfilePage() {
         // Check if already friends
         const { data: friendCheck } = await supabase
           .from('friends')
-          .select('id')
+          .select('id, created_at')
           .eq('user_id', user.id)
           .eq('friend_id', pp.id)
           .maybeSingle()
         
         if (friendCheck && !cancelled) {
           setFriendStatus('friends')
+          setFriendsSince(friendCheck.created_at ? String(friendCheck.created_at) : null)
           return
         }
 
@@ -188,6 +191,7 @@ export default function PublicProfilePage() {
         if (sentRequest && !cancelled) {
           setFriendStatus('request_sent')
           setFriendRequestId(sentRequest.id)
+          setFriendsSince(null)
           return
         }
 
@@ -202,10 +206,14 @@ export default function PublicProfilePage() {
         if (receivedRequest && !cancelled) {
           setFriendStatus('request_received')
           setFriendRequestId(receivedRequest.id)
+          setFriendsSince(null)
           return
         }
 
-        if (!cancelled) setFriendStatus('none')
+        if (!cancelled) {
+          setFriendStatus('none')
+          setFriendsSince(null)
+        }
       } catch {}
     }
     checkStatus()
@@ -270,7 +278,7 @@ export default function PublicProfilePage() {
   }, [user?.id, pp?.id, isOwner])
 
   const acceptFriendRequest = React.useCallback(async () => {
-    if (!friendRequestId) return
+    if (!friendRequestId || !user?.id || !pp?.id) return
     setFriendRequestLoading(true)
     try {
       const { error: err } = await supabase.rpc('accept_friend_request', {
@@ -278,13 +286,27 @@ export default function PublicProfilePage() {
       })
       
       if (err) throw err
+      
+      // Fetch the friendship record to get the created_at date
+      const { data: friendship } = await supabase
+        .from('friends')
+        .select('created_at')
+        .eq('user_id', user.id)
+        .eq('friend_id', pp.id)
+        .maybeSingle()
+      
       setFriendStatus('friends')
+      if (friendship?.created_at) {
+        setFriendsSince(String(friendship.created_at))
+      } else {
+        setFriendsSince(new Date().toISOString())
+      }
     } catch (e: any) {
       setEditError(e?.message || 'Failed to accept friend request')
     } finally {
       setFriendRequestLoading(false)
     }
-  }, [friendRequestId])
+  }, [friendRequestId, user?.id, pp?.id])
 
   React.useEffect(() => {
     if (!menuOpen) return
@@ -440,9 +462,16 @@ export default function PublicProfilePage() {
                         </Button>
                       )}
                       {friendStatus === 'friends' && (
-                        <Button className="rounded-2xl" variant="secondary" disabled>
-                          Friends
-                        </Button>
+                        <div className="flex flex-col items-end gap-1">
+                          <Button className="rounded-2xl" variant="secondary" disabled>
+                            Friends
+                          </Button>
+                          {friendsSince && (
+                            <div className="text-[10px] opacity-60">
+                              since {new Date(friendsSince).toLocaleDateString()}
+                            </div>
+                          )}
+                        </div>
                       )}
                     </>
                   )}
