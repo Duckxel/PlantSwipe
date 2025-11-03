@@ -1,6 +1,6 @@
 import React from "react"
 import { motion, AnimatePresence, type MotionValue } from "framer-motion"
-import { ChevronLeft, ChevronRight, Heart, Info, Sparkles, X } from "lucide-react"
+import { ChevronLeft, ChevronRight, Heart, Sparkles } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -75,6 +75,53 @@ export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, 
                 <div className="h-2/3 relative">
                   <div className="absolute inset-0 bg-cover bg-center rounded-t-3xl" style={{ backgroundImage: `url(${current.image})` }} />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent rounded-t-3xl" />
+                  {/* Upward arrow indicator - apple branch style */}
+                  <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+                    <div className="relative flex flex-col items-center">
+                      {/* Branch-like upward arrow */}
+                      <svg 
+                        width="40" 
+                        height="40" 
+                        viewBox="0 0 40 40"
+                        className="text-white"
+                        style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.9))' }}
+                      >
+                        {/* Main stem */}
+                        <path
+                          d="M20 8 L20 32"
+                          stroke="white"
+                          strokeWidth="3"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                        {/* Left branch */}
+                        <path
+                          d="M20 12 L17 18 M20 16 L16 22"
+                          stroke="white"
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                        {/* Right branch */}
+                        <path
+                          d="M20 12 L23 18 M20 16 L24 22"
+                          stroke="white"
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                        {/* Arrowhead at top */}
+                        <path
+                          d="M20 8 L16 14 L20 12 L24 14 Z"
+                          fill="white"
+                          stroke="white"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </div>
+                  </div>
                   <div className="absolute top-2 right-2 z-10">
                     <button
                       onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); onToggleLike && onToggleLike() }}
@@ -136,8 +183,8 @@ export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, 
         </AnimatePresence>
       </div>
       <div className="mt-4 grid grid-cols-2 gap-3">
-        <ActionHint label="Pass" icon={<X className="h-5 w-5" />} />
-        <ActionHint label="More info" icon={<Info className="h-5 w-5" />} />
+        <ActionHint label="Previous" icon={<ChevronLeft className="h-5 w-5" />} />
+        <ActionHint label="Next" icon={<ChevronRight className="h-5 w-5" />} />
       </div>
     </div>
   )
