@@ -147,9 +147,10 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
         await logGardenActivity({ gardenId, kind: 'note' as any, message: `deleted "${label}" Task`, taskName: label, actorColor: null })
         try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
       } catch {}
+      // Broadcast update BEFORE reload to ensure other clients receive it
+      await emitTasksRealtime({ action: 'delete', taskId })
       await load()
       if (onChanged) await onChanged()
-      emitTasksRealtime({ action: 'delete', taskId })
     } catch (e: any) {
       setError(e?.message || 'Failed to delete task')
     }
@@ -250,10 +251,11 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
                 await logGardenActivity({ gardenId, kind: 'note' as any, message: `updated "${label}" Task`, taskName: label, actorColor: null })
                 try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
               } catch {}
+              // Broadcast update BEFORE reload to ensure other clients receive it
+              await emitTasksRealtime({ action: 'update', taskId: editingTask.id })
               setEditingTask(null)
               await load()
               if (onChanged) await onChanged()
-              emitTasksRealtime({ action: 'update', taskId: editingTask.id })
             } catch (e: any) {
               setError(e?.message || 'Failed to update task')
             }
@@ -272,11 +274,12 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
         gardenId={gardenId}
         gardenPlantId={gardenPlantId}
         onCreated={async () => {
+          // Broadcast update BEFORE reload to ensure other clients receive it
+          await emitTasksRealtime({ action: 'create', gardenPlantId })
           await load()
           // Notify global UI to refresh nav badges immediately on task creation
           try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
           if (onChanged) await onChanged()
-          emitTasksRealtime({ action: 'create', gardenPlantId })
         }}
       />
     </Dialog>
