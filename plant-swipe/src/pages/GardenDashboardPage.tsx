@@ -2063,7 +2063,7 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner, ownerCount, cu
         <div>
           <div className="font-medium max-w-[60vw] truncate" style={member.accentKey ? (() => { const opt = getAccentOption(member.accentKey as any); return opt ? { color: `hsl(${opt.hsl})` } : undefined })() : undefined}>{member.displayName || member.userId}</div>
           {member.email && <div className="text-xs opacity-60">{member.email}</div>}
-          <div className="text-xs opacity-60">{member.role}{member.joinedAt ? ` ? Joined ${new Date(member.joinedAt).toLocaleString()}` : ''}</div>
+          <div className="text-xs opacity-60">{member.role}{member.joinedAt ? ` • Joined ${new Date(member.joinedAt).toLocaleString()}` : ''}</div>
         </div>
       </div>
       {/* Self actions for non-owners: Quit button */}
