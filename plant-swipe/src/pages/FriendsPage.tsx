@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabaseClient"
-import { User, Search, UserPlus, Check, X, ArrowRight } from "lucide-react"
+import { User, Search, UserPlus, Check, X, ArrowRight, ArrowUpRight } from "lucide-react"
 
 type FriendRequest = {
   id: string
@@ -474,29 +474,39 @@ export const FriendsPage: React.FC = () => {
                     className="flex items-center justify-between p-3 rounded-xl border bg-white"
                   >
                     <div className="flex flex-col gap-1 flex-1">
-                      <button
-                        className="flex items-center gap-2 hover:opacity-70 transition text-left"
-                        onClick={() => navigate(`/u/${encodeURIComponent(friend.friend_profile?.display_name || '')}`)}
-                      >
+                      <div className="flex items-center gap-2">
                         <User className="h-5 w-5 opacity-60" />
                         <span className="font-medium">
                           {friend.friend_profile?.display_name || 'Unknown'}
                         </span>
-                      </button>
+                      </div>
                       {friend.friend_profile?.email && (
                         <div className="text-xs opacity-60 pl-7">
                           {friend.friend_profile.email}
                         </div>
                       )}
                     </div>
-                    <Button
-                      className="rounded-xl"
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => removeFriend(friend.friend_id)}
-                    >
-                      Remove
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      {friend.friend_profile?.display_name && (
+                        <Button
+                          variant="secondary"
+                          size="icon"
+                          className="rounded-full h-8 w-8"
+                          aria-label="View profile"
+                          onClick={() => navigate(`/u/${encodeURIComponent(friend.friend_profile?.display_name || '')}`)}
+                        >
+                          <ArrowUpRight className="h-4 w-4" />
+                        </Button>
+                      )}
+                      <Button
+                        className="rounded-xl"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => removeFriend(friend.friend_id)}
+                      >
+                        Remove
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
