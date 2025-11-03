@@ -103,8 +103,11 @@ export function TaskCreateDialog({
         const label = (type === 'custom' ? (customName || 'CUSTOM') : String(type || '').toUpperCase())
         await logGardenActivity({ gardenId, kind: 'note' as any, message: `added "${label}" Task`, taskName: label, actorColor: null })
       } catch {}
+      // Broadcast update BEFORE onCreated callback to ensure other clients receive it
+      await broadcastGardenUpdate({ gardenId, kind: 'tasks', metadata: { action: 'create', gardenPlantId }, actorId: user?.id ?? null }).catch((err) => {
+        console.warn('[TaskCreateDialog] Failed to broadcast task update:', err)
+      })
       if (onCreated) await onCreated()
-      broadcastGardenUpdate({ gardenId, kind: 'tasks', metadata: { action: 'create', gardenPlantId }, actorId: user?.id ?? null }).catch(() => {})
       onOpenChange(false)
     } catch (e: any) {
       setError(e?.message || 'Failed to create task')
