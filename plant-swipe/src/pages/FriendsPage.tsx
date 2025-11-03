@@ -521,37 +521,26 @@ export const FriendsPage: React.FC = () => {
 
   return (
     <div className="max-w-6xl mx-auto mt-8 px-4 md:px-0">
-      <div className={`grid ${pendingRequests.length > 0 ? 'lg:grid-cols-[1fr_auto_400px]' : 'lg:grid-cols-1'} gap-6`}>
-        {/* Spacer - only visible when pending card exists */}
-        {pendingRequests.length > 0 && <div className="hidden lg:block"></div>}
+      <div className={`flex flex-col lg:grid gap-6 ${
+        sentPendingRequests.length > 0 && pendingRequests.length > 0 
+          ? 'lg:grid-cols-[400px_1fr_400px]' 
+          : sentPendingRequests.length > 0 
+          ? 'lg:grid-cols-[400px_1fr_400px]' 
+          : pendingRequests.length > 0 
+          ? 'lg:grid-cols-[400px_1fr_400px]' 
+          : 'lg:grid-cols-1'
+      }`}>
+        {/* Spacer for left side when only received requests exist */}
+        {sentPendingRequests.length === 0 && pendingRequests.length > 0 && (
+          <div className="hidden lg:block"></div>
+        )}
         
-        {/* Friends List Card - Always centered */}
-        <Card className="rounded-3xl w-full lg:max-w-2xl">
-          <CardContent className="p-6 md:p-8 space-y-6">
-            {/* Title and Add Friend Button */}
-            <div className="flex items-center justify-between">
-              <div className="text-2xl font-semibold">Friends</div>
-              <Button
-                className="rounded-xl"
-                variant="default"
-                onClick={() => {
-                  setAddFriendDialogOpen(true)
-                  setDialogSearchQuery("")
-                  setDialogSearchResults([])
-                }}
-              >
-                <UserPlus className="h-4 w-4 mr-2" /> Add Friend
-              </Button>
-            </div>
-            
-            {error && (
-              <div className="text-sm text-red-600 bg-red-50 p-3 rounded-xl">{error}</div>
-            )}
-
-            {/* Sent Pending Requests */}
-            {sentPendingRequests.length > 0 && (
+        {/* Pending Requests I Sent - Bottom on mobile, Left on desktop */}
+        {sentPendingRequests.length > 0 && (
+          <Card className="rounded-3xl w-full lg:w-[400px] lg:flex-shrink-0 order-3 lg:order-1">
+            <CardContent className="p-6 md:p-8 space-y-4">
+              <div className="text-xl font-semibold">Sent Requests</div>
               <div className="space-y-2">
-                <div className="text-sm font-medium">Sent Requests</div>
                 {sentPendingRequests.map((request) => (
                   <div
                     key={request.id}
@@ -594,6 +583,90 @@ export const FriendsPage: React.FC = () => {
                   </div>
                 ))}
               </div>
+            </CardContent>
+          </Card>
+        )}
+        
+        {/* Pending Requests I Received - Top on mobile, Right on desktop */}
+        {pendingRequests.length > 0 && (
+          <Card className="rounded-3xl w-full lg:w-[400px] lg:flex-shrink-0 order-1 lg:order-3">
+            <CardContent className="p-6 md:p-8 space-y-4">
+              <div className="text-xl font-semibold">Pending Invitations</div>
+              <div className="space-y-2">
+                {pendingRequests.map((request) => (
+                  <div
+                    key={request.id}
+                    className="flex items-center justify-between p-3 rounded-xl border bg-white"
+                  >
+                    <div className="flex flex-col gap-1 flex-1">
+                      <div className="flex items-center gap-2">
+                        <User className="h-5 w-5 opacity-60" />
+                        <span className="font-medium">
+                          {request.requester_profile?.display_name || 'Unknown'}
+                        </span>
+                      </div>
+                      {request.requester_profile?.email && (
+                        <div className="text-xs opacity-60 pl-7">
+                          {request.requester_profile.email}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {request.requester_profile?.display_name && (
+                        <Button
+                          className="rounded-xl"
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => navigate(`/u/${encodeURIComponent(request.requester_profile?.display_name || '')}`)}
+                        >
+                          <ArrowRight className="h-4 w-4" />
+                        </Button>
+                      )}
+                      <Button
+                        className="rounded-xl"
+                        variant="default"
+                        size="sm"
+                        onClick={() => acceptRequest(request.id)}
+                      >
+                        <Check className="h-4 w-4 mr-1" /> Accept
+                      </Button>
+                      <Button
+                        className="rounded-xl"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => rejectRequest(request.id)}
+                      >
+                        <X className="h-4 w-4 mr-1" /> Reject
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+        
+        {/* Friends List Card - Middle */}
+        <Card className="rounded-3xl w-full lg:max-w-2xl lg:mx-auto order-2 lg:order-2">
+          <CardContent className="p-6 md:p-8 space-y-6">
+            {/* Title and Add Friend Button */}
+            <div className="flex items-center justify-between">
+              <div className="text-2xl font-semibold">Friends</div>
+              <Button
+                className="rounded-xl"
+                variant="default"
+                onClick={() => {
+                  setAddFriendDialogOpen(true)
+                  setDialogSearchQuery("")
+                  setDialogSearchResults([])
+                }}
+              >
+                <UserPlus className="h-4 w-4 mr-2" /> Add Friend
+              </Button>
+            </div>
+            
+            {error && (
+              <div className="text-sm text-red-600 bg-red-50 p-3 rounded-xl">{error}</div>
             )}
 
             {/* Friends list */}
@@ -700,63 +773,9 @@ export const FriendsPage: React.FC = () => {
           </CardContent>
         </Card>
 
-        {/* Pending Invitations Card - Only shown when there are pending requests */}
-        {pendingRequests.length > 0 && (
-          <Card className="rounded-3xl w-full lg:w-[400px] lg:flex-shrink-0">
-            <CardContent className="p-6 md:p-8 space-y-4">
-              <div className="text-xl font-semibold">Pending Invitations</div>
-              <div className="space-y-2">
-                {pendingRequests.map((request) => (
-                  <div
-                    key={request.id}
-                    className="flex items-center justify-between p-3 rounded-xl border bg-white"
-                  >
-                    <div className="flex flex-col gap-1 flex-1">
-                      <div className="flex items-center gap-2">
-                        <User className="h-5 w-5 opacity-60" />
-                        <span className="font-medium">
-                          {request.requester_profile?.display_name || 'Unknown'}
-                        </span>
-                      </div>
-                      {request.requester_profile?.email && (
-                        <div className="text-xs opacity-60 pl-7">
-                          {request.requester_profile.email}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {request.requester_profile?.display_name && (
-                        <Button
-                          className="rounded-xl"
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => navigate(`/u/${encodeURIComponent(request.requester_profile?.display_name || '')}`)}
-                        >
-                          <ArrowRight className="h-4 w-4" />
-                        </Button>
-                      )}
-                      <Button
-                        className="rounded-xl"
-                        variant="default"
-                        size="sm"
-                        onClick={() => acceptRequest(request.id)}
-                      >
-                        <Check className="h-4 w-4 mr-1" /> Accept
-                      </Button>
-                      <Button
-                        className="rounded-xl"
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => rejectRequest(request.id)}
-                      >
-                        <X className="h-4 w-4 mr-1" /> Reject
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+        {/* Spacer for right side when only sent requests exist */}
+        {sentPendingRequests.length > 0 && pendingRequests.length === 0 && (
+          <div className="hidden lg:block"></div>
         )}
       </div>
 
