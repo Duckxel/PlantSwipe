@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabaseClient"
-import { User, Search, UserPlus, Check, X } from "lucide-react"
+import { User, Search, UserPlus, Check, X, ArrowRight } from "lucide-react"
 
 type FriendRequest = {
   id: string
@@ -28,6 +28,7 @@ type Friend = {
   friend_profile?: {
     id: string
     display_name: string | null
+    email?: string | null
   }
 }
 
@@ -71,10 +72,25 @@ export const FriendsPage: React.FC = () => {
           .select('id, display_name')
           .in('id', friendIds)
         
+        // Fetch emails for friends using RPC function
+        const emailPromises = friendIds.map(async (id) => {
+          try {
+            const { data: emailData } = await supabase.rpc('get_friend_email', { _friend_id: id })
+            return { id, email: emailData || null }
+          } catch {
+            return { id, email: null }
+          }
+        })
+        const emails = await Promise.all(emailPromises)
+        const emailMap = new Map(emails.map(e => [e.id, e.email]))
+        
         const profileMap = new Map((profiles || []).map(p => [p.id, p]))
         const friendsWithProfiles = (data || []).map(f => ({
           ...f,
-          friend_profile: profileMap.get(f.friend_id)
+          friend_profile: {
+            ...(profileMap.get(f.friend_id) || { id: f.friend_id, display_name: null }),
+            email: emailMap.get(f.friend_id) || null
+          }
         }))
         setFriends(friendsWithProfiles as Friend[])
       } else {
@@ -127,7 +143,8 @@ export const FriendsPage: React.FC = () => {
         const requestsWithProfiles = (data || []).map(r => ({
           ...r,
           requester_profile: {
-            ...profileMap.get(r.requester_id),
+            id: r.requester_id,
+            display_name: profileMap.get(r.requester_id)?.display_name || null,
             email: emailMap.get(r.requester_id) || null
           }
         }))
@@ -394,7 +411,7 @@ export const FriendsPage: React.FC = () => {
                   key={request.id}
                   className="flex items-center justify-between p-3 rounded-xl border bg-white"
                 >
-                  <div className="flex flex-col gap-1">
+                  <div className="flex flex-col gap-1 flex-1">
                     <div className="flex items-center gap-2">
                       <User className="h-5 w-5 opacity-60" />
                       <span className="font-medium">
@@ -408,6 +425,14 @@ export const FriendsPage: React.FC = () => {
                     )}
                   </div>
                   <div className="flex items-center gap-2">
+                    <Button
+                      className="rounded-xl"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => navigate(`/u/${encodeURIComponent(request.requester_profile?.display_name || '')}`)}
+                    >
+                      <ArrowRight className="h-4 w-4" />
+                    </Button>
                     <Button
                       className="rounded-xl"
                       variant="default"
@@ -448,15 +473,22 @@ export const FriendsPage: React.FC = () => {
                     key={friend.id}
                     className="flex items-center justify-between p-3 rounded-xl border bg-white"
                   >
-                    <button
-                      className="flex items-center gap-2 hover:opacity-70 transition"
-                      onClick={() => navigate(`/u/${encodeURIComponent(friend.friend_profile?.display_name || '')}`)}
-                    >
-                      <User className="h-5 w-5 opacity-60" />
-                      <span className="font-medium">
-                        {friend.friend_profile?.display_name || 'Unknown'}
-                      </span>
-                    </button>
+                    <div className="flex flex-col gap-1 flex-1">
+                      <button
+                        className="flex items-center gap-2 hover:opacity-70 transition text-left"
+                        onClick={() => navigate(`/u/${encodeURIComponent(friend.friend_profile?.display_name || '')}`)}
+                      >
+                        <User className="h-5 w-5 opacity-60" />
+                        <span className="font-medium">
+                          {friend.friend_profile?.display_name || 'Unknown'}
+                        </span>
+                      </button>
+                      {friend.friend_profile?.email && (
+                        <div className="text-xs opacity-60 pl-7">
+                          {friend.friend_profile.email}
+                        </div>
+                      )}
+                    </div>
                     <Button
                       className="rounded-xl"
                       variant="secondary"

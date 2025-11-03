@@ -2663,3 +2663,35 @@ end;
 $$;
 
 grant execute on function public.get_friend_request_requester_email(uuid) to authenticated;
+
+-- Function to get email for users who are your friends
+create or replace function public.get_friend_email(_friend_id uuid)
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_caller uuid;
+  v_is_friend boolean;
+begin
+  v_caller := auth.uid();
+  if v_caller is null then
+    return null;
+  end if;
+  -- Check if this user is a friend of the caller
+  select exists (
+    select 1 from public.friends
+    where (user_id = v_caller and friend_id = _friend_id)
+    or (user_id = _friend_id and friend_id = v_caller)
+  ) into v_is_friend;
+  
+  if v_is_friend then
+    return (select email from auth.users where id = _friend_id);
+  else
+    return null;
+  end if;
+end;
+$$;
+
+grant execute on function public.get_friend_email(uuid) to authenticated;
