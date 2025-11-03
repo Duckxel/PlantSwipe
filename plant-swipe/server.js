@@ -432,6 +432,19 @@ function buildVisitsTableIdentifier() {
 }
 const VISITS_TABLE_SQL_IDENT = buildVisitsTableIdentifier()
 
+// Helper function to get visits table identifier parts for use with sql.identifier()
+// Returns [schema, table] array that can be safely used with sql.identifier()
+function getVisitsTableIdentifierParts() {
+  try {
+    const t = VISITS_TABLE_ENV || 'web_visits'
+    // Validate table name: allow letters, digits, underscore or hyphen
+    if (/^[a-zA-Z0-9_-]+$/.test(t)) {
+      return ['public', t]
+    }
+  } catch {}
+  return ['public', 'web_visits']
+}
+
 const app = express()
 // Trust proxy headers so req.secure and x-forwarded-proto reflect real scheme
 try { app.set('trust proxy', true) } catch {}
@@ -1882,13 +1895,14 @@ app.get('/api/admin/member', async (req, res) => {
     let lastCountry = null
     let lastReferrer = null
     try {
-      const lastRows = await sql.unsafe(`
+      const visitsTableId = sql.identifier(getVisitsTableIdentifierParts())
+      const lastRows = await sql`
         select occurred_at, ip_address::text as ip, geo_country, referrer
-        from ${VISITS_TABLE_SQL_IDENT}
-        where user_id = $1
+        from ${visitsTableId}
+        where user_id = ${user.id}
         order by occurred_at desc
         limit 1
-      `, [user.id])
+      `
       if (Array.isArray(lastRows) && lastRows[0]) {
         lastOnlineAt = lastRows[0].occurred_at || null
         lastIp = (lastRows[0].ip || '').toString().replace(/\/[0-9]{1,3}$/, '') || null
