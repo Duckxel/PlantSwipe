@@ -510,7 +510,7 @@ export const GardenListPage: React.FC = () => {
               </div>
             )}
             {loadingTasks && (
-              <Card className="rounded-2xl p-4 text-sm opacity-70">Loading tasks?</Card>
+              <Card className="rounded-2xl p-4 text-sm opacity-70">Loading tasks...</Card>
             )}
             {!loadingTasks && gardensWithTasks.length === 0 && (
               <Card className="rounded-2xl p-4 text-sm opacity-70">No tasks due today. 🌿</Card>
@@ -541,7 +541,8 @@ export const GardenListPage: React.FC = () => {
                           {occs.map((o: any) => {
                             const tt = (o as any).taskType || 'custom'
                             const badgeClass = `${tt === 'water' ? 'bg-blue-500' : tt === 'fertilize' ? 'bg-green-500' : tt === 'harvest' ? 'bg-yellow-400' : tt === 'cut' ? 'bg-orange-500' : 'bg-purple-500'} ${tt === 'harvest' ? 'text-black' : 'text-white'}`
-                            const icon = (o as any).taskEmoji || (tt === 'water' ? '💧' : tt === 'fertilize' ? '🍽️' : tt === 'harvest' ? '🌾' : tt === 'cut' ? '✂️' : '🪴')
+                            const taskEmoji = (o as any).taskEmoji
+                            const icon = (taskEmoji && taskEmoji !== '??' && taskEmoji !== '???' && taskEmoji.trim() !== '') ? taskEmoji : (tt === 'water' ? '💧' : tt === 'fertilize' ? '🍽️' : tt === 'harvest' ? '🌾' : tt === 'cut' ? '✂️' : '🪴')
                             const isDone = (Number(o.completedCount || 0) >= Number(o.requiredCount || 1))
                             const completions = completionsByOcc[o.id] || []
                             return (
