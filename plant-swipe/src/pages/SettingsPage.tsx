@@ -14,7 +14,6 @@ export default function SettingsPage() {
 
   const [email, setEmail] = React.useState("")
   const [newEmail, setNewEmail] = React.useState("")
-  const [password, setPassword] = React.useState("")
   const [newPassword, setNewPassword] = React.useState("")
   const [confirmPassword, setConfirmPassword] = React.useState("")
   const [isPrivate, setIsPrivate] = React.useState(false)
