@@ -168,17 +168,26 @@ export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, 
           <ActionHint label="Previous" icon={<ChevronLeft className="h-5 w-5" />} />
         </div>
         <div className="flex items-center justify-end">
-          <ActionHint label="Next" icon={<ChevronRight className="h-5 w-5" />} />
+          <ActionHint label="Next" icon={<ChevronRight className="h-5 w-5" />} reverseOrder />
         </div>
       </div>
     </div>
   )
 }
 
-const ActionHint = ({ label, icon }: { label: string; icon: React.ReactNode }) => (
+const ActionHint = ({ label, icon, reverseOrder = false }: { label: string; icon: React.ReactNode; reverseOrder?: boolean }) => (
   <div className="flex items-center gap-2 rounded-2xl bg-white p-3 shadow border">
-    <div className="h-8 w-8 rounded-xl bg-stone-100 flex items-center justify-center">{icon}</div>
-    <div className="text-sm font-medium">{label}</div>
+    {reverseOrder ? (
+      <>
+        <div className="text-sm font-medium">{label}</div>
+        <div className="h-8 w-8 rounded-xl bg-stone-100 flex items-center justify-center">{icon}</div>
+      </>
+    ) : (
+      <>
+        <div className="h-8 w-8 rounded-xl bg-stone-100 flex items-center justify-center">{icon}</div>
+        <div className="text-sm font-medium">{label}</div>
+      </>
+    )}
   </div>
 )
 
