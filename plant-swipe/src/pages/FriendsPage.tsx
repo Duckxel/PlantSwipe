@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabaseClient"
-import { User, Search, UserPlus, Check, X, ArrowRight, ArrowUpRight } from "lucide-react"
+import { User, Search, UserPlus, Check, X, ArrowUpRight } from "lucide-react"
 import { createPortal } from "react-dom"
 
 type FriendRequest = {
