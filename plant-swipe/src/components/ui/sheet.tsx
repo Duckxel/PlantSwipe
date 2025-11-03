@@ -29,7 +29,7 @@ const SheetOverlay = React.forwardRef<
 SheetOverlay.displayName = SheetPrimitive.Overlay.displayName
 
 const sheetVariants = cva(
-  "fixed z-[60] gap-4 bg-background p-5 sm:p-6 shadow-lg transition ease-in-out data-[state=closed]:duration-300 data-[state=open]:duration-500 data-[state=open]:animate-in data-[state=closed]:animate-out",
+  "fixed z-[60] gap-4 bg-background p-5 sm:p-6 shadow-lg transition ease-in-out data-[state=closed]:duration-150 data-[state=open]:duration-150 data-[state=open]:animate-in data-[state=closed]:animate-out",
   {
     variants: {
       side: {
@@ -58,6 +58,8 @@ const SheetContent = React.forwardRef<
   const closeRef = React.useRef<HTMLButtonElement | null>(null)
   const contentRef = React.useRef<HTMLDivElement | null>(null)
   const touchStartYRef = React.useRef<number | null>(null)
+  const mouseStartYRef = React.useRef<number | null>(null)
+  const isDraggingRef = React.useRef(false)
 
   const mergeRefs = (node: HTMLDivElement | null) => {
     contentRef.current = node
@@ -89,6 +91,76 @@ const SheetContent = React.forwardRef<
   const handleTouchEnd = () => {
     touchStartYRef.current = null
   }
+
+  // Mouse drag handlers
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Only allow dragging from the top area or when scrolled to top
+    const el = contentRef.current
+    if (!el) return
+    
+    const rect = el.getBoundingClientRect()
+    const isTopArea = e.clientY - rect.top < 60 // Top 60px is draggable area
+    const isScrolledToTop = el.scrollTop <= 0
+    
+    if (isTopArea || isScrolledToTop) {
+      mouseStartYRef.current = e.clientY
+      isDraggingRef.current = true
+      e.preventDefault()
+    }
+  }
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDraggingRef.current || mouseStartYRef.current === null) return
+    
+    const el = contentRef.current
+    if (!el) return
+    
+    const dy = e.clientY - mouseStartYRef.current
+    
+    // Only close when user drags down while scrolled at the very top
+    if (el.scrollTop <= 0 && dy > 120) {
+      isDraggingRef.current = false
+      mouseStartYRef.current = null
+      closeRef.current?.click()
+    }
+  }
+
+  const handleMouseUp = () => {
+    isDraggingRef.current = false
+    mouseStartYRef.current = null
+  }
+
+  // Global mouse handlers for drag continuation
+  React.useEffect(() => {
+    const handleGlobalMouseMove = (e: MouseEvent) => {
+      if (!isDraggingRef.current || mouseStartYRef.current === null) return
+      
+      const el = contentRef.current
+      if (!el) return
+      
+      const dy = e.clientY - mouseStartYRef.current
+      
+      if (el.scrollTop <= 0 && dy > 120) {
+        isDraggingRef.current = false
+        mouseStartYRef.current = null
+        closeRef.current?.click()
+      }
+    }
+
+    const handleGlobalMouseUp = () => {
+      isDraggingRef.current = false
+      mouseStartYRef.current = null
+    }
+
+    window.addEventListener('mousemove', handleGlobalMouseMove)
+    window.addEventListener('mouseup', handleGlobalMouseUp)
+
+    return () => {
+      window.removeEventListener('mousemove', handleGlobalMouseMove)
+      window.removeEventListener('mouseup', handleGlobalMouseUp)
+    }
+  }, [])
+
   const content = (
     <>
       <SheetPrimitive.Close ref={closeRef} className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-secondary">
@@ -107,6 +179,10 @@ const SheetContent = React.forwardRef<
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        style={{ cursor: isDraggingRef.current ? 'grabbing' : (side === 'bottom' ? 'grab' : 'default') }}
         {...props}
       >
         {content}
