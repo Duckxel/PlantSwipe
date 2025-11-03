@@ -522,74 +522,18 @@ export const FriendsPage: React.FC = () => {
   return (
     <div className="max-w-6xl mx-auto mt-8 px-4 md:px-0">
       <div className={`flex flex-col lg:grid gap-6 ${
-        sentPendingRequests.length > 0 && pendingRequests.length > 0 
-          ? 'lg:grid-cols-[400px_1fr_400px]' 
-          : sentPendingRequests.length > 0 
-          ? 'lg:grid-cols-[400px_1fr_400px]' 
-          : pendingRequests.length > 0 
+        pendingRequests.length > 0 || sentPendingRequests.length > 0 
           ? 'lg:grid-cols-[400px_1fr_400px]' 
           : 'lg:grid-cols-1'
       }`}>
-        {/* Spacer for left side when only received requests exist */}
-        {sentPendingRequests.length === 0 && pendingRequests.length > 0 && (
+        {/* Spacer for left side when received requests don't exist */}
+        {pendingRequests.length === 0 && sentPendingRequests.length > 0 && (
           <div className="hidden lg:block"></div>
         )}
         
-        {/* Pending Requests I Sent - Bottom on mobile, Left on desktop */}
-        {sentPendingRequests.length > 0 && (
-          <Card className="rounded-3xl w-full lg:w-[400px] lg:flex-shrink-0 order-3 lg:order-1">
-            <CardContent className="p-6 md:p-8 space-y-4">
-              <div className="text-xl font-semibold">Sent Requests</div>
-              <div className="space-y-2">
-                {sentPendingRequests.map((request) => (
-                  <div
-                    key={request.id}
-                    className="flex items-center justify-between p-3 rounded-xl border bg-white"
-                  >
-                    <div className="flex flex-col gap-1 flex-1">
-                      <div className="flex items-center gap-2">
-                        <User className="h-5 w-5 opacity-60" />
-                        <span className="font-medium">
-                          {request.recipient_profile?.display_name || 'Unknown'}
-                        </span>
-                      </div>
-                      {request.recipient_profile?.email && (
-                        <div className="text-xs opacity-60 pl-7">
-                          {request.recipient_profile.email}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {request.recipient_profile?.display_name && (
-                        <Button
-                          variant="secondary"
-                          size="icon"
-                          className="rounded-full h-8 w-8"
-                          aria-label="View profile"
-                          onClick={() => navigate(`/u/${encodeURIComponent(request.recipient_profile?.display_name || '')}`)}
-                        >
-                          <ArrowUpRight className="h-4 w-4" />
-                        </Button>
-                      )}
-                      <Button
-                        className="rounded-xl"
-                        variant="secondary"
-                        size="sm"
-                        disabled
-                      >
-                        Pending
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-        
-        {/* Pending Requests I Received - Top on mobile, Right on desktop */}
+        {/* Pending Requests I Received - Top on mobile, Left on desktop */}
         {pendingRequests.length > 0 && (
-          <Card className="rounded-3xl w-full lg:w-[400px] lg:flex-shrink-0 order-1 lg:order-3">
+          <Card className="rounded-3xl w-full lg:w-[400px] lg:flex-shrink-0 order-1 lg:order-1">
             <CardContent className="p-6 md:p-8 space-y-4">
               <div className="text-xl font-semibold">Pending Invitations</div>
               <div className="space-y-2">
@@ -773,8 +717,60 @@ export const FriendsPage: React.FC = () => {
           </CardContent>
         </Card>
 
-        {/* Spacer for right side when only sent requests exist */}
-        {sentPendingRequests.length > 0 && pendingRequests.length === 0 && (
+        {/* Pending Requests I Sent - Bottom on mobile, Right on desktop */}
+        {sentPendingRequests.length > 0 && (
+          <Card className="rounded-3xl w-full lg:w-[400px] lg:flex-shrink-0 order-3 lg:order-3">
+            <CardContent className="p-6 md:p-8 space-y-4">
+              <div className="text-xl font-semibold">Sent Requests</div>
+              <div className="space-y-2">
+                {sentPendingRequests.map((request) => (
+                  <div
+                    key={request.id}
+                    className="flex items-center justify-between p-3 rounded-xl border bg-white"
+                  >
+                    <div className="flex flex-col gap-1 flex-1">
+                      <div className="flex items-center gap-2">
+                        <User className="h-5 w-5 opacity-60" />
+                        <span className="font-medium">
+                          {request.recipient_profile?.display_name || 'Unknown'}
+                        </span>
+                      </div>
+                      {request.recipient_profile?.email && (
+                        <div className="text-xs opacity-60 pl-7">
+                          {request.recipient_profile.email}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {request.recipient_profile?.display_name && (
+                        <Button
+                          variant="secondary"
+                          size="icon"
+                          className="rounded-full h-8 w-8"
+                          aria-label="View profile"
+                          onClick={() => navigate(`/u/${encodeURIComponent(request.recipient_profile?.display_name || '')}`)}
+                        >
+                          <ArrowUpRight className="h-4 w-4" />
+                        </Button>
+                      )}
+                      <Button
+                        className="rounded-xl"
+                        variant="secondary"
+                        size="sm"
+                        disabled
+                      >
+                        Pending
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+        
+        {/* Spacer for right side when sent requests don't exist */}
+        {sentPendingRequests.length === 0 && pendingRequests.length > 0 && (
           <div className="hidden lg:block"></div>
         )}
       </div>
