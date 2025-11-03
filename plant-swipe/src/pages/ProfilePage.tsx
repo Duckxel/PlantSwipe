@@ -215,6 +215,23 @@ export const ProfilePage: React.FC = () => {
     <div className="max-w-3xl mx-auto mt-8 px-4 md:px-0">
       <Card className="rounded-3xl">
         <CardContent className="p-6 md:p-8 space-y-4">
+          {/* Profile Header with Name and Stats */}
+          <div className="border-b pb-4 mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <div className="text-2xl font-semibold">{displayName || 'Profile'}</div>
+                {funStats.createdAt && (
+                  <div className="text-sm opacity-60 mt-1">
+                    Joined {new Date(funStats.createdAt).toLocaleDateString()}
+                  </div>
+                )}
+              </div>
+              <div className="text-right">
+                <div className="text-lg font-semibold">{funStats.loading ? '...' : (funStats.friendsCount ?? 0)}</div>
+                <div className="text-xs opacity-60">Friend{((funStats.friendsCount ?? 0) !== 1 ? 's' : '')}</div>
+              </div>
+            </div>
+          </div>
           
           <div className="grid gap-2">
             <Label htmlFor="profile-email">Email</Label>
@@ -222,12 +239,7 @@ export const ProfilePage: React.FC = () => {
           </div>
           <div className="grid gap-2">
             <Label htmlFor="profile-display-name">Display name</Label>
-            <div className="flex items-center gap-4">
-              <Input id="profile-display-name" name="displayName" value={displayName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDisplayName(e.target.value)} />
-              <div className="text-sm opacity-60 whitespace-nowrap">
-                {funStats.loading ? '...' : `${funStats.friendsCount ?? 0} friend${(funStats.friendsCount ?? 0) !== 1 ? 's' : ''}`}
-              </div>
-            </div>
+            <Input id="profile-display-name" name="displayName" value={displayName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDisplayName(e.target.value)} />
           </div>
           
           <div className="grid gap-2">
