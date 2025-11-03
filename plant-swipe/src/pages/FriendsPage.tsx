@@ -20,6 +20,11 @@ type FriendRequest = {
     display_name: string | null
     email?: string | null
   }
+  recipient_profile?: {
+    id: string
+    display_name: string | null
+    email?: string | null
+  }
 }
 
 type Friend = {
@@ -39,6 +44,7 @@ type SearchResult = {
   display_name: string | null
   email?: string | null
   is_friend?: boolean
+  is_pending?: boolean
 }
 
 export const FriendsPage: React.FC = () => {
