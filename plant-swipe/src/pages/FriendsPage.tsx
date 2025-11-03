@@ -195,17 +195,22 @@ export const FriendsPage: React.FC = () => {
       // Fetch requester profiles separately
       const requesterIds = (data || []).map(r => r.requester_id)
       if (requesterIds.length > 0) {
-        const { data: profiles } = await supabase
+        const { data: profiles, error: profileErr } = await supabase
           .from('profiles')
           .select('id, display_name')
           .in('id', requesterIds)
+        
+        if (profileErr) {
+          console.error('Error fetching requester profiles:', profileErr)
+        }
         
         // Fetch emails using RPC function (only for users who sent friend requests to you)
         const emailPromises = requesterIds.map(async (id) => {
           try {
             const { data: emailData } = await supabase.rpc('get_friend_request_requester_email', { _requester_id: id })
             return { id, email: emailData || null }
-          } catch {
+          } catch (e) {
+            console.error('Error fetching email for requester:', id, e)
             return { id, email: null }
           }
         })
@@ -213,14 +218,17 @@ export const FriendsPage: React.FC = () => {
         const emailMap = new Map(emails.map(e => [e.id, e.email]))
         
         const profileMap = new Map((profiles || []).map(p => [p.id, p]))
-        const requestsWithProfiles = (data || []).map(r => ({
-          ...r,
-          requester_profile: {
-            id: r.requester_id,
-            display_name: profileMap.get(r.requester_id)?.display_name || null,
-            email: emailMap.get(r.requester_id) || null
+        const requestsWithProfiles = (data || []).map(r => {
+          const profile = profileMap.get(r.requester_id)
+          return {
+            ...r,
+            requester_profile: {
+              id: r.requester_id,
+              display_name: profile?.display_name || null,
+              email: emailMap.get(r.requester_id) || null
+            }
           }
-        }))
+        })
         setPendingRequests(requestsWithProfiles as FriendRequest[])
       } else {
         setPendingRequests([])
@@ -607,14 +615,16 @@ export const FriendsPage: React.FC = () => {
                     )}
                   </div>
                   <div className="flex items-center gap-2">
-                    <Button
-                      className="rounded-xl"
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => navigate(`/u/${encodeURIComponent(request.requester_profile?.display_name || '')}`)}
-                    >
-                      <ArrowRight className="h-4 w-4" />
-                    </Button>
+                    {request.requester_profile?.display_name && (
+                      <Button
+                        className="rounded-xl"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => navigate(`/u/${encodeURIComponent(request.requester_profile?.display_name || '')}`)}
+                      >
+                        <ArrowRight className="h-4 w-4" />
+                      </Button>
+                    )}
                     <Button
                       className="rounded-xl"
                       variant="default"
