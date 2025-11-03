@@ -490,52 +490,38 @@ export default function PublicProfilePage() {
         <>
           <Card className="rounded-3xl">
             <CardContent className="p-6 md:p-8 space-y-4">
-              {!canViewProfile && !isOwner ? (
-                <div className="text-center py-8">
-                  <div className="text-xl font-semibold mb-2">This profile is private</div>
-                  <div className="text-sm opacity-70 mb-4">
-                    Only friends and admins can view this profile.
+              <div className="flex items-start gap-4">
+                <div className="h-16 w-16 rounded-2xl bg-stone-200 overflow-hidden flex items-center justify-center" aria-hidden>
+                  <UserIcon
+                    className="h-8 w-8 text-black"
+                  />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <div className="text-2xl font-semibold truncate">{pp.display_name || pp.username || 'Member'}</div>
+                    <span className={`text-[11px] px-2 py-0.5 rounded-full border ${pp.is_admin ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-stone-50 text-stone-700 border-stone-200'}`}>{pp.is_admin ? 'Admin' : 'Member'}</span>
                   </div>
-                  {!user?.id && (
-                    <Button asChild variant="default" className="rounded-2xl">
-                      <Link to="/">Sign in to send a friend request</Link>
-                    </Button>
+                  {canViewProfile && (
+                    <>
+                      <div className="text-sm opacity-70 mt-1 flex items-center gap-1">{pp.country ? (<><MapPin className="h-4 w-4" />{pp.country}</>) : ''}</div>
+                      <div className="text-xs opacity-70 mt-1 flex items-center gap-2">
+                        {pp.is_online ? (
+                          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" />Currently online</span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-stone-300" />{formatLastSeen(pp.last_seen_at)}</span>
+                        )}
+                        {pp.joined_at && (
+                          <span>
+                            • Joined {new Date(pp.joined_at).toLocaleDateString()}
+                            {stats?.friendsCount != null && stats.friendsCount > 0 && (
+                              <span className="ml-2">• {stats.friendsCount} Friend{(stats.friendsCount !== 1 ? 's' : '')}</span>
+                            )}
+                          </span>
+                        )}
+                      </div>
+                    </>
                   )}
                 </div>
-              ) : (
-                <>
-                  <div className="flex items-start gap-4">
-                    <div className="h-16 w-16 rounded-2xl bg-stone-200 overflow-hidden flex items-center justify-center" aria-hidden>
-                      <UserIcon
-                        className="h-8 w-8 text-black"
-                      />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <div className="text-2xl font-semibold truncate">{pp.display_name || pp.username || 'Member'}</div>
-                        <span className={`text-[11px] px-2 py-0.5 rounded-full border ${pp.is_admin ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-stone-50 text-stone-700 border-stone-200'}`}>{pp.is_admin ? 'Admin' : 'Member'}</span>
-                      </div>
-                      {canViewProfile && (
-                        <>
-                          <div className="text-sm opacity-70 mt-1 flex items-center gap-1">{pp.country ? (<><MapPin className="h-4 w-4" />{pp.country}</>) : ''}</div>
-                          <div className="text-xs opacity-70 mt-1 flex items-center gap-2">
-                            {pp.is_online ? (
-                              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" />Currently online</span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-stone-300" />{formatLastSeen(pp.last_seen_at)}</span>
-                            )}
-                            {pp.joined_at && (
-                              <span>
-                                • Joined {new Date(pp.joined_at).toLocaleDateString()}
-                                {stats?.friendsCount != null && stats.friendsCount > 0 && (
-                                  <span className="ml-2">• {stats.friendsCount} Friend{(stats.friendsCount !== 1 ? 's' : '')}</span>
-                                )}
-                              </span>
-                            )}
-                          </div>
-                        </>
-                      )}
-                    </div>
                 <div className="ml-auto flex items-center gap-2" ref={anchorRef}>
                   {isOwner ? (
                     <>
@@ -590,12 +576,10 @@ export default function PublicProfilePage() {
                       )}
                     </>
                   )}
-                  </div>
-                  </div>
-                  {canViewProfile && pp.bio && (
-                    <div className="text-sm opacity-90">{pp.bio}</div>
-                  )}
-                </>
+                </div>
+              </div>
+              {canViewProfile && pp.bio && (
+                <div className="text-sm opacity-90">{pp.bio}</div>
               )}
             </CardContent>
           </Card>
