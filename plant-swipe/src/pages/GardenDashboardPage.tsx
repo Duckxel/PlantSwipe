@@ -1422,37 +1422,7 @@ export const GardenDashboardPage: React.FC = () => {
                 </div>
               )} />
               {/* Routine route kept for weekly chart; item rows show completers instead of button */}
-              <Route path="routine" element={<RoutineSection plants={plants} duePlantIds={dueToday} onLogWater={logWater} weekDays={weekDays} weekCounts={weekCounts} weekCountsByType={weekCountsByType} serverToday={serverToday} dueThisWeekByPlant={dueThisWeekByPlant} todayTaskOccurrences={todayTaskOccurrences} onProgressOccurrence={async (occId: string, inc: number) => {
-                try {
-                  await progressTaskOccurrence(occId, inc)
-                  const o = todayTaskOccurrences.find((x: any) => x.id === occId)
-                  if (o && id) {
-                    const gp = (plants as any[]).find((p: any) => p.id === o.gardenPlantId)
-                    const type = (o as any).taskType || 'custom'
-                    const label = String(type).toUpperCase()
-                    const plantName = gp?.nickname || gp?.plant?.name || null
-                    const newCount = Number(o.completedCount || 0) + inc
-                    const required = Number(o.requiredCount || 1)
-                    const done = newCount >= required
-                    const kind = done ? 'task_completed' : 'task_progressed'
-                    const msg = done
-                      ? `has completed "${label}" Task on "${plantName || 'Plant'}"`
-                      : `has progressed "${label}" Task on "${plantName || 'Plant'}" (${Math.min(newCount, required)}/${required})`
-                    const actorColorCss = getActorColorCss()
-                    await logGardenActivity({ gardenId: id, kind: kind as any, message: msg, plantName: plantName || null, taskName: label, actorColor: actorColorCss || null })
-                    setActivityRev((r) => r + 1)
-                    // Broadcast update BEFORE reload to ensure other clients receive it
-                    await broadcastGardenUpdate({ gardenId: id, kind: 'tasks', actorId: user?.id ?? null }).catch((err) => {
-                      console.warn('[GardenDashboard] Failed to broadcast task update:', err)
-                    })
-                  }
-              } finally {
-                await load({ silent: true, preserveHeavy: true })
-                await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday)
-                // Also emit local event for immediate UI updates
-                emitGardenRealtime('tasks')
-              }
-              }} />} />
+              <Route path="routine" element={<RoutineSection plants={plants} duePlantIds={dueToday} onLogWater={logWater} weekDays={weekDays} weekCounts={weekCounts} weekCountsByType={weekCountsByType} serverToday={serverToday} dueThisWeekByPlant={dueThisWeekByPlant} todayTaskOccurrences={todayTaskOccurrences} onProgressOccurrence={progressOccurrenceHandler} />} />
               <Route path="settings" element={(
                 <div className="space-y-6">
                   <div className="space-y-3">
@@ -1746,7 +1716,7 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
                     const tt = (o as any).taskType || 'custom'
                     const badgeClass = `${typeToColor[tt]} ${tt === 'harvest' ? 'text-black' : 'text-white'}`
                     const customEmoji = (o as any).taskEmoji || null
-                    const icon = customEmoji || (tt === 'water' ? '💧' : tt === 'fertilize' ? '🍽️' : tt === 'harvest' ? '🌾' : tt === 'cut' ? '✂️' : '🪴')
+                    const icon = customEmoji || (tt === 'water' ? '??' : tt === 'fertilize' ? '???' : tt === 'harvest' ? '??' : tt === 'cut' ? '??' : '??')
                     const isDone = (Number(o.completedCount || 0) >= Math.max(1, Number(o.requiredCount || 1)))
                     const completions = completionsByOcc[o.id] || []
                     return (
