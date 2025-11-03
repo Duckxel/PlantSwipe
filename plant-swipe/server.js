@@ -1882,13 +1882,13 @@ app.get('/api/admin/member', async (req, res) => {
     let lastCountry = null
     let lastReferrer = null
     try {
-      const lastRows = await sql`
+      const lastRows = await sql.unsafe(`
         select occurred_at, ip_address::text as ip, geo_country, referrer
         from ${VISITS_TABLE_SQL_IDENT}
-        where user_id = ${user.id}
+        where user_id = $1
         order by occurred_at desc
         limit 1
-      `
+      `, [user.id])
       if (Array.isArray(lastRows) && lastRows[0]) {
         lastOnlineAt = lastRows[0].occurred_at || null
         lastIp = (lastRows[0].ip || '').toString().replace(/\/[0-9]{1,3}$/, '') || null
@@ -1948,7 +1948,7 @@ app.get('/api/admin/member', async (req, res) => {
     let meanRpm5m = null
     try {
       const [refRows, countryRows, uaRows, rpmRows] = await Promise.all([
-        sql`
+        sql.unsafe(`
           select source, visits from (
             select case
                      when v.referrer is null or v.referrer = '' then 'direct'
@@ -1957,32 +1957,32 @@ app.get('/api/admin/member', async (req, res) => {
                    end as source,
                    count(*)::int as visits
             from ${VISITS_TABLE_SQL_IDENT} v
-            where v.user_id = ${user.id}
+            where v.user_id = $1
               and v.occurred_at >= now() - interval '30 days'
             group by 1
           ) s
           order by visits desc
           limit 10
-        `,
-        sql`
+        `, [user.id]),
+        sql.unsafe(`
           select upper(v.geo_country) as country, count(*)::int as visits
           from ${VISITS_TABLE_SQL_IDENT} v
-          where v.user_id = ${user.id}
+          where v.user_id = $1
             and v.geo_country is not null and v.geo_country <> ''
             and v.occurred_at >= now() - interval '30 days'
           group by 1
           order by visits desc
           limit 10
-        `,
-        sql`
+        `, [user.id]),
+        sql.unsafe(`
           select v.user_agent, count(*)::int as visits
           from ${VISITS_TABLE_SQL_IDENT} v
-          where v.user_id = ${user.id}
+          where v.user_id = $1
             and v.occurred_at >= now() - interval '30 days'
           group by v.user_agent
           order by visits desc
           limit 200
-        `,
+        `, [user.id]),
         sql.unsafe(`select count(*)::int as c from ${VISITS_TABLE_SQL_IDENT} where user_id = $1 and occurred_at >= now() - interval '5 minutes'`, [user.id]),
       ])
       topReferrers = (Array.isArray(refRows) ? refRows : []).map(r => ({ source: String(r.source || 'direct'), visits: Number(r.visits || 0) }))
