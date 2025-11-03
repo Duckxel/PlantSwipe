@@ -1643,18 +1643,18 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
   }, [plants, duePlantIds])
   const hasTodayTasks = (todayTaskOccurrences || []).length > 0
   const emptyPhrases = React.useMemo(() => [
-    'Bored? Maybe it\'s time to get more plants? ??',
-    'All quiet in the garden today. Enjoy the calm! ??',
-    'Nothing due today ? your plants salute you. ??',
-    'Free day! Maybe browse for a new leafy friend? ??',
-    'Rest day. Hydrate yourself instead of the plants. ??',
-    'No tasks now. Perfect time to plan your next bloom. ??',
-    'Garden\'s on cruise control. You earned it. ??',
-    'No chores today ? maybe prune your playlist? ??',
-    'Nothing to do! Consider a new herb for the kitchen. ????',
-    'Feet up, gloves off. Tomorrow\'s another grow day. ??',
-    'Zero tasks. Maximum vibes. ?',
-    'Your routine is empty ? your cart doesn\'t have to be. ????',
+    'Bored? Maybe it\'s time to get more plants! 🪴',
+    'All quiet in the garden today. Enjoy the calm! 🌿',
+    'Nothing due today – your plants salute you. 🫡',
+    'Free day! Maybe browse for a new leafy friend? 🪴',
+    'Rest day. Hydrate yourself instead of the plants. 💧',
+    'No tasks now. Perfect time to plan your next bloom. 🌸',
+    'Garden\'s on cruise control. You earned it. 😎',
+    'No chores today – maybe prune your playlist? 🎶',
+    'Nothing to do! Consider a new herb for the kitchen. 🌱',
+    'Feet up, gloves off. Tomorrow\'s another grow day. 🧑‍🌾',
+    'Zero tasks. Maximum vibes. ✨',
+    'Your routine is empty – your cart doesn\'t have to be. 🛒🪴',
   ], [])
   const randomEmptyPhrase = React.useMemo(() => {
     const idx = Math.floor(Math.random() * emptyPhrases.length)
