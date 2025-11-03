@@ -419,7 +419,14 @@ export default function PublicProfilePage() {
                     ) : (
                       <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-stone-300" />{formatLastSeen(pp.last_seen_at)}</span>
                     )}
-                    {pp.joined_at && <span>• Joined {new Date(pp.joined_at).toLocaleDateString()}</span>}
+                    {pp.joined_at && (
+                      <span>
+                        • Joined {new Date(pp.joined_at).toLocaleDateString()}
+                        {stats?.friendsCount != null && (
+                          <span className="ml-2">{stats.friendsCount} Friend{(stats.friendsCount !== 1 ? 's' : '')}</span>
+                        )}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="ml-auto flex items-center gap-2" ref={anchorRef}>
@@ -504,10 +511,6 @@ export default function PublicProfilePage() {
                   <div className="rounded-xl border p-3 text-center">
                     <div className="text-[11px] opacity-60">Longest streak</div>
                     <div className="text-base font-semibold tabular-nums">{stats?.bestStreak ?? '—'}</div>
-                  </div>
-                  <div className="rounded-xl border p-3 text-center">
-                    <div className="text-[11px] opacity-60">Friends</div>
-                    <div className="text-base font-semibold tabular-nums">{stats?.friendsCount ?? '—'}</div>
                   </div>
                 </div>
               </CardContent>
