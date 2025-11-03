@@ -2529,11 +2529,13 @@ app.get('/api/admin/member-visits-series', async (req, res) => {
       }
     }
 
-    // Supabase REST fallback using security-definer RPC
+    // Supabase REST fallback using security-definer RPC or direct query
     if (supabaseUrlEnv && supabaseAnonKey) {
       const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
       const token = getBearerTokenFromRequest(req)
       if (token) Object.assign(headers, { 'Authorization': `Bearer ${token}` })
+      
+      // Try RPC first (if available)
       try {
         const resp = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_user_visits_series_days`, {
           method: 'POST', headers, body: JSON.stringify({ _user_id: targetUserId, _days: 30 })
@@ -2546,6 +2548,71 @@ app.get('/api/admin/member-visits-series', async (req, res) => {
           return
         }
       } catch {}
+      
+      // Fallback: Query visits table directly and aggregate
+      try {
+        const tablePath = (process.env.VISITS_TABLE_REST || VISITS_TABLE_ENV || 'web_visits')
+        const cutoffDate = new Date()
+        cutoffDate.setUTCDate(cutoffDate.getUTCDate() - 29)
+        cutoffDate.setUTCHours(0, 0, 0, 0)
+        const cutoffIso = cutoffDate.toISOString()
+        
+        // Fetch all visits for the user in the last 30 days (handle pagination)
+        const getHeaders = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+        if (token) getHeaders['Authorization'] = `Bearer ${token}`
+        
+        const visitsArray = []
+        let offset = 0
+        const limit = 1000
+        
+        while (true) {
+          const visitsResp = await fetch(`${supabaseUrlEnv}/rest/v1/${tablePath}?user_id=eq.${encodeURIComponent(targetUserId)}&occurred_at=gte.${cutoffIso}&select=occurred_at&order=occurred_at.asc&limit=${limit}&offset=${offset}`, {
+            headers: getHeaders,
+          })
+          
+          if (!visitsResp.ok) break
+          
+          const visits = await visitsResp.json().catch(() => [])
+          const batch = Array.isArray(visits) ? visits : []
+          if (batch.length === 0) break
+          
+          visitsArray.push(...batch)
+          if (batch.length < limit) break // Last page
+          offset += limit
+        }
+        
+        // Generate date series for last 30 days
+        const days = []
+        for (let i = 29; i >= 0; i--) {
+          const d = new Date()
+          d.setUTCDate(d.getUTCDate() - i)
+          d.setUTCHours(0, 0, 0, 0)
+          days.push(d.toISOString().slice(0, 10))
+        }
+        
+        // Count visits per day
+        const dayCounts = new Map()
+        days.forEach(day => dayCounts.set(day, 0))
+        
+        visitsArray.forEach((visit) => {
+          if (visit?.occurred_at) {
+            try {
+              const visitDate = new Date(visit.occurred_at)
+              const dayKey = visitDate.toISOString().slice(0, 10)
+              if (dayCounts.has(dayKey)) {
+                dayCounts.set(dayKey, dayCounts.get(dayKey) + 1)
+              }
+            } catch {}
+          }
+        })
+        
+        const series30d = days.map(day => ({ date: day, visits: dayCounts.get(day) || 0 }))
+        const total30d = series30d.reduce((a, b) => a + (b.visits || 0), 0)
+        res.json({ ok: true, userId: targetUserId, series30d, total30d, via: 'supabase-rest' })
+        return
+      } catch (e) {
+        console.error('Failed to fetch visits via REST:', e)
+      }
     }
 
     res.status(500).json({ error: 'Database not configured' })
