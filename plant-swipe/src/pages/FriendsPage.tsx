@@ -668,7 +668,7 @@ export const FriendsPage: React.FC = () => {
                               setConfirmingRemove(null)
                             }}
                           >
-                            ?
+                            ...
                           </Button>
                           {menuOpenFriendId === friend.id && menuPos && createPortal(
                             <div 
