@@ -1684,7 +1684,7 @@ export const AdminPage: React.FC = () => {
                 <Button className="rounded-2xl w-full" variant="secondary" onClick={pullLatest} disabled={pulling}>
                   <Github className="h-4 w-4" />
                   <RefreshCw className="h-4 w-4" />
-                  <span>{pulling ? 'Pulling?' : 'Pull & Build'}</span>
+                  <span>{pulling ? 'Pulling...' : 'Pull & Build'}</span>
                 </Button>
                 <Button className="rounded-2xl w-full" variant="destructive" onClick={runSyncSchema} disabled={syncing}>
                   <Database className="h-4 w-4" />
