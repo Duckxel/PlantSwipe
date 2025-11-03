@@ -16,6 +16,7 @@ type FriendRequest = {
   requester_profile?: {
     id: string
     display_name: string | null
+    email?: string | null
   }
 }
 
@@ -110,10 +111,25 @@ export const FriendsPage: React.FC = () => {
           .select('id, display_name')
           .in('id', requesterIds)
         
+        // Fetch emails using RPC function (only for users who sent friend requests to you)
+        const emailPromises = requesterIds.map(async (id) => {
+          try {
+            const { data: emailData } = await supabase.rpc('get_friend_request_requester_email', { _requester_id: id })
+            return { id, email: emailData || null }
+          } catch {
+            return { id, email: null }
+          }
+        })
+        const emails = await Promise.all(emailPromises)
+        const emailMap = new Map(emails.map(e => [e.id, e.email]))
+        
         const profileMap = new Map((profiles || []).map(p => [p.id, p]))
         const requestsWithProfiles = (data || []).map(r => ({
           ...r,
-          requester_profile: profileMap.get(r.requester_id)
+          requester_profile: {
+            ...profileMap.get(r.requester_id),
+            email: emailMap.get(r.requester_id) || null
+          }
         }))
         setPendingRequests(requestsWithProfiles as FriendRequest[])
       } else {
@@ -356,11 +372,18 @@ export const FriendsPage: React.FC = () => {
                   key={request.id}
                   className="flex items-center justify-between p-3 rounded-xl border bg-white"
                 >
-                  <div className="flex items-center gap-2">
-                    <User className="h-5 w-5 opacity-60" />
-                    <span className="font-medium">
-                      {request.requester_profile?.display_name || 'Unknown'}
-                    </span>
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2">
+                      <User className="h-5 w-5 opacity-60" />
+                      <span className="font-medium">
+                        {request.requester_profile?.display_name || 'Unknown'}
+                      </span>
+                    </div>
+                    {request.requester_profile?.email && (
+                      <div className="text-xs opacity-60 pl-7">
+                        {request.requester_profile.email}
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <Button

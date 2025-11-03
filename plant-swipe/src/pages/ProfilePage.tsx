@@ -222,7 +222,12 @@ export const ProfilePage: React.FC = () => {
           </div>
           <div className="grid gap-2">
             <Label htmlFor="profile-display-name">Display name</Label>
-            <Input id="profile-display-name" name="displayName" value={displayName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDisplayName(e.target.value)} />
+            <div className="flex items-center gap-4">
+              <Input id="profile-display-name" name="displayName" value={displayName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDisplayName(e.target.value)} />
+              <div className="text-sm opacity-60 whitespace-nowrap">
+                {funStats.loading ? '...' : `${funStats.friendsCount ?? 0} friend${(funStats.friendsCount ?? 0) !== 1 ? 's' : ''}`}
+              </div>
+            </div>
           </div>
           
           <div className="grid gap-2">
@@ -305,10 +310,6 @@ export const ProfilePage: React.FC = () => {
               <div className="rounded-xl border p-3 text-center">
                     <div className="text-[11px] opacity-60">Longest streak</div>
                     <div className="text-base font-semibold tabular-nums">{funStats.loading ? '?' : (funStats.bestStreak ?? '?')}</div>
-              </div>
-              <div className="rounded-xl border p-3 text-center">
-                    <div className="text-[11px] opacity-60">Friends</div>
-                    <div className="text-base font-semibold tabular-nums">{funStats.loading ? '?' : (funStats.friendsCount ?? 0)}</div>
               </div>
             </div>
           </CardContent>

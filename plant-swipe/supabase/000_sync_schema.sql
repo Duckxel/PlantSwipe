@@ -2630,3 +2630,36 @@ as $$
 $$;
 
 grant execute on function public.get_friend_count(uuid) to authenticated, anon;
+
+-- Function to get email for users who sent friend requests to you
+create or replace function public.get_friend_request_requester_email(_requester_id uuid)
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_caller uuid;
+  v_has_request boolean;
+begin
+  v_caller := auth.uid();
+  if v_caller is null then
+    return null;
+  end if;
+  -- Check if this requester sent a friend request to the caller
+  select exists (
+    select 1 from public.friend_requests
+    where requester_id = _requester_id
+    and recipient_id = v_caller
+    and status = 'pending'
+  ) into v_has_request;
+  
+  if v_has_request then
+    return (select email from auth.users where id = _requester_id);
+  else
+    return null;
+  end if;
+end;
+$$;
+
+grant execute on function public.get_friend_request_requester_email(uuid) to authenticated;
