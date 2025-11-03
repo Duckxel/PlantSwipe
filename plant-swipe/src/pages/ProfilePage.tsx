@@ -16,6 +16,7 @@ type FunStats = {
   gardensCount: number | null
   currentStreak: number | null
   bestStreak: number | null
+  friendsCount: number | null
 }
 
 export const ProfilePage: React.FC = () => {
@@ -39,6 +40,7 @@ export const ProfilePage: React.FC = () => {
     gardensCount: null,
     currentStreak: null,
     bestStreak: null,
+    friendsCount: null,
   })
 
   React.useEffect(() => {
@@ -170,6 +172,13 @@ export const ProfilePage: React.FC = () => {
           }
         }
 
+        // Friend count
+        let friendsCount = 0
+        if (uid) {
+          const { data: friendCount, error: ferr } = await supabase.rpc('get_friend_count', { _user_id: uid })
+          if (!ferr && typeof friendCount === 'number') friendsCount = friendCount
+        }
+
         if (!cancelled) {
           setFunStats({
             loading: false,
@@ -180,6 +189,7 @@ export const ProfilePage: React.FC = () => {
             gardensCount,
             currentStreak,
             bestStreak,
+            friendsCount,
           })
         }
       } catch {
@@ -251,11 +261,11 @@ export const ProfilePage: React.FC = () => {
             <div className="grid sm:grid-cols-2 gap-3 mt-2">
               <div className="rounded-xl border p-3">
                 <div className="text-[11px] opacity-60">User ID</div>
-                <div className="text-xs break-all">{privateInfo?.id || '—'}</div>
+                <div className="text-xs break-all">{privateInfo?.id || '?'}</div>
               </div>
               <div className="rounded-xl border p-3">
                 <div className="text-[11px] opacity-60">Email</div>
-                <div className="text-sm">{privateInfo?.email || (user as any)?.email || '—'}</div>
+                <div className="text-sm">{privateInfo?.email || (user as any)?.email || '?'}</div>
               </div>
             </div>
           </CardContent>
@@ -269,32 +279,36 @@ export const ProfilePage: React.FC = () => {
               <div className="rounded-xl border p-3 text-center">
                 <div className="text-[11px] opacity-60">Member since</div>
                 <div className="text-base font-semibold">
-                  {funStats.loading ? '—' : (funStats.createdAt ? new Date(funStats.createdAt).toLocaleDateString() : '—')}
+                  {funStats.loading ? '?' : (funStats.createdAt ? new Date(funStats.createdAt).toLocaleDateString() : '?')}
                 </div>
               </div>
               <div className="rounded-xl border p-3 text-center">
                 <div className="text-[11px] opacity-60">Days in the garden</div>
-                <div className="text-base font-semibold tabular-nums">{funStats.loading ? '—' : (funStats.daysHere ?? '—')}</div>
+                <div className="text-base font-semibold tabular-nums">{funStats.loading ? '?' : (funStats.daysHere ?? '?')}</div>
               </div>
               <div className="rounded-xl border p-3 text-center">
                 <div className="text-[11px] opacity-60">Plants you're tending</div>
-                <div className="text-base font-semibold tabular-nums">{funStats.loading ? '—' : (funStats.plantsTotal ?? '—')}</div>
+                <div className="text-base font-semibold tabular-nums">{funStats.loading ? '?' : (funStats.plantsTotal ?? '?')}</div>
               </div>
               <div className="rounded-xl border p-3 text-center">
                 <div className="text-[11px] opacity-60">Favorites saved</div>
-                <div className="text-base font-semibold tabular-nums">{funStats.loading ? '—' : (funStats.favorites ?? 0)}</div>
+                <div className="text-base font-semibold tabular-nums">{funStats.loading ? '?' : (funStats.favorites ?? 0)}</div>
               </div>
                   <div className="rounded-xl border p-3 text-center">
                     <div className="text-[11px] opacity-60">Gardens</div>
-                    <div className="text-base font-semibold tabular-nums">{funStats.loading ? '—' : (funStats.gardensCount ?? 0)}</div>
+                    <div className="text-base font-semibold tabular-nums">{funStats.loading ? '?' : (funStats.gardensCount ?? 0)}</div>
                   </div>
                   <div className="rounded-xl border p-3 text-center">
                     <div className="text-[11px] opacity-60">Current streak</div>
-                    <div className="text-base font-semibold tabular-nums">{funStats.loading ? '—' : (funStats.currentStreak ?? 0)}</div>
+                    <div className="text-base font-semibold tabular-nums">{funStats.loading ? '?' : (funStats.currentStreak ?? 0)}</div>
                   </div>
               <div className="rounded-xl border p-3 text-center">
                     <div className="text-[11px] opacity-60">Longest streak</div>
-                    <div className="text-base font-semibold tabular-nums">{funStats.loading ? '—' : (funStats.bestStreak ?? '—')}</div>
+                    <div className="text-base font-semibold tabular-nums">{funStats.loading ? '?' : (funStats.bestStreak ?? '?')}</div>
+              </div>
+              <div className="rounded-xl border p-3 text-center">
+                    <div className="text-[11px] opacity-60">Friends</div>
+                    <div className="text-base font-semibold tabular-nums">{funStats.loading ? '?' : (funStats.friendsCount ?? 0)}</div>
               </div>
             </div>
           </CardContent>
