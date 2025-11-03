@@ -712,7 +712,6 @@ export default function PlantSwipe() {
             <Button className="w-full rounded-2xl" onClick={submitAuth}>
               {authMode === 'login' ? 'Continue' : 'Create account'}
             </Button>
-            <div className="text-center text-xs opacity-60">Demo only - hook up to your auth later (e.g., Supabase, Clerk, Auth.js)</div>
             <div className="text-center text-sm">
               {authMode === 'login' ? (
                 <button className="underline" onClick={() => setAuthMode('signup')}>No account? Sign up</button>
