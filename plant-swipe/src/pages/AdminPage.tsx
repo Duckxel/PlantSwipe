@@ -2006,7 +2006,7 @@ export const AdminPage: React.FC = () => {
                                   <ResponsiveContainer width="100%" height={150}>
                                     <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
                                       {(() => {
-                                        const pieData: Array<{ country: string; visits: number; pct?: number; isOther?: boolean }> = [...topCountries]
+                                        const pieData: Array<{ country: string; visits: number; pct?: number; isOther?: boolean }> = [...topCountries.slice(0, 5)]
                                         if (otherCountries && otherCountries.visits > 0) {
                                           pieData.push({ country: 'Other', visits: otherCountries.visits, pct: otherCountries.pct, isOther: true })
                                         }
