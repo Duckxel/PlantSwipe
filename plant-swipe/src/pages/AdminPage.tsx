@@ -6,7 +6,9 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import {
+import { LazyCharts, ChartSuspense } from '@/components/admin/LazyChart'
+// Re-export for convenience
+const {
   ResponsiveContainer,
   ComposedChart,
   Line,
@@ -19,7 +21,7 @@ import {
   PieChart,
   Pie,
   Cell,
-} from 'recharts'
+} = LazyCharts
 import { RefreshCw, Server, Database, Github, ExternalLink, ShieldCheck, ShieldX, UserSearch, AlertTriangle, Gavel, Search, ChevronDown, GitBranch, Trash2, EyeOff, Copy, ArrowUpRight } from "lucide-react"
 import { supabase } from '@/lib/supabaseClient'
 import {
@@ -600,9 +602,15 @@ export const AdminPage: React.FC = () => {
 
   React.useEffect(() => {
     // Initial probe and auto-refresh every 60s
-    runHealthProbes()
+    // Stagger initial load to avoid blocking
+    const timeoutId = setTimeout(() => {
+      runHealthProbes()
+    }, 100)
     const id = setInterval(runHealthProbes, 60_000)
-    return () => clearInterval(id)
+    return () => {
+      clearTimeout(timeoutId)
+      clearInterval(id)
+    }
   }, [runHealthProbes])
 
   const StatusDot: React.FC<{ ok: boolean | null; title?: string }> = ({ ok, title }) => (
@@ -688,7 +696,11 @@ export const AdminPage: React.FC = () => {
   }, [safeJson])
 
   React.useEffect(() => {
-    loadBranches({ initial: true })
+    // Stagger initial load to avoid blocking
+    const timeoutId = setTimeout(() => {
+      loadBranches({ initial: true })
+    }, 150)
+    return () => clearTimeout(timeoutId)
   }, [loadBranches])
 
   const pullLatest = async () => {
@@ -865,7 +877,11 @@ export const AdminPage: React.FC = () => {
   }, [safeJson])
 
   React.useEffect(() => {
-    loadRegisteredCount({ initial: true })
+    // Stagger initial load to avoid blocking
+    const timeoutId = setTimeout(() => {
+      loadRegisteredCount({ initial: true })
+    }, 200)
+    return () => clearTimeout(timeoutId)
   }, [loadRegisteredCount])
 
   // Auto-refresh registered accounts every 60 seconds
@@ -908,9 +924,12 @@ export const AdminPage: React.FC = () => {
     }
   }, [])
 
-  // Initial load (page load only)
+  // Initial load (page load only) - staggered
   React.useEffect(() => {
-    loadOnlineUsers({ initial: true })
+    const timeoutId = setTimeout(() => {
+      loadOnlineUsers({ initial: true })
+    }, 250)
+    return () => clearTimeout(timeoutId)
   }, [loadOnlineUsers])
 
   // Auto-refresh the "Currently online" count every minute
@@ -949,9 +968,12 @@ export const AdminPage: React.FC = () => {
     }
   }, [safeJson])
 
-  // Initial load and auto-refresh every 60s
+  // Initial load and auto-refresh every 60s - staggered
   React.useEffect(() => {
-    loadOnlineIpsList({ initial: true })
+    const timeoutId = setTimeout(() => {
+      loadOnlineIpsList({ initial: true })
+    }, 300)
+    return () => clearTimeout(timeoutId)
   }, [loadOnlineIpsList])
   React.useEffect(() => {
     const id = setInterval(() => { loadOnlineIpsList({ initial: false }) }, 60_000)
@@ -1040,7 +1062,11 @@ export const AdminPage: React.FC = () => {
   }, [visitorsWindowDays, safeJson])
 
   React.useEffect(() => {
-    loadVisitorsStats({ initial: true })
+    // Stagger initial load to avoid blocking - visitors stats are heavy
+    const timeoutId = setTimeout(() => {
+      loadVisitorsStats({ initial: true })
+    }, 400)
+    return () => clearTimeout(timeoutId)
   }, [loadVisitorsStats])
 
   // Auto-refresh visitors graph every 60 seconds
@@ -1938,11 +1964,12 @@ export const AdminPage: React.FC = () => {
                       <div>
                         <div className="text-sm font-medium mb-2">Total for the whole week: <span className="tabular-nums">{totalVal}</span></div>
                         <div className="h-72 w-full max-w-none mx-0">
-                          <ResponsiveContainer width="100%" height="100%">
-                            <ComposedChart
-                              data={visitorsSeries}
-                              margin={{ top: 10, right: 8, bottom: 14, left: 8 }}
-                            >
+                          <ChartSuspense fallback={<div className="h-full w-full flex items-center justify-center text-sm text-gray-400">Loading chart...</div>}>
+                            <ResponsiveContainer width="100%" height="100%">
+                              <ComposedChart
+                                data={visitorsSeries}
+                                margin={{ top: 10, right: 8, bottom: 14, left: 8 }}
+                              >
                               <defs>
                                 <linearGradient id="visitsLineGrad" x1="0" y1="0" x2="1" y2="0">
                                   <stop offset="0%" stopColor="#111827" />
@@ -1993,6 +2020,7 @@ export const AdminPage: React.FC = () => {
                               />
                             </ComposedChart>
                           </ResponsiveContainer>
+                          </ChartSuspense>
                         </div>
                         {/* Sources breakdown */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
@@ -2003,8 +2031,9 @@ export const AdminPage: React.FC = () => {
                             ) : (
                               <div className="grid grid-cols-1 md:grid-cols-3 gap-1">
                                 <div className="col-span-2 min-h-[150px]">
-                                  <ResponsiveContainer width="100%" height={150}>
-                                    <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+                                  <ChartSuspense fallback={<div className="h-[150px] w-full flex items-center justify-center text-sm text-gray-400">Loading chart...</div>}>
+                                    <ResponsiveContainer width="100%" height={150}>
+                                      <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
                                       {(() => {
                                         const pieData: Array<{ country: string; visits: number; pct?: number; isOther?: boolean }> = [...topCountries]
                                         if (otherCountries && otherCountries.visits > 0) {
@@ -2070,6 +2099,7 @@ export const AdminPage: React.FC = () => {
                                       })()}
                                     </PieChart>
                                   </ResponsiveContainer>
+                                  </ChartSuspense>
                                 </div>
                                 <div className="flex flex-col gap-1">
                                   {topCountries.slice(0, 5).map((c, idx) => (

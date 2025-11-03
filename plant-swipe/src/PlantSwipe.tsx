@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, lazy, Suspense } from "react";
 import { Routes, Route, useLocation, useNavigate, Navigate } from "react-router-dom";
 import { useMotionValue } from "framer-motion";
 import { Search } from "lucide-react";
@@ -24,10 +24,12 @@ import type { Plant } from "@/types/plant";
 import PlantInfoPage from "@/pages/PlantInfoPage";
 import { useAuth } from "@/context/AuthContext";
 import PublicProfilePage from "@/pages/PublicProfilePage";
-import { AdminPage } from "@/pages/AdminPage";
 import RequireAdmin from "@/pages/RequireAdmin";
 import { FriendsPage } from "@/pages/FriendsPage";
 import { supabase } from "@/lib/supabaseClient";
+
+// Lazy load heavy pages for code splitting
+const AdminPage = lazy(() => import("@/pages/AdminPage").then(module => ({ default: module.AdminPage })));
 
 // --- Main Component ---
 export default function PlantSwipe() {
@@ -642,7 +644,13 @@ export default function PlantSwipe() {
                 <Route path="/profile" element={user ? (profile?.display_name ? <Navigate to={`/u/${encodeURIComponent(profile.display_name)}`} replace /> : <Navigate to="/u/_me" replace />) : <Navigate to="/" replace />} />
                 <Route path="/u/:username" element={<PublicProfilePage />} />
                 <Route path="/friends" element={user ? <FriendsPage /> : <Navigate to="/" replace />} />
-                <Route path="/admin" element={<RequireAdmin><AdminPage /></RequireAdmin>} />
+                <Route path="/admin" element={
+                  <RequireAdmin>
+                    <Suspense fallback={<div className="p-8 text-center text-sm opacity-60">Loading admin panel...</div>}>
+                      <AdminPage />
+                    </Suspense>
+                  </RequireAdmin>
+                } />
                 <Route path="/create" element={user ? (
                   <CreatePlantPage
                     onCancel={() => navigate('/')}
