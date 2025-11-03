@@ -311,13 +311,12 @@ export const ProfilePage: React.FC = () => {
                 <div className="text-2xl font-semibold">{displayName || 'Profile'}</div>
                 <div className="text-xs opacity-70 mt-1 flex items-center gap-2">
                   {funStats.createdAt && (
-                    <span>Joined {new Date(funStats.createdAt).toLocaleDateString()}</span>
-                  )}
-                  {!funStats.loading && funStats.friendsCount != null && (
-                    <>
-                      {funStats.createdAt && <span>?</span>}
-                      <span>{funStats.friendsCount} Friend{((funStats.friendsCount ?? 0) !== 1 ? 's' : '')}</span>
-                    </>
+                    <span>
+                      Joined {new Date(funStats.createdAt).toLocaleDateString()}
+                      {!funStats.loading && funStats.friendsCount != null && (
+                        <span className="ml-2">{funStats.friendsCount} Friend{((funStats.friendsCount ?? 0) !== 1 ? 's' : '')}</span>
+                      )}
+                    </span>
                   )}
                 </div>
               </div>
