@@ -1,6 +1,6 @@
 import React, { useMemo, useState, lazy, Suspense } from "react";
 import { Routes, Route, useLocation, useNavigate, Navigate } from "react-router-dom";
-import { useMotionValue } from "framer-motion";
+import { useMotionValue, animate } from "framer-motion";
 import { Search } from "lucide-react";
 // Sheet is used for plant info overlay
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -383,10 +383,11 @@ export default function PlantSwipe() {
   const threshold = 100
   const velocityThreshold = 500
   
-  // Reset motion values when index changes
+  // Reset motion values immediately when index changes
   React.useEffect(() => {
-    x.set(0)
-    y.set(0)
+    // Animate smoothly back to center
+    animate(x, 0, { duration: 0.1 })
+    animate(y, 0, { duration: 0.1 })
   }, [index, x, y])
   
   const onDragEnd = (_: unknown, info: { offset: { x: number; y: number }; velocity: { x: number; y: number } }) => {
@@ -405,31 +406,41 @@ export default function PlantSwipe() {
     const absVx = Math.abs(vx)
     const absVy = Math.abs(vy)
     
+    let actionTaken = false
+    
     // Prioritize vertical swipe over horizontal if both are significant
     if ((absY > absX && absY > threshold) || (absVy > absVx && absVy > velocityThreshold)) {
       if (effectiveY < -threshold || vy < -velocityThreshold) {
         // Swipe up (bottom to top) = open info
+        animate(x, 0, { duration: 0.1 })
+        animate(y, 0, { duration: 0.1 })
         handleInfo()
-        return
+        actionTaken = true
       }
     }
     
     // Horizontal swipe detection
-    if ((absX > absY && absX > threshold) || (absVx > absVy && absVx > velocityThreshold)) {
+    if (!actionTaken && ((absX > absY && absX > threshold) || (absVx > absVy && absVx > velocityThreshold))) {
       if (effectiveX < -threshold || vx < -velocityThreshold) {
         // Swipe left (right to left) = next
+        animate(x, 0, { duration: 0.1 })
+        animate(y, 0, { duration: 0.1 })
         handlePass()
-        return
+        actionTaken = true
       } else if (effectiveX > threshold || vx > velocityThreshold) {
         // Swipe right (left to right) = previous
+        animate(x, 0, { duration: 0.1 })
+        animate(y, 0, { duration: 0.1 })
         handlePrevious()
-        return
+        actionTaken = true
       }
     }
     
-    // No action, snap back to center
-    x.set(0)
-    y.set(0)
+    // No action, snap back to center smoothly
+    if (!actionTaken) {
+      animate(x, 0, { duration: 0.2, type: "spring", stiffness: 300, damping: 30 })
+      animate(y, 0, { duration: 0.2, type: "spring", stiffness: 300, damping: 30 })
+    }
   }
 
   // Favorites handling

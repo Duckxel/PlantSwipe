@@ -1,5 +1,5 @@
 import React from "react"
-import { motion, AnimatePresence, type MotionValue, useSpring } from "framer-motion"
+import { motion, AnimatePresence, type MotionValue } from "framer-motion"
 import { ChevronLeft, ChevronRight, Heart, Info, Sparkles, X } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -22,10 +22,6 @@ interface SwipePageProps {
 }
 
 export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, x, y, onDragEnd, handleInfo, handlePass, handlePrevious, liked = false, onToggleLike }) => {
-  // Create spring animations for smooth motion
-  const springX = useSpring(x, { stiffness: 300, damping: 30 })
-  const springY = useSpring(y, { stiffness: 300, damping: 30 })
-  
   // Keyboard navigation
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -66,13 +62,13 @@ export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, 
               drag
               dragElastic={0.3}
               dragMomentum={false}
-              style={{ x: springX, y: springY }}
+              style={{ x, y }}
               dragConstraints={{ left: -500, right: 500, top: -500, bottom: 500 }}
               onDragEnd={onDragEnd}
-              initial={{ scale: 0.95, opacity: 0 }}
+              initial={{ scale: 0.96, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              transition={{ type: "spring", stiffness: 400, damping: 30 }}
+              exit={{ scale: 0.96, opacity: 0 }}
+              transition={{ duration: 0.15, ease: "easeOut" }}
               className="absolute inset-0 cursor-grab active:cursor-grabbing select-none"
             >
               <Card className="h-full rounded-3xl overflow-hidden shadow-xl">
