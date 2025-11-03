@@ -17,6 +17,8 @@ export interface GardenMember {
   role: GardenRole
   joinedAt: string
   displayName?: string | null
+  email?: string | null
+  accentKey?: string | null
 }
 
 export interface GardenPlant {

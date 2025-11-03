@@ -24,14 +24,15 @@ export const SearchPage: React.FC<SearchPageProps> = ({ plants, openInfo, likedI
           onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => { if (e.key === 'Enter') openInfo(p) }}
         >
           <div className="grid grid-cols-3 items-stretch gap-0">
-            <div className="col-span-1 h-full min-h-[148px] rounded-l-2xl overflow-hidden bg-stone-100">
+            <div className="col-span-1 relative h-full min-h-[148px] rounded-l-2xl overflow-hidden bg-stone-100">
               {p.image ? (
                 <img
                   src={p.image}
                   alt={p.name}
                   loading="lazy"
                   draggable={false}
-                  className="block h-full w-full object-cover object-center select-none"
+                  decoding="async"
+                  className="absolute inset-0 h-full w-full object-cover object-center select-none"
                 />
               ) : null}
             </div>
@@ -45,8 +46,8 @@ export const SearchPage: React.FC<SearchPageProps> = ({ plants, openInfo, likedI
                   <Badge className="rounded-xl bg-rose-600 text-white">Liked</Badge>
                 )}
               </div>
-              <div className="font-medium">{p.name}</div>
-              <div className="text-xs italic opacity-60">{p.scientificName}</div>
+              <div className="font-medium truncate">{p.name}</div>
+              <div className="text-xs italic opacity-60 truncate">{p.scientificName}</div>
               <p className="text-sm mt-1 line-clamp-2">{p.description}</p>
               <div className="mt-2 flex flex-wrap gap-1">
                 {p.colors.map((c) => (

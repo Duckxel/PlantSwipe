@@ -8,7 +8,11 @@ Group=www-data
 EnvironmentFile=/etc/admin-api/env
 WorkingDirectory=/opt/admin
 ExecStart=/opt/admin/venv/bin/gunicorn -b 127.0.0.1:5001 app:app --workers 2 --timeout 30 --access-logfile - --error-logfile -
-Restart=on-failure
+Restart=always
+RestartSec=3s
+StartLimitIntervalSec=60
+StartLimitBurst=10
+TimeoutStopSec=15s
 KillMode=mixed
 
 [Install]

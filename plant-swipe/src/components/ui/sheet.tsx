@@ -2,7 +2,6 @@ import * as React from "react"
 import * as SheetPrimitive from "@radix-ui/react-dialog"
 import { cva, type VariantProps } from "class-variance-authority"
 import { X } from "lucide-react"
-import { motion, useMotionValue } from "framer-motion"
 
 import { cn } from "@/lib/utils"
 
@@ -20,7 +19,7 @@ const SheetOverlay = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <SheetPrimitive.Overlay
     className={cn(
-      "fixed inset-0 z-50 bg-black/80  data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+      "fixed inset-0 z-[60] bg-black/80  data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
       className
     )}
     {...props}
@@ -30,13 +29,13 @@ const SheetOverlay = React.forwardRef<
 SheetOverlay.displayName = SheetPrimitive.Overlay.displayName
 
 const sheetVariants = cva(
-  "fixed z-50 gap-4 bg-background p-6 shadow-lg transition ease-in-out data-[state=closed]:duration-300 data-[state=open]:duration-500 data-[state=open]:animate-in data-[state=closed]:animate-out",
+  "fixed z-[60] gap-4 bg-background p-5 sm:p-6 shadow-lg transition ease-in-out data-[state=closed]:duration-300 data-[state=open]:duration-500 data-[state=open]:animate-in data-[state=closed]:animate-out",
   {
     variants: {
       side: {
         top: "inset-x-0 top-0 border-b data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top",
         bottom:
-          "inset-x-0 bottom-0 border-t data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom",
+          "inset-x-0 bottom-0 border-t data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom rounded-t-2xl sm:rounded-t-2xl mx-2 sm:mx-0",
         left: "inset-y-0 left-0 h-full w-3/4 border-r data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left sm:max-w-sm",
         right:
           "inset-y-0 right-0 h-full w-3/4 border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:max-w-sm",
@@ -56,14 +55,39 @@ const SheetContent = React.forwardRef<
   React.ElementRef<typeof SheetPrimitive.Content>,
   SheetContentProps
 >(({ side = "right", className, children, ...props }, ref) => {
-  const y = useMotionValue(0)
   const closeRef = React.useRef<HTMLButtonElement | null>(null)
-  const onDragEnd = (_: any, info: { offset: { y: number }; velocity: { y: number } }) => {
-    const dy = (info?.offset?.y || 0) + (info?.velocity?.y || 0) * 0.2
-    if (dy > 120) {
-      // Programmatically close via hidden close button
+  const contentRef = React.useRef<HTMLDivElement | null>(null)
+  const touchStartYRef = React.useRef<number | null>(null)
+
+  const mergeRefs = (node: HTMLDivElement | null) => {
+    contentRef.current = node
+    if (typeof ref === 'function') {
+      ref(node as any)
+    } else if (ref && typeof ref === 'object') {
+      ;(ref as any).current = node
+    }
+  }
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    const y = e.touches && e.touches.length > 0 ? e.touches[0].clientY : null
+    touchStartYRef.current = y
+  }
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    const startY = touchStartYRef.current
+    const el = contentRef.current
+    if (!el || startY == null) return
+    const currentY = e.touches && e.touches.length > 0 ? e.touches[0].clientY : startY
+    const dy = currentY - startY
+    // Only close when user pulls down while scrolled at the very top
+    if (el.scrollTop <= 0 && dy > 120) {
+      touchStartYRef.current = null
       closeRef.current?.click()
     }
+  }
+
+  const handleTouchEnd = () => {
+    touchStartYRef.current = null
   }
   const content = (
     <>
@@ -77,17 +101,16 @@ const SheetContent = React.forwardRef<
   return (
     <SheetPortal>
       <SheetOverlay />
-      {side === 'bottom' ? (
-        <SheetPrimitive.Content asChild ref={ref} {...props}>
-          <motion.div drag="y" style={{ y }} onDragEnd={onDragEnd} className={cn(sheetVariants({ side }), className)}>
-            {content}
-          </motion.div>
-        </SheetPrimitive.Content>
-      ) : (
-        <SheetPrimitive.Content ref={ref} className={cn(sheetVariants({ side }), className)} {...props}>
-          {content}
-        </SheetPrimitive.Content>
-      )}
+      <SheetPrimitive.Content
+        ref={mergeRefs}
+        className={cn(sheetVariants({ side }), className)}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        {...props}
+      >
+        {content}
+      </SheetPrimitive.Content>
     </SheetPortal>
   )
 })

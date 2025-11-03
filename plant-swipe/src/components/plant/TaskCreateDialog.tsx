@@ -100,7 +100,12 @@ export function TaskCreateDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="rounded-2xl max-w-3xl">
+      <DialogContent
+        className="rounded-2xl max-w-3xl"
+        onOpenAutoFocus={(e) => { e.preventDefault() }}
+        onPointerDownOutside={(e) => { e.preventDefault() }}
+        onInteractOutside={(e) => { e.preventDefault() }}
+      >
         <DialogHeader>
           <DialogTitle>Create task</DialogTitle>
           <DialogDescription>All tasks repeat. Choose frequency and calendar.</DialogDescription>

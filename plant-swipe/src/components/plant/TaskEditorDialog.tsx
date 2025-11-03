@@ -1,9 +1,10 @@
 // @ts-nocheck
 import React from 'react'
+import { createPortal } from 'react-dom'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import type { GardenPlantTask } from '@/types/garden'
-import { listPlantTasks, deletePlantTask, updatePatternTask } from '@/lib/gardens'
+import { listPlantTasks, deletePlantTask, updatePatternTask, listGardenTasks, syncTaskOccurrencesForGarden, resyncTaskOccurrencesForGarden } from '@/lib/gardens'
 import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
 import { TaskCreateDialog } from '@/components/plant/TaskCreateDialog'
 
@@ -69,6 +70,13 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
   const remove = async (taskId: string) => {
     try {
       await deletePlantTask(taskId)
+      // Resync occurrences to purge old ones for the deleted task
+      try {
+        const now = new Date()
+        const startIso = new Date(now.getTime() - 7*24*3600*1000).toISOString()
+        const endIso = new Date(now.getTime() + 60*24*3600*1000).toISOString()
+        await resyncTaskOccurrencesForGarden(gardenId, startIso, endIso)
+      } catch {}
       await load()
       if (onChanged) await onChanged()
     } catch (e: any) {
@@ -78,7 +86,14 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="rounded-2xl">
+      <DialogContent
+        className="rounded-2xl"
+        onOpenAutoFocus={(e) => { e.preventDefault() }}
+        // Allow outside pointer events so absolutely positioned menu stays interactive
+        onPointerDownOutside={(e) => { /* allow */ }}
+        onInteractOutside={(e) => { /* allow */ }}
+        onCloseAutoFocus={(e) => { /* allow */ }}
+      >
         <DialogHeader>
           <DialogTitle>Tasks</DialogTitle>
         </DialogHeader>
@@ -87,7 +102,7 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
             <div className="text-sm font-medium">Existing tasks</div>
             <Button className="rounded-2xl" onClick={() => setCreateOpen(true)}>Add Task</Button>
           </div>
-          <div className="max-h-64 overflow-auto rounded-xl border">
+          <div className="rounded-xl border">
             {loading && <div className="p-3 text-sm opacity-60">Loading…</div>}
             {error && <div className="p-3 text-sm text-red-600">{error}</div>}
             {!loading && tasks.length === 0 && <div className="p-3 text-sm opacity-60">No tasks yet</div>}
@@ -118,7 +133,8 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
                         yearlyDays: t.yearlyDays || undefined,
                         monthlyNthWeekdays: t.monthlyNthWeekdays || undefined,
                       })
-                      setPatternOpen(true)
+                      // Delay open to next tick to avoid menu overlay capturing events
+                      setTimeout(() => setPatternOpen(true), 0)
                     } : undefined}
                     onDelete={() => remove(t.id)}
                   />
@@ -150,6 +166,13 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
                 monthlyNthWeekdays: patternPeriod === 'month' ? (sel.monthlyNthWeekdays || []) : null,
                 requiredCount: editingTask.requiredCount || 1,
               })
+              // After updating, resync occurrences to remove stale dates
+              try {
+                const now = new Date()
+                const startIso = new Date(now.getTime() - 7*24*3600*1000).toISOString()
+                const endIso = new Date(now.getTime() + 60*24*3600*1000).toISOString()
+                await resyncTaskOccurrencesForGarden(gardenId, startIso, endIso)
+              } catch {}
               setEditingTask(null)
               await load()
               if (onChanged) await onChanged()
@@ -159,15 +182,23 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
           }
         }}
         initialSelection={patternSelection}
+        onChangePeriod={(p) => setPatternPeriod(p)}
         onChangeAmount={(n) => setPatternAmount(n)}
-        allowedPeriods={[patternPeriod]}
+        // Allow switching across week/month/year as requested
+        allowedPeriods={[ 'week', 'month', 'year' ] as any}
+        modal={false}
       />
       <TaskCreateDialog
         open={createOpen}
         onOpenChange={(o) => setCreateOpen(o)}
         gardenId={gardenId}
         gardenPlantId={gardenPlantId}
-        onCreated={async () => { await load(); if (onChanged) await onChanged() }}
+        onCreated={async () => {
+          await load()
+          // Notify global UI to refresh nav badges immediately on task creation
+          try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
+          if (onChanged) await onChanged()
+        }}
       />
     </Dialog>
   )
@@ -193,11 +224,65 @@ function renderTaskSummary(t: GardenPlantTask): string {
 
 function TaskRowMenu({ onEdit, onDelete }: { onEdit?: () => void; onDelete: () => void }) {
   const [open, setOpen] = React.useState(false)
+  const buttonRef = React.useRef<HTMLButtonElement | null>(null)
+  const menuRef = React.useRef<HTMLDivElement | null>(null)
+  const [position, setPosition] = React.useState<{ top: number; left: number; placement: 'top' | 'bottom' }>({ top: 0, left: 0, placement: 'bottom' })
+  const rafRef = React.useRef<number | null>(null)
+
+  const computePosition = React.useCallback((placementHint?: 'top' | 'bottom') => {
+    const btn = buttonRef.current
+    if (!btn) return
+    const rect = btn.getBoundingClientRect()
+    const predictedHeight = onEdit ? 88 : 46 // approximate menu height
+    const predictedWidth = 160 // w-40 => 10rem
+    const spaceBelow = window.innerHeight - rect.bottom
+    const place: 'top' | 'bottom' = placementHint || (spaceBelow < predictedHeight + 12 ? 'top' : 'bottom')
+    const top = place === 'bottom' ? (rect.bottom + 8) : (rect.top - predictedHeight - 8)
+    const left = Math.max(8, Math.min(rect.left, window.innerWidth - predictedWidth - 8))
+    setPosition({ top: Math.max(8, Math.min(top, window.innerHeight - 8 - predictedHeight)), left, placement: place })
+  }, [onEdit])
+
+  React.useEffect(() => {
+    if (!open) return
+    computePosition()
+    const onWindow = () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+      rafRef.current = requestAnimationFrame(() => computePosition(position.placement))
+    }
+    const onDocClick = (e: MouseEvent) => {
+      const target = e.target as Node
+      if (menuRef.current && menuRef.current.contains(target)) return
+      if (buttonRef.current && buttonRef.current.contains(target)) return
+      setOpen(false)
+    }
+    window.addEventListener('resize', onWindow)
+    // capture scroll from any ancestor; recalc to keep anchored
+    window.addEventListener('scroll', onWindow, true)
+    document.addEventListener('mousedown', onDocClick, true)
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setOpen(false) }, { once: true })
+    return () => {
+      window.removeEventListener('resize', onWindow)
+      window.removeEventListener('scroll', onWindow, true)
+      document.removeEventListener('mousedown', onDocClick, true)
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+    }
+  }, [open, computePosition, position.placement])
+
   return (
     <div className="relative">
-      <Button variant="secondary" className="rounded-xl px-2" onClick={(e: any) => { e.stopPropagation(); setOpen((o) => !o) }}>⋯</Button>
+      <Button
+        ref={buttonRef as any}
+        variant="secondary"
+        className="rounded-xl px-2"
+        onClick={(e: any) => { e.stopPropagation(); setOpen((o) => !o) }}
+      >
+        ⋯
+      </Button>
       {open && (
-        <div className="absolute right-0 mt-2 w-40 bg-white border rounded-xl shadow-lg z-10">
+        <div
+          ref={menuRef as any}
+          className="absolute right-0 top-full mt-2 w-40 bg-white border rounded-xl shadow-lg z-[80]"
+        >
           {onEdit && (
             <button onClick={(e) => { e.stopPropagation(); setOpen(false); onEdit() }} className="w-full text-left px-3 py-2 rounded-t-xl hover:bg-stone-50">Edit</button>
           )}

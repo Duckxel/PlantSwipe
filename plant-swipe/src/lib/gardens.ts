@@ -187,8 +187,13 @@ export async function getGardenMembers(gardenId: string): Promise<GardenMember[]
   const { data: profilesData, error: pErr } = await supabase.rpc('get_profiles_for_garden', { _garden_id: gardenId })
   if (pErr) throw new Error(pErr.message)
   const idToName: Record<string, string | null> = {}
+  const idToEmail: Record<string, string | null> = {}
+  const idToAccent: Record<string, string | null> = {}
   for (const r of (profilesData as any[]) || []) {
-    idToName[String((r as any).user_id)] = (r as any).display_name || null
+    const uid = String((r as any).user_id)
+    idToName[uid] = (r as any).display_name || null
+    idToEmail[uid] = (r as any).email || null
+    idToAccent[uid] = (r as any).accent_key || null
   }
   return rows.map((r: any) => ({
     gardenId: String(r.garden_id),
@@ -196,6 +201,8 @@ export async function getGardenMembers(gardenId: string): Promise<GardenMember[]
     role: r.role,
     joinedAt: String(r.joined_at),
     displayName: idToName[String(r.user_id)] ?? null,
+    email: idToEmail[String(r.user_id)] ?? null,
+    accentKey: idToAccent[String(r.user_id)] ?? null,
   }))
 }
 
@@ -234,6 +241,27 @@ export async function addMemberByEmail(params: { gardenId: string; email: string
   const userId = data as unknown as string | null
   if (!userId) return { ok: false, reason: 'no_account' }
   try {
+    await addGardenMember({ gardenId, userId, role })
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, reason: 'insert_failed' }
+  }
+}
+
+export async function addMemberByNameOrEmail(params: { gardenId: string; input: string; role?: 'member' | 'owner' }): Promise<{ ok: boolean; reason?: string }> {
+  const { gardenId, input, role = 'member' } = params
+  const val = input.trim()
+  if (!val) return { ok: false, reason: 'invalid' }
+  // If looks like email, use existing path
+  if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(val)) {
+    return await addMemberByEmail({ gardenId, email: val, role })
+  }
+  // Otherwise, treat as display name
+  try {
+    const { data, error } = await supabase.rpc('get_user_id_by_display_name', { _name: val })
+    if (error) return { ok: false, reason: 'lookup_failed' }
+    const userId = (data ? String(data) : null)
+    if (!userId) return { ok: false, reason: 'no_account' }
     await addGardenMember({ gardenId, userId, role })
     return { ok: true }
   } catch (e) {
@@ -317,6 +345,20 @@ export async function getGardenTodayProgress(gardenId: string, dayIso: string): 
     completed += comp
   }
   return { due, completed }
+}
+
+export async function userHasUnfinishedTasksToday(userId: string): Promise<boolean> {
+  const gardens = await getUserGardens(userId)
+  if (gardens.length === 0) return false
+  const nowIso = await fetchServerNowISO()
+  const today = nowIso.slice(0, 10)
+  for (const g of gardens) {
+    try {
+      const prog = await getGardenTodayProgress(g.id, today)
+      if (prog.due > prog.completed) return true
+    } catch {}
+  }
+  return false
 }
 
 export async function getGardenInventory(gardenId: string): Promise<Array<{ plantId: string; seedsOnHand: number; plantsOnHand: number; plant?: Plant | null }>> {
@@ -518,19 +560,29 @@ export async function upsertOneTimeTask(params: { gardenId: string; gardenPlantI
 
 export async function listPlantTasks(gardenPlantId: string): Promise<GardenPlantTask[]> {
   const base = supabase.from('garden_plant_tasks')
-  const selectWithEmoji = 'id, garden_id, garden_plant_id, type, custom_name, emoji, schedule_kind, due_at, interval_amount, interval_unit, required_count, period, amount, weekly_days, monthly_days, yearly_days, monthly_nth_weekdays, created_at'
-  const selectWithoutEmoji = 'id, garden_id, garden_plant_id, type, custom_name, schedule_kind, due_at, interval_amount, interval_unit, required_count, period, amount, weekly_days, monthly_days, yearly_days, monthly_nth_weekdays, created_at'
-  let { data, error } = await base
-    .select(selectWithEmoji)
-    .eq('garden_plant_id', gardenPlantId)
-    .order('created_at', { ascending: true })
-  if (error && /column .*emoji.* does not exist/i.test(error.message)) {
-    const res2 = await base
-      .select(selectWithoutEmoji)
-      .eq('garden_plant_id', gardenPlantId)
-      .order('created_at', { ascending: true })
-    data = res2.data as any
-    error = res2.error as any
+  const selectAll = 'id, garden_id, garden_plant_id, type, custom_name, emoji, schedule_kind, due_at, interval_amount, interval_unit, required_count, period, amount, weekly_days, monthly_days, yearly_days, monthly_nth_weekdays, created_at'
+  const selectNoEmoji = 'id, garden_id, garden_plant_id, type, custom_name, schedule_kind, due_at, interval_amount, interval_unit, required_count, period, amount, weekly_days, monthly_days, yearly_days, monthly_nth_weekdays, created_at'
+  const selectNoNth = 'id, garden_id, garden_plant_id, type, custom_name, emoji, schedule_kind, due_at, interval_amount, interval_unit, required_count, period, amount, weekly_days, monthly_days, yearly_days, created_at'
+  const selectNoEmojiNoNth = 'id, garden_id, garden_plant_id, type, custom_name, schedule_kind, due_at, interval_amount, interval_unit, required_count, period, amount, weekly_days, monthly_days, yearly_days, created_at'
+  // Try most complete select first, then gracefully fallback if optional columns are missing
+  let { data, error } = await base.select(selectAll).eq('garden_plant_id', gardenPlantId).order('created_at', { ascending: true })
+  if (error) {
+    const msg = String(error.message || '')
+    const noEmoji = /column .*emoji.* does not exist/i.test(msg)
+    const noNth = /column .*monthly_nth_weekdays.* does not exist/i.test(msg)
+    if (noEmoji && noNth) {
+      const res = await base.select(selectNoEmojiNoNth).eq('garden_plant_id', gardenPlantId).order('created_at', { ascending: true })
+      data = res.data as any
+      error = res.error as any
+    } else if (noEmoji) {
+      const res = await base.select(selectNoEmoji).eq('garden_plant_id', gardenPlantId).order('created_at', { ascending: true })
+      data = res.data as any
+      error = res.error as any
+    } else if (noNth) {
+      const res = await base.select(selectNoNth).eq('garden_plant_id', gardenPlantId).order('created_at', { ascending: true })
+      data = res.data as any
+      error = res.error as any
+    }
   }
   if (error) throw new Error(error.message)
   return (data || []).map((r: any) => ({
@@ -550,7 +602,7 @@ export async function listPlantTasks(gardenPlantId: string): Promise<GardenPlant
     weeklyDays: r.weekly_days || null,
     monthlyDays: r.monthly_days || null,
     yearlyDays: r.yearly_days || null,
-    monthlyNthWeekdays: r.monthly_nth_weekdays || null,
+    monthlyNthWeekdays: (r as any).monthly_nth_weekdays || null,
     createdAt: String(r.created_at),
   }))
 }
@@ -591,19 +643,28 @@ export async function progressTaskOccurrence(occurrenceId: string, increment = 1
 
 export async function listGardenTasks(gardenId: string): Promise<GardenPlantTask[]> {
   const base = supabase.from('garden_plant_tasks')
-  const selectWithEmoji = 'id, garden_id, garden_plant_id, type, custom_name, emoji, schedule_kind, due_at, interval_amount, interval_unit, required_count, period, amount, weekly_days, monthly_days, yearly_days, monthly_nth_weekdays, created_at'
-  const selectWithoutEmoji = 'id, garden_id, garden_plant_id, type, custom_name, schedule_kind, due_at, interval_amount, interval_unit, required_count, period, amount, weekly_days, monthly_days, yearly_days, monthly_nth_weekdays, created_at'
-  let { data, error } = await base
-    .select(selectWithEmoji)
-    .eq('garden_id', gardenId)
-    .order('created_at', { ascending: true })
-  if (error && /column .*emoji.* does not exist/i.test(error.message)) {
-    const res2 = await base
-      .select(selectWithoutEmoji)
-      .eq('garden_id', gardenId)
-      .order('created_at', { ascending: true })
-    data = res2.data as any
-    error = res2.error as any
+  const selectAll = 'id, garden_id, garden_plant_id, type, custom_name, emoji, schedule_kind, due_at, interval_amount, interval_unit, required_count, period, amount, weekly_days, monthly_days, yearly_days, monthly_nth_weekdays, created_at'
+  const selectNoEmoji = 'id, garden_id, garden_plant_id, type, custom_name, schedule_kind, due_at, interval_amount, interval_unit, required_count, period, amount, weekly_days, monthly_days, yearly_days, monthly_nth_weekdays, created_at'
+  const selectNoNth = 'id, garden_id, garden_plant_id, type, custom_name, emoji, schedule_kind, due_at, interval_amount, interval_unit, required_count, period, amount, weekly_days, monthly_days, yearly_days, created_at'
+  const selectNoEmojiNoNth = 'id, garden_id, garden_plant_id, type, custom_name, schedule_kind, due_at, interval_amount, interval_unit, required_count, period, amount, weekly_days, monthly_days, yearly_days, created_at'
+  let { data, error } = await base.select(selectAll).eq('garden_id', gardenId).order('created_at', { ascending: true })
+  if (error) {
+    const msg = String(error.message || '')
+    const noEmoji = /column .*emoji.* does not exist/i.test(msg)
+    const noNth = /column .*monthly_nth_weekdays.* does not exist/i.test(msg)
+    if (noEmoji && noNth) {
+      const res = await base.select(selectNoEmojiNoNth).eq('garden_id', gardenId).order('created_at', { ascending: true })
+      data = res.data as any
+      error = res.error as any
+    } else if (noEmoji) {
+      const res = await base.select(selectNoEmoji).eq('garden_id', gardenId).order('created_at', { ascending: true })
+      data = res.data as any
+      error = res.error as any
+    } else if (noNth) {
+      const res = await base.select(selectNoNth).eq('garden_id', gardenId).order('created_at', { ascending: true })
+      data = res.data as any
+      error = res.error as any
+    }
   }
   if (error) throw new Error(error.message)
   return (data || []).map((r: any) => ({
@@ -623,7 +684,7 @@ export async function listGardenTasks(gardenId: string): Promise<GardenPlantTask
     weeklyDays: r.weekly_days || null,
     monthlyDays: r.monthly_days || null,
     yearlyDays: r.yearly_days || null,
-    monthlyNthWeekdays: r.monthly_nth_weekdays || null,
+    monthlyNthWeekdays: (r as any).monthly_nth_weekdays || null,
     createdAt: String(r.created_at),
   }))
 }
@@ -731,6 +792,140 @@ export async function syncTaskOccurrencesForGarden(gardenId: string, startIso: s
   }
 }
 
+/**
+ * Regenerates task occurrences for the given garden and window by:
+ * - inserting any missing occurrences that should exist per current schedules
+ * - deleting occurrences that no longer match any task's schedule (stale/ghosts)
+ * - updating required_count for existing occurrences if the schedule's requirement changed
+ */
+export async function resyncTaskOccurrencesForGarden(gardenId: string, startIso: string, endIso: string): Promise<void> {
+  const tasks = await listGardenTasks(gardenId)
+  if (tasks.length === 0) return
+  const start = new Date(startIso)
+  const end = new Date(endIso)
+
+  // Compute expected occurrences based on current task definitions
+  type Expected = { taskId: string; gardenPlantId: string; dueAtIso: string; requiredCount: number }
+  const expectedByKey = new Map<string, Expected>()
+
+  const addExpected = (taskId: string, gardenPlantId: string, due: Date, required: number) => {
+    const dueIso = due.toISOString()
+    const key = `${taskId}::${dueIso}`
+    // Only keep the highest requirement if duplicates somehow arise
+    const prev = expectedByKey.get(key)
+    if (!prev || prev.requiredCount < required) {
+      expectedByKey.set(key, { taskId, gardenPlantId, dueAtIso: dueIso, requiredCount: required })
+    }
+  }
+
+  for (const t of tasks) {
+    const reqCount = Math.max(1, Number(t.requiredCount || 1))
+    if (t.scheduleKind === 'one_time_date') {
+      if (!t.dueAt) continue
+      const due = new Date(t.dueAt)
+      if (due >= start && due <= end) addExpected(t.id, t.gardenPlantId, due, reqCount)
+    } else if (t.scheduleKind === 'one_time_duration') {
+      const anchor = new Date(t.createdAt)
+      const amount = Math.max(1, Number(t.intervalAmount || 1))
+      const unit = (t.intervalUnit || 'day') as TaskUnit
+      const due = addInterval(anchor, amount, unit)
+      if (due >= start && due <= end) addExpected(t.id, t.gardenPlantId, due, reqCount)
+    } else if (t.scheduleKind === 'repeat_duration') {
+      const amount = Math.max(1, Number(t.intervalAmount || 1))
+      const unit = (t.intervalUnit || 'week') as TaskUnit
+      if (amount <= 0) continue
+      let cur = new Date(t.createdAt)
+      while (cur < start) {
+        cur = addInterval(cur, amount, unit)
+      }
+      while (cur <= end) {
+        addExpected(t.id, t.gardenPlantId, cur, reqCount)
+        cur = addInterval(cur, amount, unit)
+      }
+    } else if (t.scheduleKind === 'repeat_pattern') {
+      const period = (t.period || 'week') as 'week' | 'month' | 'year'
+      const cur = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate(), 12, 0, 0))
+      const endDay = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate(), 12, 0, 0))
+      const weeklyDays = (t.weeklyDays || []) as number[]
+      const monthlyDays = (t.monthlyDays || []) as number[]
+      const monthlyNthWeekdays = (t.monthlyNthWeekdays || []) as string[]
+      const yearlyDays = (t.yearlyDays || []) as string[]
+      while (cur <= endDay) {
+        const m = cur.getUTCMonth() + 1
+        const d = cur.getUTCDate()
+        const weekday = cur.getUTCDay()
+        const mm = String(m).padStart(2, '0')
+        const dd = String(d).padStart(2, '0')
+        const ymd = `${mm}-${dd}`
+        let match = false
+        if (period === 'week') {
+          match = weeklyDays.includes(weekday)
+        } else if (period === 'month') {
+          if (monthlyDays.includes(d)) match = true
+          if (!match && monthlyNthWeekdays.length > 0) {
+            const weekIndex = Math.floor((d - 1) / 7) + 1
+            const key = `${weekIndex}-${weekday}`
+            if (monthlyNthWeekdays.includes(key)) match = true
+          }
+        } else if (period === 'year') {
+          if (yearlyDays.includes(ymd)) {
+            match = true
+          } else if (yearlyDays.length > 0) {
+            const weekIndex = Math.floor((d - 1) / 7) + 1
+            const key = `${mm}-${weekIndex}-${weekday}`
+            if (yearlyDays.includes(key)) match = true
+          }
+        }
+        if (match) addExpected(t.id, t.gardenPlantId, cur, reqCount)
+        cur.setUTCDate(cur.getUTCDate() + 1)
+      }
+    }
+  }
+
+  const taskIds = Array.from(new Set(tasks.map(t => t.id)))
+  const existing = await listOccurrencesForTasks(taskIds, startIso, endIso)
+  const existingByKey = new Map<string, { id: string; requiredCount: number; completedCount: number }>()
+  for (const o of existing) {
+    const key = `${o.taskId}::${o.dueAt}`
+    existingByKey.set(key, { id: o.id, requiredCount: Number(o.requiredCount || 1), completedCount: Number(o.completedCount || 0) })
+  }
+
+  // Determine operations
+  const toInsert: Expected[] = []
+  const toUpdate: Array<{ id: string; requiredCount: number; completedCount: number }> = []
+  const existingKeys = new Set(existing.map(o => `${o.taskId}::${o.dueAt}`))
+  for (const [key, exp] of expectedByKey.entries()) {
+    if (!existingKeys.has(key)) {
+      toInsert.push(exp)
+    } else {
+      const ex = existingByKey.get(key)!
+      const nextReq = Math.max(ex.completedCount, exp.requiredCount)
+      if (ex.requiredCount !== nextReq) {
+        toUpdate.push({ id: ex.id, requiredCount: nextReq, completedCount: ex.completedCount })
+      }
+    }
+  }
+  const expectedKeys = new Set(expectedByKey.keys())
+  const toDeleteIds: string[] = []
+  for (const [key, ex] of existingByKey.entries()) {
+    if (!expectedKeys.has(key)) toDeleteIds.push(ex.id)
+  }
+
+  // Apply deletes first to avoid duplicates then inserts/updates
+  if (toDeleteIds.length > 0) {
+    await supabase.from('garden_plant_task_occurrences').delete().in('id', toDeleteIds)
+  }
+  for (const ins of toInsert) {
+    await ensureTaskOccurrence(ins.taskId, ins.gardenPlantId, ins.dueAtIso, ins.requiredCount)
+  }
+  for (const upd of toUpdate) {
+    await supabase
+      .from('garden_plant_task_occurrences')
+      .update({ required_count: upd.requiredCount })
+      .eq('id', upd.id)
+  }
+}
+
 export async function createPatternTask(params: {
   gardenId: string
   gardenPlantId: string
@@ -746,7 +941,8 @@ export async function createPatternTask(params: {
   requiredCount?: number | null
 }): Promise<string> {
   const { gardenId, gardenPlantId, type, customName = null, emoji = null, period, amount, weeklyDays = null, monthlyDays = null, yearlyDays = null, monthlyNthWeekdays = null, requiredCount = 1 } = params
-  const attempt = async (includeEmoji: boolean) => {
+  // Attempt insert with graceful fallbacks for optional columns (emoji, monthly_nth_weekdays)
+  const attempt = async (includeEmoji: boolean, includeNth: boolean) => {
     const payload: any = {
       garden_id: gardenId,
       garden_plant_id: gardenPlantId,
@@ -758,9 +954,9 @@ export async function createPatternTask(params: {
       weekly_days: weeklyDays,
       monthly_days: monthlyDays,
       yearly_days: yearlyDays,
-      monthly_nth_weekdays: monthlyNthWeekdays,
       required_count: requiredCount ?? 1,
     }
+    if (includeNth) payload.monthly_nth_weekdays = monthlyNthWeekdays
     if (includeEmoji && type === 'custom') payload.emoji = emoji || null
     return await supabase
       .from('garden_plant_tasks')
@@ -768,11 +964,21 @@ export async function createPatternTask(params: {
       .select('id')
       .single()
   }
-  let { data, error } = await attempt(true)
-  if (error && /column .*emoji.* does not exist/i.test(error.message)) {
-    const res2 = await attempt(false)
-    data = res2.data as any
-    error = res2.error as any
+  let includeEmoji = true
+  let includeNth = true
+  let { data, error } = await attempt(includeEmoji, includeNth)
+  // Handle missing columns by retrying without them
+  if (error) {
+    const msg = String(error.message || '')
+    const noNth = /column .*monthly_nth_weekdays.* does not exist/i.test(msg)
+    const noEmoji = /column .*emoji.* does not exist/i.test(msg)
+    if (noNth) includeNth = false
+    if (noEmoji) includeEmoji = false
+    if (noNth || noEmoji) {
+      const res2 = await attempt(includeEmoji, includeNth)
+      data = res2.data as any
+      error = res2.error as any
+    }
   }
   if (error) throw new Error(error.message)
   return String((data as any).id)
@@ -792,30 +998,41 @@ export async function updatePatternTask(params: {
   requiredCount?: number | null
 }): Promise<void> {
   const { taskId, type, customName, emoji, period, amount, weeklyDays, monthlyDays, yearlyDays, monthlyNthWeekdays, requiredCount } = params
-  const payload: any = {}
-  if (type) payload.type = type
-  if (customName !== undefined) payload.custom_name = customName
-  if (emoji !== undefined) payload.emoji = emoji
-  if (period) payload.period = period
-  if (amount !== undefined && amount !== null) payload.amount = amount
-  if (weeklyDays !== undefined) payload.weekly_days = weeklyDays
-  if (monthlyDays !== undefined) payload.monthly_days = monthlyDays
-  if (yearlyDays !== undefined) payload.yearly_days = yearlyDays
-  if (monthlyNthWeekdays !== undefined) payload.monthly_nth_weekdays = monthlyNthWeekdays
-  if (requiredCount !== undefined && requiredCount !== null) payload.required_count = requiredCount
-  payload.schedule_kind = 'repeat_pattern'
-  const attempt = async (includeEmoji: boolean) => {
-    const pl = { ...payload }
-    if (!includeEmoji) delete (pl as any).emoji
+  const basePayload: any = {}
+  if (type) basePayload.type = type
+  if (customName !== undefined) basePayload.custom_name = customName
+  if (emoji !== undefined) basePayload.emoji = emoji
+  if (period) basePayload.period = period
+  if (amount !== undefined && amount !== null) basePayload.amount = amount
+  if (weeklyDays !== undefined) basePayload.weekly_days = weeklyDays
+  if (monthlyDays !== undefined) basePayload.monthly_days = monthlyDays
+  if (yearlyDays !== undefined) basePayload.yearly_days = yearlyDays
+  if (monthlyNthWeekdays !== undefined) basePayload.monthly_nth_weekdays = monthlyNthWeekdays
+  if (requiredCount !== undefined && requiredCount !== null) basePayload.required_count = requiredCount
+  basePayload.schedule_kind = 'repeat_pattern'
+
+  const attempt = async (includeEmoji: boolean, includeNth: boolean) => {
+    const pl: any = { ...basePayload }
+    if (!includeEmoji) delete pl.emoji
+    if (!includeNth) delete pl.monthly_nth_weekdays
     return await supabase
       .from('garden_plant_tasks')
       .update(pl)
       .eq('id', taskId)
   }
-  let { error } = await attempt(true)
-  if (error && /column .*emoji.* does not exist/i.test(error.message)) {
-    const res2 = await attempt(false)
-    error = res2.error as any
+  let includeEmoji = true
+  let includeNth = true
+  let { error } = await attempt(includeEmoji, includeNth)
+  if (error) {
+    const msg = String(error.message || '')
+    const noNth = /column .*monthly_nth_weekdays.* does not exist/i.test(msg)
+    const noEmoji = /column .*emoji.* does not exist/i.test(msg)
+    if (noNth) includeNth = false
+    if (noEmoji) includeEmoji = false
+    if (noNth || noEmoji) {
+      const res2 = await attempt(includeEmoji, includeNth)
+      error = res2.error as any
+    }
   }
   if (error) throw new Error(error.message)
 }
@@ -841,4 +1058,58 @@ export async function listOccurrencesForTasks(taskIds: string[], startIso: strin
   }))
 }
 
+
+// ===== Activity logs =====
+export type GardenActivityKind = 'plant_added' | 'plant_updated' | 'plant_deleted' | 'task_completed' | 'task_progressed' | 'note'
+export type GardenActivity = {
+  id: string
+  gardenId: string
+  actorId: string | null
+  actorName: string | null
+  actorColor: string | null
+  kind: GardenActivityKind
+  message: string
+  plantName?: string | null
+  taskName?: string | null
+  occurredAt: string
+}
+
+export async function listGardenActivityToday(gardenId: string, todayIso?: string | null): Promise<GardenActivity[]> {
+  const today = todayIso || new Date().toISOString().slice(0,10)
+  const start = `${today}T00:00:00.000Z`
+  const end = `${today}T23:59:59.999Z`
+  const { data, error } = await supabase
+    .from('garden_activity_logs')
+    .select('id, garden_id, actor_id, actor_name, actor_color, kind, message, plant_name, task_name, occurred_at')
+    .eq('garden_id', gardenId)
+    .gte('occurred_at', start)
+    .lte('occurred_at', end)
+    .order('occurred_at', { ascending: false })
+  if (error) throw new Error(error.message)
+  return (data || []).map((r: any) => ({
+    id: String(r.id),
+    gardenId: String(r.garden_id),
+    actorId: r.actor_id ? String(r.actor_id) : null,
+    actorName: r.actor_name || null,
+    actorColor: r.actor_color || null,
+    kind: r.kind,
+    message: r.message,
+    plantName: r.plant_name || null,
+    taskName: r.task_name || null,
+    occurredAt: String(r.occurred_at),
+  }))
+}
+
+export async function logGardenActivity(params: { gardenId: string; kind: GardenActivityKind; message: string; plantName?: string | null; taskName?: string | null; actorColor?: string | null }): Promise<void> {
+  const { gardenId, kind, message, plantName = null, taskName = null, actorColor = null } = params
+  const { error } = await supabase.rpc('log_garden_activity', {
+    _garden_id: gardenId,
+    _kind: kind,
+    _message: message,
+    _plant_name: plantName,
+    _task_name: taskName,
+    _actor_color: actorColor,
+  })
+  if (error) throw new Error(error.message)
+}
 

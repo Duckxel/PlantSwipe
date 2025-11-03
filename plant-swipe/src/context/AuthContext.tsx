@@ -1,5 +1,6 @@
 import React from 'react'
 import { supabase, type ProfileRow } from '@/lib/supabaseClient'
+import { applyAccentByKey } from '@/lib/accent'
 
 type AuthUser = {
   id: string
@@ -21,7 +22,14 @@ const AuthContext = React.createContext<AuthContextValue | undefined>(undefined)
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = React.useState<AuthUser | null>(null)
-  const [profile, setProfile] = React.useState<ProfileRow | null>(null)
+  const [profile, setProfile] = React.useState<ProfileRow | null>(() => {
+    try {
+      const cached = localStorage.getItem('plantswipe.profile')
+      return cached ? (JSON.parse(cached) as ProfileRow) : null
+    } catch {
+      return null
+    }
+  })
   const [loading, setLoading] = React.useState(true)
 
   const loadSession = React.useCallback(async () => {
@@ -39,13 +47,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, display_name, avatar_url, liked_plant_ids, is_admin')
+      .select('id, display_name, liked_plant_ids, is_admin, username, country, bio, favorite_plant, avatar_url, timezone, experience_years, accent_key')
       .eq('id', currentId)
       .maybeSingle()
     if (!error) {
       setProfile(data as any)
       // Persist profile alongside session so reloads can hydrate faster
       try { localStorage.setItem('plantswipe.profile', JSON.stringify(data)) } catch {}
+      // Apply accent if present
+      if ((data as any)?.accent_key) {
+        try { applyAccentByKey((data as any).accent_key) } catch {}
+      }
     }
   }, [])
 
@@ -66,8 +78,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [loadSession, refreshProfile])
 
   const signUp: AuthContextValue['signUp'] = async ({ email, password, displayName }) => {
+    // Check ban by email and IP before attempting signup
+    try {
+      const check = await fetch(`/api/banned/check?email=${encodeURIComponent(email)}`, { credentials: 'same-origin' }).then(r => r.json()).catch(() => ({ banned: false }))
+      if (check?.banned) return { error: 'Your account is banned. Signup is not allowed.' }
+    } catch {}
     // Ensure unique email handled by Supabase; ensure unique display_name in profiles
-    // First check display_name uniqueness
+    // First check display_name uniqueness (case-insensitive)
     const existing = await supabase.from('profiles').select('id').ilike('display_name', displayName).maybeSingle()
     if (existing.data?.id) return { error: 'Display name already taken' }
 
@@ -80,8 +97,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const { error: perr } = await supabase.from('profiles').insert({
       id: uid,
       display_name: displayName,
-      avatar_url: null,
       liked_plant_ids: [],
+      accent_key: 'emerald',
     })
     if (perr) return { error: perr.message }
 
@@ -92,7 +109,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }
 
   const signIn: AuthContextValue['signIn'] = async ({ email, password }) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    // Gate sign-in if email/IP banned, and show a clear message
+    try {
+      const check = await fetch(`/api/banned/check?email=${encodeURIComponent(email)}`, { credentials: 'same-origin' }).then(r => r.json()).catch(() => ({ banned: false }))
+      if (check?.banned) return { error: 'Your account has been banned.' }
+    } catch {}
+    // Allow login with display name (username) or email
+    let loginEmail = email
+    if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      try {
+        const { data, error: rpcErr } = await supabase.rpc('get_email_by_display_name', { _name: email })
+        if (!rpcErr && data) loginEmail = String(data)
+      } catch {}
+    }
+    const { error } = await supabase.auth.signInWithPassword({ email: loginEmail, password })
     if (error) return { error: error.message }
     // Fetch profile in background; do not block sign-in completion
     refreshProfile().catch(() => {})

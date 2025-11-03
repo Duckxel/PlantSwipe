@@ -1,6 +1,10 @@
 import React from "react"
+import { createPortal } from "react-dom"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -11,21 +15,175 @@ import {
   YAxis,
   Tooltip,
   ReferenceLine,
+  PieChart,
+  Pie,
+  Cell,
 } from 'recharts'
-import { RefreshCw, Server, Database, Github, ExternalLink } from "lucide-react"
+import { RefreshCw, Server, Database, Github, ExternalLink, ShieldCheck, ShieldX, UserSearch, AlertTriangle, Gavel, Search, ChevronDown, GitBranch, Trash2, EyeOff, Copy } from "lucide-react"
 import { supabase } from '@/lib/supabaseClient'
+import {
+  Dialog,
+  DialogTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from '@/components/ui/dialog'
 
 export const AdminPage: React.FC = () => {
+  const shortenMiddle = React.useCallback((value: string, maxChars: number = 28): string => {
+    try {
+      const s = String(value || '')
+      if (s.length <= maxChars) return s
+      const keep = Math.max(3, Math.floor((maxChars - 3) / 2))
+      const left = s.slice(0, keep)
+      const right = s.slice(-keep)
+      return `${left}...${right}`
+    } catch { return value }
+  }, [])
+
+  // Compute a responsive max character count for branch names based on viewport width
+  const computeBranchMaxChars = React.useCallback((viewportWidth: number): number => {
+    const w = Math.max(0, viewportWidth || 0)
+    if (w < 340) return 18
+    if (w < 380) return 22
+    if (w < 420) return 26
+    if (w < 640) return 32
+    if (w < 768) return 42
+    if (w < 1024) return 56
+    return 64
+  }, [])
+
+  const [branchMaxChars, setBranchMaxChars] = React.useState<number>(() =>
+    typeof window !== 'undefined' ? computeBranchMaxChars(window.innerWidth) : 56,
+  )
+
+  React.useEffect(() => {
+    const onResize = () => setBranchMaxChars(computeBranchMaxChars(window.innerWidth))
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [computeBranchMaxChars])
+  const countryCodeToName = React.useCallback((code: string): string => {
+    try {
+      const c = String(code || '').toUpperCase()
+      if (!c) return ''
+      if ((Intl as any)?.DisplayNames) {
+        try {
+          const dn = new (Intl as any).DisplayNames([navigator.language || 'en'], { type: 'region' })
+          const name = dn.of(c)
+          return name || c
+        } catch {}
+      }
+      return c
+    } catch { return code }
+  }, [])
 
   const [syncing, setSyncing] = React.useState(false)
   
-  const [backingUp, setBackingUp] = React.useState(false)
+  // Backup disabled for now
 
   const [restarting, setRestarting] = React.useState(false)
   const [pulling, setPulling] = React.useState(false)
+  const [consoleOpen, setConsoleOpen] = React.useState<boolean>(false)
+  const [consoleLines, setConsoleLines] = React.useState<string[]>([])
+  const [reloadReady, setReloadReady] = React.useState<boolean>(false)
+  const [preRestartNotice, setPreRestartNotice] = React.useState<boolean>(false)
+  // Default collapsed on load; will auto-open only if an active broadcast exists
+  const [broadcastOpen, setBroadcastOpen] = React.useState<boolean>(false)
+  // On initial load, if a broadcast is currently active, auto-open the section
+  React.useEffect(() => {
+    let cancelled = false
+    const checkActiveBroadcast = async () => {
+      // Fast path: open if a persisted, still-valid broadcast exists
+      try {
+        const raw = localStorage.getItem('plantswipe.broadcast.active')
+        if (raw) {
+          const data = JSON.parse(raw)
+          const ex = data?.expiresAt ? Date.parse(String(data.expiresAt)) : null
+          const stillValid = !ex || ex > Date.now()
+          if (!cancelled && stillValid) setBroadcastOpen(true)
+        }
+      } catch {}
+      try {
+        const r = await fetch('/api/broadcast/active', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+        if (!cancelled && r.ok) {
+          const data = await r.json().catch(() => ({}))
+          if (data?.broadcast) setBroadcastOpen(true)
+        }
+      } catch {}
+    }
+    checkActiveBroadcast()
+    return () => { cancelled = true }
+  }, [])
+
+  // Even when collapsed, listen to broadcast SSE and auto-open when a broadcast starts
+  React.useEffect(() => {
+    let es: EventSource | null = null
+    try {
+      es = new EventSource('/api/broadcast/stream', { withCredentials: true })
+      const onBroadcast = () => { setBroadcastOpen(true) }
+      es.addEventListener('broadcast', onBroadcast as EventListener)
+      // No need to auto-close on clear; keep user preference
+    } catch {}
+    return () => { try { es?.close() } catch {} }
+  }, [])
+  const consoleRef = React.useRef<HTMLDivElement | null>(null)
+  React.useEffect(() => {
+    if (!consoleOpen) return
+    const el = consoleRef.current
+    if (!el) return
+    el.scrollTop = el.scrollHeight
+  }, [consoleLines, consoleOpen])
+
+  const copyTextToClipboard = React.useCallback(async (text: string): Promise<boolean> => {
+    try {
+      if (navigator && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        await navigator.clipboard.writeText(text)
+        return true
+      }
+    } catch {}
+    try {
+      const ta = document.createElement('textarea')
+      ta.value = text
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.focus()
+      ta.select()
+      const ok = document.execCommand('copy')
+      document.body.removeChild(ta)
+      return ok
+    } catch {
+      return false
+    }
+  }, [])
+
+  // Heuristic to mark the console as error. Keep strict to avoid false positives
+  // from JSON keys like "error" or benign words. Prefer lines that clearly
+  // signal errors (severity prefixes) and common failure words.
+  const errorLineRx = React.useMemo(
+    () => /(^\s*\[?(ERROR|FATAL)\]?|^\s*(error:|fatal:)|npm\s+ERR!|\b(failed|failure|exception|traceback)\b)/i,
+    [],
+  )
+
+  const getAllLogsText = React.useCallback((): string => {
+    return consoleLines.join('\n')
+  }, [consoleLines])
+
+  const hasConsoleError = React.useMemo(() => consoleLines.some(l => errorLineRx.test(l)), [consoleLines, errorLineRx])
+
+  const appendConsole = React.useCallback((line: string) => {
+    setConsoleLines(prev => [...prev, line])
+  }, [])
+
+  const reloadPage = React.useCallback(() => {
+    try { window.location.reload() } catch {}
+  }, [])
 
   // Safely parse response body into JSON, tolerating HTML/error pages
-  const safeJson = async (resp: Response): Promise<any> => {
+  const safeJson = React.useCallback(async (resp: Response): Promise<any> => {
     try {
       const contentType = (resp.headers.get('content-type') || '').toLowerCase()
       const text = await resp.text().catch(() => '')
@@ -36,47 +194,84 @@ export const AdminPage: React.FC = () => {
     } catch {
       return {}
     }
-  }
+  }, [])
 
   const runSyncSchema = async () => {
     if (syncing) return
     setSyncing(true)
     try {
+      setConsoleOpen(true)
+      appendConsole('[sync] Sync DB Schema: starting…')
       const session = (await supabase.auth.getSession()).data.session
       const token = session?.access_token
       if (!token) {
-        alert('You must be signed in to run schema sync')
+        appendConsole('[sync] You must be signed in to run schema sync')
         return
       }
-      // Try GET first to avoid 405s from proxies that block POST
+      // Try Node API first
       let resp = await fetch('/api/admin/sync-schema', {
         method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json',
-        },
+        headers: (() => {
+          const h: Record<string, string> = { 'Accept': 'application/json' }
+          if (token) h['Authorization'] = `Bearer ${token}`
+          const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+          if (adminToken) h['X-Admin-Token'] = String(adminToken)
+          return h
+        })(),
         credentials: 'same-origin',
       })
       if (resp.status === 405) {
-        // Fallback to POST if GET is blocked
+        // Try POST on Node if GET blocked
         resp = await fetch('/api/admin/sync-schema', {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
+          headers: (() => {
+            const h: Record<string, string> = { 'Content-Type': 'application/json', 'Accept': 'application/json' }
+            if (token) h['Authorization'] = `Bearer ${token}`
+            const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+            if (adminToken) h['X-Admin-Token'] = String(adminToken)
+            return h
+          })(),
           credentials: 'same-origin',
         })
+      }
+      // If Node API failed, fallback to local Admin API proxied by nginx
+      if (!resp.ok) {
+        const adminHeaders: Record<string, string> = { 'Accept': 'application/json' }
+        try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) adminHeaders['X-Admin-Token'] = String(adminToken) } catch {}
+        let respAdmin = await fetch('/admin/sync-schema', { method: 'GET', headers: adminHeaders, credentials: 'same-origin' })
+        if (respAdmin.status === 405) {
+          respAdmin = await fetch('/admin/sync-schema', { method: 'POST', headers: { ...adminHeaders, 'Content-Type': 'application/json' }, credentials: 'same-origin', body: '{}' })
+        }
+        resp = respAdmin
       }
       const body = await safeJson(resp)
       if (!resp.ok) {
         throw new Error(body?.error || `Request failed (${resp.status})`)
       }
-      alert('Schema synchronized successfully')
+      appendConsole('[sync] Schema synchronized successfully')
+      const summary = body?.summary
+      if (summary && typeof summary === 'object') {
+        try {
+          const missingTables: string[] = Array.isArray(summary?.tables?.missing) ? summary.tables.missing : []
+          const missingFunctions: string[] = Array.isArray(summary?.functions?.missing) ? summary.functions.missing : []
+          const missingExtensions: string[] = Array.isArray(summary?.extensions?.missing) ? summary.extensions.missing : []
+          const hasMissing = missingTables.length + missingFunctions.length + missingExtensions.length > 0
+          appendConsole('[sync] Post‑sync verification:')
+          appendConsole(`- Tables OK: ${(summary?.tables?.present || []).length}/${(summary?.tables?.required || []).length}`)
+          appendConsole(`- Functions OK: ${(summary?.functions?.present || []).length}/${(summary?.functions?.required || []).length}`)
+          appendConsole(`- Extensions OK: ${(summary?.extensions?.present || []).length}/${(summary?.extensions?.required || []).length}`)
+          if (hasMissing) {
+            if (missingTables.length) appendConsole(`- Missing tables: ${missingTables.join(', ')}`)
+            if (missingFunctions.length) appendConsole(`- Missing functions: ${missingFunctions.join(', ')}`)
+            if (missingExtensions.length) appendConsole(`- Missing extensions: ${missingExtensions.join(', ')}`)
+          } else {
+            appendConsole('- All required objects present')
+          }
+        } catch {}
+      }
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e)
-      alert(`Failed to sync schema: ${message}`)
+      appendConsole(`[sync] Failed to sync schema: ${message}`)
     } finally {
       setSyncing(false)
     }
@@ -86,46 +281,104 @@ export const AdminPage: React.FC = () => {
     if (restarting) return
     setRestarting(true)
     try {
+      setConsoleOpen(true)
+      appendConsole('[restart] Restart services requested…')
+      setReloadReady(false)
+      setPreRestartNotice(false)
       const session = (await supabase.auth.getSession()).data.session
       const token = session?.access_token
       if (!token) {
-        alert('You must be signed in to restart the server')
+        appendConsole('[restart] You must be signed in to restart services')
         return
       }
-      // Try POST first to ensure Authorization header is preserved across proxies
-      let resp = await fetch('/api/admin/restart-server', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        credentials: 'same-origin',
-        body: '{}',
-      })
-      if (resp.status === 405) {
-        // Fallback to GET if POST is blocked
-        resp = await fetch('/api/admin/restart-server', {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Accept': 'application/json',
-          },
+      // First attempt: restart via Node API (preserves Authorization)
+      const nodeHeaders = (() => {
+        const h: Record<string, string> = { 'Accept': 'application/json' }
+        if (token) h['Authorization'] = `Bearer ${token}`
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+        if (adminToken) h['X-Admin-Token'] = String(adminToken)
+        return h
+      })()
+      const nodePostHeaders = { ...nodeHeaders, 'Content-Type': 'application/json' }
+
+      let nodeResp: Response | null = null
+      try {
+        nodeResp = await fetch('/api/admin/restart-all', {
+          method: 'POST',
+          headers: nodePostHeaders,
           credentials: 'same-origin',
+          body: '{}',
         })
+      } catch {}
+      // restart-all is POST-only on the Node API; no GET fallback here
+
+      let ok = false
+      let nodeErrorMsg = 'Restart request failed'
+      if (nodeResp) {
+        const b = await safeJson(nodeResp)
+        ok = nodeResp.ok && (b?.ok === true)
+        if (!ok) nodeErrorMsg = b?.error || `Request failed (${nodeResp.status})`
       }
-      const body = await safeJson(resp)
-      if (!resp.ok) {
-        throw new Error(body?.error || `Request failed (${resp.status})`)
+
+      // Fallback: call local Admin API via nginx if Node endpoint not reachable/forbidden
+      if (!ok) {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+        if (adminToken) {
+          const adminHeaders: Record<string, string> = {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-Admin-Token': String(adminToken),
+          }
+          // Best-effort: reload nginx to minimize 502s during service restarts
+          try {
+            const reloadResp = await fetch('/admin/reload-nginx', {
+              method: 'POST',
+              headers: adminHeaders,
+              credentials: 'same-origin',
+              body: '{}',
+            })
+            await safeJson(reloadResp).catch(() => null)
+          } catch {}
+          // Then restart the Admin API and Node services via Admin API
+          const services = ['admin-api', 'plant-swipe-node']
+          for (const svc of services) {
+            const r = await fetch('/admin/restart-app', {
+              method: 'POST',
+              headers: adminHeaders,
+              credentials: 'same-origin',
+              body: JSON.stringify({ service: svc }),
+            })
+            const jb = await safeJson(r)
+            if (!r.ok || jb?.ok !== true) {
+              throw new Error(jb?.error || `Admin restart failed for ${svc} (${r.status})`)
+            }
+          }
+        } else {
+          throw new Error(nodeErrorMsg)
+        }
       }
-      // Give the server a moment to restart, then reload client
-      setTimeout(() => {
-        window.location.reload()
-      }, 1000)
+
+      // Wait for API to come back healthy to avoid 502s; do NOT auto-reload
+      const deadline = Date.now() + 30_000
+      let healthy = false
+      while (Date.now() < deadline) {
+        try {
+          const r = await fetch('/api/health', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+          const b = await safeJson(r)
+          if (r.ok && (b?.ok === true)) { healthy = true; break }
+        } catch {}
+        await new Promise(res => setTimeout(res, 1000))
+      }
+      if (healthy) {
+        appendConsole('[restart] Services healthy. You can reload the page when ready.')
+      } else {
+        appendConsole('[restart] Timed out waiting for service health. You may try reloading manually.')
+      }
+      setReloadReady(true)
 
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e)
-      alert(`Failed to restart server: ${message}`)
+      appendConsole(`[restart] Failed to restart services: ${message}`)
     } finally {
       setRestarting(false)
     }
@@ -133,6 +386,9 @@ export const AdminPage: React.FC = () => {
 
   const [onlineUsers, setOnlineUsers] = React.useState<number>(0)
   const [registeredCount, setRegisteredCount] = React.useState<number | null>(null)
+  const [registeredLoading, setRegisteredLoading] = React.useState<boolean>(true)
+  const [registeredRefreshing, setRegisteredRefreshing] = React.useState<boolean>(false)
+  const [registeredUpdatedAt, setRegisteredUpdatedAt] = React.useState<number | null>(null)
   const [onlineLoading, setOnlineLoading] = React.useState<boolean>(true)
   const [onlineRefreshing, setOnlineRefreshing] = React.useState<boolean>(false)
   const [onlineUpdatedAt, setOnlineUpdatedAt] = React.useState<number | null>(null)
@@ -140,6 +396,34 @@ export const AdminPage: React.FC = () => {
   const [visitorsRefreshing, setVisitorsRefreshing] = React.useState<boolean>(false)
   const [visitorsUpdatedAt, setVisitorsUpdatedAt] = React.useState<number | null>(null)
   const [visitorsSeries, setVisitorsSeries] = React.useState<Array<{ date: string; uniqueVisitors: number }>>([])
+  const [visitorsTotalUnique7d, setVisitorsTotalUnique7d] = React.useState<number>(0)
+  const [topCountries, setTopCountries] = React.useState<Array<{ country: string; visits: number; pct?: number }>>([])
+  type OtherCountriesBucket = { count: number; visits: number; pct?: number; codes?: string[]; items?: Array<{ country: string; visits: number }> }
+  const [otherCountries, setOtherCountries] = React.useState<OtherCountriesBucket | null>(null)
+  const [topReferrers, setTopReferrers] = React.useState<Array<{ source: string; visits: number; pct?: number }>>([])
+  const [otherReferrers, setOtherReferrers] = React.useState<{ count: number; visits: number; pct?: number } | null>(null)
+  // Distinct, high-contrast palette for readability
+  const countryColors = ['#10b981','#3b82f6','#ef4444','#f59e0b','#8b5cf6','#14b8a6','#6366f1','#d946ef','#06b6d4','#84cc16','#fb7185','#f97316']
+  const referrerColors = ['#111827','#3b82f6','#ef4444','#10b981','#f59e0b','#8b5cf6']
+  // Floating tooltip for the "Other countries" legend item
+  const [otherCountriesTooltip, setOtherCountriesTooltip] = React.useState<{ top: number; left: number; names: string[] } | null>(null)
+  const showOtherCountriesTooltip = React.useCallback((el: HTMLElement) => {
+    try {
+      if (!otherCountries || !Array.isArray(otherCountries.codes) || otherCountries.codes.length === 0) return
+      const rect = el.getBoundingClientRect()
+      const names = otherCountries.codes
+        .map((c) => countryCodeToName(c))
+        .filter((n) => !!n)
+        .sort((a, b) => a.localeCompare(b))
+      setOtherCountriesTooltip({ top: Math.max(8, rect.top - 8), left: rect.left + rect.width / 2, names })
+    } catch {}
+  }, [otherCountries, countryCodeToName])
+  const hideOtherCountriesTooltip = React.useCallback(() => setOtherCountriesTooltip(null), [])
+  // Connected IPs (last 60 minutes)
+  const [ips, setIps] = React.useState<string[]>([])
+  const [ipsLoading, setIpsLoading] = React.useState<boolean>(true)
+  const [ipsRefreshing, setIpsRefreshing] = React.useState<boolean>(false)
+  const [ipsOpen, setIpsOpen] = React.useState<boolean>(false)
   // Tick every minute to update the "Updated X ago" label without refetching
   const [nowMs, setNowMs] = React.useState<number>(() => Date.now())
   React.useEffect(() => {
@@ -160,168 +444,418 @@ export const AdminPage: React.FC = () => {
     return `${d}d ago`
   }
 
-  // Fallback to Supabase Realtime presence if API is unavailable
-  const getPresenceCountOnce = React.useCallback(async (): Promise<number | null> => {
+  // Presence fallback removed by request: rely on DB-backed API only
+
+  // --- Health monitor: ping API, Admin, DB every minute ---
+  type ProbeResult = {
+    ok: boolean | null
+    latencyMs: number | null
+    updatedAt: number | null
+    status: number | null
+    errorCode: string | null
+    errorMessage: string | null
+  }
+  const emptyProbe: ProbeResult = { ok: null, latencyMs: null, updatedAt: null, status: null, errorCode: null, errorMessage: null }
+  const [apiProbe, setApiProbe] = React.useState<ProbeResult>(emptyProbe)
+  const [adminProbe, setAdminProbe] = React.useState<ProbeResult>(emptyProbe)
+  const [dbProbe, setDbProbe] = React.useState<ProbeResult>(emptyProbe)
+  const [healthRefreshing, setHealthRefreshing] = React.useState<boolean>(false)
+
+  // Track mount state to avoid setState on unmounted component during async probes
+  const isMountedRef = React.useRef(true)
+  React.useEffect(() => {
+    return () => { isMountedRef.current = false }
+  }, [])
+
+  const probeEndpoint = React.useCallback(async (url: string, okCheck?: (body: any) => boolean): Promise<ProbeResult> => {
+    const started = Date.now()
     try {
-      const key = `admin_${Math.random().toString(36).slice(2, 10)}`
-      const channel: any = (supabase as any).channel('global-presence', { config: { presence: { key } } })
-      return await new Promise<number | null>((resolve) => {
-        let settled = false
-        const finish = (val: number | null) => {
-          if (settled) return
-          settled = true
-          try { channel.untrack?.() } catch {}
-          try { (supabase as any).removeChannel(channel) } catch {}
-          resolve(val)
+      const headers: Record<string, string> = { 'Accept': 'application/json' }
+      try {
+        const token = (await supabase.auth.getSession()).data.session?.access_token
+        if (token) headers['Authorization'] = `Bearer ${token}`
+        const staticToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+        if (staticToken) headers['X-Admin-Token'] = staticToken
+      } catch {}
+      const resp = await fetch(url, { headers, credentials: 'same-origin' })
+      const body = await safeJson(resp)
+      const isOk = (typeof okCheck === 'function') ? (resp.ok && okCheck(body)) : (resp.ok && body?.ok === true)
+      const latency = Date.now() - started
+      if (isOk) {
+        return { ok: true, latencyMs: latency, updatedAt: Date.now(), status: resp.status, errorCode: null, errorMessage: null }
+      }
+      // Derive error info when not ok
+      const errorCodeFromBody = typeof body?.errorCode === 'string' && body.errorCode ? body.errorCode : null
+      const errorMessageFromBody = typeof body?.error === 'string' && body.error ? body.error : null
+      const fallbackCode = !resp.ok
+        ? `HTTP_${resp.status}`
+        : (errorCodeFromBody || 'CHECK_FAILED')
+      return {
+        ok: false,
+        latencyMs: null,
+        updatedAt: Date.now(),
+        status: resp.status,
+        errorCode: errorCodeFromBody || fallbackCode,
+        errorMessage: errorMessageFromBody,
+      }
+    } catch {
+      // Network/other failure
+      return { ok: false, latencyMs: null, updatedAt: Date.now(), status: null, errorCode: 'NETWORK_ERROR', errorMessage: null }
+    }
+  }, [safeJson])
+
+  const probeDbWithFallback = React.useCallback(async (): Promise<ProbeResult> => {
+    const started = Date.now()
+    try {
+      // First try server DB health
+      const resp = await fetch('/api/health/db', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+      const elapsedMs = Date.now() - started
+      const body = await safeJson(resp)
+      if (resp.ok && body?.ok === true) {
+        return { ok: true, latencyMs: Number.isFinite(body?.latencyMs) ? body.latencyMs : elapsedMs, updatedAt: Date.now(), status: resp.status, errorCode: null, errorMessage: null }
+      }
+      // Not OK: derive error info
+      const errorCodeFromBody = typeof body?.errorCode === 'string' && body.errorCode ? body.errorCode : null
+      const errorMessageFromBody = typeof body?.error === 'string' && body.error ? body.error : null
+      const fallbackCode = !resp.ok ? `HTTP_${resp.status}` : (errorCodeFromBody || 'CHECK_FAILED')
+      // Fallback to client Supabase reachability
+      const t2Start = Date.now()
+      const { error } = await supabase.from('plants').select('id', { head: true, count: 'exact' }).limit(1)
+      const t2 = Date.now() - t2Start
+      if (!error) {
+        return { ok: true, latencyMs: t2, updatedAt: Date.now(), status: null, errorCode: null, errorMessage: null }
+      }
+      return { ok: false, latencyMs: null, updatedAt: Date.now(), status: resp.status, errorCode: errorCodeFromBody || fallbackCode, errorMessage: errorMessageFromBody }
+    } catch {
+      try {
+        // As a last resort, try an auth no-op which hits Supabase API
+        await supabase.auth.getSession()
+        return { ok: true, latencyMs: Date.now() - started, updatedAt: Date.now(), status: null, errorCode: null, errorMessage: null }
+      } catch {
+        return { ok: false, latencyMs: null, updatedAt: Date.now(), status: null, errorCode: 'NETWORK_ERROR', errorMessage: null }
+      }
+    }
+  }, [safeJson])
+
+  const runHealthProbes = React.useCallback(async () => {
+    const [apiRes, adminRes, dbRes] = await Promise.all([
+      probeEndpoint('/api/health', (b) => b?.ok === true),
+      probeEndpoint('/api/admin/stats', (b) => b?.ok === true && typeof b?.profilesCount === 'number'),
+      probeDbWithFallback(),
+    ])
+    if (isMountedRef.current) {
+      setApiProbe(apiRes)
+      setAdminProbe(adminRes)
+      setDbProbe(dbRes)
+    }
+  }, [probeEndpoint, probeDbWithFallback])
+
+  const refreshHealth = React.useCallback(async () => {
+    if (healthRefreshing) return
+    setHealthRefreshing(true)
+    try {
+      await runHealthProbes()
+    } finally {
+      if (isMountedRef.current) setHealthRefreshing(false)
+    }
+  }, [healthRefreshing, runHealthProbes])
+
+  const softRefreshAdmin = React.useCallback(() => {
+    try {
+      refreshHealth()
+    } catch {}
+  }, [refreshHealth])
+
+  React.useEffect(() => {
+    // Initial probe and auto-refresh every 60s
+    runHealthProbes()
+    const id = setInterval(runHealthProbes, 60_000)
+    return () => clearInterval(id)
+  }, [runHealthProbes])
+
+  const StatusDot: React.FC<{ ok: boolean | null; title?: string }> = ({ ok, title }) => (
+    <span
+      className={
+        `inline-block h-3 w-3 rounded-full ${ok === null ? 'bg-zinc-400' : ok ? 'bg-emerald-500' : 'bg-rose-500'}`
+      }
+      aria-label={ok === null ? 'unknown' : ok ? 'ok' : 'error'}
+      title={title}
+    />
+  )
+
+  const ErrorBadge: React.FC<{ code: string | null }> = ({ code }) => {
+    if (!code) return null
+    return (
+      <span className="text-[11px] px-1.5 py-0.5 rounded border bg-rose-50 text-rose-700 border-rose-200">
+        {code}
+      </span>
+    )
+  }
+
+  
+
+  // ---- Branch management state ----
+  const [branchesLoading, setBranchesLoading] = React.useState<boolean>(true)
+  const [branchesRefreshing, setBranchesRefreshing] = React.useState<boolean>(false)
+  const [branchOptions, setBranchOptions] = React.useState<string[]>([])
+  const [currentBranch, setCurrentBranch] = React.useState<string>("")
+  const [selectedBranch, setSelectedBranch] = React.useState<string>("")
+
+  const loadBranches = React.useCallback(async (opts?: { initial?: boolean }) => {
+    const isInitial = !!opts?.initial
+    if (isInitial) setBranchesLoading(true)
+    else setBranchesRefreshing(true)
+    try {
+      const headersNode: Record<string, string> = { 'Accept': 'application/json' }
+      try {
+        const session = (await supabase.auth.getSession()).data.session
+        const token = session?.access_token
+        if (token) headersNode['Authorization'] = `Bearer ${token}`
+      } catch {}
+      const respNode = await fetch('/api/admin/branches', { headers: headersNode, credentials: 'same-origin' })
+      let data = await safeJson(respNode)
+      // Guard against accidental inclusion of non-branch items
+      if (Array.isArray(data?.branches)) {
+        data.branches = data.branches.filter((b: string) => b && b !== 'origin' && b !== 'HEAD')
+      }
+      let ok = respNode.ok && Array.isArray(data?.branches)
+      if (!ok) {
+        const adminHeaders: Record<string, string> = { 'Accept': 'application/json' }
+        try {
+          const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+          if (adminToken) adminHeaders['X-Admin-Token'] = String(adminToken)
+        } catch {}
+        const respAdmin = await fetch('/admin/branches', { headers: adminHeaders, credentials: 'same-origin' })
+        data = await safeJson(respAdmin)
+        if (Array.isArray(data?.branches)) {
+          data.branches = data.branches.filter((b: string) => b && b !== 'origin' && b !== 'HEAD')
         }
-        const timer = setTimeout(() => finish(null), 2000)
-        channel.on('presence', { event: 'sync' }, () => {
-          try {
-            const state = channel.presenceState?.() || {}
-            const count = Object.values(state as Record<string, any[]>).reduce((acc, arr) => acc + (Array.isArray(arr) ? arr.length : 0), 0)
-            clearTimeout(timer)
-            finish(Number.isFinite(count) ? count : 0)
-          } catch {
-            clearTimeout(timer)
-            finish(null)
-          }
-        })
-        channel.subscribe((status: any) => {
-          if (status === 'SUBSCRIBED') {
-            try { channel.track({ admin_probe: true, at: new Date().toISOString() }) } catch {}
-          }
-        })
+        if (!respAdmin.ok || !Array.isArray(data?.branches)) throw new Error(data?.error || `HTTP ${respAdmin.status}`)
+      }
+      const branches: string[] = data.branches
+      const current: string = String(data.current || '')
+      setBranchOptions(branches)
+      setCurrentBranch(current)
+      setSelectedBranch((prev) => {
+        if (!prev) return current
+        return branches.includes(prev) ? prev : current
       })
     } catch {
-      return null
+      if (isInitial) {
+        setBranchOptions([])
+        setCurrentBranch('')
+        setSelectedBranch('')
+      }
+    } finally {
+      if (isInitial) setBranchesLoading(false)
+      else setBranchesRefreshing(false)
     }
-  }, [])
+  }, [safeJson])
+
+  React.useEffect(() => {
+    loadBranches({ initial: true })
+  }, [loadBranches])
 
   const pullLatest = async () => {
     if (pulling) return
     setPulling(true)
     try {
-      const token = (await supabase.auth.getSession()).data.session?.access_token
-      // Try POST first to ensure Authorization header is preserved across proxies
-      let res = await fetch('/api/admin/pull-code', {
-        method: 'POST',
-        headers: token ? { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Accept': 'application/json' } : { 'Accept': 'application/json' },
-        body: token ? '{}' : undefined,
-        credentials: 'same-origin',
-      })
-      if (res.status === 405) {
-        // Fallback to GET if POST is blocked
-        res = await fetch('/api/admin/pull-code', {
+      // Use streaming endpoint for live logs
+      setConsoleLines([])
+      setConsoleOpen(true)
+      appendConsole('[pull] Pull & Build: starting…')
+      if (selectedBranch && selectedBranch !== currentBranch) {
+        appendConsole(`[pull] Will switch to branch: ${selectedBranch}`)
+      } else if (currentBranch) {
+        appendConsole(`[pull] Staying on branch: ${currentBranch}`)
+      }
+      setReloadReady(false)
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      const headers: Record<string, string> = {}
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+        if (adminToken) headers['X-Admin-Token'] = String(adminToken)
+      } catch {}
+      const branchParam = (selectedBranch && selectedBranch !== currentBranch) ? `?branch=${encodeURIComponent(selectedBranch)}` : ''
+      let resp: Response | null = null
+      // Try Node server SSE first
+      try {
+        resp = await fetch(`/api/admin/pull-code/stream${branchParam}`, {
           method: 'GET',
-          headers: token ? { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } : { 'Accept': 'application/json' },
+          headers,
           credentials: 'same-origin',
         })
+      } catch {}
+      // Fallback to Admin API SSE if Node is down or forbidden
+      if (!resp || !resp.ok || !resp.body) {
+        const adminHeaders: Record<string, string> = {}
+        try {
+          const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+          if (adminToken) adminHeaders['X-Admin-Token'] = String(adminToken)
+        } catch {}
+        try {
+          resp = await fetch(`/admin/pull-code/stream${branchParam}`, {
+            method: 'GET',
+            headers: adminHeaders,
+            credentials: 'same-origin',
+          })
+        } catch {}
       }
-      if (!res.ok) {
-        const body: any = await safeJson(res)
-        if (!body || Object.keys(body).length === 0) {
-          const text = await res.text().catch(() => '')
-          throw new Error(text?.slice(0, 200) || `Request failed (${res.status})`)
+      if (!resp || !resp.ok || !resp.body) {
+        // Last resort: fire-and-forget refresh via Admin API without stream
+        const adminHeadersBg: Record<string, string> = { 'Content-Type': 'application/json', 'Accept': 'application/json' }
+        try {
+          const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+          if (adminToken) adminHeadersBg['X-Admin-Token'] = String(adminToken)
+        } catch {}
+        const bg = await fetch(`/admin/pull-code${branchParam}`, { method: 'POST', headers: adminHeadersBg, credentials: 'same-origin', body: '{}' })
+        const bgBody = await safeJson(bg)
+        if (!bg.ok || bgBody?.ok !== true) {
+          throw new Error(bgBody?.error || `Refresh failed (${bg.status})`)
         }
-        throw new Error(body?.error || `Request failed (${res.status})`)
+        appendConsole('[pull] Started background refresh via Admin API.')
+        appendConsole('[pull] Not restarting services automatically without build status. Use streamed mode to auto-restart.')
+        // Skip SSE consumption and do not restart services automatically
+      } else {
+        const reader = resp.body.getReader()
+        const decoder = new TextDecoder()
+        let buf = ''
+        const append = (line: string) => appendConsole(line)
+        let currentEvent: string | null = null
+        let sawDoneEvent = false
+        let buildOk = false
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buf += decoder.decode(value, { stream: true })
+          let idx
+          while ((idx = buf.indexOf('\n')) >= 0) {
+            const raw = buf.slice(0, idx)
+            buf = buf.slice(idx + 1)
+            const line = raw.replace(/\r$/, '')
+            if (!line) continue
+            if (line.startsWith('event:')) {
+              currentEvent = line.slice(6).trim()
+            } else if (line.startsWith('data:')) {
+              const payload = line.slice(5).trimStart()
+              if (currentEvent === 'done') {
+                try {
+                  const obj = JSON.parse(payload)
+                  if (obj && typeof obj.ok === 'boolean') {
+                    sawDoneEvent = true
+                    buildOk = !!obj.ok
+                  }
+                } catch {}
+              }
+              append(payload)
+            } else if (!/^(:|event:|id:|retry:)/.test(line)) {
+              append(line)
+            }
+          }
+        }
+        const success = sawDoneEvent && buildOk
+        if (!success) {
+          if (!sawDoneEvent) appendConsole('[pull] Stream finished without a terminal result; not restarting automatically.')
+          if (sawDoneEvent && !buildOk) appendConsole('[pull] Build or validation failed. Website remains on the previous version; not restarting services.')
+          return
+        }
       }
-      setTimeout(() => { window.location.reload() }, 800)
+
+      // Show a non-blocking orange notice just before restarts
+      setPreRestartNotice(true)
+
+      // Ensure both Admin API and Node API are restarted after successful build
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+        if (adminToken) {
+          await fetch('/admin/restart-app', {
+            method: 'POST',
+            headers: { 'X-Admin-Token': String(adminToken), 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ service: 'admin-api' })
+          }).catch(() => {})
+        }
+      } catch {}
+      // Then restart the Node service via our API (includes health poll)
+      try { await restartServer() } catch {}
+      try { await loadBranches({ initial: false }) } catch {}
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e)
-      alert(`Failed to pull & build: ${message}`)
+      appendConsole(`[pull] Failed to pull & build: ${message}`)
     } finally {
       setPulling(false)
     }
   }
 
-  const runBackup = async () => {
-    if (backingUp) return
-    setBackingUp(true)
+  // Backup UI disabled for now
+
+
+  // Loader for total registered accounts (DB first via admin API; fallback to client count)
+  const loadRegisteredCount = React.useCallback(async (opts?: { initial?: boolean }) => {
+    const isInitial = !!opts?.initial
+    if (isInitial) setRegisteredLoading(true)
+    else setRegisteredRefreshing(true)
     try {
-      const token = (await supabase.auth.getSession()).data.session?.access_token
-      if (!token) {
-        alert('You must be signed in to back up the database')
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      const headers: Record<string, string> = { 'Accept': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+        if (adminToken) headers['X-Admin-Token'] = String(adminToken)
+      } catch {}
+      const resp = await fetch('/api/admin/stats', { headers, credentials: 'same-origin' })
+      const data = await safeJson(resp)
+      if (resp.ok && typeof data?.profilesCount === 'number') {
+        setRegisteredCount(data.profilesCount)
+        setRegisteredUpdatedAt(Date.now())
         return
       }
-
-      const start = await fetch('/api/admin/backup-db', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        credentials: 'same-origin',
-      })
-      const startBody: { token?: string; filename?: string; error?: string } = await safeJson(start)
-      if (!start.ok) {
-        throw new Error(startBody?.error || `Backup failed (${start.status})`)
-      }
-      const dlToken = startBody?.token
-      const filename: string = startBody?.filename || 'backup.sql.gz'
-      if (!dlToken) throw new Error('Missing download token from server')
-
-      const downloadUrl = `/api/admin/download-backup?token=${encodeURIComponent(dlToken)}`
-      const resp = await fetch(downloadUrl, {
-        method: 'GET',
-        headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/gzip' },
-        credentials: 'same-origin',
-      })
-      if (!resp.ok) {
-        const errText = await resp.text().catch(() => '')
-        let errBody: { error?: string } = {}
-        try { errBody = JSON.parse(errText) } catch {}
-        throw new Error(errBody?.error || errText?.slice(0, 200) || `Download failed (${resp.status})`)
-      }
-      const blob = await resp.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = filename
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      setTimeout(() => URL.revokeObjectURL(url), 2000)
-    } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : String(e)
-      alert(`Backup failed: ${message}`)
-    } finally {
-      setBackingUp(false)
-    }
-  }
-
-
-  // Fetch total registered accounts (admin API first to bypass RLS; fallback to client count)
-  React.useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const token = (await supabase.auth.getSession()).data.session?.access_token
-        if (token) {
-          const resp = await fetch('/api/admin/stats', { headers: { 'Authorization': `Bearer ${token}` } })
-          if (resp.ok) {
-            const data = await resp.json().catch(() => ({}))
-            const val = typeof data?.profilesCount === 'number' ? data.profilesCount : null
-            if (!cancelled && val !== null) { setRegisteredCount(val); return }
-          }
-        }
-      } catch {}
-      // Fallback: client-side count (will be limited by RLS to own row)
+      // Fallback: client-side count (may be limited by RLS)
       const { count, error } = await supabase.from('profiles').select('id', { count: 'exact', head: true })
-      if (!cancelled) setRegisteredCount(error ? null : (count ?? 0))
-    })()
-    return () => { cancelled = true }
-  }, [])
+      setRegisteredCount(error ? null : (count ?? 0))
+      setRegisteredUpdatedAt(Date.now())
+    } catch {
+      try {
+        const { count, error } = await supabase.from('profiles').select('id', { count: 'exact', head: true })
+        setRegisteredCount(error ? null : (count ?? 0))
+        setRegisteredUpdatedAt(Date.now())
+      } catch {}
+    } finally {
+      if (isInitial) setRegisteredLoading(false)
+      else setRegisteredRefreshing(false)
+    }
+  }, [safeJson])
+
+  React.useEffect(() => {
+    loadRegisteredCount({ initial: true })
+  }, [loadRegisteredCount])
+
+  // Auto-refresh registered accounts every 60 seconds
+  React.useEffect(() => {
+    const id = setInterval(() => { loadRegisteredCount({ initial: false }) }, 60_000)
+    return () => clearInterval(id)
+  }, [loadRegisteredCount])
 
 
-  // Shared loader for visitors stats (used on initial load and manual refresh)
+  // Loader for "Currently online" (unique IPs in the last 60 minutes, DB-only)
   const loadOnlineUsers = React.useCallback(async (opts?: { initial?: boolean }) => {
     const isInitial = !!opts?.initial
     if (isInitial) setOnlineLoading(true)
     else setOnlineRefreshing(true)
     try {
+      // Use dedicated endpoint backed by DB counts; forward Authorization so REST fallback can pass RLS
+      const token = (await supabase.auth.getSession()).data.session?.access_token
       const resp = await fetch('/api/admin/online-users', {
-        headers: { 'Accept': 'application/json' },
+        headers: (() => {
+          const h: Record<string, string> = { 'Accept': 'application/json' }
+          if (token) h['Authorization'] = `Bearer ${token}`
+          const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+          if (adminToken) h['X-Admin-Token'] = String(adminToken)
+          return h
+        })(),
         credentials: 'same-origin',
       })
       const data = await safeJson(resp)
@@ -332,14 +866,7 @@ export const AdminPage: React.FC = () => {
       setOnlineUsers(Number.isFinite(num) ? num : 0)
       setOnlineUpdatedAt(Date.now())
     } catch {
-      // Fallback to presence count
-      try {
-        const pc = await getPresenceCountOnce()
-        if (pc !== null) {
-          setOnlineUsers(Math.max(0, pc))
-          setOnlineUpdatedAt(Date.now())
-        }
-      } catch {}
+      // Keep last known value on error
     } finally {
       if (isInitial) setOnlineLoading(false)
       else setOnlineRefreshing(false)
@@ -351,13 +878,59 @@ export const AdminPage: React.FC = () => {
     loadOnlineUsers({ initial: true })
   }, [loadOnlineUsers])
 
+  // Auto-refresh the "Currently online" count every minute
+  React.useEffect(() => {
+    const intervalId = setInterval(() => {
+      loadOnlineUsers({ initial: false })
+    }, 60_000)
+    return () => clearInterval(intervalId)
+  }, [loadOnlineUsers])
+
+  // Loader for list of connected IPs (unique IPs past N minutes; default 60)
+  const loadOnlineIpsList = React.useCallback(async (opts?: { initial?: boolean; minutes?: number }) => {
+    const isInitial = !!opts?.initial
+    const minutes = Number.isFinite(opts?.minutes as number) && (opts?.minutes as number)! > 0 ? Math.floor(opts!.minutes as number) : 60
+    if (isInitial) setIpsLoading(true)
+    else setIpsRefreshing(true)
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      const headers: Record<string, string> = { 'Accept': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+        if (adminToken) headers['X-Admin-Token'] = String(adminToken)
+      } catch {}
+      const resp = await fetch(`/api/admin/online-ips?minutes=${encodeURIComponent(String(minutes))}` , { headers, credentials: 'same-origin' })
+      const data = await safeJson(resp)
+      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`)
+      const list: string[] = Array.isArray(data?.ips) ? data.ips.map((s: any) => String(s)).filter(Boolean) : []
+      setIps(list)
+    } catch {
+      // keep last
+    } finally {
+      if (isInitial) setIpsLoading(false)
+      else setIpsRefreshing(false)
+    }
+  }, [safeJson])
+
+  // Initial load and auto-refresh every 60s
+  React.useEffect(() => {
+    loadOnlineIpsList({ initial: true })
+  }, [loadOnlineIpsList])
+  React.useEffect(() => {
+    const id = setInterval(() => { loadOnlineIpsList({ initial: false }) }, 60_000)
+    return () => clearInterval(id)
+  }, [loadOnlineIpsList])
+
   // Load visitors stats (last 7 days)
+  const [visitorsWindowDays, setVisitorsWindowDays] = React.useState<7 | 30>(7)
   const loadVisitorsStats = React.useCallback(async (opts?: { initial?: boolean }) => {
     const isInitial = !!opts?.initial
     if (isInitial) setVisitorsLoading(true)
     else setVisitorsRefreshing(true)
     try {
-      const resp = await fetch('/api/admin/visitors-stats', {
+      const resp = await fetch(`/api/admin/visitors-stats?days=${visitorsWindowDays}`, {
         headers: { 'Accept': 'application/json' },
         credentials: 'same-origin',
       })
@@ -367,6 +940,61 @@ export const AdminPage: React.FC = () => {
         ? data.series7d.map((d: any) => ({ date: String(d.date), uniqueVisitors: Number(d.uniqueVisitors ?? d.unique_visitors ?? 0) }))
         : []
       setVisitorsSeries(series)
+      // Fetch weekly unique total from dedicated endpoint to keep requests separate
+      try {
+        const totalResp = await fetch('/api/admin/visitors-unique-7d', {
+          headers: { 'Accept': 'application/json' },
+          credentials: 'same-origin',
+        })
+        const totalData = await safeJson(totalResp)
+        if (totalResp.ok) {
+          const total7d = Number(totalData?.uniqueIps7d ?? totalData?.weeklyUniqueIps7d ?? 0)
+          setVisitorsTotalUnique7d(Number.isFinite(total7d) ? total7d : 0)
+        }
+      } catch {}
+      // Load sources breakdown in parallel
+      try {
+        const sb = await fetch(`/api/admin/sources-breakdown?days=${visitorsWindowDays}`, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+        const sbd = await safeJson(sb)
+        if (sb.ok) {
+          const tc = Array.isArray(sbd?.topCountries)
+            ? sbd.topCountries.map((r: { country?: string; visits?: number }) => ({ country: String(r.country || ''), visits: Number(r.visits || 0) }))
+                .filter((x: { country: string }) => !!x.country)
+            : []
+          const oc = sbd?.otherCountries && typeof sbd.otherCountries === 'object'
+            ? {
+                count: Number(sbd.otherCountries.count || 0),
+                visits: Number(sbd.otherCountries.visits || 0),
+                codes: Array.isArray(sbd.otherCountries.codes)
+                  ? sbd.otherCountries.codes.map((x: any) => String(x || '')).filter(Boolean)
+                  : undefined,
+                items: Array.isArray(sbd.otherCountries.items)
+                  ? sbd.otherCountries.items
+                      .map((it: any) => ({ country: String(it?.country || ''), visits: Number(it?.visits || 0) }))
+                      .filter((it: { country: string }) => !!it.country)
+                  : undefined,
+              }
+            : null
+          const totalCountryVisits = tc.reduce((a: number, b: any) => a + (b.visits || 0), 0) + (oc?.visits || 0)
+          const countriesWithPct = totalCountryVisits > 0
+            ? tc.map((x: { country: string; visits: number }) => ({ ...x, pct: (x.visits / totalCountryVisits) * 100 }))
+            : tc.map((x: { country: string; visits: number }) => ({ ...x, pct: 0 }))
+          const ocWithPct = oc ? { ...oc, pct: totalCountryVisits > 0 ? (oc.visits / totalCountryVisits) * 100 : 0 } : null
+
+          const tr = Array.isArray(sbd?.topReferrers) ? sbd.topReferrers.map((r: { source?: string; visits?: number }) => ({ source: String(r.source || 'direct'), visits: Number(r.visits || 0) })) : []
+          const orf = sbd?.otherReferrers && typeof sbd.otherReferrers === 'object' ? { count: Number(sbd.otherReferrers.count || 0), visits: Number(sbd.otherReferrers.visits || 0) } : null
+          const totalRefVisits = tr.reduce((a: number, b: any) => a + (b.visits || 0), 0) + (orf?.visits || 0)
+          const refsWithPct = totalRefVisits > 0
+            ? tr.map((x: { source: string; visits: number }) => ({ ...x, pct: (x.visits / totalRefVisits) * 100 }))
+            : tr.map((x: { source: string; visits: number }) => ({ ...x, pct: 0 }))
+          const orfWithPct = orf ? { ...orf, pct: totalRefVisits > 0 ? (orf.visits / totalRefVisits) * 100 : 0 } : null
+
+          setTopCountries(countriesWithPct)
+          setOtherCountries(ocWithPct)
+          setTopReferrers(refsWithPct)
+          setOtherReferrers(orfWithPct)
+        }
+      } catch {}
       setVisitorsUpdatedAt(Date.now())
     } catch {
       // keep last known
@@ -374,71 +1002,803 @@ export const AdminPage: React.FC = () => {
       if (isInitial) setVisitorsLoading(false)
       else setVisitorsRefreshing(false)
     }
-  }, [])
+  }, [visitorsWindowDays, safeJson])
 
   React.useEffect(() => {
     loadVisitorsStats({ initial: true })
   }, [loadVisitorsStats])
 
+  // Auto-refresh visitors graph every 60 seconds
+  React.useEffect(() => {
+    const id = setInterval(() => {
+      loadVisitorsStats({ initial: false })
+    }, 60_000)
+    return () => clearInterval(id)
+  }, [loadVisitorsStats])
+
+  // ---- Members tab state ----
+  const [activeTab, setActiveTab] = React.useState<'overview' | 'members' | 'admin_logs'>('overview')
+  const [lookupEmail, setLookupEmail] = React.useState('')
+  const [memberLoading, setMemberLoading] = React.useState(false)
+  const [memberError, setMemberError] = React.useState<string | null>(null)
+  const [memberData, setMemberData] = React.useState<{
+    user: { id: string; email: string; created_at?: string } | null
+    profile: any
+    ips: string[]
+    lastOnlineAt?: string | null
+    lastIp?: string | null
+    visitsCount?: number
+    uniqueIpsCount?: number
+    plantsTotal?: number
+    isBannedEmail?: boolean
+    bannedReason?: string | null
+    bannedAt?: string | null
+    bannedIps?: string[]
+    topReferrers?: Array<{ source: string; visits: number }>
+    topCountries?: Array<{ country: string; visits: number }>
+    topDevices?: Array<{ device: string; visits: number }>
+    meanRpm5m?: number | null
+    adminNotes?: Array<{ id: string; admin_id: string | null; admin_name: string | null; message: string; created_at: string | null }>
+  } | null>(null)
+  const [banReason, setBanReason] = React.useState('')
+  const [banSubmitting, setBanSubmitting] = React.useState(false)
+  const [banOpen, setBanOpen] = React.useState(false)
+  const [promoteOpen, setPromoteOpen] = React.useState(false)
+  const [promoteSubmitting, setPromoteSubmitting] = React.useState(false)
+  const [demoteOpen, setDemoteOpen] = React.useState(false)
+  const [demoteSubmitting, setDemoteSubmitting] = React.useState(false)
+
+  // Container ref for Members tab to run form-field validation logs
+  const membersContainerRef = React.useRef<HTMLDivElement | null>(null)
+
+  // Email/username autocomplete state
+  const [emailSuggestions, setEmailSuggestions] = React.useState<Array<{ id: string; email: string | null; display_name?: string | null }>>([])
+  const [suggestionsOpen, setSuggestionsOpen] = React.useState(false)
+  const [suggestLoading, setSuggestLoading] = React.useState(false)
+  const [highlightIndex, setHighlightIndex] = React.useState<number>(-1)
+
+  // IP lookup state
+  const [ipLookup, setIpLookup] = React.useState('')
+  const [ipLoading, setIpLoading] = React.useState(false)
+  const [ipError, setIpError] = React.useState<string | null>(null)
+  const [ipResults, setIpResults] = React.useState<Array<{ id: string; email: string | null; display_name: string | null; last_seen_at: string | null }>>([])
+  const [ipUsed, setIpUsed] = React.useState<string | null>(null)
+  const [ipUsersCount, setIpUsersCount] = React.useState<number | null>(null)
+  const [ipConnectionsCount, setIpConnectionsCount] = React.useState<number | null>(null)
+  const [ipLastSeenAt, setIpLastSeenAt] = React.useState<string | null>(null)
+  const [ipTopReferrers, setIpTopReferrers] = React.useState<Array<{ source: string; visits: number }>>([])
+  const [ipTopDevices, setIpTopDevices] = React.useState<Array<{ device: string; visits: number }>>([])
+  const [ipCountry, setIpCountry] = React.useState<string | null>(null)
+  const [ipMeanRpm5m, setIpMeanRpm5m] = React.useState<number | null>(null)
+
+  // Ref to focus the IP input when jumping from overview
+  const memberIpInputRef = React.useRef<HTMLInputElement | null>(null)
+
+  // Member visits (last 30 days)
+  const [memberVisitsLoading, setMemberVisitsLoading] = React.useState<boolean>(false)
+  const [memberVisitsSeries, setMemberVisitsSeries] = React.useState<Array<{ date: string; visits: number }>>([])
+  const [memberVisitsTotal30d, setMemberVisitsTotal30d] = React.useState<number>(0)
+  const [memberVisitsUpdatedAt, setMemberVisitsUpdatedAt] = React.useState<number | null>(null)
+
+  const loadMemberVisitsSeries = React.useCallback(async (userId: string, opts?: { initial?: boolean }) => {
+    if (!userId) return
+    const isInitial = !!opts?.initial
+    if (isInitial) setMemberVisitsLoading(true)
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      const headers: Record<string, string> = { 'Accept': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+        if (adminToken) headers['X-Admin-Token'] = String(adminToken)
+      } catch {}
+      const resp = await fetch(`/api/admin/member-visits-series?userId=${encodeURIComponent(userId)}`, { headers, credentials: 'same-origin' })
+      const data = await safeJson(resp)
+      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`)
+      const series = Array.isArray(data?.series30d) ? data.series30d.map((d: any) => ({ date: String(d.date), visits: Number(d.visits || 0) })) : []
+      setMemberVisitsSeries(series)
+      const total = Number(data?.total30d || 0)
+      setMemberVisitsTotal30d(Number.isFinite(total) ? total : 0)
+      setMemberVisitsUpdatedAt(Date.now())
+    } catch {
+      // keep last
+    } finally {
+      if (isInitial) setMemberVisitsLoading(false)
+    }
+  }, [safeJson])
+
+  const lookupMember = React.useCallback(async () => {
+    if (!lookupEmail || memberLoading) return
+    setMemberLoading(true)
+    setMemberError(null)
+    setMemberData(null)
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      const url = `/api/admin/member?q=${encodeURIComponent(lookupEmail)}`
+      const headers: Record<string,string> = { 'Accept': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+        if (adminToken) headers['X-Admin-Token'] = String(adminToken)
+      } catch {}
+      const resp = await fetch(url, { headers, credentials: 'same-origin' })
+      const data = await safeJson(resp)
+      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`)
+      setMemberData({
+        user: data?.user || null,
+        profile: data?.profile || null,
+        ips: Array.isArray(data?.ips) ? data.ips : [],
+        lastOnlineAt: data?.lastOnlineAt ?? null,
+        lastIp: data?.lastIp ?? null,
+        visitsCount: typeof data?.visitsCount === 'number' ? data.visitsCount : undefined,
+        uniqueIpsCount: typeof data?.uniqueIpsCount === 'number' ? data.uniqueIpsCount : undefined,
+        plantsTotal: typeof data?.plantsTotal === 'number' ? data.plantsTotal : undefined,
+        isBannedEmail: !!data?.isBannedEmail,
+        bannedReason: data?.bannedReason ?? null,
+        bannedAt: data?.bannedAt ?? null,
+        bannedIps: Array.isArray(data?.bannedIps) ? data.bannedIps : [],
+        topReferrers: Array.isArray(data?.topReferrers) ? data.topReferrers : [],
+        topCountries: Array.isArray(data?.topCountries) ? data.topCountries : [],
+        topDevices: Array.isArray(data?.topDevices) ? data.topDevices : [],
+        meanRpm5m: typeof data?.meanRpm5m === 'number' ? data.meanRpm5m : null,
+        adminNotes: Array.isArray(data?.adminNotes) ? data.adminNotes.map((n: any) => ({ id: String(n.id), admin_id: n?.admin_id || null, admin_name: n?.admin_name || null, message: String(n?.message || ''), created_at: n?.created_at || null })) : [],
+      })
+      // Log lookup success (UI)
+      try {
+        const headers2: Record<string,string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+        if (token) headers2['Authorization'] = `Bearer ${token}`
+        try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) headers2['X-Admin-Token'] = String(adminToken) } catch {}
+        await fetch('/api/admin/log-action', { method: 'POST', headers: headers2, credentials: 'same-origin', body: JSON.stringify({ action: 'admin_lookup', target: lookupEmail, detail: { via: 'ui' } }) })
+      } catch {}
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setMemberError(msg || 'Lookup failed')
+      // Log failed lookup
+      try {
+        const session = (await supabase.auth.getSession()).data.session
+        const token = session?.access_token
+        const headers2: Record<string,string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+        if (token) headers2['Authorization'] = `Bearer ${token}`
+        try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) headers2['X-Admin-Token'] = String(adminToken) } catch {}
+        await fetch('/api/admin/log-action', { method: 'POST', headers: headers2, credentials: 'same-origin', body: JSON.stringify({ action: 'admin_lookup_failed', target: lookupEmail, detail: { error: msg } }) })
+      } catch {}
+    } finally {
+      setMemberLoading(false)
+    }
+  }, [lookupEmail, memberLoading, safeJson])
+
+  const lookupByIp = React.useCallback(async (overrideIp?: string) => {
+    const ip = (overrideIp ?? ipLookup).trim()
+    if (!ip || ipLoading) return
+    setIpLoading(true)
+    setIpError(null)
+    setIpResults([])
+    setIpUsed(null)
+    setIpUsersCount(null)
+    setIpConnectionsCount(null)
+    setIpLastSeenAt(null)
+    setIpTopReferrers([])
+    setIpTopDevices([])
+    setIpCountry(null)
+    setIpMeanRpm5m(null)
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      const headers: Record<string, string> = { 'Accept': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+        if (adminToken) headers['X-Admin-Token'] = String(adminToken)
+      } catch {}
+      const resp = await fetch(`/api/admin/members-by-ip?ip=${encodeURIComponent(ip)}`, { headers, credentials: 'same-origin' })
+      const data = await safeJson(resp)
+      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`)
+      const users = Array.isArray(data?.users)
+        ? data.users.map((u: any) => ({ id: String(u.id), email: u?.email ?? null, display_name: u?.display_name ?? null, last_seen_at: u?.last_seen_at ?? null }))
+        : []
+      setIpResults(users)
+      setIpUsed(typeof data?.ip === 'string' ? data.ip : ip)
+      if (typeof data?.usersCount === 'number') setIpUsersCount(data.usersCount)
+      if (typeof data?.connectionsCount === 'number') setIpConnectionsCount(data.connectionsCount)
+      if (typeof data?.lastSeenAt === 'string') setIpLastSeenAt(data.lastSeenAt)
+      if (Array.isArray(data?.ipTopReferrers)) setIpTopReferrers(data.ipTopReferrers)
+      if (Array.isArray(data?.ipTopDevices)) setIpTopDevices(data.ipTopDevices)
+      if (typeof data?.ipCountry === 'string') setIpCountry(data.ipCountry)
+      if (typeof data?.ipMeanRpm5m === 'number') setIpMeanRpm5m(data.ipMeanRpm5m)
+      // Log IP lookup (success)
+      try {
+        const headers2: Record<string,string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+        if (token) headers2['Authorization'] = `Bearer ${token}`
+        try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) headers2['X-Admin-Token'] = String(adminToken) } catch {}
+        await fetch('/api/admin/log-action', { method: 'POST', headers: headers2, credentials: 'same-origin', body: JSON.stringify({ action: 'ip_lookup', target: ip, detail: { via: 'ui' } }) })
+      } catch {}
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setIpError(msg || 'IP lookup failed')
+      // Log IP lookup failure
+      try {
+        const session = (await supabase.auth.getSession()).data.session
+        const token = session?.access_token
+        const headers2: Record<string,string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+        if (token) headers2['Authorization'] = `Bearer ${token}`
+        try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) headers2['X-Admin-Token'] = String(adminToken) } catch {}
+        await fetch('/api/admin/log-action', { method: 'POST', headers: headers2, credentials: 'same-origin', body: JSON.stringify({ action: 'ip_lookup_failed', target: ip, detail: { error: msg } }) })
+      } catch {}
+    } finally {
+      setIpLoading(false)
+    }
+  }, [ipLookup, ipLoading, safeJson])
+
+  // Jump from overview IP badge to Members tab IP lookup
+  const jumpToIpLookup = React.useCallback((ip: string) => {
+    const next = String(ip || '').trim()
+    if (!next) return
+    setActiveTab('members')
+    setIpLookup(next)
+    setTimeout(() => {
+      try {
+        memberIpInputRef.current?.focus()
+      } catch {}
+      // Trigger the same search flow as pressing Enter in the input
+      lookupByIp(next)
+    }, 0)
+  }, [lookupByIp])
+
+  // Auto-load visits series when a member is selected
+  React.useEffect(() => {
+    const uid = memberData?.user?.id
+    if (uid) {
+      loadMemberVisitsSeries(uid, { initial: true })
+    } else {
+      setMemberVisitsSeries([])
+      setMemberVisitsTotal30d(0)
+      setMemberVisitsUpdatedAt(null)
+    }
+  }, [memberData?.user?.id, loadMemberVisitsSeries])
+
+  const performBan = React.useCallback(async () => {
+    if (!lookupEmail || banSubmitting) return
+    setBanSubmitting(true)
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      const headers: Record<string,string> = { 'Content-Type': 'application/json', 'Accept': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+        if (adminToken) headers['X-Admin-Token'] = String(adminToken)
+      } catch {}
+      const resp = await fetch('/api/admin/ban', {
+        method: 'POST',
+        headers,
+        credentials: 'same-origin',
+        body: JSON.stringify({ email: lookupEmail, reason: banReason })
+      })
+      const data = await safeJson(resp)
+      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`)
+      alert('User banned successfully')
+      setBanReason('')
+      setBanOpen(false)
+      // Refresh lookup data to reflect deletion
+      setMemberData(null)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      alert(`Ban failed: ${msg}`)
+    } finally {
+      setBanSubmitting(false)
+    }
+  }, [lookupEmail, banReason, banSubmitting, safeJson])
+
+  const performPromote = React.useCallback(async () => {
+    if (!lookupEmail || promoteSubmitting) return
+    setPromoteSubmitting(true)
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      const headers: Record<string,string> = { 'Content-Type': 'application/json', 'Accept': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+        if (adminToken) headers['X-Admin-Token'] = String(adminToken)
+      } catch {}
+      const resp = await fetch('/api/admin/promote-admin', {
+        method: 'POST',
+        headers,
+        credentials: 'same-origin',
+        body: JSON.stringify({ email: lookupEmail })
+      })
+      const data = await safeJson(resp)
+      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`)
+      alert('User promoted to admin successfully')
+      setPromoteOpen(false)
+      // Refresh profile info
+      setMemberData((prev) => prev ? { ...prev, profile: { ...(prev.profile || {}), is_admin: true } } : prev)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      alert(`Promotion failed: ${msg}`)
+    } finally {
+      setPromoteSubmitting(false)
+    }
+  }, [lookupEmail, promoteSubmitting, safeJson])
+
+  const performDemote = React.useCallback(async () => {
+    if (!lookupEmail || demoteSubmitting) return
+    setDemoteSubmitting(true)
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      const headers: Record<string,string> = { 'Content-Type': 'application/json', 'Accept': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+        if (adminToken) headers['X-Admin-Token'] = String(adminToken)
+      } catch {}
+      const resp = await fetch('/api/admin/demote-admin', {
+        method: 'POST',
+        headers,
+        credentials: 'same-origin',
+        body: JSON.stringify({ email: lookupEmail })
+      })
+      const data = await safeJson(resp)
+      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`)
+      alert('Admin removed successfully')
+      setDemoteOpen(false)
+      // Refresh profile info
+      setMemberData((prev) => prev ? { ...prev, profile: { ...(prev.profile || {}), is_admin: false } } : prev)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      alert(`Demotion failed: ${msg}`)
+    } finally {
+      setDemoteSubmitting(false)
+    }
+  }, [lookupEmail, demoteSubmitting, safeJson])
+
+  // Debounced email/username suggestions fetch
+  React.useEffect(() => {
+    let cancelled = false
+    let timer: any = null
+    const run = async () => {
+      const q = lookupEmail.trim()
+      if (q.length < 1) {
+        setEmailSuggestions([])
+        setSuggestionsOpen(false)
+        setHighlightIndex(-1)
+        return
+      }
+      setSuggestLoading(true)
+      try {
+        const token = (await supabase.auth.getSession()).data.session?.access_token
+        const headers: Record<string,string> = { 'Accept': 'application/json' }
+        if (token) headers['Authorization'] = `Bearer ${token}`
+        try {
+          const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+          if (adminToken) headers['X-Admin-Token'] = String(adminToken)
+        } catch {}
+        const resp = await fetch(`/api/admin/member-suggest?q=${encodeURIComponent(q)}`, {
+          headers,
+          credentials: 'same-origin',
+        })
+        const data = await safeJson(resp)
+        if (cancelled) return
+        if (resp.ok && Array.isArray(data?.suggestions)) {
+          setEmailSuggestions(data.suggestions.map((s: any) => ({ id: String(s.id), email: s?.email ? String(s.email) : null, display_name: s?.display_name ? String(s.display_name) : null })))
+          setSuggestionsOpen(true)
+          setHighlightIndex(-1)
+        } else {
+          setEmailSuggestions([])
+          setSuggestionsOpen(false)
+          setHighlightIndex(-1)
+        }
+      } catch {
+        if (!cancelled) {
+          setEmailSuggestions([])
+          setSuggestionsOpen(false)
+          setHighlightIndex(-1)
+        }
+      } finally {
+        if (!cancelled) setSuggestLoading(false)
+      }
+    }
+    timer = setTimeout(run, 200)
+    return () => { cancelled = true; if (timer) clearTimeout(timer) }
+  }, [lookupEmail, safeJson])
+
+  // Console diagnostic: log any form fields missing both id and name within Members tab
+  React.useEffect(() => {
+    if (activeTab !== 'members') return
+    const container = membersContainerRef.current
+    if (!container) return
+    const t = setTimeout(() => {
+      const fields = Array.from(container.querySelectorAll('input, textarea, select')) as Array<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+      const violations = fields.filter(el => !(el.getAttribute('id') || el.getAttribute('name')))
+      if (violations.length > 0) {
+        violations.forEach(el => {
+          console.warn('A form field element has neither an id nor a name attribute:', el)
+        })
+      } else {
+        console.info('Member Lookup: all form fields have an id or a name.')
+      }
+    }, 0)
+    return () => clearTimeout(t)
+  }, [activeTab])
+
   return (
     <div className="max-w-3xl mx-auto mt-8 px-4 md:px-0">
       <Card className="rounded-3xl">
         <CardContent className="p-6 md:p-8 space-y-6">
-          <div>
-            <div className="text-2xl font-semibold tracking-tight">Admin Controls</div>
-            <div className="text-sm opacity-60 mt-1">Admin actions: monitor and manage infrastructure.</div>
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-2xl font-semibold tracking-tight">Admin Controls</div>
+              <div className="text-sm opacity-60 mt-1">Admin actions: monitor and manage infrastructure.</div>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant={activeTab === 'overview' ? 'default' : 'secondary'}
+                className="rounded-2xl"
+                onClick={() => setActiveTab('overview')}
+              >Overview</Button>
+              <Button
+                variant={activeTab === 'members' ? 'default' : 'secondary'}
+                className="rounded-2xl"
+                onClick={() => setActiveTab('members')}
+              >Members</Button>
+              <Button
+                variant={activeTab === 'admin_logs' ? 'default' : 'secondary'}
+                className="rounded-2xl"
+                onClick={() => setActiveTab('admin_logs')}
+              >Admin Logs</Button>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <Button className="rounded-2xl w-full" onClick={restartServer} disabled={restarting}>
-              <Server className="h-4 w-4" />
-              <RefreshCw className="h-4 w-4" />
-              <span>{restarting ? 'Restarting…' : 'Restart Server'}</span>
-            </Button>
-            <Button className="rounded-2xl w-full" variant="secondary" onClick={pullLatest} disabled={pulling}>
-              <Github className="h-4 w-4" />
-              <RefreshCw className="h-4 w-4" />
-              <span>{pulling ? 'Pulling…' : 'Pull & Build'}</span>
-            </Button>
-            <Button className="rounded-2xl w-full" variant="destructive" onClick={runSyncSchema} disabled={syncing}>
-              <Database className="h-4 w-4" />
-              <span>{syncing ? 'Syncing Schema…' : 'Sync DB Schema'}</span>
-            </Button>
-            <Button className="rounded-2xl w-full" onClick={runBackup} disabled={backingUp}>
-              <Database className="h-4 w-4" />
-              <span>{backingUp ? 'Creating Backup…' : 'Backup DB'}</span>
-            </Button>
-          </div>
+          {/* Overview Tab */}
+          {activeTab === 'overview' && (
+          <>
+          {/* Health monitor */}
+          <Card className="rounded-2xl">
+            <CardContent className="p-4">
+              {preRestartNotice && (
+                <div className="mb-3 rounded-xl border bg-amber-100 p-3 flex items-center justify-between gap-3">
+                  <div className="text-sm text-amber-900">New version built. Page info may be outdated. We will restart services now; the site will stay up. You can reload anytime.</div>
+                  <Button className="rounded-xl" variant="outline" onClick={reloadPage}>Reload now</Button>
+                </div>
+              )}
+              {reloadReady && (
+                <div className="mb-3 rounded-xl border bg-amber-50/70 p-3 flex items-center justify-between gap-3">
+                  <div className="text-sm">Services restart complete. Reload when convenient.</div>
+                  <Button className="rounded-xl" onClick={reloadPage}>Reload page</Button>
+                </div>
+              )}
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium">Health monitor</div>
+                  <div className="text-xs opacity-60">Auto‑ping every 60s</div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  aria-label="Refresh health"
+                  onClick={refreshHealth}
+                  disabled={healthRefreshing}
+                  className="h-8 w-8 rounded-xl border bg-white text-black hover:bg-stone-50"
+                >
+                  <RefreshCw className={`h-4 w-4 ${healthRefreshing ? 'animate-spin' : ''}`} />
+                </Button>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
+                <div className="flex items-center justify-between rounded-xl border p-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Server className="h-4 w-4 opacity-70" />
+                    <div className="text-sm truncate">API</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-xs tabular-nums opacity-60">
+                      {apiProbe.latencyMs !== null ? `${apiProbe.latencyMs} ms` : '—'}
+                    </div>
+                    <StatusDot ok={apiProbe.ok} title={!apiProbe.ok ? (apiProbe.errorCode || undefined) : undefined} />
+                    {!apiProbe?.ok && <ErrorBadge code={apiProbe.errorCode} />}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between rounded-xl border p-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <ShieldCheck className="h-4 w-4 opacity-70" />
+                    <div className="text-sm truncate">Admin API</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-xs tabular-nums opacity-60">
+                      {adminProbe.latencyMs !== null ? `${adminProbe.latencyMs} ms` : '—'}
+                    </div>
+                    <StatusDot ok={adminProbe.ok} title={!adminProbe.ok ? (adminProbe.errorCode || undefined) : undefined} />
+                    {!adminProbe?.ok && <ErrorBadge code={adminProbe.errorCode} />}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between rounded-xl border p-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Database className="h-4 w-4 opacity-70" />
+                    <div className="text-sm truncate">Database</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-xs tabular-nums opacity-60">
+                      {dbProbe.latencyMs !== null ? `${dbProbe.latencyMs} ms` : '—'}
+                    </div>
+                    <StatusDot ok={dbProbe.ok} title={!dbProbe.ok ? (dbProbe.errorCode || undefined) : undefined} />
+                    {!dbProbe?.ok && <ErrorBadge code={dbProbe.errorCode} />}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
+          {/* Actions */}
+          <Card className="rounded-2xl">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-sm font-medium truncate">Actions</div>
+              </div>
+
+              {/* Collapsible: Broadcast message creation */}
+              <div className="mt-2">
+                <button
+                  type="button"
+                  className="flex items-center gap-2 text-sm font-medium"
+                  onClick={() => setBroadcastOpen(o => !o)}
+                  aria-expanded={broadcastOpen}
+                  aria-controls="broadcast-create"
+                >
+                  <ChevronDown className={`h-4 w-4 transition-transform ${broadcastOpen ? 'rotate-180' : ''}`} />
+                  Broadcast message
+                </button>
+                {broadcastOpen && (
+                  <div className="mt-2" id="broadcast-create">
+                    <BroadcastControls inline onExpired={() => setBroadcastOpen(true)} onActive={() => setBroadcastOpen(true)} />
+                  </div>
+                )}
+              </div>
+
+              {/* Divider between Broadcast and the action controls/buttons */}
+              <div className="my-4 border-t" />
+
+              {/* Branch selection */}
+              <div className="mt-4 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  <GitBranch className="h-4 w-4 opacity-70" />
+                  <div className="text-sm font-medium truncate">Branch</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="text-xs opacity-60 hidden sm:block">Current:</div>
+                  <Badge variant="outline" className="rounded-full max-w-[360px] truncate" title={currentBranch || undefined}>
+                    {branchesLoading ? '—' : shortenMiddle(currentBranch || 'unknown', branchMaxChars)}
+                  </Badge>
+                </div>
+              </div>
+              <div className="mt-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <div className="flex-1 min-w-0">
+                  <select
+                    className="w-full rounded-xl border px-3 py-2 text-sm bg-white"
+                    value={selectedBranch}
+                    onChange={(e) => setSelectedBranch(e.target.value)}
+                    disabled={branchesLoading || branchesRefreshing}
+                    aria-label="Select branch"
+                  >
+                  {branchesLoading ? (
+                    <option value="">Loading…</option>
+                  ) : branchOptions.length === 0 ? (
+                    <option value="">No branches found</option>
+                  ) : (
+                    branchOptions.map(b => (
+                      <option key={b} value={b} title={b}>{shortenMiddle(b, branchMaxChars)}</option>
+                    ))
+                  )}
+                  </select>
+                </div>
+                <Button
+                  variant="outline"
+                  className="rounded-xl w-full sm:w-auto px-2 sm:px-3"
+                  onClick={() => loadBranches({ initial: false })}
+                  disabled={branchesLoading || branchesRefreshing}
+                  aria-label="Refresh branches"
+                >
+                  <RefreshCw className={`h-4 w-4 ${branchesRefreshing ? 'animate-spin' : ''}`} />
+                  <span className="hidden sm:inline">Refresh branches</span>
+                  <span className="sm:hidden inline">Refresh</span>
+                </Button>
+              </div>
+              <div className="text-xs opacity-60 mt-2">
+                Changing branch takes effect when you run Pull & Build.
+              </div>
+
+              {/* Action buttons */}
+              <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <Button className="rounded-2xl w-full" onClick={restartServer} disabled={restarting}>
+                  <Server className="h-4 w-4" />
+                  <RefreshCw className="h-4 w-4" />
+                  <span>{restarting ? 'Restarting…' : 'Restart Services'}</span>
+                </Button>
+                <Button className="rounded-2xl w-full" variant="secondary" onClick={pullLatest} disabled={pulling}>
+                  <Github className="h-4 w-4" />
+                  <RefreshCw className="h-4 w-4" />
+                  <span>{pulling ? 'Pulling…' : 'Pull & Build'}</span>
+                </Button>
+                <Button className="rounded-2xl w-full" variant="destructive" onClick={runSyncSchema} disabled={syncing}>
+                  <Database className="h-4 w-4" />
+                  <span>{syncing ? 'Syncing Schema…' : 'Sync DB Schema'}</span>
+                </Button>
+              </div>
+
+              {/* Divider before Admin Console */}
+              <div className="my-4 border-t" />
+
+              {/* Admin Console (moved inside Actions card) */}
+              <div>
+                <div className="flex items-center justify-between">
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 text-sm font-medium"
+                    onClick={() => setConsoleOpen(o => !o)}
+                    aria-expanded={consoleOpen}
+                    aria-controls="admin-console"
+                  >
+                    <ChevronDown className={`h-4 w-4 transition-transform ${consoleOpen ? 'rotate-180' : ''}`} />
+                    Admin Console
+                    {consoleLines.length > 0 && (
+                      <span className="text-xs opacity-60">({consoleLines.length} lines)</span>
+                    )}
+                  </button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-xl h-8 px-3"
+                    onClick={softRefreshAdmin}
+                    aria-label="Refresh admin data"
+                    title="Soft reload (won't lose edits)"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    Reload
+                  </Button>
+                </div>
+                {consoleOpen && (
+                  <div className="mt-2" id="admin-console">
+                    <div className={`relative rounded-xl border ${hasConsoleError ? 'border-4 border-rose-600 ring-8 ring-rose-500/40 shadow-lg shadow-rose-500/30' : ''}`}>
+                      <div
+                        ref={consoleRef}
+                        className="h-48 overflow-auto bg-black text-white text-xs p-3 pr-8 font-mono whitespace-pre-wrap rounded-xl"
+                        aria-live="polite"
+                      >
+                        {consoleLines.length === 0 ? 'No messages yet.' : consoleLines.join('\n')}
+                      </div>
+                      <div className="pointer-events-none absolute bottom-2 right-3 z-10 flex items-center gap-1">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="pointer-events-auto h-7 w-7 rounded-md bg-white/10 text-white hover:bg-white/20"
+                          onClick={() => setConsoleOpen(false)}
+                          title="Hide console"
+                          aria-label="Hide console"
+                        >
+                          <EyeOff className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="pointer-events-auto h-7 w-7 rounded-md bg-white/10 text-white hover:bg-white/20"
+                          onClick={() => { setConsoleLines([]); setConsoleOpen(true) }}
+                          title="Clear console"
+                          aria-label="Clear console"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="pointer-events-auto h-7 w-7 rounded-md bg-white/10 text-white hover:bg-white/20"
+                          onClick={async () => {
+                            const ok = await copyTextToClipboard(getAllLogsText())
+                            if (!ok) alert('Copy failed. You can still select and copy manually.')
+                          }}
+                          title="Copy console"
+                          aria-label="Copy console"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
           <div className="pt-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
               <Card className="rounded-2xl">
-                <CardContent className="p-4">
+                <CardContent className="p-4 space-y-2">
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       <div className="text-sm opacity-60">Currently online</div>
                       <div className="text-xs opacity-60">{onlineUpdatedAt ? `Updated ${formatTimeAgo(onlineUpdatedAt)}` : 'Updated —'}</div>
                     </div>
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="icon"
                       aria-label="Refresh currently online"
-                      onClick={() => loadOnlineUsers({ initial: false })}
-                      disabled={onlineLoading || onlineRefreshing}
-                      className="h-8 w-8"
+                      onClick={() => { loadOnlineUsers({ initial: false }); loadOnlineIpsList({ initial: false }) }}
+                      disabled={onlineLoading || onlineRefreshing || ipsLoading || ipsRefreshing}
+                      className="h-8 w-8 rounded-xl border bg-white text-black hover:bg-stone-50"
                     >
-                      <RefreshCw className={`h-4 w-4 ${onlineLoading || onlineRefreshing ? 'animate-spin' : ''}`} />
+                      <RefreshCw className={`h-4 w-4 ${(onlineLoading || onlineRefreshing || ipsLoading || ipsRefreshing) ? 'animate-spin' : ''}`} />
                     </Button>
                   </div>
                   <div className="text-2xl font-semibold tabular-nums mt-1">
                     {onlineLoading ? '—' : onlineUsers}
                   </div>
+                  {/* Collapsible Connected IPs under Currently online */}
+                  <div className="mt-3">
+                    <div className="flex items-center justify-between">
+                      <button
+                        type="button"
+                        className="flex items-center gap-2 text-sm font-medium"
+                        onClick={() => setIpsOpen(o => !o)}
+                        aria-expanded={ipsOpen}
+                        aria-controls="connected-ips"
+                      >
+                        <ChevronDown className={`h-4 w-4 transition-transform ${ipsOpen ? 'rotate-180' : ''}`} />
+                        IPs
+                      </button>
+                      <div />
+                    </div>
+                    {ipsOpen && (
+                      <div className="mt-2" id="connected-ips">
+                        <div className="rounded-xl border bg-white p-3 max-h-48 overflow-auto">
+                          {ipsLoading ? (
+                            <div className="text-sm opacity-60">Loading…</div>
+                          ) : ips.length === 0 ? (
+                            <div className="text-sm opacity-60">No IPs.</div>
+                          ) : (
+                            <div className="flex flex-wrap gap-2">
+                              {ips.map((ip) => (
+                                <Badge
+                                  key={ip}
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={() => jumpToIpLookup(ip)}
+                                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); jumpToIpLookup(ip) } }}
+                                  title={`Lookup members for ${ip}`}
+                                  aria-label={`Lookup members for ${ip}`}
+                                  variant="outline"
+                                  className="rounded-full px-2 py-1 text-xs cursor-pointer hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-ring"
+                                >
+                                  {ip}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
               <Card className="rounded-2xl">
                 <CardContent className="p-4">
-                  <div className="text-sm opacity-60">Registered accounts</div>
-                  <div className="text-2xl font-semibold">{registeredCount ?? '—'}</div>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-sm opacity-60">Registered accounts</div>
+                      <div className="text-xs opacity-60">{registeredUpdatedAt ? `Updated ${formatTimeAgo(registeredUpdatedAt)}` : 'Updated —'}</div>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      aria-label="Refresh registered accounts"
+                      onClick={() => loadRegisteredCount({ initial: false })}
+                      disabled={registeredLoading || registeredRefreshing}
+                      className="h-8 w-8 rounded-xl border bg-white text-black hover:bg-stone-50"
+                    >
+                      <RefreshCw className={`h-4 w-4 ${registeredLoading || registeredRefreshing ? 'animate-spin' : ''}`} />
+                    </Button>
+                  </div>
+                  <div className="text-2xl font-semibold tabular-nums mt-1">
+                    {registeredLoading ? '—' : (registeredCount ?? '—')}
+                  </div>
                 </CardContent>
               </Card>
             </div>
@@ -446,18 +1806,34 @@ export const AdminPage: React.FC = () => {
               <CardContent className="p-4">
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <div>
-                    <div className="text-sm font-medium">Unique visitors — last 7 days</div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-sm font-medium">Unique visitors — last {visitorsWindowDays} days</div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          className={`text-xs px-2 py-1 rounded-lg border ${visitorsWindowDays === 7 ? 'bg-black text-white' : 'bg-white'}`}
+                          onClick={() => setVisitorsWindowDays(7)}
+                          aria-pressed={visitorsWindowDays === 7}
+                        >7d</button>
+                        <button
+                          type="button"
+                          className={`text-xs px-2 py-1 rounded-lg border ${visitorsWindowDays === 30 ? 'bg-black text-white' : 'bg-white'}`}
+                          onClick={() => setVisitorsWindowDays(30)}
+                          aria-pressed={visitorsWindowDays === 30}
+                        >30d</button>
+                      </div>
+                    </div>
                     <div className="text-xs opacity-60">{visitorsUpdatedAt ? `Updated ${formatTimeAgo(visitorsUpdatedAt)}` : 'Updated —'}</div>
                   </div>
                   <Button
-                    variant="ghost"
+                    variant="outline"
                     size="icon"
                     aria-label="Refresh visitors"
                     onClick={() => loadVisitorsStats({ initial: false })}
                     disabled={visitorsLoading || visitorsRefreshing}
-                    className="h-8 w-8"
+                    className="h-8 w-8 rounded-xl border bg-white text-black hover:bg-stone-50"
                   >
-                    <RefreshCw className={`h-4 w-4 ${visitorsLoading || visitorsRefreshing ? 'animate-spin' : ''}`} />
+                      <RefreshCw className={`h-4 w-4 ${visitorsLoading || visitorsRefreshing ? 'animate-spin' : ''}`} />
                   </Button>
                 </div>
 
@@ -469,11 +1845,15 @@ export const AdminPage: React.FC = () => {
                   (() => {
                     const values = visitorsSeries.map(d => d.uniqueVisitors)
                     const maxVal = Math.max(...values, 1)
-                    const totalVal = values.reduce((acc, val) => acc + val, 0)
+                    // Prefer unique total across the full week from API; fallback to sum
+                    const totalVal = (visitorsTotalUnique7d && Number.isFinite(visitorsTotalUnique7d))
+                      ? visitorsTotalUnique7d
+                      : values.reduce((acc, val) => acc + val, 0)
                     const avgVal = Math.round(totalVal / values.length)
 
                     const formatDow = (isoDate: string) => {
                       try {
+                        if (visitorsWindowDays === 30) return ''
                         const dt = new Date(isoDate + 'T00:00:00Z')
                         return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dt.getUTCDay()]
                       } catch {
@@ -517,11 +1897,11 @@ export const AdminPage: React.FC = () => {
                     return (
                       <div>
                         <div className="text-sm font-medium mb-2">Total for the whole week: <span className="tabular-nums">{totalVal}</span></div>
-                        <div className="h-64">
+                        <div className="h-72 w-full max-w-none mx-0">
                           <ResponsiveContainer width="100%" height="100%">
                             <ComposedChart
                               data={visitorsSeries}
-                              margin={{ top: 10, right: 8, bottom: 8, left: 0 }}
+                              margin={{ top: 10, right: 8, bottom: 14, left: 8 }}
                             >
                               <defs>
                                 <linearGradient id="visitsLineGrad" x1="0" y1="0" x2="1" y2="0">
@@ -542,6 +1922,7 @@ export const AdminPage: React.FC = () => {
                                 axisLine={false}
                                 tickLine={false}
                                 interval={0}
+                                padding={{ left: 0, right: 0 }}
                               />
                               <YAxis
                                 allowDecimals={false}
@@ -549,9 +1930,16 @@ export const AdminPage: React.FC = () => {
                                 tick={{ fontSize: 11, fill: '#525252' }}
                                 axisLine={false}
                                 tickLine={false}
+                                width={28}
                               />
                               <Tooltip content={<TooltipContent />} cursor={{ stroke: 'rgba(0,0,0,0.1)' }} />
-                              <ReferenceLine y={avgVal} stroke="#a3a3a3" strokeDasharray="4 4" ifOverflow="extendDomain" label={{ value: 'avg', position: 'right', fill: '#737373', fontSize: 11 }} />
+                              <ReferenceLine
+                                y={avgVal}
+                                stroke="#a3a3a3"
+                                strokeDasharray="4 4"
+                                ifOverflow="extendDomain"
+                                label={{ value: 'avg', position: 'insideRight', fill: '#737373', fontSize: 11, dx: -6 }}
+                              />
 
                               <Area type="monotone" dataKey="uniqueVisitors" fill="url(#visitsAreaGrad)" stroke="none" animationDuration={600} />
                               <Line
@@ -565,6 +1953,140 @@ export const AdminPage: React.FC = () => {
                               />
                             </ComposedChart>
                           </ResponsiveContainer>
+                        </div>
+                        {/* Sources breakdown */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
+                          <div className="rounded-xl border p-3 md:col-span-2">
+                            <div className="text-sm font-medium mb-2">Top countries</div>
+                            {topCountries.length === 0 ? (
+                              <div className="text-sm opacity-60">No data.</div>
+                            ) : (
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-1">
+                                <div className="col-span-2 min-h-[150px]">
+                                  <ResponsiveContainer width="100%" height={150}>
+                                    <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+                                      {(() => {
+                                        const pieData: Array<{ country: string; visits: number; pct?: number; isOther?: boolean }> = [...topCountries]
+                                        if (otherCountries && otherCountries.visits > 0) {
+                                          pieData.push({ country: 'Other', visits: otherCountries.visits, pct: otherCountries.pct, isOther: true })
+                                        }
+                                        const totalVisits = pieData.reduce((s, x) => s + (x.visits || 0), 0)
+                                        const CountryPieTooltip = ({ active, payload }: { active?: boolean; payload?: any[] }) => {
+                                          if (!active || !payload || !payload.length) return null
+                                          const d = payload[0]?.payload as { country: string; visits: number; pct?: number; isOther?: boolean }
+                                          if (!d) return null
+                                          if (d.isOther) {
+                                            const items: Array<{ country: string; visits: number }> = Array.isArray(otherCountries?.items) ? otherCountries!.items as Array<{ country: string; visits: number }> : []
+                                            const otherTotal = Math.max(0, otherCountries?.visits || 0)
+                                            const rows: Array<{ name: string; visits: number; pctTotal: number; pctOther: number }> = items
+                                              .map((it: { country: string; visits: number }) => ({
+                                                name: countryCodeToName(it.country),
+                                                visits: it.visits,
+                                                pctTotal: totalVisits > 0 ? (it.visits / totalVisits) * 100 : 0,
+                                                pctOther: otherTotal > 0 ? (it.visits / otherTotal) * 100 : 0,
+                                              }))
+                                              .sort((a: { visits: number }, b: { visits: number }) => (b.visits || 0) - (a.visits || 0))
+                                            return (
+                                              <div className="rounded-xl border bg-white shadow px-3 py-2 max-w-[480px]">
+                                                <div className="text-xs font-medium mb-1">Countries in Other</div>
+                                                <div className="text-[11px] opacity-80 space-y-0.5">
+                                                  {rows.map((r: { name: string; visits: number; pctTotal: number; pctOther: number }, idx: number) => (
+                                                    <div key={`${r.name}-${idx}`} className="flex items-center justify-between gap-3">
+                                                      <div className="truncate">{r.name}</div>
+                                                      <div className="text-[11px] tabular-nums whitespace-nowrap">{Math.round(r.pctOther)}% of Other · {Math.round(r.pctTotal)}% · {r.visits}</div>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              </div>
+                                            )
+                                          }
+                                          const name = countryCodeToName(d.country)
+                                          const pct = Math.round(d.pct ?? (totalVisits > 0 ? (d.visits / totalVisits) * 100 : 0))
+                                          return (
+                                            <div className="rounded-xl border bg-white shadow px-3 py-2">
+                                              <div className="text-xs font-medium">{name}</div>
+                                              <div className="text-[11px] opacity-80">{pct}% · {d.visits}</div>
+                                            </div>
+                                          )
+                                        }
+                                        return (
+                                          <>
+                                            <Pie
+                                              data={pieData}
+                                              dataKey="visits"
+                                              nameKey="country"
+                                              innerRadius={36}
+                                              outerRadius={64}
+                                              paddingAngle={3}
+                                              cx="40%"
+                                            >
+                                              {pieData.map((entry, index) => (
+                                                <Cell key={`cell-${entry.country}-${index}`} fill={countryColors[index % countryColors.length]} />
+                                              ))}
+                                            </Pie>
+                                            <Tooltip content={<CountryPieTooltip />} cursor={{ stroke: 'rgba(0,0,0,0.1)' }} />
+                                          </>
+                                        )
+                                      })()}
+                                    </PieChart>
+                                  </ResponsiveContainer>
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                  {topCountries.slice(0, 5).map((c, idx) => (
+                                    <div key={c.country} className="flex items-center justify-between">
+                                      <div className="flex-1 flex items-center gap-1.5 min-w-0">
+                                        <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: countryColors[idx % countryColors.length] }} />
+                                        <span className="text-sm truncate">{countryCodeToName(c.country)}</span>
+                                      </div>
+                                      <span className="text-sm tabular-nums">{Math.round(c.pct || 0)}%</span>
+                                    </div>
+                                  ))}
+                                  {otherCountries && otherCountries.visits > 0 && (
+                                    <div className="flex items-center justify-between">
+                                      <div
+                                        className="flex-1 flex items-center gap-1.5 min-w-0"
+                                        onMouseEnter={(e) => showOtherCountriesTooltip(e.currentTarget as HTMLElement)}
+                                        onMouseLeave={hideOtherCountriesTooltip}
+                                        onFocus={(e) => showOtherCountriesTooltip(e.currentTarget as HTMLElement)}
+                                        onBlur={hideOtherCountriesTooltip}
+                                      >
+                                        <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: countryColors[5 % countryColors.length] }} />
+                                        <span className="text-sm truncate">Other ({otherCountries.count})</span>
+                                      </div>
+                                      <span className="text-sm tabular-nums">{Math.round(otherCountries?.pct || 0)}%</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                          <div className="rounded-xl border p-3 md:col-span-1">
+                            <div className="text-sm font-medium mb-2">Top referrers</div>
+                            {topReferrers.length === 0 ? (
+                              <div className="text-sm opacity-60">No data.</div>
+                            ) : (
+                              <div className="flex flex-col gap-2">
+                                {topReferrers.slice(0, 5).map((r, idx) => (
+                                  <div key={r.source} className="flex items-center justify-between">
+                                    <div className="flex-1 flex items-center gap-2 min-w-0">
+                                      <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: referrerColors[idx % referrerColors.length] }} />
+                                      <span className="text-sm truncate">{r.source}</span>
+                                    </div>
+                                    <span className="text-sm tabular-nums">{Math.round(r.pct || 0)}%</span>
+                                  </div>
+                                ))}
+                                {otherReferrers && otherReferrers.visits > 0 && (
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex-1 flex items-center gap-2 min-w-0">
+                                      <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: referrerColors[4 % referrerColors.length] }} />
+                                      <span className="text-sm truncate">Other ({otherReferrers.count})</span>
+                                    </div>
+                                    <span className="text-sm tabular-nums">{Math.round(otherReferrers.pct || 0)}%</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     )
@@ -597,6 +2119,638 @@ export const AdminPage: React.FC = () => {
               </Button>
             </div>
           </div>
+          </>
+          )}
+
+          {/* Admin Logs Tab */}
+          {activeTab === 'admin_logs' && (
+            <AdminLogs />
+          )}
+
+          {/* Members Tab */}
+          {activeTab === 'members' && (
+            <div className="space-y-4" ref={membersContainerRef}>
+          <Card className="rounded-2xl">
+                <CardContent className="p-4 space-y-3">
+                  <div className="text-sm font-medium flex items-center gap-2"><UserSearch className="h-4 w-4" /> Find member by email or username</div>
+                  <div className="flex gap-2 relative">
+                    <div className="flex-1 relative">
+                  <Input
+                    id="member-email"
+                    name="member-email"
+                    autoComplete="email"
+                    aria-label="Member email or username"
+                    className="rounded-xl"
+                    placeholder="user@example.com or username"
+                    value={lookupEmail}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setLookupEmail(e.target.value)}
+                    onFocus={() => { if (emailSuggestions.length > 0) setSuggestionsOpen(true) }}
+                    onBlur={() => setTimeout(() => setSuggestionsOpen(false), 120)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        if (suggestionsOpen && emailSuggestions.length > 0 && highlightIndex >= 0 && highlightIndex < emailSuggestions.length) {
+                          e.preventDefault()
+                          const chosen = emailSuggestions[highlightIndex]
+                          const typed = lookupEmail.trim()
+                          const nextVal = typed.includes('@') ? (chosen.email || chosen.display_name || '') : (chosen.display_name || chosen.email || '')
+                          setLookupEmail(nextVal)
+                          setSuggestionsOpen(false)
+                        } else {
+                          e.preventDefault()
+                          lookupMember()
+                        }
+                        return
+                      }
+                      if (!suggestionsOpen || emailSuggestions.length === 0) return
+                      if (e.key === 'ArrowDown') {
+                        e.preventDefault()
+                        setHighlightIndex((prev) => (prev + 1) % emailSuggestions.length)
+                      } else if (e.key === 'ArrowUp') {
+                        e.preventDefault()
+                        setHighlightIndex((prev) => (prev - 1 + emailSuggestions.length) % emailSuggestions.length)
+                      }
+                    }}
+                  />
+                  {suggestionsOpen && emailSuggestions.length > 0 && (
+                    <div className="absolute z-10 mt-1 w-full rounded-xl border bg-white shadow-md max-h-60 overflow-auto" role="listbox">
+                          {emailSuggestions.map((s, idx) => (
+                            <button
+                              key={s.id}
+                              type="button"
+                          className={`w-full text-left px-3 py-2 text-sm rounded-xl ${idx === highlightIndex ? 'bg-neutral-100' : ''}`}
+                          role="option"
+                          aria-selected={idx === highlightIndex}
+                              onMouseEnter={() => setHighlightIndex(idx)}
+                              onMouseDown={(e) => {
+                                e.preventDefault()
+                                const typed = lookupEmail.trim()
+                                const nextVal = typed.includes('@') ? (s.email || s.display_name || '') : (s.display_name || s.email || '')
+                                setLookupEmail(nextVal)
+                                setSuggestionsOpen(false)
+                              }}
+                            >
+                              <div className="truncate">{s.display_name || s.email || ''}</div>
+                              {s.display_name && s.email && s.display_name !== s.email && (
+                                <div className="text-xs opacity-60 truncate">{s.email}</div>
+                              )}
+                            </button>
+                          ))}
+                          {suggestLoading && (
+                            <div className="px-3 py-2 text-xs opacity-60">Loading…</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <Button className="rounded-2xl" onClick={lookupMember} disabled={memberLoading || !lookupEmail}>
+                      <Search className="h-4 w-4" /> Lookup
+                    </Button>
+                  </div>
+              {memberError && <div className="text-sm text-rose-600">{memberError}</div>}
+              {memberLoading && (
+                <div className="space-y-3" aria-live="polite">
+                  <div className="flex items-center gap-3">
+                    <div className="h-12 w-12 rounded-full bg-neutral-200 animate-pulse" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-4 bg-neutral-200 rounded w-40 animate-pulse" />
+                      <div className="h-3 bg-neutral-200 rounded w-60 animate-pulse" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <div key={i} className="h-16 rounded-xl border bg-white animate-pulse" />
+                    ))}
+                  </div>
+                </div>
+              )}
+              {!memberLoading && !memberError && !memberData && (
+                <div className="text-sm opacity-60">Search for a member to see details.</div>
+              )}
+              {memberData && (
+                <div className="space-y-4">
+                  {(() => {
+                    const nameOrEmail = (memberData.profile?.display_name || memberData.user?.email || '').trim()
+                    const initial = (nameOrEmail[0] || '?').toUpperCase()
+                    return (
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="h-14 w-14 rounded-full bg-gradient-to-br from-emerald-200 to-green-300 text-emerald-900 flex items-center justify-center font-semibold shadow-inner">
+                            {initial}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-base md:text-lg font-semibold truncate">
+                              {memberData.profile?.display_name || memberData.user?.email || '—'}
+                            </div>
+                            <div className="text-xs opacity-70 truncate">
+                              {memberData.user?.email || '—'}{memberData.user?.id ? (<span className="opacity-60"> · id {memberData.user.id}</span>) : null}
+                            </div>
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {memberData.profile?.is_admin && (
+                                <Badge variant="outline" className="rounded-full px-2 py-0.5 bg-emerald-100 text-emerald-800 border-emerald-200 flex items-center gap-1">
+                                  <ShieldCheck className="h-3 w-3" /> Admin
+                                </Badge>
+                              )}
+                              {memberData.isBannedEmail && (
+                                <Badge variant="destructive" className="rounded-full px-2 py-0.5">Banned</Badge>
+                              )}
+                              {memberData.lastOnlineAt && (
+                                <Badge variant="outline" className="rounded-full px-2 py-0.5">Last online {new Date(memberData.lastOnlineAt).toLocaleString()}</Badge>
+                              )}
+                              {(memberData as any)?.lastCountry && (
+                                <Badge variant="outline" className="rounded-full px-2 py-0.5">{countryCodeToName((memberData as any).lastCountry)}</Badge>
+                              )}
+                              {(memberData as any)?.lastReferrer && (
+                                <Badge variant="outline" className="rounded-full px-2 py-0.5">Referrer {(memberData as any).lastReferrer}</Badge>
+                              )}
+                              {memberData.user?.created_at && (
+                                <Badge variant="outline" className="rounded-full px-2 py-0.5">Joined {new Date(memberData.user.created_at).toLocaleDateString()}</Badge>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {memberData.profile?.is_admin ? (
+                            <Dialog open={demoteOpen} onOpenChange={setDemoteOpen}>
+                              <DialogTrigger asChild>
+                                <Button
+                                  variant="destructive"
+                                  size="icon"
+                                  className="rounded-xl"
+                                  title="Remove admin"
+                                  aria-label="Remove admin"
+                                  disabled={!lookupEmail}
+                                >
+                                  <ShieldX className="h-4 w-4" />
+                                </Button>
+                              </DialogTrigger>
+                              <DialogContent>
+                                <DialogHeader>
+                                  <DialogTitle>Remove admin from {lookupEmail || 'user'}</DialogTitle>
+                                  <DialogDescription>
+                                    This will revoke administrative privileges and make the user a normal member.
+                                  </DialogDescription>
+                                </DialogHeader>
+                                <DialogFooter>
+                                  <DialogClose asChild>
+                                    <Button variant="secondary">Cancel</Button>
+                                  </DialogClose>
+                                  <Button
+                                    variant="destructive"
+                                    onClick={performDemote}
+                                    disabled={!lookupEmail || demoteSubmitting}
+                                  >
+                                    {demoteSubmitting ? 'Removing…' : 'Confirm remove'}
+                                  </Button>
+                                </DialogFooter>
+                              </DialogContent>
+                            </Dialog>
+                          ) : (
+                            <Dialog open={promoteOpen} onOpenChange={setPromoteOpen}>
+                              <DialogTrigger asChild>
+                                <Button
+                                  variant="secondary"
+                                  size="icon"
+                                  className="rounded-xl"
+                                  title="Promote to admin"
+                                  aria-label="Promote to admin"
+                                  disabled={!lookupEmail}
+                                >
+                                  <ShieldCheck className="h-4 w-4" />
+                                </Button>
+                              </DialogTrigger>
+                              <DialogContent>
+                                <DialogHeader>
+                                  <DialogTitle>Promote {lookupEmail || 'user'} to Admin</DialogTitle>
+                                  <DialogDescription>
+                                    This grants full administrative privileges. Are you sure?
+                                  </DialogDescription>
+                                </DialogHeader>
+                                <DialogFooter>
+                                  <DialogClose asChild>
+                                    <Button variant="secondary">Cancel</Button>
+                                  </DialogClose>
+                                  <Button
+                                    onClick={performPromote}
+                                    disabled={!lookupEmail || promoteSubmitting}
+                                  >
+                                    {promoteSubmitting ? 'Promoting…' : 'Confirm promote'}
+                                  </Button>
+                                </DialogFooter>
+                              </DialogContent>
+                            </Dialog>
+                          )}
+                          <Dialog open={banOpen} onOpenChange={setBanOpen}>
+                            <DialogTrigger asChild>
+                              <Button
+                                variant="destructive"
+                                size="icon"
+                                className="rounded-xl"
+                                title="Ban user"
+                                aria-label="Ban user"
+                                disabled={!lookupEmail}
+                              >
+                                <Gavel className="h-4 w-4" />
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle>Ban {lookupEmail || 'user'}</DialogTitle>
+                                <DialogDescription>
+                                  This will delete the account and ban all known IPs for this user.
+                                </DialogDescription>
+                              </DialogHeader>
+                              <div className="grid gap-2 mt-2">
+                                <label htmlFor="ban-reason" className="text-xs opacity-60">Reason</label>
+                                <Textarea
+                                  id="ban-reason"
+                                  name="ban-reason"
+                                  className="min-h-[100px]"
+                                  placeholder="Reason for ban"
+                                  value={banReason}
+                                  onChange={(e) => setBanReason(e.target.value)}
+                                />
+                              </div>
+                              <DialogFooter>
+                                <DialogClose asChild>
+                                  <Button variant="secondary">Cancel</Button>
+                                </DialogClose>
+                                <Button
+                                  variant="destructive"
+                                  onClick={performBan}
+                                  disabled={!lookupEmail || banSubmitting}
+                                >
+                                  {banSubmitting ? 'Banning…' : 'Confirm ban'}
+                                </Button>
+                              </DialogFooter>
+                            </DialogContent>
+                          </Dialog>
+                        </div>
+                      </div>
+                    )
+                  })()}
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    <div className="rounded-xl border p-3 text-center">
+                      <div className="text-[11px] opacity-60">Visits</div>
+                      <div className="text-base font-semibold tabular-nums">{memberData.visitsCount ?? '—'}</div>
+                    </div>
+                    
+                    <div className="rounded-xl border p-3 text-center">
+                      <div className="text-[11px] opacity-60">Total plants</div>
+                      <div className="text-base font-semibold tabular-nums">{memberData.plantsTotal ?? '—'}</div>
+                    </div>
+                    <div className="rounded-xl border p-3 text-center">
+                      <div className="text-[11px] opacity-60">Last IP</div>
+                      <div className="text-base font-semibold tabular-nums truncate" title={memberData.lastIp || undefined}>{memberData.lastIp || '—'}</div>
+                    </div>
+                    <div className="rounded-xl border p-3 text-center">
+                      <div className="text-[11px] opacity-60">Mean RPM (5m)</div>
+                      <div className="text-base font-semibold tabular-nums">{typeof memberData.meanRpm5m === 'number' ? memberData.meanRpm5m.toFixed(2) : '—'}</div>
+                    </div>
+                    <div className="rounded-xl border p-3">
+                      <div className="text-[11px] opacity-60 mb-1">Top referrers</div>
+                      {(!memberData.topReferrers || memberData.topReferrers.length === 0) ? (
+                        <div className="text-xs opacity-60">—</div>
+                      ) : (
+                        <div className="space-y-0.5">
+                          {memberData.topReferrers.slice(0,3).map((r, idx) => (
+                            <div key={`${r.source}-${idx}`} className="flex items-center justify-between text-sm">
+                              <div className="truncate mr-2">{r.source || 'direct'}</div>
+                              <div className="tabular-nums">{r.visits}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="rounded-xl border p-3">
+                      <div className="text-[11px] opacity-60 mb-1">Top countries</div>
+                      {(!memberData.topCountries || memberData.topCountries.length === 0) ? (
+                        <div className="text-xs opacity-60">—</div>
+                      ) : (
+                        <div className="space-y-0.5">
+                          {memberData.topCountries.slice(0,3).map((c, idx) => (
+                            <div key={`${c.country}-${idx}`} className="flex items-center justify-between text-sm">
+                              <div className="truncate mr-2">{countryCodeToName(c.country)}</div>
+                              <div className="tabular-nums">{c.visits}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="rounded-xl border p-3">
+                      <div className="text-[11px] opacity-60 mb-1">Top devices</div>
+                      {(!memberData.topDevices || memberData.topDevices.length === 0) ? (
+                        <div className="text-xs opacity-60">—</div>
+                      ) : (
+                        <div className="space-y-0.5">
+                          {memberData.topDevices.slice(0,3).map((d, idx) => (
+                            <div key={`${d.device}-${idx}`} className="flex items-center justify-between text-sm">
+                              <div className="truncate mr-2">{d.device}</div>
+                              <div className="tabular-nums">{d.visits}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="text-xs font-medium uppercase tracking-wide opacity-60">Known IPs</div>
+                    <div className="text-xs opacity-60">Unique IPs: <span className="tabular-nums">{memberData.ips.length}</span></div>
+                    <div className="flex flex-wrap gap-1">
+                      {memberData.ips.map((ip) => (
+                        <Badge
+                          key={ip}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => jumpToIpLookup(ip)}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); jumpToIpLookup(ip) } }}
+                          title={`Lookup members for ${ip}`}
+                          aria-label={`Lookup members for ${ip}`}
+                          variant="outline"
+                          className="rounded-full cursor-pointer hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-ring"
+                        >
+                          {ip}
+                        </Badge>
+                      ))}
+                      {memberData.ips.length === 0 && <div className="text-xs opacity-60">No IPs recorded</div>}
+                    </div>
+                  </div>
+
+                  <Card className="rounded-2xl">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <div>
+                          <div className="text-sm font-medium">Visits — last 30 days</div>
+                          <div className="text-xs opacity-60">{memberVisitsUpdatedAt ? `Updated ${formatTimeAgo(memberVisitsUpdatedAt)}` : 'Updated —'}</div>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          aria-label="Refresh visits"
+                          onClick={() => { if (memberData?.user?.id) loadMemberVisitsSeries(memberData.user.id, { initial: true }) }}
+                          disabled={memberVisitsLoading || !memberData?.user?.id}
+                          className="h-8 w-8 rounded-xl border bg-white text-black hover:bg-stone-50"
+                        >
+                          <RefreshCw className={`h-4 w-4 ${memberVisitsLoading ? 'animate-spin' : ''}`} />
+                        </Button>
+                      </div>
+
+                      {memberVisitsLoading ? (
+                        <div className="text-sm opacity-60">Loading…</div>
+                      ) : memberVisitsSeries.length === 0 ? (
+                        <div className="text-sm opacity-60">No data yet.</div>
+                      ) : (
+                        (() => {
+                          const values = memberVisitsSeries.map(d => d.visits)
+                          const maxVal = Math.max(...values, 1)
+                          const avgVal = Math.round((values.reduce((a, b) => a + b, 0)) / values.length)
+                          const formatShort = (iso: string) => {
+                            try {
+                              const dt = new Date(iso + 'T00:00:00Z')
+                              return new Intl.DateTimeFormat(undefined, { month: 'numeric', day: 'numeric', timeZone: 'UTC' }).format(dt)
+                            } catch { return iso }
+                          }
+                          const formatFull = (iso: string) => {
+                            try {
+                              const dt = new Date(iso + 'T00:00:00Z')
+                              return new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(dt)
+                            } catch { return iso }
+                          }
+                          const TooltipContent = ({ active, payload, label }: any) => {
+                            if (!active || !payload || payload.length === 0) return null
+                            const current = payload[0]?.value as number
+                            return (
+                              <div className="rounded-xl border bg-white/90 backdrop-blur p-3 shadow-lg">
+                                <div className="text-xs opacity-60">{formatFull(label)}</div>
+                                <div className="mt-1 text-base font-semibold tabular-nums">{current}</div>
+                              </div>
+                            )
+                          }
+                          return (
+                            <div>
+                              <div className="text-sm font-medium mb-2">Total last 30 days: <span className="tabular-nums">{memberVisitsTotal30d}</span></div>
+                              <div className="h-64">
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <ComposedChart data={memberVisitsSeries} margin={{ top: 10, right: 16, bottom: 14, left: 16 }}>
+                                    <defs>
+                                      <linearGradient id="mVisitsLine" x1="0" y1="0" x2="1" y2="0">
+                                        <stop offset="0%" stopColor="#065f46" />
+                                        <stop offset="100%" stopColor="#10b981" />
+                                      </linearGradient>
+                                      <linearGradient id="mVisitsArea" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stopColor="#10b981" stopOpacity={0.3} />
+                                        <stop offset="100%" stopColor="#10b981" stopOpacity={0.06} />
+                                      </linearGradient>
+                                    </defs>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
+                                    <XAxis dataKey="date" tickFormatter={formatShort} tick={{ fontSize: 11, fill: '#525252' }} axisLine={false} tickLine={false} interval={4} padding={{ left: 12, right: 12 }} />
+                                    <YAxis allowDecimals={false} domain={[0, Math.max(maxVal, 5)]} tick={{ fontSize: 11, fill: '#525252' }} axisLine={false} tickLine={false} />
+                                    <Tooltip content={<TooltipContent />} cursor={{ stroke: 'rgba(0,0,0,0.1)' }} />
+                                    <ReferenceLine y={avgVal} stroke="#a3a3a3" strokeDasharray="4 4" ifOverflow="extendDomain" label={{ value: 'avg', position: 'insideRight', fill: '#737373', fontSize: 11, dx: -6 }} />
+                                    <Area type="monotone" dataKey="visits" fill="url(#mVisitsArea)" stroke="none" animationDuration={600} />
+                                    <Line type="monotone" dataKey="visits" stroke="url(#mVisitsLine)" strokeWidth={3} dot={false} activeDot={{ r: 5, strokeWidth: 2, stroke: '#065f46', fill: '#ffffff' }} animationDuration={700} />
+                                  </ComposedChart>
+                                </ResponsiveContainer>
+                              </div>
+                            </div>
+                          )
+                        })()
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  <Card className="rounded-2xl">
+                    <CardContent className="p-4 space-y-2">
+                      <div className="flex items-start justify-between">
+                        <div className="text-sm font-medium">Admin notes</div>
+                        <AddAdminNote profileId={memberData.user?.id || ''} onAdded={() => lookupMember()} />
+                      </div>
+                      <div className="space-y-2">
+                        {(memberData.adminNotes || []).length === 0 ? (
+                          <div className="text-sm opacity-60">No notes yet.</div>
+                        ) : (
+                          (memberData.adminNotes || []).map((n) => (
+                            <NoteRow key={n.id} note={n} onRemoved={() => lookupMember()} />
+                          ))
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {(memberData.isBannedEmail || (memberData.bannedIps && memberData.bannedIps.length > 0)) && (
+                    <div className="rounded-xl border p-3 bg-rose-50/60">
+                      <div className="text-sm font-medium text-rose-700 flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Banned details</div>
+                      {memberData.isBannedEmail && (
+                        <div className="text-sm mt-1">Email banned {memberData.bannedAt ? `on ${new Date(memberData.bannedAt).toLocaleString()}` : ''}{memberData.bannedReason ? ` — ${memberData.bannedReason}` : ''}</div>
+                      )}
+                      {memberData.bannedIps && memberData.bannedIps.length > 0 && (
+                        <div className="text-sm mt-1">Blocked IPs:
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {memberData.bannedIps.map(ip => (
+                              <Badge
+                                key={ip}
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => jumpToIpLookup(ip)}
+                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); jumpToIpLookup(ip) } }}
+                                title={`Lookup members for ${ip}`}
+                                aria-label={`Lookup members for ${ip}`}
+                                variant="outline"
+                                className="rounded-full bg-white cursor-pointer hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-ring"
+                              >
+                                {ip}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+                </CardContent>
+              </Card>
+
+              {/* Ban action moved into member card header via hammer button */}
+            </div>
+          )}
+
+          {/* IP Search Card */}
+          {activeTab === 'members' && (
+            <Card className="rounded-2xl">
+              <CardContent className="p-4 space-y-3">
+                <div className="text-sm font-medium flex items-center gap-2"><UserSearch className="h-4 w-4" /> Find users by IP address</div>
+                <div className="flex gap-2">
+                  <Input
+                    id="member-ip"
+                    name="member-ip"
+                    autoComplete="off"
+                    aria-label="IP address"
+                    className="rounded-xl"
+                    placeholder="e.g. 203.0.113.42"
+                    value={ipLookup}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setIpLookup(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); lookupByIp() } }}
+                    ref={memberIpInputRef}
+                  />
+                  <Button className="rounded-2xl" onClick={() => lookupByIp()} disabled={ipLoading || !ipLookup.trim()}>
+                    <Search className="h-4 w-4" /> Search IP
+                  </Button>
+                </div>
+                {ipError && <div className="text-sm text-rose-600">{ipError}</div>}
+                {ipLoading && (
+                  <div className="space-y-2" aria-live="polite">
+                    <div className="h-4 bg-neutral-200 rounded w-52 animate-pulse" />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                      {Array.from({ length: 6 }).map((_, i) => (
+                        <div key={i} className="h-20 rounded-xl border bg-white animate-pulse" />
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {!ipLoading && ipResults && (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <div className="rounded-xl border p-3 text-center">
+                        <div className="text-[11px] opacity-60">IP</div>
+                        <div className="text-base font-semibold tabular-nums truncate" title={ipUsed || undefined}>{ipUsed || '—'}</div>
+                      </div>
+                      <div className="rounded-xl border p-3 text-center">
+                        <div className="text-[11px] opacity-60">Users</div>
+                        <div className="text-base font-semibold tabular-nums">{ipUsersCount ?? ipResults.length}</div>
+                      </div>
+                      <div className="rounded-xl border p-3 text-center">
+                        <div className="text-[11px] opacity-60">Connections</div>
+                        <div className="text-base font-semibold tabular-nums">{ipConnectionsCount ?? '—'}</div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <div className="rounded-xl border p-3 text-center">
+                        <div className="text-[11px] opacity-60">Mean RPM (5m)</div>
+                        <div className="text-base font-semibold tabular-nums">{typeof ipMeanRpm5m === 'number' ? ipMeanRpm5m.toFixed(2) : '—'}</div>
+                      </div>
+                      <div className="rounded-xl border p-3 text-center">
+                        <div className="text-[11px] opacity-60">Country</div>
+                        <div className="text-base font-semibold tabular-nums">{ipCountry ? countryCodeToName(ipCountry) : '—'}</div>
+                      </div>
+                      <div className="rounded-xl border p-3">
+                        <div className="text-[11px] opacity-60 mb-1">Top referrers</div>
+                        {(ipTopReferrers.length === 0) ? (
+                          <div className="text-xs opacity-60">—</div>
+                        ) : (
+                          <div className="space-y-0.5">
+                            {ipTopReferrers.slice(0,3).map((r, idx) => (
+                              <div key={`${r.source}-${idx}`} className="flex items-center justify-between text-sm">
+                                <div className="truncate mr-2">{r.source || 'direct'}</div>
+                                <div className="tabular-nums">{r.visits}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      {otherCountriesTooltip && createPortal(
+                        <div
+                          className="fixed z-[70] pointer-events-none"
+                          style={{ top: otherCountriesTooltip.top, left: otherCountriesTooltip.left, transform: 'translate(-50%, -100%)' }}
+                        >
+                          <div className="rounded-xl border bg-white shadow px-3 py-2 max-w-[280px]">
+                            <div className="text-xs font-medium mb-1">Countries in Other</div>
+                            <div className="text-[11px] opacity-80 space-y-0.5 max-h-48 overflow-auto">
+                              {otherCountriesTooltip.names.map((n, idx) => (
+                                <div key={`${n}-${idx}`} className="truncate">{n}</div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>,
+                        document.body
+                      )}
+                    </div>
+                    <div className="rounded-xl border p-3">
+                      <div className="text-[11px] opacity-60 mb-1">Top devices</div>
+                      {(ipTopDevices.length === 0) ? (
+                        <div className="text-xs opacity-60">—</div>
+                      ) : (
+                        <div className="space-y-0.5">
+                          {ipTopDevices.slice(0,4).map((d, idx) => (
+                            <div key={`${d.device}-${idx}`} className="flex items-center justify-between text-sm">
+                              <div className="truncate mr-2">{d.device}</div>
+                              <div className="tabular-nums">{d.visits}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-xs opacity-60">Last seen: {ipLastSeenAt ? new Date(ipLastSeenAt).toLocaleString() : '—'}</div>
+                    {ipResults.length === 0 ? (
+                      <div className="text-sm opacity-60">No users found for this IP.</div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                        {ipResults.map((u) => (
+                          <button
+                            key={u.id}
+                            type="button"
+                            className="text-left rounded-2xl border p-3 bg-white hover:bg-stone-50"
+                            onClick={() => {
+                              const nextVal = (u.email || u.display_name || '').trim()
+                              if (!nextVal) return
+                              setLookupEmail(nextVal)
+                              setTimeout(() => { lookupMember() }, 0)
+                            }}
+                          >
+                            <div className="text-sm font-semibold truncate">{u.display_name || u.email || 'User'}</div>
+                            <div className="text-xs opacity-70 truncate">{u.email || '—'}</div>
+                            {u.last_seen_at && (
+                              <div className="text-[11px] opacity-60 mt-0.5">Last seen {new Date(u.last_seen_at).toLocaleString()}</div>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </CardContent>
       </Card>
 
@@ -604,5 +2758,566 @@ export const AdminPage: React.FC = () => {
   )
 }
 
+// --- Broadcast controls (Overview tab) ---
+const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; onActive?: () => void }> = ({ inline = false, onExpired, onActive }) => {
+  const [active, setActive] = React.useState<{ id: string; message: string; severity?: 'info' | 'warning' | 'danger'; expiresAt: string | null; adminName?: string | null } | null>(() => {
+    // Seed from persisted broadcast for instant edit UI on reload
+    try {
+      const raw = localStorage.getItem('plantswipe.broadcast.active')
+      if (raw) {
+        const data = JSON.parse(raw)
+        const ex = data?.expiresAt ? Date.parse(String(data.expiresAt)) : null
+        const stillValid = !ex || ex > Date.now()
+        if (stillValid) {
+          return {
+            id: String(data?.id || ''),
+            message: String(data?.message || ''),
+            severity: (data?.severity === 'warning' || data?.severity === 'danger') ? data.severity : 'info',
+            expiresAt: data?.expiresAt || null,
+            adminName: data?.adminName || null,
+          }
+        }
+      }
+    } catch {}
+    return null
+  })
+  const [message, setMessage] = React.useState('')
+  // Default to warning requested, but server/UI sometimes using info; keep 'warning' default selectable
+  const [severity, setSeverity] = React.useState<'info' | 'warning' | 'danger'>('warning')
+  // Duration selector (default 5 minutes for send; empty string keeps current on edit)
+  const [duration, setDuration] = React.useState<string>('5m')
+  // Duration removed; default used on send
+  const [submitting, setSubmitting] = React.useState(false)
+  const [removing, setRemoving] = React.useState(false)
+  const [now, setNow] = React.useState(() => Date.now())
+  // Prevent flashing the create UI before we know if an active broadcast exists
+  const [initializing, setInitializing] = React.useState(true)
+
+  // Default duration behavior:
+  // - Create mode (no active): default to 5m
+  // - Edit mode (active): default to "Keep current" (empty string) so we don't override
+  React.useEffect(() => {
+    setDuration(active ? '' : '5m')
+  }, [active])
+
+  React.useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [])
+
+  const msRemaining = React.useCallback((expiresAt: string | null): number | null => {
+    if (!expiresAt) return null
+    const end = Date.parse(expiresAt)
+    if (!Number.isFinite(end)) return null
+    return Math.max(0, end - now)
+  }, [now])
+
+  const formatDuration = (ms: number): string => {
+    const totalSeconds = Math.floor(Math.max(0, ms) / 1000)
+    const s = totalSeconds % 60
+    const totalMinutes = Math.floor(totalSeconds / 60)
+    const m = totalMinutes % 60
+    const h = Math.floor(totalMinutes / 60)
+    const d = Math.floor(h / 24)
+    if (d > 0) return `${d}d ${h % 24}h ${m}m`
+    if (h > 0) return `${h}h ${m}m`
+    if (m > 0) return `${m}m ${s}s`
+    return `${s}s`
+  }
+
+  const loadActive = React.useCallback(async () => {
+    try {
+      const r = await fetch('/api/broadcast/active', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+      if (r.ok) {
+        const b = await r.json().catch(() => ({}))
+        if (b?.broadcast) {
+          setActive(b.broadcast)
+          // Pre-fill edit fields so admin can immediately edit
+          setMessage(b.broadcast.message || '')
+          setSeverity((b.broadcast.severity as any) || 'info')
+          // Inform parent to open the section if collapsed
+          onActive?.()
+        } else {
+          // If we already have a valid active (e.g., from persisted state), keep it
+          setActive((prev) => prev ? prev : null)
+        }
+      }
+    } catch {}
+    finally {
+      setInitializing(false)
+    }
+  }, [])
+
+  // On load, if an active message exists, go straight to edit mode
+  React.useEffect(() => { loadActive() }, [loadActive])
+
+  // Live updates via SSE to keep admin panel in sync with user toasts
+  React.useEffect(() => {
+    let es: EventSource | null = null
+    try {
+      es = new EventSource('/api/broadcast/stream', { withCredentials: true })
+      es.addEventListener('broadcast', (ev: MessageEvent) => {
+        try {
+          const data = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data
+          setActive({
+            id: String(data?.id || ''),
+            message: String(data?.message || ''),
+            severity: (data?.severity === 'warning' || data?.severity === 'danger') ? data.severity : 'info',
+            expiresAt: data?.expiresAt || null,
+            adminName: data?.adminName || null,
+          })
+          // Pre-fill edit values if none entered yet
+          setMessage((prev) => (prev && prev.trim().length > 0 ? prev : (String(data?.message || ''))))
+          setSeverity(((data?.severity === 'warning' || data?.severity === 'danger') ? data.severity : 'info') as any)
+          // Ask parent to open the section so admin sees edit/delete UI
+          onActive?.()
+        } catch {}
+      })
+      es.addEventListener('clear', () => {
+        setActive(null)
+      })
+    } catch {}
+    return () => { try { es?.close() } catch {} }
+  }, [])
+
+  // When current broadcast expires, revert to create form and notify parent (to re-open section)
+  React.useEffect(() => {
+    if (!active?.expiresAt) return
+    const remain = msRemaining(active.expiresAt)
+    if (remain === null) return
+    const id = window.setTimeout(() => {
+      setActive(null)
+      onExpired?.()
+    }, Math.max(0, remain))
+    return () => window.clearTimeout(id)
+  }, [active?.expiresAt, onExpired, msRemaining])
+
+  const onSubmit = React.useCallback(async () => {
+    if (submitting) return
+    if (!message.trim()) return
+    setSubmitting(true)
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      const headers: Record<string, string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      try { const staticToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (staticToken) headers['X-Admin-Token'] = String(staticToken) } catch {}
+      const resp = await fetch('/api/admin/broadcast', {
+        method: 'POST',
+        headers,
+        credentials: 'same-origin',
+        body: JSON.stringify({ message: message.trim(), severity, durationMs: (() => { const v = duration; if (v === 'unlimited' || !v) return null; const m = v.match(/^(\d+)([smhd])$/); if (!m) return null; const n = Number(m[1]); const u = m[2]; const mult = u === 's' ? 1000 : u === 'm' ? 60000 : u === 'h' ? 3600000 : 86400000; return n*mult; })() }),
+      })
+      const b = await resp.json().catch(() => ({}))
+      if (!resp.ok) throw new Error(b?.error || `HTTP ${resp.status}`)
+      setActive(b?.broadcast || null)
+      setMessage('')
+      setSeverity('warning')
+    } catch (e) {
+      alert((e as Error)?.message || 'Failed to create broadcast')
+    } finally {
+      setSubmitting(false)
+    }
+  }, [message, submitting, duration, severity])
+
+  const onRemove = React.useCallback(async () => {
+    if (removing) return
+    setRemoving(true)
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      const headers: Record<string, string> = { 'Accept': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      try { const staticToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (staticToken) headers['X-Admin-Token'] = String(staticToken) } catch {}
+      const resp = await fetch('/api/admin/broadcast', { method: 'DELETE', headers, credentials: 'same-origin' })
+      const b = await resp.json().catch(() => ({}))
+      if (!resp.ok) throw new Error(b?.error || `HTTP ${resp.status}`)
+      setActive(null)
+    } catch (e) {
+      alert((e as Error)?.message || 'Failed to remove broadcast')
+    } finally {
+      setRemoving(false)
+    }
+  }, [removing])
+
+  // Duration selection removed; default send duration is 5 minutes
+
+  const content = (
+    <div>
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-medium">Global broadcast message</div>
+      </div>
+        {initializing && !active ? (
+          <div className="mt-3 text-sm opacity-70">Checking current broadcast…</div>
+        ) : active ? (
+          <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto_auto]">
+            <Input
+              placeholder="Edit message"
+              value={message.length ? message : active.message}
+              onChange={(e) => setMessage(e.target.value)}
+              maxLength={200}
+            />
+            <select
+              className="rounded-xl border px-3 py-2 text-sm bg-white"
+              value={severity || 'warning'}
+              onChange={(e) => setSeverity((e.target.value as any) || 'warning')}
+              aria-label="Type"
+            >
+              <option value="info">Information</option>
+              <option value="warning">Warning</option>
+              <option value="danger">Danger</option>
+            </select>
+            <select
+              className="rounded-xl border px-3 py-2 text-sm bg-white"
+              value={duration}
+              onChange={(e) => setDuration(e.target.value)}
+              aria-label="Display time"
+            >
+              <option value="">Keep current</option>
+              <option value="1m">1 min</option>
+              <option value="5m">5 mins</option>
+              <option value="30m">30 mins</option>
+              <option value="1h">1 hour</option>
+              <option value="5h">5 hours</option>
+              <option value="1d">1 day</option>
+              <option value="unlimited">Unlimited</option>
+            </select>
+            <div className="flex gap-2">
+              <Button className="rounded-2xl" variant="secondary" onClick={async () => {
+                try {
+                  const session = (await supabase.auth.getSession()).data.session
+                  const token = session?.access_token
+                  const headers: Record<string, string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+                  if (token) headers['Authorization'] = `Bearer ${token}`
+                  try { const staticToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (staticToken) headers['X-Admin-Token'] = String(staticToken) } catch {}
+                  const resp = await fetch('/api/admin/broadcast', {
+                    method: 'PUT', headers, credentials: 'same-origin',
+                    body: JSON.stringify({ message: (message.length ? message : active.message).trim(), severity, durationMs: (() => { const v = duration; if (v === '' || v === 'unlimited') return null; const m = v.match(/^(\d+)([smhd])$/); if (!m) return null; const n = Number(m[1]); const u = m[2]; const mult = u === 's' ? 1000 : u === 'm' ? 60000 : u === 'h' ? 3600000 : 86400000; return n*mult; })() })
+                  })
+                  const b = await resp.json().catch(() => ({}))
+                  if (!resp.ok) throw new Error(b?.error || `HTTP ${resp.status}`)
+                  setActive(b?.broadcast || null)
+                  setMessage('')
+                } catch (e) {
+                  alert((e as Error)?.message || 'Failed to update broadcast')
+                }
+              }}>
+                Save
+              </Button>
+              <Button className="rounded-2xl" variant="destructive" onClick={onRemove} disabled={removing}>
+                <Trash2 className="h-4 w-4 mr-1" /> Remove
+              </Button>
+            </div>
+            <div className="sm:col-span-4 text-xs opacity-60">
+              Submitted by {active.adminName ? active.adminName : 'Admin'}
+              {active.expiresAt && (
+                <> — Expires in {formatDuration(msRemaining(active.expiresAt) || 0)}</>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto_auto]">
+            <Input
+              placeholder="Write a short message (single line)"
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              maxLength={200}
+            />
+            <select
+              className="rounded-xl border px-3 py-2 text-sm bg-white"
+              value={severity}
+              onChange={(e) => setSeverity((e.target.value as any) || 'warning')}
+              aria-label="Type"
+            >
+              <option value="info">Information</option>
+              <option value="warning">Warning</option>
+              <option value="danger">Danger</option>
+            </select>
+            <select
+              className="rounded-xl border px-3 py-2 text-sm bg-white"
+              value={duration}
+              onChange={(e) => setDuration(e.target.value)}
+              aria-label="Display time"
+            >
+              <option value="1m">1 min</option>
+              <option value="5m">5 mins</option>
+              <option value="10m">10 mins</option>
+              <option value="30m">30 mins</option>
+              <option value="1h">1 hour</option>
+              <option value="5h">5 hours</option>
+              <option value="1d">1 day</option>
+              <option value="unlimited">Unlimited</option>
+            </select>
+            <Button className="rounded-2xl" onClick={onSubmit} disabled={submitting || !message.trim()}>
+              Send
+            </Button>
+          </div>
+        )}
+    </div>
+  )
+  if (inline) return content
+  return (
+    <Card className="rounded-2xl"><CardContent className="p-4">{content}</CardContent></Card>
+  )
+}
+
+// parseDurationToMs removed
+
 export default AdminPage
+
+function AddAdminNote({ profileId, onAdded }: { profileId: string; onAdded: () => void }) {
+  const [value, setValue] = React.useState('')
+  const [submitting, setSubmitting] = React.useState(false)
+  const [open, setOpen] = React.useState(false)
+  const disabled = !profileId || !value.trim() || submitting
+  const submit = React.useCallback(async () => {
+    if (disabled) return
+    setSubmitting(true)
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      const headers: Record<string, string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      try {
+        const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+        if (adminToken) headers['X-Admin-Token'] = String(adminToken)
+      } catch {}
+      const resp = await fetch('/api/admin/member-note', {
+        method: 'POST',
+        headers,
+        credentials: 'same-origin',
+        body: JSON.stringify({ profileId, message: value.trim() }),
+      })
+      const data = await resp.json().catch(() => ({}))
+      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`)
+      // Log note create (UI)
+      try {
+        const headers2: Record<string,string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+        if (token) headers2['Authorization'] = `Bearer ${token}`
+        try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) headers2['X-Admin-Token'] = String(adminToken) } catch {}
+        await fetch('/api/admin/log-action', { method: 'POST', headers: headers2, credentials: 'same-origin', body: JSON.stringify({ action: 'add_note', target: profileId, detail: { source: 'ui' } }) })
+      } catch {}
+      setValue('')
+      setOpen(false)
+      onAdded()
+    } catch {
+      // noop
+    } finally {
+      setSubmitting(false)
+    }
+  }, [profileId, value, submitting, onAdded])
+  return (
+    <div>
+      {!open ? (
+        <Button onClick={() => setOpen(true)} className="rounded-2xl">Add note</Button>
+      ) : (
+        <div className="flex gap-2">
+          <Textarea
+            placeholder="Add a note for other admins (visible only to admins)"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            className="min-h-[56px]"
+          />
+          <div className="flex flex-col gap-2">
+            <Button onClick={submit} disabled={disabled} className="rounded-2xl">Save</Button>
+            <Button variant="secondary" onClick={() => { setOpen(false); setValue('') }} className="rounded-2xl">Cancel</Button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+
+function NoteRow({ note, onRemoved }: { note: { id: string; admin_id: string | null; admin_name: string | null; message: string; created_at: string | null }, onRemoved: () => void }) {
+  const [removing, setRemoving] = React.useState(false)
+  const remove = React.useCallback(async () => {
+    if (removing) return
+    setRemoving(true)
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      const headers: Record<string, string> = { 'Accept': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) headers['X-Admin-Token'] = String(adminToken) } catch {}
+      const resp = await fetch(`/api/admin/member-note/${encodeURIComponent(note.id)}`, { method: 'DELETE', headers, credentials: 'same-origin' })
+      if (!resp.ok) {
+        // ignore error UI for now
+      }
+      // Log note delete (UI)
+      try {
+        const headers2: Record<string,string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+        if (token) headers2['Authorization'] = `Bearer ${token}`
+        try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) headers2['X-Admin-Token'] = String(adminToken) } catch {}
+        await fetch('/api/admin/log-action', { method: 'POST', headers: headers2, credentials: 'same-origin', body: JSON.stringify({ action: 'delete_note', target: note.id, detail: { source: 'ui' } }) })
+      } catch {}
+      onRemoved()
+    } catch {
+      // noop
+    } finally {
+      setRemoving(false)
+    }
+  }, [note?.id, removing, onRemoved])
+  const [confirming, setConfirming] = React.useState(false)
+  return (
+    <div className="rounded-xl border p-3 bg-white">
+      <div className="text-xs opacity-60 flex items-center justify-between">
+        <span>{note.admin_name || 'Admin'}</span>
+        <div className="flex items-center gap-2">
+          <span>{note.created_at ? new Date(note.created_at).toLocaleString() : ''}</span>
+          {!confirming ? (
+            <button type="button" aria-label="Delete note" className="px-2 py-1 rounded hover:bg-rose-50 text-rose-600" onClick={() => setConfirming(true)}>
+              <Trash2 className="h-4 w-4" />
+            </button>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="destructive" onClick={remove} disabled={removing} className="h-7 px-2 rounded-xl">Confirm</Button>
+              <Button size="sm" variant="secondary" onClick={() => setConfirming(false)} className="h-7 px-2 rounded-xl">Cancel</Button>
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="text-xs mt-1 font-mono whitespace-pre-wrap break-words">
+        {note.message}
+      </div>
+    </div>
+  )
+}
+
+const AdminLogs: React.FC = () => {
+  const [logs, setLogs] = React.useState<Array<{ occurred_at: string; admin_id?: string | null; admin_name: string | null; action: string; target: string | null; detail: any }>>([])
+  const [loading, setLoading] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+  const [visibleCount, setVisibleCount] = React.useState<number>(20)
+
+  const copyTextToClipboard = React.useCallback(async (text: string): Promise<boolean> => {
+    try {
+      if (navigator && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        await navigator.clipboard.writeText(text)
+        return true
+      }
+    } catch {}
+    try {
+      const ta = document.createElement('textarea')
+      ta.value = text
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.focus()
+      ta.select()
+      const ok = document.execCommand('copy')
+      document.body.removeChild(ta)
+      return ok
+    } catch {
+      return false
+    }
+  }, [])
+
+  const formatLogLine = React.useCallback((l: { occurred_at: string; admin_id?: string | null; admin_name: string | null; action: string; target: string | null; detail: any }): string => {
+    const ts = l.occurred_at ? new Date(l.occurred_at).toLocaleString() : ''
+    const who = (l.admin_name && String(l.admin_name).trim()) || 'Admin'
+    const act = l.action || ''
+    const tgt = l.target ? ` — ${l.target}` : ''
+    const det = l.detail ? ` ${JSON.stringify(l.detail)}` : ''
+    return `${ts} :: ${who} // ${act}${tgt}${det}`
+  }, [])
+
+  const copyVisibleLogs = React.useCallback(async () => {
+    const subset = logs.slice(0, visibleCount)
+    const text = subset.map(formatLogLine).join('\n')
+    await copyTextToClipboard(text)
+  }, [logs, visibleCount, copyTextToClipboard, formatLogLine])
+  const load = React.useCallback(async () => {
+    setLoading(true); setError(null)
+    try {
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token
+      const headers: Record<string, string> = { 'Accept': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) headers['X-Admin-Token'] = String(adminToken) } catch {}
+      const r = await fetch('/api/admin/admin-logs?days=30', { headers, credentials: 'same-origin' })
+      const data = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`)
+      const list = Array.isArray(data?.logs) ? data.logs : []
+      setLogs(list)
+      setVisibleCount(Math.min(20, list.length || 20))
+    } catch (e: any) {
+      setError(e?.message || 'Failed to load logs')
+    } finally { setLoading(false) }
+  }, [])
+  React.useEffect(() => { load() }, [load])
+
+  // Live stream of admin logs via SSE
+  React.useEffect(() => {
+    let es: EventSource | null = null
+    let updating = false
+    ;(async () => {
+      try {
+        const session = (await supabase.auth.getSession()).data.session
+        const token = session?.access_token
+        // Static admin token if configured
+        let adminToken: string | null = null
+        try { adminToken = String((globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN || '') || null } catch {}
+        const q: string[] = []
+        if (token) q.push(`token=${encodeURIComponent(token)}`)
+        if (adminToken) q.push(`admin_token=${encodeURIComponent(adminToken)}`)
+        const url = `/api/admin/admin-logs/stream${q.length ? ('?' + q.join('&')) : ''}`
+        es = new EventSource(url)
+        es.addEventListener('snapshot', (ev: MessageEvent) => {
+          try {
+            const data = JSON.parse(String(ev.data || '{}'))
+            const list = Array.isArray(data?.logs) ? data.logs : []
+            setLogs(list)
+            setVisibleCount(Math.min(20, list.length || 20))
+          } catch {}
+        })
+        es.addEventListener('append', (ev: MessageEvent) => {
+          try {
+            const row = JSON.parse(String(ev.data || '{}'))
+            if (updating) return
+            updating = true
+            setLogs((prev) => [row, ...prev].slice(0, 2000))
+            setTimeout(() => { updating = false }, 0)
+          } catch {}
+        })
+        es.onerror = () => {}
+      } catch {}
+    })()
+    return () => { try { es?.close() } catch {} }
+  }, [])
+  return (
+    <Card className="rounded-2xl">
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-sm font-medium">Admin logs — last 30 days</div>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" className="rounded-2xl h-8 px-3" onClick={copyVisibleLogs} disabled={loading} aria-label="Copy logs">Copy</Button>
+            <Button size="icon" variant="outline" className="rounded-2xl" onClick={load} disabled={loading} aria-label="Refresh logs"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></Button>
+          </div>
+        </div>
+        {error && <div className="text-sm text-rose-600">{error}</div>}
+        {loading ? (
+          <div className="text-sm opacity-60">Loading…</div>
+        ) : logs.length === 0 ? (
+          <div className="text-sm opacity-60">No admin activity logged.</div>
+        ) : (
+          <>
+            <div className="bg-black text-green-300 rounded-2xl p-3 text-[11px] font-mono overflow-y-auto overflow-x-hidden max-h-[480px] space-y-2">
+              {logs.slice(0, visibleCount).map((l, idx) => (
+                <div key={idx} className="whitespace-pre-wrap break-words">
+                  {formatLogLine(l)}
+                </div>
+              ))}
+            </div>
+            {logs.length > visibleCount && (
+              <div className="flex justify-end mt-2">
+                <Button variant="outline" className="rounded-2xl h-8 px-3" onClick={() => setVisibleCount((c) => Math.min(c + 50, logs.length))}>Show more</Button>
+              </div>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
 

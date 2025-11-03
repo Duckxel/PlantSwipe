@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
-import { Routes, Route, NavLink, useLocation, useNavigate, Navigate } from "react-router-dom";
+import { Routes, Route, useLocation, useNavigate, Navigate } from "react-router-dom";
 import { useMotionValue } from "framer-motion";
-import { Search, Sparkles } from "lucide-react";
+import { Search } from "lucide-react";
 // Sheet is used for plant info overlay
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { TopBar } from "@/components/layout/TopBar";
 import { BottomBar } from "@/components/layout/BottomBar";
+import BroadcastToast from "@/components/layout/BroadcastToast";
+import MobileNavBar from "@/components/layout/MobileNavBar";
 import { SwipePage } from "@/pages/SwipePage";
 import { GardenListPage } from "@/pages/GardenListPage";
 import { GardenDashboardPage } from "@/pages/GardenDashboardPage";
@@ -22,7 +24,9 @@ import type { Plant } from "@/types/plant";
 import PlantInfoPage from "@/pages/PlantInfoPage";
 import { useAuth } from "@/context/AuthContext";
 import { ProfilePage } from "@/pages/ProfilePage";
+import PublicProfilePage from "@/pages/PublicProfilePage";
 import { AdminPage } from "@/pages/AdminPage";
+import RequireAdmin from "@/pages/RequireAdmin";
 import { supabase } from "@/lib/supabaseClient";
 
 // --- Main Component ---
@@ -55,6 +59,7 @@ export default function PlantSwipe() {
   const [authPassword, setAuthPassword] = useState("")
   const [authPassword2, setAuthPassword2] = useState("")
   const [authDisplayName, setAuthDisplayName] = useState("")
+  
   const [authSubmitting, setAuthSubmitting] = useState(false)
 
   const [plants, setPlants] = useState<Plant[]>([])
@@ -176,6 +181,13 @@ export default function PlantSwipe() {
     loadPlants()
   }, [loadPlants])
 
+  // Global refresh for plant lists without full reload
+  React.useEffect(() => {
+    const onRefresh = () => { loadPlants() }
+    try { window.addEventListener('plants:refresh', onRefresh as EventListener) } catch {}
+    return () => { try { window.removeEventListener('plants:refresh', onRefresh as EventListener) } catch {} }
+  }, [loadPlants])
+
   // Global presence tracking so Admin can see "currently online" users
   const presenceRef = React.useRef<ReturnType<typeof supabase.channel> | null>(null)
   React.useEffect(() => {
@@ -216,7 +228,7 @@ export default function PlantSwipe() {
             userId: user?.id || null,
             pageTitle: document.title || null,
             language: navigator.language || (navigator as any).languages?.[0] || null,
-            utm: null,
+            // utm removed from server; not sent anymore
             extra,
           }),
           keepalive: true,
@@ -251,7 +263,6 @@ export default function PlantSwipe() {
             userId: user?.id || null,
             pageTitle: document.title || null,
             language: navigator.language || (navigator as any).languages?.[0] || null,
-            utm: null,
             extra: { source: 'heartbeat' },
           }),
           keepalive: true,
@@ -455,7 +466,7 @@ export default function PlantSwipe() {
   }, [user])
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-b from-stone-50 to-stone-100 p-4 md:p-8">
+    <div className="min-h-screen w-full bg-gradient-to-b from-stone-50 to-stone-100 p-4 pb-24 md:p-8 md:pb-8 overflow-x-hidden">
   <TopBar
     openLogin={openLogin}
     openSignup={openSignup}
@@ -465,18 +476,8 @@ export default function PlantSwipe() {
     onLogout={async () => { await signOut(); navigate('/') }}
   />
 
-      {/* Mobile nav */}
-      <div className="max-w-5xl mx-auto mt-4 md:hidden grid grid-cols-3 gap-2">
-        <Button asChild variant={'secondary'} className={currentView === 'discovery' ? "rounded-2xl bg-black text-white hover:bg-black/90 hover:text-white" : "rounded-2xl bg-white text-black hover:bg-stone-100 hover:text-black"}>
-          <NavLink to="/" end className="no-underline flex items-center gap-2"><Sparkles className="h-4 w-4" /> Discovery</NavLink>
-        </Button>
-        <Button asChild variant={'secondary'} className={currentView === 'gardens' ? "rounded-2xl bg-black text-white hover:bg-black/90 hover:text-white" : "rounded-2xl bg-white text-black hover:bg-stone-100 hover:text-black"}>
-          <NavLink to="/gardens" className="no-underline">Garden</NavLink>
-        </Button>
-        <Button asChild variant={'secondary'} className={currentView === 'search' ? "rounded-2xl bg-black text-white hover:bg-black/90 hover:text-white" : "rounded-2xl bg-white text-black hover:bg-stone-100 hover:text-black"}>
-          <NavLink to="/search" className="no-underline">Search</NavLink>
-        </Button>
-      </div>
+      {/* Mobile bottom nav (hide Create on phones) */}
+      <MobileNavBar canCreate={false} />
 
       {/* Layout: grid only when search view (to avoid narrow column in other views) */}
       <div className={`max-w-6xl mx-auto mt-6 ${currentView === 'search' ? 'lg:grid lg:grid-cols-[260px_1fr] lg:gap-10' : ''}`}>
@@ -487,10 +488,10 @@ export default function PlantSwipe() {
             <div>
               <Label htmlFor="plant-search" className="sr-only">Search plants</Label>
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-60" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-60 pointer-events-none" />
                 <Input
                   id="plant-search"
-                  className="pl-9"
+                  className="pl-9 md:pl-9"
                   placeholder="Search name, meaning, color…"
                   value={query}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
@@ -638,8 +639,9 @@ export default function PlantSwipe() {
                     />
                   }
                 />
-                <Route path="/profile" element={user ? <ProfilePage /> : <Navigate to="/" replace />} />
-                <Route path="/admin" element={profile?.is_admin ? <AdminPage /> : <Navigate to="/" replace />} />
+                <Route path="/profile" element={user ? (profile?.display_name ? <Navigate to={`/u/${encodeURIComponent(profile.display_name)}`} replace /> : <ProfilePage />) : <Navigate to="/" replace />} />
+                <Route path="/u/:username" element={<PublicProfilePage />} />
+                <Route path="/admin" element={<RequireAdmin><AdminPage /></RequireAdmin>} />
                 <Route path="/create" element={user ? (
                   <CreatePlantPage
                     onCancel={() => navigate('/')}
@@ -690,6 +692,7 @@ export default function PlantSwipe() {
                 <Input id="name" type="text" placeholder="Your name" value={authDisplayName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthDisplayName(e.target.value)} />
               </div>
             )}
+            
             <div className="grid gap-2">
               <Label htmlFor="email">Email</Label>
               <Input id="email" type="email" placeholder="you@example.com" value={authEmail} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthEmail(e.target.value)} disabled={authSubmitting} />
@@ -721,6 +724,7 @@ export default function PlantSwipe() {
       </Dialog>
 
       <BottomBar />
+      <BroadcastToast />
     </div>
   )
 }

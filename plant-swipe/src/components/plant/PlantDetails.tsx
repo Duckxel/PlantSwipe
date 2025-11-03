@@ -1,6 +1,5 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { motion, useMotionValue } from "framer-motion";
 import { SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,12 +14,6 @@ import { useAuth } from "@/context/AuthContext";
 export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?: boolean; onToggleLike?: () => void }> = ({ plant, onClose, liked = false, onToggleLike }) => {
   const navigate = useNavigate()
   const { user } = useAuth()
-  const y = useMotionValue(0)
-  const threshold = 120
-  const onDragEnd = (_: unknown, info: { offset: { y: number }; velocity: { y: number } }) => {
-    const dy = info.offset.y + info.velocity.y * 0.2
-    if (dy > threshold) onClose()
-  }
   const freqAmountRaw = plant.waterFreqAmount ?? plant.waterFreqValue
   const freqAmount = typeof freqAmountRaw === 'number' ? freqAmountRaw : Number(freqAmountRaw || 0)
   const freqPeriod = (plant.waterFreqPeriod || plant.waterFreqUnit) as 'day' | 'week' | 'month' | 'year' | undefined
@@ -29,7 +22,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
     ? `${freqAmount > 0 ? `${freqAmount} ${freqAmount === 1 ? 'time' : 'times'} ` : ''}per ${freqPeriod}`
     : null
   return (
-    <motion.div className="space-y-4 select-none" drag="y" style={{ y }} dragConstraints={{ top: 0, bottom: 0 }} onDragEnd={onDragEnd}>
+    <div className="space-y-4 select-none">
       <div className="grid md:grid-cols-2 gap-4 items-center">
         <SheetHeader className="text-left">
           <SheetTitle className="text-3xl md:text-4xl font-bold leading-tight">{plant.name}</SheetTitle>
@@ -108,17 +101,27 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
             const { error } = await supabase.from('plants').delete().eq('id', plant.id)
             if (error) { alert(error.message); return }
             onClose()
-            window.location.reload()
+            try { window.dispatchEvent(new CustomEvent('plants:refresh')) } catch {}
           }}>Delete</Button>
         )}
         <div className="flex gap-2 ml-auto">
           {user && (
-            <Button variant="secondary" className="rounded-2xl" onClick={() => { navigate(`/plants/${plant.id}/edit`); onClose() }}>Edit</Button>
+            <Button
+              variant="secondary"
+              className="rounded-2xl"
+              onClick={() => {
+                // Navigate to the dedicated edit page; do not call onClose here
+                // so we don't immediately pop back to the overlay route.
+                navigate(`/plants/${plant.id}/edit`)
+              }}
+            >
+              Edit
+            </Button>
           )}
           <Button className="rounded-2xl" onClick={onClose}>Close</Button>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 };
 
