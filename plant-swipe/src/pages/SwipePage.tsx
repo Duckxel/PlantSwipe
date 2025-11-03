@@ -75,33 +75,30 @@ export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, 
                 <div className="h-2/3 relative">
                   <div className="absolute inset-0 bg-cover bg-center rounded-t-3xl" style={{ backgroundImage: `url(${current.image})` }} />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent rounded-t-3xl" />
-                  {/* Upward arrow indicator */}
+                  {/* Upward arrow indicator - minimalist geometric */}
                   <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
                     <div className="relative flex flex-col items-center">
-                      {/* Simple upward arrow */}
+                      {/* Minimalist white arrow - solid fill, geometric, thick line, triangular head */}
                       <svg 
-                        width="32" 
-                        height="32" 
-                        viewBox="0 0 32 32"
+                        width="40" 
+                        height="40" 
+                        viewBox="0 0 40 40"
                         className="text-white"
                         style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.9))' }}
                       >
-                        {/* Arrow stem */}
-                        <path
-                          d="M16 8 L16 24"
-                          stroke="white"
-                          strokeWidth="3"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                        {/* Arrowhead pointing up */}
-                        <path
-                          d="M16 8 L10 16 L16 14 L22 16 Z"
+                        {/* Thick vertical stem */}
+                        <rect
+                          x="17"
+                          y="20"
+                          width="6"
+                          height="16"
                           fill="white"
-                          stroke="white"
-                          strokeWidth="1.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
+                          rx="3"
+                        />
+                        {/* Triangular arrowhead pointing up */}
+                        <path
+                          d="M20 6 L10 20 L30 20 Z"
+                          fill="white"
                         />
                       </svg>
                     </div>
@@ -167,8 +164,12 @@ export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, 
         </AnimatePresence>
       </div>
       <div className="mt-4 grid grid-cols-2 gap-3">
-        <ActionHint label="Previous" icon={<ChevronLeft className="h-5 w-5" />} />
-        <ActionHint label="Next" icon={<ChevronRight className="h-5 w-5" />} />
+        <div className="flex items-center justify-start">
+          <ActionHint label="Previous" icon={<ChevronLeft className="h-5 w-5" />} />
+        </div>
+        <div className="flex items-center justify-end">
+          <ActionHint label="Next" icon={<ChevronRight className="h-5 w-5" />} />
+        </div>
       </div>
     </div>
   )
