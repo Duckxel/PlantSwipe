@@ -216,6 +216,39 @@ export default function PublicProfilePage() {
     if (!user?.id || !pp?.id || isOwner) return
     setFriendRequestLoading(true)
     try {
+      // Check if there's an existing request (including rejected ones)
+      const { data: existingRequest } = await supabase
+        .from('friend_requests')
+        .select('id, status')
+        .eq('requester_id', user.id)
+        .eq('recipient_id', pp.id)
+        .maybeSingle()
+      
+      if (existingRequest) {
+        if (existingRequest.status === 'pending') {
+          setFriendStatus('request_sent')
+          setFriendRequestId(existingRequest.id)
+          setFriendRequestLoading(false)
+          return
+        }
+        // If rejected, update it to pending
+        if (existingRequest.status === 'rejected') {
+          const { data, error: err } = await supabase
+            .from('friend_requests')
+            .update({ status: 'pending' })
+            .eq('id', existingRequest.id)
+            .select('id')
+            .single()
+          
+          if (err) throw err
+          setFriendStatus('request_sent')
+          setFriendRequestId(data.id)
+          setFriendRequestLoading(false)
+          return
+        }
+      }
+      
+      // No existing request, create a new one
       const { data, error: err } = await supabase
         .from('friend_requests')
         .insert({

@@ -171,7 +171,7 @@ export const FriendsPage: React.FC = () => {
       // Filter out users who are already friends or have pending requests
       const friendIds = new Set(friends.map(f => f.friend_id))
       
-      // Get pending requests sent by current user
+      // Get pending requests sent by current user (not rejected ones)
       const { data: sentRequests } = await supabase
         .from('friend_requests')
         .select('recipient_id')
@@ -220,19 +220,35 @@ export const FriendsPage: React.FC = () => {
         return
       }
       
-      // Check if request already exists
+      // Check if request already exists (including rejected ones)
       const { data: existingRequest } = await supabase
         .from('friend_requests')
-        .select('id')
+        .select('id, status')
         .eq('requester_id', user.id)
         .eq('recipient_id', recipientId)
         .maybeSingle()
       
       if (existingRequest) {
-        setError('Friend request already sent')
-        return
+        if (existingRequest.status === 'pending') {
+          setError('Friend request already sent')
+          return
+        }
+        // If rejected, update it to pending
+        if (existingRequest.status === 'rejected') {
+          const { error: err } = await supabase
+            .from('friend_requests')
+            .update({ status: 'pending' })
+            .eq('id', existingRequest.id)
+          
+          if (err) throw err
+          // Refresh search results
+          handleSearch()
+          setError(null)
+          return
+        }
       }
       
+      // No existing request, create a new one
       const { error: err } = await supabase
         .from('friend_requests')
         .insert({
