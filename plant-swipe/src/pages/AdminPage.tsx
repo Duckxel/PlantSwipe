@@ -46,6 +46,36 @@ export const AdminPage: React.FC = () => {
     } catch { return value }
   }, [])
 
+  // Format last update time for display
+  const formatLastUpdateTime = React.useCallback((timeStr: string | null): string => {
+    if (!timeStr) return ''
+    try {
+      const date = new Date(timeStr)
+      if (isNaN(date.getTime())) return ''
+      // Format as relative time (e.g., "2 hours ago") or absolute if older than 24 hours
+      const now = new Date()
+      const diffMs = now.getTime() - date.getTime()
+      const diffHours = diffMs / (1000 * 60 * 60)
+      const diffDays = diffMs / (1000 * 60 * 60 * 24)
+      
+      if (diffHours < 1) {
+        const diffMins = Math.floor(diffMs / (1000 * 60))
+        return diffMins < 1 ? 'just now' : `${diffMins}m ago`
+      } else if (diffHours < 24) {
+        const hours = Math.floor(diffHours)
+        return `${hours}h ago`
+      } else if (diffDays < 7) {
+        const days = Math.floor(diffDays)
+        return `${days}d ago`
+      } else {
+        // Format as date: "Jan 15, 2024"
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      }
+    } catch {
+      return ''
+    }
+  }, [])
+
   // Compute a responsive max character count for branch names based on viewport width
   const computeBranchMaxChars = React.useCallback((viewportWidth: number): number => {
     const w = Math.max(0, viewportWidth || 0)
@@ -203,7 +233,7 @@ export const AdminPage: React.FC = () => {
     setSyncing(true)
     try {
       setConsoleOpen(true)
-      appendConsole('[sync] Sync DB Schema: starting…')
+      appendConsole('[sync] Sync DB Schema: starting?')
       const session = (await supabase.auth.getSession()).data.session
       const token = session?.access_token
       if (!token) {
@@ -258,7 +288,7 @@ export const AdminPage: React.FC = () => {
           const missingFunctions: string[] = Array.isArray(summary?.functions?.missing) ? summary.functions.missing : []
           const missingExtensions: string[] = Array.isArray(summary?.extensions?.missing) ? summary.extensions.missing : []
           const hasMissing = missingTables.length + missingFunctions.length + missingExtensions.length > 0
-          appendConsole('[sync] Post‑sync verification:')
+          appendConsole('[sync] Post?sync verification:')
           appendConsole(`- Tables OK: ${(summary?.tables?.present || []).length}/${(summary?.tables?.required || []).length}`)
           appendConsole(`- Functions OK: ${(summary?.functions?.present || []).length}/${(summary?.functions?.required || []).length}`)
           appendConsole(`- Extensions OK: ${(summary?.extensions?.present || []).length}/${(summary?.extensions?.required || []).length}`)
@@ -284,7 +314,7 @@ export const AdminPage: React.FC = () => {
     setRestarting(true)
     try {
       setConsoleOpen(true)
-      appendConsole('[restart] Restart services requested…')
+      appendConsole('[restart] Restart services requested?')
       setReloadReady(false)
       setPreRestartNotice(false)
       const session = (await supabase.auth.getSession()).data.session
@@ -602,6 +632,7 @@ export const AdminPage: React.FC = () => {
   const [branchOptions, setBranchOptions] = React.useState<string[]>([])
   const [currentBranch, setCurrentBranch] = React.useState<string>("")
   const [selectedBranch, setSelectedBranch] = React.useState<string>("")
+  const [lastUpdateTime, setLastUpdateTime] = React.useState<string | null>(null)
 
   const loadBranches = React.useCallback(async (opts?: { initial?: boolean }) => {
     const isInitial = !!opts?.initial
@@ -636,8 +667,10 @@ export const AdminPage: React.FC = () => {
       }
       const branches: string[] = data.branches
       const current: string = String(data.current || '')
+      const lastUpdate: string | null = data.lastUpdateTime || null
       setBranchOptions(branches)
       setCurrentBranch(current)
+      setLastUpdateTime(lastUpdate)
       setSelectedBranch((prev) => {
         if (!prev) return current
         return branches.includes(prev) ? prev : current
@@ -665,7 +698,7 @@ export const AdminPage: React.FC = () => {
       // Use streaming endpoint for live logs
       setConsoleLines([])
       setConsoleOpen(true)
-      appendConsole('[pull] Pull & Build: starting…')
+      appendConsole('[pull] Pull & Build: starting?')
       if (selectedBranch && selectedBranch !== currentBranch) {
         appendConsole(`[pull] Will switch to branch: ${selectedBranch}`)
       } else if (currentBranch) {
@@ -1475,7 +1508,7 @@ export const AdminPage: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-sm font-medium">Health monitor</div>
-                  <div className="text-xs opacity-60">Auto‑ping every 60s</div>
+                  <div className="text-xs opacity-60">Auto?ping every 60s</div>
                 </div>
                 <Button
                   variant="outline"
@@ -1496,7 +1529,7 @@ export const AdminPage: React.FC = () => {
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="text-xs tabular-nums opacity-60">
-                      {apiProbe.latencyMs !== null ? `${apiProbe.latencyMs} ms` : '—'}
+                      {apiProbe.latencyMs !== null ? `${apiProbe.latencyMs} ms` : '?'}
                     </div>
                     <StatusDot ok={apiProbe.ok} title={!apiProbe.ok ? (apiProbe.errorCode || undefined) : undefined} />
                     {!apiProbe?.ok && <ErrorBadge code={apiProbe.errorCode} />}
@@ -1509,7 +1542,7 @@ export const AdminPage: React.FC = () => {
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="text-xs tabular-nums opacity-60">
-                      {adminProbe.latencyMs !== null ? `${adminProbe.latencyMs} ms` : '—'}
+                      {adminProbe.latencyMs !== null ? `${adminProbe.latencyMs} ms` : '?'}
                     </div>
                     <StatusDot ok={adminProbe.ok} title={!adminProbe.ok ? (adminProbe.errorCode || undefined) : undefined} />
                     {!adminProbe?.ok && <ErrorBadge code={adminProbe.errorCode} />}
@@ -1522,7 +1555,7 @@ export const AdminPage: React.FC = () => {
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="text-xs tabular-nums opacity-60">
-                      {dbProbe.latencyMs !== null ? `${dbProbe.latencyMs} ms` : '—'}
+                      {dbProbe.latencyMs !== null ? `${dbProbe.latencyMs} ms` : '?'}
                     </div>
                     <StatusDot ok={dbProbe.ok} title={!dbProbe.ok ? (dbProbe.errorCode || undefined) : undefined} />
                     {!dbProbe?.ok && <ErrorBadge code={dbProbe.errorCode} />}
@@ -1567,11 +1600,16 @@ export const AdminPage: React.FC = () => {
                   <GitBranch className="h-4 w-4 opacity-70" />
                   <div className="text-sm font-medium truncate">Branch</div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <div className="text-xs opacity-60 hidden sm:block">Current:</div>
                   <Badge variant="outline" className="rounded-full max-w-[360px] truncate" title={currentBranch || undefined}>
-                    {branchesLoading ? '—' : shortenMiddle(currentBranch || 'unknown', branchMaxChars)}
+                    {branchesLoading ? '?' : shortenMiddle(currentBranch || 'unknown', branchMaxChars)}
                   </Badge>
+                  {lastUpdateTime && (
+                    <div className="text-xs opacity-50" title={lastUpdateTime}>
+                      ({formatLastUpdateTime(lastUpdateTime)})
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="mt-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
@@ -1584,7 +1622,7 @@ export const AdminPage: React.FC = () => {
                     aria-label="Select branch"
                   >
                   {branchesLoading ? (
-                    <option value="">Loading…</option>
+                    <option value="">Loading?</option>
                   ) : branchOptions.length === 0 ? (
                     <option value="">No branches found</option>
                   ) : (
@@ -1615,16 +1653,16 @@ export const AdminPage: React.FC = () => {
                 <Button className="rounded-2xl w-full" onClick={restartServer} disabled={restarting}>
                   <Server className="h-4 w-4" />
                   <RefreshCw className="h-4 w-4" />
-                  <span>{restarting ? 'Restarting…' : 'Restart Services'}</span>
+                  <span>{restarting ? 'Restarting?' : 'Restart Services'}</span>
                 </Button>
                 <Button className="rounded-2xl w-full" variant="secondary" onClick={pullLatest} disabled={pulling}>
                   <Github className="h-4 w-4" />
                   <RefreshCw className="h-4 w-4" />
-                  <span>{pulling ? 'Pulling…' : 'Pull & Build'}</span>
+                  <span>{pulling ? 'Pulling?' : 'Pull & Build'}</span>
                 </Button>
                 <Button className="rounded-2xl w-full" variant="destructive" onClick={runSyncSchema} disabled={syncing}>
                   <Database className="h-4 w-4" />
-                  <span>{syncing ? 'Syncing Schema…' : 'Sync DB Schema'}</span>
+                  <span>{syncing ? 'Syncing Schema?' : 'Sync DB Schema'}</span>
                 </Button>
               </div>
 
@@ -1717,7 +1755,7 @@ export const AdminPage: React.FC = () => {
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       <div className="text-sm opacity-60">Currently online</div>
-                      <div className="text-xs opacity-60">{onlineUpdatedAt ? `Updated ${formatTimeAgo(onlineUpdatedAt)}` : 'Updated —'}</div>
+                      <div className="text-xs opacity-60">{onlineUpdatedAt ? `Updated ${formatTimeAgo(onlineUpdatedAt)}` : 'Updated ?'}</div>
                     </div>
                     <Button
                       variant="outline"
@@ -1731,7 +1769,7 @@ export const AdminPage: React.FC = () => {
                     </Button>
                   </div>
                   <div className="text-2xl font-semibold tabular-nums mt-1">
-                    {onlineLoading ? '—' : onlineUsers}
+                    {onlineLoading ? '?' : onlineUsers}
                   </div>
                   {/* Collapsible Connected IPs under Currently online */}
                   <div className="mt-3">
@@ -1752,7 +1790,7 @@ export const AdminPage: React.FC = () => {
                       <div className="mt-2" id="connected-ips">
                         <div className="rounded-xl border bg-white p-3 max-h-48 overflow-auto">
                           {ipsLoading ? (
-                            <div className="text-sm opacity-60">Loading…</div>
+                            <div className="text-sm opacity-60">Loading?</div>
                           ) : ips.length === 0 ? (
                             <div className="text-sm opacity-60">No IPs.</div>
                           ) : (
@@ -1785,7 +1823,7 @@ export const AdminPage: React.FC = () => {
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       <div className="text-sm opacity-60">Registered accounts</div>
-                      <div className="text-xs opacity-60">{registeredUpdatedAt ? `Updated ${formatTimeAgo(registeredUpdatedAt)}` : 'Updated —'}</div>
+                      <div className="text-xs opacity-60">{registeredUpdatedAt ? `Updated ${formatTimeAgo(registeredUpdatedAt)}` : 'Updated ?'}</div>
                     </div>
                     <Button
                       variant="outline"
@@ -1799,7 +1837,7 @@ export const AdminPage: React.FC = () => {
                     </Button>
                   </div>
                   <div className="text-2xl font-semibold tabular-nums mt-1">
-                    {registeredLoading ? '—' : (registeredCount ?? '—')}
+                    {registeredLoading ? '?' : (registeredCount ?? '?')}
                   </div>
                 </CardContent>
               </Card>
@@ -1809,7 +1847,7 @@ export const AdminPage: React.FC = () => {
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <div>
                     <div className="flex items-center gap-2">
-                      <div className="text-sm font-medium">Unique visitors — last {visitorsWindowDays} days</div>
+                      <div className="text-sm font-medium">Unique visitors ? last {visitorsWindowDays} days</div>
                       <div className="flex items-center gap-1">
                         <button
                           type="button"
@@ -1825,7 +1863,7 @@ export const AdminPage: React.FC = () => {
                         >30d</button>
                       </div>
                     </div>
-                    <div className="text-xs opacity-60">{visitorsUpdatedAt ? `Updated ${formatTimeAgo(visitorsUpdatedAt)}` : 'Updated —'}</div>
+                    <div className="text-xs opacity-60">{visitorsUpdatedAt ? `Updated ${formatTimeAgo(visitorsUpdatedAt)}` : 'Updated ?'}</div>
                   </div>
                   <Button
                     variant="outline"
@@ -1840,7 +1878,7 @@ export const AdminPage: React.FC = () => {
                 </div>
 
                 {visitorsLoading ? (
-                  <div className="text-sm opacity-60">Loading…</div>
+                  <div className="text-sm opacity-60">Loading?</div>
                 ) : visitorsSeries.length === 0 ? (
                   <div className="text-sm opacity-60">No data yet.</div>
                 ) : (
@@ -1891,7 +1929,7 @@ export const AdminPage: React.FC = () => {
                             </span>
                             <span className="opacity-60"> vs previous day</span>
                           </div>
-                          <div className="text-[11px] opacity-70 mt-1">7‑day avg: <span className="font-medium">{avgVal}</span></div>
+                          <div className="text-[11px] opacity-70 mt-1">7?day avg: <span className="font-medium">{avgVal}</span></div>
                         </div>
                       )
                     }
@@ -1995,7 +2033,7 @@ export const AdminPage: React.FC = () => {
                                                   {rows.map((r: { name: string; visits: number; pctTotal: number; pctOther: number }, idx: number) => (
                                                     <div key={`${r.name}-${idx}`} className="flex items-center justify-between gap-3">
                                                       <div className="truncate">{r.name}</div>
-                                                      <div className="text-[11px] tabular-nums whitespace-nowrap">{Math.round(r.pctOther)}% of Other · {Math.round(r.pctTotal)}% · {r.visits}</div>
+                                                      <div className="text-[11px] tabular-nums whitespace-nowrap">{Math.round(r.pctOther)}% of Other ? {Math.round(r.pctTotal)}% ? {r.visits}</div>
                                                     </div>
                                                   ))}
                                                 </div>
@@ -2007,7 +2045,7 @@ export const AdminPage: React.FC = () => {
                                           return (
                                             <div className="rounded-xl border bg-white shadow px-3 py-2">
                                               <div className="text-xs font-medium">{name}</div>
-                                              <div className="text-[11px] opacity-80">{pct}% · {d.visits}</div>
+                                              <div className="text-[11px] opacity-80">{pct}% ? {d.visits}</div>
                                             </div>
                                           )
                                         }
@@ -2198,7 +2236,7 @@ export const AdminPage: React.FC = () => {
                             </button>
                           ))}
                           {suggestLoading && (
-                            <div className="px-3 py-2 text-xs opacity-60">Loading…</div>
+                            <div className="px-3 py-2 text-xs opacity-60">Loading?</div>
                           )}
                         </div>
                       )}
@@ -2240,10 +2278,10 @@ export const AdminPage: React.FC = () => {
                           </div>
                           <div className="min-w-0">
                             <div className="text-base md:text-lg font-semibold truncate">
-                              {memberData.profile?.display_name || memberData.user?.email || '—'}
+                              {memberData.profile?.display_name || memberData.user?.email || '?'}
                             </div>
                             <div className="text-xs opacity-70 truncate">
-                              {memberData.user?.email || '—'}{memberData.user?.id ? (<span className="opacity-60"> · id {memberData.user.id}</span>) : null}
+                              {memberData.user?.email || '?'}{memberData.user?.id ? (<span className="opacity-60"> ? id {memberData.user.id}</span>) : null}
                             </div>
                             <div className="flex flex-wrap gap-1 mt-1">
                               {memberData.profile?.is_admin && (
@@ -2312,7 +2350,7 @@ export const AdminPage: React.FC = () => {
                                     onClick={performDemote}
                                     disabled={!lookupEmail || demoteSubmitting}
                                   >
-                                    {demoteSubmitting ? 'Removing…' : 'Confirm remove'}
+                                    {demoteSubmitting ? 'Removing?' : 'Confirm remove'}
                                   </Button>
                                 </DialogFooter>
                               </DialogContent>
@@ -2346,7 +2384,7 @@ export const AdminPage: React.FC = () => {
                                     onClick={performPromote}
                                     disabled={!lookupEmail || promoteSubmitting}
                                   >
-                                    {promoteSubmitting ? 'Promoting…' : 'Confirm promote'}
+                                    {promoteSubmitting ? 'Promoting?' : 'Confirm promote'}
                                   </Button>
                                 </DialogFooter>
                               </DialogContent>
@@ -2392,7 +2430,7 @@ export const AdminPage: React.FC = () => {
                                   onClick={performBan}
                                   disabled={!lookupEmail || banSubmitting}
                                 >
-                                  {banSubmitting ? 'Banning…' : 'Confirm ban'}
+                                  {banSubmitting ? 'Banning?' : 'Confirm ban'}
                                 </Button>
                               </DialogFooter>
                             </DialogContent>
@@ -2405,25 +2443,25 @@ export const AdminPage: React.FC = () => {
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     <div className="rounded-xl border p-3 text-center">
                       <div className="text-[11px] opacity-60">Visits</div>
-                      <div className="text-base font-semibold tabular-nums">{memberData.visitsCount ?? '—'}</div>
+                      <div className="text-base font-semibold tabular-nums">{memberData.visitsCount ?? '?'}</div>
                     </div>
                     
                     <div className="rounded-xl border p-3 text-center">
                       <div className="text-[11px] opacity-60">Total plants</div>
-                      <div className="text-base font-semibold tabular-nums">{memberData.plantsTotal ?? '—'}</div>
+                      <div className="text-base font-semibold tabular-nums">{memberData.plantsTotal ?? '?'}</div>
                     </div>
                     <div className="rounded-xl border p-3 text-center">
                       <div className="text-[11px] opacity-60">Last IP</div>
-                      <div className="text-base font-semibold tabular-nums truncate" title={memberData.lastIp || undefined}>{memberData.lastIp || '—'}</div>
+                      <div className="text-base font-semibold tabular-nums truncate" title={memberData.lastIp || undefined}>{memberData.lastIp || '?'}</div>
                     </div>
                     <div className="rounded-xl border p-3 text-center">
                       <div className="text-[11px] opacity-60">Mean RPM (5m)</div>
-                      <div className="text-base font-semibold tabular-nums">{typeof memberData.meanRpm5m === 'number' ? memberData.meanRpm5m.toFixed(2) : '—'}</div>
+                      <div className="text-base font-semibold tabular-nums">{typeof memberData.meanRpm5m === 'number' ? memberData.meanRpm5m.toFixed(2) : '?'}</div>
                     </div>
                     <div className="rounded-xl border p-3">
                       <div className="text-[11px] opacity-60 mb-1">Top referrers</div>
                       {(!memberData.topReferrers || memberData.topReferrers.length === 0) ? (
-                        <div className="text-xs opacity-60">—</div>
+                        <div className="text-xs opacity-60">?</div>
                       ) : (
                         <div className="space-y-0.5">
                           {memberData.topReferrers.slice(0,1).map((r, idx) => (
@@ -2438,7 +2476,7 @@ export const AdminPage: React.FC = () => {
                     <div className="rounded-xl border p-3">
                       <div className="text-[11px] opacity-60 mb-1">Top countries</div>
                       {(!memberData.topCountries || memberData.topCountries.length === 0) ? (
-                        <div className="text-xs opacity-60">—</div>
+                        <div className="text-xs opacity-60">?</div>
                       ) : (
                         <div className="space-y-0.5">
                           {memberData.topCountries.slice(0,1).map((c, idx) => (
@@ -2453,7 +2491,7 @@ export const AdminPage: React.FC = () => {
                     <div className="rounded-xl border p-3">
                       <div className="text-[11px] opacity-60 mb-1">Top devices</div>
                       {(!memberData.topDevices || memberData.topDevices.length === 0) ? (
-                        <div className="text-xs opacity-60">—</div>
+                        <div className="text-xs opacity-60">?</div>
                       ) : (
                         <div className="space-y-0.5">
                           {memberData.topDevices.slice(0,1).map((d, idx) => (
@@ -2494,8 +2532,8 @@ export const AdminPage: React.FC = () => {
                     <CardContent className="p-4">
                       <div className="flex items-center justify-between gap-2 mb-2">
                         <div>
-                          <div className="text-sm font-medium">Visits — last 30 days</div>
-                          <div className="text-xs opacity-60">{memberVisitsUpdatedAt ? `Updated ${formatTimeAgo(memberVisitsUpdatedAt)}` : 'Updated —'}</div>
+                          <div className="text-sm font-medium">Visits ? last 30 days</div>
+                          <div className="text-xs opacity-60">{memberVisitsUpdatedAt ? `Updated ${formatTimeAgo(memberVisitsUpdatedAt)}` : 'Updated ?'}</div>
                         </div>
                         <Button
                           variant="outline"
@@ -2510,7 +2548,7 @@ export const AdminPage: React.FC = () => {
                       </div>
 
                       {memberVisitsLoading ? (
-                        <div className="text-sm opacity-60">Loading…</div>
+                        <div className="text-sm opacity-60">Loading?</div>
                       ) : memberVisitsSeries.length === 0 ? (
                         <div className="text-sm opacity-60">No data yet.</div>
                       ) : (
@@ -2595,7 +2633,7 @@ export const AdminPage: React.FC = () => {
                     <div className="rounded-xl border p-3 bg-rose-50/60">
                       <div className="text-sm font-medium text-rose-700 flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Banned details</div>
                       {memberData.isBannedEmail && (
-                        <div className="text-sm mt-1">Email banned {memberData.bannedAt ? `on ${new Date(memberData.bannedAt).toLocaleString()}` : ''}{memberData.bannedReason ? ` — ${memberData.bannedReason}` : ''}</div>
+                        <div className="text-sm mt-1">Email banned {memberData.bannedAt ? `on ${new Date(memberData.bannedAt).toLocaleString()}` : ''}{memberData.bannedReason ? ` ? ${memberData.bannedReason}` : ''}</div>
                       )}
                       {memberData.bannedIps && memberData.bannedIps.length > 0 && (
                         <div className="text-sm mt-1">Blocked IPs:
@@ -2667,7 +2705,7 @@ export const AdminPage: React.FC = () => {
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                       <div className="rounded-xl border p-3 text-center">
                         <div className="text-[11px] opacity-60">IP</div>
-                        <div className="text-base font-semibold tabular-nums truncate" title={ipUsed || undefined}>{ipUsed || '—'}</div>
+                        <div className="text-base font-semibold tabular-nums truncate" title={ipUsed || undefined}>{ipUsed || '?'}</div>
                       </div>
                       <div className="rounded-xl border p-3 text-center">
                         <div className="text-[11px] opacity-60">Users</div>
@@ -2675,22 +2713,22 @@ export const AdminPage: React.FC = () => {
                       </div>
                       <div className="rounded-xl border p-3 text-center">
                         <div className="text-[11px] opacity-60">Connections</div>
-                        <div className="text-base font-semibold tabular-nums">{ipConnectionsCount ?? '—'}</div>
+                        <div className="text-base font-semibold tabular-nums">{ipConnectionsCount ?? '?'}</div>
                       </div>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                       <div className="rounded-xl border p-3 text-center">
                         <div className="text-[11px] opacity-60">Mean RPM (5m)</div>
-                        <div className="text-base font-semibold tabular-nums">{typeof ipMeanRpm5m === 'number' ? ipMeanRpm5m.toFixed(2) : '—'}</div>
+                        <div className="text-base font-semibold tabular-nums">{typeof ipMeanRpm5m === 'number' ? ipMeanRpm5m.toFixed(2) : '?'}</div>
                       </div>
                       <div className="rounded-xl border p-3 text-center">
                         <div className="text-[11px] opacity-60">Country</div>
-                        <div className="text-base font-semibold tabular-nums">{ipCountry ? countryCodeToName(ipCountry) : '—'}</div>
+                        <div className="text-base font-semibold tabular-nums">{ipCountry ? countryCodeToName(ipCountry) : '?'}</div>
                       </div>
                       <div className="rounded-xl border p-3">
                         <div className="text-[11px] opacity-60 mb-1">Top referrers</div>
                         {(ipTopReferrers.length === 0) ? (
-                          <div className="text-xs opacity-60">—</div>
+                          <div className="text-xs opacity-60">?</div>
                         ) : (
                           <div className="space-y-0.5">
                             {ipTopReferrers.slice(0,1).map((r, idx) => (
@@ -2722,7 +2760,7 @@ export const AdminPage: React.FC = () => {
                     <div className="rounded-xl border p-3">
                       <div className="text-[11px] opacity-60 mb-1">Top devices</div>
                       {(ipTopDevices.length === 0) ? (
-                        <div className="text-xs opacity-60">—</div>
+                        <div className="text-xs opacity-60">?</div>
                       ) : (
                         <div className="space-y-0.5">
                           {ipTopDevices.slice(0,1).map((d, idx) => (
@@ -2734,7 +2772,7 @@ export const AdminPage: React.FC = () => {
                         </div>
                       )}
                     </div>
-                    <div className="text-xs opacity-60">Last seen: {ipLastSeenAt ? new Date(ipLastSeenAt).toLocaleString() : '—'}</div>
+                    <div className="text-xs opacity-60">Last seen: {ipLastSeenAt ? new Date(ipLastSeenAt).toLocaleString() : '?'}</div>
                     {ipResults.length === 0 ? (
                       <div className="text-sm opacity-60">No users found for this IP.</div>
                     ) : (
@@ -2752,7 +2790,7 @@ export const AdminPage: React.FC = () => {
                             }}
                           >
                             <div className="text-sm font-semibold truncate">{u.display_name || u.email || 'User'}</div>
-                            <div className="text-xs opacity-70 truncate">{u.email || '—'}</div>
+                            <div className="text-xs opacity-70 truncate">{u.email || '?'}</div>
                             {u.last_seen_at && (
                               <div className="text-[11px] opacity-60 mt-0.5">Last seen {new Date(u.last_seen_at).toLocaleString()}</div>
                             )}
@@ -2962,7 +3000,7 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
         <div className="text-sm font-medium">Global broadcast message</div>
       </div>
         {initializing && !active ? (
-          <div className="mt-3 text-sm opacity-70">Checking current broadcast…</div>
+          <div className="mt-3 text-sm opacity-70">Checking current broadcast?</div>
         ) : active ? (
           <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto_auto]">
             <Input
@@ -3025,7 +3063,7 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
             <div className="sm:col-span-4 text-xs opacity-60">
               Submitted by {active.adminName ? active.adminName : 'Admin'}
               {active.expiresAt && (
-                <> — Expires in {formatDuration(msRemaining(active.expiresAt) || 0)}</>
+                <> ? Expires in {formatDuration(msRemaining(active.expiresAt) || 0)}</>
               )}
             </div>
           </div>
@@ -3231,7 +3269,7 @@ const AdminLogs: React.FC = () => {
     const ts = l.occurred_at ? new Date(l.occurred_at).toLocaleString() : ''
     const who = (l.admin_name && String(l.admin_name).trim()) || 'Admin'
     const act = l.action || ''
-    const tgt = l.target ? ` — ${l.target}` : ''
+    const tgt = l.target ? ` ? ${l.target}` : ''
     const det = l.detail ? ` ${JSON.stringify(l.detail)}` : ''
     return `${ts} :: ${who} // ${act}${tgt}${det}`
   }, [])
@@ -3303,7 +3341,7 @@ const AdminLogs: React.FC = () => {
     <Card className="rounded-2xl">
       <CardContent className="p-4">
         <div className="flex items-center justify-between mb-2">
-          <div className="text-sm font-medium">Admin logs — last 30 days</div>
+          <div className="text-sm font-medium">Admin logs ? last 30 days</div>
           <div className="flex items-center gap-2">
             <Button variant="secondary" className="rounded-2xl h-8 px-3" onClick={copyVisibleLogs} disabled={loading} aria-label="Copy logs">Copy</Button>
             <Button size="icon" variant="outline" className="rounded-2xl" onClick={load} disabled={loading} aria-label="Refresh logs"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></Button>
@@ -3311,7 +3349,7 @@ const AdminLogs: React.FC = () => {
         </div>
         {error && <div className="text-sm text-rose-600">{error}</div>}
         {loading ? (
-          <div className="text-sm opacity-60">Loading…</div>
+          <div className="text-sm opacity-60">Loading?</div>
         ) : logs.length === 0 ? (
           <div className="text-sm opacity-60">No admin activity logged.</div>
         ) : (

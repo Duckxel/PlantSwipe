@@ -3291,13 +3291,23 @@ app.get('/api/admin/branches', async (req, res) => {
     const { stdout: currentStdout } = await exec(`${gitBase} rev-parse --abbrev-ref HEAD`, { timeout: 3000 })
     const current = currentStdout.trim()
 
+    // Read the last update time from TIME file if it exists
+    let lastUpdateTime = null
+    try {
+      const timeFile = path.join(repoRoot, 'TIME')
+      const timeContent = await fs.readFile(timeFile, 'utf-8')
+      lastUpdateTime = timeContent.trim() || null
+    } catch {
+      // TIME file doesn't exist or can't be read, which is fine
+    }
+
     try {
       const caller = await getUserFromRequest(req)
       const adminId = caller?.id || null
       const adminName = null
       if (sql) await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${adminId}, ${adminName}, 'list_branches', ${current || null}, ${sql.json({ count: branches.length })})`
     } catch {}
-    res.json({ branches, current })
+    res.json({ branches, current, lastUpdateTime })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to list branches' })
   }
