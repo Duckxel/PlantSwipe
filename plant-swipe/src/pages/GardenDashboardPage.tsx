@@ -1715,8 +1715,8 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
                   {occs.map((o) => {
                     const tt = (o as any).taskType || 'custom'
                     const badgeClass = `${typeToColor[tt]} ${tt === 'harvest' ? 'text-black' : 'text-white'}`
-                    const customEmoji = (o as any).taskEmoji || null
-                    const icon = customEmoji || (tt === 'water' ? '??' : tt === 'fertilize' ? '???' : tt === 'harvest' ? '??' : tt === 'cut' ? '??' : '??')
+                    const taskEmoji = (o as any).taskEmoji
+                    const icon = (taskEmoji && taskEmoji !== '??' && taskEmoji !== '???' && taskEmoji.trim() !== '') ? taskEmoji : (tt === 'water' ? '💧' : tt === 'fertilize' ? '🍽️' : tt === 'harvest' ? '🌾' : tt === 'cut' ? '✂️' : '🪴')
                     const isDone = (Number(o.completedCount || 0) >= Math.max(1, Number(o.requiredCount || 1)))
                     const completions = completionsByOcc[o.id] || []
                     return (
