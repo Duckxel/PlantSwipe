@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
 import { EditProfileDialog, type EditProfileValues } from "@/components/profile/EditProfileDialog"
 import { applyAccentByKey, saveAccentKey } from "@/lib/accent"
-import { MapPin, User as UserIcon, UserPlus, Check, Lock } from "lucide-react"
+import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff } from "lucide-react"
 
 type PublicProfile = {
   id: string
@@ -23,6 +23,7 @@ type PublicProfile = {
   accent_key?: string | null
   is_private?: boolean | null
   disable_friend_requests?: boolean | null
+  isAdminViewingPrivateNonFriend?: boolean | null
 }
 
 type PublicStats = {
@@ -112,6 +113,7 @@ export default function PublicProfilePage() {
         
         // Check if viewer can see this profile
         let viewerCanSee = true
+        let isAdminViewingPrivateNonFriend = false
         if (profileIsPrivate && !isOwnerViewing && !viewerIsAdmin) {
           // Check if they are friends
           if (user?.id) {
@@ -134,6 +136,51 @@ export default function PublicProfilePage() {
           } else {
             viewerCanSee = false
           }
+        } else if (profileIsPrivate && !isOwnerViewing && viewerIsAdmin) {
+          // Admin viewing private profile - check if they're friends
+          if (user?.id) {
+            const { data: friendCheck1 } = await supabase
+              .from('friends')
+              .select('id')
+              .eq('user_id', user.id)
+              .eq('friend_id', userId)
+              .maybeSingle()
+            
+            const { data: friendCheck2 } = await supabase
+              .from('friends')
+              .select('id')
+              .eq('user_id', userId)
+              .eq('friend_id', user.id)
+              .maybeSingle()
+            
+            const isFriend = Boolean(friendCheck1?.id || friendCheck2?.id)
+            if (!isFriend) {
+              isAdminViewingPrivateNonFriend = true
+              // Log admin visit to private profile
+              try {
+                const session = (await supabase.auth.getSession()).data.session
+                const token = session?.access_token
+                const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+                if (token) headers.Authorization = `Bearer ${token}`
+                await fetch('/api/admin/log-action', {
+                  method: 'POST',
+                  headers,
+                  credentials: 'same-origin',
+                  body: JSON.stringify({
+                    action: 'view_private_profile',
+                    target: userId,
+                    detail: {
+                      profile_display_name: row.display_name || null,
+                      profile_is_private: true,
+                      admin_is_friend: false,
+                      via: 'profile_page'
+                    }
+                  })
+                }).catch(() => {}) // Don't block if logging fails
+              } catch {}
+            }
+            viewerCanSee = true // Admins can always see private profiles
+          }
         }
         
         setCanViewProfile(viewerCanSee)
@@ -152,6 +199,7 @@ export default function PublicProfilePage() {
           accent_key: row.accent_key || null,
           is_private: profileIsPrivate,
           disable_friend_requests: Boolean(row.disable_friend_requests || false),
+          isAdminViewingPrivateNonFriend: isAdminViewingPrivateNonFriend,
         })
 
         // Only load stats and data if user can view profile
@@ -498,11 +546,14 @@ export default function PublicProfilePage() {
                     className="h-8 w-8 text-black"
                   />
                 </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <div className="text-2xl font-semibold truncate">{pp.display_name || pp.username || 'Member'}</div>
-                    <span className={`text-[11px] px-2 py-0.5 rounded-full border ${pp.is_admin ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-stone-50 text-stone-700 border-stone-200'}`}>{pp.is_admin ? 'Admin' : 'Member'}</span>
-                  </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <div className="text-2xl font-semibold truncate">{pp.display_name || pp.username || 'Member'}</div>
+                        {pp.isAdminViewingPrivateNonFriend && (
+                          <EyeOff className="h-4 w-4 text-stone-500" title="Private profile viewed by admin" />
+                        )}
+                        <span className={`text-[11px] px-2 py-0.5 rounded-full border ${pp.is_admin ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-stone-50 text-stone-700 border-stone-200'}`}>{pp.is_admin ? 'Admin' : 'Member'}</span>
+                      </div>
                   {canViewProfile && (
                     <>
                       <div className="text-sm opacity-70 mt-1 flex items-center gap-1">{pp.country ? (<><MapPin className="h-4 w-4" />{pp.country}</>) : ''}</div>
