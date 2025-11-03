@@ -521,7 +521,7 @@ export const FriendsPage: React.FC = () => {
 
   return (
     <div className="max-w-6xl mx-auto mt-8 px-4 md:px-0">
-      <div className={`flex flex-col lg:grid gap-6 ${
+      <div className={`flex flex-col lg:grid gap-6 items-stretch ${
         pendingRequests.length > 0 || sentPendingRequests.length > 0 
           ? 'lg:grid-cols-[400px_1fr_400px]' 
           : 'lg:grid-cols-1'
@@ -533,8 +533,8 @@ export const FriendsPage: React.FC = () => {
         
         {/* Pending Requests I Received - Top on mobile, Left on desktop */}
         {pendingRequests.length > 0 && (
-          <Card className="rounded-3xl w-full lg:w-[400px] lg:flex-shrink-0 order-1 lg:order-1">
-            <CardContent className="p-6 md:p-8 space-y-4">
+          <Card className="rounded-3xl w-full lg:w-[400px] lg:flex-shrink-0 order-1 lg:order-1 h-full">
+            <CardContent className="p-6 md:p-8 space-y-4 h-full flex flex-col">
               <div className="text-xl font-semibold">Pending Invitations</div>
               <div className="space-y-2">
                 {pendingRequests.map((request) => (
@@ -591,8 +591,8 @@ export const FriendsPage: React.FC = () => {
         )}
         
         {/* Friends List Card - Middle */}
-        <Card className="rounded-3xl w-full lg:max-w-2xl lg:mx-auto order-2 lg:order-2">
-          <CardContent className="p-6 md:p-8 space-y-6">
+        <Card className="rounded-3xl w-full lg:max-w-2xl lg:mx-auto order-2 lg:order-2 h-full">
+          <CardContent className="p-6 md:p-8 space-y-6 h-full flex flex-col">
             {/* Title and Add Friend Button */}
             <div className="flex items-center justify-between">
               <div className="text-2xl font-semibold">Friends</div>
@@ -719,8 +719,8 @@ export const FriendsPage: React.FC = () => {
 
         {/* Pending Requests I Sent - Bottom on mobile, Right on desktop */}
         {sentPendingRequests.length > 0 && (
-          <Card className="rounded-3xl w-full lg:w-[400px] lg:flex-shrink-0 order-3 lg:order-3">
-            <CardContent className="p-6 md:p-8 space-y-4">
+          <Card className="rounded-3xl w-full lg:w-[400px] lg:flex-shrink-0 order-3 lg:order-3 h-full">
+            <CardContent className="p-6 md:p-8 space-y-4 h-full flex flex-col">
               <div className="text-xl font-semibold">Sent Requests</div>
               <div className="space-y-2">
                 {sentPendingRequests.map((request) => (
