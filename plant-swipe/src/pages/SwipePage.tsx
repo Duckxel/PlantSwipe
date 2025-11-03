@@ -54,7 +54,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, 
 
   return (
     <div className="max-w-3xl mx-auto mt-8 px-4 md:px-0">
-      <div className="relative h-[520px]">
+      <div className="relative h-[650px]">
         <AnimatePresence initial={false} mode="wait">
           {current ? (
             <motion.div
@@ -174,33 +174,9 @@ export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, 
           )}
         </AnimatePresence>
       </div>
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        <div className="flex items-center justify-start">
-          <ActionHint label="Previous" icon={<ChevronLeft className="h-5 w-5" />} />
-        </div>
-        <div className="flex items-center justify-end">
-          <ActionHint label="Next" icon={<ChevronRight className="h-5 w-5" />} reverseOrder />
-        </div>
-      </div>
     </div>
   )
 }
-
-const ActionHint = ({ label, icon, reverseOrder = false }: { label: string; icon: React.ReactNode; reverseOrder?: boolean }) => (
-  <div className="flex items-center gap-2 rounded-2xl bg-white p-3 shadow border">
-    {reverseOrder ? (
-      <>
-        <div className="text-sm font-medium">{label}</div>
-        <div className="h-8 w-8 rounded-xl bg-stone-100 flex items-center justify-center">{icon}</div>
-      </>
-    ) : (
-      <>
-        <div className="h-8 w-8 rounded-xl bg-stone-100 flex items-center justify-center">{icon}</div>
-        <div className="text-sm font-medium">{label}</div>
-      </>
-    )}
-  </div>
-)
 
 const EmptyState = ({ onReset }: { onReset: () => void }) => (
   <Card className="rounded-3xl p-8 text-center">
