@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, createContext, useContext, useState, useEffect } from 'react'
+import React, { Suspense, createContext, useContext, useState, useEffect } from 'react'
 
 // Lazy load the entire recharts module at once
 const loadRecharts = () => import('recharts')
