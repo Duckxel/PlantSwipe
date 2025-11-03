@@ -245,7 +245,7 @@ export const AdminPage: React.FC = () => {
         method: 'GET',
         headers: (() => {
           const h: Record<string, string> = { 'Accept': 'application/json' }
-          if (token) h['Authorization'] = `Bearer ${token}`
+          if (token) h['Authorization'] = `Bearer ? ${token}`
           const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
           if (adminToken) h['X-Admin-Token'] = String(adminToken)
           return h
@@ -258,7 +258,7 @@ export const AdminPage: React.FC = () => {
           method: 'POST',
           headers: (() => {
             const h: Record<string, string> = { 'Content-Type': 'application/json', 'Accept': 'application/json' }
-            if (token) h['Authorization'] = `Bearer ${token}`
+            if (token) h['Authorization'] = `Bearer ? ${token}`
             const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
             if (adminToken) h['X-Admin-Token'] = String(adminToken)
             return h
@@ -289,13 +289,13 @@ export const AdminPage: React.FC = () => {
           const missingExtensions: string[] = Array.isArray(summary?.extensions?.missing) ? summary.extensions.missing : []
           const hasMissing = missingTables.length + missingFunctions.length + missingExtensions.length > 0
           appendConsole('[sync] Post?sync verification:')
-          appendConsole(`- Tables OK: ${(summary?.tables?.present || []).length}/${(summary?.tables?.required || []).length}`)
-          appendConsole(`- Functions OK: ${(summary?.functions?.present || []).length}/${(summary?.functions?.required || []).length}`)
-          appendConsole(`- Extensions OK: ${(summary?.extensions?.present || []).length}/${(summary?.extensions?.required || []).length}`)
+          appendConsole(`- Tables OK: ? ${(summary?.tables?.present || []).length}/${(summary?.tables?.required || []).length}`)
+          appendConsole(`- Functions OK: ? ${(summary?.functions?.present || []).length}/${(summary?.functions?.required || []).length}`)
+          appendConsole(`- Extensions OK: ? ${(summary?.extensions?.present || []).length}/${(summary?.extensions?.required || []).length}`)
           if (hasMissing) {
-            if (missingTables.length) appendConsole(`- Missing tables: ${missingTables.join(', ')}`)
-            if (missingFunctions.length) appendConsole(`- Missing functions: ${missingFunctions.join(', ')}`)
-            if (missingExtensions.length) appendConsole(`- Missing extensions: ${missingExtensions.join(', ')}`)
+            if (missingTables.length) appendConsole(`- Missing tables: ? ${missingTables.join(', ')}`)
+            if (missingFunctions.length) appendConsole(`- Missing functions: ? ${missingFunctions.join(', ')}`)
+            if (missingExtensions.length) appendConsole(`- Missing extensions: ? ${missingExtensions.join(', ')}`)
           } else {
             appendConsole('- All required objects present')
           }
@@ -303,7 +303,7 @@ export const AdminPage: React.FC = () => {
       }
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e)
-      appendConsole(`[sync] Failed to sync schema: ${message}`)
+      appendConsole(`[sync] Failed to sync schema: ? ${message}`)
     } finally {
       setSyncing(false)
     }
@@ -326,7 +326,7 @@ export const AdminPage: React.FC = () => {
       // First attempt: restart via Node API (preserves Authorization)
       const nodeHeaders = (() => {
         const h: Record<string, string> = { 'Accept': 'application/json' }
-        if (token) h['Authorization'] = `Bearer ${token}`
+        if (token) h['Authorization'] = `Bearer ? ${token}`
         const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
         if (adminToken) h['X-Admin-Token'] = String(adminToken)
         return h
@@ -382,7 +382,7 @@ export const AdminPage: React.FC = () => {
             })
             const jb = await safeJson(r)
             if (!r.ok || jb?.ok !== true) {
-              throw new Error(jb?.error || `Admin restart failed for ${svc} (${r.status})`)
+              throw new Error(jb?.error || `Admin restart failed for ? ${svc} (${r.status})`)
             }
           }
         } else {
@@ -410,7 +410,7 @@ export const AdminPage: React.FC = () => {
 
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e)
-      appendConsole(`[restart] Failed to restart services: ${message}`)
+      appendConsole(`[restart] Failed to restart services: ? ${message}`)
     } finally {
       setRestarting(false)
     }
@@ -505,7 +505,7 @@ export const AdminPage: React.FC = () => {
       const headers: Record<string, string> = { 'Accept': 'application/json' }
       try {
         const token = (await supabase.auth.getSession()).data.session?.access_token
-        if (token) headers['Authorization'] = `Bearer ${token}`
+        if (token) headers['Authorization'] = `Bearer ? ${token}`
         const staticToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
         if (staticToken) headers['X-Admin-Token'] = staticToken
       } catch {}
@@ -608,7 +608,7 @@ export const AdminPage: React.FC = () => {
   const StatusDot: React.FC<{ ok: boolean | null; title?: string }> = ({ ok, title }) => (
     <span
       className={
-        `inline-block h-3 w-3 rounded-full ${ok === null ? 'bg-zinc-400' : ok ? 'bg-emerald-500' : 'bg-rose-500'}`
+        `inline-block h-3 w-3 rounded-full ? ${ok === null ? 'bg-zinc-400' : ok ? 'bg-emerald-500' : 'bg-rose-500'}`
       }
       aria-label={ok === null ? 'unknown' : ok ? 'ok' : 'error'}
       title={title}
@@ -643,7 +643,7 @@ export const AdminPage: React.FC = () => {
       try {
         const session = (await supabase.auth.getSession()).data.session
         const token = session?.access_token
-        if (token) headersNode['Authorization'] = `Bearer ${token}`
+        if (token) headersNode['Authorization'] = `Bearer ? ${token}`
       } catch {}
       const respNode = await fetch('/api/admin/branches', { headers: headersNode, credentials: 'same-origin' })
       let data = await safeJson(respNode)
@@ -663,7 +663,7 @@ export const AdminPage: React.FC = () => {
         if (Array.isArray(data?.branches)) {
           data.branches = data.branches.filter((b: string) => b && b !== 'origin' && b !== 'HEAD')
         }
-        if (!respAdmin.ok || !Array.isArray(data?.branches)) throw new Error(data?.error || `HTTP ${respAdmin.status}`)
+        if (!respAdmin.ok || !Array.isArray(data?.branches)) throw new Error(data?.error || `HTTP ? ${respAdmin.status}`)
       }
       const branches: string[] = data.branches
       const current: string = String(data.current || '')
@@ -700,15 +700,15 @@ export const AdminPage: React.FC = () => {
       setConsoleOpen(true)
       appendConsole('[pull] Pull & Build: starting?')
       if (selectedBranch && selectedBranch !== currentBranch) {
-        appendConsole(`[pull] Will switch to branch: ${selectedBranch}`)
+        appendConsole(`[pull] Will switch to branch: ? ${selectedBranch}`)
       } else if (currentBranch) {
-        appendConsole(`[pull] Staying on branch: ${currentBranch}`)
+        appendConsole(`[pull] Staying on branch: ? ${currentBranch}`)
       }
       setReloadReady(false)
       const session = (await supabase.auth.getSession()).data.session
       const token = session?.access_token
       const headers: Record<string, string> = {}
-      if (token) headers['Authorization'] = `Bearer ${token}`
+      if (token) headers['Authorization'] = `Bearer ? ${token}`
       try {
         const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
         if (adminToken) headers['X-Admin-Token'] = String(adminToken)
@@ -818,7 +818,7 @@ export const AdminPage: React.FC = () => {
       try { await loadBranches({ initial: false }) } catch {}
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e)
-      appendConsole(`[pull] Failed to pull & build: ${message}`)
+      appendConsole(`[pull] Failed to pull & build: ? ${message}`)
     } finally {
       setPulling(false)
     }
@@ -836,7 +836,7 @@ export const AdminPage: React.FC = () => {
       const session = (await supabase.auth.getSession()).data.session
       const token = session?.access_token
       const headers: Record<string, string> = { 'Accept': 'application/json' }
-      if (token) headers['Authorization'] = `Bearer ${token}`
+      if (token) headers['Authorization'] = `Bearer ? ${token}`
       try {
         const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
         if (adminToken) headers['X-Admin-Token'] = String(adminToken)
@@ -886,7 +886,7 @@ export const AdminPage: React.FC = () => {
       const resp = await fetch('/api/admin/online-users', {
         headers: (() => {
           const h: Record<string, string> = { 'Accept': 'application/json' }
-          if (token) h['Authorization'] = `Bearer ${token}`
+          if (token) h['Authorization'] = `Bearer ? ${token}`
           const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
           if (adminToken) h['X-Admin-Token'] = String(adminToken)
           return h
@@ -931,14 +931,14 @@ export const AdminPage: React.FC = () => {
       const session = (await supabase.auth.getSession()).data.session
       const token = session?.access_token
       const headers: Record<string, string> = { 'Accept': 'application/json' }
-      if (token) headers['Authorization'] = `Bearer ${token}`
+      if (token) headers['Authorization'] = `Bearer ? ${token}`
       try {
         const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
         if (adminToken) headers['X-Admin-Token'] = String(adminToken)
       } catch {}
       const resp = await fetch(`/api/admin/online-ips?minutes=${encodeURIComponent(String(minutes))}` , { headers, credentials: 'same-origin' })
       const data = await safeJson(resp)
-      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`)
+      if (!resp.ok) throw new Error(data?.error || `HTTP ? ${resp.status}`)
       const list: string[] = Array.isArray(data?.ips) ? data.ips.map((s: any) => String(s)).filter(Boolean) : []
       setIps(list)
     } catch {
@@ -1123,14 +1123,14 @@ export const AdminPage: React.FC = () => {
       const session = (await supabase.auth.getSession()).data.session
       const token = session?.access_token
       const headers: Record<string, string> = { 'Accept': 'application/json' }
-      if (token) headers['Authorization'] = `Bearer ${token}`
+      if (token) headers['Authorization'] = `Bearer ? ${token}`
       try {
         const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
         if (adminToken) headers['X-Admin-Token'] = String(adminToken)
       } catch {}
       const resp = await fetch(`/api/admin/member-visits-series?userId=${encodeURIComponent(userId)}`, { headers, credentials: 'same-origin' })
       const data = await safeJson(resp)
-      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`)
+      if (!resp.ok) throw new Error(data?.error || `HTTP ? ${resp.status}`)
       const series = Array.isArray(data?.series30d) ? data.series30d.map((d: any) => ({ date: String(d.date), visits: Number(d.visits || 0) })) : []
       setMemberVisitsSeries(series)
       const total = Number(data?.total30d || 0)
@@ -1153,14 +1153,14 @@ export const AdminPage: React.FC = () => {
       const token = session?.access_token
       const url = `/api/admin/member?q=${encodeURIComponent(lookupEmail)}`
       const headers: Record<string,string> = { 'Accept': 'application/json' }
-      if (token) headers['Authorization'] = `Bearer ${token}`
+      if (token) headers['Authorization'] = `Bearer ? ${token}`
       try {
         const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
         if (adminToken) headers['X-Admin-Token'] = String(adminToken)
       } catch {}
       const resp = await fetch(url, { headers, credentials: 'same-origin' })
       const data = await safeJson(resp)
-      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`)
+      if (!resp.ok) throw new Error(data?.error || `HTTP ? ${resp.status}`)
       setMemberData({
         user: data?.user || null,
         profile: data?.profile || null,
@@ -1183,7 +1183,7 @@ export const AdminPage: React.FC = () => {
       // Log lookup success (UI)
       try {
         const headers2: Record<string,string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
-        if (token) headers2['Authorization'] = `Bearer ${token}`
+        if (token) headers2['Authorization'] = `Bearer ? ${token}`
         try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) headers2['X-Admin-Token'] = String(adminToken) } catch {}
         await fetch('/api/admin/log-action', { method: 'POST', headers: headers2, credentials: 'same-origin', body: JSON.stringify({ action: 'admin_lookup', target: lookupEmail, detail: { via: 'ui' } }) })
       } catch {}
@@ -1195,7 +1195,7 @@ export const AdminPage: React.FC = () => {
         const session = (await supabase.auth.getSession()).data.session
         const token = session?.access_token
         const headers2: Record<string,string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
-        if (token) headers2['Authorization'] = `Bearer ${token}`
+        if (token) headers2['Authorization'] = `Bearer ? ${token}`
         try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) headers2['X-Admin-Token'] = String(adminToken) } catch {}
         await fetch('/api/admin/log-action', { method: 'POST', headers: headers2, credentials: 'same-origin', body: JSON.stringify({ action: 'admin_lookup_failed', target: lookupEmail, detail: { error: msg } }) })
       } catch {}
@@ -1222,14 +1222,14 @@ export const AdminPage: React.FC = () => {
       const session = (await supabase.auth.getSession()).data.session
       const token = session?.access_token
       const headers: Record<string, string> = { 'Accept': 'application/json' }
-      if (token) headers['Authorization'] = `Bearer ${token}`
+      if (token) headers['Authorization'] = `Bearer ? ${token}`
       try {
         const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
         if (adminToken) headers['X-Admin-Token'] = String(adminToken)
       } catch {}
       const resp = await fetch(`/api/admin/members-by-ip?ip=${encodeURIComponent(ip)}`, { headers, credentials: 'same-origin' })
       const data = await safeJson(resp)
-      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`)
+      if (!resp.ok) throw new Error(data?.error || `HTTP ? ${resp.status}`)
       const users = Array.isArray(data?.users)
         ? data.users.map((u: any) => ({ id: String(u.id), email: u?.email ?? null, display_name: u?.display_name ?? null, last_seen_at: u?.last_seen_at ?? null }))
         : []
@@ -1245,7 +1245,7 @@ export const AdminPage: React.FC = () => {
       // Log IP lookup (success)
       try {
         const headers2: Record<string,string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
-        if (token) headers2['Authorization'] = `Bearer ${token}`
+        if (token) headers2['Authorization'] = `Bearer ? ${token}`
         try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) headers2['X-Admin-Token'] = String(adminToken) } catch {}
         await fetch('/api/admin/log-action', { method: 'POST', headers: headers2, credentials: 'same-origin', body: JSON.stringify({ action: 'ip_lookup', target: ip, detail: { via: 'ui' } }) })
       } catch {}
@@ -1257,7 +1257,7 @@ export const AdminPage: React.FC = () => {
         const session = (await supabase.auth.getSession()).data.session
         const token = session?.access_token
         const headers2: Record<string,string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
-        if (token) headers2['Authorization'] = `Bearer ${token}`
+        if (token) headers2['Authorization'] = `Bearer ? ${token}`
         try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) headers2['X-Admin-Token'] = String(adminToken) } catch {}
         await fetch('/api/admin/log-action', { method: 'POST', headers: headers2, credentials: 'same-origin', body: JSON.stringify({ action: 'ip_lookup_failed', target: ip, detail: { error: msg } }) })
       } catch {}
@@ -1300,7 +1300,7 @@ export const AdminPage: React.FC = () => {
       const session = (await supabase.auth.getSession()).data.session
       const token = session?.access_token
       const headers: Record<string,string> = { 'Content-Type': 'application/json', 'Accept': 'application/json' }
-      if (token) headers['Authorization'] = `Bearer ${token}`
+      if (token) headers['Authorization'] = `Bearer ? ${token}`
       try {
         const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
         if (adminToken) headers['X-Admin-Token'] = String(adminToken)
@@ -1312,7 +1312,7 @@ export const AdminPage: React.FC = () => {
         body: JSON.stringify({ email: lookupEmail, reason: banReason })
       })
       const data = await safeJson(resp)
-      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`)
+      if (!resp.ok) throw new Error(data?.error || `HTTP ? ${resp.status}`)
       alert('User banned successfully')
       setBanReason('')
       setBanOpen(false)
@@ -1320,7 +1320,7 @@ export const AdminPage: React.FC = () => {
       setMemberData(null)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
-      alert(`Ban failed: ${msg}`)
+      alert(`Ban failed: ? ${msg}`)
     } finally {
       setBanSubmitting(false)
     }
@@ -1333,7 +1333,7 @@ export const AdminPage: React.FC = () => {
       const session = (await supabase.auth.getSession()).data.session
       const token = session?.access_token
       const headers: Record<string,string> = { 'Content-Type': 'application/json', 'Accept': 'application/json' }
-      if (token) headers['Authorization'] = `Bearer ${token}`
+      if (token) headers['Authorization'] = `Bearer ? ${token}`
       try {
         const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
         if (adminToken) headers['X-Admin-Token'] = String(adminToken)
@@ -1345,14 +1345,14 @@ export const AdminPage: React.FC = () => {
         body: JSON.stringify({ email: lookupEmail })
       })
       const data = await safeJson(resp)
-      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`)
+      if (!resp.ok) throw new Error(data?.error || `HTTP ? ${resp.status}`)
       alert('User promoted to admin successfully')
       setPromoteOpen(false)
       // Refresh profile info
       setMemberData((prev) => prev ? { ...prev, profile: { ...(prev.profile || {}), is_admin: true } } : prev)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
-      alert(`Promotion failed: ${msg}`)
+      alert(`Promotion failed: ? ${msg}`)
     } finally {
       setPromoteSubmitting(false)
     }
@@ -1365,7 +1365,7 @@ export const AdminPage: React.FC = () => {
       const session = (await supabase.auth.getSession()).data.session
       const token = session?.access_token
       const headers: Record<string,string> = { 'Content-Type': 'application/json', 'Accept': 'application/json' }
-      if (token) headers['Authorization'] = `Bearer ${token}`
+      if (token) headers['Authorization'] = `Bearer ? ${token}`
       try {
         const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
         if (adminToken) headers['X-Admin-Token'] = String(adminToken)
@@ -1377,14 +1377,14 @@ export const AdminPage: React.FC = () => {
         body: JSON.stringify({ email: lookupEmail })
       })
       const data = await safeJson(resp)
-      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`)
+      if (!resp.ok) throw new Error(data?.error || `HTTP ? ${resp.status}`)
       alert('Admin removed successfully')
       setDemoteOpen(false)
       // Refresh profile info
       setMemberData((prev) => prev ? { ...prev, profile: { ...(prev.profile || {}), is_admin: false } } : prev)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
-      alert(`Demotion failed: ${msg}`)
+      alert(`Demotion failed: ? ${msg}`)
     } finally {
       setDemoteSubmitting(false)
     }
@@ -1406,7 +1406,7 @@ export const AdminPage: React.FC = () => {
       try {
         const token = (await supabase.auth.getSession()).data.session?.access_token
         const headers: Record<string,string> = { 'Accept': 'application/json' }
-        if (token) headers['Authorization'] = `Bearer ${token}`
+        if (token) headers['Authorization'] = `Bearer ? ${token}`
         try {
           const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
           if (adminToken) headers['X-Admin-Token'] = String(adminToken)
@@ -1518,7 +1518,7 @@ export const AdminPage: React.FC = () => {
                   disabled={healthRefreshing}
                   className="h-8 w-8 rounded-xl border bg-white text-black hover:bg-stone-50"
                 >
-                  <RefreshCw className={`h-4 w-4 ${healthRefreshing ? 'animate-spin' : ''}`} />
+                  <RefreshCw className={`h-4 w-4 ? ${healthRefreshing ? 'animate-spin' : ''}`} />
                 </Button>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
@@ -1581,7 +1581,7 @@ export const AdminPage: React.FC = () => {
                   aria-expanded={broadcastOpen}
                   aria-controls="broadcast-create"
                 >
-                  <ChevronDown className={`h-4 w-4 transition-transform ${broadcastOpen ? 'rotate-180' : ''}`} />
+                  <ChevronDown className={`h-4 w-4 transition-transform ? ${broadcastOpen ? 'rotate-180' : ''}`} />
                   Broadcast message
                 </button>
                 {broadcastOpen && (
@@ -1639,7 +1639,7 @@ export const AdminPage: React.FC = () => {
                   disabled={branchesLoading || branchesRefreshing}
                   aria-label="Refresh branches"
                 >
-                  <RefreshCw className={`h-4 w-4 ${branchesRefreshing ? 'animate-spin' : ''}`} />
+                  <RefreshCw className={`h-4 w-4 ? ${branchesRefreshing ? 'animate-spin' : ''}`} />
                   <span className="hidden sm:inline">Refresh branches</span>
                   <span className="sm:hidden inline">Refresh</span>
                 </Button>
@@ -1679,7 +1679,7 @@ export const AdminPage: React.FC = () => {
                     aria-expanded={consoleOpen}
                     aria-controls="admin-console"
                   >
-                    <ChevronDown className={`h-4 w-4 transition-transform ${consoleOpen ? 'rotate-180' : ''}`} />
+                    <ChevronDown className={`h-4 w-4 transition-transform ? ${consoleOpen ? 'rotate-180' : ''}`} />
                     Admin Console
                     {consoleLines.length > 0 && (
                       <span className="text-xs opacity-60">({consoleLines.length} lines)</span>
@@ -1699,7 +1699,7 @@ export const AdminPage: React.FC = () => {
                 </div>
                 {consoleOpen && (
                   <div className="mt-2" id="admin-console">
-                    <div className={`relative rounded-xl border ${hasConsoleError ? 'border-4 border-rose-600 ring-8 ring-rose-500/40 shadow-lg shadow-rose-500/30' : ''}`}>
+                    <div className={`relative rounded-xl border ? ${hasConsoleError ? 'border-4 border-rose-600 ring-8 ring-rose-500/40 shadow-lg shadow-rose-500/30' : ''}`}>
                       <div
                         ref={consoleRef}
                         className="h-48 overflow-auto bg-black text-white text-xs p-3 pr-8 font-mono whitespace-pre-wrap rounded-xl"
@@ -1755,7 +1755,7 @@ export const AdminPage: React.FC = () => {
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       <div className="text-sm opacity-60">Currently online</div>
-                      <div className="text-xs opacity-60">{onlineUpdatedAt ? `Updated ${formatTimeAgo(onlineUpdatedAt)}` : 'Updated -'}</div>
+                      <div className="text-xs opacity-60">{onlineUpdatedAt ? `Updated ? ${formatTimeAgo(onlineUpdatedAt)}` : 'Updated -'}</div>
                     </div>
                     <Button
                       variant="outline"
@@ -1765,7 +1765,7 @@ export const AdminPage: React.FC = () => {
                       disabled={onlineLoading || onlineRefreshing || ipsLoading || ipsRefreshing}
                       className="h-8 w-8 rounded-xl border bg-white text-black hover:bg-stone-50"
                     >
-                      <RefreshCw className={`h-4 w-4 ${(onlineLoading || onlineRefreshing || ipsLoading || ipsRefreshing) ? 'animate-spin' : ''}`} />
+                      <RefreshCw className={`h-4 w-4 ? ${(onlineLoading || onlineRefreshing || ipsLoading || ipsRefreshing) ? 'animate-spin' : ''}`} />
                     </Button>
                   </div>
                   <div className="text-2xl font-semibold tabular-nums mt-1">
@@ -1781,7 +1781,7 @@ export const AdminPage: React.FC = () => {
                         aria-expanded={ipsOpen}
                         aria-controls="connected-ips"
                       >
-                        <ChevronDown className={`h-4 w-4 transition-transform ${ipsOpen ? 'rotate-180' : ''}`} />
+                        <ChevronDown className={`h-4 w-4 transition-transform ? ${ipsOpen ? 'rotate-180' : ''}`} />
                         IPs
                       </button>
                       <div />
@@ -1802,8 +1802,8 @@ export const AdminPage: React.FC = () => {
                                   tabIndex={0}
                                   onClick={() => jumpToIpLookup(ip)}
                                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); jumpToIpLookup(ip) } }}
-                                  title={`Lookup members for ${ip}`}
-                                  aria-label={`Lookup members for ${ip}`}
+                                  title={`Lookup members for ? ${ip}`}
+                                  aria-label={`Lookup members for ? ${ip}`}
                                   variant="outline"
                                   className="rounded-full px-2 py-1 text-xs cursor-pointer hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-ring"
                                 >
@@ -1823,7 +1823,7 @@ export const AdminPage: React.FC = () => {
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       <div className="text-sm opacity-60">Registered accounts</div>
-                      <div className="text-xs opacity-60">{registeredUpdatedAt ? `Updated ${formatTimeAgo(registeredUpdatedAt)}` : 'Updated -'}</div>
+                      <div className="text-xs opacity-60">{registeredUpdatedAt ? `Updated ? ${formatTimeAgo(registeredUpdatedAt)}` : 'Updated -'}</div>
                     </div>
                     <Button
                       variant="outline"
@@ -1833,7 +1833,7 @@ export const AdminPage: React.FC = () => {
                       disabled={registeredLoading || registeredRefreshing}
                       className="h-8 w-8 rounded-xl border bg-white text-black hover:bg-stone-50"
                     >
-                      <RefreshCw className={`h-4 w-4 ${registeredLoading || registeredRefreshing ? 'animate-spin' : ''}`} />
+                      <RefreshCw className={`h-4 w-4 ? ${registeredLoading || registeredRefreshing ? 'animate-spin' : ''}`} />
                     </Button>
                   </div>
                   <div className="text-2xl font-semibold tabular-nums mt-1">
@@ -1847,23 +1847,23 @@ export const AdminPage: React.FC = () => {
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <div>
                     <div className="flex items-center gap-2">
-                      <div className="text-sm font-medium">Unique visitors ? last {visitorsWindowDays} days</div>
+                      <div className="text-sm font-medium">Unique visitors - last {visitorsWindowDays} days</div>
                       <div className="flex items-center gap-1">
                         <button
                           type="button"
-                          className={`text-xs px-2 py-1 rounded-lg border ${visitorsWindowDays === 7 ? 'bg-black text-white' : 'bg-white'}`}
+                          className={`text-xs px-2 py-1 rounded-lg border ? ${visitorsWindowDays === 7 ? 'bg-black text-white' : 'bg-white'}`}
                           onClick={() => setVisitorsWindowDays(7)}
                           aria-pressed={visitorsWindowDays === 7}
                         >7d</button>
                         <button
                           type="button"
-                          className={`text-xs px-2 py-1 rounded-lg border ${visitorsWindowDays === 30 ? 'bg-black text-white' : 'bg-white'}`}
+                          className={`text-xs px-2 py-1 rounded-lg border ? ${visitorsWindowDays === 30 ? 'bg-black text-white' : 'bg-white'}`}
                           onClick={() => setVisitorsWindowDays(30)}
                           aria-pressed={visitorsWindowDays === 30}
                         >30d</button>
                       </div>
                     </div>
-                    <div className="text-xs opacity-60">{visitorsUpdatedAt ? `Updated ${formatTimeAgo(visitorsUpdatedAt)}` : 'Updated -'}</div>
+                    <div className="text-xs opacity-60">{visitorsUpdatedAt ? `Updated ? ${formatTimeAgo(visitorsUpdatedAt)}` : 'Updated -'}</div>
                   </div>
                   <Button
                     variant="outline"
@@ -1873,7 +1873,7 @@ export const AdminPage: React.FC = () => {
                     disabled={visitorsLoading || visitorsRefreshing}
                     className="h-8 w-8 rounded-xl border bg-white text-black hover:bg-stone-50"
                   >
-                      <RefreshCw className={`h-4 w-4 ${visitorsLoading || visitorsRefreshing ? 'animate-spin' : ''}`} />
+                      <RefreshCw className={`h-4 w-4 ? ${visitorsLoading || visitorsRefreshing ? 'animate-spin' : ''}`} />
                   </Button>
                 </div>
 
@@ -1929,7 +1929,7 @@ export const AdminPage: React.FC = () => {
                             </span>
                             <span className="opacity-60"> vs previous day</span>
                           </div>
-                          <div className="text-[11px] opacity-70 mt-1">7?day avg: <span className="font-medium">{avgVal}</span></div>
+                          <div className="text-[11px] opacity-70 mt-1">7-day avg: <span className="font-medium">{avgVal}</span></div>
                         </div>
                       )
                     }
@@ -2217,7 +2217,7 @@ export const AdminPage: React.FC = () => {
                             <button
                               key={s.id}
                               type="button"
-                          className={`w-full text-left px-3 py-2 text-sm rounded-xl ${idx === highlightIndex ? 'bg-neutral-100' : ''}`}
+                          className={`w-full text-left px-3 py-2 text-sm rounded-xl ? ${idx === highlightIndex ? 'bg-neutral-100' : ''}`}
                           role="option"
                           aria-selected={idx === highlightIndex}
                               onMouseEnter={() => setHighlightIndex(idx)}
@@ -2516,8 +2516,8 @@ export const AdminPage: React.FC = () => {
                           tabIndex={0}
                           onClick={() => jumpToIpLookup(ip)}
                           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); jumpToIpLookup(ip) } }}
-                          title={`Lookup members for ${ip}`}
-                          aria-label={`Lookup members for ${ip}`}
+                          title={`Lookup members for ? ${ip}`}
+                          aria-label={`Lookup members for ? ${ip}`}
                           variant="outline"
                           className="rounded-full cursor-pointer hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-ring"
                         >
@@ -2532,8 +2532,8 @@ export const AdminPage: React.FC = () => {
                     <CardContent className="p-4">
                       <div className="flex items-center justify-between gap-2 mb-2">
                         <div>
-                          <div className="text-sm font-medium">Visits ? last 30 days</div>
-                          <div className="text-xs opacity-60">{memberVisitsUpdatedAt ? `Updated ${formatTimeAgo(memberVisitsUpdatedAt)}` : 'Updated -'}</div>
+                          <div className="text-sm font-medium">Visits - last 30 days</div>
+                          <div className="text-xs opacity-60">{memberVisitsUpdatedAt ? `Updated ? ${formatTimeAgo(memberVisitsUpdatedAt)}` : 'Updated -'}</div>
                         </div>
                         <Button
                           variant="outline"
@@ -2543,7 +2543,7 @@ export const AdminPage: React.FC = () => {
                           disabled={memberVisitsLoading || !memberData?.user?.id}
                           className="h-8 w-8 rounded-xl border bg-white text-black hover:bg-stone-50"
                         >
-                          <RefreshCw className={`h-4 w-4 ${memberVisitsLoading ? 'animate-spin' : ''}`} />
+                          <RefreshCw className={`h-4 w-4 ? ${memberVisitsLoading ? 'animate-spin' : ''}`} />
                         </Button>
                       </div>
 
@@ -2633,7 +2633,7 @@ export const AdminPage: React.FC = () => {
                     <div className="rounded-xl border p-3 bg-rose-50/60">
                       <div className="text-sm font-medium text-rose-700 flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Banned details</div>
                       {memberData.isBannedEmail && (
-                        <div className="text-sm mt-1">Email banned {memberData.bannedAt ? `on ${new Date(memberData.bannedAt).toLocaleString()}` : ''}{memberData.bannedReason ? ` ? ${memberData.bannedReason}` : ''}</div>
+                        <div className="text-sm mt-1">Email banned {memberData.bannedAt ? `on ? ${new Date(memberData.bannedAt).toLocaleString()}` : ''}{memberData.bannedReason ? ` ? ? ${memberData.bannedReason}` : ''}</div>
                       )}
                       {memberData.bannedIps && memberData.bannedIps.length > 0 && (
                         <div className="text-sm mt-1">Blocked IPs:
@@ -2645,8 +2645,8 @@ export const AdminPage: React.FC = () => {
                                 tabIndex={0}
                                 onClick={() => jumpToIpLookup(ip)}
                                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); jumpToIpLookup(ip) } }}
-                                title={`Lookup members for ${ip}`}
-                                aria-label={`Lookup members for ${ip}`}
+                                title={`Lookup members for ? ${ip}`}
+                                aria-label={`Lookup members for ? ${ip}`}
                                 variant="outline"
                                 className="rounded-full bg-white cursor-pointer hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-ring"
                               >
@@ -2874,9 +2874,9 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
     const m = totalMinutes % 60
     const h = Math.floor(totalMinutes / 60)
     const d = Math.floor(h / 24)
-    if (d > 0) return `${d}d ${h % 24}h ${m}m`
-    if (h > 0) return `${h}h ${m}m`
-    if (m > 0) return `${m}m ${s}s`
+    if (d > 0) return `${d}d ? ${h % 24}h ? ${m}m`
+    if (h > 0) return `${h}h ? ${m}m`
+    if (m > 0) return `${m}m ? ${s}s`
     return `${s}s`
   }
 
@@ -2955,7 +2955,7 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
       const session = (await supabase.auth.getSession()).data.session
       const token = session?.access_token
       const headers: Record<string, string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
-      if (token) headers['Authorization'] = `Bearer ${token}`
+      if (token) headers['Authorization'] = `Bearer ? ${token}`
       try { const staticToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (staticToken) headers['X-Admin-Token'] = String(staticToken) } catch {}
       const resp = await fetch('/api/admin/broadcast', {
         method: 'POST',
@@ -2964,7 +2964,7 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
         body: JSON.stringify({ message: message.trim(), severity, durationMs: (() => { const v = duration; if (v === 'unlimited' || !v) return null; const m = v.match(/^(\d+)([smhd])$/); if (!m) return null; const n = Number(m[1]); const u = m[2]; const mult = u === 's' ? 1000 : u === 'm' ? 60000 : u === 'h' ? 3600000 : 86400000; return n*mult; })() }),
       })
       const b = await resp.json().catch(() => ({}))
-      if (!resp.ok) throw new Error(b?.error || `HTTP ${resp.status}`)
+      if (!resp.ok) throw new Error(b?.error || `HTTP ? ${resp.status}`)
       setActive(b?.broadcast || null)
       setMessage('')
       setSeverity('warning')
@@ -2982,11 +2982,11 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
       const session = (await supabase.auth.getSession()).data.session
       const token = session?.access_token
       const headers: Record<string, string> = { 'Accept': 'application/json' }
-      if (token) headers['Authorization'] = `Bearer ${token}`
+      if (token) headers['Authorization'] = `Bearer ? ${token}`
       try { const staticToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (staticToken) headers['X-Admin-Token'] = String(staticToken) } catch {}
       const resp = await fetch('/api/admin/broadcast', { method: 'DELETE', headers, credentials: 'same-origin' })
       const b = await resp.json().catch(() => ({}))
-      if (!resp.ok) throw new Error(b?.error || `HTTP ${resp.status}`)
+      if (!resp.ok) throw new Error(b?.error || `HTTP ? ${resp.status}`)
       setActive(null)
     } catch (e) {
       alert((e as Error)?.message || 'Failed to remove broadcast')
@@ -3043,14 +3043,14 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
                   const session = (await supabase.auth.getSession()).data.session
                   const token = session?.access_token
                   const headers: Record<string, string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
-                  if (token) headers['Authorization'] = `Bearer ${token}`
+                  if (token) headers['Authorization'] = `Bearer ? ${token}`
                   try { const staticToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (staticToken) headers['X-Admin-Token'] = String(staticToken) } catch {}
                   const resp = await fetch('/api/admin/broadcast', {
                     method: 'PUT', headers, credentials: 'same-origin',
                     body: JSON.stringify({ message: (message.length ? message : active.message).trim(), severity, durationMs: (() => { const v = duration; if (v === '' || v === 'unlimited') return null; const m = v.match(/^(\d+)([smhd])$/); if (!m) return null; const n = Number(m[1]); const u = m[2]; const mult = u === 's' ? 1000 : u === 'm' ? 60000 : u === 'h' ? 3600000 : 86400000; return n*mult; })() })
                   })
                   const b = await resp.json().catch(() => ({}))
-                  if (!resp.ok) throw new Error(b?.error || `HTTP ${resp.status}`)
+                  if (!resp.ok) throw new Error(b?.error || `HTTP ? ${resp.status}`)
                   setActive(b?.broadcast || null)
                   setMessage('')
                 } catch (e) {
@@ -3132,7 +3132,7 @@ function AddAdminNote({ profileId, onAdded }: { profileId: string; onAdded: () =
       const session = (await supabase.auth.getSession()).data.session
       const token = session?.access_token
       const headers: Record<string, string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
-      if (token) headers['Authorization'] = `Bearer ${token}`
+      if (token) headers['Authorization'] = `Bearer ? ${token}`
       try {
         const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
         if (adminToken) headers['X-Admin-Token'] = String(adminToken)
@@ -3144,11 +3144,11 @@ function AddAdminNote({ profileId, onAdded }: { profileId: string; onAdded: () =
         body: JSON.stringify({ profileId, message: value.trim() }),
       })
       const data = await resp.json().catch(() => ({}))
-      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`)
+      if (!resp.ok) throw new Error(data?.error || `HTTP ? ${resp.status}`)
       // Log note create (UI)
       try {
         const headers2: Record<string,string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
-        if (token) headers2['Authorization'] = `Bearer ${token}`
+        if (token) headers2['Authorization'] = `Bearer ? ${token}`
         try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) headers2['X-Admin-Token'] = String(adminToken) } catch {}
         await fetch('/api/admin/log-action', { method: 'POST', headers: headers2, credentials: 'same-origin', body: JSON.stringify({ action: 'add_note', target: profileId, detail: { source: 'ui' } }) })
       } catch {}
@@ -3193,7 +3193,7 @@ function NoteRow({ note, onRemoved }: { note: { id: string; admin_id: string | n
       const session = (await supabase.auth.getSession()).data.session
       const token = session?.access_token
       const headers: Record<string, string> = { 'Accept': 'application/json' }
-      if (token) headers['Authorization'] = `Bearer ${token}`
+      if (token) headers['Authorization'] = `Bearer ? ${token}`
       try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) headers['X-Admin-Token'] = String(adminToken) } catch {}
       const resp = await fetch(`/api/admin/member-note/${encodeURIComponent(note.id)}`, { method: 'DELETE', headers, credentials: 'same-origin' })
       if (!resp.ok) {
@@ -3202,7 +3202,7 @@ function NoteRow({ note, onRemoved }: { note: { id: string; admin_id: string | n
       // Log note delete (UI)
       try {
         const headers2: Record<string,string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
-        if (token) headers2['Authorization'] = `Bearer ${token}`
+        if (token) headers2['Authorization'] = `Bearer ? ${token}`
         try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) headers2['X-Admin-Token'] = String(adminToken) } catch {}
         await fetch('/api/admin/log-action', { method: 'POST', headers: headers2, credentials: 'same-origin', body: JSON.stringify({ action: 'delete_note', target: note.id, detail: { source: 'ui' } }) })
       } catch {}
@@ -3273,8 +3273,8 @@ const AdminLogs: React.FC = () => {
     const who = (l.admin_name && String(l.admin_name).trim()) || 'Admin'
     const act = l.action || ''
     const tgt = l.target ? ` ? ${l.target}` : ''
-    const det = l.detail ? ` ${JSON.stringify(l.detail)}` : ''
-    return `${ts} :: ${who} // ${act}${tgt}${det}`
+    const det = l.detail ? ` ? ${JSON.stringify(l.detail)}` : ''
+    return `${ts} :: ? ${who} // ? ${act}${tgt}${det}`
   }, [])
 
   const copyVisibleLogs = React.useCallback(async () => {
@@ -3288,11 +3288,11 @@ const AdminLogs: React.FC = () => {
       const session = (await supabase.auth.getSession()).data.session
       const token = session?.access_token
       const headers: Record<string, string> = { 'Accept': 'application/json' }
-      if (token) headers['Authorization'] = `Bearer ${token}`
+      if (token) headers['Authorization'] = `Bearer ? ${token}`
       try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) headers['X-Admin-Token'] = String(adminToken) } catch {}
       const r = await fetch('/api/admin/admin-logs?days=30', { headers, credentials: 'same-origin' })
       const data = await r.json().catch(() => ({}))
-      if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`)
+      if (!r.ok) throw new Error(data?.error || `HTTP ? ${r.status}`)
       const list = Array.isArray(data?.logs) ? data.logs : []
       setLogs(list)
       setVisibleCount(Math.min(20, list.length || 20))
@@ -3344,10 +3344,10 @@ const AdminLogs: React.FC = () => {
     <Card className="rounded-2xl">
       <CardContent className="p-4">
         <div className="flex items-center justify-between mb-2">
-          <div className="text-sm font-medium">Admin logs ? last 30 days</div>
+          <div className="text-sm font-medium">Admin logs - last 30 days</div>
           <div className="flex items-center gap-2">
             <Button variant="secondary" className="rounded-2xl h-8 px-3" onClick={copyVisibleLogs} disabled={loading} aria-label="Copy logs">Copy</Button>
-            <Button size="icon" variant="outline" className="rounded-2xl" onClick={load} disabled={loading} aria-label="Refresh logs"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></Button>
+            <Button size="icon" variant="outline" className="rounded-2xl" onClick={load} disabled={loading} aria-label="Refresh logs"><RefreshCw className={`h-4 w-4 ? ${loading ? 'animate-spin' : ''}`} /></Button>
           </div>
         </div>
         {error && <div className="text-sm text-rose-600">{error}</div>}

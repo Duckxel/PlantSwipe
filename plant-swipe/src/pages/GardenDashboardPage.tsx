@@ -1924,8 +1924,8 @@ function EditPlantButton({ gp, gardenId, onChanged, serverToday, actorColorCss }
         const changedCount = Number(gp.plantsOnHand || 0) !== Math.max(0, Number(count || 0))
         if (changedName || changedCount) {
           const parts: string[] = []
-          if (changedName) parts.push(`name ? "${nickname.trim() || '-'}"`)
-          if (changedCount) parts.push(`count ? ${Math.max(0, Number(count || 0))}`)
+          if (changedName) parts.push(`name: "${nickname.trim() || '-'}"`)
+          if (changedCount) parts.push(`count: ${Math.max(0, Number(count || 0))}`)
           const plantName = nickname.trim() || gp.nickname || gp.plant?.name || 'Plant'
           await logGardenActivity({ gardenId, kind: 'plant_updated' as any, message: `updated ${plantName}: ${parts.join(', ')}`, plantName, actorColor: actorColorCss || null })
         }
@@ -2111,7 +2111,7 @@ function GardenDetailsEditor({ garden, onSaved, canEdit }: { garden: Garden; onS
         const changedName = (garden.name || '') !== (name.trim() || '')
         const changedCover = (garden.coverImageUrl || '') !== (imageUrl.trim() || '')
         const parts: string[] = []
-        if (changedName) parts.push(`name ? "${name.trim() || '-'}"`)
+        if (changedName) parts.push(`name: "${name.trim() || '-'}"`)
         if (changedCover) parts.push('cover image updated')
         if (parts.length > 0) {
           await logGardenActivity({ gardenId: garden.id, kind: 'note' as any, message: `updated garden: ${parts.join(', ')}`, actorColor: null })
