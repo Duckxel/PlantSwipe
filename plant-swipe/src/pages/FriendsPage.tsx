@@ -521,9 +521,12 @@ export const FriendsPage: React.FC = () => {
 
   return (
     <div className="max-w-6xl mx-auto mt-8 px-4 md:px-0">
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-6">
-        {/* Friends List Card */}
-        <Card className="rounded-3xl">
+      <div className={`grid ${pendingRequests.length > 0 ? 'lg:grid-cols-[1fr_auto_400px]' : 'lg:grid-cols-1'} gap-6`}>
+        {/* Spacer - only visible when pending card exists */}
+        {pendingRequests.length > 0 && <div className="hidden lg:block"></div>}
+        
+        {/* Friends List Card - Always centered */}
+        <Card className="rounded-3xl w-full lg:max-w-2xl">
           <CardContent className="p-6 md:p-8 space-y-6">
             {/* Title and Add Friend Button */}
             <div className="flex items-center justify-between">
@@ -699,7 +702,7 @@ export const FriendsPage: React.FC = () => {
 
         {/* Pending Invitations Card - Only shown when there are pending requests */}
         {pendingRequests.length > 0 && (
-          <Card className="rounded-3xl">
+          <Card className="rounded-3xl w-full lg:w-[400px] lg:flex-shrink-0">
             <CardContent className="p-6 md:p-8 space-y-4">
               <div className="text-xl font-semibold">Pending Invitations</div>
               <div className="space-y-2">
