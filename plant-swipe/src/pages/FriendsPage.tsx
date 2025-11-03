@@ -44,12 +44,9 @@ type SearchResult = {
 export const FriendsPage: React.FC = () => {
   const { user } = useAuth()
   const navigate = useNavigate()
-  const [searchQuery, setSearchQuery] = React.useState("")
   const [friends, setFriends] = React.useState<Friend[]>([])
   const [pendingRequests, setPendingRequests] = React.useState<FriendRequest[]>([])
-  const [searchResults, setSearchResults] = React.useState<SearchResult[]>([])
   const [loading, setLoading] = React.useState(true)
-  const [searching, setSearching] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [menuOpenFriendId, setMenuOpenFriendId] = React.useState<string | null>(null)
   const [menuPos, setMenuPos] = React.useState<{ top: number; right: number } | null>(null)
@@ -355,12 +352,11 @@ export const FriendsPage: React.FC = () => {
       
       // Refresh both lists
       await Promise.all([loadFriends(), loadPendingRequests()])
-      handleSearch()
       setError(null)
     } catch (e: any) {
       setError(e?.message || 'Failed to accept friend request')
     }
-  }, [loadFriends, loadPendingRequests, handleSearch])
+  }, [loadFriends, loadPendingRequests])
 
   const rejectRequest = React.useCallback(async (requestId: string) => {
     try {
