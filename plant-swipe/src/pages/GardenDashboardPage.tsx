@@ -858,6 +858,10 @@ export const GardenDashboardPage: React.FC = () => {
           const actorColorCss = getActorColorCss()
           await logGardenActivity({ gardenId: id, kind: 'task_completed' as any, message: `completed all due tasks on "${plantName}"`, plantName, actorColor: actorColorCss || null })
           setActivityRev((r) => r + 1)
+          // Broadcast update BEFORE reload to ensure other clients receive it
+          await broadcastGardenUpdate({ gardenId: id, kind: 'tasks', actorId: user?.id ?? null }).catch((err) => {
+            console.warn('[GardenDashboard] Failed to broadcast task update:', err)
+          })
         }
       } catch {}
       await load()
@@ -915,13 +919,18 @@ export const GardenDashboardPage: React.FC = () => {
         const actorColorCss = getActorColorCss()
         await logGardenActivity({ gardenId: id!, kind: kind as any, message: msg, plantName: plantName || null, taskName: label, actorColor: actorColorCss || null })
         setActivityRev((r) => r + 1)
+        // Broadcast update BEFORE reload to ensure other clients receive it
+        await broadcastGardenUpdate({ gardenId: id, kind: 'tasks', actorId: user?.id ?? null }).catch((err) => {
+          console.warn('[GardenDashboard] Failed to broadcast task update:', err)
+        })
       }
     } finally {
       await load({ silent: true, preserveHeavy: true })
       await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday)
+      // Also emit local event for immediate UI updates
       emitGardenRealtime('tasks')
     }
-  }, [todayTaskOccurrences, id, plants, getActorColorCss, load, loadHeavyForCurrentTab, emitGardenRealtime])
+  }, [todayTaskOccurrences, id, plants, getActorColorCss, load, loadHeavyForCurrentTab, emitGardenRealtime, user?.id])
 
   return (
     <div className="max-w-6xl mx-auto mt-6 grid grid-cols-1 md:grid-cols-[220px_1fr] lg:grid-cols-[220px_1fr] gap-6">
@@ -1100,10 +1109,15 @@ export const GardenDashboardPage: React.FC = () => {
                     const actorColorCss = getActorColorCss()
                     await logGardenActivity({ gardenId: id, kind: kind as any, message: msg, plantName: plantName || null, taskName: label, actorColor: actorColorCss || null })
                     setActivityRev((r) => r + 1)
+                    // Broadcast update BEFORE reload to ensure other clients receive it
+                    await broadcastGardenUpdate({ gardenId: id, kind: 'tasks', actorId: user?.id ?? null }).catch((err) => {
+                      console.warn('[GardenDashboard] Failed to broadcast task update:', err)
+                    })
                   }
               } finally {
                 await load({ silent: true, preserveHeavy: true })
                 await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday)
+                // Also emit local event for immediate UI updates
                 emitGardenRealtime('tasks')
               }
               }} />} />

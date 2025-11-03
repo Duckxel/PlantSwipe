@@ -300,6 +300,10 @@ export const GardenListPage: React.FC = () => {
               ? `has completed "${label}" Task on "${plantName || 'Plant'}"`
               : `has progressed "${label}" Task on "${plantName || 'Plant'}" (${Math.min(newCount, required)}/${required})`
             await logGardenActivity({ gardenId, kind: kind as any, message: msg, plantName: plantName || null, taskName: label, actorColor: null })
+            // Broadcast update BEFORE reload to ensure other clients receive it
+            await broadcastGardenUpdate({ gardenId, kind: 'tasks', actorId: user?.id ?? null }).catch((err) => {
+              console.warn('[GardenList] Failed to broadcast task update:', err)
+            })
           }
         }
       } catch {}
@@ -309,7 +313,7 @@ export const GardenListPage: React.FC = () => {
       await loadAllTodayOccurrences()
       if (broadcastGardenId) emitGardenRealtime(broadcastGardenId, 'tasks')
     }
-  }, [allPlants, emitGardenRealtime, load, loadAllTodayOccurrences, todayTaskOccurrences])
+  }, [allPlants, emitGardenRealtime, load, loadAllTodayOccurrences, todayTaskOccurrences, user?.id])
 
   const onCompleteAllForPlant = React.useCallback(async (gardenPlantId: string) => {
     const gp = allPlants.find((p: any) => p.id === gardenPlantId)
@@ -336,7 +340,7 @@ export const GardenListPage: React.FC = () => {
       await loadAllTodayOccurrences()
       if (gardenId) emitGardenRealtime(gardenId, 'tasks')
     }
-  }, [allPlants, emitGardenRealtime, load, loadAllTodayOccurrences, todayTaskOccurrences])
+  }, [allPlants, emitGardenRealtime, load, loadAllTodayOccurrences, todayTaskOccurrences, user?.id])
 
   const onMarkAllCompleted = React.useCallback(async () => {
     const affectedGardenIds = new Set<string>()
@@ -349,12 +353,18 @@ export const GardenListPage: React.FC = () => {
         if (gp?.gardenId) affectedGardenIds.add(String(gp.gardenId))
       }
       if (ops.length > 0) await Promise.all(ops)
+      // Broadcast updates for all affected gardens BEFORE reload
+      await Promise.all(Array.from(affectedGardenIds).map((gid) => 
+        broadcastGardenUpdate({ gardenId: gid, kind: 'tasks', actorId: user?.id ?? null }).catch((err) => {
+          console.warn('[GardenList] Failed to broadcast task update for garden:', gid, err)
+        })
+      ))
     } finally {
       await load()
       await loadAllTodayOccurrences()
       affectedGardenIds.forEach((gid) => emitGardenRealtime(gid, 'tasks'))
     }
-  }, [allPlants, emitGardenRealtime, load, loadAllTodayOccurrences, todayTaskOccurrences])
+  }, [allPlants, emitGardenRealtime, load, loadAllTodayOccurrences, todayTaskOccurrences, user?.id])
 
   const onCreate = async () => {
     if (!user?.id) return
