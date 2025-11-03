@@ -380,22 +380,56 @@ export default function PlantSwipe() {
   // Swipe logic
   const x = useMotionValue(0)
   const y = useMotionValue(0)
-  const threshold = 120
+  const threshold = 100
+  const velocityThreshold = 500
+  
+  // Reset motion values when index changes
+  React.useEffect(() => {
+    x.set(0)
+    y.set(0)
+  }, [index, x, y])
+  
   const onDragEnd = (_: unknown, info: { offset: { x: number; y: number }; velocity: { x: number; y: number } }) => {
-    const dx = info.offset.x + info.velocity.x * 0.2
-    const dy = info.offset.y + info.velocity.y * 0.2
+    const dx = info.offset.x
+    const dy = info.offset.y
+    const vx = info.velocity.x
+    const vy = info.velocity.y
+    
+    // Calculate effective movement considering both offset and velocity
+    const effectiveX = dx + vx * 0.1
+    const effectiveY = dy + vy * 0.1
+    
+    // Check for significant movement or velocity
+    const absX = Math.abs(effectiveX)
+    const absY = Math.abs(effectiveY)
+    const absVx = Math.abs(vx)
+    const absVy = Math.abs(vy)
     
     // Prioritize vertical swipe over horizontal if both are significant
-    if (Math.abs(dy) > Math.abs(dx) && dy <= -threshold) {
-      // Swipe up (bottom to top) = open info
-      handleInfo()
-    } else if (dx <= -threshold) {
-      // Swipe left (right to left) = next
-      handlePass()
-    } else if (dx >= threshold) {
-      // Swipe right (left to right) = previous
-      handlePrevious()
+    if ((absY > absX && absY > threshold) || (absVy > absVx && absVy > velocityThreshold)) {
+      if (effectiveY < -threshold || vy < -velocityThreshold) {
+        // Swipe up (bottom to top) = open info
+        handleInfo()
+        return
+      }
     }
+    
+    // Horizontal swipe detection
+    if ((absX > absY && absX > threshold) || (absVx > absVy && absVx > velocityThreshold)) {
+      if (effectiveX < -threshold || vx < -velocityThreshold) {
+        // Swipe left (right to left) = next
+        handlePass()
+        return
+      } else if (effectiveX > threshold || vx > velocityThreshold) {
+        // Swipe right (left to right) = previous
+        handlePrevious()
+        return
+      }
+    }
+    
+    // No action, snap back to center
+    x.set(0)
+    y.set(0)
   }
 
   // Favorites handling

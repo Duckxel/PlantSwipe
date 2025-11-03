@@ -1,5 +1,5 @@
 import React from "react"
-import { motion, AnimatePresence, type MotionValue } from "framer-motion"
+import { motion, AnimatePresence, type MotionValue, useSpring } from "framer-motion"
 import { ChevronLeft, ChevronRight, Heart, Info, Sparkles, X } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -22,6 +22,10 @@ interface SwipePageProps {
 }
 
 export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, x, y, onDragEnd, handleInfo, handlePass, handlePrevious, liked = false, onToggleLike }) => {
+  // Create spring animations for smooth motion
+  const springX = useSpring(x, { stiffness: 300, damping: 30 })
+  const springY = useSpring(y, { stiffness: 300, damping: 30 })
+  
   // Keyboard navigation
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -55,20 +59,21 @@ export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, 
   return (
     <div className="max-w-3xl mx-auto mt-8 px-4 md:px-0">
       <div className="relative h-[520px]">
-        <AnimatePresence initial={false}>
+        <AnimatePresence initial={false} mode="wait">
           {current ? (
             <motion.div
               key={current.id + index}
               drag
-              dragElastic={0.2}
-              style={{ x, y }}
-              dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
+              dragElastic={0.3}
+              dragMomentum={false}
+              style={{ x: springX, y: springY }}
+              dragConstraints={{ left: -500, right: 500, top: -500, bottom: 500 }}
               onDragEnd={onDragEnd}
-              initial={{ scale: 0.98, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
               transition={{ type: "spring", stiffness: 400, damping: 30 }}
-              className="absolute inset-0 cursor-grab active:cursor-grabbing"
+              className="absolute inset-0 cursor-grab active:cursor-grabbing select-none"
             >
               <Card className="h-full rounded-3xl overflow-hidden shadow-xl">
                 <div className="h-2/3 relative">
@@ -77,6 +82,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, 
                   <div className="absolute top-2 right-2 z-10">
                     <button
                       onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); onToggleLike && onToggleLike() }}
+                      onPointerDown={(e) => e.stopPropagation()}
                       aria-pressed={liked}
                       aria-label={liked ? 'Unlike' : 'Like'}
                       className={`h-8 w-8 rounded-full flex items-center justify-center shadow border transition ${liked ? 'bg-rose-600 text-white' : 'bg-white/90 text-black hover:bg-white'}`}
@@ -103,10 +109,25 @@ export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, 
                     ))}
                   </div>
                   <div className="mt-auto flex items-center justify-between">
-                    <Button variant="secondary" className="rounded-2xl" onClick={handlePass}>
+                    <Button 
+                      variant="secondary" 
+                      className="rounded-2xl" 
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handlePass()
+                      }}
+                      onPointerDown={(e) => e.stopPropagation()}
+                    >
                       <ChevronLeft className="h-4 w-4 mr-1" /> Pass
                     </Button>
-                    <Button className="rounded-2xl" onClick={handleInfo}>
+                    <Button 
+                      className="rounded-2xl" 
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleInfo()
+                      }}
+                      onPointerDown={(e) => e.stopPropagation()}
+                    >
                       More info <ChevronRight className="h-4 w-4 ml-1" />
                     </Button>
                   </div>
