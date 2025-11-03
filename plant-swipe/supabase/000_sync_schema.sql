@@ -1133,6 +1133,7 @@ returns table(
   avatar_url text,
   accent_key text,
   is_admin boolean,
+  is_private boolean,
   joined_at timestamptz,
   last_seen_at timestamptz,
   is_online boolean
@@ -1143,7 +1144,7 @@ security definer
 set search_path = public
 as $$
   with base as (
-    select p.id, p.display_name, p.country, p.bio, p.avatar_url, p.accent_key, p.is_admin
+    select p.id, p.display_name, p.country, p.bio, p.avatar_url, p.accent_key, p.is_admin, coalesce(p.is_private, false) as is_private
     from public.profiles p
     where lower(p.display_name) = lower(_name)
     limit 1
@@ -1166,6 +1167,7 @@ as $$
          b.avatar_url,
          b.accent_key,
          b.is_admin,
+         b.is_private,
          a.joined_at,
          l.last_seen_at,
          coalesce((l.last_seen_at is not null and (now() - l.last_seen_at) <= make_interval(mins => 10)), false) as is_online

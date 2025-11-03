@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
 import { EditProfileDialog, type EditProfileValues } from "@/components/profile/EditProfileDialog"
 import { applyAccentByKey, saveAccentKey } from "@/lib/accent"
-import { MapPin, User as UserIcon, UserPlus, Check } from "lucide-react"
+import { MapPin, User as UserIcon, UserPlus, Check, Lock } from "lucide-react"
 
 type PublicProfile = {
   id: string
@@ -21,6 +21,7 @@ type PublicProfile = {
   last_seen_at?: string | null
   is_online?: boolean | null
   accent_key?: string | null
+  is_private?: boolean | null
 }
 
 type PublicStats = {
@@ -45,6 +46,8 @@ export default function PublicProfilePage() {
   const [stats, setStats] = React.useState<PublicStats | null>(null)
   const [monthDays, setMonthDays] = React.useState<DayAgg[]>([])
   const [privateInfo, setPrivateInfo] = React.useState<{ id: string; email: string | null } | null>(null)
+  const [canViewProfile, setCanViewProfile] = React.useState(true)
+  const [isFriend, setIsFriend] = React.useState(false)
   
 
   const formatLastSeen = React.useCallback((iso: string | null | undefined) => {
@@ -78,7 +81,7 @@ export default function PublicProfilePage() {
           // Look up current user by ID
           const { data: profileData, error: pErr } = await supabase
             .from('profiles')
-            .select('id, display_name, country, bio, avatar_url, is_admin, accent_key')
+            .select('id, display_name, country, bio, avatar_url, is_admin, accent_key, is_private')
             .eq('id', user.id)
             .maybeSingle()
           if (!pErr && profileData) {
@@ -103,6 +106,39 @@ export default function PublicProfilePage() {
           return
         }
         const userId = String(row.id)
+        const profileIsPrivate = Boolean(row.is_private || false)
+        const isOwnerViewing = user?.id === userId
+        const viewerIsAdmin = Boolean(profile?.is_admin || false)
+        
+        // Check if viewer can see this profile
+        let viewerCanSee = true
+        if (profileIsPrivate && !isOwnerViewing && !viewerIsAdmin) {
+          // Check if they are friends
+          if (user?.id) {
+            // Check if friendship exists in either direction
+            const { data: friendCheck1 } = await supabase
+              .from('friends')
+              .select('id')
+              .eq('user_id', user.id)
+              .eq('friend_id', userId)
+              .maybeSingle()
+            
+            const { data: friendCheck2 } = await supabase
+              .from('friends')
+              .select('id')
+              .eq('user_id', userId)
+              .eq('friend_id', user.id)
+              .maybeSingle()
+            
+            viewerCanSee = Boolean(friendCheck1?.id || friendCheck2?.id)
+          } else {
+            viewerCanSee = false
+          }
+        }
+        
+        setCanViewProfile(viewerCanSee)
+        setIsFriend(viewerCanSee && !isOwnerViewing && !viewerIsAdmin)
+        
         setPp({
           id: userId,
           username: null,
@@ -115,40 +151,48 @@ export default function PublicProfilePage() {
           last_seen_at: row.last_seen_at ? String(row.last_seen_at) : null,
           is_online: Boolean(row.is_online || false),
           accent_key: row.accent_key || null,
+          is_private: profileIsPrivate,
         })
 
-        // Stats (plants total, gardens count, current and best streak)
-        const { data: s, error: serr } = await supabase.rpc('get_user_profile_public_stats', { _user_id: userId })
-        if (!serr && s) {
-          const statRow = Array.isArray(s) ? s[0] : s
-          setStats({
-            plantsTotal: Number(statRow.plants_total || 0),
-            gardensCount: Number(statRow.gardens_count || 0),
-            currentStreak: Number(statRow.current_streak || 0),
-            bestStreak: Number(statRow.longest_streak || 0),
-          })
-        }
+        // Only load stats and data if user can view profile
+        if (viewerCanSee) {
+          // Stats (plants total, gardens count, current and best streak)
+          const { data: s, error: serr } = await supabase.rpc('get_user_profile_public_stats', { _user_id: userId })
+          if (!serr && s) {
+            const statRow = Array.isArray(s) ? s[0] : s
+            setStats({
+              plantsTotal: Number(statRow.plants_total || 0),
+              gardensCount: Number(statRow.gardens_count || 0),
+              currentStreak: Number(statRow.current_streak || 0),
+              bestStreak: Number(statRow.longest_streak || 0),
+            })
+          }
 
-        // Friend count
-        const { data: friendCount, error: ferr } = await supabase.rpc('get_friend_count', { _user_id: userId })
-        if (!ferr && typeof friendCount === 'number') {
-          setStats((prev) => prev ? { ...prev, friendsCount: friendCount } : null)
-        } else {
-          setStats((prev) => prev ? { ...prev, friendsCount: 0 } : null)
-        }
+          // Friend count
+          const { data: friendCount, error: ferr } = await supabase.rpc('get_friend_count', { _user_id: userId })
+          if (!ferr && typeof friendCount === 'number') {
+            setStats((prev) => prev ? { ...prev, friendsCount: friendCount } : null)
+          } else {
+            setStats((prev) => prev ? { ...prev, friendsCount: 0 } : null)
+          }
 
-        // Heatmap: last 28 days (4 rows × 7 columns)
-        const today = new Date()
-        const end = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()))
-        const start = new Date(end)
-        start.setUTCDate(end.getUTCDate() - 27)
-        const startIso = start.toISOString().slice(0,10)
-        const endIso = end.toISOString().slice(0,10)
-        const { data: series, error: herr } = await supabase.rpc('get_user_daily_tasks', { _user_id: userId, _start: startIso, _end: endIso })
-        if (!herr && Array.isArray(series)) {
-          const days: DayAgg[] = series.map((r: any) => ({ day: String(r.day).slice(0,10), completed: Number(r.completed || 0), any_success: Boolean(r.any_success) }))
-          setMonthDays(days)
+          // Heatmap: last 28 days (4 rows × 7 columns)
+          const today = new Date()
+          const end = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()))
+          const start = new Date(end)
+          start.setUTCDate(end.getUTCDate() - 27)
+          const startIso = start.toISOString().slice(0,10)
+          const endIso = end.toISOString().slice(0,10)
+          const { data: series, error: herr } = await supabase.rpc('get_user_daily_tasks', { _user_id: userId, _start: startIso, _end: endIso })
+          if (!herr && Array.isArray(series)) {
+            const days: DayAgg[] = series.map((r: any) => ({ day: String(r.day).slice(0,10), completed: Number(r.completed || 0), any_success: Boolean(r.any_success) }))
+            setMonthDays(days)
+          } else {
+            setMonthDays([])
+          }
         } else {
+          // Clear stats if can't view
+          setStats(null)
           setMonthDays([])
         }
       } catch (e: any) {
@@ -448,34 +492,52 @@ export default function PublicProfilePage() {
         <>
           <Card className="rounded-3xl">
             <CardContent className="p-6 md:p-8 space-y-4">
-              <div className="flex items-start gap-4">
-                <div className="h-16 w-16 rounded-2xl bg-stone-200 overflow-hidden flex items-center justify-center" aria-hidden>
-                  <UserIcon
-                    className="h-8 w-8 text-black"
-                  />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <div className="text-2xl font-semibold truncate">{pp.display_name || pp.username || 'Member'}</div>
-                    <span className={`text-[11px] px-2 py-0.5 rounded-full border ${pp.is_admin ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-stone-50 text-stone-700 border-stone-200'}`}>{pp.is_admin ? 'Admin' : 'Member'}</span>
+              {!canViewProfile && !isOwner ? (
+                <div className="text-center py-8">
+                  <div className="text-xl font-semibold mb-2">This profile is private</div>
+                  <div className="text-sm opacity-70 mb-4">
+                    Only friends and admins can view this profile.
                   </div>
-                  <div className="text-sm opacity-70 mt-1 flex items-center gap-1">{pp.country ? (<><MapPin className="h-4 w-4" />{pp.country}</>) : ''}</div>
-                  <div className="text-xs opacity-70 mt-1 flex items-center gap-2">
-                    {pp.is_online ? (
-                      <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" />Currently online</span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-stone-300" />{formatLastSeen(pp.last_seen_at)}</span>
-                    )}
-                    {pp.joined_at && (
-                      <span>
-                        • Joined {new Date(pp.joined_at).toLocaleDateString()}
-                        {stats?.friendsCount != null && stats.friendsCount > 0 && (
-                          <span className="ml-2">• {stats.friendsCount} Friend{(stats.friendsCount !== 1 ? 's' : '')}</span>
-                        )}
-                      </span>
-                    )}
-                  </div>
+                  {!user?.id && (
+                    <Button asChild variant="default" className="rounded-2xl">
+                      <Link to="/">Sign in to send a friend request</Link>
+                    </Button>
+                  )}
                 </div>
+              ) : (
+                <>
+                  <div className="flex items-start gap-4">
+                    <div className="h-16 w-16 rounded-2xl bg-stone-200 overflow-hidden flex items-center justify-center" aria-hidden>
+                      <UserIcon
+                        className="h-8 w-8 text-black"
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <div className="text-2xl font-semibold truncate">{pp.display_name || pp.username || 'Member'}</div>
+                        <span className={`text-[11px] px-2 py-0.5 rounded-full border ${pp.is_admin ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-stone-50 text-stone-700 border-stone-200'}`}>{pp.is_admin ? 'Admin' : 'Member'}</span>
+                      </div>
+                      {canViewProfile && (
+                        <>
+                          <div className="text-sm opacity-70 mt-1 flex items-center gap-1">{pp.country ? (<><MapPin className="h-4 w-4" />{pp.country}</>) : ''}</div>
+                          <div className="text-xs opacity-70 mt-1 flex items-center gap-2">
+                            {pp.is_online ? (
+                              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" />Currently online</span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-stone-300" />{formatLastSeen(pp.last_seen_at)}</span>
+                            )}
+                            {pp.joined_at && (
+                              <span>
+                                • Joined {new Date(pp.joined_at).toLocaleDateString()}
+                                {stats?.friendsCount != null && stats.friendsCount > 0 && (
+                                  <span className="ml-2">• {stats.friendsCount} Friend{(stats.friendsCount !== 1 ? 's' : '')}</span>
+                                )}
+                              </span>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
                 <div className="ml-auto flex items-center gap-2" ref={anchorRef}>
                   {isOwner ? (
                     <>
@@ -530,19 +592,23 @@ export default function PublicProfilePage() {
                       )}
                     </>
                   )}
-                </div>
-              </div>
-              {pp.bio && (
-                <div className="text-sm opacity-90">{pp.bio}</div>
+                  </div>
+                  </div>
+                  {canViewProfile && pp.bio && (
+                    <div className="text-sm opacity-90">{pp.bio}</div>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>
 
-          <div className="mt-4">
-            <Card className="rounded-3xl">
-              <CardContent className="p-6 md:p-8 space-y-4">
-                <div className="text-lg font-semibold">Highlights</div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {canViewProfile && (
+            <>
+              <div className="mt-4">
+                <Card className="rounded-3xl">
+                  <CardContent className="p-6 md:p-8 space-y-4">
+                    <div className="text-lg font-semibold">Highlights</div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <div className="rounded-xl border p-3 text-center">
                     <div className="text-[11px] opacity-60">Plants owned</div>
                     <div className="text-base font-semibold tabular-nums">{stats?.plantsTotal ?? '—'}</div>
@@ -558,13 +624,13 @@ export default function PublicProfilePage() {
                   <div className="rounded-xl border p-3 text-center">
                     <div className="text-[11px] opacity-60">Longest streak</div>
                     <div className="text-base font-semibold tabular-nums">{stats?.bestStreak ?? '—'}</div>
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+                </CardContent>
+              </Card>
+            </div>
 
-          <div className="mt-4">
+            <div className="mt-4">
             <Card className="rounded-3xl">
               <CardContent className="p-6 md:p-8 space-y-4">
                 <div className="text-lg font-semibold">Past 28 days</div>
@@ -603,6 +669,8 @@ export default function PublicProfilePage() {
               </CardContent>
             </Card>
           </div>
+            </>
+          )}
 
           {isOwner && privateInfo && (
             <div className="mt-4">
