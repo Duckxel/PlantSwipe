@@ -1,18 +1,32 @@
-import React, { lazy, Suspense } from 'react'
+import React, { lazy, Suspense, createContext, useContext, useState, useEffect } from 'react'
 
-// Lazy load recharts components to reduce initial bundle size
-const ResponsiveContainer = lazy(() => import('recharts').then(mod => ({ default: mod.ResponsiveContainer })))
-const ComposedChart = lazy(() => import('recharts').then(mod => ({ default: mod.ComposedChart })))
-const Line = lazy(() => import('recharts').then(mod => ({ default: mod.Line })))
-const Area = lazy(() => import('recharts').then(mod => ({ default: mod.Area })))
-const CartesianGrid = lazy(() => import('recharts').then(mod => ({ default: mod.CartesianGrid })))
-const XAxis = lazy(() => import('recharts').then(mod => ({ default: mod.XAxis })))
-const YAxis = lazy(() => import('recharts').then(mod => ({ default: mod.YAxis })))
-const Tooltip = lazy(() => import('recharts').then(mod => ({ default: mod.Tooltip })))
-const ReferenceLine = lazy(() => import('recharts').then(mod => ({ default: mod.ReferenceLine })))
-const PieChart = lazy(() => import('recharts').then(mod => ({ default: mod.PieChart })))
-const Pie = lazy(() => import('recharts').then(mod => ({ default: mod.Pie })))
-const Cell = lazy(() => import('recharts').then(mod => ({ default: mod.Cell })))
+// Lazy load the entire recharts module at once
+const loadRecharts = () => import('recharts')
+
+// Context to share loaded recharts module across all chart components
+const RechartsContext = createContext<typeof import('recharts') | null>(null)
+
+// Provider component that loads recharts once
+const RechartsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [charts, setCharts] = useState<typeof import('recharts') | null>(null)
+  
+  useEffect(() => {
+    loadRecharts().then(mod => setCharts(mod as any))
+  }, [])
+  
+  return (
+    <RechartsContext.Provider value={charts}>
+      {charts ? children : <div className="animate-pulse text-sm text-gray-400 p-4">Loading chart...</div>}
+    </RechartsContext.Provider>
+  )
+}
+
+// Hook to get chart components
+const useCharts = () => {
+  const charts = useContext(RechartsContext)
+  if (!charts) throw new Error('Charts not loaded')
+  return charts
+}
 
 // Loading skeleton for charts
 const ChartSkeleton: React.FC<{ height?: number | string }> = ({ height = 200 }) => (
@@ -21,29 +35,97 @@ const ChartSkeleton: React.FC<{ height?: number | string }> = ({ height = 200 })
   </div>
 )
 
-// Wrapper component that provides lazy-loaded chart components
-// Wrap chart trees in Suspense externally, not here
-export const LazyCharts = {
-  ResponsiveContainer: ResponsiveContainer,
-  ComposedChart: ComposedChart,
-  Line: Line,
-  Area: Area,
-  CartesianGrid: CartesianGrid,
-  XAxis: XAxis,
-  YAxis: YAxis,
-  Tooltip: Tooltip,
-  ReferenceLine: ReferenceLine,
-  PieChart: PieChart,
-  Pie: Pie,
-  Cell: Cell,
+// Chart components that use the shared context
+const ResponsiveContainerImpl: React.FC<any> = (props) => {
+  const charts = useCharts()
+  return <charts.ResponsiveContainer {...props} />
 }
 
-// Helper to wrap chart sections in Suspense
+const ComposedChartImpl: React.FC<any> = (props) => {
+  const charts = useCharts()
+  return <charts.ComposedChart {...props} />
+}
+
+const LineImpl: React.FC<any> = (props) => {
+  const charts = useCharts()
+  return <charts.Line {...props} />
+}
+
+const AreaImpl: React.FC<any> = (props) => {
+  const charts = useCharts()
+  return <charts.Area {...props} />
+}
+
+const CartesianGridImpl: React.FC<any> = (props) => {
+  const charts = useCharts()
+  return <charts.CartesianGrid {...props} />
+}
+
+const XAxisImpl: React.FC<any> = (props) => {
+  const charts = useCharts()
+  return <charts.XAxis {...props} />
+}
+
+const YAxisImpl: React.FC<any> = (props) => {
+  const charts = useCharts()
+  return <charts.YAxis {...props} />
+}
+
+const TooltipImpl: React.FC<any> = (props) => {
+  const charts = useCharts()
+  return <charts.Tooltip {...props} />
+}
+
+const ReferenceLineImpl: React.FC<any> = (props) => {
+  const charts = useCharts()
+  return <charts.ReferenceLine {...props} />
+}
+
+const PieChartImpl: React.FC<any> = (props) => {
+  const charts = useCharts()
+  return <charts.PieChart {...props} />
+}
+
+const PieImpl: React.FC<any> = (props) => {
+  const charts = useCharts()
+  return <charts.Pie {...props} />
+}
+
+const CellImpl: React.FC<any> = (props) => {
+  const charts = useCharts()
+  return <charts.Cell {...props} />
+}
+
+// Export chart components wrapped in provider
+export const LazyCharts = {
+  ResponsiveContainer: (props: any) => (
+    <Suspense fallback={<ChartSkeleton height={props.height} />}>
+      <RechartsProvider>
+        <ResponsiveContainerImpl {...props} />
+      </RechartsProvider>
+    </Suspense>
+  ),
+  ComposedChart: ComposedChartImpl,
+  Line: LineImpl,
+  Area: AreaImpl,
+  CartesianGrid: CartesianGridImpl,
+  XAxis: XAxisImpl,
+  YAxis: YAxisImpl,
+  Tooltip: TooltipImpl,
+  ReferenceLine: ReferenceLineImpl,
+  PieChart: PieChartImpl,
+  Pie: PieImpl,
+  Cell: CellImpl,
+}
+
+// Helper to wrap chart sections in Suspense with provider
 export const ChartSuspense: React.FC<{ children: React.ReactNode; fallback?: React.ReactNode }> = ({ 
   children, 
   fallback = <ChartSkeleton /> 
 }) => (
   <Suspense fallback={fallback}>
-    {children}
+    <RechartsProvider>
+      {children}
+    </RechartsProvider>
   </Suspense>
 )
