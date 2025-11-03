@@ -34,6 +34,7 @@ import {
 } from '@/components/ui/dialog'
 
 export const AdminPage: React.FC = () => {
+  const navigate = useNavigate()
   const shortenMiddle = React.useCallback((value: string, maxChars: number = 28): string => {
     try {
       const s = String(value || '')
