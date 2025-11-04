@@ -23,7 +23,9 @@
     "close": "Fermer",
     "edit": "Modifier",
     "create": "Créer",
-    "update": "Mettre à jour"
+    "update": "Mettre à jour",
+    "result": "résultat",
+    "results": "résultats"
   },
   "auth": {
     "login": "Se connecter",
@@ -162,5 +164,48 @@
     "doneBy": "Fait par",
     "failedToLoad": "Échec du chargement des jardins",
     "allDone": "Tout terminé"
+  },
+  "createPlant": {
+    "title": "Ajouter une plante",
+    "simplified": "Simplifié",
+    "advanced": "Avancé",
+    "name": "Nom",
+    "nameRequired": "Requis • doit être unique",
+    "namePlaceholder": "ex. : Rose",
+    "scientificName": "Nom scientifique",
+    "colors": "Couleurs (séparées par des virgules)",
+    "colorsPlaceholder": "Rouge, Jaune",
+    "seasons": "Saisons",
+    "description": "Description",
+    "descriptionPlaceholder": "Détails optionnels sur votre plante",
+    "imageUrl": "URL de l'image",
+    "inputLanguage": "Langue d'entrée",
+    "inputLanguageDescription": "Sélectionnez la langue dans laquelle vous écrivez. Toutes les langues utiliseront ces données initialement.",
+    "translateToAll": "Traduire dans toutes les langues avec DeepL",
+    "translateToAllDescription": "Traduire automatiquement le nom, la signification, la description et les instructions d'entretien dans toutes les langues prises en charge lors de l'enregistrement.",
+    "rarity": "Rareté",
+    "meaning": "Signification",
+    "careSunlight": "Soin : Ensoleillement",
+    "careSoil": "Soin : Sol",
+    "careDifficulty": "Soin : Difficulté",
+    "seedsAvailable": "Graines disponibles",
+    "wateringFrequency": "Fréquence d'arrosage par défaut",
+    "maxPerWeek": "Max 7 par semaine.",
+    "maxPerMonth": "Max 4 par mois (sinon utilisez semaine).",
+    "maxPerYear": "Max 12 par an (sinon utilisez mois).",
+    "saved": "Enregistré",
+    "translating": "Traduction...",
+    "translatingToAll": "Traduction dans toutes les langues..."
+  },
+  "editPlant": {
+    "editLanguage": "Modifier la langue",
+    "editLanguageDescription": "Sélectionnez la langue que vous souhaitez modifier. Cliquez sur \"Traduire tout\" pour traduire les champs actuels dans toutes les langues avec DeepL.",
+    "translateToAll": "Traduire tout",
+    "translateToAllButton": "Traduire tout",
+    "allFieldsTranslated": "Tous les champs ont été traduits et enregistrés avec succès !",
+    "translationFailed": "Échec de la traduction",
+    "translatingAllFields": "Traduction de tous les champs dans toutes les langues...",
+    "saveChanges": "Enregistrer les modifications",
+    "saving": "Enregistrement..."
   }
 }
