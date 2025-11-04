@@ -137,6 +137,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
       const translationsToSave = [translation]
       
       // If translate to all languages is enabled, translate and save
+      // Use inputLanguage for DeepL source language (works in both Simplified and Advanced mode)
       if (translateToAll && advanced) {
         setTranslating(true)
         try {
@@ -198,14 +199,32 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
           <form autoComplete="off" className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="text-lg font-semibold">Add plant</div>
-              <button
-                type="button"
-                onClick={() => setAdvanced((prev) => { const next = !prev; if (next) setEverAdvanced(true); return next })}
-                aria-pressed={advanced}
-                className={`px-3 py-1.5 rounded-2xl text-sm border shadow-sm transition flex items-center gap-2 ${advanced ? 'bg-black text-white' : 'bg-white hover:bg-stone-50'}`}
-              >
-                {advanced ? 'Advanced' : 'Simplified'}
-              </button>
+              <div className="flex items-center gap-2">
+                {/* Language Selector */}
+                <div className="flex items-center gap-1.5">
+                  <Languages className="h-4 w-4 opacity-70" />
+                  <select 
+                    id="plant-language" 
+                    className="flex h-7 px-2 rounded-lg border border-input bg-transparent text-xs shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50" 
+                    value={inputLanguage} 
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setInputLanguage(e.target.value as SupportedLanguage)}
+                  >
+                    {SUPPORTED_LANGUAGES.map((lang) => (
+                      <option key={lang} value={lang}>
+                        {lang === 'en' ? 'EN' : 'FR'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAdvanced((prev) => { const next = !prev; if (next) setEverAdvanced(true); return next })}
+                  aria-pressed={advanced}
+                  className={`px-3 py-1.5 rounded-2xl text-sm border shadow-sm transition flex items-center gap-2 ${advanced ? 'bg-black text-white' : 'bg-white hover:bg-stone-50'}`}
+                >
+                  {advanced ? 'Advanced' : 'Simplified'}
+                </button>
+              </div>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="plant-name">Name</Label>
@@ -214,29 +233,6 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
             </div>
             {advanced && (
               <>
-                {/* Language Selection */}
-                <div className="grid gap-2">
-                  <Label htmlFor="plant-language" className="flex items-center gap-2">
-                    <Languages className="h-4 w-4" />
-                    Input Language
-                  </Label>
-                  <select 
-                    id="plant-language" 
-                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm" 
-                    value={inputLanguage} 
-                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setInputLanguage(e.target.value as SupportedLanguage)}
-                  >
-                    {SUPPORTED_LANGUAGES.map((lang) => (
-                      <option key={lang} value={lang}>
-                        {lang === 'en' ? 'English' : 'Français'}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="text-xs opacity-60">
-                    Select the language you're writing in. All languages will use this data initially.
-                  </div>
-                </div>
-                
                 {/* Translation Option */}
                 <div className="flex items-start gap-2 p-4 rounded-xl border bg-stone-50">
                   <input 
