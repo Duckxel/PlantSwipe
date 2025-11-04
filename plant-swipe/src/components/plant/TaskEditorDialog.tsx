@@ -35,19 +35,19 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
     try {
       const rows = await listPlantTasks(gardenPlantId)
       // Sort by normalized frequency (descending)
-      const score = (t: GardenPlantTask): number => {
+      const score = (task: GardenPlantTask): number => {
         try {
-          if (t.scheduleKind === 'repeat_pattern') {
-            const amount = Math.max(1, Number(t.amount || 1))
-            const req = Math.max(1, Number(t.requiredCount || 1))
-            const period = (t.period || 'week') as 'week'|'month'|'year'
+          if (task.scheduleKind === 'repeat_pattern') {
+            const amount = Math.max(1, Number(task.amount || 1))
+            const req = Math.max(1, Number(task.requiredCount || 1))
+            const period = (task.period || 'week') as 'week'|'month'|'year'
             const perWeek = period === 'week' ? amount : period === 'month' ? amount / 4.345 : amount / 52
             return perWeek * req
           }
-          if (t.scheduleKind === 'repeat_duration') {
-            const amt = Math.max(1, Number(t.intervalAmount || 1))
-            const unit = String(t.intervalUnit || 'week')
-            const req = Math.max(1, Number(t.requiredCount || 1))
+          if (task.scheduleKind === 'repeat_duration') {
+            const amt = Math.max(1, Number(task.intervalAmount || 1))
+            const unit = String(task.intervalUnit || 'week')
+            const req = Math.max(1, Number(task.requiredCount || 1))
             const weeks = unit === 'day' ? amt / 7 : unit === 'week' ? amt : unit === 'month' ? amt * 4.345 : unit === 'year' ? amt * 52 : amt / 7
             const perWeek = weeks > 0 ? (1 / weeks) : 0
             return perWeek * req
@@ -181,36 +181,36 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
             {error && <div className="p-3 text-sm text-red-600">{error}</div>}
             {!loading && tasks.length === 0 && <div className="p-3 text-sm opacity-60">{t('garden.taskDialog.noTasksYet')}</div>}
             <div className="divide-y">
-              {tasks.map(t => (
-                <div key={t.id} className="flex items-center justify-between px-3 py-2">
+              {tasks.map(task => (
+                <div key={task.id} className="flex items-center justify-between px-3 py-2">
                   <div className="text-sm">
                     <div className="font-medium capitalize flex items-center gap-2">
                       <span className="h-6 w-6 rounded-md border bg-stone-100 flex items-center justify-center text-base">
-                        {t.type === 'water' && '💧'}
-                        {t.type === 'fertilize' && '🍽️'}
-                        {t.type === 'harvest' && '🌾'}
-                        {t.type === 'cut' && '✂️'}
-                        {t.type === 'custom' && (t.emoji || '🪴')}
+                        {task.type === 'water' && '💧'}
+                        {task.type === 'fertilize' && '🍽️'}
+                        {task.type === 'harvest' && '🌾'}
+                        {task.type === 'cut' && '✂️'}
+                        {task.type === 'custom' && (task.emoji || '🪴')}
                       </span>
-                      <span>{t.type === 'custom' ? (t.customName || t('garden.taskTypes.custom')) : t(`garden.taskTypes.${t.type}`)}</span>
+                      <span>{task.type === 'custom' ? (task.customName || t('garden.taskTypes.custom')) : t(`garden.taskTypes.${task.type}`)}</span>
                     </div>
-                    <div className="text-xs opacity-60">{renderTaskSummary(t)}</div>
+                    <div className="text-xs opacity-60">{renderTaskSummary(task)}</div>
                   </div>
                   <TaskRowMenu
-                    onEdit={t.scheduleKind === 'repeat_pattern' ? () => {
-                      setEditingTask(t)
-                      setPatternPeriod((t.period as any) || 'week')
-                      setPatternAmount(Number(t.amount || t.requiredCount || 1))
+                    onEdit={task.scheduleKind === 'repeat_pattern' ? () => {
+                      setEditingTask(task)
+                      setPatternPeriod((task.period as any) || 'week')
+                      setPatternAmount(Number(task.amount || task.requiredCount || 1))
                       setPatternSelection({
-                        weeklyDays: t.weeklyDays || undefined,
-                        monthlyDays: t.monthlyDays || undefined,
-                        yearlyDays: t.yearlyDays || undefined,
-                        monthlyNthWeekdays: t.monthlyNthWeekdays || undefined,
+                        weeklyDays: task.weeklyDays || undefined,
+                        monthlyDays: task.monthlyDays || undefined,
+                        yearlyDays: task.yearlyDays || undefined,
+                        monthlyNthWeekdays: task.monthlyNthWeekdays || undefined,
                       })
                       // Delay open to next tick to avoid menu overlay capturing events
                       setTimeout(() => setPatternOpen(true), 0)
                     } : undefined}
-                    onDelete={() => remove(t.id)}
+                    onDelete={() => remove(task.id)}
                   />
                 </div>
               ))}
@@ -288,21 +288,21 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
   )
 }
 
-function renderTaskSummary(t: GardenPlantTask): string {
+function renderTaskSummary(task: GardenPlantTask): string {
   const { t: translate } = useTranslation()
-  if (t.scheduleKind === 'one_time_date') {
-    return translate('garden.taskDialog.taskSummary.oneTimeOn', { date: t.dueAt ? new Date(t.dueAt).toLocaleString() : '—' })
+  if (task.scheduleKind === 'one_time_date') {
+    return translate('garden.taskDialog.taskSummary.oneTimeOn', { date: task.dueAt ? new Date(task.dueAt).toLocaleString() : '—' })
   }
-  if (t.scheduleKind === 'one_time_duration') {
-    return translate('garden.taskDialog.taskSummary.oneTimeIn', { amount: t.intervalAmount, unit: t.intervalUnit })
+  if (task.scheduleKind === 'one_time_duration') {
+    return translate('garden.taskDialog.taskSummary.oneTimeIn', { amount: task.intervalAmount, unit: task.intervalUnit })
   }
-  if (t.scheduleKind === 'repeat_duration') {
-    return translate('garden.taskDialog.taskSummary.everyNeed', { amount: t.intervalAmount, unit: t.intervalUnit, required: t.requiredCount })
+  if (task.scheduleKind === 'repeat_duration') {
+    return translate('garden.taskDialog.taskSummary.everyNeed', { amount: task.intervalAmount, unit: task.intervalUnit, required: task.requiredCount })
   }
-  if (t.scheduleKind === 'repeat_pattern') {
-    if (t.period === 'week') return translate('garden.taskDialog.taskSummary.perWeek', { count: (t.weeklyDays || []).length })
-    if (t.period === 'month') return translate('garden.taskDialog.taskSummary.perMonth', { count: (t.monthlyNthWeekdays || t.monthlyDays || []).length })
-    return translate('garden.taskDialog.taskSummary.perYear', { count: (t.yearlyDays || []).length })
+  if (task.scheduleKind === 'repeat_pattern') {
+    if (task.period === 'week') return translate('garden.taskDialog.taskSummary.perWeek', { count: (task.weeklyDays || []).length })
+    if (task.period === 'month') return translate('garden.taskDialog.taskSummary.perMonth', { count: (task.monthlyNthWeekdays || task.monthlyDays || []).length })
+    return translate('garden.taskDialog.taskSummary.perYear', { count: (task.yearlyDays || []).length })
   }
   return ''
 }
