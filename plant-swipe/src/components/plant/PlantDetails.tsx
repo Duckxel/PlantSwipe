@@ -10,16 +10,18 @@ import { rarityTone, seasonBadge } from "@/constants/badges";
 import { deriveWaterLevelFromFrequency } from "@/lib/utils";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/context/AuthContext";
+import { useTranslation } from "react-i18next";
 
 export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?: boolean; onToggleLike?: () => void }> = ({ plant, onClose, liked = false, onToggleLike }) => {
   const navigate = useNavigate()
   const { user } = useAuth()
+  const { t } = useTranslation('common')
   const freqAmountRaw = plant.waterFreqAmount ?? plant.waterFreqValue
   const freqAmount = typeof freqAmountRaw === 'number' ? freqAmountRaw : Number(freqAmountRaw || 0)
   const freqPeriod = (plant.waterFreqPeriod || plant.waterFreqUnit) as 'day' | 'week' | 'month' | 'year' | undefined
   const derivedWater = deriveWaterLevelFromFrequency(freqPeriod, freqAmount) || (plant.care.water as any) || 'Low'
   const freqLabel = freqPeriod
-    ? `${freqAmount > 0 ? `${freqAmount} ${freqAmount === 1 ? 'time' : 'times'} ` : ''}per ${freqPeriod}`
+    ? `${freqAmount > 0 ? `${freqAmount} ${freqAmount === 1 ? t('plantInfo.time') : t('plantInfo.times')} ` : ''}${t('plantInfo.per')} ${t(`plantInfo.${freqPeriod}`)}`
     : null
   return (
     <div className="space-y-4 select-none">
@@ -34,7 +36,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
             <button
               onClick={() => onToggleLike && onToggleLike()}
               aria-pressed={liked}
-              aria-label={liked ? 'Unlike' : 'Like'}
+              aria-label={liked ? t('plantInfo.unlike') : t('plantInfo.like')}
               className={`h-8 w-8 rounded-full flex items-center justify-center border transition shadow-[0_4px_12px_rgba(0,0,0,0.28)] ${liked ? 'bg-rose-600 text-white' : 'bg-white/90 text-black hover:bg-white'}`}
             >
               <Heart className={liked ? 'fill-current' : ''} />
@@ -44,14 +46,14 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
       </div>
 
       <div className="grid md:grid-cols-3 gap-3">
-        <Fact icon={<SunMedium className="h-4 w-4" />} label="Sunlight" value={plant.care.sunlight} sub={plant.care.soil ? String(plant.care.soil) : undefined} />
-        <Fact icon={<Droplets className="h-4 w-4" />} label="Water" value={derivedWater} sub={freqLabel || undefined} />
-        <Fact icon={<Leaf className="h-4 w-4" />} label="Difficulty" value={plant.care.difficulty} />
+        <Fact icon={<SunMedium className="h-4 w-4" />} label={t('plantInfo.sunlight')} value={plant.care.sunlight} sub={plant.care.soil ? String(plant.care.soil) : undefined} />
+        <Fact icon={<Droplets className="h-4 w-4" />} label={t('plantInfo.water')} value={derivedWater} sub={freqLabel || undefined} />
+        <Fact icon={<Leaf className="h-4 w-4" />} label={t('plantInfo.difficulty')} value={plant.care.difficulty} />
       </div>
 
       <Card className="rounded-2xl">
         <CardHeader>
-          <CardTitle className="text-lg md:text-xl">Overview</CardTitle>
+          <CardTitle className="text-lg md:text-xl">{t('plantInfo.overview')}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 text-[15px] md:text-base leading-relaxed">
           <p>{plant.description}</p>
@@ -69,40 +71,40 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
 
       <Card className="rounded-2xl">
         <CardHeader>
-          <CardTitle className="text-lg md:text-xl">Meaning</CardTitle>
+          <CardTitle className="text-lg md:text-xl">{t('plantInfo.meaning')}</CardTitle>
         </CardHeader>
         <CardContent className="text-[15px] md:text-base leading-relaxed">{plant.meaning}</CardContent>
       </Card>
 
       <Card className="rounded-2xl">
         <CardHeader>
-          <CardTitle className="text-lg md:text-xl">Care Guide</CardTitle>
+          <CardTitle className="text-lg md:text-xl">{t('plantInfo.careGuide')}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-[15px] md:text-base leading-relaxed">
-          <div><span className="font-medium">Sunlight:</span> {plant.care.sunlight}</div>
-            <div><span className="font-medium">Water:</span> {derivedWater}</div>
+          <div><span className="font-medium">{t('plantInfo.sunlightLabel')}</span> {plant.care.sunlight}</div>
+            <div><span className="font-medium">{t('plantInfo.waterLabel')}</span> {derivedWater}</div>
             {freqLabel && (
               <div>
-                <span className="font-medium">Water frequency:</span>
+                <span className="font-medium">{t('plantInfo.waterFrequency')}</span>
                 <span className="ml-1 inline-flex items-center gap-1">💧 {freqLabel}</span>
               </div>
             )}
-            <div><span className="font-medium">Soil:</span> {plant.care.soil}</div>
-            <div><span className="font-medium">Difficulty:</span> {plant.care.difficulty}</div>
-            <div><span className="font-medium">Seeds available:</span> {plant.seedsAvailable ? "Yes" : "No"}</div>
+            <div><span className="font-medium">{t('plantInfo.soilLabel')}</span> {plant.care.soil}</div>
+            <div><span className="font-medium">{t('plantInfo.difficultyLabel')}</span> {plant.care.difficulty}</div>
+            <div><span className="font-medium">{t('plantInfo.seedsAvailable')}</span> {plant.seedsAvailable ? t('plantInfo.yes') : t('plantInfo.no')}</div>
         </CardContent>
       </Card>
 
       <div className="flex justify-between gap-2">
         {user && (
           <Button variant="destructive" className="rounded-2xl" onClick={async () => {
-            const yes = window.confirm('Delete this plant? This will fail if it is used in any garden.')
+            const yes = window.confirm(t('plantInfo.deleteConfirm'))
             if (!yes) return
             const { error } = await supabase.from('plants').delete().eq('id', plant.id)
             if (error) { alert(error.message); return }
             onClose()
             try { window.dispatchEvent(new CustomEvent('plants:refresh')) } catch {}
-          }}>Delete</Button>
+          }}>{t('common.delete')}</Button>
         )}
         <div className="flex gap-2 ml-auto">
           {user && (
@@ -115,10 +117,10 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
                 navigate(`/plants/${plant.id}/edit`)
               }}
             >
-              Edit
+              {t('common.edit')}
             </Button>
           )}
-          <Button className="rounded-2xl" onClick={onClose}>Close</Button>
+          <Button className="rounded-2xl" onClick={onClose}>{t('common.close')}</Button>
         </div>
       </div>
     </div>

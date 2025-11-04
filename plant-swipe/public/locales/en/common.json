@@ -25,7 +25,8 @@
     "create": "Create",
     "update": "Update",
     "result": "result",
-    "results": "results"
+    "results": "results",
+    "allRightsReserved": "All rights reserved"
   },
   "auth": {
     "login": "Log in",
@@ -50,8 +51,11 @@
   "settings": {
     "title": "Account Settings",
     "description": "Manage your account preferences and security",
+    "loading": "Loading settings…",
+    "failedToLoad": "Failed to load settings",
     "email": {
       "title": "Email Address",
+      "emailAddressLabel": "Email Address:",
       "description": "Change your email address. You'll need to confirm the new email.",
       "currentEmail": "Current Email",
       "newEmail": "New Email",
@@ -60,10 +64,12 @@
       "updating": "Updating...",
       "updateRequestSent": "Email update request sent! Please check your new email for a confirmation link.",
       "enterNewEmail": "Please enter a new email address",
-      "enterValidEmail": "Please enter a valid email address"
+      "enterValidEmail": "Please enter a valid email address",
+      "failedToUpdate": "Failed to update email"
     },
     "password": {
       "title": "Password",
+      "passwordLabel": "Password:",
       "description": "Change your password to keep your account secure.",
       "currentPassword": "Current Password",
       "newPassword": "New Password",
@@ -77,19 +83,26 @@
       "enterCurrentPassword": "Please enter your current password",
       "passwordTooShort": "Password must be at least 6 characters",
       "passwordsDontMatch": "Passwords do not match",
-      "currentPasswordIncorrect": "Current password is incorrect"
+      "currentPasswordIncorrect": "Current password is incorrect",
+      "failedToUpdate": "Failed to update password"
     },
     "privacy": {
       "title": "Privacy Settings",
       "description": "Control who can see your profile and activity.",
       "privateProfile": "Private Profile",
-      "privateProfileDescription": "When enabled, only your friends can see your profile and activity. Your profile will be hidden from public searches."
+      "privateProfileDescription": "When enabled, only your friends can see your profile and activity. Your profile will be hidden from public searches.",
+      "profileNowPrivate": "Profile is now private",
+      "profileNowPublic": "Profile is now public",
+      "failedToUpdate": "Failed to update privacy setting"
     },
     "friendRequests": {
       "title": "Friend Requests",
       "description": "Control who can send you friend requests.",
       "disable": "Disable Friend Requests",
-      "disableDescription": "When enabled, other users will not be able to send you friend requests. This helps prevent unwanted invitations. Works for both public and private profiles."
+      "disableDescription": "When enabled, other users will not be able to send you friend requests. This helps prevent unwanted invitations. Works for both public and private profiles.",
+      "friendRequestsNowDisabled": "Friend requests are now disabled",
+      "friendRequestsNowEnabled": "Friend requests are now enabled",
+      "failedToUpdate": "Failed to update friend request setting"
     },
     "dangerZone": {
       "title": "Danger Zone",
@@ -100,7 +113,8 @@
       "typeDelete": "Type DELETE to confirm:",
       "yesDelete": "Yes, Delete My Account",
       "deleting": "Deleting...",
-      "typeDeleteToConfirm": "Please type DELETE to confirm account deletion"
+      "typeDeleteToConfirm": "Please type DELETE to confirm account deletion",
+      "failedToDelete": "Failed to delete account"
     },
     "language": {
       "title": "Language",
@@ -206,5 +220,222 @@
     "translatingAllFields": "Translating all fields to all languages...",
     "saveChanges": "Save changes",
     "saving": "Saving..."
+  },
+  "plantInfo": {
+    "plantNotFound": "Plant not found.",
+    "failedToLoad": "Failed to load plant",
+    "sunlight": "Sunlight",
+    "water": "Water",
+    "difficulty": "Difficulty",
+    "overview": "Overview",
+    "meaning": "Meaning",
+    "careGuide": "Care Guide",
+    "sunlightLabel": "Sunlight:",
+    "waterLabel": "Water:",
+    "waterFrequency": "Water frequency:",
+    "soilLabel": "Soil:",
+    "difficultyLabel": "Difficulty:",
+    "seedsAvailable": "Seeds available:",
+    "yes": "Yes",
+    "no": "No",
+    "time": "time",
+    "times": "times",
+    "per": "per",
+    "like": "Like",
+    "unlike": "Unlike",
+    "deleteConfirm": "Delete this plant? This will fail if it is used in any garden.",
+    "day": "day",
+    "week": "week",
+    "month": "month",
+    "year": "year"
+  },
+  "gardenDashboard": {
+    "loading": "Loading...",
+    "overview": "Overview",
+    "plants": "Plants",
+    "routine": "Routine",
+    "settings": "Settings",
+    "overviewSection": {
+      "plants": "Plants",
+      "species": "Species:",
+      "members": "Members",
+      "streak": "Streak",
+      "days": "days",
+      "todaysProgress": "Today's progress",
+      "tasksDone": "tasks done",
+      "last30Days": "Last 30 days",
+      "activityToday": "Activity (today)",
+      "loadingActivity": "Loading...",
+      "noActivity": "No activity yet today.",
+      "failedToLoadActivity": "Failed to load activity"
+    },
+    "routineSection": {
+      "thisWeek": "This week",
+      "mondayToSunday": "Monday ? Sunday",
+      "today": "Today",
+      "tasksDue": "Tasks due:",
+      "completePlus1": "Complete +1",
+      "completed": "Completed",
+      "doneBy": "Done by",
+      "dueThisWeek": "Due this week",
+      "waterNeed": "Water need:",
+      "upcoming": "Upcoming",
+      "emptyPhrases": [
+        "Bored? Maybe it's time to get more plants! 🪴",
+        "All quiet in the garden today. Enjoy the calm! 🌿",
+        "Nothing due today – your plants salute you. 🫡",
+        "Free day! Maybe browse for a new leafy friend? 🪴",
+        "Rest day. Hydrate yourself instead of the plants. 💧",
+        "No tasks now. Perfect time to plan your next bloom. 🌸",
+        "Garden's on cruise control. You earned it. 😎",
+        "No chores today – maybe prune your playlist? 🎶",
+        "Nothing to do! Consider a new herb for the kitchen. 🌱",
+        "Feet up, gloves off. Tomorrow's another grow day. 🧑‍🌾",
+        "Zero tasks. Maximum vibes. ✨",
+        "Your routine is empty – your cart doesn't have to be. 🛒🪴"
+      ],
+      "dayLabels": {
+        "mon": "Mon",
+        "tue": "Tue",
+        "wed": "Wed",
+        "thu": "Thu",
+        "fri": "Fri",
+        "sat": "Sat",
+        "sun": "Sun"
+      }
+    },
+    "plantsSection": {
+      "plantsInGarden": "Plants in this garden",
+      "addPlant": "Add Plant",
+      "onHand": "On hand:",
+      "tasks": "Tasks:",
+      "dueToday": "Due today:",
+      "tasksButton": "Tasks",
+      "delete": "Delete",
+      "noPlantsYet": "No plants yet. Add your first plant to get started.",
+      "addPlantToGarden": "Add plant to garden",
+      "searchPlants": "Search plants by name?",
+      "noResults": "No results",
+      "adding": "Adding...",
+      "next": "Next",
+      "addDetails": "Add details",
+      "customName": "Custom name",
+      "optionalNickname": "Optional nickname",
+      "numberOfFlowers": "Number of flowers",
+      "back": "Back",
+      "add": "Add",
+      "moreInformation": "More information"
+    },
+    "settingsSection": {
+      "gardenDetails": "Garden details",
+      "manageMembers": "Manage members",
+      "addMember": "Add member",
+      "deleteGarden": "Delete garden",
+      "quitGarden": "Quit garden",
+      "deleteGardenConfirm": "Delete this garden? This cannot be undone.",
+      "failedToDeleteGarden": "Failed to delete garden",
+      "quitGardenConfirm": "Quit this garden? You will be removed as a member.",
+      "failedToQuitGarden": "Failed to quit garden",
+      "addMemberTitle": "Add member",
+      "enterDisplayNameOrEmail": "Enter display name or email",
+      "unknown": "Unknown"
+    }
+  },
+  "friends": {
+    "title": "Friends",
+    "pleaseLogin": "Please log in to manage friends",
+    "pendingInvitations": "Pending Invitations",
+    "sentRequests": "Sent Requests",
+    "yourFriends": "Your Friends",
+    "addFriend": "Add Friend",
+    "noFriendsYet": "No friends yet. Search for people above to add friends!",
+    "viewProfile": "View profile",
+    "friendOptions": "Friend options",
+    "removeFriend": "Remove friend",
+    "removeFriendConfirm": "Remove",
+    "pending": "Pending",
+    "friends": "Friends",
+    "unknown": "Unknown",
+    "addFriendDialog": {
+      "title": "Add Friend",
+      "description": "Search for users by username or email",
+      "searchPlaceholder": "Search by username or email...",
+      "searching": "Searching...",
+      "noUsersFound": "No users found",
+      "addFriend": "Add Friend"
+    },
+    "errors": {
+      "failedToLoad": "Failed to load friends",
+      "failedToLoadSentRequests": "Failed to load sent pending requests",
+      "failedToLoadRequests": "Failed to load friend requests",
+      "searchFailed": "Search failed",
+      "alreadyFriends": "Already friends with this user",
+      "requestAlreadySent": "Friend request already sent",
+      "failedToSend": "Failed to send friend request",
+      "failedToAccept": "Failed to accept friend request",
+      "failedToReject": "Failed to reject friend request",
+      "failedToRemove": "Failed to remove friend"
+    }
+  },
+  "profile": {
+    "loading": "Loading profile…",
+    "userNotFound": "User not found",
+    "failedToLoad": "Failed to load profile",
+    "backHome": "Back home",
+    "member": "Member",
+    "admin": "Admin",
+    "currentlyOnline": "Currently online",
+    "online": "Online",
+    "aLongTimeAgo": "A long time ago",
+    "oneHourAgo": "1 hour ago",
+    "fewHoursAgo": "Few hours ago",
+    "oneDayAgo": "1 day ago",
+    "fewDaysAgo": "Few days ago",
+    "fewWeeksAgo": "Few weeks ago",
+    "joined": "Joined",
+    "friend": "Friend",
+    "friends": "Friends",
+    "edit": "Edit",
+    "logout": "Log out",
+    "deleteAccount": "Delete account",
+    "friendRequest": "Friend Request",
+    "requestSent": "Request Sent",
+    "acceptRequest": "Accept Request",
+    "since": "since",
+    "privateProfile": {
+      "title": "This profile is private",
+      "description": "Only friends can see this profile and activity."
+    },
+    "highlights": "Highlights",
+    "plantsOwned": "Plants owned",
+    "gardens": "Gardens",
+    "currentStreak": "Current streak",
+    "longestStreak": "Longest streak",
+    "past28Days": "Past 28 days",
+    "tasksOn": "tasks on",
+    "tasks": "tasks",
+    "completedDay": "Completed day",
+    "privateInfo": {
+      "title": "Private Info",
+      "description": "Only visible to you (and admins)",
+      "userId": "User ID",
+      "email": "Email"
+    },
+    "privateProfileViewedByAdmin": "Private profile viewed by admin",
+    "editProfile": {
+      "title": "Edit profile",
+      "description": "Update your info and choose an accent color.",
+      "displayName": "Display name",
+      "country": "Country",
+      "timezone": "Timezone",
+      "experienceYears": "Years of experience with plants",
+      "bio": "Bio",
+      "accentColor": "Accent color",
+      "previewNote": "Preview applies instantly; saved on Save.",
+      "displayNameRequired": "Display name required",
+      "displayNameTaken": "Display name already taken",
+      "failedToSendFriendRequest": "Failed to send friend request",
+      "failedToAcceptFriendRequest": "Failed to accept friend request"
+    }
   }
 }

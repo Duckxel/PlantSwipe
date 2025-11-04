@@ -25,7 +25,8 @@
     "create": "Créer",
     "update": "Mettre à jour",
     "result": "résultat",
-    "results": "résultats"
+    "results": "résultats",
+    "allRightsReserved": "Tous droits réservés"
   },
   "auth": {
     "login": "Se connecter",
@@ -50,8 +51,11 @@
   "settings": {
     "title": "Paramètres du compte",
     "description": "Gérez vos préférences de compte et votre sécurité",
+    "loading": "Chargement des paramètres…",
+    "failedToLoad": "Échec du chargement des paramètres",
     "email": {
       "title": "Adresse e-mail",
+      "emailAddressLabel": "Adresse e-mail :",
       "description": "Changez votre adresse e-mail. Vous devrez confirmer le nouvel e-mail.",
       "currentEmail": "E-mail actuel",
       "newEmail": "Nouvel e-mail",
@@ -60,10 +64,12 @@
       "updating": "Mise à jour...",
       "updateRequestSent": "Demande de mise à jour de l'e-mail envoyée ! Veuillez vérifier votre nouvel e-mail pour un lien de confirmation.",
       "enterNewEmail": "Veuillez entrer une nouvelle adresse e-mail",
-      "enterValidEmail": "Veuillez entrer une adresse e-mail valide"
+      "enterValidEmail": "Veuillez entrer une adresse e-mail valide",
+      "failedToUpdate": "Échec de la mise à jour de l'e-mail"
     },
     "password": {
       "title": "Mot de passe",
+      "passwordLabel": "Mot de passe :",
       "description": "Changez votre mot de passe pour garder votre compte sécurisé.",
       "currentPassword": "Mot de passe actuel",
       "newPassword": "Nouveau mot de passe",
@@ -77,19 +83,26 @@
       "enterCurrentPassword": "Veuillez entrer votre mot de passe actuel",
       "passwordTooShort": "Le mot de passe doit contenir au moins 6 caractères",
       "passwordsDontMatch": "Les mots de passe ne correspondent pas",
-      "currentPasswordIncorrect": "Le mot de passe actuel est incorrect"
+      "currentPasswordIncorrect": "Le mot de passe actuel est incorrect",
+      "failedToUpdate": "Échec de la mise à jour du mot de passe"
     },
     "privacy": {
       "title": "Paramètres de confidentialité",
       "description": "Contrôlez qui peut voir votre profil et votre activité.",
       "privateProfile": "Profil privé",
-      "privateProfileDescription": "Lorsqu'il est activé, seuls vos amis peuvent voir votre profil et votre activité. Votre profil sera masqué des recherches publiques."
+      "privateProfileDescription": "Lorsqu'il est activé, seuls vos amis peuvent voir votre profil et votre activité. Votre profil sera masqué des recherches publiques.",
+      "profileNowPrivate": "Le profil est maintenant privé",
+      "profileNowPublic": "Le profil est maintenant public",
+      "failedToUpdate": "Échec de la mise à jour du paramètre de confidentialité"
     },
     "friendRequests": {
       "title": "Demandes d'amis",
       "description": "Contrôlez qui peut vous envoyer des demandes d'amis.",
       "disable": "Désactiver les demandes d'amis",
-      "disableDescription": "Lorsqu'il est activé, les autres utilisateurs ne pourront pas vous envoyer de demandes d'amis. Cela aide à prévenir les invitations indésirables. Fonctionne pour les profils publics et privés."
+      "disableDescription": "Lorsqu'il est activé, les autres utilisateurs ne pourront pas vous envoyer de demandes d'amis. Cela aide à prévenir les invitations indésirables. Fonctionne pour les profils publics et privés.",
+      "friendRequestsNowDisabled": "Les demandes d'amis sont maintenant désactivées",
+      "friendRequestsNowEnabled": "Les demandes d'amis sont maintenant activées",
+      "failedToUpdate": "Échec de la mise à jour du paramètre de demande d'amis"
     },
     "dangerZone": {
       "title": "Zone de danger",
@@ -100,7 +113,8 @@
       "typeDelete": "Tapez SUPPRIMER pour confirmer :",
       "yesDelete": "Oui, supprimer mon compte",
       "deleting": "Suppression...",
-      "typeDeleteToConfirm": "Veuillez taper SUPPRIMER pour confirmer la suppression du compte"
+      "typeDeleteToConfirm": "Veuillez taper SUPPRIMER pour confirmer la suppression du compte",
+      "failedToDelete": "Échec de la suppression du compte"
     },
     "language": {
       "title": "Langue",
@@ -206,5 +220,222 @@
     "translatingAllFields": "Traduction de tous les champs dans toutes les langues...",
     "saveChanges": "Enregistrer les modifications",
     "saving": "Enregistrement..."
+  },
+  "plantInfo": {
+    "plantNotFound": "Plante introuvable.",
+    "failedToLoad": "Échec du chargement de la plante",
+    "sunlight": "Ensoleillement",
+    "water": "Eau",
+    "difficulty": "Difficulté",
+    "overview": "Aperçu",
+    "meaning": "Signification",
+    "careGuide": "Guide d'entretien",
+    "sunlightLabel": "Ensoleillement :",
+    "waterLabel": "Eau :",
+    "waterFrequency": "Fréquence d'arrosage :",
+    "soilLabel": "Sol :",
+    "difficultyLabel": "Difficulté :",
+    "seedsAvailable": "Graines disponibles :",
+    "yes": "Oui",
+    "no": "Non",
+    "time": "fois",
+    "times": "fois",
+    "per": "par",
+    "like": "J'aime",
+    "unlike": "Je n'aime plus",
+    "deleteConfirm": "Supprimer cette plante ? Cela échouera si elle est utilisée dans un jardin.",
+    "day": "jour",
+    "week": "semaine",
+    "month": "mois",
+    "year": "année"
+  },
+  "gardenDashboard": {
+    "loading": "Chargement...",
+    "overview": "Aperçu",
+    "plants": "Plantes",
+    "routine": "Routine",
+    "settings": "Paramètres",
+    "overviewSection": {
+      "plants": "Plantes",
+      "species": "Espèces :",
+      "members": "Membres",
+      "streak": "Série",
+      "days": "jours",
+      "todaysProgress": "Progrès d'aujourd'hui",
+      "tasksDone": "tâches terminées",
+      "last30Days": "30 derniers jours",
+      "activityToday": "Activité (aujourd'hui)",
+      "loadingActivity": "Chargement...",
+      "noActivity": "Aucune activité pour le moment aujourd'hui.",
+      "failedToLoadActivity": "Échec du chargement de l'activité"
+    },
+    "routineSection": {
+      "thisWeek": "Cette semaine",
+      "mondayToSunday": "Lundi ? Dimanche",
+      "today": "Aujourd'hui",
+      "tasksDue": "Tâches dues :",
+      "completePlus1": "Terminer +1",
+      "completed": "Terminé",
+      "doneBy": "Fait par",
+      "dueThisWeek": "Dû cette semaine",
+      "waterNeed": "Besoins en eau :",
+      "upcoming": "À venir",
+      "emptyPhrases": [
+        "Ennuyé ? Il est peut-être temps d'ajouter plus de plantes ! 🪴",
+        "Silence total dans le jardin aujourd'hui. Profitez du calme ! 🌿",
+        "Rien de prévu aujourd'hui – vos plantes vous saluent. 🫡",
+        "Journée libre ! Peut-être chercher un nouvel ami feuillu ? 🪴",
+        "Jour de repos. Hydratez-vous plutôt que les plantes. 💧",
+        "Aucune tâche pour le moment. Moment idéal pour planifier votre prochaine floraison. 🌸",
+        "Le jardin est en pilote automatique. Vous l'avez mérité. 😎",
+        "Pas de corvées aujourd'hui – peut-être tailler votre playlist ? 🎶",
+        "Rien à faire ! Pensez à une nouvelle herbe pour la cuisine. 🌱",
+        "Pieds sur la table, gants rangés. Demain est un autre jour de croissance. 🧑‍🌾",
+        "Zéro tâche. Vibes maximales. ✨",
+        "Votre routine est vide – votre panier ne l'est pas forcément. 🛒🪴"
+      ],
+      "dayLabels": {
+        "mon": "Lun",
+        "tue": "Mar",
+        "wed": "Mer",
+        "thu": "Jeu",
+        "fri": "Ven",
+        "sat": "Sam",
+        "sun": "Dim"
+      }
+    },
+    "plantsSection": {
+      "plantsInGarden": "Plantes dans ce jardin",
+      "addPlant": "Ajouter une plante",
+      "onHand": "En stock :",
+      "tasks": "Tâches :",
+      "dueToday": "Dû aujourd'hui :",
+      "tasksButton": "Tâches",
+      "delete": "Supprimer",
+      "noPlantsYet": "Aucune plante pour le moment. Ajoutez votre première plante pour commencer.",
+      "addPlantToGarden": "Ajouter une plante au jardin",
+      "searchPlants": "Rechercher des plantes par nom ?",
+      "noResults": "Aucun résultat",
+      "adding": "Ajout...",
+      "next": "Suivant",
+      "addDetails": "Ajouter des détails",
+      "customName": "Nom personnalisé",
+      "optionalNickname": "Surnom optionnel",
+      "numberOfFlowers": "Nombre de fleurs",
+      "back": "Retour",
+      "add": "Ajouter",
+      "moreInformation": "Plus d'informations"
+    },
+    "settingsSection": {
+      "gardenDetails": "Détails du jardin",
+      "manageMembers": "Gérer les membres",
+      "addMember": "Ajouter un membre",
+      "deleteGarden": "Supprimer le jardin",
+      "quitGarden": "Quitter le jardin",
+      "deleteGardenConfirm": "Supprimer ce jardin ? Cette action ne peut pas être annulée.",
+      "failedToDeleteGarden": "Échec de la suppression du jardin",
+      "quitGardenConfirm": "Quitter ce jardin ? Vous serez retiré en tant que membre.",
+      "failedToQuitGarden": "Échec de la sortie du jardin",
+      "addMemberTitle": "Ajouter un membre",
+      "enterDisplayNameOrEmail": "Entrez le nom d'affichage ou l'e-mail",
+      "unknown": "Inconnu"
+    }
+  },
+  "friends": {
+    "title": "Amis",
+    "pleaseLogin": "Veuillez vous connecter pour gérer vos amis",
+    "pendingInvitations": "Invitations en attente",
+    "sentRequests": "Demandes envoyées",
+    "yourFriends": "Vos amis",
+    "addFriend": "Ajouter un ami",
+    "noFriendsYet": "Aucun ami pour le moment. Recherchez des personnes ci-dessus pour ajouter des amis !",
+    "viewProfile": "Voir le profil",
+    "friendOptions": "Options d'ami",
+    "removeFriend": "Retirer l'ami",
+    "removeFriendConfirm": "Retirer",
+    "pending": "En attente",
+    "friends": "Amis",
+    "unknown": "Inconnu",
+    "addFriendDialog": {
+      "title": "Ajouter un ami",
+      "description": "Rechercher des utilisateurs par nom d'utilisateur ou e-mail",
+      "searchPlaceholder": "Rechercher par nom d'utilisateur ou e-mail...",
+      "searching": "Recherche...",
+      "noUsersFound": "Aucun utilisateur trouvé",
+      "addFriend": "Ajouter un ami"
+    },
+    "errors": {
+      "failedToLoad": "Échec du chargement des amis",
+      "failedToLoadSentRequests": "Échec du chargement des demandes envoyées en attente",
+      "failedToLoadRequests": "Échec du chargement des demandes d'amis",
+      "searchFailed": "Échec de la recherche",
+      "alreadyFriends": "Déjà ami avec cet utilisateur",
+      "requestAlreadySent": "Demande d'ami déjà envoyée",
+      "failedToSend": "Échec de l'envoi de la demande d'ami",
+      "failedToAccept": "Échec de l'acceptation de la demande d'ami",
+      "failedToReject": "Échec du rejet de la demande d'ami",
+      "failedToRemove": "Échec du retrait de l'ami"
+    }
+  },
+  "profile": {
+    "loading": "Chargement du profil…",
+    "userNotFound": "Utilisateur introuvable",
+    "failedToLoad": "Échec du chargement du profil",
+    "backHome": "Retour à l'accueil",
+    "member": "Membre",
+    "admin": "Admin",
+    "currentlyOnline": "En ligne actuellement",
+    "online": "En ligne",
+    "aLongTimeAgo": "Il y a longtemps",
+    "oneHourAgo": "Il y a 1 heure",
+    "fewHoursAgo": "Il y a quelques heures",
+    "oneDayAgo": "Il y a 1 jour",
+    "fewDaysAgo": "Il y a quelques jours",
+    "fewWeeksAgo": "Il y a quelques semaines",
+    "joined": "A rejoint",
+    "friend": "Ami",
+    "friends": "Amis",
+    "edit": "Modifier",
+    "logout": "Se déconnecter",
+    "deleteAccount": "Supprimer le compte",
+    "friendRequest": "Demande d'ami",
+    "requestSent": "Demande envoyée",
+    "acceptRequest": "Accepter la demande",
+    "since": "depuis",
+    "privateProfile": {
+      "title": "Ce profil est privé",
+      "description": "Seuls les amis peuvent voir ce profil et cette activité."
+    },
+    "highlights": "Aperçu",
+    "plantsOwned": "Plantes possédées",
+    "gardens": "Jardins",
+    "currentStreak": "Série actuelle",
+    "longestStreak": "Plus longue série",
+    "past28Days": "28 derniers jours",
+    "tasksOn": "tâches le",
+    "tasks": "tâches",
+    "completedDay": "Jour complété",
+    "privateInfo": {
+      "title": "Informations privées",
+      "description": "Visibles uniquement par vous (et les administrateurs)",
+      "userId": "ID utilisateur",
+      "email": "E-mail"
+    },
+    "privateProfileViewedByAdmin": "Profil privé consulté par un administrateur",
+    "editProfile": {
+      "title": "Modifier le profil",
+      "description": "Mettez à jour vos informations et choisissez une couleur d'accent.",
+      "displayName": "Nom d'affichage",
+      "country": "Pays",
+      "timezone": "Fuseau horaire",
+      "experienceYears": "Années d'expérience avec les plantes",
+      "bio": "Bio",
+      "accentColor": "Couleur d'accent",
+      "previewNote": "L'aperçu s'applique instantanément ; enregistré lors de l'enregistrement.",
+      "displayNameRequired": "Le nom d'affichage est requis",
+      "displayNameTaken": "Le nom d'affichage est déjà pris",
+      "failedToSendFriendRequest": "Échec de l'envoi de la demande d'ami",
+      "failedToAcceptFriendRequest": "Échec de l'acceptation de la demande d'ami"
+    }
   }
 }

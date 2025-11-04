@@ -4,11 +4,13 @@ import { PlantDetails } from '@/components/plant/PlantDetails'
 import type { Plant } from '@/types/plant'
 import { useAuth } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabaseClient'
+import { useTranslation } from 'react-i18next'
 
 export const PlantInfoPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { user, profile, refreshProfile } = useAuth()
+  const { t } = useTranslation('common')
   const [plant, setPlant] = React.useState<Plant | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
@@ -62,7 +64,7 @@ export const PlantInfoPage: React.FC = () => {
           if (!ignore) setPlant(p)
         }
       } catch (e: any) {
-        if (!ignore) setError(e?.message || 'Failed to load plant')
+        if (!ignore) setError(e?.message || t('plantInfo.failedToLoad'))
       } finally {
         if (!ignore) setLoading(false)
       }
@@ -92,9 +94,9 @@ export const PlantInfoPage: React.FC = () => {
     })
   }
 
-  if (loading) return <div className="max-w-4xl mx-auto mt-8 px-4">Loading…</div>
+  if (loading) return <div className="max-w-4xl mx-auto mt-8 px-4">{t('common.loading')}</div>
   if (error) return <div className="max-w-4xl mx-auto mt-8 px-4 text-red-600 text-sm">{error}</div>
-  if (!plant) return <div className="max-w-4xl mx-auto mt-8 px-4">Plant not found.</div>
+  if (!plant) return <div className="max-w-4xl mx-auto mt-8 px-4">{t('plantInfo.plantNotFound')}</div>
 
   return (
     <div className="max-w-4xl mx-auto mt-6 px-4 md:px-0">

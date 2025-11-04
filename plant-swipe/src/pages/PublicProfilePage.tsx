@@ -8,6 +8,7 @@ import { useAuth } from "@/context/AuthContext"
 import { EditProfileDialog, type EditProfileValues } from "@/components/profile/EditProfileDialog"
 import { applyAccentByKey, saveAccentKey } from "@/lib/accent"
 import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff } from "lucide-react"
+import { useTranslation } from "react-i18next"
 
 type PublicProfile = {
   id: string
@@ -40,6 +41,7 @@ export default function PublicProfilePage() {
   const params = useParams()
   const navigate = useNavigate()
   const { user, profile, refreshProfile, signOut, deleteAccount } = useAuth()
+  const { t } = useTranslation('common')
   const displayParam = String(params.username || '')
 
   const [loading, setLoading] = React.useState(true)
@@ -52,7 +54,7 @@ export default function PublicProfilePage() {
   
 
   const formatLastSeen = React.useCallback((iso: string | null | undefined) => {
-    if (!iso) return 'A long time ago'
+    if (!iso) return t('profile.aLongTimeAgo')
     const last = new Date(iso)
     const now = new Date()
     const diffMs = Math.max(0, now.getTime() - last.getTime())
@@ -60,15 +62,15 @@ export default function PublicProfilePage() {
     const diffHours = Math.floor(diffMin / 60)
     const diffDays = Math.floor(diffHours / 24)
     const diffWeeks = Math.floor(diffDays / 7)
-    if (diffMin <= 10) return 'Online'
-    if (diffHours < 1) return 'Online'
-    if (diffHours === 1) return '1 hour ago'
-    if (diffHours < 6) return 'Few hours ago'
-    if (diffDays === 1) return '1 day ago'
-    if (diffDays <= 6) return 'Few days ago'
-    if (diffWeeks <= 3) return 'Few weeks ago'
-    return 'A long time ago'
-  }, [])
+    if (diffMin <= 10) return t('profile.online')
+    if (diffHours < 1) return t('profile.online')
+    if (diffHours === 1) return t('profile.oneHourAgo')
+    if (diffHours < 6) return t('profile.fewHoursAgo')
+    if (diffDays === 1) return t('profile.oneDayAgo')
+    if (diffDays <= 6) return t('profile.fewDaysAgo')
+    if (diffWeeks <= 3) return t('profile.fewWeeksAgo')
+    return t('profile.aLongTimeAgo')
+  }, [t])
 
   React.useEffect(() => {
     let cancelled = false
@@ -102,7 +104,7 @@ export default function PublicProfilePage() {
         }
         
         if (!row) {
-          setError('User not found')
+          setError(t('profile.userNotFound'))
           setLoading(false)
           return
         }
@@ -244,7 +246,7 @@ export default function PublicProfilePage() {
           setMonthDays([])
         }
       } catch (e: any) {
-        setError(e?.message || 'Failed to load profile')
+        setError(e?.message || t('profile.failedToLoad'))
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -410,7 +412,7 @@ export default function PublicProfilePage() {
       setFriendStatus('request_sent')
       setFriendRequestId(data.id)
     } catch (e: any) {
-      setEditError(e?.message || 'Failed to send friend request')
+      setEditError(e?.message || t('profile.editProfile.failedToSendFriendRequest'))
     } finally {
       setFriendRequestLoading(false)
     }
@@ -441,7 +443,7 @@ export default function PublicProfilePage() {
         setFriendsSince(new Date().toISOString())
       }
     } catch (e: any) {
-      setEditError(e?.message || 'Failed to accept friend request')
+      setEditError(e?.message || t('profile.editProfile.failedToAcceptFriendRequest'))
     } finally {
       setFriendRequestLoading(false)
     }
@@ -529,11 +531,11 @@ export default function PublicProfilePage() {
 
   return (
     <div className="max-w-5xl mx-auto mt-8 px-4 md:px-0">
-      {loading && <div className="p-8 text-center text-sm opacity-60">Loading profile…</div>}
+      {loading && <div className="p-8 text-center text-sm opacity-60">{t('profile.loading')}</div>}
       {error && !loading && (
         <div className="p-8 text-center">
           <div className="text-sm text-red-600 mb-2">{error}</div>
-          <Button asChild variant="secondary"><Link to="/">Back home</Link></Button>
+          <Button asChild variant="secondary"><Link to="/">{t('profile.backHome')}</Link></Button>
         </div>
       )}
       {!loading && !error && pp && (
@@ -548,28 +550,28 @@ export default function PublicProfilePage() {
                 </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <div className="text-2xl font-semibold truncate">{pp.display_name || pp.username || 'Member'}</div>
+                        <div className="text-2xl font-semibold truncate">{pp.display_name || pp.username || t('profile.member')}</div>
                         {pp.isAdminViewingPrivateNonFriend && (
-                          <div title="Private profile viewed by admin">
+                          <div title={t('profile.privateProfileViewedByAdmin')}>
                             <EyeOff className="h-5 w-5 text-stone-500 opacity-70" />
                           </div>
                         )}
-                        <span className={`text-[11px] px-2 py-0.5 rounded-full border ${pp.is_admin ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-stone-50 text-stone-700 border-stone-200'}`}>{pp.is_admin ? 'Admin' : 'Member'}</span>
+                        <span className={`text-[11px] px-2 py-0.5 rounded-full border ${pp.is_admin ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-stone-50 text-stone-700 border-stone-200'}`}>{pp.is_admin ? t('profile.admin') : t('profile.member')}</span>
                       </div>
                   {canViewProfile && (
                     <>
                       <div className="text-sm opacity-70 mt-1 flex items-center gap-1">{pp.country ? (<><MapPin className="h-4 w-4" />{pp.country}</>) : ''}</div>
                       <div className="text-xs opacity-70 mt-1 flex items-center gap-2">
                         {pp.is_online ? (
-                          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" />Currently online</span>
+                          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" />{t('profile.currentlyOnline')}</span>
                         ) : (
                           <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-stone-300" />{formatLastSeen(pp.last_seen_at)}</span>
                         )}
                         {pp.joined_at && (
                           <span>
-                            • Joined {new Date(pp.joined_at).toLocaleDateString()}
+                            • {t('profile.joined')} {new Date(pp.joined_at).toLocaleDateString()}
                             {stats?.friendsCount != null && stats.friendsCount > 0 && (
-                              <span className="ml-2">• {stats.friendsCount} Friend{(stats.friendsCount !== 1 ? 's' : '')}</span>
+                              <span className="ml-2">• {stats.friendsCount} {stats.friendsCount !== 1 ? t('profile.friends') : t('profile.friend')}</span>
                             )}
                           </span>
                         )}
@@ -583,9 +585,9 @@ export default function PublicProfilePage() {
                       <Button className="rounded-2xl" variant="secondary" onClick={() => setMenuOpen((o) => !o)}>⋯</Button>
                       {menuOpen && menuPos && createPortal(
                         <div ref={menuRef} className="w-40 rounded-xl border bg-white shadow z-[60] p-1" style={{ position: 'fixed', top: menuPos.top, right: menuPos.right }}>
-                          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50" onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); setEditOpen(true) }}>Edit</button>
-                          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50" onMouseDown={async (e) => { e.stopPropagation(); setMenuOpen(false); await signOut(); navigate('/') }}>Log out</button>
-                          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 text-red-600" onMouseDown={async (e) => { e.stopPropagation(); setMenuOpen(false); await deleteAccount() }}>Delete account</button>
+                          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50" onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); setEditOpen(true) }}>{t('profile.edit')}</button>
+                          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50" onMouseDown={async (e) => { e.stopPropagation(); setMenuOpen(false); await signOut(); navigate('/') }}>{t('profile.logout')}</button>
+                          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 text-red-600" onMouseDown={async (e) => { e.stopPropagation(); setMenuOpen(false); await deleteAccount() }}>{t('profile.deleteAccount')}</button>
                         </div>,
                         document.body
                       )}
@@ -599,12 +601,12 @@ export default function PublicProfilePage() {
                           onClick={sendFriendRequest}
                           disabled={friendRequestLoading}
                         >
-                          <UserPlus className="h-4 w-4 mr-2" /> Friend Request
+                          <UserPlus className="h-4 w-4 mr-2" /> {t('profile.friendRequest')}
                         </Button>
                       )}
                       {friendStatus === 'request_sent' && (
                         <Button className="rounded-2xl" variant="secondary" disabled>
-                          Request Sent
+                          {t('profile.requestSent')}
                         </Button>
                       )}
                       {friendStatus === 'request_received' && (
@@ -614,17 +616,17 @@ export default function PublicProfilePage() {
                           onClick={acceptFriendRequest}
                           disabled={friendRequestLoading}
                         >
-                          <Check className="h-4 w-4 mr-2" /> Accept Request
+                          <Check className="h-4 w-4 mr-2" /> {t('profile.acceptRequest')}
                         </Button>
                       )}
                       {friendStatus === 'friends' && (
                         <div className="flex flex-col items-end gap-1">
                           <Button className="rounded-2xl" variant="secondary" disabled>
-                            Friends
+                            {t('profile.friends')}
                           </Button>
                           {friendsSince && (
                             <div className="text-[10px] opacity-60">
-                              since {new Date(friendsSince).toLocaleDateString()}
+                              {t('profile.since')} {new Date(friendsSince).toLocaleDateString()}
                             </div>
                           )}
                         </div>
@@ -641,10 +643,10 @@ export default function PublicProfilePage() {
                   <Lock className="h-5 w-5 mt-0.5 text-stone-600 shrink-0" />
                   <div>
                     <div className="text-sm font-medium text-stone-900 mb-1">
-                      This profile is private
+                      {t('profile.privateProfile.title')}
                     </div>
                     <div className="text-xs opacity-70 text-stone-700">
-                      Only friends can see this profile and activity.
+                      {t('profile.privateProfile.description')}
                     </div>
                   </div>
                 </div>
@@ -657,22 +659,22 @@ export default function PublicProfilePage() {
               <div className="mt-4">
                 <Card className="rounded-3xl">
                   <CardContent className="p-6 md:p-8 space-y-4">
-                    <div className="text-lg font-semibold">Highlights</div>
+                    <div className="text-lg font-semibold">{t('profile.highlights')}</div>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <div className="rounded-xl border p-3 text-center">
-                    <div className="text-[11px] opacity-60">Plants owned</div>
+                    <div className="text-[11px] opacity-60">{t('profile.plantsOwned')}</div>
                     <div className="text-base font-semibold tabular-nums">{stats?.plantsTotal ?? '—'}</div>
                   </div>
                   <div className="rounded-xl border p-3 text-center">
-                    <div className="text-[11px] opacity-60">Gardens</div>
+                    <div className="text-[11px] opacity-60">{t('profile.gardens')}</div>
                     <div className="text-base font-semibold tabular-nums">{stats?.gardensCount ?? '—'}</div>
                   </div>
                   <div className="rounded-xl border p-3 text-center">
-                    <div className="text-[11px] opacity-60">Current streak</div>
+                    <div className="text-[11px] opacity-60">{t('profile.currentStreak')}</div>
                     <div className="text-base font-semibold tabular-nums">{stats?.currentStreak ?? '—'}</div>
                   </div>
                   <div className="rounded-xl border p-3 text-center">
-                    <div className="text-[11px] opacity-60">Longest streak</div>
+                    <div className="text-[11px] opacity-60">{t('profile.longestStreak')}</div>
                     <div className="text-base font-semibold tabular-nums">{stats?.bestStreak ?? '—'}</div>
                     </div>
                   </div>
@@ -683,7 +685,7 @@ export default function PublicProfilePage() {
             <div className="mt-4">
             <Card className="rounded-3xl">
               <CardContent className="p-6 md:p-8 space-y-4">
-                <div className="text-lg font-semibold">Past 28 days</div>
+                <div className="text-lg font-semibold">{t('profile.past28Days')}</div>
                 <div className="w-full">
                   <div className="flex justify-center">
                     <div className="grid grid-rows-4 grid-flow-col auto-cols-max gap-1 sm:gap-1.5">
@@ -696,8 +698,8 @@ export default function PublicProfilePage() {
                         onMouseLeave={hideTooltip}
                         onFocus={(e: React.FocusEvent<HTMLDivElement>) => showTooltip(e.currentTarget as HTMLDivElement, item)}
                         onBlur={hideTooltip}
-                        title={`${item.value} tasks on ${new Date(item.date).toLocaleDateString()}`}
-                        aria-label={`${new Date(item.date).toLocaleDateString()}: ${item.value} tasks${item.success ? ', completed day' : ''}`}
+                        title={`${item.value} ${t('profile.tasks')} ${t('profile.tasksOn')} ${new Date(item.date).toLocaleDateString()}`}
+                        aria-label={`${new Date(item.date).toLocaleDateString()}: ${item.value} ${t('profile.tasks')}${item.success ? `, ${t('profile.completedDay')}` : ''}`}
                       />
                     ))}
                     </div>
@@ -711,7 +713,7 @@ export default function PublicProfilePage() {
                   >
                     <div className="rounded-xl border bg-white shadow px-3 py-2">
                       <div className="text-xs font-medium">{new Date(tooltip.date).toLocaleDateString()}</div>
-                      <div className="text-[11px] opacity-70">{tooltip.value} tasks{tooltip.success ? ' • Completed day' : ''}</div>
+                      <div className="text-[11px] opacity-70">{tooltip.value} {t('profile.tasks')}{tooltip.success ? ` • ${t('profile.completedDay')}` : ''}</div>
                     </div>
                   </div>,
                   document.body
@@ -726,15 +728,15 @@ export default function PublicProfilePage() {
             <div className="mt-4">
               <Card className="rounded-3xl">
                 <CardContent className="p-6 md:p-8 space-y-2">
-                  <div className="text-lg font-semibold">Private Info</div>
-                  <div className="text-sm opacity-60">Only visible to you (and admins)</div>
+                  <div className="text-lg font-semibold">{t('profile.privateInfo.title')}</div>
+                  <div className="text-sm opacity-60">{t('profile.privateInfo.description')}</div>
                   <div className="grid sm:grid-cols-2 gap-3 mt-2">
                     <div className="rounded-xl border p-3">
-                      <div className="text-[11px] opacity-60">User ID</div>
+                      <div className="text-[11px] opacity-60">{t('profile.privateInfo.userId')}</div>
                       <div className="text-xs break-all">{privateInfo.id || '-'}</div>
                     </div>
                     <div className="rounded-xl border p-3">
-                      <div className="text-[11px] opacity-60">Email</div>
+                      <div className="text-[11px] opacity-60">{t('profile.privateInfo.email')}</div>
                       <div className="text-sm">{privateInfo.email || (user as any)?.email || '-'}</div>
                     </div>
                   </div>
@@ -765,14 +767,14 @@ export default function PublicProfilePage() {
                 try {
                   // Ensure display name unique and valid
                   const dn = (vals.display_name || '').trim()
-                  if (dn.length === 0) { setEditError('Display name required'); return }
+                  if (dn.length === 0) { setEditError(t('profile.editProfile.displayNameRequired')); return }
                   const nameCheck = await supabase
                     .from('profiles')
                     .select('id')
                     .ilike('display_name', dn)
                     .neq('id', user.id)
                     .maybeSingle()
-                  if (nameCheck.data?.id) { setEditError('Display name already taken'); return }
+                  if (nameCheck.data?.id) { setEditError(t('profile.editProfile.displayNameTaken')); return }
 
                   const updates: Record<string, any> = {
                     id: user.id,
