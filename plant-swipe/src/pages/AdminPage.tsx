@@ -1140,6 +1140,7 @@ export const AdminPage: React.FC = () => {
   const [memberVisitsSeries, setMemberVisitsSeries] = React.useState<Array<{ date: string; visits: number }>>([])
   const [memberVisitsTotal30d, setMemberVisitsTotal30d] = React.useState<number>(0)
   const [memberVisitsUpdatedAt, setMemberVisitsUpdatedAt] = React.useState<number | null>(null)
+  const [memberVisitsWarning, setMemberVisitsWarning] = React.useState<string | null>(null)
 
   const loadMemberVisitsSeries = React.useCallback(async (userId: string, opts?: { initial?: boolean }) => {
     if (!userId) return
@@ -1157,13 +1158,76 @@ export const AdminPage: React.FC = () => {
       const resp = await fetch(`/api/admin/member-visits-series?userId=${encodeURIComponent(userId)}`, { headers, credentials: 'same-origin' })
       const data = await safeJson(resp)
       if (!resp.ok) throw new Error(data?.error || `HTTP ? ${resp.status}`)
-      const series = Array.isArray(data?.series30d) ? data.series30d.map((d: any) => ({ date: String(d.date), visits: Number(d.visits || 0) })) : []
+      
+      // Debug: log response to help diagnose background task issues
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Member visits series API response:', { hasSeries30d: !!data?.series30d, hasStatus: !!data?.status, hasJobId: !!data?.jobId, keys: Object.keys(data || {}) })
+      }
+      
+      // Handle background task response - check if data is still being generated
+      if (data?.status === 'pending' || data?.jobId) {
+        // Background task is processing, return empty for now
+        console.log('Visits series data is being generated in background')
+        setMemberVisitsSeries([])
+        setMemberVisitsTotal30d(0)
+        setMemberVisitsUpdatedAt(null)
+        setMemberVisitsWarning(null)
+        return
+      }
+      
+      // Check if response has the expected structure
+      if (!data?.series30d || !Array.isArray(data?.series30d)) {
+        console.warn('Unexpected API response format:', data)
+        // If data structure changed, try to adapt
+        if (data?.data?.series30d && Array.isArray(data.data.series30d)) {
+          // Nested structure
+          data.series30d = data.data.series30d
+          data.total30d = data.data.total30d
+        } else {
+          throw new Error('Invalid response format: missing or invalid series30d')
+        }
+      }
+      
+      const series = Array.isArray(data?.series30d) ? data.series30d.map((d: any) => {
+        // API returns dates in YYYY-MM-DD format from toISOString().slice(0,10)
+        let dateStr = String(d.date || '')
+        // Extract date part if it's an ISO string (handles edge cases)
+        if (dateStr.includes('T')) {
+          dateStr = dateStr.split('T')[0]
+        }
+        // If date is already in YYYY-MM-DD format, use it directly
+        if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          return { date: dateStr, visits: Number(d.visits || 0) }
+        }
+        // Try to normalize if format is different
+        if (dateStr) {
+          try {
+            const dateObj = new Date(dateStr + 'T00:00:00Z')
+            if (!isNaN(dateObj.getTime())) {
+              dateStr = dateObj.toISOString().split('T')[0]
+              if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                return { date: dateStr, visits: Number(d.visits || 0) }
+              }
+            }
+          } catch {}
+        }
+        // Skip invalid dates
+        return null
+      }).filter((item: { date: string; visits: number } | null): item is { date: string; visits: number } => item !== null) : []
       setMemberVisitsSeries(series)
       const total = Number(data?.total30d || 0)
       setMemberVisitsTotal30d(Number.isFinite(total) ? total : 0)
       setMemberVisitsUpdatedAt(Date.now())
-    } catch {
-      // keep last
+      setMemberVisitsWarning(data?.warning || null)
+    } catch (e: unknown) {
+      // Log error but don't clear existing data if this is a refresh (only clear on initial load)
+      console.error('Failed to load member visits series:', e)
+      if (isInitial) {
+        setMemberVisitsSeries([])
+        setMemberVisitsTotal30d(0)
+        setMemberVisitsUpdatedAt(null)
+        setMemberVisitsWarning(null)
+      }
     } finally {
       if (isInitial) setMemberVisitsLoading(false)
     }
@@ -1316,6 +1380,7 @@ export const AdminPage: React.FC = () => {
       setMemberVisitsSeries([])
       setMemberVisitsTotal30d(0)
       setMemberVisitsUpdatedAt(null)
+      setMemberVisitsWarning(null)
     }
   }, [memberData?.user?.id, loadMemberVisitsSeries])
 
@@ -2229,7 +2294,7 @@ export const AdminPage: React.FC = () => {
                   <Input
                     id="member-email"
                     name="member-email"
-                    autoComplete="email"
+                    autoComplete="off"
                     aria-label="Member email or username"
                     className="rounded-xl"
                     placeholder="user@example.com or username"
@@ -2503,7 +2568,7 @@ export const AdminPage: React.FC = () => {
                     </div>
                     <div className="rounded-xl border p-3 text-center">
                       <div className="text-[11px] opacity-60">Last IP</div>
-                      <div className="text-base font-semibold tabular-nums truncate" title={memberData.lastIp || undefined}>{memberData.lastIp || '-'}</div>
+                      <div className="text-base font-semibold tabular-nums truncate" title={memberData.lastIp || (memberData.ips && memberData.ips.length > 0 ? memberData.ips[0] : undefined) || undefined}>{memberData.lastIp || (memberData.ips && memberData.ips.length > 0 ? memberData.ips[0] : null) || '-'}</div>
                     </div>
                     <div className="rounded-xl border p-3 text-center">
                       <div className="text-[11px] opacity-60">Mean RPM (5m)</div>
@@ -2601,7 +2666,7 @@ export const AdminPage: React.FC = () => {
                       {memberVisitsLoading ? (
                         <div className="text-sm opacity-60">Loading...</div>
                       ) : memberVisitsSeries.length === 0 ? (
-                        <div className="text-sm opacity-60">No data yet.</div>
+                        <div className="text-sm opacity-60">{memberVisitsWarning ? `Data unavailable: ${memberVisitsWarning}` : 'No data yet.'}</div>
                       ) : (
                         (() => {
                           const values = memberVisitsSeries.map(d => d.visits)
