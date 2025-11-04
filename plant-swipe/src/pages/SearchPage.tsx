@@ -4,14 +4,17 @@ import { rarityTone, seasonBadge } from "@/constants/badges"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { ListFilter } from "lucide-react"
+import { useTranslation } from "react-i18next"
 
 interface SearchPageProps { plants: Plant[]; openInfo: (p: Plant) => void; likedIds?: string[] }
 
-export const SearchPage: React.FC<SearchPageProps> = ({ plants, openInfo, likedIds = [] }) => (
+export const SearchPage: React.FC<SearchPageProps> = ({ plants, openInfo, likedIds = [] }) => {
+  const { t } = useTranslation('common')
+  return (
   <div className="max-w-6xl mx-auto mt-8 px-4 md:px-0">
     <div className="flex items-center gap-2 text-sm mb-3">
       <ListFilter className="h-4 w-4" />
-      <span className="opacity-60">Refine with filters above. Click a card for full details.</span>
+      <span className="opacity-60">{t('plant.refineFilters')}</span>
     </div>
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       {plants.map((p) => (
@@ -43,7 +46,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ plants, openInfo, likedI
                   <span key={s} className={`text-[10px] px-2 py-0.5 rounded-full ${seasonBadge[s]}`}>{s}</span>
                 ))}
                 {likedIds.includes(p.id) && (
-                  <Badge className="rounded-xl bg-rose-600 text-white">Liked</Badge>
+                  <Badge className="rounded-xl bg-rose-600 text-white">{t('plant.liked')}</Badge>
                 )}
               </div>
               <div className="font-medium truncate">{p.name}</div>
@@ -59,6 +62,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ plants, openInfo, likedI
         </Card>
       ))}
     </div>
-    {plants.length === 0 && <div className="text-center py-10 opacity-60 text-sm">No results</div>}
+    {plants.length === 0 && <div className="text-center py-10 opacity-60 text-sm">{t('plant.noResults')}</div>}
   </div>
-)
+  )
+}

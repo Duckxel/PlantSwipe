@@ -127,12 +127,40 @@
     "purple": "Violet",
     "blue": "Bleu",
     "orange": "Orange",
-    "green": "Vert"
+    "green": "Vert",
+    "refineFilters": "Affinez avec les filtres ci-dessus. Cliquez sur une carte pour plus de détails.",
+    "noResults": "Aucun résultat",
+    "liked": "Aimé",
+    "back": "Retour",
+    "info": "Info",
+    "next": "Suivant",
+    "tryAnotherSearch": "Essayez une autre recherche ou ajustez vos filtres.",
+    "reset": "Réinitialiser"
   },
   "garden": {
     "title": "Jardins",
+    "yourGardens": "Vos jardins",
     "create": "Créer un jardin",
+    "createGarden": "Créer un jardin",
+    "name": "Nom",
+    "namePlaceholder": "Mon jardin de balcon",
+    "coverImageUrl": "URL de l'image de couverture (optionnel)",
+    "coverImageUrlPlaceholder": "https://?",
+    "creating": "Création ?",
     "noGardens": "Aucun jardin pour le moment",
-    "createFirst": "Créez votre premier jardin pour commencer !"
+    "createFirst": "Créez votre premier jardin pour commencer !",
+    "created": "Créé",
+    "tasks": "Tâches",
+    "allGardens": "Tous les jardins",
+    "today": "Aujourd'hui",
+    "markAllCompleted": "TOUT MARQUER COMME TERMINÉ",
+    "loadingTasks": "Chargement des tâches...",
+    "noTasksToday": "Aucune tâche due aujourd'hui. 🌿",
+    "done": "fait",
+    "completeAll": "Tout compléter",
+    "completed": "Terminé",
+    "doneBy": "Fait par",
+    "failedToLoad": "Échec du chargement des jardins",
+    "allDone": "Tout terminé"
   }
 }
