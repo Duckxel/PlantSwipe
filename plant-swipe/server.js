@@ -2448,11 +2448,13 @@ app.get('/api/admin/member-visits-series', async (req, res) => {
       }
     }
 
-    // Supabase REST fallback using security-definer RPC
+    // Supabase REST fallback - try RPC first, then direct query
     if (supabaseUrlEnv && supabaseAnonKey) {
       const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
       const token = getBearerTokenFromRequest(req)
       if (token) Object.assign(headers, { 'Authorization': `Bearer ${token}` })
+      
+      // Try RPC function first (if available)
       try {
         const resp = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_user_visits_series_days`, {
           method: 'POST', headers, body: JSON.stringify({ _user_id: targetUserId, _days: 30 })
@@ -2461,15 +2463,83 @@ app.get('/api/admin/member-visits-series', async (req, res) => {
           const arr = await resp.json().catch(() => [])
           const series30d = (Array.isArray(arr) ? arr : []).map((r) => ({ date: String(r.date), visits: Number(r.visits || 0) }))
           const total30d = series30d.reduce((a, b) => a + (b.visits || 0), 0)
-          res.json({ ok: true, userId: targetUserId, series30d, total30d, via: 'supabase' })
+          res.json({ ok: true, userId: targetUserId, series30d, total30d, via: 'supabase-rpc' })
           return
-        } else {
-          // Log REST fallback failure for debugging
-          const errorText = await resp.text().catch(() => 'Unknown error')
-          console.error(`REST fallback failed for user ${targetUserId}: ${resp.status} ${errorText}`)
         }
       } catch (e) {
-        console.error('REST fallback exception:', e)
+        // RPC might not exist, try direct query
+      }
+      
+      // Fallback: Query visits table directly via REST
+      try {
+        const tablePath = (process.env.VISITS_TABLE_REST || VISITS_TABLE_ENV || 'web_visits')
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+        
+        // Fetch visits with pagination support (limit 1000 per page)
+        let allVisits = []
+        let offset = 0
+        const limit = 1000
+        
+        while (true) {
+          const visitsResp = await fetch(
+            `${supabaseUrlEnv}/rest/v1/${tablePath}?user_id=eq.${encodeURIComponent(targetUserId)}&occurred_at=gte.${thirtyDaysAgo}&select=occurred_at&order=occurred_at.asc&limit=${limit}&offset=${offset}`,
+            { headers: { ...headers, 'Prefer': 'count=exact' } }
+          )
+          
+          if (!visitsResp.ok) {
+            const errorText = await visitsResp.text().catch(() => 'Unknown error')
+            console.error(`REST direct query failed for user ${targetUserId}: ${visitsResp.status} ${errorText}`)
+            break
+          }
+          
+          const visits = await visitsResp.json().catch(() => [])
+          if (!Array.isArray(visits) || visits.length === 0) break
+          
+          allVisits = allVisits.concat(visits)
+          
+          // Check if we got all results (if less than limit, we're done)
+          if (visits.length < limit) break
+          
+          offset += limit
+          
+          // Safety limit: don't fetch more than 10k visits
+          if (offset >= 10000) break
+        }
+        
+        // Generate series for last 30 days
+        const series30d = []
+        const today = new Date()
+        today.setUTCHours(0, 0, 0, 0)
+        
+        // Group visits by date
+        const visitsByDate = new Map()
+        if (Array.isArray(allVisits)) {
+          for (const visit of allVisits) {
+            if (visit.occurred_at) {
+              const date = new Date(visit.occurred_at)
+              date.setUTCHours(0, 0, 0, 0)
+              const dateStr = date.toISOString().split('T')[0]
+              visitsByDate.set(dateStr, (visitsByDate.get(dateStr) || 0) + 1)
+            }
+          }
+        }
+        
+        // Generate 30 days of data
+        for (let i = 29; i >= 0; i--) {
+          const date = new Date(today)
+          date.setUTCDate(date.getUTCDate() - i)
+          const dateStr = date.toISOString().split('T')[0]
+          series30d.push({
+            date: dateStr,
+            visits: visitsByDate.get(dateStr) || 0
+          })
+        }
+        
+        const total30d = series30d.reduce((a, b) => a + (b.visits || 0), 0)
+        res.json({ ok: true, userId: targetUserId, series30d, total30d, via: 'supabase-rest' })
+        return
+      } catch (e) {
+        console.error('REST direct query exception:', e)
       }
     }
 
