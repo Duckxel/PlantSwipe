@@ -377,5 +377,66 @@
       "failedToReject": "Échec du rejet de la demande d'ami",
       "failedToRemove": "Échec du retrait de l'ami"
     }
+  },
+  "profile": {
+    "loading": "Chargement du profil…",
+    "userNotFound": "Utilisateur introuvable",
+    "failedToLoad": "Échec du chargement du profil",
+    "backHome": "Retour à l'accueil",
+    "member": "Membre",
+    "admin": "Admin",
+    "currentlyOnline": "En ligne actuellement",
+    "online": "En ligne",
+    "aLongTimeAgo": "Il y a longtemps",
+    "oneHourAgo": "Il y a 1 heure",
+    "fewHoursAgo": "Il y a quelques heures",
+    "oneDayAgo": "Il y a 1 jour",
+    "fewDaysAgo": "Il y a quelques jours",
+    "fewWeeksAgo": "Il y a quelques semaines",
+    "joined": "A rejoint",
+    "friend": "Ami",
+    "friends": "Amis",
+    "edit": "Modifier",
+    "logout": "Se déconnecter",
+    "deleteAccount": "Supprimer le compte",
+    "friendRequest": "Demande d'ami",
+    "requestSent": "Demande envoyée",
+    "acceptRequest": "Accepter la demande",
+    "since": "depuis",
+    "privateProfile": {
+      "title": "Ce profil est privé",
+      "description": "Seuls les amis peuvent voir ce profil et cette activité."
+    },
+    "highlights": "Aperçu",
+    "plantsOwned": "Plantes possédées",
+    "gardens": "Jardins",
+    "currentStreak": "Série actuelle",
+    "longestStreak": "Plus longue série",
+    "past28Days": "28 derniers jours",
+    "tasksOn": "tâches le",
+    "tasks": "tâches",
+    "completedDay": "Jour complété",
+    "privateInfo": {
+      "title": "Informations privées",
+      "description": "Visibles uniquement par vous (et les administrateurs)",
+      "userId": "ID utilisateur",
+      "email": "E-mail"
+    },
+    "privateProfileViewedByAdmin": "Profil privé consulté par un administrateur",
+    "editProfile": {
+      "title": "Modifier le profil",
+      "description": "Mettez à jour vos informations et choisissez une couleur d'accent.",
+      "displayName": "Nom d'affichage",
+      "country": "Pays",
+      "timezone": "Fuseau horaire",
+      "experienceYears": "Années d'expérience avec les plantes",
+      "bio": "Bio",
+      "accentColor": "Couleur d'accent",
+      "previewNote": "L'aperçu s'applique instantanément ; enregistré lors de l'enregistrement.",
+      "displayNameRequired": "Le nom d'affichage est requis",
+      "displayNameTaken": "Le nom d'affichage est déjà pris",
+      "failedToSendFriendRequest": "Échec de l'envoi de la demande d'ami",
+      "failedToAcceptFriendRequest": "Échec de l'acceptation de la demande d'ami"
+    }
   }
 }

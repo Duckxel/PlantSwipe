@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { ACCENT_OPTIONS, applyAccentByKey, saveAccentKey } from "@/lib/accent"
 import type { AccentKey } from "@/lib/accent"
+import { useTranslation } from "react-i18next"
 
 export type EditProfileValues = {
   display_name: string
@@ -24,6 +25,7 @@ export const EditProfileDialog: React.FC<{
   submitting?: boolean
   error?: string | null
 }> = ({ open, onOpenChange, initial, onSubmit, submitting, error }) => {
+  const { t } = useTranslation('common')
   const [values, setValues] = React.useState<EditProfileValues>(initial)
 
   React.useEffect(() => { setValues(initial) }, [initial])
@@ -46,33 +48,33 @@ export const EditProfileDialog: React.FC<{
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="rounded-2xl">
         <DialogHeader>
-          <DialogTitle>Edit profile</DialogTitle>
-          <DialogDescription>Update your info and choose an accent color.</DialogDescription>
+          <DialogTitle>{t('profile.editProfile.title')}</DialogTitle>
+          <DialogDescription>{t('profile.editProfile.description')}</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="grid gap-2">
-            <Label htmlFor="ep-name">Display name</Label>
+            <Label htmlFor="ep-name">{t('profile.editProfile.displayName')}</Label>
             <Input id="ep-name" value={values.display_name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => set('display_name', e.target.value)} />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="ep-country">Country</Label>
+            <Label htmlFor="ep-country">{t('profile.editProfile.country')}</Label>
             <Input id="ep-country" value={values.country} onChange={(e: React.ChangeEvent<HTMLInputElement>) => set('country', e.target.value)} />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="ep-timezone">Timezone</Label>
+            <Label htmlFor="ep-timezone">{t('profile.editProfile.timezone')}</Label>
             <Input id="ep-timezone" value={values.timezone} onChange={(e: React.ChangeEvent<HTMLInputElement>) => set('timezone', e.target.value)} />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="ep-exp">Years of experience with plants</Label>
+            <Label htmlFor="ep-exp">{t('profile.editProfile.experienceYears')}</Label>
             <Input id="ep-exp" type="number" inputMode="numeric" value={values.experience_years} onChange={(e: React.ChangeEvent<HTMLInputElement>) => set('experience_years', e.target.value)} />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="ep-bio">Bio</Label>
+            <Label htmlFor="ep-bio">{t('profile.editProfile.bio')}</Label>
             <Textarea id="ep-bio" value={values.bio} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => set('bio', e.target.value)} />
           </div>
 
           <div className="grid gap-2">
-            <div className="text-sm font-medium">Accent color</div>
+            <div className="text-sm font-medium">{t('profile.editProfile.accentColor')}</div>
             <div className="grid grid-cols-5 gap-2">
               {ACCENT_OPTIONS.map((opt) => {
                 const active = values.accent_key === opt.key
@@ -90,13 +92,13 @@ export const EditProfileDialog: React.FC<{
                 )
               })}
             </div>
-            <div className="text-xs opacity-60">Preview applies instantly; saved on Save.</div>
+            <div className="text-xs opacity-60">{t('profile.editProfile.previewNote')}</div>
           </div>
           {error && <div className="text-sm text-red-600">{error}</div>}
         </div>
         <DialogFooter>
-          <Button variant="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={submit} disabled={submitting}>Save</Button>
+          <Button variant="secondary" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
+          <Button onClick={submit} disabled={submitting}>{t('common.save')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
