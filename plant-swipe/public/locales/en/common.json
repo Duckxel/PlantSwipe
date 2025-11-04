@@ -170,6 +170,13 @@
     "tasks": "Tasks",
     "allGardens": "All gardens",
     "allDone": "All done",
+    "taskTypes": {
+      "water": "Water",
+      "fertilize": "Fertilize",
+      "harvest": "Harvest",
+      "cut": "Cut",
+      "custom": "Custom"
+    },
     "today": "Today",
     "markAllCompleted": "MARK ALL AS COMPLETED",
     "loadingTasks": "Loading tasks...",
@@ -179,6 +186,12 @@
     "completed": "Completed",
     "doneBy": "Done by",
     "someone": "Someone",
+    "activity": {
+      "completedTask": "has completed \"{{taskType}}\" Task on \"{{plantName}}\"",
+      "progressedTask": "has progressed \"{{taskType}}\" Task on \"{{plantName}}\" ({{completed}}/{{required}})",
+      "completedAllTasks": "completed all due tasks on \"{{plantName}}\"",
+      "plant": "Plant"
+    },
     "failedToLoad": "Failed to load gardens"
   },
   "createPlant": {

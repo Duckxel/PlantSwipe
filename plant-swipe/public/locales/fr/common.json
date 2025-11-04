@@ -170,6 +170,13 @@
     "tasks": "Tâches",
     "allGardens": "Tous les jardins",
     "allDone": "Tout terminé",
+    "taskTypes": {
+      "water": "Arroser",
+      "fertilize": "Fertiliser",
+      "harvest": "Récolter",
+      "cut": "Couper",
+      "custom": "Personnalisé"
+    },
     "today": "Aujourd'hui",
     "markAllCompleted": "TOUT MARQUER COMME TERMINÉ",
     "loadingTasks": "Chargement des tâches...",
@@ -179,6 +186,12 @@
     "completed": "Terminé",
     "doneBy": "Fait par",
     "someone": "Quelqu'un",
+    "activity": {
+      "completedTask": "a terminé la tâche \"{{taskType}}\" sur \"{{plantName}}\"",
+      "progressedTask": "a progressé la tâche \"{{taskType}}\" sur \"{{plantName}}\" ({{completed}}/{{required}})",
+      "completedAllTasks": "a terminé toutes les tâches dues sur \"{{plantName}}\"",
+      "plant": "Plante"
+    },
     "failedToLoad": "Échec du chargement des jardins"
   },
   "createPlant": {

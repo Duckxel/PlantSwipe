@@ -1246,17 +1246,17 @@ export const GardenDashboardPage: React.FC = () => {
       if (o && id) {
         const gp = (plants as any[]).find((p: any) => p.id === o.gardenPlantId)
         const type = (o as any).taskType || 'custom'
-        const label = String(type).toUpperCase()
+        const taskTypeLabel = t(`garden.taskTypes.${type}`)
         const plantName = gp?.nickname || gp?.plant?.name || null
         const newCount = Number(o.completedCount || 0) + inc
         const required = Number(o.requiredCount || 1)
         const done = newCount >= required
         const kind = done ? 'task_completed' : 'task_progressed'
         const msg = done
-          ? `has completed "${label}" Task on "${plantName || 'Plant'}"`
-          : `has progressed "${label}" Task on "${plantName || 'Plant'}" (${Math.min(newCount, required)}/${required})`
+          ? t('garden.activity.completedTask', { taskType: taskTypeLabel, plantName: plantName || t('garden.activity.plant') })
+          : t('garden.activity.progressedTask', { taskType: taskTypeLabel, plantName: plantName || t('garden.activity.plant'), completed: Math.min(newCount, required), required })
         const actorColorCss = getActorColorCss()
-        await logGardenActivity({ gardenId: id!, kind: kind as any, message: msg, plantName: plantName || null, taskName: label, actorColor: actorColorCss || null })
+        await logGardenActivity({ gardenId: id!, kind: kind as any, message: msg, plantName: plantName || null, taskName: taskTypeLabel, actorColor: actorColorCss || null })
         setActivityRev((r) => r + 1)
         // Broadcast update BEFORE reload to ensure other clients receive it
         await broadcastGardenUpdate({ gardenId: id, kind: 'tasks', actorId: user?.id ?? null }).catch((err) => {
@@ -1719,7 +1719,7 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
                       <div key={o.id} className={`flex items-center justify-between gap-3 text-sm rounded-xl border p-2 ${isDone ? 'bg-stone-50' : ''}`}>
                         <div className="flex items-center gap-2">
                           <span className={`h-6 w-6 flex items-center justify-center rounded-md border`}>{icon}</span>
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full ${badgeClass}`}>{String(tt).toUpperCase()}</span>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full ${badgeClass}`}>{t(`garden.taskTypes.${tt}`)}</span>
                         </div>
                         {!isDone ? (
                           <>
