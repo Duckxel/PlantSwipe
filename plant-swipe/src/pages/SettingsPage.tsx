@@ -472,17 +472,20 @@ export default function SettingsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex flex-wrap gap-2">
-            {SUPPORTED_LANGUAGES.map((lang) => (
-              <Button
-                key={lang}
-                onClick={() => changeLanguage(lang)}
-                variant={currentLang === lang ? "default" : "secondary"}
-                className={`rounded-2xl ${currentLang === lang ? "bg-black text-white hover:bg-black/90" : ""}`}
-              >
-                {lang === 'en' ? t('settings.language.english') : t('settings.language.french')}
-              </Button>
-            ))}
+          <div className="grid gap-2">
+            <Label htmlFor="language-select">{t('settings.language.selectLanguage')}</Label>
+            <select
+              id="language-select"
+              value={currentLang}
+              onChange={(e) => changeLanguage(e.target.value as typeof currentLang)}
+              className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
+            >
+              {SUPPORTED_LANGUAGES.map((lang) => (
+                <option key={lang} value={lang}>
+                  {lang === 'en' ? t('settings.language.english') : t('settings.language.french')}
+                </option>
+              ))}
+            </select>
           </div>
         </CardContent>
       </Card>

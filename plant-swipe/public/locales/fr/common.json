@@ -119,6 +119,7 @@
     "language": {
       "title": "Langue",
       "description": "Choisissez votre langue préférée pour l'interface.",
+      "selectLanguage": "Sélectionner la langue",
       "english": "Anglais",
       "french": "Français"
     }
