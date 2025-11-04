@@ -1,16 +1,22 @@
 import React from "react"
-import { useNavigate } from "react-router-dom"
+import { useLanguageNavigate } from "@/lib/i18nRouting"
+import { useChangeLanguage, useLanguage } from "@/lib/i18nRouting"
+import { useTranslation } from "react-i18next"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
-import { Settings, Mail, Lock, Trash2, AlertTriangle, Check, ChevronDown, ChevronUp } from "lucide-react"
+import { Settings, Mail, Lock, Trash2, AlertTriangle, Check, ChevronDown, ChevronUp, Globe } from "lucide-react"
+import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE } from "@/lib/i18n"
 
 export default function SettingsPage() {
   const { user, profile, refreshProfile, deleteAccount, signOut } = useAuth()
-  const navigate = useNavigate()
+  const navigate = useLanguageNavigate()
+  const changeLanguage = useChangeLanguage()
+  const currentLang = useLanguage()
+  const { t } = useTranslation('common')
 
   const [email, setEmail] = React.useState("")
   const [newEmail, setNewEmail] = React.useState("")
@@ -245,9 +251,9 @@ export default function SettingsPage() {
       <div className="mb-6">
         <h1 className="text-3xl font-semibold flex items-center gap-3">
           <Settings className="h-6 w-6" />
-          Account Settings
+          {t('settings.title')}
         </h1>
-        <p className="text-sm opacity-70 mt-2">Manage your account preferences and security</p>
+        <p className="text-sm opacity-70 mt-2">{t('settings.description')}</p>
       </div>
 
       {error && (
@@ -450,6 +456,33 @@ export default function SettingsPage() {
                 When enabled, other users will not be able to send you friend requests. This helps prevent unwanted invitations. Works for both public and private profiles.
               </p>
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Language Settings */}
+      <Card className="rounded-3xl mb-4">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Globe className="h-5 w-5" />
+            {t('settings.language.title')}
+          </CardTitle>
+          <CardDescription>
+            {t('settings.language.description')}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            {SUPPORTED_LANGUAGES.map((lang) => (
+              <Button
+                key={lang}
+                onClick={() => changeLanguage(lang)}
+                variant={currentLang === lang ? "default" : "secondary"}
+                className={`rounded-2xl ${currentLang === lang ? "bg-black text-white hover:bg-black/90" : ""}`}
+              >
+                {lang === 'en' ? t('settings.language.english') : t('settings.language.french')}
+              </Button>
+            ))}
           </div>
         </CardContent>
       </Card>

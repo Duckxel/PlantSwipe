@@ -1,5 +1,7 @@
 import React, { useMemo, useState, lazy, Suspense } from "react";
-import { Routes, Route, useLocation, useNavigate, Navigate } from "react-router-dom";
+import { Routes, Route, useLocation, useNavigate } from "react-router-dom";
+import { useLanguageNavigate, usePathWithoutLanguage } from "@/lib/i18nRouting";
+import { Navigate } from "@/components/i18n/Navigate";
 import { useMotionValue, animate } from "framer-motion";
 import { Search } from "lucide-react";
 // Sheet is used for plant info overlay
@@ -48,13 +50,14 @@ export default function PlantSwipe() {
   const location = useLocation()
   const state = location.state as { backgroundLocation?: any } | null
   const backgroundLocation = state?.backgroundLocation
-  const navigate = useNavigate()
+  const navigate = useLanguageNavigate()
+  const pathWithoutLang = usePathWithoutLanguage()
   const currentView: "discovery" | "gardens" | "search" | "profile" | "create" =
-    location.pathname === "/" ? "discovery" :
-    location.pathname.startsWith("/gardens") || location.pathname.startsWith('/garden/') ? "gardens" :
-    location.pathname.startsWith("/search") ? "search" :
-    location.pathname.startsWith("/profile") ? "profile" :
-    location.pathname.startsWith("/create") ? "create" : "discovery"
+    pathWithoutLang === "/" ? "discovery" :
+    pathWithoutLang.startsWith("/gardens") || pathWithoutLang.startsWith('/garden/') ? "gardens" :
+    pathWithoutLang.startsWith("/search") ? "search" :
+    pathWithoutLang.startsWith("/profile") ? "profile" :
+    pathWithoutLang.startsWith("/create") ? "create" : "discovery"
   const [authOpen, setAuthOpen] = useState(false)
   const [authMode, setAuthMode] = useState<"login" | "signup">("login")
   const [authError, setAuthError] = useState<string | null>(null)
@@ -805,7 +808,7 @@ export default function PlantSwipe() {
 }
 
 function PlantInfoOverlay() {
-  const navigate = useNavigate()
+  const navigate = useLanguageNavigate()
   return (
     <Sheet open onOpenChange={(o) => { if (!o) navigate(-1) }}>
       <SheetContent

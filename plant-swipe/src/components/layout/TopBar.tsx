@@ -1,6 +1,7 @@
 import React from "react"
 import { createPortal } from "react-dom"
-import { useNavigate, Link, useLocation } from "react-router-dom"
+import { useNavigate, useLocation } from "react-router-dom"
+import { Link } from "@/components/i18n/Link"
 import { Leaf, Sprout, Sparkles, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Plus, Shield, HeartHandshake, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
@@ -17,10 +18,12 @@ import { useAuth } from "@/context/AuthContext"
 import { userHasUnfinishedTasksToday } from "@/lib/gardens"
 import { addGardenBroadcastListener } from "@/lib/realtime"
 import { supabase } from "@/lib/supabaseClient"
+import { usePathWithoutLanguage, useLanguageNavigate } from "@/lib/i18nRouting"
 
 export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, displayName, onProfile, onLogout }) => {
-  const navigate = useNavigate()
+  const navigate = useLanguageNavigate()
   const location = useLocation()
+  const pathWithoutLang = usePathWithoutLanguage()
   const { profile } = useAuth()
   const [menuOpen, setMenuOpen] = React.useState(false)
   const anchorRef = React.useRef<HTMLDivElement | null>(null)
@@ -150,9 +153,9 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
         PLANT SWIPE
       </Link>
       <nav className="ml-4 hidden md:flex gap-2">
-        <NavPill to="/" isActive={location.pathname === '/'} icon={<Sparkles className="h-4 w-4" />} label="Discovery" />
-        <NavPill to="/gardens" isActive={location.pathname.startsWith('/gardens') || location.pathname.startsWith('/garden/')} icon={<Sprout className="h-4 w-4" />} label="Garden" showDot={hasUnfinished} />
-        <NavPill to="/search" isActive={location.pathname.startsWith('/search')} icon={<Search className="h-4 w-4" />} label="Encyclopedia" />
+        <NavPill to="/" isActive={pathWithoutLang === '/'} icon={<Sparkles className="h-4 w-4" />} label="Discovery" />
+        <NavPill to="/gardens" isActive={pathWithoutLang.startsWith('/gardens') || pathWithoutLang.startsWith('/garden/')} icon={<Sprout className="h-4 w-4" />} label="Garden" showDot={hasUnfinished} />
+        <NavPill to="/search" isActive={pathWithoutLang.startsWith('/search')} icon={<Search className="h-4 w-4" />} label="Encyclopedia" />
       </nav>
   <div className="ml-auto flex items-center gap-2 flex-wrap sm:flex-nowrap min-w-0 justify-end">
         {user && (

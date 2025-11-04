@@ -1,5 +1,7 @@
 import React from "react"
 import { NavLink, useLocation } from "react-router-dom"
+import { Link } from "@/components/i18n/Link"
+import { usePathWithoutLanguage } from "@/lib/i18nRouting"
 import { Sparkles, Sprout, Search, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/context/AuthContext"
@@ -13,6 +15,7 @@ interface MobileNavBarProps {
 
 export const MobileNavBar: React.FC<MobileNavBarProps> = ({ canCreate }) => {
   const location = useLocation()
+  const pathWithoutLang = usePathWithoutLanguage()
   const { user } = useAuth()
   const [hasUnfinished, setHasUnfinished] = React.useState(false)
 
@@ -90,10 +93,10 @@ export const MobileNavBar: React.FC<MobileNavBarProps> = ({ canCreate }) => {
     }
   }, [user?.id, refreshNotification])
   const currentView: "discovery" | "gardens" | "search" | "create" =
-    location.pathname === "/" ? "discovery" :
-    location.pathname.startsWith("/gardens") || location.pathname.startsWith('/garden/') ? "gardens" :
-    location.pathname.startsWith("/search") ? "search" :
-    location.pathname.startsWith("/create") ? "create" : "discovery"
+    pathWithoutLang === "/" ? "discovery" :
+    pathWithoutLang.startsWith("/gardens") || pathWithoutLang.startsWith('/garden/') ? "gardens" :
+    pathWithoutLang.startsWith("/search") ? "search" :
+    pathWithoutLang.startsWith("/create") ? "create" : "discovery"
 
   return (
     <nav
@@ -106,24 +109,24 @@ export const MobileNavBar: React.FC<MobileNavBarProps> = ({ canCreate }) => {
         {canCreate && (
           <div className="pointer-events-none absolute -top-6 left-1/2 -translate-x-1/2">
             <Button asChild variant={"default"} size={"icon"} className="pointer-events-auto h-14 w-14 rounded-2xl bg-black text-white shadow-xl ring-1 ring-black/10">
-              <NavLink to="/create" aria-label="Add Plant" className="no-underline flex items-center justify-center">
+              <Link to="/create" aria-label="Add Plant" className="no-underline flex items-center justify-center">
                 <Plus className="h-7 w-7" />
-              </NavLink>
+              </Link>
             </Button>
           </div>
         )}
         {/* Icon-only nav items */}
         <div className="flex items-center justify-around gap-8">
           <Button asChild variant={"secondary"} size={"icon"} className={currentView === 'discovery' ? "h-12 w-12 rounded-2xl bg-black text-white hover:bg-black/90" : "h-12 w-12 rounded-2xl bg-white text-black hover:bg-stone-100"}>
-            <NavLink to="/" end aria-label="Discover" className="no-underline flex items-center justify-center">
+            <Link to="/" end aria-label="Discover" className="no-underline flex items-center justify-center">
               <Sparkles className="h-6 w-6" />
-            </NavLink>
+            </Link>
           </Button>
           <div className="relative overflow-visible">
             <Button asChild variant={"secondary"} size={"icon"} className={currentView === 'gardens' ? "h-12 w-12 rounded-2xl bg-black text-white hover:bg-black/90" : "h-12 w-12 rounded-2xl bg-white text-black hover:bg-stone-100"}>
-              <NavLink to="/gardens" aria-label="Garden" className="no-underline flex items-center justify-center">
+              <Link to="/gardens" aria-label="Garden" className="no-underline flex items-center justify-center">
                 <Sprout className="h-6 w-6" />
-              </NavLink>
+              </Link>
             </Button>
             {hasUnfinished && (
               <span
@@ -133,9 +136,9 @@ export const MobileNavBar: React.FC<MobileNavBarProps> = ({ canCreate }) => {
             )}
           </div>
           <Button asChild variant={"secondary"} size={"icon"} className={currentView === 'search' ? "h-12 w-12 rounded-2xl bg-black text-white hover:bg-black/90" : "h-12 w-12 rounded-2xl bg-white text-black hover:bg-stone-100"}>
-            <NavLink to="/search" aria-label="Search" className="no-underline flex items-center justify-center">
+            <Link to="/search" aria-label="Search" className="no-underline flex items-center justify-center">
               <Search className="h-6 w-6" />
-            </NavLink>
+            </Link>
           </Button>
         </div>
       </div>
