@@ -1269,7 +1269,7 @@ export const GardenDashboardPage: React.FC = () => {
       // Also emit local event for immediate UI updates
       emitGardenRealtime('tasks')
     }
-  }, [todayTaskOccurrences, id, plants, getActorColorCss, load, loadHeavyForCurrentTab, emitGardenRealtime, user?.id])
+  }, [todayTaskOccurrences, id, plants, getActorColorCss, load, loadHeavyForCurrentTab, emitGardenRealtime, user?.id, t])
 
   return (
     <div className="max-w-6xl mx-auto mt-6 grid grid-cols-1 md:grid-cols-[220px_1fr] lg:grid-cols-[220px_1fr] gap-6">
@@ -1786,7 +1786,7 @@ function OverviewSection({ gardenId, activityRev, plants, membersCount, serverTo
       }
     })()
     return () => { ignore = true }
-  }, [gardenId, serverToday, activityRev])
+  }, [gardenId, serverToday, activityRev, t])
   const totalToDoToday = dailyStats.find(d => d.date === (serverToday || ''))?.due ?? 0
   const completedToday = dailyStats.find(d => d.date === (serverToday || ''))?.completed ?? 0
   const progressPct = totalToDoToday === 0 ? 100 : Math.min(100, Math.round((completedToday / totalToDoToday) * 100))
