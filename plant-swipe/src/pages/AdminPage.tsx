@@ -1157,13 +1157,38 @@ export const AdminPage: React.FC = () => {
       const resp = await fetch(`/api/admin/member-visits-series?userId=${encodeURIComponent(userId)}`, { headers, credentials: 'same-origin' })
       const data = await safeJson(resp)
       if (!resp.ok) throw new Error(data?.error || `HTTP ? ${resp.status}`)
-      const series = Array.isArray(data?.series30d) ? data.series30d.map((d: any) => ({ date: String(d.date), visits: Number(d.visits || 0) })) : []
+      const series = Array.isArray(data?.series30d) ? data.series30d.map((d: any) => {
+        // Ensure date is in YYYY-MM-DD format
+        let dateStr = String(d.date || '')
+        // If date is an ISO string, extract just the date part
+        if (dateStr.includes('T')) {
+          dateStr = dateStr.split('T')[0]
+        }
+        // If date is a Date object, convert to YYYY-MM-DD
+        if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          // Already in correct format
+        } else {
+          try {
+            const dateObj = new Date(dateStr)
+            if (!isNaN(dateObj.getTime())) {
+              dateStr = dateObj.toISOString().split('T')[0]
+            }
+          } catch {
+            // Keep original if parsing fails
+          }
+        }
+        return { date: dateStr, visits: Number(d.visits || 0) }
+      }) : []
       setMemberVisitsSeries(series)
       const total = Number(data?.total30d || 0)
       setMemberVisitsTotal30d(Number.isFinite(total) ? total : 0)
       setMemberVisitsUpdatedAt(Date.now())
-    } catch {
-      // keep last
+    } catch (e: unknown) {
+      // Log error and clear data on failure
+      console.error('Failed to load member visits series:', e)
+      setMemberVisitsSeries([])
+      setMemberVisitsTotal30d(0)
+      setMemberVisitsUpdatedAt(null)
     } finally {
       if (isInitial) setMemberVisitsLoading(false)
     }
@@ -2503,7 +2528,7 @@ export const AdminPage: React.FC = () => {
                     </div>
                     <div className="rounded-xl border p-3 text-center">
                       <div className="text-[11px] opacity-60">Last IP</div>
-                      <div className="text-base font-semibold tabular-nums truncate" title={memberData.lastIp || undefined}>{memberData.lastIp || '-'}</div>
+                      <div className="text-base font-semibold tabular-nums truncate" title={memberData.lastIp || (memberData.ips && memberData.ips.length > 0 ? memberData.ips[0] : undefined) || undefined}>{memberData.lastIp || (memberData.ips && memberData.ips.length > 0 ? memberData.ips[0] : null) || '-'}</div>
                     </div>
                     <div className="rounded-xl border p-3 text-center">
                       <div className="text-[11px] opacity-60">Mean RPM (5m)</div>

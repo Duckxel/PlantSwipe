@@ -1671,6 +1671,10 @@ app.get('/api/admin/member', async (req, res) => {
           ips = Array.isArray(arr) ? arr.map((r) => String(r.ip).replace(/\/[0-9]{1,3}$/, '')).filter(Boolean) : []
         }
       } catch {}
+      // Fallback: if lastIp is null but we have IPs, use the first one from distinct IPs list
+      if (!lastIp && Array.isArray(ips) && ips.length > 0) {
+        lastIp = ips[0]
+      }
 
       // Counts (best-effort via headers; requires Authorization)
       let visitsCount = undefined
@@ -1912,6 +1916,10 @@ app.get('/api/admin/member', async (req, res) => {
         lastReferrer = domain || (ref ? String(ref) : 'direct')
       }
     } catch {}
+    // Fallback: if lastIp is null but we have IPs, use the first one from distinct IPs list
+    if (!lastIp && Array.isArray(ips) && ips.length > 0) {
+      lastIp = ips[0]
+    }
     try {
       const [vcRows, uipRows] = await Promise.all([
         sql.unsafe(`select count(*)::int as c from ${VISITS_TABLE_SQL_IDENT} where user_id = $1`, [user.id]),
