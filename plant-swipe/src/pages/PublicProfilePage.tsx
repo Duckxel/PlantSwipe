@@ -9,6 +9,7 @@ import { EditProfileDialog, type EditProfileValues } from "@/components/profile/
 import { applyAccentByKey, saveAccentKey } from "@/lib/accent"
 import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import i18n from "@/lib/i18n"
 
 type PublicProfile = {
   id: string
@@ -569,7 +570,7 @@ export default function PublicProfilePage() {
                         )}
                         {pp.joined_at && (
                           <span>
-                            • {t('profile.joined')} {new Date(pp.joined_at).toLocaleDateString()}
+                            • {t('profile.joined')} {new Date(pp.joined_at).toLocaleDateString(i18n.language)}
                             {stats?.friendsCount != null && stats.friendsCount > 0 && (
                               <span className="ml-2">• {stats.friendsCount} {stats.friendsCount !== 1 ? t('profile.friends') : t('profile.friend')}</span>
                             )}
@@ -626,7 +627,7 @@ export default function PublicProfilePage() {
                           </Button>
                           {friendsSince && (
                             <div className="text-[10px] opacity-60">
-                              {t('profile.since')} {new Date(friendsSince).toLocaleDateString()}
+                              {t('profile.since')} {new Date(friendsSince).toLocaleDateString(i18n.language)}
                             </div>
                           )}
                         </div>
@@ -698,8 +699,8 @@ export default function PublicProfilePage() {
                         onMouseLeave={hideTooltip}
                         onFocus={(e: React.FocusEvent<HTMLDivElement>) => showTooltip(e.currentTarget as HTMLDivElement, item)}
                         onBlur={hideTooltip}
-                        title={`${item.value} ${t('profile.tasks')} ${t('profile.tasksOn')} ${new Date(item.date).toLocaleDateString()}`}
-                        aria-label={`${new Date(item.date).toLocaleDateString()}: ${item.value} ${t('profile.tasks')}${item.success ? `, ${t('profile.completedDay')}` : ''}`}
+                        title={`${item.value} ${t('profile.tasks')} ${t('profile.tasksOn')} ${new Date(item.date).toLocaleDateString(i18n.language)}`}
+                        aria-label={`${new Date(item.date).toLocaleDateString(i18n.language)}: ${item.value} ${t('profile.tasks')}${item.success ? `, ${t('profile.completedDay')}` : ''}`}
                       />
                     ))}
                     </div>
@@ -712,7 +713,7 @@ export default function PublicProfilePage() {
                     style={{ top: tooltip.top, left: tooltip.left, transform: 'translate(-50%, -100%)' }}
                   >
                     <div className="rounded-xl border bg-white shadow px-3 py-2">
-                      <div className="text-xs font-medium">{new Date(tooltip.date).toLocaleDateString()}</div>
+                      <div className="text-xs font-medium">{new Date(tooltip.date).toLocaleDateString(i18n.language)}</div>
                       <div className="text-[11px] opacity-70">{tooltip.value} {t('profile.tasks')}{tooltip.success ? ` • ${t('profile.completedDay')}` : ''}</div>
                     </div>
                   </div>,
