@@ -62,7 +62,7 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
     } finally {
       setLoading(false)
     }
-  }, [gardenPlantId])
+  }, [gardenPlantId, t])
 
   const emitTasksRealtime = React.useCallback(async (metadata?: Record<string, unknown>) => {
     await broadcastGardenUpdate({ gardenId, kind: 'tasks', metadata, actorId: user?.id ?? null }).catch(() => {})
@@ -194,7 +194,7 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
                       </span>
                       <span>{task.type === 'custom' ? (task.customName || t('garden.taskTypes.custom')) : t(`garden.taskTypes.${task.type}`)}</span>
                     </div>
-                    <div className="text-xs opacity-60">{renderTaskSummary(task)}</div>
+                    <div className="text-xs opacity-60">{renderTaskSummary(task, t)}</div>
                   </div>
                   <TaskRowMenu
                     onEdit={task.scheduleKind === 'repeat_pattern' ? () => {
@@ -288,8 +288,7 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
   )
 }
 
-function renderTaskSummary(task: GardenPlantTask): string {
-  const { t: translate } = useTranslation()
+function renderTaskSummary(task: GardenPlantTask, translate: ReturnType<typeof useTranslation>['t']): string {
   if (task.scheduleKind === 'one_time_date') {
     return translate('garden.taskDialog.taskSummary.oneTimeOn', { date: task.dueAt ? new Date(task.dueAt).toLocaleString() : '—' })
   }
