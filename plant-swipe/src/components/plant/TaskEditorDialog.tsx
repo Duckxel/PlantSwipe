@@ -169,7 +169,7 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
         onCloseAutoFocus={(e) => { /* allow */ }}
       >
         <DialogHeader>
-          <DialogTitle>{t('garden.taskDialog.tasks')}</DialogTitle>
+          <DialogTitle>{i18nInstance.t('garden.taskDialog.tasks', { ns: 'common' })}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <div className="flex items-center justify-between">
