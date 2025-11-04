@@ -25,7 +25,8 @@
     "create": "Create",
     "update": "Update",
     "result": "result",
-    "results": "results"
+    "results": "results",
+    "allRightsReserved": "All rights reserved"
   },
   "auth": {
     "login": "Log in",

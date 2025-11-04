@@ -25,7 +25,8 @@
     "create": "Créer",
     "update": "Mettre à jour",
     "result": "résultat",
-    "results": "résultats"
+    "results": "résultats",
+    "allRightsReserved": "Tous droits réservés"
   },
   "auth": {
     "login": "Se connecter",
