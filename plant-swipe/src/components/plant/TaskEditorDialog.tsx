@@ -58,7 +58,7 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
       rows.sort((a, b) => score(b) - score(a))
       setTasks(rows)
     } catch (e: any) {
-      setError(e?.message || t('garden.taskDialog.failedToLoad'))
+      setError(e?.message || t('gardenDashboard.taskDialog.failedToLoad'))
     } finally {
       setLoading(false)
     }
@@ -146,7 +146,7 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
       try {
         const task = tasks.find((x) => x.id === taskId)
         const label = task ? (task.type === 'custom' ? (task.customName || t('garden.taskTypes.custom')) : t(`garden.taskTypes.${task.type}`)) : t('garden.taskTypes.custom')
-        await logGardenActivity({ gardenId, kind: 'note' as any, message: t('garden.taskDialog.deletedTask', { taskName: label }), taskName: label, actorColor: null })
+        await logGardenActivity({ gardenId, kind: 'note' as any, message: t('gardenDashboard.taskDialog.deletedTask', { taskName: label }), taskName: label, actorColor: null })
         try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
       } catch {}
       // Broadcast update BEFORE reload to ensure other clients receive it
@@ -154,7 +154,7 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
       await load()
       if (onChanged) await onChanged()
     } catch (e: any) {
-      setError(e?.message || t('garden.taskDialog.failedToDelete'))
+      setError(e?.message || t('gardenDashboard.taskDialog.failedToDelete'))
     }
   }
 
@@ -169,17 +169,17 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
         onCloseAutoFocus={(e) => { /* allow */ }}
       >
         <DialogHeader>
-          <DialogTitle>{t('garden.taskDialog.tasks')}</DialogTitle>
+          <DialogTitle>{t('gardenDashboard.taskDialog.tasks')}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <div className="text-sm font-medium">{t('garden.taskDialog.existingTasks')}</div>
-            <Button className="rounded-2xl" onClick={() => setCreateOpen(true)}>{t('garden.taskDialog.addTask')}</Button>
+            <div className="text-sm font-medium">{t('gardenDashboard.taskDialog.existingTasks')}</div>
+            <Button className="rounded-2xl" onClick={() => setCreateOpen(true)}>{t('gardenDashboard.taskDialog.addTask')}</Button>
           </div>
           <div className="rounded-xl border">
-            {loading && <div className="p-3 text-sm opacity-60">{t('garden.taskDialog.loading')}</div>}
+            {loading && <div className="p-3 text-sm opacity-60">{t('gardenDashboard.taskDialog.loading')}</div>}
             {error && <div className="p-3 text-sm text-red-600">{error}</div>}
-            {!loading && tasks.length === 0 && <div className="p-3 text-sm opacity-60">{t('garden.taskDialog.noTasksYet')}</div>}
+            {!loading && tasks.length === 0 && <div className="p-3 text-sm opacity-60">{t('gardenDashboard.taskDialog.noTasksYet')}</div>}
             <div className="divide-y">
               {tasks.map(task => (
                 <div key={task.id} className="flex items-center justify-between px-3 py-2">
@@ -217,7 +217,7 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
             </div>
           </div>
           <div className="flex justify-end">
-            <Button variant="secondary" className="rounded-2xl" onClick={() => { resetEditor(); onOpenChange(false) }}>{t('garden.taskDialog.close')}</Button>
+            <Button variant="secondary" className="rounded-2xl" onClick={() => { resetEditor(); onOpenChange(false) }}>{t('gardenDashboard.taskDialog.close')}</Button>
           </div>
         </div>
       </DialogContent>
@@ -250,7 +250,7 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
               // Log activity so other clients refresh via SSE
               try {
                 const label = editingTask.type === 'custom' ? (editingTask.customName || t('garden.taskTypes.custom')) : t(`garden.taskTypes.${editingTask.type}`)
-                await logGardenActivity({ gardenId, kind: 'note' as any, message: t('garden.taskDialog.updatedTask', { taskName: label }), taskName: label, actorColor: null })
+                await logGardenActivity({ gardenId, kind: 'note' as any, message: t('gardenDashboard.taskDialog.updatedTask', { taskName: label }), taskName: label, actorColor: null })
                 try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
               } catch {}
               // Broadcast update BEFORE reload to ensure other clients receive it
@@ -259,7 +259,7 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
               await load()
               if (onChanged) await onChanged()
             } catch (e: any) {
-              setError(e?.message || t('garden.taskDialog.failedToUpdate'))
+              setError(e?.message || t('gardenDashboard.taskDialog.failedToUpdate'))
             }
           }
         }}
@@ -290,18 +290,18 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
 
 function renderTaskSummary(task: GardenPlantTask, translate: ReturnType<typeof useTranslation<'common'>>['t']): string {
   if (task.scheduleKind === 'one_time_date') {
-    return translate('garden.taskDialog.taskSummary.oneTimeOn', { date: task.dueAt ? new Date(task.dueAt).toLocaleString() : '—' })
+    return translate('gardenDashboard.taskDialog.taskSummary.oneTimeOn', { date: task.dueAt ? new Date(task.dueAt).toLocaleString() : '—' })
   }
   if (task.scheduleKind === 'one_time_duration') {
-    return translate('garden.taskDialog.taskSummary.oneTimeIn', { amount: task.intervalAmount, unit: task.intervalUnit })
+    return translate('gardenDashboard.taskDialog.taskSummary.oneTimeIn', { amount: task.intervalAmount, unit: task.intervalUnit })
   }
   if (task.scheduleKind === 'repeat_duration') {
-    return translate('garden.taskDialog.taskSummary.everyNeed', { amount: task.intervalAmount, unit: task.intervalUnit, required: task.requiredCount })
+    return translate('gardenDashboard.taskDialog.taskSummary.everyNeed', { amount: task.intervalAmount, unit: task.intervalUnit, required: task.requiredCount })
   }
   if (task.scheduleKind === 'repeat_pattern') {
-    if (task.period === 'week') return translate('garden.taskDialog.taskSummary.perWeek', { count: (task.weeklyDays || []).length })
-    if (task.period === 'month') return translate('garden.taskDialog.taskSummary.perMonth', { count: (task.monthlyNthWeekdays || task.monthlyDays || []).length })
-    return translate('garden.taskDialog.taskSummary.perYear', { count: (task.yearlyDays || []).length })
+    if (task.period === 'week') return translate('gardenDashboard.taskDialog.taskSummary.perWeek', { count: (task.weeklyDays || []).length })
+    if (task.period === 'month') return translate('gardenDashboard.taskDialog.taskSummary.perMonth', { count: (task.monthlyNthWeekdays || task.monthlyDays || []).length })
+    return translate('gardenDashboard.taskDialog.taskSummary.perYear', { count: (task.yearlyDays || []).length })
   }
   return ''
 }
@@ -369,9 +369,9 @@ function TaskRowMenu({ onEdit, onDelete }: { onEdit?: () => void; onDelete: () =
           className="absolute right-0 top-full mt-2 w-40 bg-white border rounded-xl shadow-lg z-[80]"
         >
           {onEdit && (
-            <button onClick={(e) => { e.stopPropagation(); setOpen(false); onEdit() }} className="w-full text-left px-3 py-2 rounded-t-xl hover:bg-stone-50">{t('garden.taskDialog.edit')}</button>
+            <button onClick={(e) => { e.stopPropagation(); setOpen(false); onEdit() }} className="w-full text-left px-3 py-2 rounded-t-xl hover:bg-stone-50">{t('gardenDashboard.taskDialog.edit')}</button>
           )}
-          <button onClick={(e) => { e.stopPropagation(); setOpen(false); onDelete() }} className={`w-full text-left px-3 py-2 ${onEdit ? '' : 'rounded-t-xl'} rounded-b-xl hover:bg-stone-50 text-red-600`}>{t('garden.taskDialog.delete')}</button>
+          <button onClick={(e) => { e.stopPropagation(); setOpen(false); onDelete() }} className={`w-full text-left px-3 py-2 ${onEdit ? '' : 'rounded-t-xl'} rounded-b-xl hover:bg-stone-50 text-red-600`}>{t('gardenDashboard.taskDialog.delete')}</button>
         </div>
       )}
     </div>
