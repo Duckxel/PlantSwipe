@@ -1,5 +1,6 @@
 import { Link as RouterLink, type LinkProps as RouterLinkProps } from 'react-router-dom'
 import { useLanguage, addLanguagePrefix, removeLanguagePrefix } from '@/lib/i18nRouting'
+import { useLocation } from 'react-router-dom'
 import { forwardRef } from 'react'
 
 /**
@@ -8,6 +9,7 @@ import { forwardRef } from 'react'
 export const Link = forwardRef<HTMLAnchorElement, RouterLinkProps>(
   ({ to, ...props }, ref) => {
     const currentLang = useLanguage()
+    const location = useLocation()
     
     // Convert 'to' to string if it's an object
     let toPath: string
@@ -17,6 +19,17 @@ export const Link = forwardRef<HTMLAnchorElement, RouterLinkProps>(
       toPath = to.pathname || '/'
     } else {
       toPath = '/'
+    }
+    
+    // Handle relative paths (paths that don't start with '/')
+    if (!toPath.startsWith('/')) {
+      // Resolve relative path against current location
+      const currentPathWithoutLang = removeLanguagePrefix(location.pathname)
+      // Remove trailing slash and add the relative path
+      const basePath = currentPathWithoutLang.endsWith('/') 
+        ? currentPathWithoutLang.slice(0, -1) 
+        : currentPathWithoutLang
+      toPath = basePath ? `${basePath}/${toPath}` : `/${toPath}`
     }
     
     // Remove any existing language prefix and add current language

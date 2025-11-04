@@ -11,6 +11,7 @@ import { addGardenBroadcastListener, broadcastGardenUpdate, type GardenRealtimeK
 import type { Garden } from '@/types/garden'
 import { useTranslation } from 'react-i18next'
 import { useLanguageNavigate } from '@/lib/i18nRouting'
+import { Link } from '@/components/i18n/Link'
 
 export const GardenListPage: React.FC = () => {
   const { user } = useAuth()
@@ -457,13 +458,13 @@ export const GardenListPage: React.FC = () => {
                       )
                     })()
                   )}
-                  <button onClick={() => navigate(`/garden/${g.id}`)} className="grid grid-cols-3 gap-0 w-full text-left">
+                  <Link to={`/garden/${g.id}`} className="grid grid-cols-3 gap-0 w-full text-left">
                     <div className="col-span-1 h-36 bg-cover bg-center rounded-l-2xl" style={{ backgroundImage: `url(${g.coverImageUrl || ''})` }} />
                     <div className="col-span-2 p-4">
                       <div className="font-medium">{g.name}</div>
                       <div className="text-xs opacity-60">{t('garden.created')} {new Date(g.createdAt).toLocaleDateString()}</div>
                     </div>
-                  </button>
+                  </Link>
                 </Card>
               ))}
             </div>

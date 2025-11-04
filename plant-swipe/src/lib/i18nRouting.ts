@@ -128,9 +128,22 @@ export function useLanguageNavigate() {
       resolvedPath = basePath ? `${basePath}/${to}` : `/${to}`
     }
     
-    // Handle string paths
+    // Handle string paths - always add language prefix for absolute paths
     const pathWithoutLang = removeLanguagePrefix(resolvedPath)
     const pathWithLang = addLanguagePrefix(pathWithoutLang, currentLang)
+    
+    // Debug logging (can be removed in production)
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[useLanguageNavigate]', {
+        from: location.pathname,
+        to,
+        resolvedPath,
+        currentLang,
+        pathWithoutLang,
+        pathWithLang
+      })
+    }
+    
     navigate(pathWithLang, options)
   }
 }
