@@ -6,9 +6,6 @@ on:
       - 'plant-swipe/public/locales/**/*.json'
       - 'plant-swipe/scripts/check-translations.js'
   push:
-    branches:
-      - main
-      - master
     paths:
       - 'plant-swipe/public/locales/**/*.json'
       - 'plant-swipe/scripts/check-translations.js'
