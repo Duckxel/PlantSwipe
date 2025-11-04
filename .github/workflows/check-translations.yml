@@ -2,10 +2,7 @@ name: Check Translation Consistency
 
 on:
   pull_request:
-    paths:
-      - 'plant-swipe/public/locales/**/*.json'
-      - 'plant-swipe/scripts/check-translations.js'
-  push:
+    types: [opened, synchronize, reopened]
     paths:
       - 'plant-swipe/public/locales/**/*.json'
       - 'plant-swipe/scripts/check-translations.js'
