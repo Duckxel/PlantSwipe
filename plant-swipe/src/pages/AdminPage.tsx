@@ -1140,6 +1140,7 @@ export const AdminPage: React.FC = () => {
   const [memberVisitsSeries, setMemberVisitsSeries] = React.useState<Array<{ date: string; visits: number }>>([])
   const [memberVisitsTotal30d, setMemberVisitsTotal30d] = React.useState<number>(0)
   const [memberVisitsUpdatedAt, setMemberVisitsUpdatedAt] = React.useState<number | null>(null)
+  const [memberVisitsWarning, setMemberVisitsWarning] = React.useState<string | null>(null)
 
   const loadMemberVisitsSeries = React.useCallback(async (userId: string, opts?: { initial?: boolean }) => {
     if (!userId) return
@@ -1170,6 +1171,7 @@ export const AdminPage: React.FC = () => {
         setMemberVisitsSeries([])
         setMemberVisitsTotal30d(0)
         setMemberVisitsUpdatedAt(null)
+        setMemberVisitsWarning(null)
         return
       }
       
@@ -1216,6 +1218,7 @@ export const AdminPage: React.FC = () => {
       const total = Number(data?.total30d || 0)
       setMemberVisitsTotal30d(Number.isFinite(total) ? total : 0)
       setMemberVisitsUpdatedAt(Date.now())
+      setMemberVisitsWarning(data?.warning || null)
     } catch (e: unknown) {
       // Log error but don't clear existing data if this is a refresh (only clear on initial load)
       console.error('Failed to load member visits series:', e)
@@ -1223,6 +1226,7 @@ export const AdminPage: React.FC = () => {
         setMemberVisitsSeries([])
         setMemberVisitsTotal30d(0)
         setMemberVisitsUpdatedAt(null)
+        setMemberVisitsWarning(null)
       }
     } finally {
       if (isInitial) setMemberVisitsLoading(false)
@@ -1376,6 +1380,7 @@ export const AdminPage: React.FC = () => {
       setMemberVisitsSeries([])
       setMemberVisitsTotal30d(0)
       setMemberVisitsUpdatedAt(null)
+      setMemberVisitsWarning(null)
     }
   }, [memberData?.user?.id, loadMemberVisitsSeries])
 
@@ -2661,7 +2666,7 @@ export const AdminPage: React.FC = () => {
                       {memberVisitsLoading ? (
                         <div className="text-sm opacity-60">Loading...</div>
                       ) : memberVisitsSeries.length === 0 ? (
-                        <div className="text-sm opacity-60">No data yet.</div>
+                        <div className="text-sm opacity-60">{memberVisitsWarning ? `Data unavailable: ${memberVisitsWarning}` : 'No data yet.'}</div>
                       ) : (
                         (() => {
                           const values = memberVisitsSeries.map(d => d.visits)

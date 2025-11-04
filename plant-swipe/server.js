@@ -2463,11 +2463,27 @@ app.get('/api/admin/member-visits-series', async (req, res) => {
           const total30d = series30d.reduce((a, b) => a + (b.visits || 0), 0)
           res.json({ ok: true, userId: targetUserId, series30d, total30d, via: 'supabase' })
           return
+        } else {
+          // Log REST fallback failure for debugging
+          const errorText = await resp.text().catch(() => 'Unknown error')
+          console.error(`REST fallback failed for user ${targetUserId}: ${resp.status} ${errorText}`)
         }
-      } catch {}
+      } catch (e) {
+        console.error('REST fallback exception:', e)
+      }
     }
 
-    res.status(500).json({ error: 'Database not configured' })
+    // If we get here, both SQL and REST failed
+    // Return empty data instead of error so the graph can still render (empty)
+    console.warn(`Could not load visits series for user ${targetUserId}: SQL and REST both failed`)
+    res.json({ 
+      ok: true, 
+      userId: targetUserId, 
+      series30d: [], 
+      total30d: 0, 
+      via: 'fallback',
+      warning: 'Could not load visits data from database'
+    })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to load member visits series' })
   }
