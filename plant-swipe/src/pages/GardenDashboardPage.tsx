@@ -4,7 +4,7 @@ import { useAuth } from '@/context/AuthContext'
 import { useParams, Routes, Route, useLocation } from 'react-router-dom'
 import { NavLink } from '@/components/i18n/NavLink'
 import { Navigate } from '@/components/i18n/Navigate'
-import { useLanguageNavigate } from '@/lib/i18nRouting'
+import { useLanguageNavigate, removeLanguagePrefix } from '@/lib/i18nRouting'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -37,8 +37,10 @@ export const GardenDashboardPage: React.FC = () => {
   const [tab, setTab] = React.useState<TabKey>('overview')
   // derive tab from URL path segment after /garden/:id
   React.useEffect(() => {
+    // Remove language prefix first to get the actual path
+    const pathWithoutLang = removeLanguagePrefix(location.pathname)
     const base = `/garden/${id || ''}`
-    const rest = location.pathname.startsWith(base) ? location.pathname.slice(base.length) : ''
+    const rest = pathWithoutLang.startsWith(base) ? pathWithoutLang.slice(base.length) : ''
     const seg = rest.replace(/^\//, '').split('/')[0] as TabKey
     setTab((seg as TabKey) || 'overview')
   }, [location.pathname, id])
