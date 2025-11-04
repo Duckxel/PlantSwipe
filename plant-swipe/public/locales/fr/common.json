@@ -169,6 +169,7 @@
     "created": "Créé",
     "tasks": "Tâches",
     "allGardens": "Tous les jardins",
+    "allDone": "Tout terminé",
     "today": "Aujourd'hui",
     "markAllCompleted": "TOUT MARQUER COMME TERMINÉ",
     "loadingTasks": "Chargement des tâches...",
@@ -177,6 +178,7 @@
     "completeAll": "Tout compléter",
     "completed": "Terminé",
     "doneBy": "Fait par",
+    "someone": "Quelqu'un",
     "failedToLoad": "Échec du chargement des jardins"
   },
   "createPlant": {

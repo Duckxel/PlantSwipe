@@ -169,6 +169,7 @@
     "created": "Created",
     "tasks": "Tasks",
     "allGardens": "All gardens",
+    "allDone": "All done",
     "today": "Today",
     "markAllCompleted": "MARK ALL AS COMPLETED",
     "loadingTasks": "Loading tasks...",
@@ -177,6 +178,7 @@
     "completeAll": "Complete all",
     "completed": "Completed",
     "doneBy": "Done by",
+    "someone": "Someone",
     "failedToLoad": "Failed to load gardens"
   },
   "createPlant": {

@@ -562,7 +562,7 @@ export const GardenListPage: React.FC = () => {
                                   </>
                                 ) : (
                                   <div className="text-xs opacity-70 truncate max-w-[50%]">
-                                    {completions.length === 0 ? t('garden.completed') : `${t('garden.doneBy')} ${completions.map(c => c.displayName || 'Someone').join(', ')}`}
+                                    {completions.length === 0 ? t('garden.completed') : `${t('garden.doneBy')} ${completions.map(c => c.displayName || t('garden.someone')).join(', ')}`}
                                   </div>
                                 )}
                               </div>
