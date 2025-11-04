@@ -6,6 +6,10 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { supabase } from "@/lib/supabaseClient"
 import type { Plant } from "@/types/plant"
+import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE, type SupportedLanguage } from "@/lib/i18n"
+import { translatePlantToAllLanguages } from "@/lib/deepl"
+import { savePlantTranslations, getPlantTranslation } from "@/lib/plantTranslations"
+import { Languages } from "lucide-react"
 
 interface EditPlantPageProps {
   onCancel: () => void
@@ -34,6 +38,10 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
   const [waterFreqPeriod, setWaterFreqPeriod] = React.useState<'week' | 'month' | 'year'>('week')
   const [waterFreqAmount, setWaterFreqAmount] = React.useState<number>(1)
   const [saving, setSaving] = React.useState(false)
+  
+  // Language selection for editing
+  const [editLanguage, setEditLanguage] = React.useState<SupportedLanguage>(DEFAULT_LANGUAGE)
+  const [translating, setTranslating] = React.useState(false)
 
   const toggleSeason = (s: Plant["seasons"][number]) => {
     setSeasons((cur: string[]) => (cur.includes(s) ? cur.filter((x: string) => x !== s) : [...cur, s]))
@@ -46,6 +54,7 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
       setLoading(true)
       setError(null)
       try {
+        // Load base plant data
         const { data, error: qerr } = await supabase
           .from('plants')
           .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_soil, care_difficulty, seeds_available, water_freq_period, water_freq_amount, water_freq_unit, water_freq_value')
@@ -54,16 +63,23 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
         if (qerr) throw new Error(qerr.message)
         if (!data) throw new Error('Plant not found')
         if (ignore) return
-        setName(String(data.name || ''))
-        setScientificName(String(data.scientific_name || ''))
+        
+        // Load translation for selected language
+        const { data: translation } = await getPlantTranslation(id, editLanguage)
+        
+        // Use translation data if available, otherwise use base data
+        setName(String(translation?.name || data.name || ''))
+        setScientificName(String(translation?.scientific_name || data.scientific_name || ''))
+        setMeaning(String(translation?.meaning || data.meaning || ''))
+        setDescription(String(translation?.description || data.description || ''))
+        setCareSoil(String(translation?.care_soil || data.care_soil || ''))
+        
+        // These fields are not translated (shared across languages)
         setColors(Array.isArray(data.colors) ? (data.colors as string[]).join(', ') : '')
         setSeasons(Array.isArray(data.seasons) ? (data.seasons as string[]) : [])
         setRarity((data.rarity || 'Common') as Plant['rarity'])
-        setMeaning(String(data.meaning || ''))
-        setDescription(String(data.description || ''))
         setImageUrl(String(data.image_url || ''))
         setCareSunlight((data.care_sunlight || 'Low') as Plant['care']['sunlight'])
-        setCareSoil(String(data.care_soil || ''))
         setCareDifficulty((data.care_difficulty || 'Easy') as Plant['care']['difficulty'])
         setSeedsAvailable(Boolean(data.seeds_available ?? false))
         const period = (data.water_freq_period || data.water_freq_unit || 'week') as 'week' | 'month' | 'year'
@@ -77,7 +93,50 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
       }
     })()
     return () => { ignore = true }
-  }, [id])
+  }, [id, editLanguage])
+
+  const handleTranslate = async () => {
+    if (!id) return
+    setTranslating(true)
+    setError(null)
+    setOk(null)
+    
+    try {
+      // Get current fields
+      const fields = {
+        name: name.trim() || undefined,
+        scientificName: scientificName.trim() || undefined,
+        meaning: meaning.trim() || undefined,
+        description: description.trim() || undefined,
+        careSoil: careSoil.trim() || undefined,
+      }
+      
+      // Translate to all languages
+      const allTranslations = await translatePlantToAllLanguages(fields, editLanguage)
+      
+      // Save all translations
+      const translationsToSave = Object.entries(allTranslations).map(([lang, translated]) => ({
+        plant_id: id,
+        language: lang as SupportedLanguage,
+        name: translated.name || name.trim(),
+        scientific_name: translated.scientificName || scientificName.trim() || null,
+        meaning: translated.meaning || null,
+        description: translated.description || null,
+        care_soil: translated.careSoil || null,
+      }))
+      
+      const { error: transErr } = await savePlantTranslations(translationsToSave)
+      if (transErr) {
+        throw transErr
+      }
+      
+      setOk('All fields translated and saved successfully!')
+    } catch (e: any) {
+      setError(e?.message || 'Translation failed')
+    } finally {
+      setTranslating(false)
+    }
+  }
 
   const save = async () => {
     if (!id) return
@@ -113,6 +172,24 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
         })
         .eq('id', id)
       if (uerr) { setError(uerr.message); return }
+      
+      // Save translation for the current edit language
+      const translation = {
+        plant_id: id,
+        language: editLanguage,
+        name: name.trim(),
+        scientific_name: scientificName.trim() || null,
+        meaning: meaning || null,
+        description: description || null,
+        care_soil: careSoil.trim() || null,
+      }
+      
+      const { error: transErr } = await savePlantTranslations([translation])
+      if (transErr) {
+        console.error('Failed to save translation:', transErr)
+        // Don't fail the whole save if translation save fails
+      }
+      
       setOk('Saved')
       onSaved && onSaved(id)
     } finally {
@@ -129,6 +206,40 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
             {error && <div className="text-sm text-red-600">{error}</div>}
             {!loading && !error && (
               <>
+              {/* Language Selection */}
+              <div className="grid gap-2 p-4 rounded-xl border bg-stone-50">
+                <Label htmlFor="edit-language" className="flex items-center gap-2">
+                  <Languages className="h-4 w-4" />
+                  Edit Language
+                </Label>
+                <div className="flex items-center gap-2">
+                  <select 
+                    id="edit-language" 
+                    className="flex h-9 flex-1 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm" 
+                    value={editLanguage} 
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEditLanguage(e.target.value as SupportedLanguage)}
+                  >
+                    {SUPPORTED_LANGUAGES.map((lang) => (
+                      <option key={lang} value={lang}>
+                        {lang === 'en' ? 'English' : 'Français'}
+                      </option>
+                    ))}
+                  </select>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={handleTranslate}
+                    disabled={translating || saving}
+                    className="rounded-2xl"
+                  >
+                    {translating ? 'Translating...' : 'Translate to All'}
+                  </Button>
+                </div>
+                <div className="text-xs opacity-60">
+                  Select the language you want to edit. Click "Translate to All" to translate current fields to all languages using DeepL.
+                </div>
+              </div>
+              
               <div className="grid gap-2">
                 <Label htmlFor="plant-name">Name</Label>
                 <Input id="plant-name" autoComplete="off" value={name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} />
@@ -213,9 +324,12 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
                 <Label htmlFor="plant-seeds">Seeds available</Label>
               </div>
               {ok && <div className="text-sm text-green-600">{ok}</div>}
+              {translating && <div className="text-sm text-blue-600">Translating all fields to all languages...</div>}
               <div className="flex gap-2 pt-2">
-                <Button variant="secondary" className="rounded-2xl" onClick={onCancel}>Cancel</Button>
-                <Button className="rounded-2xl" onClick={save} disabled={saving}>Save changes</Button>
+                <Button variant="secondary" className="rounded-2xl" onClick={onCancel} disabled={saving || translating}>Cancel</Button>
+                <Button className="rounded-2xl" onClick={save} disabled={saving || translating}>
+                  {saving ? 'Saving...' : 'Save changes'}
+                </Button>
               </div>
               </>
             )}

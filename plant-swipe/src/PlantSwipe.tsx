@@ -30,6 +30,8 @@ import RequireAdmin from "@/pages/RequireAdmin";
 import { FriendsPage } from "@/pages/FriendsPage";
 import SettingsPage from "@/pages/SettingsPage";
 import { supabase } from "@/lib/supabaseClient";
+import { useLanguage } from "@/lib/i18nRouting";
+import { loadPlantsWithTranslations } from "@/lib/plantTranslationLoader";
 
 // Lazy load heavy pages for code splitting
 const AdminPage = lazy(() => import("@/pages/AdminPage").then(module => ({ default: module.AdminPage })));
@@ -37,6 +39,7 @@ const AdminPage = lazy(() => import("@/pages/AdminPage").then(module => ({ defau
 // --- Main Component ---
 export default function PlantSwipe() {
   const { user, signIn, signUp, signOut, profile, refreshProfile } = useAuth()
+  const currentLang = useLanguage()
   const [query, setQuery] = useState("")
   const [seasonFilter, setSeasonFilter] = useState<string | null>(null)
   const [colorFilter, setColorFilter] = useState<string | null>(null)
@@ -122,56 +125,10 @@ export default function PlantSwipe() {
         throw new Error('Non-JSON response from /api/plants')
       }
     } catch (_apiErr: unknown) {
-      // Fallback to Supabase client if API unavailable
+      // Fallback to Supabase client with translations
       try {
-        const { data, error } = await supabase
-          .from('plants')
-          .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount')
-          .order('name', { ascending: true })
-        if (error) throw error
-        type PlantRow = {
-          id: string | number
-          name: string
-          scientific_name?: string | null
-          colors?: unknown
-          seasons?: unknown
-          rarity: Plant['rarity']
-          meaning?: string | null
-          description?: string | null
-          image_url?: string | null
-          care_sunlight?: Plant['care']['sunlight'] | null
-          care_water?: Plant['care']['water'] | null
-          care_soil?: string | null
-          care_difficulty?: Plant['care']['difficulty'] | null
-          seeds_available?: boolean | null
-          water_freq_unit?: Plant['waterFreqUnit'] | null
-          water_freq_value?: number | null
-          water_freq_period?: Plant['waterFreqPeriod'] | null
-          water_freq_amount?: number | null
-        }
-        const parsed: Plant[] = (Array.isArray(data) ? data : []).map((p: PlantRow) => ({
-          id: String(p.id),
-          name: String(p.name),
-          scientificName: String(p.scientific_name || ''),
-          colors: Array.isArray(p.colors as string[] | unknown[]) ? (p.colors as unknown[]).map((c) => String(c)) : [],
-          seasons: Array.isArray(p.seasons as string[] | unknown[]) ? (p.seasons as unknown[]).map((s) => String(s)) as Plant['seasons'] : [],
-          rarity: p.rarity as Plant['rarity'],
-          meaning: p.meaning ? String(p.meaning) : '',
-          description: p.description ? String(p.description) : '',
-          image: p.image_url || '',
-          care: {
-            sunlight: (p.care_sunlight || 'Low') as Plant['care']['sunlight'],
-            water: (p.care_water || 'Low') as Plant['care']['water'],
-            soil: String(p.care_soil || ''),
-            difficulty: (p.care_difficulty || 'Easy') as Plant['care']['difficulty']
-          },
-          seedsAvailable: Boolean(p.seeds_available ?? false),
-          waterFreqUnit: p.water_freq_unit || undefined,
-          waterFreqValue: p.water_freq_value ?? null,
-          waterFreqPeriod: p.water_freq_period || undefined,
-          waterFreqAmount: p.water_freq_amount ?? null
-        }))
-        setPlants(parsed)
+        const plantsWithTranslations = await loadPlantsWithTranslations(currentLang)
+        setPlants(plantsWithTranslations)
         ok = true
       } catch (e2: unknown) {
         const msg = e2 && typeof e2 === 'object' && 'message' in e2 ? String((e2 as { message?: unknown }).message || '') : ''
@@ -181,7 +138,7 @@ export default function PlantSwipe() {
       setLoading(false)
     }
     return ok
-  }, [])
+  }, [currentLang])
 
   React.useEffect(() => {
     loadPlants()

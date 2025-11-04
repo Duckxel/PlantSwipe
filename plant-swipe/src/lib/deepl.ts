@@ -2,13 +2,10 @@
  * DeepL Translation Service
  * 
  * Translates plant data between supported languages using DeepL API
- * Requires DEEPL_API_KEY environment variable
+ * Requires DEEPL_API_KEY environment variable on the server
  */
 
 import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE, type SupportedLanguage } from './i18n'
-
-const DEEPL_API_URL = 'https://api-free.deepl.com/v2/translate'
-// For production, use: 'https://api.deepl.com/v2/translate'
 
 export interface TranslationFields {
   name?: string
@@ -21,17 +18,7 @@ export interface TranslationFields {
 export interface TranslatedFields extends TranslationFields {}
 
 /**
- * Get DeepL API key from environment or return null
- */
-function getDeepLApiKey(): string | null {
-  // Check for API key in environment variables
-  // In browser, this would come from a server endpoint or config
-  // For now, we'll need to implement a server-side endpoint
-  return null
-}
-
-/**
- * Translate text using DeepL API
+ * Translate text using DeepL API via backend endpoint
  */
 async function translateText(text: string, targetLang: SupportedLanguage, sourceLang: SupportedLanguage = DEFAULT_LANGUAGE): Promise<string> {
   if (!text || text.trim() === '') return text
@@ -40,30 +27,30 @@ async function translateText(text: string, targetLang: SupportedLanguage, source
   if (sourceLang === targetLang) return text
 
   try {
-    // In a real implementation, this would call a backend endpoint
-    // that has the DeepL API key for security
+    // Call backend endpoint that has the DeepL API key
     const response = await fetch('/api/translate', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        text,
+        text: text.trim(),
         source_lang: sourceLang.toUpperCase(),
         target_lang: targetLang.toUpperCase(),
       }),
     })
 
     if (!response.ok) {
-      throw new Error(`Translation API error: ${response.statusText}`)
+      const errorData = await response.json().catch(() => ({ error: response.statusText }))
+      throw new Error(errorData.error || `Translation API error: ${response.statusText}`)
     }
 
     const data = await response.json()
     return data.translatedText || text
   } catch (error) {
     console.error('Translation error:', error)
-    // Return original text on error
-    return text
+    // Throw error so caller can handle it
+    throw error
   }
 }
 
@@ -81,7 +68,7 @@ export async function translatePlantFields(
 
   const translations: TranslatedFields = {}
 
-  // Translate each field if it exists
+  // Translate each field if it exists (each field is sent separately to DeepL)
   if (fields.name) {
     translations.name = await translateText(fields.name, targetLang, sourceLang)
   }

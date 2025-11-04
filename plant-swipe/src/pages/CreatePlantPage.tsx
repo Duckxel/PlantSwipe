@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { supabase } from "@/lib/supabaseClient"
 import type { Plant } from "@/types/plant"
-import { useLanguage } from "@/lib/i18nRouting"
 import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE, type SupportedLanguage } from "@/lib/i18n"
 import { translatePlantToAllLanguages } from "@/lib/deepl"
 import { savePlantTranslations } from "@/lib/plantTranslations"
@@ -40,7 +39,6 @@ interface CreatePlantPageProps {
 }
 
 export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSaved }) => {
-  const currentLang = useLanguage()
   const [name, setName] = React.useState("")
   const [scientificName, setScientificName] = React.useState("")
   const [colors, setColors] = React.useState<string>("")
@@ -125,7 +123,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
       })
       if (insErr) { setError(insErr.message); return }
       
-      // Save translation for the input language
+      // Always save translation for the input language (defaults to English in simplified mode)
       const translation = {
         plant_id: id,
         language: inputLanguage,
