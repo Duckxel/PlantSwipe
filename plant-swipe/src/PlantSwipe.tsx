@@ -32,6 +32,7 @@ import SettingsPage from "@/pages/SettingsPage";
 import { supabase } from "@/lib/supabaseClient";
 import { useLanguage } from "@/lib/i18nRouting";
 import { loadPlantsWithTranslations } from "@/lib/plantTranslationLoader";
+import { useTranslation } from "react-i18next";
 
 // Lazy load heavy pages for code splitting
 const AdminPage = lazy(() => import("@/pages/AdminPage").then(module => ({ default: module.AdminPage })));
@@ -40,6 +41,7 @@ const AdminPage = lazy(() => import("@/pages/AdminPage").then(module => ({ defau
 export default function PlantSwipe() {
   const { user, signIn, signUp, signOut, profile, refreshProfile } = useAuth()
   const currentLang = useLanguage()
+  const { t } = useTranslation('common')
   const [query, setQuery] = useState("")
   const [seasonFilter, setSeasonFilter] = useState<string | null>(null)
   const [colorFilter, setColorFilter] = useState<string | null>(null)
@@ -512,13 +514,13 @@ export default function PlantSwipe() {
         <aside className="mb-8 lg:mb-0 space-y-6 lg:sticky lg:top-4 self-start" aria-label="Filters">
           {/* Search */}
             <div>
-              <Label htmlFor="plant-search" className="sr-only">Search plants</Label>
+              <Label htmlFor="plant-search" className="sr-only">{t('common.search')}</Label>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-60 pointer-events-none" />
                 <Input
                   id="plant-search"
                   className="pl-9 md:pl-9"
-                  placeholder="Search name, meaning, color?"
+                  placeholder={t('plant.searchPlaceholder')}
                   value={query}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                     setQuery(e.target.value)
@@ -530,7 +532,7 @@ export default function PlantSwipe() {
 
             {/* Seasons */}
             <div>
-              <div className="text-xs font-medium mb-2 uppercase tracking-wide opacity-60">Season</div>
+              <div className="text-xs font-medium mb-2 uppercase tracking-wide opacity-60">{t('plant.season')}</div>
               <div className="flex flex-wrap gap-2">
                 {(["Spring", "Summer", "Autumn", "Winter"] as const).map((s) => (
                   <button
@@ -539,7 +541,7 @@ export default function PlantSwipe() {
                     className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${seasonFilter === s ? "bg-black text-white" : "bg-white hover:bg-stone-50"}`}
                     aria-pressed={seasonFilter === s}
                   >
-                    {s}
+                    {t(`plant.${s.toLowerCase()}`)}
                   </button>
                 ))}
               </div>
@@ -547,7 +549,7 @@ export default function PlantSwipe() {
 
             {/* Colors */}
             <div>
-              <div className="text-xs font-medium mb-2 uppercase tracking-wide opacity-60">Color</div>
+              <div className="text-xs font-medium mb-2 uppercase tracking-wide opacity-60">{t('plant.color')}</div>
               <div className="flex flex-wrap gap-2">
                 {["Red", "Pink", "Yellow", "White", "Purple", "Blue", "Orange", "Green"].map((c) => (
                   <button
@@ -556,7 +558,7 @@ export default function PlantSwipe() {
                     className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${colorFilter === c ? "bg-black text-white" : "bg-white hover:bg-stone-50"}`}
                     aria-pressed={colorFilter === c}
                   >
-                    {c}
+                    {t(`plant.${c.toLowerCase()}`)}
                   </button>
                 ))}
               </div>
@@ -571,7 +573,7 @@ export default function PlantSwipe() {
                 }`}
                 aria-pressed={onlySeeds}
               >
-                <span className="inline-block h-2 w-2 rounded-full bg-current" /> Seeds only
+                <span className="inline-block h-2 w-2 rounded-full bg-current" /> {t('plant.seedsOnly')}
               </button>
               <div className="h-2" />
               <button
@@ -581,7 +583,7 @@ export default function PlantSwipe() {
                 }`}
                 aria-pressed={onlyFavorites}
               >
-                <span className="inline-block h-2 w-2 rounded-full bg-current" /> Favorites only
+                <span className="inline-block h-2 w-2 rounded-full bg-current" /> {t('plant.favoritesOnly')}
               </button>
               <div className="h-2" />
               <button
@@ -591,31 +593,31 @@ export default function PlantSwipe() {
                 }`}
                 aria-pressed={favoritesFirst}
               >
-                Favorites first
+                {t('plant.favoritesFirst')}
               </button>
             </div>
 
             {/* Active filters summary */}
             <div className="text-xs space-y-1">
-              <div className="font-medium uppercase tracking-wide opacity-60">Active</div>
+              <div className="font-medium uppercase tracking-wide opacity-60">{t('plant.active')}</div>
               <div className="flex flex-wrap gap-2">
                 {seasonFilter && (
-                  <Badge variant="secondary" className="rounded-xl">{seasonFilter}</Badge>
+                  <Badge variant="secondary" className="rounded-xl">{t(`plant.${seasonFilter.toLowerCase()}`)}</Badge>
                 )}
                 {colorFilter && (
-                  <Badge variant="secondary" className="rounded-xl">{colorFilter}</Badge>
+                  <Badge variant="secondary" className="rounded-xl">{t(`plant.${colorFilter.toLowerCase()}`)}</Badge>
                 )}
                 {onlySeeds && (
-                  <Badge variant="secondary" className="rounded-xl">Seeds</Badge>
+                  <Badge variant="secondary" className="rounded-xl">{t('plant.seedsOnly')}</Badge>
                 )}
                 {onlyFavorites && (
-                  <Badge variant="secondary" className="rounded-xl">Favorites</Badge>
+                  <Badge variant="secondary" className="rounded-xl">{t('plant.favoritesOnly')}</Badge>
                 )}
                 {favoritesFirst && (
-                  <Badge variant="secondary" className="rounded-xl">Favs first</Badge>
+                  <Badge variant="secondary" className="rounded-xl">{t('plant.favoritesFirst')}</Badge>
                 )}
                 {!seasonFilter && !colorFilter && !onlySeeds && (
-                  <span className="opacity-50">None</span>
+                  <span className="opacity-50">{t('plant.none')}</span>
                 )}
               </div>
             </div>
@@ -624,13 +626,13 @@ export default function PlantSwipe() {
 
         {/* Main content area */}
         <main className="min-h-[60vh]" aria-live="polite">
-          {loading && <div className="p-8 text-center text-sm opacity-60">Loading from Supabase...</div>}
-          {loadError && <div className="p-8 text-center text-sm text-red-600">Supabase error: {loadError}</div>}
+          {loading && <div className="p-8 text-center text-sm opacity-60">{t('common.loading')}</div>}
+          {loadError && <div className="p-8 text-center text-sm text-red-600">{t('common.error')}: {loadError}</div>}
           {!loading && !loadError && (
             <>
               {plants.length === 0 && !query && !loadError && !loading && (
                 <div className="p-8 text-center text-sm opacity-60">
-                  No plants found. Insert rows into table "plants" (columns: id, name, scientific_name, colors[], seasons[], rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available) then refresh.
+                  {t('plant.noResults')}
                 </div>
               )}
               {/* Use background location for primary routes so overlays render on top */}
@@ -716,42 +718,42 @@ export default function PlantSwipe() {
       <Dialog open={authOpen && !user} onOpenChange={setAuthOpen}>
         <DialogContent className="rounded-2xl">
           <DialogHeader>
-            <DialogTitle>{authMode === 'login' ? 'Log in' : 'Create your account'}</DialogTitle>
+            <DialogTitle>{authMode === 'login' ? t('auth.login') : t('auth.signup')}</DialogTitle>
             <DialogDescription>
-              {authMode === 'login' ? 'Access favorites, notes, and seed wishlists.' : 'Start saving favorites, notes, and seed wishlists.'}
+              {authMode === 'login' ? t('auth.loginDescription') : t('auth.signupDescription')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             {authMode === 'signup' && (
               <div className="grid gap-2">
-                <Label htmlFor="name">Display name</Label>
-                <Input id="name" type="text" placeholder="Your name" value={authDisplayName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthDisplayName(e.target.value)} />
+                <Label htmlFor="name">{t('auth.displayName')}</Label>
+                <Input id="name" type="text" placeholder={t('auth.displayNamePlaceholder')} value={authDisplayName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthDisplayName(e.target.value)} />
               </div>
             )}
             
             <div className="grid gap-2">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" placeholder="you@example.com" value={authEmail} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthEmail(e.target.value)} disabled={authSubmitting} />
+              <Label htmlFor="email">{t('auth.email')}</Label>
+              <Input id="email" type="email" placeholder={t('auth.emailPlaceholder')} value={authEmail} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthEmail(e.target.value)} disabled={authSubmitting} />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" placeholder="Password" value={authPassword} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword(e.target.value)} disabled={authSubmitting} />
+              <Label htmlFor="password">{t('auth.password')}</Label>
+              <Input id="password" type="password" placeholder={t('auth.passwordPlaceholder')} value={authPassword} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword(e.target.value)} disabled={authSubmitting} />
             </div>
             {authMode === 'signup' && (
               <div className="grid gap-2">
-                <Label htmlFor="confirm">Confirm password</Label>
-                <Input id="confirm" type="password" placeholder="Confirm password" value={authPassword2} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword2(e.target.value)} disabled={authSubmitting} />
+                <Label htmlFor="confirm">{t('auth.confirmPassword')}</Label>
+                <Input id="confirm" type="password" placeholder={t('auth.confirmPasswordPlaceholder')} value={authPassword2} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword2(e.target.value)} disabled={authSubmitting} />
               </div>
             )}
             {authError && <div className="text-sm text-red-600">{authError}</div>}
             <Button className="w-full rounded-2xl" onClick={submitAuth}>
-              {authMode === 'login' ? 'Continue' : 'Create account'}
+              {authMode === 'login' ? t('auth.continue') : t('auth.createAccount')}
             </Button>
             <div className="text-center text-sm">
               {authMode === 'login' ? (
-                <button className="underline" onClick={() => setAuthMode('signup')}>No account? Sign up</button>
+                <button className="underline" onClick={() => setAuthMode('signup')}>{t('auth.noAccount')}</button>
               ) : (
-                <button className="underline" onClick={() => setAuthMode('login')}>Have an account? Log in</button>
+                <button className="underline" onClick={() => setAuthMode('login')}>{t('auth.haveAccount')}</button>
               )}
             </div>
           </div>

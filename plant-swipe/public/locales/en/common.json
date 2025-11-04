@@ -23,7 +23,9 @@
     "close": "Close",
     "edit": "Edit",
     "create": "Create",
-    "update": "Update"
+    "update": "Update",
+    "result": "result",
+    "results": "results"
   },
   "auth": {
     "login": "Log in",

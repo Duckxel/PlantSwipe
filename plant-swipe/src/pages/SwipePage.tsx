@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import type { Plant } from "@/types/plant"
 import { rarityTone, seasonBadge } from "@/constants/badges"
+import { useTranslation } from "react-i18next"
 
 interface SwipePageProps {
   current: Plant | undefined
@@ -22,6 +23,7 @@ interface SwipePageProps {
 }
 
 export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, x, y, onDragEnd, handleInfo, handlePass, handlePrevious, liked = false, onToggleLike }) => {
+  const { t } = useTranslation('common')
   // Keyboard navigation
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -125,7 +127,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, 
                       }}
                       onPointerDown={(e) => e.stopPropagation()}
                     >
-                      <ChevronLeft className="h-4 w-4 mr-1" /> Back
+                      <ChevronLeft className="h-4 w-4 mr-1" /> {t('plant.back')}
                     </Button>
                     <Button 
                       className="rounded-2xl flex-1" 
@@ -135,7 +137,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, 
                       }}
                       onPointerDown={(e) => e.stopPropagation()}
                     >
-                      Info <ChevronUp className="h-4 w-4 ml-1" />
+                      {t('plant.info')} <ChevronUp className="h-4 w-4 ml-1" />
                     </Button>
                     <Button 
                       variant="secondary" 
@@ -146,7 +148,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, 
                       }}
                       onPointerDown={(e) => e.stopPropagation()}
                     >
-                      Next <ChevronRight className="h-4 w-4 ml-1" />
+                      {t('plant.next')} <ChevronRight className="h-4 w-4 ml-1" />
                     </Button>
                   </div>
                 </CardContent>
@@ -161,18 +163,21 @@ export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, 
   )
 }
 
-const EmptyState = ({ onReset }: { onReset: () => void }) => (
+const EmptyState = ({ onReset }: { onReset: () => void }) => {
+  const { t } = useTranslation('common')
+  return (
   <Card className="rounded-3xl p-8 text-center">
     <CardHeader>
       <CardTitle className="flex items-center justify-center gap-2">
-        <Sparkles className="h-5 w-5" /> No results
+        <Sparkles className="h-5 w-5" /> {t('plant.noResults')}
       </CardTitle>
     </CardHeader>
     <CardContent className="space-y-4">
-      <p className="text-sm opacity-70 max-w-md mx-auto">Try another search or adjust your filters.</p>
+      <p className="text-sm opacity-70 max-w-md mx-auto">{t('plant.tryAnotherSearch')}</p>
       <div className="flex items-center justify-center gap-3">
-        <Button variant="secondary" className="rounded-2xl" onClick={onReset}>Reset</Button>
+        <Button variant="secondary" className="rounded-2xl" onClick={onReset}>{t('plant.reset')}</Button>
       </div>
     </CardContent>
   </Card>
-)
+  )
+}

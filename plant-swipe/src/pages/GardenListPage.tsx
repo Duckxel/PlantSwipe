@@ -10,10 +10,12 @@ import { supabase } from '@/lib/supabaseClient'
 import { addGardenBroadcastListener, broadcastGardenUpdate, type GardenRealtimeKind } from '@/lib/realtime'
 import type { Garden } from '@/types/garden'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 
 export const GardenListPage: React.FC = () => {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const { t } = useTranslation('common')
   const [gardens, setGardens] = React.useState<Garden[]>([])
   const [dragIndex, setDragIndex] = React.useState<number | null>(null)
   const [loading, setLoading] = React.useState(true)
@@ -72,11 +74,11 @@ export const GardenListPage: React.FC = () => {
       for (const [gid, prog] of entries) map[gid] = prog
       setProgressByGarden(map)
     } catch (e: any) {
-      setError(e?.message || 'Failed to load gardens')
+      setError(e?.message || t('garden.failedToLoad'))
     } finally {
       setLoading(false)
     }
-  }, [user?.id])
+  }, [user?.id, t])
 
   React.useEffect(() => { load() }, [load])
 
@@ -423,12 +425,12 @@ export const GardenListPage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-6">
         <div className="max-w-3xl mx-auto w-full">
           <div className="flex items-center justify-between mt-6 mb-4">
-            <h1 className="text-2xl font-semibold">Your Gardens</h1>
+            <h1 className="text-2xl font-semibold">{t('garden.yourGardens')}</h1>
             {user && (
-              <Button className="rounded-2xl" onClick={() => setOpen(true)}>Create Garden</Button>
+              <Button className="rounded-2xl" onClick={() => setOpen(true)}>{t('garden.create')}</Button>
             )}
           </div>
-          {loading && <div className="p-6 opacity-60 text-sm">Loading...</div>}
+          {loading && <div className="p-6 opacity-60 text-sm">{t('common.loading')}</div>}
           {error && <div className="p-6 text-sm text-red-600">{error}</div>}
           {!loading && !error && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -447,7 +449,7 @@ export const GardenListPage: React.FC = () => {
                       const done = due === 0 || completed >= due
                       const inProgress = due > 0 && completed > 0 && completed < due
                       const color = done ? 'bg-emerald-500 text-white' : inProgress ? 'bg-amber-500 text-white' : 'bg-red-500 text-white'
-                      const label = done ? 'All done' : `${completed} / ${due}`
+                      const label = done ? t('garden.allDone') : `${completed} / ${due}`
                       return (
                         <div className={`pointer-events-none absolute top-2 right-2 rounded-xl px-2 py-0.5 text-xs font-medium shadow ${color}`}>
                           {label}
@@ -459,7 +461,7 @@ export const GardenListPage: React.FC = () => {
                     <div className="col-span-1 h-36 bg-cover bg-center rounded-l-2xl" style={{ backgroundImage: `url(${g.coverImageUrl || ''})` }} />
                     <div className="col-span-2 p-4">
                       <div className="font-medium">{g.name}</div>
-                      <div className="text-xs opacity-60">Created {new Date(g.createdAt).toLocaleDateString()}</div>
+                      <div className="text-xs opacity-60">{t('garden.created')} {new Date(g.createdAt).toLocaleDateString()}</div>
                     </div>
                   </button>
                 </Card>
@@ -467,26 +469,26 @@ export const GardenListPage: React.FC = () => {
             </div>
           )}
           {!loading && !error && gardens.length === 0 && (
-            <div className="p-10 text-center opacity-60 text-sm">No gardens yet. Create your first garden to get started.</div>
+            <div className="p-10 text-center opacity-60 text-sm">{t('garden.noGardens')}. {t('garden.createFirst')}</div>
           )}
 
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogContent className="rounded-2xl">
               <DialogHeader>
-                <DialogTitle>Create a Garden</DialogTitle>
+                <DialogTitle>{t('garden.createGarden')}</DialogTitle>
               </DialogHeader>
               <div className="space-y-3">
                 <div className="grid gap-2">
-                  <label className="text-sm font-medium">Name</label>
-                  <Input value={name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} placeholder="My balcony garden" />
+                  <label className="text-sm font-medium">{t('garden.name')}</label>
+                  <Input value={name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} placeholder={t('garden.namePlaceholder')} />
                 </div>
                 <div className="grid gap-2">
-                  <label className="text-sm font-medium">Cover image URL (optional)</label>
-                  <Input value={imageUrl} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setImageUrl(e.target.value)} placeholder="https://?" />
+                  <label className="text-sm font-medium">{t('garden.coverImageUrl')}</label>
+                  <Input value={imageUrl} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setImageUrl(e.target.value)} placeholder={t('garden.coverImageUrlPlaceholder')} />
                 </div>
                 <div className="flex gap-2 justify-end pt-2">
-                  <Button variant="secondary" className="rounded-2xl" onClick={() => setOpen(false)}>Cancel</Button>
-                  <Button className="rounded-2xl" onClick={onCreate} disabled={!name.trim() || submitting}>{submitting ? 'Creating?' : 'Create'}</Button>
+                  <Button variant="secondary" className="rounded-2xl" onClick={() => setOpen(false)}>{t('common.cancel')}</Button>
+                  <Button className="rounded-2xl" onClick={onCreate} disabled={!name.trim() || submitting}>{submitting ? t('garden.creating') : t('common.create')}</Button>
                 </div>
               </div>
             </DialogContent>
@@ -496,31 +498,31 @@ export const GardenListPage: React.FC = () => {
         {/* Right-side Tasks sidebar for all gardens */}
         <aside className="mt-6 lg:mt-6 lg:border-l lg:border-stone-200 lg:pl-6">
           <div className="space-y-3">
-            <div className="text-lg font-semibold">Tasks</div>
+            <div className="text-lg font-semibold">{t('garden.tasks')}</div>
             <Card className="rounded-2xl p-4">
-              <div className="text-sm opacity-60 mb-2">All gardens</div>
+              <div className="text-sm opacity-60 mb-2">{t('garden.allGardens')}</div>
               <div className="h-2 bg-stone-200 rounded-full overflow-hidden">
                 <div className="h-2 bg-emerald-500" style={{ width: `${totalTasks === 0 ? 100 : Math.min(100, Math.round((totalDone / totalTasks) * 100))}%` }} />
               </div>
-              <div className="text-xs opacity-70 mt-1">Today: {totalDone} / {totalTasks}</div>
+              <div className="text-xs opacity-70 mt-1">{t('garden.today')}: {totalDone} / {totalTasks}</div>
             </Card>
             {totalTasks > totalDone && (
               <div>
-                <Button className="rounded-2xl w-full" onClick={onMarkAllCompleted}>MARK ALL AS COMPLETED</Button>
+                <Button className="rounded-2xl w-full" onClick={onMarkAllCompleted}>{t('garden.markAllCompleted')}</Button>
               </div>
             )}
             {loadingTasks && (
-              <Card className="rounded-2xl p-4 text-sm opacity-70">Loading tasks...</Card>
+              <Card className="rounded-2xl p-4 text-sm opacity-70">{t('garden.loadingTasks')}</Card>
             )}
             {!loadingTasks && gardensWithTasks.length === 0 && (
-              <Card className="rounded-2xl p-4 text-sm opacity-70">No tasks due today. 🌿</Card>
+              <Card className="rounded-2xl p-4 text-sm opacity-70">{t('garden.noTasksToday')}</Card>
             )}
             {!loadingTasks && gardensWithTasks.map((gw) => (
               <Card key={gw.gardenId} className="rounded-2xl p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="font-medium">{gw.gardenName}</div>
-                    <div className="text-xs opacity-70">{gw.done} / {gw.req} done</div>
+                    <div className="text-xs opacity-70">{gw.done} / {gw.req} {t('garden.done')}</div>
                   </div>
                 </div>
                 <div className="mt-3 space-y-3">
@@ -533,10 +535,10 @@ export const GardenListPage: React.FC = () => {
                         <div className="flex items-center justify-between">
                           <div className="text-sm font-medium">{gp.nickname || gp.plant?.name}</div>
                           {done < req && (
-                            <Button size="sm" className="rounded-xl" onClick={() => onCompleteAllForPlant(gp.id)}>Complete all</Button>
+                            <Button size="sm" className="rounded-xl" onClick={() => onCompleteAllForPlant(gp.id)}>{t('garden.completeAll')}</Button>
                           )}
                         </div>
-                        <div className="text-[11px] opacity-60">{done} / {req} done</div>
+                        <div className="text-[11px] opacity-60">{done} / {req} {t('garden.done')}</div>
                         <div className="mt-2 space-y-2">
                           {occs.map((o: any) => {
                             const tt = (o as any).taskType || 'custom'
@@ -559,7 +561,7 @@ export const GardenListPage: React.FC = () => {
                                   </>
                                 ) : (
                                   <div className="text-xs opacity-70 truncate max-w-[50%]">
-                                    {completions.length === 0 ? 'Completed' : `Done by ${completions.map(c => c.displayName || 'Someone').join(', ')}`}
+                                    {completions.length === 0 ? t('garden.completed') : `${t('garden.doneBy')} ${completions.map(c => c.displayName || 'Someone').join(', ')}`}
                                   </div>
                                 )}
                               </div>

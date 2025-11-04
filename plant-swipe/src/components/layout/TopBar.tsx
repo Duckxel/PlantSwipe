@@ -3,6 +3,7 @@ import { createPortal } from "react-dom"
 import { Link } from "@/components/i18n/Link"
 import { Leaf, Sprout, Sparkles, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Plus, Shield, HeartHandshake, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { useTranslation } from "react-i18next"
 
 interface TopBarProps {
   openLogin: () => void
@@ -23,6 +24,7 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
   const navigate = useLanguageNavigate()
   const pathWithoutLang = usePathWithoutLanguage()
   const { profile } = useAuth()
+  const { t } = useTranslation('common')
   const [menuOpen, setMenuOpen] = React.useState(false)
   const anchorRef = React.useRef<HTMLDivElement | null>(null)
   const menuRef = React.useRef<HTMLDivElement | null>(null)
@@ -137,7 +139,7 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
       try { supabase.removeChannel(channel) } catch {}
     }
   }, [user?.id, refreshNotification])
-  const label = displayName && displayName.trim().length > 0 ? displayName : 'Profile'
+  const label = displayName && displayName.trim().length > 0 ? displayName : t('common.profile')
   return (
     <header className="max-w-6xl mx-auto w-full flex items-center gap-3 px-2 overflow-x-hidden">
       <div className="h-10 w-10 rounded-2xl bg-green-200 flex items-center justify-center shadow">
@@ -148,26 +150,26 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
         className="text-2xl md:text-3xl font-semibold tracking-tight no-underline text-black hover:text-black visited:text-black active:text-black focus:text-black focus-visible:outline-none outline-none hover:opacity-90"
         style={{ WebkitTapHighlightColor: 'transparent' }}
       >
-        PLANT SWIPE
+        {t('common.appName')}
       </Link>
       <nav className="ml-4 hidden md:flex gap-2">
-        <NavPill to="/" isActive={pathWithoutLang === '/'} icon={<Sparkles className="h-4 w-4" />} label="Discovery" />
-        <NavPill to="/gardens" isActive={pathWithoutLang.startsWith('/gardens') || pathWithoutLang.startsWith('/garden/')} icon={<Sprout className="h-4 w-4" />} label="Garden" showDot={hasUnfinished} />
-        <NavPill to="/search" isActive={pathWithoutLang.startsWith('/search')} icon={<Search className="h-4 w-4" />} label="Encyclopedia" />
+        <NavPill to="/" isActive={pathWithoutLang === '/'} icon={<Sparkles className="h-4 w-4" />} label={t('common.discovery')} />
+        <NavPill to="/gardens" isActive={pathWithoutLang.startsWith('/gardens') || pathWithoutLang.startsWith('/garden/')} icon={<Sprout className="h-4 w-4" />} label={t('common.garden')} showDot={hasUnfinished} />
+        <NavPill to="/search" isActive={pathWithoutLang.startsWith('/search')} icon={<Search className="h-4 w-4" />} label={t('common.encyclopedia')} />
       </nav>
   <div className="ml-auto flex items-center gap-2 flex-wrap sm:flex-nowrap min-w-0 justify-end">
         {user && (
           <Button className="rounded-2xl" variant="default" onClick={() => navigate('/create')}>
-            <Plus className="h-4 w-4 sm:mr-2" /> <span className="hidden sm:inline">Add Plant</span>
+            <Plus className="h-4 w-4 sm:mr-2" /> <span className="hidden sm:inline">{t('common.addPlant')}</span>
           </Button>
         )}
         {!user ? (
           <>
             <Button className="rounded-2xl" variant="secondary" onClick={openSignup}>
-              <UserPlus className="h-4 w-4 mr-2" /> Sign up
+              <UserPlus className="h-4 w-4 mr-2" /> {t('common.signup')}
             </Button>
             <Button className="rounded-2xl" variant="default" onClick={openLogin}>
-              <LogIn className="h-4 w-4 mr-2" /> Login
+              <LogIn className="h-4 w-4 mr-2" /> {t('common.login')}
             </Button>
           </>
         ) : (
@@ -186,20 +188,20 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
               >
                 {profile?.is_admin && (
                   <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/admin') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 flex items-center gap-2" role="menuitem">
-                    <Shield className="h-4 w-4" /> Admin
+                    <Shield className="h-4 w-4" /> {t('common.admin')}
                   </button>
                 )}
                 <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); (onProfile ? onProfile : () => navigate('/profile'))() }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 flex items-center gap-2" role="menuitem">
-                  <User className="h-4 w-4" /> Profile
+                  <User className="h-4 w-4" /> {t('common.profile')}
                 </button>
                 <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/friends') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 flex items-center gap-2" role="menuitem">
-                  <HeartHandshake className="h-4 w-4" /> Friends
+                  <HeartHandshake className="h-4 w-4" /> {t('common.friends')}
                 </button>
                 <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/settings') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 flex items-center gap-2" role="menuitem">
-                  <Settings className="h-4 w-4" /> Settings
+                  <Settings className="h-4 w-4" /> {t('common.settings')}
                 </button>
                 <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); if (onLogout) { onLogout() } }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 text-red-600 flex items-center gap-2" role="menuitem">
-                  <LogOut className="h-4 w-4" /> Logout
+                  <LogOut className="h-4 w-4" /> {t('common.logout')}
                 </button>
               </div>,
               document.body
