@@ -207,5 +207,33 @@
     "translatingAllFields": "Translating all fields to all languages...",
     "saveChanges": "Save changes",
     "saving": "Saving..."
+  },
+  "plantInfo": {
+    "plantNotFound": "Plant not found.",
+    "failedToLoad": "Failed to load plant",
+    "sunlight": "Sunlight",
+    "water": "Water",
+    "difficulty": "Difficulty",
+    "overview": "Overview",
+    "meaning": "Meaning",
+    "careGuide": "Care Guide",
+    "sunlightLabel": "Sunlight:",
+    "waterLabel": "Water:",
+    "waterFrequency": "Water frequency:",
+    "soilLabel": "Soil:",
+    "difficultyLabel": "Difficulty:",
+    "seedsAvailable": "Seeds available:",
+    "yes": "Yes",
+    "no": "No",
+    "time": "time",
+    "times": "times",
+    "per": "per",
+    "like": "Like",
+    "unlike": "Unlike",
+    "deleteConfirm": "Delete this plant? This will fail if it is used in any garden.",
+    "day": "day",
+    "week": "week",
+    "month": "month",
+    "year": "year"
   }
 }
