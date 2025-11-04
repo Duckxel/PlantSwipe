@@ -14,7 +14,7 @@ import { useTranslation } from 'react-i18next'
 
 export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, onChanged }: { open: boolean; onOpenChange: (o: boolean) => void; gardenId: string; gardenPlantId: string; onChanged?: () => Promise<void> | void }) {
   const { user } = useAuth()
-  const { t } = useTranslation()
+  const { t } = useTranslation('common')
   const [tasks, setTasks] = React.useState<GardenPlantTask[]>([])
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -288,7 +288,7 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
   )
 }
 
-function renderTaskSummary(task: GardenPlantTask, translate: ReturnType<typeof useTranslation>['t']): string {
+function renderTaskSummary(task: GardenPlantTask, translate: ReturnType<typeof useTranslation<'common'>>['t']): string {
   if (task.scheduleKind === 'one_time_date') {
     return translate('garden.taskDialog.taskSummary.oneTimeOn', { date: task.dueAt ? new Date(task.dueAt).toLocaleString() : '—' })
   }
@@ -307,7 +307,7 @@ function renderTaskSummary(task: GardenPlantTask, translate: ReturnType<typeof u
 }
 
 function TaskRowMenu({ onEdit, onDelete }: { onEdit?: () => void; onDelete: () => void }) {
-  const { t } = useTranslation()
+  const { t } = useTranslation('common')
   const [open, setOpen] = React.useState(false)
   const buttonRef = React.useRef<HTMLButtonElement | null>(null)
   const menuRef = React.useRef<HTMLDivElement | null>(null)

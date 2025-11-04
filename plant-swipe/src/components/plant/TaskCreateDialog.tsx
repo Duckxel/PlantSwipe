@@ -25,7 +25,7 @@ export function TaskCreateDialog({
   onCreated?: () => Promise<void> | void
 }) {
   const { user } = useAuth()
-  const { t } = useTranslation()
+  const { t } = useTranslation('common')
   const [type, setType] = React.useState<TaskType>('water')
   const [customName, setCustomName] = React.useState('')
   const [emoji, setEmoji] = React.useState<string>('')
@@ -301,7 +301,7 @@ export function TaskCreateDialog({
 }
 
 function WeekPicker({ selectedNumbers, onToggleNumber, disabledMore }: { selectedNumbers: number[]; onToggleNumber: (uiIndex: number) => void; disabledMore: boolean }) {
-  const { t } = useTranslation()
+  const { t } = useTranslation('common')
   const display = [
     { label: t('garden.taskDialog.dayLabels.mon'), uiIndex: 0 },
     { label: t('garden.taskDialog.dayLabels.tue'), uiIndex: 1 },
@@ -334,7 +334,7 @@ function WeekPicker({ selectedNumbers, onToggleNumber, disabledMore }: { selecte
 }
 
 function MonthNthWeekdayPicker({ selected, onToggle, onToggleHeader, disabledMore }: { selected: string[]; onToggle: (weekIndex: number, uiIndex: number) => void; onToggleHeader: (uiIndex: number) => void; disabledMore: boolean }) {
-  const { t } = useTranslation()
+  const { t } = useTranslation('common')
   const labels = [
     t('garden.taskDialog.dayLabels.mon'),
     t('garden.taskDialog.dayLabels.tue'),
@@ -384,7 +384,7 @@ function MonthNthWeekdayPicker({ selected, onToggle, onToggleHeader, disabledMor
 }
 
 function YearMonthNthWeekdayPicker({ selected, onToggle, onToggleHeader, disabledMore }: { selected: string[]; onToggle: (monthIdx: number, weekIndex: number, uiIndex: number) => void; onToggleHeader: (monthIdx: number, uiIndex: number) => void; disabledMore: boolean }) {
-  const { t } = useTranslation()
+  const { t } = useTranslation('common')
   const months = [
     t('garden.taskDialog.monthNames.jan'),
     t('garden.taskDialog.monthNames.feb'),
