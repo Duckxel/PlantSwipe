@@ -420,7 +420,7 @@ export const GardenListPage: React.FC = () => {
 
   return (
     <div className="max-w-6xl mx-auto px-4 md:px-0">
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-6">
+      <div className={`grid grid-cols-1 ${user ? 'lg:grid-cols-[minmax(0,1fr)_360px]' : ''} gap-6`}>
         <div className="max-w-3xl mx-auto w-full">
           <div className="flex items-center justify-between mt-6 mb-4">
             <h1 className="text-2xl font-semibold">Your Gardens</h1>
@@ -467,7 +467,23 @@ export const GardenListPage: React.FC = () => {
             </div>
           )}
           {!loading && !error && gardens.length === 0 && (
-            <div className="p-10 text-center opacity-60 text-sm">No gardens yet. Create your first garden to get started.</div>
+            <div className="p-10 text-center">
+              {!user ? (
+                <Card className="rounded-2xl p-6 max-w-md mx-auto">
+                  <div className="space-y-4">
+                    <div className="text-lg font-semibold">Login Required</div>
+                    <div className="text-sm opacity-70">
+                      Please login to create your first garden and start tracking your plants.
+                    </div>
+                    <Button className="rounded-2xl w-full" onClick={() => navigate('/')}>
+                      Go to Login
+                    </Button>
+                  </div>
+                </Card>
+              ) : (
+                <div className="opacity-60 text-sm">No gardens yet. Create your first garden to get started.</div>
+              )}
+            </div>
           )}
 
           <Dialog open={open} onOpenChange={setOpen}>
@@ -493,10 +509,11 @@ export const GardenListPage: React.FC = () => {
           </Dialog>
         </div>
 
-        {/* Right-side Tasks sidebar for all gardens */}
-        <aside className="mt-6 lg:mt-6 lg:border-l lg:border-stone-200 lg:pl-6">
-          <div className="space-y-3">
-            <div className="text-lg font-semibold">Tasks</div>
+        {/* Right-side Tasks sidebar for all gardens - hidden for non-logged-in users */}
+        {user && (
+          <aside className="mt-6 lg:mt-6 lg:border-l lg:border-stone-200 lg:pl-6">
+            <div className="space-y-3">
+              <div className="text-lg font-semibold">Tasks</div>
             <Card className="rounded-2xl p-4">
               <div className="text-sm opacity-60 mb-2">All gardens</div>
               <div className="h-2 bg-stone-200 rounded-full overflow-hidden">
@@ -572,8 +589,9 @@ export const GardenListPage: React.FC = () => {
                 </div>
               </Card>
             ))}
-          </div>
-        </aside>
+            </div>
+          </aside>
+        )}
       </div>
     </div>
   )

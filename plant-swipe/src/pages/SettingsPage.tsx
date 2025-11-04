@@ -21,6 +21,7 @@ export default function SettingsPage() {
   const [disableFriendRequests, setDisableFriendRequests] = React.useState(false)
   const [emailExpanded, setEmailExpanded] = React.useState(false)
   const [passwordExpanded, setPasswordExpanded] = React.useState(false)
+  const [privacyExpanded, setPrivacyExpanded] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -247,7 +248,7 @@ export default function SettingsPage() {
           <Settings className="h-6 w-6" />
           Account Settings
         </h1>
-        <p className="text-sm opacity-70 mt-2">Manage your account preferences and security</p>
+        <p className="text-xs opacity-70 mt-2">Manage your account preferences and security</p>
       </div>
 
       {error && (
@@ -282,11 +283,11 @@ export default function SettingsPage() {
             )}
           </button>
           {!emailExpanded ? (
-            <CardDescription className="mt-2">
+            <CardDescription className="mt-2 text-xs">
               Email Address: <span className="font-medium">{email}</span>
             </CardDescription>
           ) : (
-            <CardDescription className="mt-2">
+            <CardDescription className="mt-2 text-xs">
               Change your email address. You'll need to confirm the new email.
             </CardDescription>
           )}
@@ -343,11 +344,11 @@ export default function SettingsPage() {
             )}
           </button>
           {!passwordExpanded ? (
-            <CardDescription className="mt-2">
+            <CardDescription className="mt-2 text-xs">
               Password: <span className="font-medium">••••••••</span>
             </CardDescription>
           ) : (
-            <CardDescription className="mt-2">
+            <CardDescription className="mt-2 text-xs">
               Change your password to keep your account secure.
             </CardDescription>
           )}
@@ -401,57 +402,70 @@ export default function SettingsPage() {
       {/* Privacy Settings */}
       <Card className="rounded-3xl mb-4">
         <CardHeader>
-          <CardTitle>Privacy Settings</CardTitle>
-          <CardDescription>Control who can see your profile and activity.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-start gap-3">
-            <input
-              type="checkbox"
-              id="private-profile"
-              checked={isPrivate}
-              onChange={handleTogglePrivacy}
-              disabled={saving}
-              className="mt-1 h-4 w-4 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
-            />
-            <div className="flex-1">
-              <Label htmlFor="private-profile" className="font-medium cursor-pointer">
-                Private Profile
-              </Label>
-              <p className="text-sm opacity-70 mt-1">
-                When enabled, only your friends can see your profile and activity. Your profile will be hidden from public searches.
-              </p>
+          <button
+            onClick={() => setPrivacyExpanded(!privacyExpanded)}
+            className="w-full text-left flex items-center justify-between gap-2 hover:opacity-80 transition-opacity"
+          >
+            <div className="flex items-center gap-2">
+              <Lock className="h-5 w-5" />
+              <CardTitle>Privacy</CardTitle>
             </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Friend Requests Settings */}
-      <Card className="rounded-3xl mb-4">
-        <CardHeader>
-          <CardTitle>Friend Requests</CardTitle>
-          <CardDescription>Control who can send you friend requests.</CardDescription>
+            {privacyExpanded ? (
+              <ChevronUp className="h-5 w-5 opacity-60" />
+            ) : (
+              <ChevronDown className="h-5 w-5 opacity-60" />
+            )}
+          </button>
+          {!privacyExpanded ? (
+            <CardDescription className="mt-2 text-xs">
+              Privacy: <span className="font-medium">{isPrivate ? 'Private' : 'Public'}</span> • Friend Requests: <span className="font-medium">{disableFriendRequests ? 'Disabled' : 'Enabled'}</span>
+            </CardDescription>
+          ) : (
+            <CardDescription className="mt-2 text-xs">
+              Control who can see your profile and send you friend requests.
+            </CardDescription>
+          )}
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-start gap-3">
-            <input
-              type="checkbox"
-              id="disable-friend-requests"
-              checked={disableFriendRequests}
-              onChange={handleToggleFriendRequests}
-              disabled={saving}
-              className="mt-1 h-4 w-4 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
-            />
-            <div className="flex-1">
-              <Label htmlFor="disable-friend-requests" className="font-medium cursor-pointer">
-                Disable Friend Requests
-              </Label>
-              <p className="text-sm opacity-70 mt-1">
-                When enabled, other users will not be able to send you friend requests. This helps prevent unwanted invitations. Works for both public and private profiles.
-              </p>
+        {privacyExpanded && (
+          <CardContent className="space-y-4">
+            <div className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                id="private-profile"
+                checked={isPrivate}
+                onChange={handleTogglePrivacy}
+                disabled={saving}
+                className="mt-1 h-4 w-4 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
+              />
+              <div className="flex-1">
+                <Label htmlFor="private-profile" className="font-medium cursor-pointer">
+                  Private Profile
+                </Label>
+                <p className="text-xs opacity-70 mt-1">
+                  When enabled, only your friends can see your profile and activity. Your profile will be hidden from public searches.
+                </p>
+              </div>
             </div>
-          </div>
-        </CardContent>
+            <div className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                id="disable-friend-requests"
+                checked={disableFriendRequests}
+                onChange={handleToggleFriendRequests}
+                disabled={saving}
+                className="mt-1 h-4 w-4 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
+              />
+              <div className="flex-1">
+                <Label htmlFor="disable-friend-requests" className="font-medium cursor-pointer">
+                  Disable Friend Requests
+                </Label>
+                <p className="text-xs opacity-70 mt-1">
+                  When enabled, other users will not be able to send you friend requests. This helps prevent unwanted invitations. Works for both public and private profiles.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        )}
       </Card>
 
       {/* Danger Zone */}
@@ -461,14 +475,14 @@ export default function SettingsPage() {
             <AlertTriangle className="h-5 w-5" />
             Danger Zone
           </CardTitle>
-          <CardDescription className="text-red-600/80">
+          <CardDescription className="text-red-600/80 text-xs">
             Irreversible and destructive actions. Please proceed with caution.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {!deleteConfirm ? (
             <>
-              <p className="text-sm opacity-90">
+              <p className="text-xs opacity-90">
                 Once you delete your account, there is no going back. This will permanently delete your account, profile, gardens, and all associated data.
               </p>
               <Button
@@ -483,11 +497,11 @@ export default function SettingsPage() {
           ) : (
             <>
               <div className="p-4 rounded-xl bg-white border border-red-200 space-y-4">
-                <p className="text-sm font-medium text-red-700">
+                <p className="text-xs font-medium text-red-700">
                   Are you absolutely sure? This action cannot be undone.
                 </p>
                 <div className="grid gap-2">
-                  <Label htmlFor="confirm-delete" className="text-sm">
+                  <Label htmlFor="confirm-delete" className="text-xs">
                     Type <span className="font-mono font-semibold">DELETE</span> to confirm:
                   </Label>
                   <Input
