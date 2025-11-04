@@ -1786,7 +1786,7 @@ function OverviewSection({ gardenId, activityRev, plants, membersCount, serverTo
       }
     })()
     return () => { ignore = true }
-  }, [gardenId, serverToday, activityRev, t])
+  }, [gardenId, serverToday, activityRev])
   const totalToDoToday = dailyStats.find(d => d.date === (serverToday || ''))?.due ?? 0
   const completedToday = dailyStats.find(d => d.date === (serverToday || ''))?.completed ?? 0
   const progressPct = totalToDoToday === 0 ? 100 : Math.min(100, Math.round((completedToday / totalToDoToday) * 100))
