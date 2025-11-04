@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
-import { Settings, Mail, Lock, Trash2, AlertTriangle, Check, ChevronDown, ChevronUp } from "lucide-react"
+import { Settings, Mail, Lock, Trash2, AlertTriangle, Check, ChevronDown, ChevronUp, Shield } from "lucide-react"
 
 export default function SettingsPage() {
   const { user, profile, refreshProfile, deleteAccount, signOut } = useAuth()
@@ -21,6 +21,7 @@ export default function SettingsPage() {
   const [disableFriendRequests, setDisableFriendRequests] = React.useState(false)
   const [emailExpanded, setEmailExpanded] = React.useState(false)
   const [passwordExpanded, setPasswordExpanded] = React.useState(false)
+  const [privacyExpanded, setPrivacyExpanded] = React.useState(true)
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -242,13 +243,13 @@ export default function SettingsPage() {
 
   return (
     <div className="max-w-4xl mx-auto mt-8 px-4 md:px-0">
-      <div className="mb-6">
-        <h1 className="text-3xl font-semibold flex items-center gap-3">
-          <Settings className="h-6 w-6" />
-          Account Settings
-        </h1>
-        <p className="text-sm opacity-70 mt-2">Manage your account preferences and security</p>
-      </div>
+        <div className="mb-6">
+          <h1 className="text-3xl font-semibold flex items-center gap-3">
+            <Settings className="h-6 w-6" />
+            Account Settings
+          </h1>
+          <p className="text-xs opacity-70 mt-2">Manage your account preferences and security</p>
+        </div>
 
       {error && (
         <div className="mb-4 p-4 rounded-2xl bg-red-50 border border-red-200 text-red-700 flex items-start gap-2">
@@ -281,15 +282,15 @@ export default function SettingsPage() {
               <ChevronDown className="h-5 w-5 opacity-60" />
             )}
           </button>
-          {!emailExpanded ? (
-            <CardDescription className="mt-2">
-              Email Address: <span className="font-medium">{email}</span>
-            </CardDescription>
-          ) : (
-            <CardDescription className="mt-2">
-              Change your email address. You'll need to confirm the new email.
-            </CardDescription>
-          )}
+            {!emailExpanded ? (
+              <CardDescription className="mt-2 text-xs opacity-70">
+                Email Address: <span className="font-medium">{email}</span>
+              </CardDescription>
+            ) : (
+              <CardDescription className="mt-2 text-xs opacity-70">
+                Change your email address. You'll need to confirm the new email.
+              </CardDescription>
+            )}
         </CardHeader>
         {emailExpanded && (
           <CardContent className="space-y-4">
@@ -342,15 +343,15 @@ export default function SettingsPage() {
               <ChevronDown className="h-5 w-5 opacity-60" />
             )}
           </button>
-          {!passwordExpanded ? (
-            <CardDescription className="mt-2">
-              Password: <span className="font-medium">••••••••</span>
-            </CardDescription>
-          ) : (
-            <CardDescription className="mt-2">
-              Change your password to keep your account secure.
-            </CardDescription>
-          )}
+            {!passwordExpanded ? (
+              <CardDescription className="mt-2 text-xs opacity-70">
+                Password: <span className="font-medium">••••••••</span>
+              </CardDescription>
+            ) : (
+              <CardDescription className="mt-2 text-xs opacity-70">
+                Change your password to keep your account secure.
+              </CardDescription>
+            )}
         </CardHeader>
         {passwordExpanded && (
           <CardContent className="space-y-4">
@@ -398,135 +399,142 @@ export default function SettingsPage() {
         )}
       </Card>
 
-      {/* Privacy Settings */}
-      <Card className="rounded-3xl mb-4">
-        <CardHeader>
-          <CardTitle>Privacy Settings</CardTitle>
-          <CardDescription>Control who can see your profile and activity.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-start gap-3">
-            <input
-              type="checkbox"
-              id="private-profile"
-              checked={isPrivate}
-              onChange={handleTogglePrivacy}
-              disabled={saving}
-              className="mt-1 h-4 w-4 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
-            />
-            <div className="flex-1">
-              <Label htmlFor="private-profile" className="font-medium cursor-pointer">
-                Private Profile
-              </Label>
-              <p className="text-sm opacity-70 mt-1">
-                When enabled, only your friends can see your profile and activity. Your profile will be hidden from public searches.
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Friend Requests Settings */}
-      <Card className="rounded-3xl mb-4">
-        <CardHeader>
-          <CardTitle>Friend Requests</CardTitle>
-          <CardDescription>Control who can send you friend requests.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-start gap-3">
-            <input
-              type="checkbox"
-              id="disable-friend-requests"
-              checked={disableFriendRequests}
-              onChange={handleToggleFriendRequests}
-              disabled={saving}
-              className="mt-1 h-4 w-4 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
-            />
-            <div className="flex-1">
-              <Label htmlFor="disable-friend-requests" className="font-medium cursor-pointer">
-                Disable Friend Requests
-              </Label>
-              <p className="text-sm opacity-70 mt-1">
-                When enabled, other users will not be able to send you friend requests. This helps prevent unwanted invitations. Works for both public and private profiles.
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Danger Zone */}
-      <Card className="rounded-3xl border-red-200 bg-red-50/50">
-        <CardHeader>
-          <CardTitle className="text-red-700 flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5" />
-            Danger Zone
-          </CardTitle>
-          <CardDescription className="text-red-600/80">
-            Irreversible and destructive actions. Please proceed with caution.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {!deleteConfirm ? (
-            <>
-              <p className="text-sm opacity-90">
-                Once you delete your account, there is no going back. This will permanently delete your account, profile, gardens, and all associated data.
-              </p>
-              <Button
-                onClick={() => setDeleteConfirm(true)}
-                variant="destructive"
-                className="rounded-2xl"
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Delete Account
-              </Button>
-            </>
-          ) : (
-            <>
-              <div className="p-4 rounded-xl bg-white border border-red-200 space-y-4">
-                <p className="text-sm font-medium text-red-700">
-                  Are you absolutely sure? This action cannot be undone.
-                </p>
-                <div className="grid gap-2">
-                  <Label htmlFor="confirm-delete" className="text-sm">
-                    Type <span className="font-mono font-semibold">DELETE</span> to confirm:
+        {/* Privacy */}
+        <Card className="rounded-3xl mb-4">
+          <CardHeader>
+            <button
+              onClick={() => setPrivacyExpanded(!privacyExpanded)}
+              className="w-full text-left flex items-center justify-between gap-2 hover:opacity-80 transition-opacity"
+            >
+              <div className="flex items-center gap-2">
+                <Shield className="h-5 w-5" />
+                <CardTitle>Privacy</CardTitle>
+              </div>
+              {privacyExpanded ? (
+                <ChevronUp className="h-5 w-5 opacity-60" />
+              ) : (
+                <ChevronDown className="h-5 w-5 opacity-60" />
+              )}
+            </button>
+            <CardDescription className="mt-2 text-xs opacity-70">
+              Manage your profile visibility and friend request preferences.
+            </CardDescription>
+          </CardHeader>
+          {privacyExpanded && (
+            <CardContent className="space-y-4">
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  id="private-profile"
+                  checked={isPrivate}
+                  onChange={handleTogglePrivacy}
+                  disabled={saving}
+                  className="mt-1 h-4 w-4 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
+                />
+                <div className="flex-1">
+                  <Label htmlFor="private-profile" className="font-medium cursor-pointer">
+                    Private Profile
                   </Label>
-                  <Input
-                    id="confirm-delete"
-                    type="text"
-                    placeholder="DELETE"
-                    value={deleteConfirmText}
-                    onChange={(e) => setDeleteConfirmText(e.target.value)}
-                    disabled={deleting}
-                    className="font-mono"
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    onClick={handleDeleteAccount}
-                    variant="destructive"
-                    disabled={deleting || deleteConfirmText !== "DELETE"}
-                    className="rounded-2xl"
-                  >
-                    {deleting ? "Deleting..." : "Yes, Delete My Account"}
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      setDeleteConfirm(false)
-                      setDeleteConfirmText("")
-                      setError(null)
-                    }}
-                    variant="secondary"
-                    disabled={deleting}
-                    className="rounded-2xl"
-                  >
-                    Cancel
-                  </Button>
+                  <p className="text-xs opacity-70 mt-1">
+                    When enabled, only your friends can see your profile and activity. Your profile will be hidden from public searches.
+                  </p>
                 </div>
               </div>
-            </>
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  id="disable-friend-requests"
+                  checked={disableFriendRequests}
+                  onChange={handleToggleFriendRequests}
+                  disabled={saving}
+                  className="mt-1 h-4 w-4 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
+                />
+                <div className="flex-1">
+                  <Label htmlFor="disable-friend-requests" className="font-medium cursor-pointer">
+                    Disable Friend Requests
+                  </Label>
+                  <p className="text-xs opacity-70 mt-1">
+                    When enabled, other users will not be able to send you friend requests. This helps prevent unwanted invitations. Works for both public and private profiles.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
           )}
-        </CardContent>
-      </Card>
+        </Card>
+
+        {/* Danger Zone */}
+        <Card className="rounded-3xl border-red-200 bg-red-50/50">
+          <CardHeader>
+            <CardTitle className="text-red-700 flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5" />
+              Danger Zone
+            </CardTitle>
+            <CardDescription className="text-xs text-red-600/80">
+              Irreversible and destructive actions. Please proceed with caution.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!deleteConfirm ? (
+              <>
+                <p className="text-xs opacity-90">
+                  Once you delete your account, there is no going back. This will permanently delete your account, profile, gardens, and all associated data.
+                </p>
+                <Button
+                  onClick={() => setDeleteConfirm(true)}
+                  variant="destructive"
+                  className="rounded-2xl"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete Account
+                </Button>
+              </>
+            ) : (
+              <>
+                <div className="p-4 rounded-xl bg-white border border-red-200 space-y-4">
+                  <p className="text-xs font-medium text-red-700">
+                    Are you absolutely sure? This action cannot be undone.
+                  </p>
+                  <div className="grid gap-2">
+                    <Label htmlFor="confirm-delete" className="text-sm">
+                      Type <span className="font-mono font-semibold">DELETE</span> to confirm:
+                    </Label>
+                    <Input
+                      id="confirm-delete"
+                      type="text"
+                      placeholder="DELETE"
+                      value={deleteConfirmText}
+                      onChange={(e) => setDeleteConfirmText(e.target.value)}
+                      disabled={deleting}
+                      className="font-mono"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={handleDeleteAccount}
+                      variant="destructive"
+                      disabled={deleting || deleteConfirmText !== "DELETE"}
+                      className="rounded-2xl"
+                    >
+                      {deleting ? "Deleting..." : "Yes, Delete My Account"}
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        setDeleteConfirm(false)
+                        setDeleteConfirmText("")
+                        setError(null)
+                      }}
+                      variant="secondary"
+                      disabled={deleting}
+                      className="rounded-2xl"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
     </div>
   )
 }
