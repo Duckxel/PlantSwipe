@@ -1374,7 +1374,7 @@ export const GardenDashboardPage: React.FC = () => {
                                 onTouchStart={(e: any) => e.stopPropagation()}
                                 onClick={() => { setPendingGardenPlantId(gp.id); setTaskOpen(true) }}
                               >
-                                Tasks
+                                {t('gardenDashboard.plantsSection.tasksButton')}
                               </Button>
                               <EditPlantButton gp={gp} gardenId={id!} onChanged={load} serverToday={serverToday} actorColorCss={getActorColorCss()} />
                               <Button
@@ -1891,6 +1891,7 @@ function colorForName(name?: string | null, colorToken?: string | null): string 
 }
 
 function EditPlantButton({ gp, gardenId, onChanged, serverToday, actorColorCss }: { gp: any; gardenId: string; onChanged: () => Promise<void>; serverToday: string | null; actorColorCss?: string | null }) {
+  const { t } = useTranslation('common')
   const [open, setOpen] = React.useState(false)
   const [nickname, setNickname] = React.useState(gp.nickname || '')
   const [count, setCount] = React.useState<number>(Number(gp.plantsOnHand ?? 0))
@@ -1938,24 +1939,24 @@ function EditPlantButton({ gp, gardenId, onChanged, serverToday, actorColorCss }
 
   return (
     <>
-      <Button variant="secondary" className="rounded-2xl" onClick={() => setOpen(true)}>Edit</Button>
+      <Button variant="secondary" className="rounded-2xl" onClick={() => setOpen(true)}>{t('gardenDashboard.taskDialog.edit')}</Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="rounded-2xl">
           <DialogHeader>
-            <DialogTitle>Edit plant</DialogTitle>
+            <DialogTitle>{t('gardenDashboard.plantsSection.editPlant')}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div>
-              <label className="text-sm font-medium">Custom name</label>
-              <Input value={nickname} maxLength={30} onChange={(e: any) => setNickname(e.target.value)} placeholder="Optional nickname" />
+              <label className="text-sm font-medium">{t('gardenDashboard.plantsSection.customName')}</label>
+              <Input value={nickname} maxLength={30} onChange={(e: any) => setNickname(e.target.value)} placeholder={t('gardenDashboard.plantsSection.optionalNickname')} />
             </div>
             <div>
-              <label className="text-sm font-medium">Number of plants</label>
+              <label className="text-sm font-medium">{t('gardenDashboard.plantsSection.numberOfPlants')}</label>
               <Input type="number" min={0} value={String(count)} onChange={(e: any) => setCount(Number(e.target.value))} />
             </div>
             <div className="flex justify-end gap-2 pt-2">
-              <Button variant="secondary" className="rounded-2xl" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button className="rounded-2xl" onClick={save} disabled={submitting}>{submitting ? 'Saving...' : 'Save'}</Button>
+              <Button variant="secondary" className="rounded-2xl" onClick={() => setOpen(false)}>{t('cancel')}</Button>
+              <Button className="rounded-2xl" onClick={save} disabled={submitting}>{submitting ? t('gardenDashboard.settingsSection.saving') : t('save')}</Button>
             </div>
           </div>
         </DialogContent>
