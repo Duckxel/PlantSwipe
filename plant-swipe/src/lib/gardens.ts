@@ -3,6 +3,8 @@ import type { Garden, GardenMember, GardenPlant } from '@/types/garden'
 import type { GardenTaskRow } from '@/types/garden'
 import type { GardenPlantTask, GardenPlantTaskOccurrence, TaskType, TaskScheduleKind, TaskUnit } from '@/types/garden'
 import type { Plant } from '@/types/plant'
+import type { SupportedLanguage } from './i18n'
+import { mergePlantWithTranslation } from './plantTranslationLoader'
 
 export async function getUserGardens(userId: string): Promise<Garden[]> {
   // Fetch garden ids where user is a member, then fetch gardens
@@ -82,7 +84,7 @@ export async function refreshGardenStreak(gardenId: string, anchorDayIso?: strin
   if (error) throw new Error(error.message)
 }
 
-export async function getGardenPlants(gardenId: string): Promise<Array<GardenPlant & { plant?: Plant | null; sortIndex?: number | null }>> {
+export async function getGardenPlants(gardenId: string, language?: SupportedLanguage): Promise<Array<GardenPlant & { plant?: Plant | null; sortIndex?: number | null }>> {
   const { data, error } = await supabase
     .from('garden_plants')
     .select('id, garden_id, plant_id, nickname, seeds_planted, planted_at, expected_bloom_date, override_water_freq_unit, override_water_freq_value, plants_on_hand')
@@ -96,30 +98,27 @@ export async function getGardenPlants(gardenId: string): Promise<Array<GardenPla
     .from('plants')
     .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount')
     .in('id', plantIds)
+  
+  // Load translations if language is provided and not default
+  let translationMap = new Map()
+  if (language && language !== 'en') {
+    const { data: translations } = await supabase
+      .from('plant_translations')
+      .select('*')
+      .eq('language', language)
+      .in('plant_id', plantIds)
+    if (translations) {
+      translations.forEach(t => {
+        translationMap.set(t.plant_id, t)
+      })
+    }
+  }
+  
   const idToPlant: Record<string, Plant> = {}
   for (const p of plantRows || []) {
-    idToPlant[String(p.id)] = {
-      id: String(p.id),
-      name: String(p.name),
-      scientificName: String(p.scientific_name || ''),
-      colors: Array.isArray(p.colors) ? p.colors.map(String) : [],
-      seasons: Array.isArray(p.seasons) ? p.seasons.map(String) as any : [],
-      rarity: p.rarity,
-      meaning: p.meaning || '',
-      description: p.description || '',
-      image: p.image_url || '',
-      care: {
-        sunlight: p.care_sunlight || 'Low',
-        water: p.care_water || 'Low',
-        soil: p.care_soil || '',
-        difficulty: p.care_difficulty || 'Easy',
-      },
-      seedsAvailable: Boolean(p.seeds_available ?? false),
-      waterFreqUnit: p.water_freq_unit || undefined,
-      waterFreqValue: p.water_freq_value ?? null,
-      waterFreqPeriod: p.water_freq_period || undefined,
-      waterFreqAmount: p.water_freq_amount ?? null,
-    }
+    const translation = translationMap.get(p.id) || null
+    const mergedPlant = mergePlantWithTranslation(p, translation)
+    idToPlant[String(p.id)] = mergedPlant
   }
   return rows.map(r => ({
     id: String(r.id),

@@ -5,12 +5,15 @@ import type { Plant } from '@/types/plant'
 import { useAuth } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabaseClient'
 import { useTranslation } from 'react-i18next'
+import { useLanguage } from '@/lib/i18nRouting'
+import { mergePlantWithTranslation } from '@/lib/plantTranslationLoader'
 
 export const PlantInfoPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { user, profile, refreshProfile } = useAuth()
   const { t } = useTranslation('common')
+  const currentLang = useLanguage()
   const [plant, setPlant] = React.useState<Plant | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
@@ -30,6 +33,7 @@ export const PlantInfoPage: React.FC = () => {
       setLoading(true)
       setError(null)
       try {
+        // Load base plant data
         const { data, error } = await supabase
           .from('plants')
           .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount')
@@ -39,29 +43,21 @@ export const PlantInfoPage: React.FC = () => {
         if (!data) {
           setPlant(null)
         } else {
-          const p: Plant = {
-            id: String(data.id),
-            name: data.name,
-            scientificName: data.scientific_name || '',
-            colors: Array.isArray(data.colors) ? data.colors.map(String) : [],
-            seasons: Array.isArray(data.seasons) ? (data.seasons as unknown[]).map((s) => String(s)) as Plant['seasons'] : [],
-            rarity: data.rarity,
-            meaning: data.meaning || '',
-            description: data.description || '',
-            image: data.image_url || '',
-            care: {
-              sunlight: (data.care_sunlight || 'Low') as Plant['care']['sunlight'],
-              water: (data.care_water || 'Low') as Plant['care']['water'],
-              soil: String(data.care_soil || ''),
-              difficulty: (data.care_difficulty || 'Easy') as Plant['care']['difficulty'],
-            },
-            seedsAvailable: Boolean(data.seeds_available ?? false),
-            waterFreqUnit: data.water_freq_unit || undefined,
-            waterFreqValue: data.water_freq_value ?? null,
-            waterFreqPeriod: data.water_freq_period || undefined,
-            waterFreqAmount: data.water_freq_amount ?? null,
+          // Load translation if language is not default
+          let translation = null
+          if (currentLang !== 'en') {
+            const { data: transData } = await supabase
+              .from('plant_translations')
+              .select('*')
+              .eq('plant_id', id)
+              .eq('language', currentLang)
+              .maybeSingle()
+            translation = transData
           }
-          if (!ignore) setPlant(p)
+          
+          // Merge translation with base plant data
+          const mergedPlant = mergePlantWithTranslation(data, translation)
+          if (!ignore) setPlant(mergedPlant)
         }
       } catch (e: any) {
         if (!ignore) setError(e?.message || t('plantInfo.failedToLoad'))
@@ -71,7 +67,7 @@ export const PlantInfoPage: React.FC = () => {
     }
     load()
     return () => { ignore = true }
-  }, [id])
+  }, [id, currentLang])
 
   const toggleLiked = async () => {
     if (!user?.id || !id) return

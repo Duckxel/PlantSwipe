@@ -22,6 +22,7 @@ import { supabase } from '@/lib/supabaseClient'
 import { addGardenBroadcastListener, broadcastGardenUpdate, type GardenRealtimeKind } from '@/lib/realtime'
 import { getAccentOption } from '@/lib/accent'
 import { useTranslation } from 'react-i18next'
+import { useLanguage } from '@/lib/i18nRouting'
  
 
 
@@ -33,6 +34,7 @@ export const GardenDashboardPage: React.FC = () => {
   const location = useLocation()
   const { user, profile, refreshProfile } = useAuth()
   const { t } = useTranslation('common')
+  const currentLang = useLanguage()
   const [garden, setGarden] = React.useState<Garden | null>(null)
   const [tab, setTab] = React.useState<TabKey>('overview')
   // derive tab from URL path segment after /garden/:id
@@ -352,7 +354,7 @@ export const GardenDashboardPage: React.FC = () => {
     } finally {
       if (!silent) setLoading(false)
     }
-  }, [id, garden])
+  }, [id, garden, currentLang])
 
   // Lazy heavy loader for tabs that need it
   const loadHeavyForCurrentTab = React.useCallback(async (todayOverride?: string | null) => {
@@ -613,7 +615,7 @@ export const GardenDashboardPage: React.FC = () => {
 
       if (kind === 'plants' || kind === 'general') {
         // Plants: Update plants array while preserving existing items
-        const gpsRaw = await getGardenPlants(id)
+        const gpsRaw = await getGardenPlants(id, currentLang)
         setPlants(prev => {
           // Merge: preserve order and existing items, update changed ones
           const prevMap = new Map(prev.map((p: any) => [p.id, p]))
