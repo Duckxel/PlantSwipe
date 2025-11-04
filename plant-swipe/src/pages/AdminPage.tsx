@@ -2229,7 +2229,7 @@ export const AdminPage: React.FC = () => {
                   <Input
                     id="member-email"
                     name="member-email"
-                    autoComplete="email"
+                    autoComplete="off"
                     aria-label="Member email or username"
                     className="rounded-xl"
                     placeholder="user@example.com or username"
