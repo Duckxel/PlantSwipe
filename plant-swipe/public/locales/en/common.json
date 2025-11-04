@@ -431,7 +431,6 @@
       "experienceYears": "Years of experience with plants",
       "bio": "Bio",
       "accentColor": "Accent color",
-      "previewNote": "Preview applies instantly; saved on Save.",
       "displayNameRequired": "Display name required",
       "displayNameTaken": "Display name already taken",
       "failedToSendFriendRequest": "Failed to send friend request",
