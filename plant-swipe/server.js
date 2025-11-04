@@ -2427,23 +2427,29 @@ app.get('/api/admin/member-visits-series', async (req, res) => {
       return
     }
 
-    // SQL (preferred)
+    // SQL (preferred) - use same pattern as global visits graph
     if (sql) {
       try {
-        const rows = await sql`
+        const rows = await sql.unsafe(`
           with days as (
             select generate_series(((now() at time zone 'utc')::date - interval '29 days'), (now() at time zone 'utc')::date, interval '1 day')::date as d
           )
-          select d as day,
-                 coalesce((select count(*) from ${VISITS_TABLE_SQL_IDENT} v where v.user_id = ${targetUserId} and (timezone('utc', v.occurred_at))::date = d), 0)::int as visits
+          select to_char(d, 'YYYY-MM-DD') as date,
+                 coalesce((
+                   select count(*)::int
+                   from ${VISITS_TABLE_SQL_IDENT} v
+                   where v.user_id = $1
+                     and (timezone('utc', v.occurred_at))::date = d
+                 ), 0)::int as visits
           from days
           order by d asc
-        `
-        const series30d = (rows || []).map(r => ({ date: new Date(r.day).toISOString().slice(0,10), visits: Number(r.visits || 0) }))
+        `, [targetUserId])
+        const series30d = (rows || []).map(r => ({ date: String(r.date), visits: Number(r.visits || 0) }))
         const total30d = series30d.reduce((a, b) => a + (b.visits || 0), 0)
         res.json({ ok: true, userId: targetUserId, series30d, total30d, via: 'database' })
         return
       } catch (e) {
+        console.error('SQL query failed for member visits series:', e)
         // fall through to REST
       }
     }
