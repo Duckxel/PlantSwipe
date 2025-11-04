@@ -1,4 +1,4 @@
-import { Navigate as RouterNavigate, NavigateProps } from 'react-router-dom'
+import { Navigate as RouterNavigate, type NavigateProps } from 'react-router-dom'
 import { useLanguage, addLanguagePrefix, removeLanguagePrefix } from '@/lib/i18nRouting'
 
 /**

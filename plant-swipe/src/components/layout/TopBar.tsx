@@ -1,6 +1,5 @@
 import React from "react"
 import { createPortal } from "react-dom"
-import { useNavigate, useLocation } from "react-router-dom"
 import { Link } from "@/components/i18n/Link"
 import { Leaf, Sprout, Sparkles, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Plus, Shield, HeartHandshake, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -22,7 +21,6 @@ import { usePathWithoutLanguage, useLanguageNavigate } from "@/lib/i18nRouting"
 
 export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, displayName, onProfile, onLogout }) => {
   const navigate = useLanguageNavigate()
-  const location = useLocation()
   const pathWithoutLang = usePathWithoutLanguage()
   const { profile } = useAuth()
   const [menuOpen, setMenuOpen] = React.useState(false)

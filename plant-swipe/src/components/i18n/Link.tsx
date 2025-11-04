@@ -1,4 +1,4 @@
-import { Link as RouterLink, LinkProps as RouterLinkProps } from 'react-router-dom'
+import { Link as RouterLink, type LinkProps as RouterLinkProps } from 'react-router-dom'
 import { useLanguage, addLanguagePrefix, removeLanguagePrefix } from '@/lib/i18nRouting'
 import { forwardRef } from 'react'
 

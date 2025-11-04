@@ -3,8 +3,8 @@ import PlantSwipe from "@/PlantSwipe"
 import { AuthProvider, useAuth } from '@/context/AuthContext'
 import { BrowserRouter, Routes, Route, useLocation, Navigate } from 'react-router-dom'
 import { I18nextProvider } from 'react-i18next'
-import i18n, { DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES, type SupportedLanguage } from '@/lib/i18n'
-import { getLanguageFromPath } from '@/lib/i18nRouting'
+import i18n, { DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES } from '@/lib/i18n'
+import { getLanguageFromPath, getSavedLanguagePreference, detectBrowserLanguage, addLanguagePrefix } from '@/lib/i18nRouting'
 
 function AppShell() {
   const { loading } = useAuth()
@@ -26,12 +26,30 @@ function AppShell() {
   return <PlantSwipe />
 }
 
-// Language-aware route wrapper
-function LanguageRoutes() {
+// Initial redirect component - redirects root path to preferred language
+function InitialRedirect() {
   const location = useLocation()
   
+  // Get preferred language (saved preference or browser detection)
+  const savedLang = getSavedLanguagePreference()
+  const preferredLang = savedLang || detectBrowserLanguage()
+  
+  // If preferred language is not default and we're at root, redirect to it
+  if (location.pathname === '/' && preferredLang !== DEFAULT_LANGUAGE) {
+    const newPath = addLanguagePrefix('/', preferredLang)
+    return <Navigate to={newPath} replace />
+  }
+  
+  return <AppShell />
+}
+
+// Language-aware route wrapper
+function LanguageRoutes() {
   return (
     <Routes>
+      {/* Root path - redirect to preferred language */}
+      <Route path="/" element={<InitialRedirect />} />
+      
       {/* Routes without language prefix (default language) */}
       <Route path="/*" element={<AppShell />} />
       

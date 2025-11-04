@@ -1,6 +1,41 @@
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE, type SupportedLanguage } from './i18n'
 import i18n from './i18n'
+
+/**
+ * Get the saved language preference from localStorage
+ */
+export function getSavedLanguagePreference(): SupportedLanguage | null {
+  try {
+    const saved = localStorage.getItem('plant-swipe-language')
+    if (saved && SUPPORTED_LANGUAGES.includes(saved as SupportedLanguage)) {
+      return saved as SupportedLanguage
+    }
+  } catch {}
+  return null
+}
+
+/**
+ * Save language preference to localStorage
+ */
+export function saveLanguagePreference(lang: SupportedLanguage): void {
+  try {
+    localStorage.setItem('plant-swipe-language', lang)
+  } catch {}
+}
+
+/**
+ * Detect initial language from browser (French if browser language is French)
+ */
+export function detectBrowserLanguage(): SupportedLanguage {
+  try {
+    const browserLang = navigator.language || (navigator as any).languages?.[0] || ''
+    if (browserLang.startsWith('fr')) {
+      return 'fr'
+    }
+  } catch {}
+  return DEFAULT_LANGUAGE
+}
 
 /**
  * Get the current language from the URL path
@@ -76,7 +111,7 @@ export function useLanguageNavigate() {
   return (to: string | number, options?: { replace?: boolean; state?: any }) => {
     // Handle browser history navigation (numbers)
     if (typeof to === 'number') {
-      navigate(to, options)
+      navigate(to as any, options)
       return
     }
     
@@ -100,6 +135,9 @@ export function useChangeLanguage() {
     
     // Change i18n language
     i18n.changeLanguage(newLang)
+    
+    // Save preference to localStorage
+    saveLanguagePreference(newLang)
     
     // Navigate to new path with language prefix
     navigate(newPath, { replace: true })

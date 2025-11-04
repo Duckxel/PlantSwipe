@@ -1,5 +1,4 @@
 import React from "react"
-import { NavLink, useLocation } from "react-router-dom"
 import { Link } from "@/components/i18n/Link"
 import { usePathWithoutLanguage } from "@/lib/i18nRouting"
 import { Sparkles, Sprout, Search, Plus } from "lucide-react"
@@ -14,7 +13,6 @@ interface MobileNavBarProps {
 }
 
 export const MobileNavBar: React.FC<MobileNavBarProps> = ({ canCreate }) => {
-  const location = useLocation()
   const pathWithoutLang = usePathWithoutLanguage()
   const { user } = useAuth()
   const [hasUnfinished, setHasUnfinished] = React.useState(false)
@@ -118,7 +116,7 @@ export const MobileNavBar: React.FC<MobileNavBarProps> = ({ canCreate }) => {
         {/* Icon-only nav items */}
         <div className="flex items-center justify-around gap-8">
           <Button asChild variant={"secondary"} size={"icon"} className={currentView === 'discovery' ? "h-12 w-12 rounded-2xl bg-black text-white hover:bg-black/90" : "h-12 w-12 rounded-2xl bg-white text-black hover:bg-stone-100"}>
-            <Link to="/" end aria-label="Discover" className="no-underline flex items-center justify-center">
+            <Link to="/" aria-label="Discover" className="no-underline flex items-center justify-center">
               <Sparkles className="h-6 w-6" />
             </Link>
           </Button>

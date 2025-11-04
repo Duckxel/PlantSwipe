@@ -8,6 +8,32 @@ export const SUPPORTED_LANGUAGES = ['en', 'fr'] as const
 export type SupportedLanguage = typeof SUPPORTED_LANGUAGES[number]
 export const DEFAULT_LANGUAGE: SupportedLanguage = 'en'
 
+/**
+ * Detect initial language preference:
+ * 1. Check localStorage for saved preference
+ * 2. Check browser language (if French, default to French)
+ * 3. Fallback to default (English)
+ */
+function detectInitialLanguage(): SupportedLanguage {
+  // Check localStorage first
+  try {
+    const saved = localStorage.getItem('plant-swipe-language')
+    if (saved && SUPPORTED_LANGUAGES.includes(saved as SupportedLanguage)) {
+      return saved as SupportedLanguage
+    }
+  } catch {}
+
+  // Check browser language - if French, default to French
+  try {
+    const browserLang = navigator.language || (navigator as any).languages?.[0] || ''
+    if (browserLang.startsWith('fr')) {
+      return 'fr'
+    }
+  } catch {}
+
+  return DEFAULT_LANGUAGE
+}
+
 // Initialize i18n
 i18n
   .use(Backend)
@@ -16,13 +42,14 @@ i18n
   .init({
     fallbackLng: DEFAULT_LANGUAGE,
     supportedLngs: SUPPORTED_LANGUAGES,
+    lng: detectInitialLanguage(), // Set initial language
     defaultNS: 'common',
     ns: ['common'],
     backend: {
       loadPath: '/locales/{{lng}}/{{ns}}.json',
     },
     detection: {
-      // Don't auto-detect language from browser, we'll use URL
+      // Don't auto-detect language from browser, we'll use our custom logic
       order: [],
       caches: [],
     },

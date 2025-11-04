@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
 import { Settings, Mail, Lock, Trash2, AlertTriangle, Check, ChevronDown, ChevronUp, Globe } from "lucide-react"
-import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE } from "@/lib/i18n"
+import { SUPPORTED_LANGUAGES } from "@/lib/i18n"
 
 export default function SettingsPage() {
   const { user, profile, refreshProfile, deleteAccount, signOut } = useAuth()

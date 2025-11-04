@@ -1,5 +1,5 @@
 import React, { useMemo, useState, lazy, Suspense } from "react";
-import { Routes, Route, useLocation, useNavigate } from "react-router-dom";
+import { Routes, Route, useLocation } from "react-router-dom";
 import { useLanguageNavigate, usePathWithoutLanguage } from "@/lib/i18nRouting";
 import { Navigate } from "@/components/i18n/Navigate";
 import { useMotionValue, animate } from "framer-motion";
