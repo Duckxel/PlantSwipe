@@ -329,8 +329,13 @@
     },
     "settingsSection": {
       "gardenDetails": "Détails du jardin",
+      "gardenName": "Nom du jardin",
+      "coverImageUrl": "URL de l'image de couverture",
       "manageMembers": "Gérer les membres",
       "addMember": "Ajouter un membre",
+      "owner": "Propriétaire",
+      "member": "Membre",
+      "joined": "Rejoint",
       "deleteGarden": "Supprimer le jardin",
       "quitGarden": "Quitter le jardin",
       "deleteGardenConfirm": "Supprimer ce jardin ? Cette action ne peut pas être annulée.",

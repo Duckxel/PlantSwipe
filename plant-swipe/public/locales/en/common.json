@@ -329,8 +329,13 @@
     },
     "settingsSection": {
       "gardenDetails": "Garden details",
+      "gardenName": "Garden name",
+      "coverImageUrl": "Cover image URL",
       "manageMembers": "Manage members",
       "addMember": "Add member",
+      "owner": "Owner",
+      "member": "Member",
+      "joined": "Joined",
       "deleteGarden": "Delete garden",
       "quitGarden": "Quit garden",
       "deleteGardenConfirm": "Delete this garden? This cannot be undone.",

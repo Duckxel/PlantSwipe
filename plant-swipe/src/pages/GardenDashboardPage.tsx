@@ -1965,6 +1965,7 @@ function EditPlantButton({ gp, gardenId, onChanged, serverToday, actorColorCss }
 }
 
 function MemberCard({ member, gardenId, onChanged, viewerIsOwner, ownerCount, currentUserId }: { member: { userId: string; displayName?: string | null; email?: string | null; joinedAt?: string | null; role: 'owner' | 'member'; accentKey?: string | null }; gardenId: string; onChanged: () => Promise<void>; viewerIsOwner: boolean; ownerCount: number; currentUserId: string | null }) {
+  const { t } = useTranslation('common')
   const [open, setOpen] = React.useState(false)
   const [busy, setBusy] = React.useState(false)
   const isSelf = !!currentUserId && currentUserId === member.userId
@@ -2060,7 +2061,7 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner, ownerCount, cu
         <div>
           <div className="font-medium max-w-[60vw] truncate" style={member.accentKey ? (() => { const opt = getAccentOption(member.accentKey as any); return opt ? { color: `hsl(${opt.hsl})` } : undefined })() : undefined}>{member.displayName || member.userId}</div>
           {member.email && <div className="text-xs opacity-60">{member.email}</div>}
-          <div className="text-xs opacity-60">{member.role}{member.joinedAt ? ` ? Joined ${new Date(member.joinedAt).toLocaleString()}` : ''}</div>
+          <div className="text-xs opacity-60">{member.role === 'owner' ? t('gardenDashboard.settingsSection.owner') : t('gardenDashboard.settingsSection.member')}{member.joinedAt ? ` • ${t('gardenDashboard.settingsSection.joined')} ${new Date(member.joinedAt).toLocaleString()}` : ''}</div>
         </div>
       </div>
       {/* Self actions for non-owners: Quit button */}
@@ -2085,6 +2086,7 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner, ownerCount, cu
 }
 
 function GardenDetailsEditor({ garden, onSaved, canEdit }: { garden: Garden; onSaved: () => Promise<void>; canEdit?: boolean }) {
+  const { t } = useTranslation('common')
   const [name, setName] = React.useState(garden.name)
   const [imageUrl, setImageUrl] = React.useState(garden.coverImageUrl || '')
   const [submitting, setSubmitting] = React.useState(false)
@@ -2122,11 +2124,11 @@ function GardenDetailsEditor({ garden, onSaved, canEdit }: { garden: Garden; onS
   return (
     <div className="space-y-3">
       <div>
-        <label className="text-sm font-medium">Garden name</label>
+        <label className="text-sm font-medium">{t('gardenDashboard.settingsSection.gardenName')}</label>
         <Input value={name} onChange={(e: any) => setName(e.target.value)} disabled={!canEdit} />
       </div>
       <div>
-        <label className="text-sm font-medium">Cover image URL</label>
+        <label className="text-sm font-medium">{t('gardenDashboard.settingsSection.coverImageUrl')}</label>
         <Input value={imageUrl} onChange={(e: any) => setImageUrl(e.target.value)} placeholder="https://?" disabled={!canEdit} />
       </div>
       {err && <div className="text-sm text-red-600">{err}</div>}
