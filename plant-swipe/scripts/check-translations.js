@@ -112,6 +112,7 @@ function checkTranslations() {
   console.log(`📋 Languages to check: ${languages.filter(l => l !== BASE_LANGUAGE).join(', ') || 'none'}\n`);
   
   let hasErrors = false;
+  const failingLanguages = [];
   const otherLanguages = languages.filter(l => l !== BASE_LANGUAGE);
   
   if (otherLanguages.length === 0) {
@@ -132,6 +133,7 @@ function checkTranslations() {
       console.log(`  ✅ ${lang}: All keys match (${targetKeys.size} keys)`);
     } else {
       hasErrors = true;
+      failingLanguages.push(lang);
       console.log(`  ❌ ${lang}: Found inconsistencies`);
       
       if (comparison.missing.length > 0) {
@@ -160,7 +162,9 @@ function checkTranslations() {
   console.log('\n' + '='.repeat(60));
   
   if (hasErrors) {
-    console.log('\n❌ Translation check failed! Please fix the inconsistencies above.');
+    const languagesList = failingLanguages.join(', ');
+    console.log(`\n❌ Translation check failed! The following language(s) have inconsistencies: ${languagesList}`);
+    console.log('Please fix the inconsistencies above.');
     process.exit(1);
   } else {
     console.log('\n✅ All translation files are consistent!');
