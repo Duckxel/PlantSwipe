@@ -6,6 +6,11 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { supabase } from "@/lib/supabaseClient"
 import type { Plant } from "@/types/plant"
+import { useLanguage } from "@/lib/i18nRouting"
+import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE, type SupportedLanguage } from "@/lib/i18n"
+import { translatePlantToAllLanguages } from "@/lib/deepl"
+import { savePlantTranslations } from "@/lib/plantTranslations"
+import { Languages } from "lucide-react"
 
 function generateUUIDv4(): string {
   try {
@@ -35,6 +40,7 @@ interface CreatePlantPageProps {
 }
 
 export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSaved }) => {
+  const currentLang = useLanguage()
   const [name, setName] = React.useState("")
   const [scientificName, setScientificName] = React.useState("")
   const [colors, setColors] = React.useState<string>("")
@@ -54,6 +60,10 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
   const [ok, setOk] = React.useState<string | null>(null)
   const [advanced, setAdvanced] = React.useState(false)
   const [everAdvanced, setEverAdvanced] = React.useState(false)
+  // Language selection (only in Advanced mode, defaults to English)
+  const [inputLanguage, setInputLanguage] = React.useState<SupportedLanguage>(DEFAULT_LANGUAGE)
+  const [translateToAll, setTranslateToAll] = React.useState(false)
+  const [translating, setTranslating] = React.useState(false)
 
   const toggleSeason = (s: Plant["seasons"][number]) => {
     setSeasons((cur: string[]) => (cur.includes(s) ? cur.filter((x: string) => x !== s) : [...cur, s]))
@@ -114,6 +124,63 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
         water_freq_value: includeAdvanced ? normalizedAmount : defaultAmount,
       })
       if (insErr) { setError(insErr.message); return }
+      
+      // Save translation for the input language
+      const translation = {
+        plant_id: id,
+        language: inputLanguage,
+        name: nameNorm,
+        scientific_name: sciNorm || null,
+        meaning: meaning || null,
+        description: description || null,
+        care_soil: includeAdvanced ? (careSoil || null) : null,
+      }
+      
+      const translationsToSave = [translation]
+      
+      // If translate to all languages is enabled, translate and save
+      if (translateToAll && advanced) {
+        setTranslating(true)
+        try {
+          const allTranslations = await translatePlantToAllLanguages({
+            name: nameNorm,
+            scientificName: sciNorm || undefined,
+            meaning: meaning || undefined,
+            description: description || undefined,
+            careSoil: includeAdvanced ? (careSoil || undefined) : undefined,
+          }, inputLanguage)
+          
+          // Convert translations to the format needed for saving
+          for (const [lang, translated] of Object.entries(allTranslations)) {
+            if (lang !== inputLanguage) {
+              translationsToSave.push({
+                plant_id: id,
+                language: lang as SupportedLanguage,
+                name: translated.name || nameNorm,
+                scientific_name: translated.scientificName || sciNorm || null,
+                meaning: translated.meaning || null,
+                description: translated.description || null,
+                care_soil: translated.careSoil || null,
+              })
+            }
+          }
+        } catch (transErr: any) {
+          console.error('Translation error:', transErr)
+          setOk('Plant saved, but translation failed. You can translate later when editing.')
+        } finally {
+          setTranslating(false)
+        }
+      }
+      
+      // Save all translations
+      if (translationsToSave.length > 0) {
+        const { error: transErr } = await savePlantTranslations(translationsToSave)
+        if (transErr) {
+          console.error('Failed to save translations:', transErr)
+          // Don't fail the whole save if translations fail
+        }
+      }
+      
       setOk('Saved')
       onSaved && onSaved(id)
       // Notify app to refresh plant lists without full reload
@@ -148,10 +215,55 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
               <div className="text-xs opacity-60">Required • must be unique</div>
             </div>
             {advanced && (
-              <div className="grid gap-2">
-                <Label htmlFor="plant-scientific">Scientific name</Label>
-                <Input id="plant-scientific" autoComplete="off" value={scientificName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setScientificName(e.target.value)} />
-              </div>
+              <>
+                {/* Language Selection */}
+                <div className="grid gap-2">
+                  <Label htmlFor="plant-language" className="flex items-center gap-2">
+                    <Languages className="h-4 w-4" />
+                    Input Language
+                  </Label>
+                  <select 
+                    id="plant-language" 
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm" 
+                    value={inputLanguage} 
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setInputLanguage(e.target.value as SupportedLanguage)}
+                  >
+                    {SUPPORTED_LANGUAGES.map((lang) => (
+                      <option key={lang} value={lang}>
+                        {lang === 'en' ? 'English' : 'Français'}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="text-xs opacity-60">
+                    Select the language you're writing in. All languages will use this data initially.
+                  </div>
+                </div>
+                
+                {/* Translation Option */}
+                <div className="flex items-start gap-2 p-4 rounded-xl border bg-stone-50">
+                  <input 
+                    id="translate-to-all" 
+                    type="checkbox" 
+                    checked={translateToAll} 
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTranslateToAll(e.target.checked)}
+                    disabled={translating}
+                    className="mt-1"
+                  />
+                  <div className="flex-1">
+                    <Label htmlFor="translate-to-all" className="font-medium cursor-pointer">
+                      Translate to all languages using DeepL
+                    </Label>
+                    <p className="text-xs opacity-70 mt-1">
+                      Automatically translate name, meaning, description, and care instructions to all supported languages when saving.
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="grid gap-2">
+                  <Label htmlFor="plant-scientific">Scientific name</Label>
+                  <Input id="plant-scientific" autoComplete="off" value={scientificName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setScientificName(e.target.value)} />
+                </div>
+              </>
             )}
             <div className="grid gap-2">
               <Label htmlFor="plant-colors">Colors (comma separated)</Label>
@@ -236,9 +348,12 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
             
             {error && <div className="text-sm text-red-600">{error}</div>}
             {ok && <div className="text-sm text-green-600">{ok}</div>}
+            {translating && <div className="text-sm text-blue-600">Translating to all languages...</div>}
             <div className="flex gap-2 pt-2">
-              <Button type="button" variant="secondary" className="rounded-2xl" onClick={onCancel}>Cancel</Button>
-              <Button type="button" className="rounded-2xl" onClick={save} disabled={saving}>Save</Button>
+              <Button type="button" variant="secondary" className="rounded-2xl" onClick={onCancel} disabled={saving || translating}>Cancel</Button>
+              <Button type="button" className="rounded-2xl" onClick={save} disabled={saving || translating}>
+                {saving ? 'Saving...' : translating ? 'Translating...' : 'Save'}
+              </Button>
             </div>
           </form>
         </CardContent>
