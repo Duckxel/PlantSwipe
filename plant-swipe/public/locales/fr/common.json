@@ -162,8 +162,7 @@
     "completeAll": "Tout compléter",
     "completed": "Terminé",
     "doneBy": "Fait par",
-    "failedToLoad": "Échec du chargement des jardins",
-    "allDone": "Tout terminé"
+    "failedToLoad": "Échec du chargement des jardins"
   },
   "createPlant": {
     "title": "Ajouter une plante",
