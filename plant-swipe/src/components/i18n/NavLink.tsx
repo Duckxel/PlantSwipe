@@ -1,12 +1,12 @@
-import { Link as RouterLink, type LinkProps as RouterLinkProps } from 'react-router-dom'
+import { NavLink as RouterNavLink, type NavLinkProps as RouterNavLinkProps } from 'react-router-dom'
 import { useLanguage, addLanguagePrefix, removeLanguagePrefix } from '@/lib/i18nRouting'
 import { useLocation } from 'react-router-dom'
 import { forwardRef } from 'react'
 
 /**
- * Language-aware Link component that preserves language when navigating
+ * Language-aware NavLink component that preserves language when navigating
  */
-export const Link = forwardRef<HTMLAnchorElement, RouterLinkProps>(
+export const NavLink = forwardRef<HTMLAnchorElement, RouterNavLinkProps>(
   ({ to, ...props }, ref) => {
     const currentLang = useLanguage()
     const location = useLocation()
@@ -42,7 +42,7 @@ export const Link = forwardRef<HTMLAnchorElement, RouterLinkProps>(
       : { ...to, pathname: pathWithLang }
     
     return (
-      <RouterLink
+      <RouterNavLink
         ref={ref}
         to={newTo}
         {...props}
@@ -51,4 +51,4 @@ export const Link = forwardRef<HTMLAnchorElement, RouterLinkProps>(
   }
 )
 
-Link.displayName = 'LanguageAwareLink'
+NavLink.displayName = 'LanguageAwareNavLink'

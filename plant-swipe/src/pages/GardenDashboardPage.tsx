@@ -1,7 +1,10 @@
 // @ts-nocheck
 import React from 'react'
 import { useAuth } from '@/context/AuthContext'
-import { useParams, NavLink, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
+import { useParams, Routes, Route, useLocation } from 'react-router-dom'
+import { NavLink } from '@/components/i18n/NavLink'
+import { Navigate } from '@/components/i18n/Navigate'
+import { useLanguageNavigate, removeLanguagePrefix } from '@/lib/i18nRouting'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -26,7 +29,7 @@ type TabKey = 'overview' | 'plants' | 'routine' | 'settings'
 
 export const GardenDashboardPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
-  const navigate = useNavigate()
+  const navigate = useLanguageNavigate()
   const location = useLocation()
   const { user, profile, refreshProfile } = useAuth()
   const { t } = useTranslation('common')
@@ -34,8 +37,10 @@ export const GardenDashboardPage: React.FC = () => {
   const [tab, setTab] = React.useState<TabKey>('overview')
   // derive tab from URL path segment after /garden/:id
   React.useEffect(() => {
+    // Remove language prefix first to get the actual path
+    const pathWithoutLang = removeLanguagePrefix(location.pathname)
     const base = `/garden/${id || ''}`
-    const rest = location.pathname.startsWith(base) ? location.pathname.slice(base.length) : ''
+    const rest = pathWithoutLang.startsWith(base) ? pathWithoutLang.slice(base.length) : ''
     const seg = rest.replace(/^\//, '').split('/')[0] as TabKey
     setTab((seg as TabKey) || 'overview')
   }, [location.pathname, id])
@@ -1241,17 +1246,17 @@ export const GardenDashboardPage: React.FC = () => {
       if (o && id) {
         const gp = (plants as any[]).find((p: any) => p.id === o.gardenPlantId)
         const type = (o as any).taskType || 'custom'
-        const label = String(type).toUpperCase()
+        const taskTypeLabel = t(`garden.taskTypes.${type}`)
         const plantName = gp?.nickname || gp?.plant?.name || null
         const newCount = Number(o.completedCount || 0) + inc
         const required = Number(o.requiredCount || 1)
         const done = newCount >= required
         const kind = done ? 'task_completed' : 'task_progressed'
         const msg = done
-          ? `has completed "${label}" Task on "${plantName || 'Plant'}"`
-          : `has progressed "${label}" Task on "${plantName || 'Plant'}" (${Math.min(newCount, required)}/${required})`
+          ? t('garden.activity.completedTask', { taskType: taskTypeLabel, plantName: plantName || t('garden.activity.plant') })
+          : t('garden.activity.progressedTask', { taskType: taskTypeLabel, plantName: plantName || t('garden.activity.plant'), completed: Math.min(newCount, required), required })
         const actorColorCss = getActorColorCss()
-        await logGardenActivity({ gardenId: id!, kind: kind as any, message: msg, plantName: plantName || null, taskName: label, actorColor: actorColorCss || null })
+        await logGardenActivity({ gardenId: id!, kind: kind as any, message: msg, plantName: plantName || null, taskName: taskTypeLabel, actorColor: actorColorCss || null })
         setActivityRev((r) => r + 1)
         // Broadcast update BEFORE reload to ensure other clients receive it
         await broadcastGardenUpdate({ gardenId: id, kind: 'tasks', actorId: user?.id ?? null }).catch((err) => {
@@ -1264,7 +1269,7 @@ export const GardenDashboardPage: React.FC = () => {
       // Also emit local event for immediate UI updates
       emitGardenRealtime('tasks')
     }
-  }, [todayTaskOccurrences, id, plants, getActorColorCss, load, loadHeavyForCurrentTab, emitGardenRealtime, user?.id])
+  }, [todayTaskOccurrences, id, plants, getActorColorCss, load, loadHeavyForCurrentTab, emitGardenRealtime, user?.id, t])
 
   return (
     <div className="max-w-6xl mx-auto mt-6 grid grid-cols-1 md:grid-cols-[220px_1fr] lg:grid-cols-[220px_1fr] gap-6">
@@ -1369,7 +1374,7 @@ export const GardenDashboardPage: React.FC = () => {
                                 onTouchStart={(e: any) => e.stopPropagation()}
                                 onClick={() => { setPendingGardenPlantId(gp.id); setTaskOpen(true) }}
                               >
-                                Tasks
+                                {t('gardenDashboard.plantsSection.tasksButton')}
                               </Button>
                               <EditPlantButton gp={gp} gardenId={id!} onChanged={load} serverToday={serverToday} actorColorCss={getActorColorCss()} />
                               <Button
@@ -1714,7 +1719,7 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
                       <div key={o.id} className={`flex items-center justify-between gap-3 text-sm rounded-xl border p-2 ${isDone ? 'bg-stone-50' : ''}`}>
                         <div className="flex items-center gap-2">
                           <span className={`h-6 w-6 flex items-center justify-center rounded-md border`}>{icon}</span>
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full ${badgeClass}`}>{String(tt).toUpperCase()}</span>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full ${badgeClass}`}>{t(`garden.taskTypes.${tt}`)}</span>
                         </div>
                         {!isDone ? (
                           <>
@@ -1886,6 +1891,7 @@ function colorForName(name?: string | null, colorToken?: string | null): string 
 }
 
 function EditPlantButton({ gp, gardenId, onChanged, serverToday, actorColorCss }: { gp: any; gardenId: string; onChanged: () => Promise<void>; serverToday: string | null; actorColorCss?: string | null }) {
+  const { t } = useTranslation('common')
   const [open, setOpen] = React.useState(false)
   const [nickname, setNickname] = React.useState(gp.nickname || '')
   const [count, setCount] = React.useState<number>(Number(gp.plantsOnHand ?? 0))
@@ -1933,24 +1939,24 @@ function EditPlantButton({ gp, gardenId, onChanged, serverToday, actorColorCss }
 
   return (
     <>
-      <Button variant="secondary" className="rounded-2xl" onClick={() => setOpen(true)}>Edit</Button>
+      <Button variant="secondary" className="rounded-2xl" onClick={() => setOpen(true)}>{t('gardenDashboard.taskDialog.edit')}</Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="rounded-2xl">
           <DialogHeader>
-            <DialogTitle>Edit plant</DialogTitle>
+            <DialogTitle>{t('gardenDashboard.plantsSection.editPlant')}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div>
-              <label className="text-sm font-medium">Custom name</label>
-              <Input value={nickname} maxLength={30} onChange={(e: any) => setNickname(e.target.value)} placeholder="Optional nickname" />
+              <label className="text-sm font-medium">{t('gardenDashboard.plantsSection.customName')}</label>
+              <Input value={nickname} maxLength={30} onChange={(e: any) => setNickname(e.target.value)} placeholder={t('gardenDashboard.plantsSection.optionalNickname')} />
             </div>
             <div>
-              <label className="text-sm font-medium">Number of plants</label>
+              <label className="text-sm font-medium">{t('gardenDashboard.plantsSection.numberOfPlants')}</label>
               <Input type="number" min={0} value={String(count)} onChange={(e: any) => setCount(Number(e.target.value))} />
             </div>
             <div className="flex justify-end gap-2 pt-2">
-              <Button variant="secondary" className="rounded-2xl" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button className="rounded-2xl" onClick={save} disabled={submitting}>{submitting ? 'Saving...' : 'Save'}</Button>
+              <Button variant="secondary" className="rounded-2xl" onClick={() => setOpen(false)}>{t('cancel')}</Button>
+              <Button className="rounded-2xl" onClick={save} disabled={submitting}>{submitting ? t('gardenDashboard.settingsSection.saving') : t('save')}</Button>
             </div>
           </div>
         </DialogContent>
@@ -1960,6 +1966,7 @@ function EditPlantButton({ gp, gardenId, onChanged, serverToday, actorColorCss }
 }
 
 function MemberCard({ member, gardenId, onChanged, viewerIsOwner, ownerCount, currentUserId }: { member: { userId: string; displayName?: string | null; email?: string | null; joinedAt?: string | null; role: 'owner' | 'member'; accentKey?: string | null }; gardenId: string; onChanged: () => Promise<void>; viewerIsOwner: boolean; ownerCount: number; currentUserId: string | null }) {
+  const { t } = useTranslation('common')
   const [open, setOpen] = React.useState(false)
   const [busy, setBusy] = React.useState(false)
   const isSelf = !!currentUserId && currentUserId === member.userId
@@ -1967,7 +1974,7 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner, ownerCount, cu
   // Owners can remove members; for owners, allow demote only when multiple owners exist
   const canRemove = viewerIsOwner && (member.role !== 'owner')
   const canDemoteOwner = viewerIsOwner && member.role === 'owner' && ownerCount > 1 && !isSelf
-  const navigate = useNavigate()
+  const navigate = useLanguageNavigate()
   const doPromote = async () => {
     if (!canPromote || busy) return
     setBusy(true)
@@ -2038,13 +2045,13 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner, ownerCount, cu
             {open && (
               <div className="absolute right-0 mt-2 w-48 bg-white border rounded-xl shadow-lg z-10">
                 {member.role !== 'owner' && (
-                  <button disabled={!canPromote || busy} onClick={(e) => { e.stopPropagation(); doPromote() }} className={`w-full text-left px-3 py-2 hover:bg-stone-50 ${!canPromote ? 'opacity-60 cursor-not-allowed' : ''}`}>Promote to owner</button>
+                  <button disabled={!canPromote || busy} onClick={(e) => { e.stopPropagation(); doPromote() }} className={`w-full text-left px-3 py-2 hover:bg-stone-50 ${!canPromote ? 'opacity-60 cursor-not-allowed' : ''}`}>{t('gardenDashboard.settingsSection.promoteToOwner')}</button>
                 )}
                 {member.role === 'owner' && (
-                  <button disabled={!canDemoteOwner || busy} onClick={(e) => { e.stopPropagation(); doDemote() }} className={`w-full text-left px-3 py-2 hover:bg-stone-50 ${!canDemoteOwner ? 'opacity-60 cursor-not-allowed' : ''}`}>Demote to member</button>
+                  <button disabled={!canDemoteOwner || busy} onClick={(e) => { e.stopPropagation(); doDemote() }} className={`w-full text-left px-3 py-2 hover:bg-stone-50 ${!canDemoteOwner ? 'opacity-60 cursor-not-allowed' : ''}`}>{t('gardenDashboard.settingsSection.demoteToMember')}</button>
                 )}
                 {member.role !== 'owner' && (
-                  <button disabled={!canRemove || busy} onClick={(e) => { e.stopPropagation(); doRemove() }} className="w-full text-left px-3 py-2 hover:bg-stone-50 text-red-600">Remove member</button>
+                  <button disabled={!canRemove || busy} onClick={(e) => { e.stopPropagation(); doRemove() }} className="w-full text-left px-3 py-2 hover:bg-stone-50 text-red-600">{t('gardenDashboard.settingsSection.removeMember')}</button>
                 )}
               </div>
             )}
@@ -2055,7 +2062,7 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner, ownerCount, cu
         <div>
           <div className="font-medium max-w-[60vw] truncate" style={member.accentKey ? (() => { const opt = getAccentOption(member.accentKey as any); return opt ? { color: `hsl(${opt.hsl})` } : undefined })() : undefined}>{member.displayName || member.userId}</div>
           {member.email && <div className="text-xs opacity-60">{member.email}</div>}
-          <div className="text-xs opacity-60">{member.role}{member.joinedAt ? ` ? Joined ${new Date(member.joinedAt).toLocaleString()}` : ''}</div>
+          <div className="text-xs opacity-60">{member.role === 'owner' ? t('gardenDashboard.settingsSection.owner') : t('gardenDashboard.settingsSection.member')}{member.joinedAt ? ` • ${t('gardenDashboard.settingsSection.joined')} ${new Date(member.joinedAt).toLocaleString()}` : ''}</div>
         </div>
       </div>
       {/* Self actions for non-owners: Quit button */}
@@ -2066,13 +2073,13 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner, ownerCount, cu
             className="rounded-2xl"
             onClick={async (e: any) => {
               e.stopPropagation()
-              if (!confirm('Quit this garden? You will be removed as a member.')) return
+              if (!confirm(t('gardenDashboard.settingsSection.quitGardenConfirm'))) return
               try {
                 await removeGardenMember({ gardenId, userId: member.userId })
                 navigate('/gardens')
               } catch {}
             }}
-          >Quit</Button>
+          >{t('gardenDashboard.settingsSection.quit')}</Button>
         </div>
       )}
     </Card>
@@ -2080,6 +2087,7 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner, ownerCount, cu
 }
 
 function GardenDetailsEditor({ garden, onSaved, canEdit }: { garden: Garden; onSaved: () => Promise<void>; canEdit?: boolean }) {
+  const { t } = useTranslation('common')
   const [name, setName] = React.useState(garden.name)
   const [imageUrl, setImageUrl] = React.useState(garden.coverImageUrl || '')
   const [submitting, setSubmitting] = React.useState(false)
@@ -2117,16 +2125,16 @@ function GardenDetailsEditor({ garden, onSaved, canEdit }: { garden: Garden; onS
   return (
     <div className="space-y-3">
       <div>
-        <label className="text-sm font-medium">Garden name</label>
+        <label className="text-sm font-medium">{t('gardenDashboard.settingsSection.gardenName')}</label>
         <Input value={name} onChange={(e: any) => setName(e.target.value)} disabled={!canEdit} />
       </div>
       <div>
-        <label className="text-sm font-medium">Cover image URL</label>
+        <label className="text-sm font-medium">{t('gardenDashboard.settingsSection.coverImageUrl')}</label>
         <Input value={imageUrl} onChange={(e: any) => setImageUrl(e.target.value)} placeholder="https://?" disabled={!canEdit} />
       </div>
       {err && <div className="text-sm text-red-600">{err}</div>}
       <div className="flex justify-end gap-2 pt-2">
-        <Button className="rounded-2xl" onClick={save} disabled={submitting || !canEdit}>{submitting ? 'Saving...' : 'Save changes'}</Button>
+        <Button className="rounded-2xl" onClick={save} disabled={submitting || !canEdit}>{submitting ? t('gardenDashboard.settingsSection.saving') : t('gardenDashboard.settingsSection.saveChanges')}</Button>
       </div>
     </div>
   )

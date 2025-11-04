@@ -9,12 +9,13 @@ import { getUserGardens, createGarden, fetchServerNowISO, getGardenTodayProgress
 import { supabase } from '@/lib/supabaseClient'
 import { addGardenBroadcastListener, broadcastGardenUpdate, type GardenRealtimeKind } from '@/lib/realtime'
 import type { Garden } from '@/types/garden'
-import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { useLanguageNavigate } from '@/lib/i18nRouting'
+import { Link } from '@/components/i18n/Link'
 
 export const GardenListPage: React.FC = () => {
   const { user } = useAuth()
-  const navigate = useNavigate()
+  const navigate = useLanguageNavigate()
   const { t } = useTranslation('common')
   const [gardens, setGardens] = React.useState<Garden[]>([])
   const [dragIndex, setDragIndex] = React.useState<number | null>(null)
@@ -292,16 +293,16 @@ export const GardenListPage: React.FC = () => {
           if (gardenId) broadcastGardenId = gardenId
           if (gardenId) {
             const type = (o as any).taskType || 'custom'
-            const label = String(type).toUpperCase()
+            const taskTypeLabel = t(`garden.taskTypes.${type}`)
             const plantName = gp?.nickname || gp?.plant?.name || null
             const newCount = Number(o.completedCount || 0) + inc
             const required = Math.max(1, Number(o.requiredCount || 1))
             const done = newCount >= required
             const kind = done ? 'task_completed' : 'task_progressed'
             const msg = done
-              ? `has completed "${label}" Task on "${plantName || 'Plant'}"`
-              : `has progressed "${label}" Task on "${plantName || 'Plant'}" (${Math.min(newCount, required)}/${required})`
-            await logGardenActivity({ gardenId, kind: kind as any, message: msg, plantName: plantName || null, taskName: label, actorColor: null })
+              ? t('garden.activity.completedTask', { taskType: taskTypeLabel, plantName: plantName || t('garden.activity.plant') })
+              : t('garden.activity.progressedTask', { taskType: taskTypeLabel, plantName: plantName || t('garden.activity.plant'), completed: Math.min(newCount, required), required })
+            await logGardenActivity({ gardenId, kind: kind as any, message: msg, plantName: plantName || null, taskName: taskTypeLabel, actorColor: null })
             // Broadcast update BEFORE reload to ensure other clients receive it
             await broadcastGardenUpdate({ gardenId, kind: 'tasks', actorId: user?.id ?? null }).catch((err) => {
               console.warn('[GardenList] Failed to broadcast task update:', err)
@@ -333,8 +334,8 @@ export const GardenListPage: React.FC = () => {
       try {
         const gp = allPlants.find((p: any) => p.id === gardenPlantId)
         if (gp?.gardenId) {
-          const plantName = gp?.nickname || gp?.plant?.name || 'Plant'
-          await logGardenActivity({ gardenId: gp.gardenId, kind: 'task_completed' as any, message: `completed all due tasks on "${plantName}"`, plantName, actorColor: null })
+          const plantName = gp?.nickname || gp?.plant?.name || t('garden.activity.plant')
+          await logGardenActivity({ gardenId: gp.gardenId, kind: 'task_completed' as any, message: t('garden.activity.completedAllTasks', { plantName }), plantName, actorColor: null })
           // Broadcast update AFTER all task completions finish, BEFORE reload to ensure other clients receive it
           await broadcastGardenUpdate({ gardenId: gp.gardenId, kind: 'tasks', actorId: user?.id ?? null }).catch((err) => {
             console.warn('[GardenList] Failed to broadcast task update:', err)
@@ -457,13 +458,13 @@ export const GardenListPage: React.FC = () => {
                       )
                     })()
                   )}
-                  <button onClick={() => navigate(`/garden/${g.id}`)} className="grid grid-cols-3 gap-0 w-full text-left">
+                  <Link to={`/garden/${g.id}`} className="grid grid-cols-3 gap-0 w-full text-left">
                     <div className="col-span-1 h-36 bg-cover bg-center rounded-l-2xl" style={{ backgroundImage: `url(${g.coverImageUrl || ''})` }} />
                     <div className="col-span-2 p-4">
                       <div className="font-medium">{g.name}</div>
                       <div className="text-xs opacity-60">{t('garden.created')} {new Date(g.createdAt).toLocaleDateString()}</div>
                     </div>
-                  </button>
+                  </Link>
                 </Card>
               ))}
             </div>
@@ -551,7 +552,7 @@ export const GardenListPage: React.FC = () => {
                               <div key={o.id} className={`flex items-center justify-between gap-3 text-sm rounded-xl border p-2 ${isDone ? 'bg-stone-50' : ''}`}>
                                 <div className="flex items-center gap-2">
                                   <span className={`h-6 w-6 flex items-center justify-center rounded-md border`}>{icon}</span>
-                                  <span className={`text-[10px] px-2 py-0.5 rounded-full ${badgeClass}`}>{String(tt).toUpperCase()}</span>
+                                  <span className={`text-[10px] px-2 py-0.5 rounded-full ${badgeClass}`}>{t(`garden.taskTypes.${tt}`)}</span>
                                   <span className="text-xs opacity-70">{gp.nickname || gp.plant?.name}</span>
                                 </div>
                                 {!isDone ? (
@@ -561,7 +562,7 @@ export const GardenListPage: React.FC = () => {
                                   </>
                                 ) : (
                                   <div className="text-xs opacity-70 truncate max-w-[50%]">
-                                    {completions.length === 0 ? t('garden.completed') : `${t('garden.doneBy')} ${completions.map(c => c.displayName || 'Someone').join(', ')}`}
+                                    {completions.length === 0 ? t('garden.completed') : `${t('garden.doneBy')} ${completions.map(c => c.displayName || t('garden.someone')).join(', ')}`}
                                   </div>
                                 )}
                               </div>

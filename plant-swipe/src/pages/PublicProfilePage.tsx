@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
 import { EditProfileDialog, type EditProfileValues } from "@/components/profile/EditProfileDialog"
 import { applyAccentByKey, saveAccentKey } from "@/lib/accent"
-import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff } from "lucide-react"
+import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff, Flame, Sprout, Home, Trophy } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import i18n from "@/lib/i18n"
 
@@ -663,30 +663,34 @@ export default function PublicProfilePage() {
                     <div className="text-lg font-semibold">{t('profile.highlights')}</div>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <div className="rounded-xl border p-3 text-center">
-                    <div className="text-[11px] opacity-60">{t('profile.plantsOwned')}</div>
+                    <div className="flex items-center justify-center gap-1.5 mb-1">
+                      <Sprout className="h-4 w-4 text-emerald-600" />
+                      <div className="text-[11px] opacity-60">{t('profile.plantsOwned')}</div>
+                    </div>
                     <div className="text-base font-semibold tabular-nums">{stats?.plantsTotal ?? '—'}</div>
                   </div>
                   <div className="rounded-xl border p-3 text-center">
-                    <div className="text-[11px] opacity-60">{t('profile.gardens')}</div>
+                    <div className="flex items-center justify-center gap-1.5 mb-1">
+                      <Home className="h-4 w-4 text-blue-600" />
+                      <div className="text-[11px] opacity-60">{t('profile.gardens')}</div>
+                    </div>
                     <div className="text-base font-semibold tabular-nums">{stats?.gardensCount ?? '—'}</div>
                   </div>
                   <div className="rounded-xl border p-3 text-center">
-                    <div className="text-[11px] opacity-60">{t('profile.currentStreak')}</div>
+                    <div className="flex items-center justify-center gap-1.5 mb-1">
+                      <Flame className="h-4 w-4 text-orange-500" />
+                      <div className="text-[11px] opacity-60">{t('profile.currentStreak')}</div>
+                    </div>
                     <div className="text-base font-semibold tabular-nums">{stats?.currentStreak ?? '—'}</div>
                   </div>
                   <div className="rounded-xl border p-3 text-center">
-                    <div className="text-[11px] opacity-60">{t('profile.longestStreak')}</div>
-                    <div className="text-base font-semibold tabular-nums">{stats?.bestStreak ?? '—'}</div>
+                    <div className="flex items-center justify-center gap-1.5 mb-1">
+                      <Trophy className="h-4 w-4 text-amber-500" />
+                      <div className="text-[11px] opacity-60">{t('profile.longestStreak')}</div>
                     </div>
+                    <div className="text-base font-semibold tabular-nums">{stats?.bestStreak ?? '—'}</div>
                   </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            <div className="mt-4">
-            <Card className="rounded-3xl">
-              <CardContent className="p-6 md:p-8 space-y-4">
-                <div className="text-lg font-semibold">{t('profile.past28Days')}</div>
+                </div>
                 <div className="w-full">
                   <div className="flex justify-center">
                     <div className="grid grid-rows-4 grid-flow-col auto-cols-max gap-1 sm:gap-1.5">

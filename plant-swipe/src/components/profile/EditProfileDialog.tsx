@@ -92,7 +92,6 @@ export const EditProfileDialog: React.FC<{
                 )
               })}
             </div>
-            <div className="text-xs opacity-60">{t('profile.editProfile.previewNote')}</div>
           </div>
           {error && <div className="text-sm text-red-600">{error}</div>}
         </div>
