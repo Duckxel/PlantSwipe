@@ -1157,6 +1157,35 @@ export const AdminPage: React.FC = () => {
       const resp = await fetch(`/api/admin/member-visits-series?userId=${encodeURIComponent(userId)}`, { headers, credentials: 'same-origin' })
       const data = await safeJson(resp)
       if (!resp.ok) throw new Error(data?.error || `HTTP ? ${resp.status}`)
+      
+      // Debug: log response to help diagnose background task issues
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Member visits series API response:', { hasSeries30d: !!data?.series30d, hasStatus: !!data?.status, hasJobId: !!data?.jobId, keys: Object.keys(data || {}) })
+      }
+      
+      // Handle background task response - check if data is still being generated
+      if (data?.status === 'pending' || data?.jobId) {
+        // Background task is processing, return empty for now
+        console.log('Visits series data is being generated in background')
+        setMemberVisitsSeries([])
+        setMemberVisitsTotal30d(0)
+        setMemberVisitsUpdatedAt(null)
+        return
+      }
+      
+      // Check if response has the expected structure
+      if (!data?.series30d || !Array.isArray(data?.series30d)) {
+        console.warn('Unexpected API response format:', data)
+        // If data structure changed, try to adapt
+        if (data?.data?.series30d && Array.isArray(data.data.series30d)) {
+          // Nested structure
+          data.series30d = data.data.series30d
+          data.total30d = data.data.total30d
+        } else {
+          throw new Error('Invalid response format: missing or invalid series30d')
+        }
+      }
+      
       const series = Array.isArray(data?.series30d) ? data.series30d.map((d: any) => {
         // API returns dates in YYYY-MM-DD format from toISOString().slice(0,10)
         let dateStr = String(d.date || '')
