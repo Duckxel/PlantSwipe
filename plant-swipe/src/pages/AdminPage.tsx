@@ -1182,7 +1182,7 @@ export const AdminPage: React.FC = () => {
         }
         // Skip invalid dates
         return null
-      }).filter((item): item is { date: string; visits: number } => item !== null) : []
+      }).filter((item: { date: string; visits: number } | null): item is { date: string; visits: number } => item !== null) : []
       setMemberVisitsSeries(series)
       const total = Number(data?.total30d || 0)
       setMemberVisitsTotal30d(Number.isFinite(total) ? total : 0)
