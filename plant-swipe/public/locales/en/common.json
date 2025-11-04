@@ -51,8 +51,11 @@
   "settings": {
     "title": "Account Settings",
     "description": "Manage your account preferences and security",
+    "loading": "Loading settings…",
+    "failedToLoad": "Failed to load settings",
     "email": {
       "title": "Email Address",
+      "emailAddressLabel": "Email Address:",
       "description": "Change your email address. You'll need to confirm the new email.",
       "currentEmail": "Current Email",
       "newEmail": "New Email",
@@ -61,10 +64,12 @@
       "updating": "Updating...",
       "updateRequestSent": "Email update request sent! Please check your new email for a confirmation link.",
       "enterNewEmail": "Please enter a new email address",
-      "enterValidEmail": "Please enter a valid email address"
+      "enterValidEmail": "Please enter a valid email address",
+      "failedToUpdate": "Failed to update email"
     },
     "password": {
       "title": "Password",
+      "passwordLabel": "Password:",
       "description": "Change your password to keep your account secure.",
       "currentPassword": "Current Password",
       "newPassword": "New Password",
@@ -78,19 +83,26 @@
       "enterCurrentPassword": "Please enter your current password",
       "passwordTooShort": "Password must be at least 6 characters",
       "passwordsDontMatch": "Passwords do not match",
-      "currentPasswordIncorrect": "Current password is incorrect"
+      "currentPasswordIncorrect": "Current password is incorrect",
+      "failedToUpdate": "Failed to update password"
     },
     "privacy": {
       "title": "Privacy Settings",
       "description": "Control who can see your profile and activity.",
       "privateProfile": "Private Profile",
-      "privateProfileDescription": "When enabled, only your friends can see your profile and activity. Your profile will be hidden from public searches."
+      "privateProfileDescription": "When enabled, only your friends can see your profile and activity. Your profile will be hidden from public searches.",
+      "profileNowPrivate": "Profile is now private",
+      "profileNowPublic": "Profile is now public",
+      "failedToUpdate": "Failed to update privacy setting"
     },
     "friendRequests": {
       "title": "Friend Requests",
       "description": "Control who can send you friend requests.",
       "disable": "Disable Friend Requests",
-      "disableDescription": "When enabled, other users will not be able to send you friend requests. This helps prevent unwanted invitations. Works for both public and private profiles."
+      "disableDescription": "When enabled, other users will not be able to send you friend requests. This helps prevent unwanted invitations. Works for both public and private profiles.",
+      "friendRequestsNowDisabled": "Friend requests are now disabled",
+      "friendRequestsNowEnabled": "Friend requests are now enabled",
+      "failedToUpdate": "Failed to update friend request setting"
     },
     "dangerZone": {
       "title": "Danger Zone",
@@ -101,7 +113,8 @@
       "typeDelete": "Type DELETE to confirm:",
       "yesDelete": "Yes, Delete My Account",
       "deleting": "Deleting...",
-      "typeDeleteToConfirm": "Please type DELETE to confirm account deletion"
+      "typeDeleteToConfirm": "Please type DELETE to confirm account deletion",
+      "failedToDelete": "Failed to delete account"
     },
     "language": {
       "title": "Language",

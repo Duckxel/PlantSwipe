@@ -51,8 +51,11 @@
   "settings": {
     "title": "Paramètres du compte",
     "description": "Gérez vos préférences de compte et votre sécurité",
+    "loading": "Chargement des paramètres…",
+    "failedToLoad": "Échec du chargement des paramètres",
     "email": {
       "title": "Adresse e-mail",
+      "emailAddressLabel": "Adresse e-mail :",
       "description": "Changez votre adresse e-mail. Vous devrez confirmer le nouvel e-mail.",
       "currentEmail": "E-mail actuel",
       "newEmail": "Nouvel e-mail",
@@ -61,10 +64,12 @@
       "updating": "Mise à jour...",
       "updateRequestSent": "Demande de mise à jour de l'e-mail envoyée ! Veuillez vérifier votre nouvel e-mail pour un lien de confirmation.",
       "enterNewEmail": "Veuillez entrer une nouvelle adresse e-mail",
-      "enterValidEmail": "Veuillez entrer une adresse e-mail valide"
+      "enterValidEmail": "Veuillez entrer une adresse e-mail valide",
+      "failedToUpdate": "Échec de la mise à jour de l'e-mail"
     },
     "password": {
       "title": "Mot de passe",
+      "passwordLabel": "Mot de passe :",
       "description": "Changez votre mot de passe pour garder votre compte sécurisé.",
       "currentPassword": "Mot de passe actuel",
       "newPassword": "Nouveau mot de passe",
@@ -78,19 +83,26 @@
       "enterCurrentPassword": "Veuillez entrer votre mot de passe actuel",
       "passwordTooShort": "Le mot de passe doit contenir au moins 6 caractères",
       "passwordsDontMatch": "Les mots de passe ne correspondent pas",
-      "currentPasswordIncorrect": "Le mot de passe actuel est incorrect"
+      "currentPasswordIncorrect": "Le mot de passe actuel est incorrect",
+      "failedToUpdate": "Échec de la mise à jour du mot de passe"
     },
     "privacy": {
       "title": "Paramètres de confidentialité",
       "description": "Contrôlez qui peut voir votre profil et votre activité.",
       "privateProfile": "Profil privé",
-      "privateProfileDescription": "Lorsqu'il est activé, seuls vos amis peuvent voir votre profil et votre activité. Votre profil sera masqué des recherches publiques."
+      "privateProfileDescription": "Lorsqu'il est activé, seuls vos amis peuvent voir votre profil et votre activité. Votre profil sera masqué des recherches publiques.",
+      "profileNowPrivate": "Le profil est maintenant privé",
+      "profileNowPublic": "Le profil est maintenant public",
+      "failedToUpdate": "Échec de la mise à jour du paramètre de confidentialité"
     },
     "friendRequests": {
       "title": "Demandes d'amis",
       "description": "Contrôlez qui peut vous envoyer des demandes d'amis.",
       "disable": "Désactiver les demandes d'amis",
-      "disableDescription": "Lorsqu'il est activé, les autres utilisateurs ne pourront pas vous envoyer de demandes d'amis. Cela aide à prévenir les invitations indésirables. Fonctionne pour les profils publics et privés."
+      "disableDescription": "Lorsqu'il est activé, les autres utilisateurs ne pourront pas vous envoyer de demandes d'amis. Cela aide à prévenir les invitations indésirables. Fonctionne pour les profils publics et privés.",
+      "friendRequestsNowDisabled": "Les demandes d'amis sont maintenant désactivées",
+      "friendRequestsNowEnabled": "Les demandes d'amis sont maintenant activées",
+      "failedToUpdate": "Échec de la mise à jour du paramètre de demande d'amis"
     },
     "dangerZone": {
       "title": "Zone de danger",
@@ -101,7 +113,8 @@
       "typeDelete": "Tapez SUPPRIMER pour confirmer :",
       "yesDelete": "Oui, supprimer mon compte",
       "deleting": "Suppression...",
-      "typeDeleteToConfirm": "Veuillez taper SUPPRIMER pour confirmer la suppression du compte"
+      "typeDeleteToConfirm": "Veuillez taper SUPPRIMER pour confirmer la suppression du compte",
+      "failedToDelete": "Échec de la suppression du compte"
     },
     "language": {
       "title": "Langue",
