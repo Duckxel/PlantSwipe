@@ -2044,13 +2044,13 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner, ownerCount, cu
             {open && (
               <div className="absolute right-0 mt-2 w-48 bg-white border rounded-xl shadow-lg z-10">
                 {member.role !== 'owner' && (
-                  <button disabled={!canPromote || busy} onClick={(e) => { e.stopPropagation(); doPromote() }} className={`w-full text-left px-3 py-2 hover:bg-stone-50 ${!canPromote ? 'opacity-60 cursor-not-allowed' : ''}`}>Promote to owner</button>
+                  <button disabled={!canPromote || busy} onClick={(e) => { e.stopPropagation(); doPromote() }} className={`w-full text-left px-3 py-2 hover:bg-stone-50 ${!canPromote ? 'opacity-60 cursor-not-allowed' : ''}`}>{t('gardenDashboard.settingsSection.promoteToOwner')}</button>
                 )}
                 {member.role === 'owner' && (
-                  <button disabled={!canDemoteOwner || busy} onClick={(e) => { e.stopPropagation(); doDemote() }} className={`w-full text-left px-3 py-2 hover:bg-stone-50 ${!canDemoteOwner ? 'opacity-60 cursor-not-allowed' : ''}`}>Demote to member</button>
+                  <button disabled={!canDemoteOwner || busy} onClick={(e) => { e.stopPropagation(); doDemote() }} className={`w-full text-left px-3 py-2 hover:bg-stone-50 ${!canDemoteOwner ? 'opacity-60 cursor-not-allowed' : ''}`}>{t('gardenDashboard.settingsSection.demoteToMember')}</button>
                 )}
                 {member.role !== 'owner' && (
-                  <button disabled={!canRemove || busy} onClick={(e) => { e.stopPropagation(); doRemove() }} className="w-full text-left px-3 py-2 hover:bg-stone-50 text-red-600">Remove member</button>
+                  <button disabled={!canRemove || busy} onClick={(e) => { e.stopPropagation(); doRemove() }} className="w-full text-left px-3 py-2 hover:bg-stone-50 text-red-600">{t('gardenDashboard.settingsSection.removeMember')}</button>
                 )}
               </div>
             )}
@@ -2072,13 +2072,13 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner, ownerCount, cu
             className="rounded-2xl"
             onClick={async (e: any) => {
               e.stopPropagation()
-              if (!confirm('Quit this garden? You will be removed as a member.')) return
+              if (!confirm(t('gardenDashboard.settingsSection.quitGardenConfirm'))) return
               try {
                 await removeGardenMember({ gardenId, userId: member.userId })
                 navigate('/gardens')
               } catch {}
             }}
-          >Quit</Button>
+          >{t('gardenDashboard.settingsSection.quit')}</Button>
         </div>
       )}
     </Card>
@@ -2133,7 +2133,7 @@ function GardenDetailsEditor({ garden, onSaved, canEdit }: { garden: Garden; onS
       </div>
       {err && <div className="text-sm text-red-600">{err}</div>}
       <div className="flex justify-end gap-2 pt-2">
-        <Button className="rounded-2xl" onClick={save} disabled={submitting || !canEdit}>{submitting ? 'Saving...' : 'Save changes'}</Button>
+        <Button className="rounded-2xl" onClick={save} disabled={submitting || !canEdit}>{submitting ? t('gardenDashboard.settingsSection.saving') : t('gardenDashboard.settingsSection.saveChanges')}</Button>
       </div>
     </div>
   )
