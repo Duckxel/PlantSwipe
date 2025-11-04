@@ -1158,37 +1158,43 @@ export const AdminPage: React.FC = () => {
       const data = await safeJson(resp)
       if (!resp.ok) throw new Error(data?.error || `HTTP ? ${resp.status}`)
       const series = Array.isArray(data?.series30d) ? data.series30d.map((d: any) => {
-        // Ensure date is in YYYY-MM-DD format
+        // API returns dates in YYYY-MM-DD format from toISOString().slice(0,10)
         let dateStr = String(d.date || '')
-        // If date is an ISO string, extract just the date part
+        // Extract date part if it's an ISO string (handles edge cases)
         if (dateStr.includes('T')) {
           dateStr = dateStr.split('T')[0]
         }
-        // If date is a Date object, convert to YYYY-MM-DD
+        // If date is already in YYYY-MM-DD format, use it directly
         if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-          // Already in correct format
-        } else {
+          return { date: dateStr, visits: Number(d.visits || 0) }
+        }
+        // Try to normalize if format is different
+        if (dateStr) {
           try {
-            const dateObj = new Date(dateStr)
+            const dateObj = new Date(dateStr + 'T00:00:00Z')
             if (!isNaN(dateObj.getTime())) {
               dateStr = dateObj.toISOString().split('T')[0]
+              if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                return { date: dateStr, visits: Number(d.visits || 0) }
+              }
             }
-          } catch {
-            // Keep original if parsing fails
-          }
+          } catch {}
         }
-        return { date: dateStr, visits: Number(d.visits || 0) }
-      }) : []
+        // Skip invalid dates
+        return null
+      }).filter((item): item is { date: string; visits: number } => item !== null) : []
       setMemberVisitsSeries(series)
       const total = Number(data?.total30d || 0)
       setMemberVisitsTotal30d(Number.isFinite(total) ? total : 0)
       setMemberVisitsUpdatedAt(Date.now())
     } catch (e: unknown) {
-      // Log error and clear data on failure
+      // Log error but don't clear existing data if this is a refresh (only clear on initial load)
       console.error('Failed to load member visits series:', e)
-      setMemberVisitsSeries([])
-      setMemberVisitsTotal30d(0)
-      setMemberVisitsUpdatedAt(null)
+      if (isInitial) {
+        setMemberVisitsSeries([])
+        setMemberVisitsTotal30d(0)
+        setMemberVisitsUpdatedAt(null)
+      }
     } finally {
       if (isInitial) setMemberVisitsLoading(false)
     }
