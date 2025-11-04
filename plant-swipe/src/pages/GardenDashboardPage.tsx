@@ -1,8 +1,9 @@
 // @ts-nocheck
 import React from 'react'
 import { useAuth } from '@/context/AuthContext'
-import { useParams, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { useParams, Routes, Route, useLocation } from 'react-router-dom'
 import { NavLink } from '@/components/i18n/NavLink'
+import { Navigate } from '@/components/i18n/Navigate'
 import { useLanguageNavigate } from '@/lib/i18nRouting'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'

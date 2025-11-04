@@ -106,6 +106,7 @@ export function usePathWithoutLanguage(): string {
  */
 export function useLanguageNavigate() {
   const navigate = useNavigate()
+  const location = useLocation()
   const currentLang = useLanguage()
   
   return (to: string | number, options?: { replace?: boolean; state?: any }) => {
@@ -115,8 +116,20 @@ export function useLanguageNavigate() {
       return
     }
     
+    // Handle relative paths (paths that don't start with '/')
+    let resolvedPath = to
+    if (!to.startsWith('/')) {
+      // Resolve relative path against current location
+      const currentPathWithoutLang = removeLanguagePrefix(location.pathname)
+      // Remove trailing slash and add the relative path
+      const basePath = currentPathWithoutLang.endsWith('/') 
+        ? currentPathWithoutLang.slice(0, -1) 
+        : currentPathWithoutLang
+      resolvedPath = basePath ? `${basePath}/${to}` : `/${to}`
+    }
+    
     // Handle string paths
-    const pathWithoutLang = removeLanguagePrefix(to)
+    const pathWithoutLang = removeLanguagePrefix(resolvedPath)
     const pathWithLang = addLanguagePrefix(pathWithoutLang, currentLang)
     navigate(pathWithLang, options)
   }
