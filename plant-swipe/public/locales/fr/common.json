@@ -341,5 +341,41 @@
       "enterDisplayNameOrEmail": "Entrez le nom d'affichage ou l'e-mail",
       "unknown": "Inconnu"
     }
+  },
+  "friends": {
+    "title": "Amis",
+    "pleaseLogin": "Veuillez vous connecter pour gérer vos amis",
+    "pendingInvitations": "Invitations en attente",
+    "sentRequests": "Demandes envoyées",
+    "yourFriends": "Vos amis",
+    "addFriend": "Ajouter un ami",
+    "noFriendsYet": "Aucun ami pour le moment. Recherchez des personnes ci-dessus pour ajouter des amis !",
+    "viewProfile": "Voir le profil",
+    "friendOptions": "Options d'ami",
+    "removeFriend": "Retirer l'ami",
+    "removeFriendConfirm": "Retirer",
+    "pending": "En attente",
+    "friends": "Amis",
+    "unknown": "Inconnu",
+    "addFriendDialog": {
+      "title": "Ajouter un ami",
+      "description": "Rechercher des utilisateurs par nom d'utilisateur ou e-mail",
+      "searchPlaceholder": "Rechercher par nom d'utilisateur ou e-mail...",
+      "searching": "Recherche...",
+      "noUsersFound": "Aucun utilisateur trouvé",
+      "addFriend": "Ajouter un ami"
+    },
+    "errors": {
+      "failedToLoad": "Échec du chargement des amis",
+      "failedToLoadSentRequests": "Échec du chargement des demandes envoyées en attente",
+      "failedToLoadRequests": "Échec du chargement des demandes d'amis",
+      "searchFailed": "Échec de la recherche",
+      "alreadyFriends": "Déjà ami avec cet utilisateur",
+      "requestAlreadySent": "Demande d'ami déjà envoyée",
+      "failedToSend": "Échec de l'envoi de la demande d'ami",
+      "failedToAccept": "Échec de l'acceptation de la demande d'ami",
+      "failedToReject": "Échec du rejet de la demande d'ami",
+      "failedToRemove": "Échec du retrait de l'ami"
+    }
   }
 }

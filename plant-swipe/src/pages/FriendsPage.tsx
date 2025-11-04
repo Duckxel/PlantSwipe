@@ -8,6 +8,7 @@ import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabaseClient"
 import { User, Search, UserPlus, Check, X, ArrowUpRight } from "lucide-react"
 import { createPortal } from "react-dom"
+import { useTranslation } from "react-i18next"
 
 type FriendRequest = {
   id: string
@@ -50,6 +51,7 @@ type SearchResult = {
 export const FriendsPage: React.FC = () => {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const { t } = useTranslation('common')
   const [friends, setFriends] = React.useState<Friend[]>([])
   const [pendingRequests, setPendingRequests] = React.useState<FriendRequest[]>([])
   const [sentPendingRequests, setSentPendingRequests] = React.useState<FriendRequest[]>([])
@@ -114,7 +116,7 @@ export const FriendsPage: React.FC = () => {
         setFriends([])
       }
     } catch (e: any) {
-      setError(e?.message || 'Failed to load friends')
+      setError(e?.message || t('friends.errors.failedToLoad'))
     }
   }, [user?.id])
 
@@ -170,7 +172,7 @@ export const FriendsPage: React.FC = () => {
         setSentPendingRequests([])
       }
     } catch (e: any) {
-      setError(e?.message || 'Failed to load sent pending requests')
+      setError(e?.message || t('friends.errors.failedToLoadSentRequests'))
     }
   }, [user?.id])
 
@@ -234,7 +236,7 @@ export const FriendsPage: React.FC = () => {
         setPendingRequests([])
       }
     } catch (e: any) {
-      setError(e?.message || 'Failed to load friend requests')
+      setError(e?.message || t('friends.errors.failedToLoadRequests'))
     }
   }, [user?.id])
 
@@ -334,7 +336,7 @@ export const FriendsPage: React.FC = () => {
       
       setDialogSearchResults(filteredResults)
     } catch (e: any) {
-      setError(e?.message || 'Search failed')
+      setError(e?.message || t('friends.errors.searchFailed'))
     } finally {
       setDialogSearching(false)
     }
@@ -359,7 +361,7 @@ export const FriendsPage: React.FC = () => {
         .maybeSingle()
       
       if (existingFriend) {
-        setError('Already friends with this user')
+        setError(t('friends.errors.alreadyFriends'))
         return
       }
       
@@ -373,7 +375,7 @@ export const FriendsPage: React.FC = () => {
       
       if (existingRequest) {
         if (existingRequest.status === 'pending') {
-          setError('Friend request already sent')
+          setError(t('friends.errors.requestAlreadySent'))
           return
         }
         // If rejected or accepted, update it to pending (allows resending after removal/rejection)
@@ -410,7 +412,7 @@ export const FriendsPage: React.FC = () => {
       // Optionally close dialog after successful send
       // setAddFriendDialogOpen(false)
     } catch (e: any) {
-      setError(e?.message || 'Failed to send friend request')
+      setError(e?.message || t('friends.errors.failedToSend'))
     }
   }, [user?.id, handleDialogSearch, loadPendingRequests, loadSentPendingRequests])
 
@@ -426,7 +428,7 @@ export const FriendsPage: React.FC = () => {
       await Promise.all([loadFriends(), loadPendingRequests(), loadSentPendingRequests()])
       setError(null)
     } catch (e: any) {
-      setError(e?.message || 'Failed to accept friend request')
+      setError(e?.message || t('friends.errors.failedToAccept'))
     }
   }, [loadFriends, loadPendingRequests, loadSentPendingRequests])
 
@@ -442,7 +444,7 @@ export const FriendsPage: React.FC = () => {
       await Promise.all([loadPendingRequests(), loadSentPendingRequests()])
       setError(null)
     } catch (e: any) {
-      setError(e?.message || 'Failed to reject friend request')
+      setError(e?.message || t('friends.errors.failedToReject'))
     }
   }, [loadPendingRequests, loadSentPendingRequests])
 
@@ -466,7 +468,7 @@ export const FriendsPage: React.FC = () => {
       await loadFriends()
       setError(null)
     } catch (e: any) {
-      setError(e?.message || 'Failed to remove friend')
+      setError(e?.message || t('friends.errors.failedToRemove'))
     }
   }, [user?.id, loadFriends])
 
@@ -512,7 +514,7 @@ export const FriendsPage: React.FC = () => {
       <div className="max-w-3xl mx-auto mt-8 px-4 md:px-0">
         <Card className="rounded-3xl">
           <CardContent className="p-6 md:p-8 text-center">
-            <p className="text-sm opacity-60">Please log in to manage friends</p>
+            <p className="text-sm opacity-60">{t('friends.pleaseLogin')}</p>
           </CardContent>
         </Card>
       </div>
@@ -535,7 +537,7 @@ export const FriendsPage: React.FC = () => {
         {pendingRequests.length > 0 && (
           <Card className="rounded-3xl w-full lg:w-[300px] lg:flex-shrink-0 order-1 lg:order-1 h-full">
             <CardContent className="p-6 md:p-8 space-y-4 h-full flex flex-col">
-              <div className="text-xl font-semibold">Pending Invitations</div>
+              <div className="text-xl font-semibold">{t('friends.pendingInvitations')}</div>
               <div className="space-y-2">
                 {pendingRequests.map((request) => (
                   <div
@@ -546,7 +548,7 @@ export const FriendsPage: React.FC = () => {
                       <div className="flex items-center gap-2">
                         <User className="h-5 w-5 opacity-60" />
                         <span className="font-medium">
-                          {request.requester_profile?.display_name || 'Unknown'}
+                          {request.requester_profile?.display_name || t('friends.unknown')}
                         </span>
                       </div>
                       {request.requester_profile?.email && (
@@ -595,7 +597,7 @@ export const FriendsPage: React.FC = () => {
           <CardContent className="p-6 md:p-8 space-y-6 h-full flex flex-col">
             {/* Title and Add Friend Button */}
             <div className="flex items-center justify-between">
-              <div className="text-2xl font-semibold">Friends</div>
+              <div className="text-2xl font-semibold">{t('friends.title')}</div>
               <Button
                 className="rounded-xl"
                 variant="default"
@@ -605,7 +607,7 @@ export const FriendsPage: React.FC = () => {
                   setDialogSearchResults([])
                 }}
               >
-                <UserPlus className="h-4 w-4 mr-2" /> Add Friend
+                <UserPlus className="h-4 w-4 mr-2" /> {t('friends.addFriend')}
               </Button>
             </div>
             
@@ -616,13 +618,13 @@ export const FriendsPage: React.FC = () => {
             {/* Friends list */}
             <div className="space-y-2">
               <div className="text-sm font-medium">
-                Your Friends ({friends.length})
+                {t('friends.yourFriends')} ({friends.length})
               </div>
               {loading ? (
-                <div className="text-xs opacity-60">Loading...</div>
+                <div className="text-xs opacity-60">{t('common.loading')}</div>
               ) : friends.length === 0 ? (
                 <div className="text-xs opacity-60 p-4 rounded-xl border text-center">
-                  No friends yet. Search for people above to add friends!
+                  {t('friends.noFriendsYet')}
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -635,7 +637,7 @@ export const FriendsPage: React.FC = () => {
                         <div className="flex items-center gap-2">
                           <User className="h-5 w-5 opacity-60" />
                           <span className="font-medium">
-                            {friend.friend_profile?.display_name || 'Unknown'}
+                            {friend.friend_profile?.display_name || t('friends.unknown')}
                           </span>
                         </div>
                         {friend.friend_profile?.email && (
@@ -650,7 +652,7 @@ export const FriendsPage: React.FC = () => {
                             variant="secondary"
                             size="icon"
                             className="rounded-full h-8 w-8"
-                            aria-label="View profile"
+                            aria-label={t('friends.viewProfile')}
                             onClick={() => navigate(`/u/${encodeURIComponent(friend.friend_profile?.display_name || '')}`)}
                           >
                             <ArrowUpRight className="h-4 w-4" />
@@ -661,7 +663,7 @@ export const FriendsPage: React.FC = () => {
                             variant="secondary"
                             size="icon"
                             className="rounded-full h-8 w-8"
-                            aria-label="Friend options"
+                            aria-label={t('friends.friendOptions')}
                             onClick={(e) => {
                               e.stopPropagation()
                               setMenuOpenFriendId(menuOpenFriendId === friend.id ? null : friend.id)
@@ -679,20 +681,20 @@ export const FriendsPage: React.FC = () => {
                               {confirmingRemove === friend.id ? (
                                 <>
                                   <div className="px-3 py-2 text-xs text-red-600 mb-1">
-                                    Remove {friend.friend_profile?.display_name || 'friend'}?
+                                    {t('friends.removeFriend')} {friend.friend_profile?.display_name || t('friends.unknown')}?
                                   </div>
                                   <div className="flex gap-1">
                                     <button 
                                       className="flex-1 px-2 py-1.5 rounded-lg hover:bg-red-50 text-red-600 text-xs font-medium"
                                       onMouseDown={(e) => { e.stopPropagation(); removeFriend(friend.friend_id) }}
                                     >
-                                      Confirm
+                                      {t('common.confirm')}
                                     </button>
                                     <button 
                                       className="flex-1 px-2 py-1.5 rounded-lg hover:bg-stone-50 text-xs"
                                       onMouseDown={(e) => { e.stopPropagation(); setConfirmingRemove(null); setMenuOpenFriendId(null) }}
                                     >
-                                      Cancel
+                                      {t('common.cancel')}
                                     </button>
                                   </div>
                                 </>
@@ -701,7 +703,7 @@ export const FriendsPage: React.FC = () => {
                                   className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 text-red-600"
                                   onMouseDown={(e) => { e.stopPropagation(); setConfirmingRemove(friend.id) }}
                                 >
-                                  Remove friend
+                                  {t('friends.removeFriend')}
                                 </button>
                               )}
                             </div>,
@@ -721,7 +723,7 @@ export const FriendsPage: React.FC = () => {
         {sentPendingRequests.length > 0 && (
           <Card className="rounded-3xl w-full lg:w-[300px] lg:flex-shrink-0 order-3 lg:order-3 h-full">
             <CardContent className="p-6 md:p-8 space-y-4 h-full flex flex-col">
-              <div className="text-xl font-semibold">Sent Requests</div>
+              <div className="text-xl font-semibold">{t('friends.sentRequests')}</div>
               <div className="space-y-2">
                 {sentPendingRequests.map((request) => (
                   <div
@@ -732,7 +734,7 @@ export const FriendsPage: React.FC = () => {
                       <div className="flex items-center gap-2">
                         <User className="h-5 w-5 opacity-60" />
                         <span className="font-medium">
-                          {request.recipient_profile?.display_name || 'Unknown'}
+                          {request.recipient_profile?.display_name || t('friends.unknown')}
                         </span>
                       </div>
                       {request.recipient_profile?.email && (
@@ -747,7 +749,7 @@ export const FriendsPage: React.FC = () => {
                           variant="secondary"
                           size="icon"
                           className="rounded-full h-8 w-8"
-                          aria-label="View profile"
+                          aria-label={t('friends.viewProfile')}
                           onClick={() => navigate(`/u/${encodeURIComponent(request.recipient_profile?.display_name || '')}`)}
                         >
                           <ArrowUpRight className="h-4 w-4" />
@@ -759,7 +761,7 @@ export const FriendsPage: React.FC = () => {
                         size="sm"
                         disabled
                       >
-                        Pending
+                        {t('friends.pending')}
                       </Button>
                     </div>
                   </div>
@@ -779,9 +781,9 @@ export const FriendsPage: React.FC = () => {
       <Dialog open={addFriendDialogOpen} onOpenChange={setAddFriendDialogOpen}>
         <DialogContent className="rounded-2xl">
           <DialogHeader>
-            <DialogTitle>Add Friend</DialogTitle>
+            <DialogTitle>{t('friends.addFriendDialog.title')}</DialogTitle>
             <DialogDescription>
-              Search for users by username or email
+              {t('friends.addFriendDialog.description')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -789,12 +791,12 @@ export const FriendsPage: React.FC = () => {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-60" />
               <Input
                 className="pl-9"
-                placeholder="Search by username or email..."
+                placeholder={t('friends.addFriendDialog.searchPlaceholder')}
                 value={dialogSearchQuery}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDialogSearchQuery(e.target.value)}
               />
             </div>
-            {dialogSearching && <div className="text-xs opacity-60">Searching...</div>}
+            {dialogSearching && <div className="text-xs opacity-60">{t('friends.addFriendDialog.searching')}</div>}
             {dialogSearchResults.length > 0 && (
               <div className="space-y-2">
                 {dialogSearchResults.map((result) => (
@@ -805,7 +807,7 @@ export const FriendsPage: React.FC = () => {
                     <div className="flex flex-col gap-1 flex-1">
                       <div className="flex items-center gap-2">
                         <User className="h-5 w-5 opacity-60" />
-                        <span className="font-medium">{result.display_name || 'Unknown'}</span>
+                        <span className="font-medium">{result.display_name || t('friends.unknown')}</span>
                       </div>
                       {result.email && (
                         <div className="text-xs opacity-60 pl-7">{result.email}</div>
@@ -820,15 +822,15 @@ export const FriendsPage: React.FC = () => {
                     >
                       {result.is_friend ? (
                         <>
-                          <Check className="h-4 w-4 mr-1" /> Friends
+                          <Check className="h-4 w-4 mr-1" /> {t('friends.friends')}
                         </>
                       ) : result.is_pending ? (
                         <>
-                          Pending
+                          {t('friends.pending')}
                         </>
                       ) : (
                         <>
-                          <UserPlus className="h-4 w-4 mr-1" /> Add Friend
+                          <UserPlus className="h-4 w-4 mr-1" /> {t('friends.addFriendDialog.addFriend')}
                         </>
                       )}
                     </Button>
@@ -837,7 +839,7 @@ export const FriendsPage: React.FC = () => {
               </div>
             )}
             {dialogSearchQuery && !dialogSearching && dialogSearchResults.length === 0 && (
-              <div className="text-xs opacity-60 text-center py-4">No users found</div>
+              <div className="text-xs opacity-60 text-center py-4">{t('friends.addFriendDialog.noUsersFound')}</div>
             )}
           </div>
         </DialogContent>
