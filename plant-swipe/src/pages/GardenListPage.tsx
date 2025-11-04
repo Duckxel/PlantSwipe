@@ -9,12 +9,12 @@ import { getUserGardens, createGarden, fetchServerNowISO, getGardenTodayProgress
 import { supabase } from '@/lib/supabaseClient'
 import { addGardenBroadcastListener, broadcastGardenUpdate, type GardenRealtimeKind } from '@/lib/realtime'
 import type { Garden } from '@/types/garden'
-import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { useLanguageNavigate } from '@/lib/i18nRouting'
 
 export const GardenListPage: React.FC = () => {
   const { user } = useAuth()
-  const navigate = useNavigate()
+  const navigate = useLanguageNavigate()
   const { t } = useTranslation('common')
   const [gardens, setGardens] = React.useState<Garden[]>([])
   const [dragIndex, setDragIndex] = React.useState<number | null>(null)

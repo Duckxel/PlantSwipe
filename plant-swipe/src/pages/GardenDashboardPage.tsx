@@ -1,7 +1,9 @@
 // @ts-nocheck
 import React from 'react'
 import { useAuth } from '@/context/AuthContext'
-import { useParams, NavLink, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
+import { useParams, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { NavLink } from '@/components/i18n/NavLink'
+import { useLanguageNavigate } from '@/lib/i18nRouting'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -26,7 +28,7 @@ type TabKey = 'overview' | 'plants' | 'routine' | 'settings'
 
 export const GardenDashboardPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
-  const navigate = useNavigate()
+  const navigate = useLanguageNavigate()
   const location = useLocation()
   const { user, profile, refreshProfile } = useAuth()
   const { t } = useTranslation('common')
@@ -1967,7 +1969,7 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner, ownerCount, cu
   // Owners can remove members; for owners, allow demote only when multiple owners exist
   const canRemove = viewerIsOwner && (member.role !== 'owner')
   const canDemoteOwner = viewerIsOwner && member.role === 'owner' && ownerCount > 1 && !isSelf
-  const navigate = useNavigate()
+  const navigate = useLanguageNavigate()
   const doPromote = async () => {
     if (!canPromote || busy) return
     setBusy(true)
