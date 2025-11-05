@@ -30,62 +30,77 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
     e.preventDefault()
     e.stopPropagation()
     
-    try {
-      // Build the shareable URL for the current plant
-      const baseUrl = window.location.origin
-      const pathWithoutLang = `/plants/${plant.id}`
-      const pathWithLang = currentLang === 'en' ? pathWithoutLang : `/${currentLang}${pathWithoutLang}`
-      const shareUrl = `${baseUrl}${pathWithLang}`
-      
-      // Copy to clipboard - try modern API first
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        try {
-          await navigator.clipboard.writeText(shareUrl)
-          setShareSuccess(true)
-          setTimeout(() => setShareSuccess(false), 3000)
-          return
-        } catch (clipboardErr) {
-          console.warn('Clipboard API failed, trying fallback:', clipboardErr)
-          // Fall through to fallback method
-        }
+    const baseUrl = window.location.origin
+    const pathWithoutLang = `/plants/${plant.id}`
+    const pathWithLang = currentLang === 'en' ? pathWithoutLang : `/${currentLang}${pathWithoutLang}`
+    const shareUrl = `${baseUrl}${pathWithLang}`
+    
+    console.log('Attempting to copy:', shareUrl)
+    
+    // Try modern Clipboard API first
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      try {
+        // Clipboard API requires user gesture, which we have here
+        await navigator.clipboard.writeText(shareUrl)
+        console.log('Successfully copied to clipboard via Clipboard API')
+        setShareSuccess(true)
+        setTimeout(() => setShareSuccess(false), 3000)
+        return
+      } catch (clipboardErr: any) {
+        console.warn('Clipboard API failed:', clipboardErr?.message || clipboardErr)
+        // Continue to fallback
       }
-      
-      // Fallback method for older browsers or when clipboard API fails
+    }
+    
+    // Fallback method using execCommand
+    try {
+      // Create a temporary textarea element
       const textArea = document.createElement('textarea')
       textArea.value = shareUrl
+      
+      // Style it to be invisible but still selectable
       textArea.style.position = 'fixed'
-      textArea.style.left = '0'
       textArea.style.top = '0'
-      textArea.style.width = '2em'
-      textArea.style.height = '2em'
+      textArea.style.left = '0'
+      textArea.style.width = '2px'
+      textArea.style.height = '2px'
       textArea.style.padding = '0'
       textArea.style.border = 'none'
       textArea.style.outline = 'none'
       textArea.style.boxShadow = 'none'
       textArea.style.background = 'transparent'
+      textArea.style.opacity = '0'
+      textArea.style.pointerEvents = 'none'
+      
+      // Make it readonly to prevent keyboard from appearing on mobile
       textArea.setAttribute('readonly', '')
       textArea.setAttribute('aria-hidden', 'true')
       
       document.body.appendChild(textArea)
+      
+      // Focus and select - must be done after appending to DOM
       textArea.focus()
+      textArea.select()
       textArea.setSelectionRange(0, shareUrl.length)
       
-      try {
-        const successful = document.execCommand('copy')
-        if (!successful) {
-          throw new Error('execCommand copy returned false')
-        }
+      // Execute copy command
+      const successful = document.execCommand('copy')
+      
+      // Clean up immediately
+      document.body.removeChild(textArea)
+      
+      if (successful) {
+        console.log('Successfully copied using execCommand fallback')
         setShareSuccess(true)
         setTimeout(() => setShareSuccess(false), 3000)
-      } catch (err) {
-        console.error('Fallback copy failed:', err)
-        alert(t('plantInfo.shareFailed'))
-      } finally {
-        document.body.removeChild(textArea)
+      } else {
+        throw new Error('execCommand returned false')
       }
     } catch (err) {
-      console.error('Failed to copy link:', err)
-      alert(t('plantInfo.shareFailed'))
+      console.error('All copy methods failed:', err)
+      // Show user-friendly error
+      const errorMsg = err instanceof Error ? err.message : String(err)
+      alert(`${t('plantInfo.shareFailed')}\n\nURL: ${shareUrl}\n\nError: ${errorMsg}`)
     }
   }
 
@@ -100,7 +115,15 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
           <div className="h-44 md:h-60 bg-cover bg-center select-none rounded-2xl" style={{ backgroundImage: `url(${plant.image})`, userSelect: 'none' as any }} />
           <div className="absolute bottom-3 right-3 flex gap-2">
             <button
-              onClick={handleShare}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                handleShare(e)
+              }}
+              onMouseDown={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+              }}
               type="button"
               aria-label={t('plantInfo.share')}
               className={`h-8 w-8 rounded-full flex items-center justify-center border transition shadow-[0_4px_12px_rgba(0,0,0,0.28)] ${shareSuccess ? 'bg-green-600 text-white' : 'bg-white/90 text-black hover:bg-white'}`}
