@@ -35,8 +35,15 @@ export const SearchPage: React.FC<SearchPageProps> = ({ plants, openInfo, likedI
                   loading="lazy"
                   draggable={false}
                   decoding="async"
-                  className="w-full h-full object-cover object-center select-none flex-shrink-0"
-                  style={{ transform: 'scale(1.5)' }}
+                  className="w-full h-full select-none"
+                  style={{ 
+                    objectFit: 'cover',
+                    objectPosition: 'center',
+                    minHeight: '100%',
+                    height: '100%',
+                    width: '100%',
+                    display: 'block'
+                  }}
                 />
               ) : null}
             </div>
