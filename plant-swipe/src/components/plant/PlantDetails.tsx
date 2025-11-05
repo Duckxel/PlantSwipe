@@ -3,6 +3,7 @@ import { useLanguageNavigate, useLanguage } from "@/lib/i18nRouting";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { SunMedium, Droplets, Leaf, Heart, Share2, Maximize2, ChevronLeft } from "lucide-react";
 import type { Plant } from "@/types/plant";
 import { rarityTone, seasonBadge } from "@/constants/badges";
@@ -17,6 +18,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
   const { user } = useAuth()
   const { t } = useTranslation('common')
   const [shareSuccess, setShareSuccess] = React.useState(false)
+  const [isImageFullScreen, setIsImageFullScreen] = React.useState(false)
   const freqAmountRaw = plant.waterFreqAmount ?? plant.waterFreqValue
   const freqAmount = typeof freqAmountRaw === 'number' ? freqAmountRaw : Number(freqAmountRaw || 0)
   const freqPeriod = (plant.waterFreqPeriod || plant.waterFreqUnit) as 'day' | 'week' | 'month' | 'year' | undefined
@@ -136,10 +138,24 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
           <p className="italic text-base md:text-lg opacity-80">{plant.scientificName}</p>
         </div>
         <div className="rounded-2xl overflow-hidden shadow relative">
-          <div className="h-44 md:h-60 bg-cover bg-center select-none rounded-2xl" style={{ backgroundImage: `url(${plant.image})`, userSelect: 'none' as any }} />
+          <div 
+            className={`h-44 md:h-60 bg-cover bg-center select-none rounded-2xl ${!isOverlayMode ? 'cursor-pointer hover:opacity-90 transition-opacity' : ''}`}
+            style={{ backgroundImage: `url(${plant.image})`, userSelect: 'none' as any }}
+            onClick={() => !isOverlayMode && setIsImageFullScreen(true)}
+            role={!isOverlayMode ? 'button' : undefined}
+            tabIndex={!isOverlayMode ? 0 : undefined}
+            onKeyDown={(e) => {
+              if (!isOverlayMode && (e.key === 'Enter' || e.key === ' ')) {
+                e.preventDefault()
+                setIsImageFullScreen(true)
+              }
+            }}
+            aria-label={!isOverlayMode ? t('plantInfo.viewFullScreen') : undefined}
+          />
           <div className="absolute bottom-3 right-3 flex gap-2">
             <button
               onClick={(e) => {
+                e.stopPropagation()
                 console.log('Share button clicked!')
                 handleShare(e)
               }}
@@ -153,7 +169,10 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
               </span>
             </button>
             <button
-              onClick={() => onToggleLike && onToggleLike()}
+              onClick={(e) => {
+                e.stopPropagation()
+                onToggleLike && onToggleLike()
+              }}
               aria-pressed={liked}
               aria-label={liked ? t('plantInfo.unlike') : t('plantInfo.like')}
               className={`h-8 w-8 rounded-full flex items-center justify-center border transition shadow-[0_4px_12px_rgba(0,0,0,0.28)] ${liked ? 'bg-rose-600 text-white' : 'bg-white/90 text-black hover:bg-white'}`}
@@ -242,6 +261,22 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
           <Button className="rounded-2xl" onClick={onClose}>{t('common.close')}</Button>
         </div>
       </div>
+
+      {/* Full-screen image viewer - only show when not in overlay mode */}
+      {!isOverlayMode && (
+        <Dialog open={isImageFullScreen} onOpenChange={setIsImageFullScreen}>
+          <DialogContent className="max-w-[95vw] max-h-[95vh] w-auto h-auto p-0 bg-black/95 border-none rounded-none sm:rounded-lg">
+            <div className="relative w-full h-full flex items-center justify-center p-4 min-h-[50vh]">
+              <img
+                src={plant.image}
+                alt={plant.name}
+                className="max-w-full max-h-[90vh] object-contain rounded-lg"
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 };
