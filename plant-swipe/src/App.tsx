@@ -1,7 +1,7 @@
 import React from 'react'
 import PlantSwipe from "@/PlantSwipe"
 import { AuthProvider, useAuth } from '@/context/AuthContext'
-import { BrowserRouter, Routes, Route, useLocation, Navigate, useNavigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom'
 import { I18nextProvider } from 'react-i18next'
 import i18n, { DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES } from '@/lib/i18n'
 import { getLanguageFromPath, getSavedLanguagePreference, detectBrowserLanguage, addLanguagePrefix } from '@/lib/i18nRouting'
