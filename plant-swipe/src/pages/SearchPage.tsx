@@ -26,8 +26,8 @@ export const SearchPage: React.FC<SearchPageProps> = ({ plants, openInfo, likedI
           tabIndex={0}
           onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => { if (e.key === 'Enter') openInfo(p) }}
         >
-          <div className="grid grid-cols-3 items-stretch gap-0">
-            <div className="col-span-1 relative rounded-l-2xl overflow-hidden bg-stone-100 h-full">
+          <div className="grid grid-cols-3 gap-0">
+            <div className="col-span-1 relative rounded-l-2xl overflow-hidden bg-stone-100 aspect-[4/3]">
               {p.image ? (
                 <img
                   src={p.image}
@@ -35,14 +35,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ plants, openInfo, likedI
                   loading="lazy"
                   draggable={false}
                   decoding="async"
-                  className="absolute inset-0 w-full h-full object-cover select-none"
-                  style={{ 
-                    height: '100%',
-                    width: '100%',
-                    objectFit: 'cover',
-                    objectPosition: 'center',
-                    transform: 'scale(1.5)'
-                  }}
+                  className="w-full h-full object-cover object-center select-none"
                 />
               ) : null}
             </div>
