@@ -372,14 +372,34 @@ export async function getGardenTodayProgressFast(gardenId: string, dayIso: strin
 }
 
 /**
- * Ultra-lightweight version that uses aggregation to minimize egress.
- * Only fetches aggregated counts instead of all occurrence rows.
+ * Ultra-lightweight version that uses PostgreSQL RPC function for server-side aggregation.
+ * Returns only 2 numbers (due, completed) instead of fetching all occurrence rows.
+ * Minimizes Supabase egress to absolute minimum - just a few bytes.
  */
 export async function getGardenTodayProgressUltraFast(gardenId: string, dayIso: string): Promise<{ due: number; completed: number }> {
-  const tasks = await listGardenTasksMinimal(gardenId)
-  if (tasks.length === 0) return { due: 0, completed: 0 }
   const start = `${dayIso}T00:00:00.000Z`
   const end = `${dayIso}T23:59:59.999Z`
+  
+  // Try RPC function first (zero egress except return value)
+  try {
+    const { data, error } = await supabase.rpc('get_garden_today_progress', {
+      _garden_id: gardenId,
+      _start_iso: start,
+      _end_iso: end,
+    })
+    if (!error && data) {
+      return {
+        due: Number(data.due ?? 0),
+        completed: Number(data.completed ?? 0),
+      }
+    }
+  } catch {
+    // Fallback to client-side aggregation if RPC doesn't exist
+  }
+  
+  // Fallback: client-side aggregation (still minimal egress)
+  const tasks = await listGardenTasksMinimal(gardenId)
+  if (tasks.length === 0) return { due: 0, completed: 0 }
   const taskIds = tasks.map(t => t.id)
   
   // Use aggregation query to minimize egress - only fetch counts, not all rows
@@ -404,19 +424,76 @@ export async function getGardenTodayProgressUltraFast(gardenId: string, dayIso: 
 }
 
 /**
+ * Server-side batched progress calculation for multiple gardens.
+ * Uses PostgreSQL RPC to minimize egress - returns only totals per garden.
+ */
+export async function getGardensTodayProgressBatch(gardenIds: string[], dayIso: string): Promise<Record<string, { due: number; completed: number }>> {
+  const start = `${dayIso}T00:00:00.000Z`
+  const end = `${dayIso}T23:59:59.999Z`
+  
+  // Try RPC function first (minimal egress)
+  try {
+    const { data, error } = await supabase.rpc('get_gardens_today_progress_batch', {
+      _garden_ids: gardenIds,
+      _start_iso: start,
+      _end_iso: end,
+    })
+    if (!error && data && Array.isArray(data)) {
+      const result: Record<string, { due: number; completed: number }> = {}
+      for (const row of data) {
+        result[String(row.garden_id)] = {
+          due: Number(row.due ?? 0),
+          completed: Number(row.completed ?? 0),
+        }
+      }
+      return result
+    }
+  } catch {
+    // Fallback to parallel queries
+  }
+  
+  // Fallback: parallel queries with minimal fields
+  const results = await Promise.all(
+    gardenIds.map(async (gid) => {
+      try {
+        const prog = await getGardenTodayProgressUltraFast(gid, dayIso)
+        return [gid, prog] as [string, { due: number; completed: number }]
+      } catch {
+        return [gid, { due: 0, completed: 0 }] as [string, { due: number; completed: number }]
+      }
+    })
+  )
+  
+  const result: Record<string, { due: number; completed: number }> = {}
+  for (const [gid, prog] of results) {
+    result[gid] = prog
+  }
+  return result
+}
+
+/**
  * Minimal version of listGardenTasks - only fetches essential fields for list view.
  * Reduces egress by ~70% compared to full task fetch.
+ * Adds limit to prevent excessive data transfer.
  */
-export async function listGardenTasksMinimal(gardenId: string): Promise<Array<{ id: string; type: TaskType; emoji: string | null; gardenPlantId: string }>> {
+export async function listGardenTasksMinimal(gardenId: string, limit: number = 500): Promise<Array<{ id: string; type: TaskType; emoji: string | null; gardenPlantId: string }>> {
   const base = supabase.from('garden_plant_tasks')
   const selectMinimal = 'id, type, emoji, garden_plant_id'
   const selectMinimalNoEmoji = 'id, type, garden_plant_id'
   
-  let { data, error } = await base.select(selectMinimal).eq('garden_id', gardenId)
+  let { data, error } = await base
+    .select(selectMinimal)
+    .eq('garden_id', gardenId)
+    .limit(limit) // Limit to prevent excessive egress
+    .order('created_at', { ascending: true })
   if (error) {
     const msg = String(error.message || '')
     if (/column .*emoji.* does not exist/i.test(msg)) {
-      const res = await base.select(selectMinimalNoEmoji).eq('garden_id', gardenId)
+      const res = await base
+        .select(selectMinimalNoEmoji)
+        .eq('garden_id', gardenId)
+        .limit(limit)
+        .order('created_at', { ascending: true })
       data = res.data as any
       error = res.error as any
     }
@@ -433,13 +510,16 @@ export async function listGardenTasksMinimal(gardenId: string): Promise<Array<{ 
 /**
  * Minimal version of getGardenPlants - only fetches essential fields for task sidebar.
  * Reduces egress by ~80% compared to full plant fetch.
+ * Adds limit to prevent excessive data transfer.
  */
-export async function getGardenPlantsMinimal(gardenIds: string[]): Promise<Array<{ id: string; gardenId: string; nickname: string | null; plantName: string | null }>> {
+export async function getGardenPlantsMinimal(gardenIds: string[], limitPerGarden: number = 200): Promise<Array<{ id: string; gardenId: string; nickname: string | null; plantName: string | null }>> {
   if (gardenIds.length === 0) return []
   const { data, error } = await supabase
     .from('garden_plants')
     .select('id, garden_id, plant_id, nickname')
     .in('garden_id', gardenIds)
+    .limit(limitPerGarden * gardenIds.length) // Total limit
+    .order('sort_index', { ascending: true, nullsFirst: false })
   if (error) throw new Error(error.message)
   const rows = (data || []) as any[]
   if (rows.length === 0) return []
@@ -450,6 +530,7 @@ export async function getGardenPlantsMinimal(gardenIds: string[]): Promise<Array
     .from('plants')
     .select('id, name')
     .in('id', plantIds)
+    .limit(plantIds.length) // Explicit limit
   
   const idToPlantName: Record<string, string> = {}
   for (const p of plantRows || []) {
@@ -1246,16 +1327,58 @@ export async function listOccurrencesForTasks(taskIds: string[], startIso: strin
 /**
  * Batched version that fetches occurrences for multiple gardens at once.
  * Reduces egress by combining queries and minimizing round trips.
+ * Adds limit to prevent excessive data transfer.
  */
 export async function listOccurrencesForMultipleGardens(
   gardenTaskIds: Record<string, string[]>, 
   startIso: string, 
-  endIso: string
+  endIso: string,
+  limitPerGarden: number = 1000 // Limit to prevent excessive egress
 ): Promise<Record<string, GardenPlantTaskOccurrence[]>> {
   const allTaskIds = Array.from(new Set(Object.values(gardenTaskIds).flat()))
   if (allTaskIds.length === 0) return {}
   
-  // Single query instead of multiple queries
+  // Try RPC function first for server-side optimization
+  try {
+    const { data, error } = await supabase.rpc('get_task_occurrences_batch', {
+      _task_ids: allTaskIds,
+      _start_iso: startIso,
+      _end_iso: endIso,
+      _limit_per_task: limitPerGarden,
+    })
+    if (!error && data && Array.isArray(data)) {
+      // Group by garden using task_id -> garden_id mapping
+      const taskToGarden: Record<string, string> = {}
+      for (const [gardenId, taskIds] of Object.entries(gardenTaskIds)) {
+        for (const taskId of taskIds) {
+          taskToGarden[taskId] = gardenId
+        }
+      }
+      
+      const result: Record<string, GardenPlantTaskOccurrence[]> = {}
+      for (const r of data) {
+        const taskId = String(r.task_id)
+        const gardenId = taskToGarden[taskId]
+        if (!gardenId) continue
+        
+        if (!result[gardenId]) result[gardenId] = []
+        result[gardenId].push({
+          id: String(r.id),
+          taskId,
+          gardenPlantId: String(r.garden_plant_id),
+          dueAt: String(r.due_at),
+          requiredCount: Number(r.required_count ?? 1),
+          completedCount: Number(r.completed_count ?? 0),
+          completedAt: r.completed_at || null,
+        })
+      }
+      return result
+    }
+  } catch {
+    // Fallback to regular query
+  }
+  
+  // Fallback: Single query with limit to prevent excessive egress
   const { data, error } = await supabase
     .from('garden_plant_task_occurrences')
     .select('id, task_id, garden_plant_id, due_at, required_count, completed_count, completed_at')
@@ -1263,6 +1386,7 @@ export async function listOccurrencesForMultipleGardens(
     .gte('due_at', startIso)
     .lte('due_at', endIso)
     .order('due_at', { ascending: true })
+    .limit(limitPerGarden * Object.keys(gardenTaskIds).length) // Total limit
   
   if (error) throw new Error(error.message)
   

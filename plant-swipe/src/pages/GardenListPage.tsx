@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useAuth } from '@/context/AuthContext'
-import { getUserGardens, createGarden, fetchServerNowISO, getGardenTodayProgressUltraFast, getGardenPlantsMinimal, listGardenTasksMinimal, listOccurrencesForTasks, listOccurrencesForMultipleGardens, resyncTaskOccurrencesForGarden, progressTaskOccurrence, listCompletionsForOccurrences, logGardenActivity } from '@/lib/gardens'
+import { getUserGardens, createGarden, fetchServerNowISO, getGardenTodayProgressUltraFast, getGardensTodayProgressBatch, getGardenPlantsMinimal, listGardenTasksMinimal, listOccurrencesForTasks, listOccurrencesForMultipleGardens, resyncTaskOccurrencesForGarden, progressTaskOccurrence, listCompletionsForOccurrences, logGardenActivity } from '@/lib/gardens'
 import { supabase } from '@/lib/supabaseClient'
 import { addGardenBroadcastListener, broadcastGardenUpdate, type GardenRealtimeKind } from '@/lib/realtime'
 import type { Garden } from '@/types/garden'
@@ -150,36 +150,18 @@ export const GardenListPage: React.FC = () => {
           setServerToday(today)
           serverTodayRef.current = today
           
-          // Update progress with fresh data - use ultra-fast aggregation
-          Promise.all(freshData.map(async (g) => {
-            try {
-              const prog = await getGardenTodayProgressUltraFast(g.id, today)
-              return [g.id, prog] as [string, { due: number; completed: number }]
-            } catch {
-              return [g.id, { due: 0, completed: 0 }] as [string, { due: number; completed: number }]
-            }
-          })).then((entries) => {
-            const map: Record<string, { due: number; completed: number }> = {}
-            for (const [gid, prog] of entries) map[gid] = prog
-            setProgressByGarden(map)
+          // Update progress with fresh data - use batched RPC (single query, minimal egress)
+          getGardensTodayProgressBatch(freshData.map(g => g.id), today).then((progMap) => {
+            setProgressByGarden(progMap)
           }).catch(() => {})
         }).catch(() => {
           // If background fetch fails, keep using cached data
         })
         
-        // Load progress for cached gardens - use ultra-fast aggregation
+        // Load progress for cached gardens - use batched RPC (single query, minimal egress)
         const today = serverTodayRef.current ?? new Date().toISOString().slice(0, 10)
-        Promise.all(data.map(async (g) => {
-          try {
-            const prog = await getGardenTodayProgressUltraFast(g.id, today)
-            return [g.id, prog] as [string, { due: number; completed: number }]
-          } catch {
-            return [g.id, { due: 0, completed: 0 }] as [string, { due: number; completed: number }]
-          }
-        })).then((entries) => {
-          const map: Record<string, { due: number; completed: number }> = {}
-          for (const [gid, prog] of entries) map[gid] = prog
-          setProgressByGarden(map)
+        getGardensTodayProgressBatch(data.map(g => g.id), today).then((progMap) => {
+          setProgressByGarden(progMap)
         }).catch(() => {})
         
         return
@@ -211,18 +193,9 @@ export const GardenListPage: React.FC = () => {
       // Set loading to false immediately so gardens render
       setLoading(false)
       
-      // Load progress in parallel (non-blocking) - use ultra-fast aggregation
-      Promise.all(data.map(async (g) => {
-        try {
-          const prog = await getGardenTodayProgressUltraFast(g.id, today)
-          return [g.id, prog] as [string, { due: number; completed: number }]
-        } catch {
-          return [g.id, { due: 0, completed: 0 }] as [string, { due: number; completed: number }]
-        }
-      })).then((entries) => {
-        const map: Record<string, { due: number; completed: number }> = {}
-        for (const [gid, prog] of entries) map[gid] = prog
-        setProgressByGarden(map)
+      // Load progress using batched RPC function (minimal egress - single query)
+      getGardensTodayProgressBatch(data.map(g => g.id), today).then((progMap) => {
+        setProgressByGarden(progMap)
       }).catch(() => {
         // Silently fail - progress will update on next refresh
       })
