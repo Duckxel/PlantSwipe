@@ -1,10 +1,11 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
+import { useLanguage } from "@/lib/i18nRouting";
 import { SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { SunMedium, Droplets, Leaf, Heart } from "lucide-react";
+import { SunMedium, Droplets, Leaf, Heart, Share2 } from "lucide-react";
 import type { Plant } from "@/types/plant";
 import { rarityTone, seasonBadge } from "@/constants/badges";
 import { deriveWaterLevelFromFrequency } from "@/lib/utils";
@@ -14,8 +15,10 @@ import { useTranslation } from "react-i18next";
 
 export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?: boolean; onToggleLike?: () => void }> = ({ plant, onClose, liked = false, onToggleLike }) => {
   const navigate = useNavigate()
+  const currentLang = useLanguage()
   const { user } = useAuth()
   const { t } = useTranslation('common')
+  const [shareSuccess, setShareSuccess] = React.useState(false)
   const freqAmountRaw = plant.waterFreqAmount ?? plant.waterFreqValue
   const freqAmount = typeof freqAmountRaw === 'number' ? freqAmountRaw : Number(freqAmountRaw || 0)
   const freqPeriod = (plant.waterFreqPeriod || plant.waterFreqUnit) as 'day' | 'week' | 'month' | 'year' | undefined
@@ -23,6 +26,44 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
   const freqLabel = freqPeriod
     ? `${freqAmount > 0 ? `${freqAmount} ${freqAmount === 1 ? t('plantInfo.time') : t('plantInfo.times')} ` : ''}${t('plantInfo.per')} ${t(`plantInfo.${freqPeriod}`)}`
     : null
+
+  const handleShare = async () => {
+    try {
+      // Build the shareable URL - always use full page URL for sharing
+      const baseUrl = window.location.origin
+      const pathWithoutLang = `/plants/${plant.id}`
+      const pathWithLang = currentLang === 'en' ? pathWithoutLang : `/${currentLang}${pathWithoutLang}`
+      const shareUrl = `${baseUrl}${pathWithLang}`
+      
+      // Try Web Share API first (mobile-friendly)
+      if (navigator.share) {
+        try {
+          await navigator.share({
+            title: plant.name,
+            text: `${plant.name} (${plant.scientificName})`,
+            url: shareUrl,
+          })
+          setShareSuccess(true)
+          setTimeout(() => setShareSuccess(false), 3000)
+          return
+        } catch (err) {
+          // User cancelled or share failed, fall through to clipboard
+          if ((err as any)?.name !== 'AbortError') {
+            console.error('Share failed:', err)
+          }
+        }
+      }
+      
+      // Fallback to clipboard
+      await navigator.clipboard.writeText(shareUrl)
+      setShareSuccess(true)
+      setTimeout(() => setShareSuccess(false), 3000)
+    } catch (err) {
+      console.error('Failed to share:', err)
+      alert(t('plantInfo.shareFailed'))
+    }
+  }
+
   return (
     <div className="space-y-4 select-none">
       <div className="grid md:grid-cols-2 gap-4 items-center">
@@ -32,7 +73,15 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
         </SheetHeader>
         <div className="rounded-2xl overflow-hidden shadow relative">
           <div className="h-44 md:h-60 bg-cover bg-center select-none rounded-2xl" style={{ backgroundImage: `url(${plant.image})`, userSelect: 'none' as any }} />
-          <div className="absolute bottom-3 right-3">
+          <div className="absolute bottom-3 right-3 flex gap-2">
+            <button
+              onClick={handleShare}
+              aria-label={t('plantInfo.share')}
+              className={`h-8 w-8 rounded-full flex items-center justify-center border transition shadow-[0_4px_12px_rgba(0,0,0,0.28)] ${shareSuccess ? 'bg-green-600 text-white' : 'bg-white/90 text-black hover:bg-white'}`}
+              title={shareSuccess ? t('plantInfo.shareCopied') : t('plantInfo.share')}
+            >
+              <Share2 className={shareSuccess ? 'fill-current' : ''} />
+            </button>
             <button
               onClick={() => onToggleLike && onToggleLike()}
               aria-pressed={liked}

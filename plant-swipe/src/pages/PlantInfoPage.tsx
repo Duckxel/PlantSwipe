@@ -1,16 +1,17 @@
 import React from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useLocation } from 'react-router-dom'
 import { PlantDetails } from '@/components/plant/PlantDetails'
 import type { Plant } from '@/types/plant'
 import { useAuth } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabaseClient'
 import { useTranslation } from 'react-i18next'
-import { useLanguage } from '@/lib/i18nRouting'
+import { useLanguage, useLanguageNavigate } from '@/lib/i18nRouting'
 import { mergePlantWithTranslation } from '@/lib/plantTranslationLoader'
 
 export const PlantInfoPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
-  const navigate = useNavigate()
+  const navigate = useLanguageNavigate()
+  const location = useLocation()
   const { user, profile, refreshProfile } = useAuth()
   const { t } = useTranslation('common')
   const currentLang = useLanguage()
@@ -18,6 +19,10 @@ export const PlantInfoPage: React.FC = () => {
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [likedIds, setLikedIds] = React.useState<string[]>([])
+  
+  // Check if we're in overlay mode (has backgroundLocation) or full page mode
+  const state = location.state as { backgroundLocation?: any } | null
+  const isOverlayMode = !!state?.backgroundLocation
 
   React.useEffect(() => {
     const arr = Array.isArray((profile as any)?.liked_plant_ids)
@@ -90,6 +95,16 @@ export const PlantInfoPage: React.FC = () => {
     })
   }
 
+  const handleClose = () => {
+    if (isOverlayMode) {
+      // In overlay mode, go back to previous page
+      navigate(-1)
+    } else {
+      // In full page mode (shared link), navigate to home
+      navigate('/')
+    }
+  }
+
   if (loading) return <div className="max-w-4xl mx-auto mt-8 px-4">{t('common.loading')}</div>
   if (error) return <div className="max-w-4xl mx-auto mt-8 px-4 text-red-600 text-sm">{error}</div>
   if (!plant) return <div className="max-w-4xl mx-auto mt-8 px-4">{t('plantInfo.plantNotFound')}</div>
@@ -98,7 +113,7 @@ export const PlantInfoPage: React.FC = () => {
     <div className="max-w-4xl mx-auto mt-6 px-4 md:px-0">
       <PlantDetails
         plant={plant}
-        onClose={() => navigate(-1)}
+        onClose={handleClose}
         liked={likedIds.includes(plant.id)}
         onToggleLike={toggleLiked}
       />
