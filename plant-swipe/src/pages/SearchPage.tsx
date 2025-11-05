@@ -27,7 +27,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ plants, openInfo, likedI
           onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => { if (e.key === 'Enter') openInfo(p) }}
         >
           <div className="grid grid-cols-[1fr_2fr] items-stretch">
-            <div className="relative rounded-l-2xl overflow-hidden bg-stone-100 flex">
+            <div className="col-span-1 relative h-full rounded-l-2xl overflow-hidden bg-stone-100">
               {p.image ? (
                 <img
                   src={p.image}
@@ -35,19 +35,11 @@ export const SearchPage: React.FC<SearchPageProps> = ({ plants, openInfo, likedI
                   loading="lazy"
                   draggable={false}
                   decoding="async"
-                  className="w-full h-full select-none"
-                  style={{ 
-                    objectFit: 'cover',
-                    objectPosition: 'center',
-                    minHeight: '100%',
-                    height: '100%',
-                    width: '100%',
-                    display: 'block'
-                  }}
+                  className="absolute inset-0 h-full w-full object-cover object-center select-none"
                 />
               ) : null}
             </div>
-            <div className="p-3">
+            <div className="col-span-2 p-3">
               <div className="flex items-center gap-2 mb-1">
                 <Badge className={`${rarityTone[p.rarity]} rounded-xl`}>{p.rarity}</Badge>
                 {p.seasons.map((s) => (
