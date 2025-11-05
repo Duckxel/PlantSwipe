@@ -6,7 +6,7 @@ import { useMotionValue, animate } from "framer-motion";
 import { Search, ChevronDown, ChevronUp, ListFilter } from "lucide-react";
 // Sheet is used for plant info overlay
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -655,26 +655,6 @@ export default function PlantSwipe() {
         <main className="min-h-[60vh]" aria-live="polite">
           {/* Use background location for primary routes so overlays render on top */}
           <Routes location={(backgroundLocation as any) || location}>
-                <Route
-                  path="/"
-                  element={plants.length > 0 ? (
-                    <SwipePage
-                      current={current}
-                      index={index}
-                      setIndex={setIndex}
-                      x={x}
-                      y={y}
-                      onDragEnd={onDragEnd}
-                      handleInfo={handleInfo}
-                      handlePass={handlePass}
-                      handlePrevious={handlePrevious}
-                      liked={current ? likedIds.includes(current.id) : false}
-                      onToggleLike={() => { if (current) toggleLiked(current.id) }}
-                    />
-                  ) : (
-                    <></>
-                  )}
-                />
                 <Route path="/gardens" element={<GardenListPage />} />
                 <Route path="/garden/:id/*" element={<GardenDashboardPage />} />
                 <Route
@@ -715,22 +695,38 @@ export default function PlantSwipe() {
                   <Navigate to="/" replace />
                 )} />
                 <Route path="/plants/:id" element={<PlantInfoPage />} />
-                <Route path="*" element={
-                  <>
-                    {loading && <div className="p-8 text-center text-sm opacity-60">{t('common.loading')}</div>}
-                    {loadError && <div className="p-8 text-center text-sm text-red-600">{t('common.error')}: {loadError}</div>}
-                    {!loading && !loadError && (
-                      <>
-                        {plants.length === 0 && !query && !loadError && !loading && (
-                          <div className="p-8 text-center text-sm opacity-60">
-                            {t('plant.noResults')}
-                          </div>
-                        )}
-                        <Navigate to="/" replace />
-                      </>
-                    )}
-                  </>
-                } />
+                <Route
+                  path="/*"
+                  element={plants.length > 0 ? (
+                    <SwipePage
+                      current={current}
+                      index={index}
+                      setIndex={setIndex}
+                      x={x}
+                      y={y}
+                      onDragEnd={onDragEnd}
+                      handleInfo={handleInfo}
+                      handlePass={handlePass}
+                      handlePrevious={handlePrevious}
+                      liked={current ? likedIds.includes(current.id) : false}
+                      onToggleLike={() => { if (current) toggleLiked(current.id) }}
+                    />
+                  ) : (
+                    <>
+                      {loading && <div className="p-8 text-center text-sm opacity-60">{t('common.loading')}</div>}
+                      {loadError && <div className="p-8 text-center text-sm text-red-600">{t('common.error')}: {loadError}</div>}
+                      {!loading && !loadError && (
+                        <>
+                          {plants.length === 0 && !query && !loadError && !loading && (
+                            <div className="p-8 text-center text-sm opacity-60">
+                              {t('plant.noResults')}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </>
+                  )}
+                />
               </Routes>
               {/* When a background location is set, also render the overlay route on top */}
               {backgroundLocation && (
@@ -807,6 +803,7 @@ function PlantInfoOverlay() {
       >
         <SheetHeader>
           <SheetTitle className="sr-only">Plant Information</SheetTitle>
+          <SheetDescription className="sr-only">View detailed information about this plant</SheetDescription>
         </SheetHeader>
         <div className="max-w-4xl mx-auto w-full">
           <PlantInfoPage />

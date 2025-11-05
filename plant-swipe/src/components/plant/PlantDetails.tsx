@@ -26,9 +26,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
     : null
 
   const handleShare = async (e: React.MouseEvent) => {
-    // Don't prevent default/stop propagation until AFTER clipboard operation
-    // This preserves the user gesture context needed for clipboard API
-    
+    // Store the event to prevent default later, but preserve user gesture context
     const baseUrl = window.location.origin
     const pathWithoutLang = `/plants/${plant.id}`
     const pathWithLang = currentLang === 'en' ? pathWithoutLang : `/${currentLang}${pathWithoutLang}`
@@ -40,12 +38,10 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
     if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
       try {
         // Call clipboard API immediately while user gesture is active
-        // Don't await setTimeout first - that loses the gesture context
         await navigator.clipboard.writeText(shareUrl)
         console.log('Successfully copied to clipboard via Clipboard API')
         setShareSuccess(true)
         setTimeout(() => setShareSuccess(false), 3000)
-        // Now prevent default after clipboard operation
         e.preventDefault()
         e.stopPropagation()
         return
@@ -57,42 +53,59 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
     
     // Fallback method using execCommand
     // This must work even when inside a Sheet/Dialog overlay
+    // Use a synchronous approach to preserve user gesture context
     try {
       // Create a temporary textarea element that will be appended to body
       // (outside any Sheet/Dialog overlay)
       const textArea = document.createElement('textarea')
       textArea.value = shareUrl
       
-      // Style it to be invisible but still selectable
-      // Use high z-index to ensure it's accessible even if Sheet has high z-index
+      // Style it to be invisible but still focusable and selectable
+      // Position it off-screen
       textArea.style.position = 'fixed'
+      textArea.style.left = '-9999px'
       textArea.style.top = '0'
-      textArea.style.left = '0'
-      textArea.style.width = '2px'
-      textArea.style.height = '2px'
+      textArea.style.width = '1px'
+      textArea.style.height = '1px'
+      textArea.style.opacity = '0'
       textArea.style.padding = '0'
       textArea.style.border = 'none'
       textArea.style.outline = 'none'
       textArea.style.boxShadow = 'none'
       textArea.style.background = 'transparent'
-      textArea.style.opacity = '0'
-      textArea.style.pointerEvents = 'none'
-      textArea.style.zIndex = '99999' // Ensure it's above Sheet overlay
+      // Don't use pointer-events: none - it prevents focus/select
+      textArea.style.zIndex = '99999'
       
-      // Make it readonly to prevent keyboard from appearing on mobile
-      textArea.setAttribute('readonly', '')
+      // Some browsers require the element to be editable (not readonly) for execCommand
       textArea.setAttribute('aria-hidden', 'true')
+      textArea.setAttribute('tabindex', '-1')
       
-      // Append to body (not inside Sheet/Dialog)
+      // Append to body (not inside Sheet/Dialog) synchronously
       document.body.appendChild(textArea)
       
-      // Focus and select immediately - must be done synchronously during user gesture
+      // Focus and select immediately - must be synchronous to preserve user gesture
       textArea.focus()
       textArea.select()
+      // Ensure selection is set
       textArea.setSelectionRange(0, shareUrl.length)
       
-      // Execute copy command synchronously
-      const successful = document.execCommand('copy')
+      // Try to execute copy command synchronously
+      // Use a small synchronous delay to ensure focus/select completed
+      let successful = false
+      try {
+        // Double-check selection before copying
+        if (textArea.selectionStart === 0 && textArea.selectionEnd === shareUrl.length) {
+          successful = document.execCommand('copy')
+        } else {
+          // Retry selection if it didn't work
+          textArea.setSelectionRange(0, shareUrl.length)
+          successful = document.execCommand('copy')
+        }
+      } catch (selectErr) {
+        // If selection failed, try without explicit selection range
+        textArea.select()
+        successful = document.execCommand('copy')
+      }
       
       // Clean up immediately
       if (textArea.parentNode) {
