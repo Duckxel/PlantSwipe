@@ -1,10 +1,9 @@
 import React from "react";
-import { useNavigate } from "react-router-dom";
-import { useLanguage } from "@/lib/i18nRouting";
+import { useLanguageNavigate, useLanguage } from "@/lib/i18nRouting";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { SunMedium, Droplets, Leaf, Heart, Box, ArrowUpRight } from "lucide-react";
+import { SunMedium, Droplets, Leaf, Heart, Box, ArrowUpRight, Maximize2, ChevronLeft } from "lucide-react";
 import type { Plant } from "@/types/plant";
 import { rarityTone, seasonBadge } from "@/constants/badges";
 import { deriveWaterLevelFromFrequency } from "@/lib/utils";
@@ -12,8 +11,8 @@ import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/context/AuthContext";
 import { useTranslation } from "react-i18next";
 
-export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?: boolean; onToggleLike?: () => void }> = ({ plant, onClose, liked = false, onToggleLike }) => {
-  const navigate = useNavigate()
+export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?: boolean; onToggleLike?: () => void; isOverlayMode?: boolean }> = ({ plant, onClose, liked = false, onToggleLike, isOverlayMode = false }) => {
+  const navigate = useLanguageNavigate()
   const currentLang = useLanguage()
   const { user } = useAuth()
   const { t } = useTranslation('common')
@@ -29,18 +28,21 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
   const handleShare = async (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
+    e.nativeEvent.stopImmediatePropagation()
     
     const baseUrl = window.location.origin
     const pathWithoutLang = `/plants/${plant.id}`
     const pathWithLang = currentLang === 'en' ? pathWithoutLang : `/${currentLang}${pathWithoutLang}`
     const shareUrl = `${baseUrl}${pathWithLang}`
     
-    console.log('Attempting to copy:', shareUrl)
+    console.log('Attempting to copy:', shareUrl, 'isOverlayMode:', isOverlayMode)
     
     // Try modern Clipboard API first - this should work even in overlays
     if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
       try {
         // Clipboard API requires user gesture, which we have here
+        // Use a small delay to ensure the click event has fully propagated
+        await new Promise(resolve => setTimeout(resolve, 0))
         await navigator.clipboard.writeText(shareUrl)
         console.log('Successfully copied to clipboard via Clipboard API')
         setShareSuccess(true)
@@ -115,7 +117,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
             }
             reject(err)
           }
-        }, 10) // Small delay to ensure DOM is ready
+        }, 50) // Increased delay for overlay context
       })
     } catch (err) {
       console.error('All copy methods failed:', err)
@@ -125,8 +127,48 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
     }
   }
 
+  const handleExpand = () => {
+    const pathWithoutLang = `/plants/${plant.id}`
+    const pathWithLang = currentLang === 'en' ? pathWithoutLang : `/${currentLang}${pathWithoutLang}`
+    navigate(pathWithLang)
+  }
+
+  const handleBackToSearch = () => {
+    navigate('/search')
+  }
+
   return (
     <div className="space-y-4 select-none">
+      {/* Expand button for overlay mode - at the top */}
+      {isOverlayMode && (
+        <div className="flex justify-end mb-2">
+          <button
+            onClick={handleExpand}
+            type="button"
+            aria-label="Expand to full page"
+            className="h-8 w-8 rounded-full flex items-center justify-center border bg-white/90 text-black hover:bg-white transition shadow-sm"
+            title="Expand to full page"
+          >
+            <Maximize2 className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+      
+      {/* Back arrow for full page mode - at the top left */}
+      {!isOverlayMode && (
+        <div className="flex justify-start mb-2">
+          <button
+            onClick={handleBackToSearch}
+            type="button"
+            aria-label="Back to search"
+            className="h-8 w-8 rounded-full flex items-center justify-center border bg-white/90 text-black hover:bg-white transition shadow-sm"
+            title="Back to search"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+      
       <div className="grid md:grid-cols-2 gap-4 items-center">
         <div className="flex flex-col space-y-2 text-left">
           <h2 className="text-3xl md:text-4xl font-bold leading-tight">{plant.name}</h2>

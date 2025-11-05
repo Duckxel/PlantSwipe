@@ -116,6 +116,7 @@ export const PlantInfoPage: React.FC = () => {
         onClose={handleClose}
         liked={likedIds.includes(plant.id)}
         onToggleLike={toggleLiked}
+        isOverlayMode={isOverlayMode}
       />
     </div>
   )
