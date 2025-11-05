@@ -35,19 +35,67 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
     
     console.log('Attempting to copy:', shareUrl, 'isOverlayMode:', isOverlayMode)
     
-    // Strategy: Try Clipboard API first (most reliable), then execCommand fallback
-    // Both must happen during the user gesture (click event)
+    // When in overlay mode (Sheet), execCommand often fails silently
+    // Prioritize Clipboard API which works better in overlays
+    if (isOverlayMode) {
+      // In overlay mode, use Clipboard API exclusively
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        try {
+          await navigator.clipboard.writeText(shareUrl)
+          console.log('Clipboard API write succeeded in overlay mode')
+          
+          // Verify it worked
+          try {
+            const copied = await navigator.clipboard.readText()
+            if (copied === shareUrl) {
+              console.log('Verified: Clipboard contains correct URL')
+              setShareSuccess(true)
+              setTimeout(() => setShareSuccess(false), 3000)
+              e.preventDefault()
+              e.stopPropagation()
+              return
+            } else {
+              console.warn('Clipboard contains different content:', copied)
+              throw new Error('Clipboard verification failed')
+            }
+          } catch (readErr) {
+            // Can't read (permissions), but assume write succeeded if no error
+            console.log('Cannot verify clipboard (read permission denied), assuming success')
+            setShareSuccess(true)
+            setTimeout(() => setShareSuccess(false), 3000)
+            e.preventDefault()
+            e.stopPropagation()
+            return
+          }
+        } catch (clipboardErr: any) {
+          console.error('Clipboard API failed in overlay mode:', clipboardErr?.message || clipboardErr)
+          // Fall through to manual copy prompt
+        }
+      }
+      
+      // If Clipboard API failed in overlay, show manual copy option
+      const manualCopy = confirm(`Copy URL to clipboard?\n\n${shareUrl}\n\nClick OK to copy manually from the prompt.`)
+      if (manualCopy) {
+        const promptResult = prompt('Copy this URL:', shareUrl)
+        if (promptResult !== null) {
+          setShareSuccess(true)
+          setTimeout(() => setShareSuccess(false), 3000)
+        }
+      }
+      e.preventDefault()
+      e.stopPropagation()
+      return
+    }
     
-    // Try Clipboard API first - call it immediately while gesture is active
+    // Full page mode: Try Clipboard API first, then execCommand fallback
     let clipboardSuccess = false
     if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
       try {
-        // Call immediately - don't await anything first
         await navigator.clipboard.writeText(shareUrl)
         clipboardSuccess = true
         console.log('Clipboard API write succeeded')
         
-        // Try to verify (optional)
+        // Try to verify
         try {
           const copied = await navigator.clipboard.readText()
           if (copied === shareUrl) {
@@ -57,7 +105,6 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
             clipboardSuccess = false
           }
         } catch {
-          // Can't read clipboard (permissions), but assume write succeeded
           console.log('Cannot verify clipboard (read permission denied)')
         }
         
@@ -69,23 +116,22 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
           return
         }
       } catch (clipboardErr: any) {
-        console.warn('Clipboard API write failed:', clipboardErr?.message || clipboardErr)
+        console.warn('Clipboard API failed:', clipboardErr?.message || clipboardErr)
       }
     }
     
-    // Fallback: execCommand - this MUST be synchronous and happen during user gesture
+    // Fallback: execCommand (works better in full page mode)
     try {
       const input = document.createElement('input')
       input.type = 'text'
       input.value = shareUrl
       
-      // Make it visible but tiny - some browsers require actual visibility
       input.style.position = 'fixed'
       input.style.left = '0'
       input.style.top = '0'
       input.style.width = '2px'
       input.style.height = '2px'
-      input.style.opacity = '0.01' // Nearly invisible but technically visible
+      input.style.opacity = '0.01'
       input.style.padding = '0'
       input.style.border = 'none'
       input.style.outline = 'none'
@@ -97,22 +143,21 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
       
       document.body.appendChild(input)
       
-      // Focus and select IMMEDIATELY - must be synchronous
+      // Focus and select synchronously
       input.focus()
       input.select()
       input.setSelectionRange(0, shareUrl.length)
       
-      // Verify selection before copying
+      // Verify selection
       const selectionStart = input.selectionStart || 0
       const selectionEnd = input.selectionEnd || 0
       if (selectionStart !== 0 || selectionEnd !== shareUrl.length) {
-        // Retry focus/select
         input.focus()
         input.select()
         input.setSelectionRange(0, shareUrl.length)
       }
       
-      // Execute copy command - must be synchronous
+      // Execute copy
       const successful = document.execCommand('copy')
       
       // Clean up
@@ -122,7 +167,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
       }
       
       if (successful) {
-        console.log('execCommand returned true - assuming copy succeeded')
+        console.log('execCommand returned true')
         setShareSuccess(true)
         setTimeout(() => setShareSuccess(false), 3000)
         e.preventDefault()
@@ -133,16 +178,14 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
       }
     } catch (err) {
       console.error('execCommand failed:', err)
-      // Continue to last resort
     }
     
-    // Last resort: show prompt for manual copy
+    // Last resort: manual copy
     console.error('All automatic copy methods failed')
     const manualCopy = confirm(`${t('plantInfo.shareFailed')}\n\nURL: ${shareUrl}\n\nWould you like to copy it manually?`)
     if (manualCopy) {
       const promptResult = prompt('Copy this URL:', shareUrl)
       if (promptResult !== null) {
-        // User might have copied it
         setShareSuccess(true)
         setTimeout(() => setShareSuccess(false), 3000)
       }
