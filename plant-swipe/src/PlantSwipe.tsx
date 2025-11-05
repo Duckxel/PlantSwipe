@@ -31,7 +31,7 @@ import { FriendsPage } from "@/pages/FriendsPage";
 import SettingsPage from "@/pages/SettingsPage";
 import { supabase } from "@/lib/supabaseClient";
 import { useLanguage } from "@/lib/i18nRouting";
-import { loadPlantsWithTranslations } from "@/lib/plantTranslationLoader";
+import { loadPlantsWithTranslations, clearPlantCache } from "@/lib/plantTranslationLoader";
 import { useTranslation } from "react-i18next";
 
 // Lazy load heavy pages for code splitting
@@ -110,7 +110,10 @@ export default function PlantSwipe() {
 
   // Global refresh for plant lists without full reload
   React.useEffect(() => {
-    const onRefresh = () => { loadPlants() }
+    const onRefresh = () => { 
+      clearPlantCache() // Clear cache before reloading to ensure fresh data
+      loadPlants() 
+    }
     try { window.addEventListener('plants:refresh', onRefresh as EventListener) } catch {}
     return () => { try { window.removeEventListener('plants:refresh', onRefresh as EventListener) } catch {} }
   }, [loadPlants])

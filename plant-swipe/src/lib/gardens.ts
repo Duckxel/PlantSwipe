@@ -101,11 +101,12 @@ export async function getGardenPlants(gardenId: string, language?: SupportedLang
   
   // Always load translations for the specified language (including English)
   // This ensures plants created in one language display correctly in another
+  // OPTIMIZED: Only select needed translation fields to reduce egress
   let translationMap = new Map()
   if (language) {
     const { data: translations } = await supabase
       .from('plant_translations')
-      .select('*')
+      .select('plant_id, language, name, scientific_name, meaning, description, care_soil')
       .eq('language', language)
       .in('plant_id', plantIds)
     if (translations) {
@@ -371,6 +372,7 @@ export async function getGardenInventory(gardenId: string): Promise<Array<{ plan
   const rows = (data || []) as Array<{ plant_id: string; seeds_on_hand: number; plants_on_hand: number }>
   if (rows.length === 0) return []
   const plantIds = rows.map(r => String(r.plant_id))
+  // OPTIMIZED: Only select fields needed for inventory display to reduce egress
   const { data: plantRows } = await supabase
     .from('plants')
     .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available')
@@ -613,7 +615,8 @@ export async function deletePlantTask(taskId: string): Promise<void> {
   if (error) throw new Error(error.message)
 }
 
-export async function listTaskOccurrences(taskId: string, windowDays = 60): Promise<GardenPlantTaskOccurrence[]> {
+// OPTIMIZED: Reduced default window to reduce egress - only load what's needed
+export async function listTaskOccurrences(taskId: string, windowDays = 30): Promise<GardenPlantTaskOccurrence[]> {
   const start = new Date()
   start.setDate(start.getDate() - windowDays)
   const end = new Date()

@@ -87,9 +87,10 @@ export async function getPlantTranslation(
   language: SupportedLanguage
 ): Promise<{ data?: PlantTranslation | null; error?: Error }> {
   try {
+    // OPTIMIZED: Only select needed fields to reduce egress
     const { data, error } = await supabase
       .from('plant_translations')
-      .select('*')
+      .select('plant_id, language, name, scientific_name, meaning, description, care_soil')
       .eq('plant_id', plantId)
       .eq('language', language)
       .maybeSingle()
@@ -109,9 +110,10 @@ export async function getPlantTranslation(
  */
 export async function getPlantTranslations(plantId: string): Promise<{ data?: PlantTranslation[]; error?: Error }> {
   try {
+    // OPTIMIZED: Only select needed fields to reduce egress
     const { data, error } = await supabase
       .from('plant_translations')
-      .select('*')
+      .select('plant_id, language, name, scientific_name, meaning, description, care_soil')
       .eq('plant_id', plantId)
 
     if (error) {

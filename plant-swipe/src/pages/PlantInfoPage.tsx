@@ -50,9 +50,10 @@ export const PlantInfoPage: React.FC = () => {
         } else {
           // Always load translation for current language (if available)
           // This ensures plants created in one language display correctly in another
+          // OPTIMIZED: Only select needed translation fields to reduce egress
           const { data: transData } = await supabase
             .from('plant_translations')
-            .select('*')
+            .select('plant_id, language, name, scientific_name, meaning, description, care_soil')
             .eq('plant_id', id)
             .eq('language', currentLang)
             .maybeSingle()
