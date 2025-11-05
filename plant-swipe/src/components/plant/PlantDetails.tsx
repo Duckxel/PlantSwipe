@@ -25,8 +25,9 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
     ? `${freqAmount > 0 ? `${freqAmount} ${freqAmount === 1 ? t('plantInfo.time') : t('plantInfo.times')} ` : ''}${t('plantInfo.per')} ${t(`plantInfo.${freqPeriod}`)}`
     : null
 
-  const handleShare = (e: React.MouseEvent) => {
-    // Don't prevent default until AFTER clipboard operation to preserve user gesture
+  const handleShare = async (e: React.MouseEvent) => {
+    // CRITICAL: Don't prevent default until AFTER clipboard operation
+    // This preserves the user gesture context needed for clipboard API
     const baseUrl = window.location.origin
     const pathWithoutLang = `/plants/${plant.id}`
     const pathWithLang = currentLang === 'en' ? pathWithoutLang : `/${currentLang}${pathWithoutLang}`
@@ -34,85 +35,121 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
     
     console.log('Attempting to copy:', shareUrl, 'isOverlayMode:', isOverlayMode)
     
-    // For Sheet overlays, clipboard API often fails due to security restrictions
-    // Use execCommand which is more reliable in overlays
+    // Strategy: Try Clipboard API first (most reliable), then execCommand fallback
+    // Both must happen during the user gesture (click event)
+    
+    // Try Clipboard API first - call it immediately while gesture is active
+    let clipboardSuccess = false
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      try {
+        // Call immediately - don't await anything first
+        await navigator.clipboard.writeText(shareUrl)
+        clipboardSuccess = true
+        console.log('Clipboard API write succeeded')
+        
+        // Try to verify (optional)
+        try {
+          const copied = await navigator.clipboard.readText()
+          if (copied === shareUrl) {
+            console.log('Verified: Clipboard contains correct URL')
+          } else {
+            console.warn('Clipboard contains different content:', copied)
+            clipboardSuccess = false
+          }
+        } catch {
+          // Can't read clipboard (permissions), but assume write succeeded
+          console.log('Cannot verify clipboard (read permission denied)')
+        }
+        
+        if (clipboardSuccess) {
+          setShareSuccess(true)
+          setTimeout(() => setShareSuccess(false), 3000)
+          e.preventDefault()
+          e.stopPropagation()
+          return
+        }
+      } catch (clipboardErr: any) {
+        console.warn('Clipboard API write failed:', clipboardErr?.message || clipboardErr)
+      }
+    }
+    
+    // Fallback: execCommand - this MUST be synchronous and happen during user gesture
     try {
-      // Create input element - inputs work better than textareas in some browsers
       const input = document.createElement('input')
       input.type = 'text'
       input.value = shareUrl
       
-      // Position it in viewport but make it invisible
-      // Being in viewport helps with focus/select in overlays
+      // Make it visible but tiny - some browsers require actual visibility
       input.style.position = 'fixed'
       input.style.left = '0'
       input.style.top = '0'
-      input.style.width = '1px'
-      input.style.height = '1px'
-      input.style.opacity = '0'
+      input.style.width = '2px'
+      input.style.height = '2px'
+      input.style.opacity = '0.01' // Nearly invisible but technically visible
       input.style.padding = '0'
       input.style.border = 'none'
       input.style.outline = 'none'
       input.style.margin = '0'
       input.style.zIndex = '999999'
-      input.readOnly = false // Must be editable for execCommand
+      input.readOnly = false
       input.setAttribute('aria-hidden', 'true')
       input.setAttribute('tabindex', '-1')
       
-      // Append to body
       document.body.appendChild(input)
       
-      // Focus and select immediately - must be synchronous to preserve user gesture
+      // Focus and select IMMEDIATELY - must be synchronous
       input.focus()
       input.select()
-      
-      // Ensure full selection
       input.setSelectionRange(0, shareUrl.length)
       
-      // Execute copy synchronously - must happen during user gesture
+      // Verify selection before copying
+      const selectionStart = input.selectionStart || 0
+      const selectionEnd = input.selectionEnd || 0
+      if (selectionStart !== 0 || selectionEnd !== shareUrl.length) {
+        // Retry focus/select
+        input.focus()
+        input.select()
+        input.setSelectionRange(0, shareUrl.length)
+      }
+      
+      // Execute copy command - must be synchronous
       const successful = document.execCommand('copy')
       
-      // Clean up immediately
-      if (input.parentNode) {
-        document.body.removeChild(input)
+      // Clean up
+      const parent = input.parentNode
+      if (parent) {
+        parent.removeChild(input)
       }
       
       if (successful) {
-        console.log('Successfully copied using execCommand')
+        console.log('execCommand returned true - assuming copy succeeded')
         setShareSuccess(true)
         setTimeout(() => setShareSuccess(false), 3000)
-        
-        // Also try Clipboard API as secondary attempt (won't break if it fails)
-        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-          navigator.clipboard.writeText(shareUrl).catch(() => {
-            // Ignore errors - execCommand already succeeded
-          })
-        }
+        e.preventDefault()
+        e.stopPropagation()
+        return
       } else {
-        // If execCommand failed, try Clipboard API as fallback
-        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-          navigator.clipboard.writeText(shareUrl).then(() => {
-            console.log('Successfully copied using Clipboard API fallback')
-            setShareSuccess(true)
-            setTimeout(() => setShareSuccess(false), 3000)
-          }).catch((clipboardErr: any) => {
-            throw new Error(`Both methods failed: execCommand=${successful}, clipboard=${clipboardErr?.message || clipboardErr}`)
-          })
-        } else {
-          throw new Error('execCommand returned false and Clipboard API not available')
-        }
+        throw new Error('execCommand returned false')
       }
-      
-      // Prevent default after successful copy
-      e.preventDefault()
-      e.stopPropagation()
     } catch (err) {
-      console.error('All copy methods failed:', err)
-      const errorMsg = err instanceof Error ? err.message : String(err)
-      alert(`${t('plantInfo.shareFailed')}\n\nURL: ${shareUrl}\n\nError: ${errorMsg}`)
-      e.preventDefault()
-      e.stopPropagation()
+      console.error('execCommand failed:', err)
+      // Continue to last resort
     }
+    
+    // Last resort: show prompt for manual copy
+    console.error('All automatic copy methods failed')
+    const manualCopy = confirm(`${t('plantInfo.shareFailed')}\n\nURL: ${shareUrl}\n\nWould you like to copy it manually?`)
+    if (manualCopy) {
+      const promptResult = prompt('Copy this URL:', shareUrl)
+      if (promptResult !== null) {
+        // User might have copied it
+        setShareSuccess(true)
+        setTimeout(() => setShareSuccess(false), 3000)
+      }
+    }
+    
+    e.preventDefault()
+    e.stopPropagation()
   }
 
   const handleExpand = () => {
