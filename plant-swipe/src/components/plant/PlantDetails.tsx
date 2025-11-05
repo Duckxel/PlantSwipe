@@ -43,6 +43,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
   const [isDragging, setIsDragging] = React.useState(false)
   const [dragStart, setDragStart] = React.useState({ x: 0, y: 0 })
   const imageRef = React.useRef<HTMLImageElement>(null)
+  const imageContainerRef = React.useRef<HTMLDivElement>(null)
   const freqAmountRaw = plant.waterFreqAmount ?? plant.waterFreqValue
   const freqAmount = typeof freqAmountRaw === 'number' ? freqAmountRaw : Number(freqAmountRaw || 0)
   const freqPeriod = (plant.waterFreqPeriod || plant.waterFreqUnit) as 'day' | 'week' | 'month' | 'year' | undefined
@@ -395,13 +396,6 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
         <Dialog open={isImageFullScreen} onOpenChange={setIsImageFullScreen}>
           <DialogContent 
             className="max-w-[100vw] max-h-[100vh] w-screen h-screen p-0 !bg-transparent border-none rounded-none !translate-x-0 !translate-y-0 !left-0 !top-0"
-            onClick={(e) => {
-              // Close when clicking outside the image container (on the background)
-              const target = e.target as HTMLElement
-              if (!target.closest('[data-image-container]') && !target.closest('button')) {
-                setIsImageFullScreen(false)
-              }
-            }}
           >
             {/* Override overlay and hide default close button */}
             <style dangerouslySetInnerHTML={{
@@ -426,11 +420,33 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
             </button>
             
             {/* Background area - clickable to close */}
-            <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
+            <div 
+              className="absolute inset-0 flex items-center justify-center overflow-hidden"
+              onClick={(e) => {
+                // Close when clicking outside the image container
+                if (imageContainerRef.current) {
+                  const rect = imageContainerRef.current.getBoundingClientRect()
+                  const clickX = e.clientX
+                  const clickY = e.clientY
+                  
+                  // Check if click is outside the image container bounds
+                  if (
+                    clickX < rect.left ||
+                    clickX > rect.right ||
+                    clickY < rect.top ||
+                    clickY > rect.bottom
+                  ) {
+                    setIsImageFullScreen(false)
+                  }
+                }
+              }}
+            >
               {/* Image container with zoom and pan */}
               <div
+                ref={imageContainerRef}
                 data-image-container
-                className="flex items-center justify-center w-full h-full touch-none"
+                className="flex items-center justify-center touch-none pointer-events-auto"
+                style={{ maxWidth: '100%', maxHeight: '100%' }}
                 onWheel={handleImageWheel}
                 onMouseMove={handleImageMouseMove}
                 onMouseUp={handleImageMouseUp}
@@ -454,6 +470,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
                   }}
                   onMouseDown={handleImageMouseDown}
                   draggable={false}
+                  onClick={(e) => e.stopPropagation()}
                 />
               </div>
             </div>
