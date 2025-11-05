@@ -1,7 +1,6 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { useLanguage } from "@/lib/i18nRouting";
-import { SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,7 +26,10 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
     ? `${freqAmount > 0 ? `${freqAmount} ${freqAmount === 1 ? t('plantInfo.time') : t('plantInfo.times')} ` : ''}${t('plantInfo.per')} ${t(`plantInfo.${freqPeriod}`)}`
     : null
 
-  const handleShare = async () => {
+  const handleShare = async (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    
     try {
       // Build the shareable URL for the current plant
       const baseUrl = window.location.origin
@@ -35,30 +37,52 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
       const pathWithLang = currentLang === 'en' ? pathWithoutLang : `/${currentLang}${pathWithoutLang}`
       const shareUrl = `${baseUrl}${pathWithLang}`
       
-      // Copy to clipboard - try modern API first, fallback to older method
+      // Copy to clipboard - try modern API first
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(shareUrl)
-      } else {
-        // Fallback for older browsers
-        const textArea = document.createElement('textarea')
-        textArea.value = shareUrl
-        textArea.style.position = 'fixed'
-        textArea.style.left = '-999999px'
-        textArea.style.top = '-999999px'
-        document.body.appendChild(textArea)
-        textArea.focus()
-        textArea.select()
         try {
-          document.execCommand('copy')
-        } catch (err) {
-          console.error('Fallback copy failed:', err)
-          throw err
+          await navigator.clipboard.writeText(shareUrl)
+          setShareSuccess(true)
+          setTimeout(() => setShareSuccess(false), 3000)
+          return
+        } catch (clipboardErr) {
+          console.warn('Clipboard API failed, trying fallback:', clipboardErr)
+          // Fall through to fallback method
         }
-        document.body.removeChild(textArea)
       }
       
-      setShareSuccess(true)
-      setTimeout(() => setShareSuccess(false), 3000)
+      // Fallback method for older browsers or when clipboard API fails
+      const textArea = document.createElement('textarea')
+      textArea.value = shareUrl
+      textArea.style.position = 'fixed'
+      textArea.style.left = '0'
+      textArea.style.top = '0'
+      textArea.style.width = '2em'
+      textArea.style.height = '2em'
+      textArea.style.padding = '0'
+      textArea.style.border = 'none'
+      textArea.style.outline = 'none'
+      textArea.style.boxShadow = 'none'
+      textArea.style.background = 'transparent'
+      textArea.setAttribute('readonly', '')
+      textArea.setAttribute('aria-hidden', 'true')
+      
+      document.body.appendChild(textArea)
+      textArea.focus()
+      textArea.setSelectionRange(0, shareUrl.length)
+      
+      try {
+        const successful = document.execCommand('copy')
+        if (!successful) {
+          throw new Error('execCommand copy returned false')
+        }
+        setShareSuccess(true)
+        setTimeout(() => setShareSuccess(false), 3000)
+      } catch (err) {
+        console.error('Fallback copy failed:', err)
+        alert(t('plantInfo.shareFailed'))
+      } finally {
+        document.body.removeChild(textArea)
+      }
     } catch (err) {
       console.error('Failed to copy link:', err)
       alert(t('plantInfo.shareFailed'))
@@ -68,15 +92,16 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
   return (
     <div className="space-y-4 select-none">
       <div className="grid md:grid-cols-2 gap-4 items-center">
-        <SheetHeader className="text-left">
-          <SheetTitle className="text-3xl md:text-4xl font-bold leading-tight">{plant.name}</SheetTitle>
-          <SheetDescription className="italic text-base md:text-lg opacity-80">{plant.scientificName}</SheetDescription>
-        </SheetHeader>
+        <div className="flex flex-col space-y-2 text-left">
+          <h2 className="text-3xl md:text-4xl font-bold leading-tight">{plant.name}</h2>
+          <p className="italic text-base md:text-lg opacity-80">{plant.scientificName}</p>
+        </div>
         <div className="rounded-2xl overflow-hidden shadow relative">
           <div className="h-44 md:h-60 bg-cover bg-center select-none rounded-2xl" style={{ backgroundImage: `url(${plant.image})`, userSelect: 'none' as any }} />
           <div className="absolute bottom-3 right-3 flex gap-2">
             <button
               onClick={handleShare}
+              type="button"
               aria-label={t('plantInfo.share')}
               className={`h-8 w-8 rounded-full flex items-center justify-center border transition shadow-[0_4px_12px_rgba(0,0,0,0.28)] ${shareSuccess ? 'bg-green-600 text-white' : 'bg-white/90 text-black hover:bg-white'}`}
               title={shareSuccess ? t('plantInfo.shareCopied') : t('plantInfo.share')}
