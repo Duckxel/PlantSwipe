@@ -88,54 +88,63 @@ export default function PlantSwipe() {
     setLoadError(null)
     let ok = false
     try {
-      // Prefer public API first to ensure anonymous browsing works even without Supabase
-      const resp = await fetch('/api/plants', {
-        credentials: 'same-origin',
-        headers: { 'Accept': 'application/json' },
-      })
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-      const ct = (resp.headers.get('content-type') || '').toLowerCase()
-      const text = await resp.text()
-      if (ct.includes('application/json') || /^[\s\n]*[\[{]/.test(text)) {
-        let arr: unknown = []
-        try { arr = JSON.parse(text) } catch { arr = [] }
-        const parsedFromApi: Plant[] = (Array.isArray(arr) ? arr : []).map((p: any) => ({
-          id: String(p.id),
-          name: String(p.name),
-          scientificName: String(p.scientificName || p.scientific_name || ''),
-          colors: Array.isArray(p.colors) ? p.colors.map((c: unknown) => String(c)) : [],
-          seasons: Array.isArray(p.seasons) ? (p.seasons as unknown[]).map((s) => String(s)) as Plant['seasons'] : [],
-          rarity: (p.rarity || 'Common') as Plant['rarity'],
-          meaning: p.meaning ? String(p.meaning) : '',
-          description: p.description ? String(p.description) : '',
-          image: String(p.image || p.image_url || ''),
-          care: {
-            sunlight: ((p.care && p.care.sunlight) || p.care_sunlight || 'Low') as Plant['care']['sunlight'],
-            water: ((p.care && p.care.water) || p.care_water || 'Low') as Plant['care']['water'],
-            soil: String((p.care && p.care.soil) || p.care_soil || ''),
-            difficulty: ((p.care && p.care.difficulty) || p.care_difficulty || 'Easy') as Plant['care']['difficulty']
-          },
-          seedsAvailable: Boolean((p.seedsAvailable ?? p.seeds_available) ?? false),
-          waterFreqUnit: (p.waterFreqUnit || p.water_freq_unit) || undefined,
-          waterFreqValue: (p.waterFreqValue ?? p.water_freq_value) ?? null,
-          waterFreqPeriod: (p.waterFreqPeriod || p.water_freq_period) || undefined,
-          waterFreqAmount: (p.waterFreqAmount ?? p.water_freq_amount) ?? null
-        }))
-        setPlants(parsedFromApi)
-        ok = true
-      } else {
-        throw new Error('Non-JSON response from /api/plants')
-      }
-    } catch (_apiErr: unknown) {
-      // Fallback to Supabase client with translations
-      try {
+      // If language is not default, prioritize Supabase with translations
+      // Otherwise try API first for better performance
+      if (currentLang !== 'en') {
+        // For non-default languages, always use Supabase with translations
         const plantsWithTranslations = await loadPlantsWithTranslations(currentLang)
         setPlants(plantsWithTranslations)
         ok = true
-      } catch (e2: unknown) {
-        const msg = e2 && typeof e2 === 'object' && 'message' in e2 ? String((e2 as { message?: unknown }).message || '') : ''
-        setLoadError(msg || 'Failed to load plants')
+      } else {
+        // For default language, try API first for better performance
+        try {
+          const resp = await fetch('/api/plants', {
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json' },
+          })
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+          const ct = (resp.headers.get('content-type') || '').toLowerCase()
+          const text = await resp.text()
+          if (ct.includes('application/json') || /^[\s\n]*[\[{]/.test(text)) {
+            let arr: unknown = []
+            try { arr = JSON.parse(text) } catch { arr = [] }
+            const parsedFromApi: Plant[] = (Array.isArray(arr) ? arr : []).map((p: any) => ({
+              id: String(p.id),
+              name: String(p.name),
+              scientificName: String(p.scientificName || p.scientific_name || ''),
+              colors: Array.isArray(p.colors) ? p.colors.map((c: unknown) => String(c)) : [],
+              seasons: Array.isArray(p.seasons) ? (p.seasons as unknown[]).map((s) => String(s)) as Plant['seasons'] : [],
+              rarity: (p.rarity || 'Common') as Plant['rarity'],
+              meaning: p.meaning ? String(p.meaning) : '',
+              description: p.description ? String(p.description) : '',
+              image: String(p.image || p.image_url || ''),
+              care: {
+                sunlight: ((p.care && p.care.sunlight) || p.care_sunlight || 'Low') as Plant['care']['sunlight'],
+                water: ((p.care && p.care.water) || p.care_water || 'Low') as Plant['care']['water'],
+                soil: String((p.care && p.care.soil) || p.care_soil || ''),
+                difficulty: ((p.care && p.care.difficulty) || p.care_difficulty || 'Easy') as Plant['care']['difficulty']
+              },
+              seedsAvailable: Boolean((p.seedsAvailable ?? p.seeds_available) ?? false),
+              waterFreqUnit: (p.waterFreqUnit || p.water_freq_unit) || undefined,
+              waterFreqValue: (p.waterFreqValue ?? p.water_freq_value) ?? null,
+              waterFreqPeriod: (p.waterFreqPeriod || p.water_freq_period) || undefined,
+              waterFreqAmount: (p.waterFreqAmount ?? p.water_freq_amount) ?? null
+            }))
+            setPlants(parsedFromApi)
+            ok = true
+          } else {
+            throw new Error('Non-JSON response from /api/plants')
+          }
+        } catch (_apiErr: unknown) {
+          // Fallback to Supabase client with translations
+          const plantsWithTranslations = await loadPlantsWithTranslations(currentLang)
+          setPlants(plantsWithTranslations)
+          ok = true
+        }
       }
+    } catch (e: unknown) {
+      const msg = e && typeof e === 'object' && 'message' in e ? String((e as { message?: unknown }).message || '') : ''
+      setLoadError(msg || 'Failed to load plants')
     } finally {
       setLoading(false)
     }
