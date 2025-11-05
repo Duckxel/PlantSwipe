@@ -35,7 +35,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ plants, openInfo, likedI
                   loading="lazy"
                   draggable={false}
                   decoding="async"
-                  className="absolute inset-0 h-full w-full object-cover object-center select-none"
+                  className="absolute inset-0 h-full w-full object-cover object-center select-none scale-110"
                 />
               ) : null}
             </div>
