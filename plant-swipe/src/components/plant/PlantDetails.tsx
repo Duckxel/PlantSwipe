@@ -3,7 +3,7 @@ import { useLanguageNavigate, useLanguage } from "@/lib/i18nRouting";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { SunMedium, Droplets, Leaf, Heart, Box, ArrowUpRight, Maximize2, ChevronLeft } from "lucide-react";
+import { SunMedium, Droplets, Leaf, Heart, Share2, Maximize2, ChevronLeft } from "lucide-react";
 import type { Plant } from "@/types/plant";
 import { rarityTone, seasonBadge } from "@/constants/badges";
 import { deriveWaterLevelFromFrequency } from "@/lib/utils";
@@ -25,105 +25,66 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
     ? `${freqAmount > 0 ? `${freqAmount} ${freqAmount === 1 ? t('plantInfo.time') : t('plantInfo.times')} ` : ''}${t('plantInfo.per')} ${t(`plantInfo.${freqPeriod}`)}`
     : null
 
-  const handleShare = async (e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    e.nativeEvent.stopImmediatePropagation()
-    
+  const handleShare = (e: React.MouseEvent) => {
     const baseUrl = window.location.origin
     const pathWithoutLang = `/plants/${plant.id}`
     const pathWithLang = currentLang === 'en' ? pathWithoutLang : `/${currentLang}${pathWithoutLang}`
     const shareUrl = `${baseUrl}${pathWithLang}`
     
-    console.log('Attempting to copy:', shareUrl, 'isOverlayMode:', isOverlayMode)
+    console.log('handleShare called! Copying:', shareUrl)
     
-    // Try modern Clipboard API first - this should work even in overlays
-    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-      try {
-        // Clipboard API requires user gesture, which we have here
-        // Use a small delay to ensure the click event has fully propagated
-        await new Promise(resolve => setTimeout(resolve, 0))
-        await navigator.clipboard.writeText(shareUrl)
-        console.log('Successfully copied to clipboard via Clipboard API')
-        setShareSuccess(true)
-        setTimeout(() => setShareSuccess(false), 3000)
-        return
-      } catch (clipboardErr: any) {
-        console.warn('Clipboard API failed:', clipboardErr?.message || clipboardErr)
-        // Continue to fallback
-      }
+    e.preventDefault()
+    e.stopPropagation()
+    
+    // Create textarea for execCommand method
+    const textarea = document.createElement('textarea')
+    textarea.value = shareUrl
+    textarea.style.position = 'fixed'
+    textarea.style.top = '0'
+    textarea.style.left = '0'
+    textarea.style.width = '2px'
+    textarea.style.height = '2px'
+    textarea.style.opacity = '0'
+    textarea.style.pointerEvents = 'none'
+    textarea.style.zIndex = '999999'
+    textarea.readOnly = false
+    
+    document.body.appendChild(textarea)
+    
+    // Focus and select
+    textarea.focus()
+    textarea.select()
+    textarea.setSelectionRange(0, shareUrl.length)
+    
+    // Try execCommand first
+    let execSuccess = false
+    try {
+      execSuccess = document.execCommand('copy')
+      console.log('execCommand result:', execSuccess)
+    } catch (err) {
+      console.error('execCommand error:', err)
     }
     
-    // Fallback method using execCommand
-    // This must work even when inside a Sheet/Dialog overlay
-    try {
-      // Create a temporary textarea element that will be appended to body
-      // (outside any Sheet/Dialog overlay)
-      const textArea = document.createElement('textarea')
-      textArea.value = shareUrl
-      
-      // Style it to be invisible but still selectable
-      // Use high z-index to ensure it's accessible even if Sheet has high z-index
-      textArea.style.position = 'fixed'
-      textArea.style.top = '0'
-      textArea.style.left = '0'
-      textArea.style.width = '2px'
-      textArea.style.height = '2px'
-      textArea.style.padding = '0'
-      textArea.style.border = 'none'
-      textArea.style.outline = 'none'
-      textArea.style.boxShadow = 'none'
-      textArea.style.background = 'transparent'
-      textArea.style.opacity = '0'
-      textArea.style.pointerEvents = 'none'
-      textArea.style.zIndex = '99999' // Ensure it's above Sheet overlay
-      
-      // Make it readonly to prevent keyboard from appearing on mobile
-      textArea.setAttribute('readonly', '')
-      textArea.setAttribute('aria-hidden', 'true')
-      
-      // Append to body (not inside Sheet/Dialog)
-      document.body.appendChild(textArea)
-      
-      // Use setTimeout to ensure DOM is ready and focus works properly
-      await new Promise<void>((resolve, reject) => {
-        setTimeout(() => {
-          try {
-            // Focus and select - must be done after appending to DOM
-            textArea.focus()
-            textArea.select()
-            textArea.setSelectionRange(0, shareUrl.length)
-            
-            // Execute copy command
-            const successful = document.execCommand('copy')
-            
-            // Clean up immediately
-            if (textArea.parentNode) {
-              document.body.removeChild(textArea)
-            }
-            
-            if (successful) {
-              console.log('Successfully copied using execCommand fallback')
-              setShareSuccess(true)
-              setTimeout(() => setShareSuccess(false), 3000)
-              resolve()
-            } else {
-              reject(new Error('execCommand returned false'))
-            }
-          } catch (err) {
-            // Clean up on error
-            if (textArea.parentNode) {
-              document.body.removeChild(textArea)
-            }
-            reject(err)
-          }
-        }, 50) // Increased delay for overlay context
+    // Clean up
+    document.body.removeChild(textarea)
+    
+    // Try Clipboard API
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(shareUrl).then(() => {
+        console.log('Clipboard API: Success')
+        setShareSuccess(true)
+        setTimeout(() => setShareSuccess(false), 3000)
+      }).catch((err) => {
+        console.warn('Clipboard API failed:', err)
+        // Show success if execCommand worked
+        if (execSuccess) {
+          setShareSuccess(true)
+          setTimeout(() => setShareSuccess(false), 3000)
+        }
       })
-    } catch (err) {
-      console.error('All copy methods failed:', err)
-      // Show user-friendly error
-      const errorMsg = err instanceof Error ? err.message : String(err)
-      alert(`${t('plantInfo.shareFailed')}\n\nURL: ${shareUrl}\n\nError: ${errorMsg}`)
+    } else if (execSuccess) {
+      setShareSuccess(true)
+      setTimeout(() => setShareSuccess(false), 3000)
     }
   }
 
@@ -179,13 +140,8 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
           <div className="absolute bottom-3 right-3 flex gap-2">
             <button
               onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
+                console.log('Share button clicked!')
                 handleShare(e)
-              }}
-              onMouseDown={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
               }}
               type="button"
               aria-label={t('plantInfo.share')}
@@ -193,8 +149,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
               title={shareSuccess ? t('plantInfo.shareCopied') : t('plantInfo.share')}
             >
               <span className="relative inline-flex items-center justify-center">
-                <Box className="h-3 w-3 stroke-[1.5]" />
-                <ArrowUpRight className="h-2 w-2 absolute -top-0.5 -right-0.5 stroke-[2]" />
+                <Share2 className="h-4 w-4 stroke-[1.5]" />
               </span>
             </button>
             <button

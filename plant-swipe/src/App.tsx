@@ -1,7 +1,7 @@
 import React from 'react'
 import PlantSwipe from "@/PlantSwipe"
 import { AuthProvider, useAuth } from '@/context/AuthContext'
-import { BrowserRouter, Routes, Route, useLocation, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom'
 import { I18nextProvider } from 'react-i18next'
 import i18n, { DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES } from '@/lib/i18n'
 import { getLanguageFromPath, getSavedLanguagePreference, detectBrowserLanguage, addLanguagePrefix } from '@/lib/i18nRouting'
@@ -9,6 +9,7 @@ import { getLanguageFromPath, getSavedLanguagePreference, detectBrowserLanguage,
 function AppShell() {
   const { loading } = useAuth()
   const location = useLocation()
+  const navigate = useNavigate()
   
   // Detect language from URL and set it
   React.useEffect(() => {
@@ -18,6 +19,20 @@ function AppShell() {
     }
   }, [location.pathname])
   
+  // Handle initial redirect to preferred language
+  React.useEffect(() => {
+    // Only redirect if we're at root path and language is not default
+    if (location.pathname === '/' || location.pathname === '') {
+      const savedLang = getSavedLanguagePreference()
+      const preferredLang = savedLang || detectBrowserLanguage()
+      
+      if (preferredLang !== DEFAULT_LANGUAGE) {
+        const newPath = addLanguagePrefix('/', preferredLang)
+        navigate(newPath, { replace: true })
+      }
+    }
+  }, [location.pathname, navigate])
+  
   if (loading) {
     return (
       <div className="min-h-screen w-full bg-gradient-to-b from-stone-50 to-stone-100 p-4 md:p-8" aria-busy="true" aria-live="polite" />
@@ -26,30 +41,10 @@ function AppShell() {
   return <PlantSwipe />
 }
 
-// Initial redirect component - redirects root path to preferred language
-function InitialRedirect() {
-  const location = useLocation()
-  
-  // Get preferred language (saved preference or browser detection)
-  const savedLang = getSavedLanguagePreference()
-  const preferredLang = savedLang || detectBrowserLanguage()
-  
-  // If preferred language is not default and we're at root, redirect to it
-  if (location.pathname === '/' && preferredLang !== DEFAULT_LANGUAGE) {
-    const newPath = addLanguagePrefix('/', preferredLang)
-    return <Navigate to={newPath} replace />
-  }
-  
-  return <AppShell />
-}
-
 // Language-aware route wrapper
 function LanguageRoutes() {
   return (
     <Routes>
-      {/* Root path - redirect to preferred language */}
-      <Route path="/" element={<InitialRedirect />} />
-      
       {/* Routes without language prefix (default language) */}
       <Route path="/*" element={<AppShell />} />
       
