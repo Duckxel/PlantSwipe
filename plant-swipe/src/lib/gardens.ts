@@ -348,6 +348,28 @@ export async function getGardenTodayProgress(gardenId: string, dayIso: string): 
   return { due, completed }
 }
 
+/**
+ * Lightweight version that queries existing occurrences without resyncing.
+ * Use this for fast initial loads - resync should happen separately for accuracy.
+ */
+export async function getGardenTodayProgressFast(gardenId: string, dayIso: string): Promise<{ due: number; completed: number }> {
+  const tasks = await listGardenTasks(gardenId)
+  if (tasks.length === 0) return { due: 0, completed: 0 }
+  const start = `${dayIso}T00:00:00.000Z`
+  const end = `${dayIso}T23:59:59.999Z`
+  // Query existing occurrences without resyncing for speed
+  const occs = await listOccurrencesForTasks(tasks.map(t => t.id), start, end)
+  let due = 0
+  let completed = 0
+  for (const o of occs) {
+    const req = Math.max(1, Number(o.requiredCount || 1))
+    const comp = Math.min(req, Number(o.completedCount || 0))
+    due += req
+    completed += comp
+  }
+  return { due, completed }
+}
+
 export async function userHasUnfinishedTasksToday(userId: string): Promise<boolean> {
   const gardens = await getUserGardens(userId)
   if (gardens.length === 0) return false

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useAuth } from '@/context/AuthContext'
-import { getUserGardens, createGarden, fetchServerNowISO, getGardenTodayProgress, getGardenPlants, listGardenTasks, listOccurrencesForTasks, resyncTaskOccurrencesForGarden, progressTaskOccurrence, listCompletionsForOccurrences, logGardenActivity } from '@/lib/gardens'
+import { getUserGardens, createGarden, fetchServerNowISO, getGardenTodayProgressFast, getGardenPlants, listGardenTasks, listOccurrencesForTasks, resyncTaskOccurrencesForGarden, progressTaskOccurrence, listCompletionsForOccurrences, logGardenActivity } from '@/lib/gardens'
 import { supabase } from '@/lib/supabaseClient'
 import { addGardenBroadcastListener, broadcastGardenUpdate, type GardenRealtimeKind } from '@/lib/realtime'
 import type { Garden } from '@/types/garden'
@@ -53,30 +53,37 @@ export const GardenListPage: React.FC = () => {
     setLoading(true)
     setError(null)
     try {
-      const data = await getUserGardens(user.id)
+      // Load gardens and server time in parallel
+      const [data, nowIso] = await Promise.all([
+        getUserGardens(user.id),
+        fetchServerNowISO()
+      ])
       setGardens(data)
       gardensRef.current = data
-      // Fetch server 'today' and compute per-garden progress
-      const nowIso = await fetchServerNowISO()
       const today = nowIso.slice(0,10)
       setServerToday(today)
       serverTodayRef.current = today
-      // compute progress sequentially to avoid hammering backend on frequent realtime updates
-      const entries: Array<[string, { due: number; completed: number }]> = []
-      for (const g of data) {
+      
+      // Set loading to false immediately so gardens render
+      setLoading(false)
+      
+      // Load progress in parallel (non-blocking) - use fast version for initial load
+      Promise.all(data.map(async (g) => {
         try {
-          const prog = await getGardenTodayProgress(g.id, today)
-          entries.push([g.id, prog])
+          const prog = await getGardenTodayProgressFast(g.id, today)
+          return [g.id, prog] as [string, { due: number; completed: number }]
         } catch {
-          entries.push([g.id, { due: 0, completed: 0 }])
+          return [g.id, { due: 0, completed: 0 }] as [string, { due: number; completed: number }]
         }
-      }
-      const map: Record<string, { due: number; completed: number }> = {}
-      for (const [gid, prog] of entries) map[gid] = prog
-      setProgressByGarden(map)
+      })).then((entries) => {
+        const map: Record<string, { due: number; completed: number }> = {}
+        for (const [gid, prog] of entries) map[gid] = prog
+        setProgressByGarden(map)
+      }).catch(() => {
+        // Silently fail - progress will update on next refresh
+      })
     } catch (e: any) {
       setError(e?.message || t('garden.failedToLoad'))
-    } finally {
       setLoading(false)
     }
   }, [user?.id, t])
@@ -96,11 +103,8 @@ export const GardenListPage: React.FC = () => {
     try {
       const startIso = `${today}T00:00:00.000Z`
       const endIso = `${today}T23:59:59.999Z`
-      // 1) Fetch tasks per garden sequentially (reduce contention during rapid realtime)
-      const tasksPerGarden: any[] = []
-      for (const g of gardensList) {
-        tasksPerGarden.push(await listGardenTasks(g.id))
-      }
+      // 1) Fetch tasks per garden in parallel (much faster)
+      const tasksPerGarden = await Promise.all(gardensList.map(g => listGardenTasks(g.id)))
       const taskTypeById: Record<string, 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'> = {}
       const taskEmojiById: Record<string, string | null> = {}
       const taskIdsByGarden: Record<string, string[]> = {}
@@ -115,7 +119,7 @@ export const GardenListPage: React.FC = () => {
       }
       // 2) Resync occurrences per garden in parallel
       await Promise.all(gardensList.map(g => resyncTaskOccurrencesForGarden(g.id, startIso, endIso)))
-      // 3) Load occurrences per garden
+      // 3) Load occurrences per garden in parallel
       const occsPerGarden = await Promise.all(gardensList.map(g => listOccurrencesForTasks(taskIdsByGarden[g.id] || [], startIso, endIso)))
       const occsAugmented: Array<any> = []
       for (const arr of occsPerGarden) {
@@ -132,7 +136,7 @@ export const GardenListPage: React.FC = () => {
       const ids = occsAugmented.map(o => o.id)
       const compMap = await listCompletionsForOccurrences(ids)
       setCompletionsByOcc(compMap)
-      // 4) Load plants for all gardens for display and mapping
+      // 4) Load plants for all gardens for display and mapping in parallel
       const plantsPerGarden = await Promise.all(gardensList.map(g => getGardenPlants(g.id)))
       const idToGardenName = gardensList.reduce<Record<string, string>>((acc, g) => { acc[g.id] = g.name; return acc }, {})
       const all = plantsPerGarden.flat().map((gp: any) => ({
@@ -254,7 +258,17 @@ export const GardenListPage: React.FC = () => {
     }
   }, [scheduleReload, user?.id])
 
-  React.useEffect(() => { loadAllTodayOccurrences() }, [loadAllTodayOccurrences])
+  // Defer task loading until after gardens are displayed (non-blocking)
+  React.useEffect(() => {
+    // Only load tasks after gardens are loaded
+    if (!loading && gardens.length > 0) {
+      // Small delay to ensure gardens render first
+      const timer = setTimeout(() => {
+        loadAllTodayOccurrences()
+      }, 50)
+      return () => clearTimeout(timer)
+    }
+  }, [loading, gardens.length, loadAllTodayOccurrences])
 
   React.useEffect(() => {
     let active = true
