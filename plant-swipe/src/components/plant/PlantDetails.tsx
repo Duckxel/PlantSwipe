@@ -5,7 +5,7 @@ import { SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { SunMedium, Droplets, Leaf, Heart, Share2 } from "lucide-react";
+import { SunMedium, Droplets, Leaf, Heart, Box, ArrowUpRight } from "lucide-react";
 import type { Plant } from "@/types/plant";
 import { rarityTone, seasonBadge } from "@/constants/badges";
 import { deriveWaterLevelFromFrequency } from "@/lib/utils";
@@ -35,8 +35,28 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
       const pathWithLang = currentLang === 'en' ? pathWithoutLang : `/${currentLang}${pathWithoutLang}`
       const shareUrl = `${baseUrl}${pathWithLang}`
       
-      // Copy to clipboard
-      await navigator.clipboard.writeText(shareUrl)
+      // Copy to clipboard - try modern API first, fallback to older method
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(shareUrl)
+      } else {
+        // Fallback for older browsers
+        const textArea = document.createElement('textarea')
+        textArea.value = shareUrl
+        textArea.style.position = 'fixed'
+        textArea.style.left = '-999999px'
+        textArea.style.top = '-999999px'
+        document.body.appendChild(textArea)
+        textArea.focus()
+        textArea.select()
+        try {
+          document.execCommand('copy')
+        } catch (err) {
+          console.error('Fallback copy failed:', err)
+          throw err
+        }
+        document.body.removeChild(textArea)
+      }
+      
       setShareSuccess(true)
       setTimeout(() => setShareSuccess(false), 3000)
     } catch (err) {
@@ -61,7 +81,10 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
               className={`h-8 w-8 rounded-full flex items-center justify-center border transition shadow-[0_4px_12px_rgba(0,0,0,0.28)] ${shareSuccess ? 'bg-green-600 text-white' : 'bg-white/90 text-black hover:bg-white'}`}
               title={shareSuccess ? t('plantInfo.shareCopied') : t('plantInfo.share')}
             >
-              <Share2 className={shareSuccess ? 'fill-current' : ''} />
+              <span className="relative inline-flex items-center justify-center">
+                <Box className="h-3 w-3 stroke-[1.5]" />
+                <ArrowUpRight className="h-2 w-2 absolute -top-0.5 -right-0.5 stroke-[2]" />
+              </span>
             </button>
             <button
               onClick={() => onToggleLike && onToggleLike()}

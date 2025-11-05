@@ -635,17 +635,8 @@ export default function PlantSwipe() {
 
         {/* Main content area */}
         <main className="min-h-[60vh]" aria-live="polite">
-          {loading && <div className="p-8 text-center text-sm opacity-60">{t('common.loading')}</div>}
-          {loadError && <div className="p-8 text-center text-sm text-red-600">{t('common.error')}: {loadError}</div>}
-          {!loading && !loadError && (
-            <>
-              {plants.length === 0 && !query && !loadError && !loading && (
-                <div className="p-8 text-center text-sm opacity-60">
-                  {t('plant.noResults')}
-                </div>
-              )}
-              {/* Use background location for primary routes so overlays render on top */}
-              <Routes location={(backgroundLocation as any) || location}>
+          {/* Use background location for primary routes so overlays render on top */}
+          <Routes location={(backgroundLocation as any) || location}>
                 <Route
                   path="/"
                   element={plants.length > 0 ? (
@@ -706,7 +697,22 @@ export default function PlantSwipe() {
                   <Navigate to="/" replace />
                 )} />
                 <Route path="/plants/:id" element={<PlantInfoPage />} />
-                <Route path="*" element={<Navigate to="/" replace />} />
+                <Route path="*" element={
+                  <>
+                    {loading && <div className="p-8 text-center text-sm opacity-60">{t('common.loading')}</div>}
+                    {loadError && <div className="p-8 text-center text-sm text-red-600">{t('common.error')}: {loadError}</div>}
+                    {!loading && !loadError && (
+                      <>
+                        {plants.length === 0 && !query && !loadError && !loading && (
+                          <div className="p-8 text-center text-sm opacity-60">
+                            {t('plant.noResults')}
+                          </div>
+                        )}
+                        <Navigate to="/" replace />
+                      </>
+                    )}
+                  </>
+                } />
               </Routes>
               {/* When a background location is set, also render the overlay route on top */}
               {backgroundLocation && (
@@ -717,8 +723,6 @@ export default function PlantSwipe() {
                   />
                 </Routes>
               )}
-            </>
-          )}
         </main>
       </div>
 
