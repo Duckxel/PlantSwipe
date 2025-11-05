@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { SunMedium, Droplets, Leaf, Heart, Share2, Maximize2, ChevronLeft } from "lucide-react";
+import { SunMedium, Droplets, Leaf, Heart, Share2, Maximize2, ChevronLeft, X } from "lucide-react";
 import type { Plant } from "@/types/plant";
 import { rarityTone, seasonBadge } from "@/constants/badges";
 import { deriveWaterLevelFromFrequency } from "@/lib/utils";
@@ -19,6 +19,11 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
   const { t } = useTranslation('common')
   const [shareSuccess, setShareSuccess] = React.useState(false)
   const [isImageFullScreen, setIsImageFullScreen] = React.useState(false)
+  const [zoom, setZoom] = React.useState(1)
+  const [pan, setPan] = React.useState({ x: 0, y: 0 })
+  const [isDragging, setIsDragging] = React.useState(false)
+  const [dragStart, setDragStart] = React.useState({ x: 0, y: 0 })
+  const imageRef = React.useRef<HTMLImageElement>(null)
   const freqAmountRaw = plant.waterFreqAmount ?? plant.waterFreqValue
   const freqAmount = typeof freqAmountRaw === 'number' ? freqAmountRaw : Number(freqAmountRaw || 0)
   const freqPeriod = (plant.waterFreqPeriod || plant.waterFreqUnit) as 'day' | 'week' | 'month' | 'year' | undefined
@@ -99,6 +104,94 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
   const handleBackToSearch = () => {
     navigate('/search')
   }
+
+  const handleImageWheel = (e: React.WheelEvent) => {
+    e.preventDefault()
+    const delta = e.deltaY > 0 ? 0.9 : 1.1
+    const newZoom = Math.max(1, Math.min(5, zoom * delta))
+    
+    // Zoom towards mouse position
+    if (newZoom > 1 && zoom === 1) {
+      const rect = imageRef.current?.getBoundingClientRect()
+      if (rect) {
+        const centerX = rect.left + rect.width / 2
+        const centerY = rect.top + rect.height / 2
+        const mouseX = e.clientX
+        const mouseY = e.clientY
+        
+        setPan({
+          x: (mouseX - centerX) * (1 - 1 / newZoom),
+          y: (mouseY - centerY) * (1 - 1 / newZoom)
+        })
+      }
+    }
+    
+    setZoom(newZoom)
+    
+    // Reset pan if zooming back to 1
+    if (newZoom === 1) {
+      setPan({ x: 0, y: 0 })
+    }
+  }
+
+  const handleImageMouseDown = (e: React.MouseEvent) => {
+    if (zoom > 1) {
+      e.preventDefault()
+      setIsDragging(true)
+      setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y })
+    }
+  }
+
+  const handleImageMouseMove = (e: React.MouseEvent) => {
+    if (isDragging && zoom > 1) {
+      e.preventDefault()
+      setPan({
+        x: e.clientX - dragStart.x,
+        y: e.clientY - dragStart.y
+      })
+    }
+  }
+
+  const handleImageMouseUp = () => {
+    setIsDragging(false)
+  }
+
+  const handleImageMouseLeave = () => {
+    setIsDragging(false)
+  }
+
+  // Touch handlers for mobile
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (zoom > 1 && e.touches.length === 1) {
+      const touch = e.touches[0]
+      setIsDragging(true)
+      setDragStart({ x: touch.clientX - pan.x, y: touch.clientY - pan.y })
+    }
+  }
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (isDragging && zoom > 1 && e.touches.length === 1) {
+      e.preventDefault()
+      const touch = e.touches[0]
+      setPan({
+        x: touch.clientX - dragStart.x,
+        y: touch.clientY - dragStart.y
+      })
+    }
+  }
+
+  const handleTouchEnd = () => {
+    setIsDragging(false)
+  }
+
+  React.useEffect(() => {
+    if (!isImageFullScreen) {
+      // Reset zoom and pan when closing
+      setZoom(1)
+      setPan({ x: 0, y: 0 })
+      setIsDragging(false)
+    }
+  }, [isImageFullScreen])
 
   return (
     <div className="space-y-4 select-none">
@@ -265,14 +358,66 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
       {/* Full-screen image viewer - only show when not in overlay mode */}
       {!isOverlayMode && (
         <Dialog open={isImageFullScreen} onOpenChange={setIsImageFullScreen}>
-          <DialogContent className="max-w-[95vw] max-h-[95vh] w-auto h-auto p-0 bg-black/95 border-none rounded-none sm:rounded-lg">
-            <div className="relative w-full h-full flex items-center justify-center p-4 min-h-[50vh]">
-              <img
-                src={plant.image}
-                alt={plant.name}
-                className="max-w-full max-h-[90vh] object-contain rounded-lg"
+          <DialogContent 
+            className="max-w-[100vw] max-h-[100vh] w-screen h-screen p-0 !bg-transparent border-none rounded-none !translate-x-0 !translate-y-0 !left-0 !top-0"
+            onClick={(e) => {
+              // Close when clicking on the background (not the image)
+              if (e.target === e.currentTarget) {
+                setIsImageFullScreen(false)
+              }
+            }}
+          >
+            {/* Override overlay and hide default close button */}
+            <style dangerouslySetInnerHTML={{
+              __html: `
+                [data-radix-dialog-content] > button[data-radix-dialog-close] {
+                  display: none !important;
+                }
+                [data-radix-dialog-overlay] {
+                  background-color: rgba(0, 0, 0, 0.6) !important;
+                }
+              `
+            }} />
+            
+            <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
+              {/* Close button - fixed position */}
+              <button
+                onClick={() => setIsImageFullScreen(false)}
+                className="fixed top-4 right-4 z-[100] h-12 w-12 rounded-full bg-black/80 hover:bg-black flex items-center justify-center transition-all shadow-lg hover:scale-110"
+                aria-label={t('common.close')}
+              >
+                <X className="h-6 w-6 text-white stroke-[2.5]" />
+              </button>
+              
+              {/* Image container with zoom and pan */}
+              <div
+                className="flex items-center justify-center w-full h-full touch-none"
+                onWheel={handleImageWheel}
+                onMouseMove={handleImageMouseMove}
+                onMouseUp={handleImageMouseUp}
+                onMouseLeave={handleImageMouseLeave}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
                 onClick={(e) => e.stopPropagation()}
-              />
+              >
+                <img
+                  ref={imageRef}
+                  src={plant.image}
+                  alt={plant.name}
+                  className={`max-w-full max-h-full object-contain select-none ${
+                    zoom > 1 ? 'cursor-move' : 'cursor-zoom-in'
+                  }`}
+                  style={{
+                    transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`,
+                    transformOrigin: 'center center',
+                    transition: isDragging ? 'none' : 'transform 0.1s ease-out',
+                    imageRendering: 'high-quality'
+                  }}
+                  onMouseDown={handleImageMouseDown}
+                  draggable={false}
+                />
+              </div>
             </div>
           </DialogContent>
         </Dialog>
