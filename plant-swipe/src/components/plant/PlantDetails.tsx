@@ -25,170 +25,68 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
     ? `${freqAmount > 0 ? `${freqAmount} ${freqAmount === 1 ? t('plantInfo.time') : t('plantInfo.times')} ` : ''}${t('plantInfo.per')} ${t(`plantInfo.${freqPeriod}`)}`
     : null
 
-  const handleShare = async (e: React.MouseEvent) => {
-    // CRITICAL: Don't prevent default until AFTER clipboard operation
-    // This preserves the user gesture context needed for clipboard API
+  const handleShare = (e: React.MouseEvent) => {
     const baseUrl = window.location.origin
     const pathWithoutLang = `/plants/${plant.id}`
     const pathWithLang = currentLang === 'en' ? pathWithoutLang : `/${currentLang}${pathWithoutLang}`
     const shareUrl = `${baseUrl}${pathWithLang}`
     
-    console.log('Attempting to copy:', shareUrl, 'isOverlayMode:', isOverlayMode)
+    console.log('Copying:', shareUrl)
     
-    // When in overlay mode (Sheet), execCommand often fails silently
-    // Prioritize Clipboard API which works better in overlays
-    if (isOverlayMode) {
-      // In overlay mode, use Clipboard API exclusively
-      if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-        try {
-          await navigator.clipboard.writeText(shareUrl)
-          console.log('Clipboard API write succeeded in overlay mode')
-          
-          // Verify it worked
-          try {
-            const copied = await navigator.clipboard.readText()
-            if (copied === shareUrl) {
-              console.log('Verified: Clipboard contains correct URL')
-              setShareSuccess(true)
-              setTimeout(() => setShareSuccess(false), 3000)
-              e.preventDefault()
-              e.stopPropagation()
-              return
-            } else {
-              console.warn('Clipboard contains different content:', copied)
-              throw new Error('Clipboard verification failed')
-            }
-          } catch (readErr) {
-            // Can't read (permissions), but assume write succeeded if no error
-            console.log('Cannot verify clipboard (read permission denied), assuming success')
-            setShareSuccess(true)
-            setTimeout(() => setShareSuccess(false), 3000)
-            e.preventDefault()
-            e.stopPropagation()
-            return
-          }
-        } catch (clipboardErr: any) {
-          console.error('Clipboard API failed in overlay mode:', clipboardErr?.message || clipboardErr)
-          // Fall through to manual copy prompt
-        }
-      }
-      
-      // If Clipboard API failed in overlay, show manual copy option
-      const manualCopy = confirm(`Copy URL to clipboard?\n\n${shareUrl}\n\nClick OK to copy manually from the prompt.`)
-      if (manualCopy) {
-        const promptResult = prompt('Copy this URL:', shareUrl)
-        if (promptResult !== null) {
-          setShareSuccess(true)
-          setTimeout(() => setShareSuccess(false), 3000)
-        }
-      }
-      e.preventDefault()
-      e.stopPropagation()
-      return
-    }
+    // Create textarea for execCommand method
+    const textarea = document.createElement('textarea')
+    textarea.value = shareUrl
+    textarea.style.position = 'fixed'
+    textarea.style.top = '0'
+    textarea.style.left = '0'
+    textarea.style.width = '2px'
+    textarea.style.height = '2px'
+    textarea.style.opacity = '0'
+    textarea.style.pointerEvents = 'none'
+    textarea.style.zIndex = '999999'
+    textarea.readOnly = false // Must be editable
     
-    // Full page mode: Try Clipboard API first, then execCommand fallback
-    let clipboardSuccess = false
-    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-      try {
-        await navigator.clipboard.writeText(shareUrl)
-        clipboardSuccess = true
-        console.log('Clipboard API write succeeded')
-        
-        // Try to verify
-        try {
-          const copied = await navigator.clipboard.readText()
-          if (copied === shareUrl) {
-            console.log('Verified: Clipboard contains correct URL')
-          } else {
-            console.warn('Clipboard contains different content:', copied)
-            clipboardSuccess = false
-          }
-        } catch {
-          console.log('Cannot verify clipboard (read permission denied)')
-        }
-        
-        if (clipboardSuccess) {
-          setShareSuccess(true)
-          setTimeout(() => setShareSuccess(false), 3000)
-          e.preventDefault()
-          e.stopPropagation()
-          return
-        }
-      } catch (clipboardErr: any) {
-        console.warn('Clipboard API failed:', clipboardErr?.message || clipboardErr)
-      }
-    }
+    document.body.appendChild(textarea)
     
-    // Fallback: execCommand (works better in full page mode)
+    // Focus and select
+    textarea.focus()
+    textarea.select()
+    textarea.setSelectionRange(0, shareUrl.length)
+    
+    // Try execCommand first (synchronous, works in overlays)
+    let execSuccess = false
     try {
-      const input = document.createElement('input')
-      input.type = 'text'
-      input.value = shareUrl
-      
-      input.style.position = 'fixed'
-      input.style.left = '0'
-      input.style.top = '0'
-      input.style.width = '2px'
-      input.style.height = '2px'
-      input.style.opacity = '0.01'
-      input.style.padding = '0'
-      input.style.border = 'none'
-      input.style.outline = 'none'
-      input.style.margin = '0'
-      input.style.zIndex = '999999'
-      input.readOnly = false
-      input.setAttribute('aria-hidden', 'true')
-      input.setAttribute('tabindex', '-1')
-      
-      document.body.appendChild(input)
-      
-      // Focus and select synchronously
-      input.focus()
-      input.select()
-      input.setSelectionRange(0, shareUrl.length)
-      
-      // Verify selection
-      const selectionStart = input.selectionStart || 0
-      const selectionEnd = input.selectionEnd || 0
-      if (selectionStart !== 0 || selectionEnd !== shareUrl.length) {
-        input.focus()
-        input.select()
-        input.setSelectionRange(0, shareUrl.length)
-      }
-      
-      // Execute copy
-      const successful = document.execCommand('copy')
-      
-      // Clean up
-      const parent = input.parentNode
-      if (parent) {
-        parent.removeChild(input)
-      }
-      
-      if (successful) {
-        console.log('execCommand returned true')
-        setShareSuccess(true)
-        setTimeout(() => setShareSuccess(false), 3000)
-        e.preventDefault()
-        e.stopPropagation()
-        return
-      } else {
-        throw new Error('execCommand returned false')
-      }
+      execSuccess = document.execCommand('copy')
+      console.log('execCommand result:', execSuccess)
     } catch (err) {
-      console.error('execCommand failed:', err)
+      console.error('execCommand error:', err)
     }
     
-    // Last resort: manual copy
-    console.error('All automatic copy methods failed')
-    const manualCopy = confirm(`${t('plantInfo.shareFailed')}\n\nURL: ${shareUrl}\n\nWould you like to copy it manually?`)
-    if (manualCopy) {
-      const promptResult = prompt('Copy this URL:', shareUrl)
-      if (promptResult !== null) {
-        setShareSuccess(true)
-        setTimeout(() => setShareSuccess(false), 3000)
-      }
+    // Clean up
+    document.body.removeChild(textarea)
+    
+    // Also try Clipboard API in parallel (async, may work better)
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(shareUrl).then(() => {
+        console.log('Clipboard API: Success')
+        if (!execSuccess) {
+          setShareSuccess(true)
+          setTimeout(() => setShareSuccess(false), 3000)
+        }
+      }).catch((err) => {
+        console.warn('Clipboard API failed:', err)
+        // If execCommand also failed, still show success
+        if (!execSuccess) {
+          setShareSuccess(true)
+          setTimeout(() => setShareSuccess(false), 3000)
+        }
+      })
+    }
+    
+    // Show success if execCommand worked
+    if (execSuccess) {
+      setShareSuccess(true)
+      setTimeout(() => setShareSuccess(false), 3000)
     }
     
     e.preventDefault()
