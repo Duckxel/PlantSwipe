@@ -411,8 +411,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
                   style={{
                     transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`,
                     transformOrigin: 'center center',
-                    transition: isDragging ? 'none' : 'transform 0.1s ease-out',
-                    imageRendering: 'high-quality'
+                    transition: isDragging ? 'none' : 'transform 0.1s ease-out'
                   }}
                   onMouseDown={handleImageMouseDown}
                   draggable={false}
