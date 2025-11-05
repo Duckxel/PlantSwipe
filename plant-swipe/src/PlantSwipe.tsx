@@ -3,7 +3,7 @@ import { Routes, Route, useLocation } from "react-router-dom";
 import { useLanguageNavigate, usePathWithoutLanguage } from "@/lib/i18nRouting";
 import { Navigate } from "@/components/i18n/Navigate";
 import { useMotionValue, animate } from "framer-motion";
-import { Search } from "lucide-react";
+import { Search, ChevronDown, ChevronUp, ListFilter } from "lucide-react";
 // Sheet is used for plant info overlay
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -48,6 +48,7 @@ export default function PlantSwipe() {
   const [onlySeeds, setOnlySeeds] = useState(false)
   const [onlyFavorites, setOnlyFavorites] = useState(false)
   const [favoritesFirst, setFavoritesFirst] = useState(false)
+  const [showFilters, setShowFilters] = useState(false)
 
   const [index, setIndex] = useState(0)
   const [likedIds, setLikedIds] = useState<string[]>([])
@@ -520,7 +521,23 @@ export default function PlantSwipe() {
       <div className={`max-w-6xl mx-auto mt-6 ${currentView === 'search' ? 'lg:grid lg:grid-cols-[260px_1fr] lg:gap-10' : ''}`}>
         {/* Sidebar / Filters */}
         {currentView === 'search' && (
-        <aside className="mb-8 lg:mb-0 space-y-6 lg:sticky lg:top-4 self-start" aria-label="Filters">
+        <>
+          {/* Toggle button for mobile */}
+          <div className="lg:hidden mb-4">
+            <Button
+              onClick={() => setShowFilters(!showFilters)}
+              variant="outline"
+              className="w-full justify-between rounded-2xl"
+              aria-expanded={showFilters}
+            >
+              <span className="flex items-center gap-2">
+                <ListFilter className="h-4 w-4" />
+                <span>{t('plant.refineFilters')}</span>
+              </span>
+              {showFilters ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </Button>
+          </div>
+          <aside className={`${showFilters ? 'block' : 'hidden'} lg:block mb-8 lg:mb-0 space-y-6 lg:sticky lg:top-4 self-start`} aria-label="Filters">
           {/* Search */}
             <div>
               <Label htmlFor="plant-search" className="sr-only">{t('common.search')}</Label>
@@ -630,8 +647,9 @@ export default function PlantSwipe() {
                 )}
               </div>
             </div>
-  </aside>
-  )}
+          </aside>
+        </>
+        )}
 
         {/* Main content area */}
         <main className="min-h-[60vh]" aria-live="polite">
