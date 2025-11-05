@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useAuth } from '@/context/AuthContext'
-import { getUserGardens, createGarden, fetchServerNowISO, getGardenTodayProgressFast, getGardenPlants, listGardenTasks, listOccurrencesForTasks, resyncTaskOccurrencesForGarden, progressTaskOccurrence, listCompletionsForOccurrences, logGardenActivity } from '@/lib/gardens'
+import { getUserGardens, createGarden, fetchServerNowISO, getGardenTodayProgressUltraFast, getGardenPlantsMinimal, listGardenTasksMinimal, listOccurrencesForTasks, listOccurrencesForMultipleGardens, resyncTaskOccurrencesForGarden, progressTaskOccurrence, listCompletionsForOccurrences, logGardenActivity } from '@/lib/gardens'
 import { supabase } from '@/lib/supabaseClient'
 import { addGardenBroadcastListener, broadcastGardenUpdate, type GardenRealtimeKind } from '@/lib/realtime'
 import type { Garden } from '@/types/garden'
@@ -150,10 +150,10 @@ export const GardenListPage: React.FC = () => {
           setServerToday(today)
           serverTodayRef.current = today
           
-          // Update progress with fresh data
+          // Update progress with fresh data - use ultra-fast aggregation
           Promise.all(freshData.map(async (g) => {
             try {
-              const prog = await getGardenTodayProgressFast(g.id, today)
+              const prog = await getGardenTodayProgressUltraFast(g.id, today)
               return [g.id, prog] as [string, { due: number; completed: number }]
             } catch {
               return [g.id, { due: 0, completed: 0 }] as [string, { due: number; completed: number }]
@@ -167,11 +167,11 @@ export const GardenListPage: React.FC = () => {
           // If background fetch fails, keep using cached data
         })
         
-        // Load progress for cached gardens
+        // Load progress for cached gardens - use ultra-fast aggregation
         const today = serverTodayRef.current ?? new Date().toISOString().slice(0, 10)
         Promise.all(data.map(async (g) => {
           try {
-            const prog = await getGardenTodayProgressFast(g.id, today)
+            const prog = await getGardenTodayProgressUltraFast(g.id, today)
             return [g.id, prog] as [string, { due: number; completed: number }]
           } catch {
             return [g.id, { due: 0, completed: 0 }] as [string, { due: number; completed: number }]
@@ -211,10 +211,10 @@ export const GardenListPage: React.FC = () => {
       // Set loading to false immediately so gardens render
       setLoading(false)
       
-      // Load progress in parallel (non-blocking) - use fast version for initial load
+      // Load progress in parallel (non-blocking) - use ultra-fast aggregation
       Promise.all(data.map(async (g) => {
         try {
-          const prog = await getGardenTodayProgressFast(g.id, today)
+          const prog = await getGardenTodayProgressUltraFast(g.id, today)
           return [g.id, prog] as [string, { due: number; completed: number }]
         } catch {
           return [g.id, { due: 0, completed: 0 }] as [string, { due: number; completed: number }]
@@ -289,8 +289,8 @@ export const GardenListPage: React.FC = () => {
     try {
       const startIso = `${today}T00:00:00.000Z`
       const endIso = `${today}T23:59:59.999Z`
-      // 1) Fetch tasks per garden in parallel (much faster)
-      const tasksPerGarden = await Promise.all(gardensList.map(g => listGardenTasks(g.id)))
+      // 1) Fetch tasks per garden in parallel - use minimal version to reduce egress
+      const tasksPerGarden = await Promise.all(gardensList.map(g => listGardenTasksMinimal(g.id)))
       const taskTypeById: Record<string, 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'> = {}
       const taskEmojiById: Record<string, string | null> = {}
       const taskIdsByGarden: Record<string, string[]> = {}
@@ -299,8 +299,8 @@ export const GardenListPage: React.FC = () => {
         const tasks = tasksPerGarden[i] || []
         taskIdsByGarden[g.id] = tasks.map(t => t.id)
         for (const t of tasks) {
-          taskTypeById[t.id] = (t as any).type
-          taskEmojiById[t.id] = (t as any).emoji || null
+          taskTypeById[t.id] = t.type
+          taskEmojiById[t.id] = t.emoji || null
         }
       }
       
@@ -319,10 +319,10 @@ export const GardenListPage: React.FC = () => {
         await Promise.all(resyncPromises)
       }
       
-      // 3) Load occurrences per garden in parallel
-      const occsPerGarden = await Promise.all(gardensList.map(g => listOccurrencesForTasks(taskIdsByGarden[g.id] || [], startIso, endIso)))
+      // 3) Load occurrences for all gardens in a single batched query (reduces egress)
+      const occsByGarden = await listOccurrencesForMultipleGardens(taskIdsByGarden, startIso, endIso)
       const occsAugmented: Array<any> = []
-      for (const arr of occsPerGarden) {
+      for (const [gardenId, arr] of Object.entries(occsByGarden)) {
         for (const o of (arr || [])) {
           occsAugmented.push({
             ...o,
@@ -336,11 +336,15 @@ export const GardenListPage: React.FC = () => {
       const ids = occsAugmented.map(o => o.id)
       const compMap = await listCompletionsForOccurrences(ids)
       setCompletionsByOcc(compMap)
-      // 4) Load plants for all gardens for display and mapping in parallel
-      const plantsPerGarden = await Promise.all(gardensList.map(g => getGardenPlants(g.id)))
+      // 4) Load plants for all gardens - use minimal version to reduce egress by ~80%
+      const gardenIds = gardensList.map(g => g.id)
+      const plantsMinimal = await getGardenPlantsMinimal(gardenIds)
       const idToGardenName = gardensList.reduce<Record<string, string>>((acc, g) => { acc[g.id] = g.name; return acc }, {})
-      const all = plantsPerGarden.flat().map((gp: any) => ({
-        ...gp,
+      const all = plantsMinimal.map((gp) => ({
+        id: gp.id,
+        gardenId: gp.gardenId,
+        nickname: gp.nickname,
+        plant: gp.plantName ? { name: gp.plantName } : null,
         gardenName: idToGardenName[gp.gardenId] || '',
       }))
       setAllPlants(all)

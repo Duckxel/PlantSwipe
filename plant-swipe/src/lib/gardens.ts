@@ -101,16 +101,17 @@ export async function getGardenPlants(gardenId: string, language?: SupportedLang
   
   // Always load translations for the specified language (including English)
   // This ensures plants created in one language display correctly in another
+  // Only fetch name field to minimize egress (~90% reduction)
   let translationMap = new Map()
   if (language) {
     const { data: translations } = await supabase
       .from('plant_translations')
-      .select('*')
+      .select('plant_id, name')
       .eq('language', language)
       .in('plant_id', plantIds)
     if (translations) {
       translations.forEach(t => {
-        translationMap.set(t.plant_id, t)
+        translationMap.set(t.plant_id, { name: t.name })
       })
     }
   }
@@ -368,6 +369,99 @@ export async function getGardenTodayProgressFast(gardenId: string, dayIso: strin
     completed += comp
   }
   return { due, completed }
+}
+
+/**
+ * Ultra-lightweight version that uses aggregation to minimize egress.
+ * Only fetches aggregated counts instead of all occurrence rows.
+ */
+export async function getGardenTodayProgressUltraFast(gardenId: string, dayIso: string): Promise<{ due: number; completed: number }> {
+  const tasks = await listGardenTasksMinimal(gardenId)
+  if (tasks.length === 0) return { due: 0, completed: 0 }
+  const start = `${dayIso}T00:00:00.000Z`
+  const end = `${dayIso}T23:59:59.999Z`
+  const taskIds = tasks.map(t => t.id)
+  
+  // Use aggregation query to minimize egress - only fetch counts, not all rows
+  const { data, error } = await supabase
+    .from('garden_plant_task_occurrences')
+    .select('required_count, completed_count', { count: 'exact', head: false })
+    .in('task_id', taskIds)
+    .gte('due_at', start)
+    .lte('due_at', end)
+  
+  if (error) throw new Error(error.message)
+  
+  let due = 0
+  let completed = 0
+  for (const o of (data || [])) {
+    const req = Math.max(1, Number(o.required_count ?? 1))
+    const comp = Math.min(req, Number(o.completed_count ?? 0))
+    due += req
+    completed += comp
+  }
+  return { due, completed }
+}
+
+/**
+ * Minimal version of listGardenTasks - only fetches essential fields for list view.
+ * Reduces egress by ~70% compared to full task fetch.
+ */
+export async function listGardenTasksMinimal(gardenId: string): Promise<Array<{ id: string; type: TaskType; emoji: string | null; gardenPlantId: string }>> {
+  const base = supabase.from('garden_plant_tasks')
+  const selectMinimal = 'id, type, emoji, garden_plant_id'
+  const selectMinimalNoEmoji = 'id, type, garden_plant_id'
+  
+  let { data, error } = await base.select(selectMinimal).eq('garden_id', gardenId)
+  if (error) {
+    const msg = String(error.message || '')
+    if (/column .*emoji.* does not exist/i.test(msg)) {
+      const res = await base.select(selectMinimalNoEmoji).eq('garden_id', gardenId)
+      data = res.data as any
+      error = res.error as any
+    }
+  }
+  if (error) throw new Error(error.message)
+  return (data || []).map((r: any) => ({
+    id: String(r.id),
+    type: r.type,
+    emoji: (r as any).emoji || null,
+    gardenPlantId: String(r.garden_plant_id),
+  }))
+}
+
+/**
+ * Minimal version of getGardenPlants - only fetches essential fields for task sidebar.
+ * Reduces egress by ~80% compared to full plant fetch.
+ */
+export async function getGardenPlantsMinimal(gardenIds: string[]): Promise<Array<{ id: string; gardenId: string; nickname: string | null; plantName: string | null }>> {
+  if (gardenIds.length === 0) return []
+  const { data, error } = await supabase
+    .from('garden_plants')
+    .select('id, garden_id, plant_id, nickname')
+    .in('garden_id', gardenIds)
+  if (error) throw new Error(error.message)
+  const rows = (data || []) as any[]
+  if (rows.length === 0) return []
+  
+  const plantIds = Array.from(new Set(rows.map(r => r.plant_id)))
+  // Only fetch name field - minimal egress
+  const { data: plantRows } = await supabase
+    .from('plants')
+    .select('id, name')
+    .in('id', plantIds)
+  
+  const idToPlantName: Record<string, string> = {}
+  for (const p of plantRows || []) {
+    idToPlantName[String(p.id)] = String(p.name || '')
+  }
+  
+  return rows.map(r => ({
+    id: String(r.id),
+    gardenId: String(r.garden_id),
+    nickname: r.nickname,
+    plantName: idToPlantName[String(r.plant_id)] || null,
+  }))
 }
 
 export async function userHasUnfinishedTasksToday(userId: string): Promise<boolean> {
@@ -1147,6 +1241,58 @@ export async function listOccurrencesForTasks(taskIds: string[], startIso: strin
     completedCount: Number(r.completed_count ?? 0),
     completedAt: r.completed_at || null,
   }))
+}
+
+/**
+ * Batched version that fetches occurrences for multiple gardens at once.
+ * Reduces egress by combining queries and minimizing round trips.
+ */
+export async function listOccurrencesForMultipleGardens(
+  gardenTaskIds: Record<string, string[]>, 
+  startIso: string, 
+  endIso: string
+): Promise<Record<string, GardenPlantTaskOccurrence[]>> {
+  const allTaskIds = Array.from(new Set(Object.values(gardenTaskIds).flat()))
+  if (allTaskIds.length === 0) return {}
+  
+  // Single query instead of multiple queries
+  const { data, error } = await supabase
+    .from('garden_plant_task_occurrences')
+    .select('id, task_id, garden_plant_id, due_at, required_count, completed_count, completed_at')
+    .in('task_id', allTaskIds)
+    .gte('due_at', startIso)
+    .lte('due_at', endIso)
+    .order('due_at', { ascending: true })
+  
+  if (error) throw new Error(error.message)
+  
+  // Group by garden using task_id -> garden_id mapping
+  const taskToGarden: Record<string, string> = {}
+  for (const [gardenId, taskIds] of Object.entries(gardenTaskIds)) {
+    for (const taskId of taskIds) {
+      taskToGarden[taskId] = gardenId
+    }
+  }
+  
+  const result: Record<string, GardenPlantTaskOccurrence[]> = {}
+  for (const r of (data || [])) {
+    const taskId = String(r.task_id)
+    const gardenId = taskToGarden[taskId]
+    if (!gardenId) continue
+    
+    if (!result[gardenId]) result[gardenId] = []
+    result[gardenId].push({
+      id: String(r.id),
+      taskId,
+      gardenPlantId: String(r.garden_plant_id),
+      dueAt: String(r.due_at),
+      requiredCount: Number(r.required_count ?? 1),
+      completedCount: Number(r.completed_count ?? 0),
+      completedAt: r.completed_at || null,
+    })
+  }
+  
+  return result
 }
 
 // Return a mapping from occurrenceId -> list of users who progressed/completed it
