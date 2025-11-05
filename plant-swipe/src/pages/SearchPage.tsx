@@ -36,6 +36,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ plants, openInfo, likedI
                   draggable={false}
                   decoding="async"
                   className="w-full h-full object-cover object-center select-none"
+                  style={{ transform: 'scale(1.5)' }}
                 />
               ) : null}
             </div>
