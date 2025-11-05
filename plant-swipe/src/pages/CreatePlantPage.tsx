@@ -62,7 +62,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
   const [everAdvanced, setEverAdvanced] = React.useState(false)
   // Language selection (only in Advanced mode, defaults to English)
   const [inputLanguage, setInputLanguage] = React.useState<SupportedLanguage>(DEFAULT_LANGUAGE)
-  const [translateToAll, setTranslateToAll] = React.useState(false)
+  const [translateToAll, setTranslateToAll] = React.useState(true) // Default to true in Advanced mode
   const [translating, setTranslating] = React.useState(false)
 
   const toggleSeason = (s: Plant["seasons"][number]) => {
