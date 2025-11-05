@@ -26,8 +26,8 @@ export const SearchPage: React.FC<SearchPageProps> = ({ plants, openInfo, likedI
           tabIndex={0}
           onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => { if (e.key === 'Enter') openInfo(p) }}
         >
-          <div className="grid grid-cols-3 gap-0">
-            <div className="col-span-1 relative rounded-l-2xl overflow-hidden bg-stone-100 aspect-[4/3]">
+          <div className="grid grid-cols-3 items-stretch gap-0">
+            <div className="col-span-1 relative rounded-l-2xl overflow-hidden bg-stone-100 h-full">
               {p.image ? (
                 <img
                   src={p.image}
