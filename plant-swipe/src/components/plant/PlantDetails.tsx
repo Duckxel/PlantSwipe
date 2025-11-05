@@ -396,8 +396,9 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
           <DialogContent 
             className="max-w-[100vw] max-h-[100vh] w-screen h-screen p-0 !bg-transparent border-none rounded-none !translate-x-0 !translate-y-0 !left-0 !top-0"
             onClick={(e) => {
-              // Close when clicking on the background (not the image)
-              if (e.target === e.currentTarget) {
+              // Close when clicking outside the image container (on the background)
+              const target = e.target as HTMLElement
+              if (!target.closest('[data-image-container]') && !target.closest('button')) {
                 setIsImageFullScreen(false)
               }
             }}
@@ -410,22 +411,25 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
                 }
                 [data-radix-dialog-overlay] {
                   background-color: rgba(0, 0, 0, 0.6) !important;
+                  cursor: pointer;
                 }
               `
             }} />
             
-            <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
-              {/* Close button - fixed position */}
-              <button
-                onClick={() => setIsImageFullScreen(false)}
-                className="fixed top-4 right-4 z-[100] h-12 w-12 rounded-full bg-black/80 hover:bg-black flex items-center justify-center transition-all shadow-lg hover:scale-110"
-                aria-label={t('common.close')}
-              >
-                <X className="h-6 w-6 text-white stroke-[2.5]" />
-              </button>
-              
+            {/* Close button - fixed position */}
+            <button
+              onClick={() => setIsImageFullScreen(false)}
+              className="fixed top-4 right-4 z-[100] h-12 w-12 rounded-full bg-black/80 hover:bg-black flex items-center justify-center transition-all shadow-lg hover:scale-110"
+              aria-label={t('common.close')}
+            >
+              <X className="h-6 w-6 text-white stroke-[2.5]" />
+            </button>
+            
+            {/* Background area - clickable to close */}
+            <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
               {/* Image container with zoom and pan */}
               <div
+                data-image-container
                 className="flex items-center justify-center w-full h-full touch-none"
                 onWheel={handleImageWheel}
                 onMouseMove={handleImageMouseMove}
