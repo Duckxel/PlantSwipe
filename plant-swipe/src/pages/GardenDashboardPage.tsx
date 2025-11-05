@@ -101,6 +101,7 @@ export const GardenDashboardPage: React.FC = () => {
 
   const [activityRev, setActivityRev] = React.useState(0)
   const streakRefreshedRef = React.useRef(false)
+  const dailyStatsRunIdRef = React.useRef(0)
 
   const [infoPlant, setInfoPlant] = React.useState<Plant | null>(null)
   // Favorites (liked plants)
@@ -139,6 +140,58 @@ export const GardenDashboardPage: React.FC = () => {
     setHeavyDataReady(false)
   }, [id])
 
+  const fetchDailyStats = React.useCallback(async (gardenId: string, todayIso: string, gardenCreatedDayIso?: string | null) => {
+    const runId = ++dailyStatsRunIdRef.current
+    try {
+      const statsStart = new Date(todayIso)
+      statsStart.setDate(statsStart.getDate() - 29)
+      const statsStartIso = statsStart.toISOString().slice(0,10)
+      const rows = await getGardenTasks(gardenId, statsStartIso, todayIso)
+      if (dailyStatsRunIdRef.current !== runId) return
+      const successByDay: Record<string, boolean> = {}
+      for (const r of rows) successByDay[r.day] = Boolean(r.success)
+      const anchor30 = new Date(todayIso)
+      const days: Array<{ date: string; due: number; completed: number; success: boolean }> = []
+      for (let i = 29; i >= 0; i--) {
+        const d = new Date(anchor30)
+        d.setDate(d.getDate() - i)
+        const ds = d.toISOString().slice(0,10)
+        const beforeCreation = gardenCreatedDayIso ? (ds < gardenCreatedDayIso) : false
+        const success = beforeCreation ? false : Boolean(successByDay[ds])
+        days.push({ date: ds, due: 0, completed: 0, success })
+      }
+      setDailyStats(days)
+    } catch {
+      if (dailyStatsRunIdRef.current !== runId) return
+      // keep previous stats on failure
+    }
+  }, [])
+
+  const refreshGardenStreakOnce = React.useCallback((todayIso: string | null) => {
+    if (!id || !todayIso) return
+    if (streakRefreshedRef.current) return
+    const yesterday = new Date(todayIso)
+    yesterday.setDate(yesterday.getDate() - 1)
+    const yesterdayIso = yesterday.toISOString().slice(0, 10)
+    streakRefreshedRef.current = true
+    ;(async () => {
+      try {
+        await refreshGardenStreak(id, yesterdayIso)
+        const updated = await getGarden(id)
+        if (updated) {
+          setGarden(prev => {
+            if (prev && prev.id === updated.id) {
+              return { ...prev, ...updated }
+            }
+            return updated
+          })
+        }
+      } catch {
+        streakRefreshedRef.current = false
+      }
+    })()
+  }, [id])
+
   const load = React.useCallback(async (opts?: { silent?: boolean; preserveHeavy?: boolean }) => {
     if (!id) return
     // Keep UI visible on subsequent reloads to avoid blink
@@ -147,57 +200,59 @@ export const GardenDashboardPage: React.FC = () => {
     setError(null)
     try {
       // Fast-path: hydrate via batched API, then continue with detailed computations
-      let hydratedPlants: any[] | null = null
-      let gpsLocal: any[] | null = null
-      let hydrated = false
-      try {
-        const session = (await supabase.auth.getSession()).data.session
-        const token = session?.access_token
-        const headers: Record<string, string> = { 'Accept': 'application/json' }
-        if (token) headers['Authorization'] = `Bearer ${token}`
-        const resp = await fetch(`/api/garden/${id}/overview`, { headers, credentials: 'same-origin' })
-        if (resp.ok) {
-          const data = await resp.json().catch(() => ({}))
-          if (data?.ok) {
-            if (data.garden) setGarden({
-              id: String(data.garden.id),
-              name: String(data.garden.name),
-              coverImageUrl: data.garden.coverImageUrl || null,
-              createdBy: String(data.garden.createdBy || ''),
-              createdAt: String(data.garden.createdAt || ''),
-              streak: Number(data.garden.streak || 0),
-            } as any)
-            if (Array.isArray(data.plants)) { setPlants(data.plants); hydratedPlants = data.plants }
-            if (Array.isArray(data.members)) setMembers(data.members.map((m: any) => ({ userId: String(m.userId || m.user_id), displayName: m.displayName ?? m.display_name ?? null, email: m.email ?? null, role: m.role, joinedAt: m.joinedAt ?? m.joined_at ?? null, accentKey: m.accentKey ?? null })))
-          if (data.serverNow) {
-            const todayIso = String(data.serverNow).slice(0,10)
-            setServerToday(todayIso)
-            serverTodayRef.current = todayIso
+        let hydratedPlants: any[] | null = null
+        let gpsLocal: any[] | null = null
+        let hydrated = false
+        let gardenCreatedDayIso: string | null = null
+        try {
+          const session = (await supabase.auth.getSession()).data.session
+          const token = session?.access_token
+          const headers: Record<string, string> = { 'Accept': 'application/json' }
+          if (token) headers['Authorization'] = `Bearer ${token}`
+          const resp = await fetch(`/api/garden/${id}/overview`, { headers, credentials: 'same-origin' })
+          if (resp.ok) {
+            const data = await resp.json().catch(() => ({}))
+            if (data?.ok) {
+              if (data.garden) {
+                setGarden({
+                  id: String(data.garden.id),
+                  name: String(data.garden.name),
+                  coverImageUrl: data.garden.coverImageUrl || null,
+                  createdBy: String(data.garden.createdBy || ''),
+                  createdAt: String(data.garden.createdAt || ''),
+                  streak: Number(data.garden.streak || 0),
+                } as any)
+                gardenCreatedDayIso = data.garden?.createdAt ? new Date(data.garden.createdAt).toISOString().slice(0,10) : null
+              }
+              if (Array.isArray(data.plants)) { setPlants(data.plants); hydratedPlants = data.plants }
+              if (Array.isArray(data.members)) setMembers(data.members.map((m: any) => ({ userId: String(m.userId || m.user_id), displayName: m.displayName ?? m.display_name ?? null, email: m.email ?? null, role: m.role, joinedAt: m.joinedAt ?? m.joined_at ?? null, accentKey: m.accentKey ?? null })))
+              if (data.serverNow) {
+                const todayIso = String(data.serverNow).slice(0,10)
+                setServerToday(todayIso)
+                serverTodayRef.current = todayIso
+              }
+              hydrated = true
+            }
           }
-            hydrated = true
-          }
-        }
-      } catch {}
+        } catch {}
 
-      let gardenCreatedDayIso: string | null = null
-      let todayLocal: string | null = null
-      if (!hydrated) {
-        const [g0, gpsRaw, ms, nowIso] = await Promise.all([
-          getGarden(id),
-          getGardenPlants(id),
-          getGardenMembers(id),
-          fetchServerNowISO(),
-        ])
-        setGarden(g0)
-        // Track garden creation day (YYYY-MM-DD) to avoid validating pre-creation days
-        gardenCreatedDayIso = g0?.createdAt ? new Date(g0.createdAt).toISOString().slice(0,10) : null
-        gpsLocal = gpsRaw
-        setPlants(gpsRaw)
-        setMembers(ms.map(m => ({ userId: m.userId, displayName: m.displayName ?? null, email: (m as any).email ?? null, role: m.role, joinedAt: (m as any).joinedAt, accentKey: (m as any).accentKey ?? null })))
-        todayLocal = nowIso.slice(0,10)
-        setServerToday(todayLocal)
-        serverTodayRef.current = todayLocal
-      }
+        let todayLocal: string | null = null
+        if (!hydrated) {
+          const [g0, gpsRaw, ms, nowIso] = await Promise.all([
+            getGarden(id),
+            getGardenPlants(id),
+            getGardenMembers(id),
+            fetchServerNowISO(),
+          ])
+          setGarden(g0)
+          gardenCreatedDayIso = g0?.createdAt ? new Date(g0.createdAt).toISOString().slice(0,10) : gardenCreatedDayIso
+          gpsLocal = gpsRaw
+          setPlants(gpsRaw)
+          setMembers(ms.map(m => ({ userId: m.userId, displayName: m.displayName ?? null, email: (m as any).email ?? null, role: m.role, joinedAt: (m as any).joinedAt, accentKey: (m as any).accentKey ?? null })))
+          todayLocal = nowIso.slice(0,10)
+          setServerToday(todayLocal)
+          serverTodayRef.current = todayLocal
+        }
       // Resolve 'today' for subsequent computations regardless of hydration path
       let today = (serverToday || todayLocal || '')
       if (!today) {
@@ -206,21 +261,8 @@ export const GardenDashboardPage: React.FC = () => {
         setServerToday(today)
         serverTodayRef.current = today
       }
-      // Ensure base streak is refreshed from server, at most once per session
-      try {
-        if (!streakRefreshedRef.current) {
-          streakRefreshedRef.current = true
-          await refreshGardenStreak(id, new Date(new Date(today).getTime() - 24*3600*1000).toISOString().slice(0,10))
-          const g1 = await getGarden(id)
-          setGarden(g1)
-          // Prefer refreshed garden's createdAt if available
-          gardenCreatedDayIso = g1?.createdAt ? new Date(g1.createdAt).toISOString().slice(0,10) : gardenCreatedDayIso
-        }
-      } catch {}
+      refreshGardenStreakOnce(today)
       // Do not recompute today's task here to avoid overriding recent actions; rely on action-specific updates
-      const start = new Date(today)
-      start.setDate(start.getDate() - 29)
-      const startIso = start.toISOString().slice(0,10)
       // Defer heavy computations; garden_tasks fetched later for stats
       // Compute current week (Mon-Sun) in UTC based on server 'today'
       const parseUTC = (iso: string) => new Date(`${iso}T00:00:00Z`)
@@ -341,32 +383,14 @@ export const GardenDashboardPage: React.FC = () => {
       setTotalOnHand(total)
       setSpeciesOnHand(species)
       // Build last-30-days success using garden_tasks (fast, no occurrences)
-      try {
-        const statsStart = new Date(today)
-        statsStart.setDate(statsStart.getDate() - 29)
-        const statsStartIso = statsStart.toISOString().slice(0,10)
-        const rows = await getGardenTasks(id, statsStartIso, today)
-        const successByDay: Record<string, boolean> = {}
-        for (const r of rows) successByDay[r.day] = Boolean(r.success)
-        const days: Array<{ date: string; due: number; completed: number; success: boolean }> = []
-        const anchor30 = new Date(today)
-        for (let i = 29; i >= 0; i--) {
-          const d = new Date(anchor30)
-          d.setDate(d.getDate() - i)
-          const ds = d.toISOString().slice(0,10)
-          const beforeCreation = gardenCreatedDayIso ? (ds < gardenCreatedDayIso) : false
-          const success = beforeCreation ? false : Boolean(successByDay[ds])
-          days.push({ date: ds, due: 0, completed: 0, success })
-        }
-        setDailyStats(days)
-      } catch {}
-      serverTodayRef.current = today
+        fetchDailyStats(id, today, gardenCreatedDayIso)
+        serverTodayRef.current = today
     } catch (e: any) {
       setError(e?.message || 'Failed to load garden')
     } finally {
       if (!silent) setLoading(false)
     }
-  }, [id, garden, currentLang])
+    }, [id, garden, currentLang, refreshGardenStreakOnce, fetchDailyStats])
 
   // Lazy heavy loader for tabs that need it
   const loadHeavyForCurrentTab = React.useCallback(async (todayOverride?: string | null, tabOverride?: TabKey, options?: { force?: boolean }) => {
