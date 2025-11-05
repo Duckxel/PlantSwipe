@@ -423,7 +423,7 @@ export const GardenListPage: React.FC = () => {
 
   return (
     <div className="max-w-6xl mx-auto px-4 md:px-0">
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-6">
+      <div className={`grid grid-cols-1 ${user ? 'lg:grid-cols-[minmax(0,1fr)_360px]' : ''} gap-6`}>
         <div className="max-w-3xl mx-auto w-full">
           <div className="flex items-center justify-between mt-6 mb-4">
             <h1 className="text-2xl font-semibold">{t('garden.yourGardens')}</h1>

@@ -27,6 +27,7 @@ export default function SettingsPage() {
   const [disableFriendRequests, setDisableFriendRequests] = React.useState(false)
   const [emailExpanded, setEmailExpanded] = React.useState(false)
   const [passwordExpanded, setPasswordExpanded] = React.useState(false)
+  const [privacyExpanded, setPrivacyExpanded] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -456,8 +457,26 @@ export default function SettingsPage() {
                 {t('settings.friendRequests.disableDescription')}
               </p>
             </div>
-          </div>
-        </CardContent>
+            <div className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                id="disable-friend-requests"
+                checked={disableFriendRequests}
+                onChange={handleToggleFriendRequests}
+                disabled={saving}
+                className="mt-1 h-4 w-4 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
+              />
+              <div className="flex-1">
+                <Label htmlFor="disable-friend-requests" className="font-medium cursor-pointer">
+                  Disable Friend Requests
+                </Label>
+                <p className="text-xs opacity-70 mt-1">
+                  When enabled, other users will not be able to send you friend requests. This helps prevent unwanted invitations. Works for both public and private profiles.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        )}
       </Card>
 
       {/* Language Settings */}
