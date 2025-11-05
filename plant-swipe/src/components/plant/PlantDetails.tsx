@@ -29,37 +29,18 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
 
   const handleShare = async () => {
     try {
-      // Build the shareable URL - always use full page URL for sharing
+      // Build the shareable URL for the current plant
       const baseUrl = window.location.origin
       const pathWithoutLang = `/plants/${plant.id}`
       const pathWithLang = currentLang === 'en' ? pathWithoutLang : `/${currentLang}${pathWithoutLang}`
       const shareUrl = `${baseUrl}${pathWithLang}`
       
-      // Try Web Share API first (mobile-friendly)
-      if (navigator.share) {
-        try {
-          await navigator.share({
-            title: plant.name,
-            text: `${plant.name} (${plant.scientificName})`,
-            url: shareUrl,
-          })
-          setShareSuccess(true)
-          setTimeout(() => setShareSuccess(false), 3000)
-          return
-        } catch (err) {
-          // User cancelled or share failed, fall through to clipboard
-          if ((err as any)?.name !== 'AbortError') {
-            console.error('Share failed:', err)
-          }
-        }
-      }
-      
-      // Fallback to clipboard
+      // Copy to clipboard
       await navigator.clipboard.writeText(shareUrl)
       setShareSuccess(true)
       setTimeout(() => setShareSuccess(false), 3000)
     } catch (err) {
-      console.error('Failed to share:', err)
+      console.error('Failed to copy link:', err)
       alert(t('plantInfo.shareFailed'))
     }
   }
