@@ -18,6 +18,25 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
   const { user } = useAuth()
   const { t } = useTranslation('common')
   const [shareSuccess, setShareSuccess] = React.useState(false)
+  const shareTimeoutRef = React.useRef<number | null>(null)
+  const showShareSuccess = React.useCallback(() => {
+    setShareSuccess(true)
+    if (shareTimeoutRef.current !== null) {
+      window.clearTimeout(shareTimeoutRef.current)
+    }
+    shareTimeoutRef.current = window.setTimeout(() => {
+      setShareSuccess(false)
+      shareTimeoutRef.current = null
+    }, 3000)
+  }, [])
+
+  React.useEffect(() => {
+    return () => {
+      if (shareTimeoutRef.current !== null) {
+        window.clearTimeout(shareTimeoutRef.current)
+      }
+    }
+  }, [])
   const [isImageFullScreen, setIsImageFullScreen] = React.useState(false)
   const [zoom, setZoom] = React.useState(1)
   const [pan, setPan] = React.useState({ x: 0, y: 0 })
@@ -32,66 +51,82 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
     ? `${freqAmount > 0 ? `${freqAmount} ${freqAmount === 1 ? t('plantInfo.time') : t('plantInfo.times')} ` : ''}${t('plantInfo.per')} ${t(`plantInfo.${freqPeriod}`)}`
     : null
 
-  const handleShare = (e: React.MouseEvent) => {
+  const handleShare = async (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+
     const baseUrl = window.location.origin
     const pathWithoutLang = `/plants/${plant.id}`
     const pathWithLang = currentLang === 'en' ? pathWithoutLang : `/${currentLang}${pathWithoutLang}`
     const shareUrl = `${baseUrl}${pathWithLang}`
-    
-    console.log('handleShare called! Copying:', shareUrl)
-    
-    e.preventDefault()
-    e.stopPropagation()
-    
-    // Create textarea for execCommand method
-    const textarea = document.createElement('textarea')
-    textarea.value = shareUrl
-    textarea.style.position = 'fixed'
-    textarea.style.top = '0'
-    textarea.style.left = '0'
-    textarea.style.width = '2px'
-    textarea.style.height = '2px'
-    textarea.style.opacity = '0'
-    textarea.style.pointerEvents = 'none'
-    textarea.style.zIndex = '999999'
-    textarea.readOnly = false
-    
-    document.body.appendChild(textarea)
-    
-    // Focus and select
-    textarea.focus()
-    textarea.select()
-    textarea.setSelectionRange(0, shareUrl.length)
-    
-    // Try execCommand first
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ url: shareUrl, title: plant.name, text: plant.description })
+        showShareSuccess()
+        return
+      } catch (err: unknown) {
+        if (err instanceof DOMException && err.name === 'AbortError') {
+          return
+        }
+        if (typeof err === 'object' && err && 'name' in err && (err as { name?: string }).name === 'AbortError') {
+          return
+        }
+        // fall through to clipboard copy
+      }
+    }
+
+    if (navigator.clipboard?.writeText && window.isSecureContext) {
+      try {
+        await navigator.clipboard.writeText(shareUrl)
+        showShareSuccess()
+        return
+      } catch (err) {
+        console.warn('Clipboard API failed:', err)
+      }
+    }
+
     let execSuccess = false
     try {
+      const textarea = document.createElement('textarea')
+      textarea.value = shareUrl
+      textarea.setAttribute('readonly', '')
+      textarea.style.position = 'fixed'
+      textarea.style.top = '0'
+      textarea.style.left = '0'
+      textarea.style.width = '2px'
+      textarea.style.height = '2px'
+      textarea.style.opacity = '0'
+      textarea.style.pointerEvents = 'none'
+
+      const attachTarget = (e.currentTarget as HTMLElement)?.parentElement ?? document.body
+      attachTarget.appendChild(textarea)
+
+      try {
+        textarea.focus({ preventScroll: true })
+      } catch {
+        textarea.focus()
+      }
+      textarea.select()
+      textarea.setSelectionRange(0, shareUrl.length)
+
       execSuccess = document.execCommand('copy')
-      console.log('execCommand result:', execSuccess)
+      if (textarea.parentNode) {
+        textarea.parentNode.removeChild(textarea)
+      }
     } catch (err) {
-      console.error('execCommand error:', err)
+      console.warn('execCommand copy failed:', err)
     }
-    
-    // Clean up
-    document.body.removeChild(textarea)
-    
-    // Try Clipboard API
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(shareUrl).then(() => {
-        console.log('Clipboard API: Success')
-        setShareSuccess(true)
-        setTimeout(() => setShareSuccess(false), 3000)
-      }).catch((err) => {
-        console.warn('Clipboard API failed:', err)
-        // Show success if execCommand worked
-        if (execSuccess) {
-          setShareSuccess(true)
-          setTimeout(() => setShareSuccess(false), 3000)
-        }
-      })
-    } else if (execSuccess) {
-      setShareSuccess(true)
-      setTimeout(() => setShareSuccess(false), 3000)
+
+    if (execSuccess) {
+      showShareSuccess()
+      return
+    }
+
+    try {
+      window.prompt(t('plantInfo.shareFailed'), shareUrl)
+    } catch {
+      // ignore if prompt not allowed
     }
   }
 
