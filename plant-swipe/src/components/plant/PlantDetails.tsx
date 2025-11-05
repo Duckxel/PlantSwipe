@@ -26,9 +26,8 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
     : null
 
   const handleShare = async (e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    e.nativeEvent.stopImmediatePropagation()
+    // Don't prevent default/stop propagation until AFTER clipboard operation
+    // This preserves the user gesture context needed for clipboard API
     
     const baseUrl = window.location.origin
     const pathWithoutLang = `/plants/${plant.id}`
@@ -37,16 +36,18 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
     
     console.log('Attempting to copy:', shareUrl, 'isOverlayMode:', isOverlayMode)
     
-    // Try modern Clipboard API first - this should work even in overlays
+    // Try modern Clipboard API first - must be called synchronously during user gesture
     if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
       try {
-        // Clipboard API requires user gesture, which we have here
-        // Use a small delay to ensure the click event has fully propagated
-        await new Promise(resolve => setTimeout(resolve, 0))
+        // Call clipboard API immediately while user gesture is active
+        // Don't await setTimeout first - that loses the gesture context
         await navigator.clipboard.writeText(shareUrl)
         console.log('Successfully copied to clipboard via Clipboard API')
         setShareSuccess(true)
         setTimeout(() => setShareSuccess(false), 3000)
+        // Now prevent default after clipboard operation
+        e.preventDefault()
+        e.stopPropagation()
         return
       } catch (clipboardErr: any) {
         console.warn('Clipboard API failed:', clipboardErr?.message || clipboardErr)
@@ -85,45 +86,38 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
       // Append to body (not inside Sheet/Dialog)
       document.body.appendChild(textArea)
       
-      // Use setTimeout to ensure DOM is ready and focus works properly
-      await new Promise<void>((resolve, reject) => {
-        setTimeout(() => {
-          try {
-            // Focus and select - must be done after appending to DOM
-            textArea.focus()
-            textArea.select()
-            textArea.setSelectionRange(0, shareUrl.length)
-            
-            // Execute copy command
-            const successful = document.execCommand('copy')
-            
-            // Clean up immediately
-            if (textArea.parentNode) {
-              document.body.removeChild(textArea)
-            }
-            
-            if (successful) {
-              console.log('Successfully copied using execCommand fallback')
-              setShareSuccess(true)
-              setTimeout(() => setShareSuccess(false), 3000)
-              resolve()
-            } else {
-              reject(new Error('execCommand returned false'))
-            }
-          } catch (err) {
-            // Clean up on error
-            if (textArea.parentNode) {
-              document.body.removeChild(textArea)
-            }
-            reject(err)
-          }
-        }, 50) // Increased delay for overlay context
-      })
+      // Focus and select immediately - must be done synchronously during user gesture
+      textArea.focus()
+      textArea.select()
+      textArea.setSelectionRange(0, shareUrl.length)
+      
+      // Execute copy command synchronously
+      const successful = document.execCommand('copy')
+      
+      // Clean up immediately
+      if (textArea.parentNode) {
+        document.body.removeChild(textArea)
+      }
+      
+      if (successful) {
+        console.log('Successfully copied using execCommand fallback')
+        setShareSuccess(true)
+        setTimeout(() => setShareSuccess(false), 3000)
+      } else {
+        throw new Error('execCommand returned false')
+      }
+      
+      // Now prevent default after copy operation
+      e.preventDefault()
+      e.stopPropagation()
     } catch (err) {
       console.error('All copy methods failed:', err)
       // Show user-friendly error
       const errorMsg = err instanceof Error ? err.message : String(err)
       alert(`${t('plantInfo.shareFailed')}\n\nURL: ${shareUrl}\n\nError: ${errorMsg}`)
+      // Prevent default even on error
+      e.preventDefault()
+      e.stopPropagation()
     }
   }
 
@@ -179,13 +173,14 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
           <div className="absolute bottom-3 right-3 flex gap-2">
             <button
               onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
                 handleShare(e)
               }}
               onMouseDown={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
+                // Only prevent default on mousedown to avoid interfering with click
+                // This prevents drag but preserves click event for clipboard API
+                if (e.button === 0) {
+                  e.preventDefault()
+                }
               }}
               type="button"
               aria-label={t('plantInfo.share')}

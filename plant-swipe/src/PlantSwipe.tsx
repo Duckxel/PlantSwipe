@@ -6,7 +6,7 @@ import { useMotionValue, animate } from "framer-motion";
 import { Search, ChevronDown, ChevronUp, ListFilter } from "lucide-react";
 // Sheet is used for plant info overlay
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -805,6 +805,9 @@ function PlantInfoOverlay() {
         side="bottom"
         className="rounded-t-2xl max-h-[85vh] overflow-y-auto p-4 md:p-6"
       >
+        <SheetHeader>
+          <SheetTitle className="sr-only">Plant Information</SheetTitle>
+        </SheetHeader>
         <div className="max-w-4xl mx-auto w-full">
           <PlantInfoPage />
         </div>
