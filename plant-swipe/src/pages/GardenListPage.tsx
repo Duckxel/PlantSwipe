@@ -42,6 +42,51 @@ export const GardenListPage: React.FC = () => {
   const taskDataCacheRef = React.useRef<{ data: any; timestamp: number; today: string } | null>(null)
   const CACHE_TTL = 30 * 1000 // 30 seconds cache for resync
   const TASK_DATA_CACHE_TTL = 10 * 1000 // 10 seconds cache for task data
+  const LOCALSTORAGE_TASK_CACHE_TTL = 60 * 1000 // 1 minute cache in localStorage
+  const LOCALSTORAGE_GARDEN_CACHE_TTL = 5 * 60 * 1000 // 5 minutes cache for gardens
+  
+  // localStorage cache helpers
+  const getLocalStorageCache = React.useCallback((key: string): any | null => {
+    try {
+      const item = localStorage.getItem(key)
+      if (!item) return null
+      const parsed = JSON.parse(item)
+      if (parsed.expires && Date.now() > parsed.expires) {
+        localStorage.removeItem(key)
+        return null
+      }
+      return parsed.data
+    } catch {
+      return null
+    }
+  }, [])
+  
+  const setLocalStorageCache = React.useCallback((key: string, data: any, ttl: number) => {
+    try {
+      const item = {
+        data,
+        expires: Date.now() + ttl,
+        timestamp: Date.now(),
+      }
+      localStorage.setItem(key, JSON.stringify(item))
+    } catch (e) {
+      // Ignore quota errors
+      console.warn('[GardenList] localStorage cache failed:', e)
+    }
+  }, [])
+  
+  const clearLocalStorageCache = React.useCallback((keyPrefix?: string) => {
+    try {
+      if (keyPrefix) {
+        const keys = Object.keys(localStorage).filter(k => k.startsWith(keyPrefix))
+        keys.forEach(k => localStorage.removeItem(k))
+      } else {
+        localStorage.removeItem('garden_list_cache')
+        localStorage.removeItem('garden_tasks_cache')
+        localStorage.removeItem('server_time_offset')
+      }
+    } catch {}
+  }, [])
 
   const emitGardenRealtime = React.useCallback((gardenId: string, kind: GardenRealtimeKind = 'tasks', metadata?: Record<string, unknown>) => {
     try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
@@ -58,16 +103,110 @@ export const GardenListPage: React.FC = () => {
     setLoading(true)
     setError(null)
     try {
-      // Load gardens and server time in parallel
-      const [data, nowIso] = await Promise.all([
+      // Try to load from localStorage cache first
+      const cacheKey = `garden_list_cache_${user.id}`
+      const cachedGardens = getLocalStorageCache(cacheKey)
+      
+      let data: Garden[]
+      let nowIso: string
+      
+      if (cachedGardens && cachedGardens.gardens) {
+        // Use cached gardens immediately for instant display
+        data = cachedGardens.gardens
+        setGardens(data)
+        gardensRef.current = data
+        setLoading(false)
+        
+        // Try cached server time offset
+        const timeOffset = getLocalStorageCache('server_time_offset')
+        if (timeOffset && timeOffset.offset !== undefined) {
+          const estimatedServerTime = new Date(Date.now() + timeOffset.offset)
+          const today = estimatedServerTime.toISOString().slice(0, 10)
+          setServerToday(today)
+          serverTodayRef.current = today
+        }
+        
+        // Load fresh data in background
+        Promise.all([
+          getUserGardens(user.id),
+          fetchServerNowISO()
+        ]).then(([freshData, freshNowIso]) => {
+          // Update if data changed
+          if (JSON.stringify(freshData) !== JSON.stringify(data)) {
+            setGardens(freshData)
+            gardensRef.current = freshData
+          }
+          
+          // Cache fresh data
+          setLocalStorageCache(cacheKey, { gardens: freshData }, LOCALSTORAGE_GARDEN_CACHE_TTL)
+          
+          // Cache server time offset
+          const clientTime = Date.now()
+          const serverTime = new Date(freshNowIso).getTime()
+          const offset = serverTime - clientTime
+          setLocalStorageCache('server_time_offset', { offset }, 24 * 60 * 60 * 1000) // 24 hours
+          
+          const today = freshNowIso.slice(0, 10)
+          setServerToday(today)
+          serverTodayRef.current = today
+          
+          // Update progress with fresh data
+          Promise.all(freshData.map(async (g) => {
+            try {
+              const prog = await getGardenTodayProgressFast(g.id, today)
+              return [g.id, prog] as [string, { due: number; completed: number }]
+            } catch {
+              return [g.id, { due: 0, completed: 0 }] as [string, { due: number; completed: number }]
+            }
+          })).then((entries) => {
+            const map: Record<string, { due: number; completed: number }> = {}
+            for (const [gid, prog] of entries) map[gid] = prog
+            setProgressByGarden(map)
+          }).catch(() => {})
+        }).catch(() => {
+          // If background fetch fails, keep using cached data
+        })
+        
+        // Load progress for cached gardens
+        const today = serverTodayRef.current ?? new Date().toISOString().slice(0, 10)
+        Promise.all(data.map(async (g) => {
+          try {
+            const prog = await getGardenTodayProgressFast(g.id, today)
+            return [g.id, prog] as [string, { due: number; completed: number }]
+          } catch {
+            return [g.id, { due: 0, completed: 0 }] as [string, { due: number; completed: number }]
+          }
+        })).then((entries) => {
+          const map: Record<string, { due: number; completed: number }> = {}
+          for (const [gid, prog] of entries) map[gid] = prog
+          setProgressByGarden(map)
+        }).catch(() => {})
+        
+        return
+      }
+      
+      // No cache - fetch fresh data
+      const [freshData, freshNowIso] = await Promise.all([
         getUserGardens(user.id),
         fetchServerNowISO()
       ])
+      data = freshData
+      nowIso = freshNowIso
+      
       setGardens(data)
       gardensRef.current = data
       const today = nowIso.slice(0,10)
       setServerToday(today)
       serverTodayRef.current = today
+      
+      // Cache the data
+      setLocalStorageCache(cacheKey, { gardens: data }, LOCALSTORAGE_GARDEN_CACHE_TTL)
+      
+      // Cache server time offset
+      const clientTime = Date.now()
+      const serverTime = new Date(nowIso).getTime()
+      const offset = serverTime - clientTime
+      setLocalStorageCache('server_time_offset', { offset }, 24 * 60 * 60 * 1000) // 24 hours
       
       // Set loading to false immediately so gardens render
       setLoading(false)
@@ -91,7 +230,7 @@ export const GardenListPage: React.FC = () => {
       setError(e?.message || t('garden.failedToLoad'))
       setLoading(false)
     }
-  }, [user?.id, t])
+  }, [user?.id, t, getLocalStorageCache, setLocalStorageCache])
 
   React.useEffect(() => { load() }, [load])
 
@@ -106,16 +245,43 @@ export const GardenListPage: React.FC = () => {
     if (!today) return
     if (gardensList.length === 0) { setAllPlants([]); setTodayTaskOccurrences([]); return }
     
-    // Check cache first
+    // Multi-layer cache check: memory -> localStorage -> API
     const cacheKey = `${today}::${gardensList.map(g => g.id).sort().join(',')}`
     const now = Date.now()
+    
+    // 1. Check memory cache first (fastest)
     const cached = taskDataCacheRef.current
     if (cached && cached.today === today && (now - cached.timestamp) < TASK_DATA_CACHE_TTL) {
-      // Use cached data
       setTodayTaskOccurrences(cached.data.occurrences)
       setCompletionsByOcc(cached.data.completions)
       setAllPlants(cached.data.plants)
       setLoadingTasks(false)
+      return
+    }
+    
+    // 2. Check localStorage cache (persists across page reloads)
+    const localStorageKey = `garden_tasks_cache_${cacheKey}`
+    const localStorageCache = getLocalStorageCache(localStorageKey)
+    if (localStorageCache && localStorageCache.data) {
+      setTodayTaskOccurrences(localStorageCache.data.occurrences || [])
+      setCompletionsByOcc(localStorageCache.data.completions || {})
+      setAllPlants(localStorageCache.data.plants || [])
+      setLoadingTasks(false)
+      
+      // Also update memory cache
+      taskDataCacheRef.current = {
+        data: localStorageCache.data,
+        timestamp: localStorageCache.timestamp || now,
+        today,
+      }
+      
+      // Refresh in background if cache is getting stale
+      if (localStorageCache.timestamp && (now - localStorageCache.timestamp) > LOCALSTORAGE_TASK_CACHE_TTL / 2) {
+        // Cache is half-expired, refresh in background
+        setTimeout(() => {
+          loadAllTodayOccurrences(gardensOverride, todayOverride, skipResync)
+        }, 100)
+      }
       return
     }
     
@@ -179,22 +345,28 @@ export const GardenListPage: React.FC = () => {
       }))
       setAllPlants(all)
       
-      // Cache the results
+      // Cache the results in both memory and localStorage
+      const cacheData = {
+        occurrences: occsAugmented,
+        completions: compMap,
+        plants: all,
+      }
+      
+      // Memory cache (fast access)
       taskDataCacheRef.current = {
-        data: {
-          occurrences: occsAugmented,
-          completions: compMap,
-          plants: all,
-        },
+        data: cacheData,
         timestamp: now,
         today,
       }
+      
+      // localStorage cache (persists across page reloads)
+      setLocalStorageCache(localStorageKey, cacheData, LOCALSTORAGE_TASK_CACHE_TTL)
     } catch {
       // swallow; page has global error area
     } finally {
       setLoadingTasks(false)
     }
-  }, [gardens, serverToday])
+  }, [gardens, serverToday, getLocalStorageCache, setLocalStorageCache])
 
   const scheduleReload = React.useCallback(() => {
     const execute = async () => {
@@ -300,6 +472,7 @@ export const GardenListPage: React.FC = () => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_task_occurrences' }, () => {
         // Clear cache on realtime updates
         taskDataCacheRef.current = null
+        clearLocalStorageCache(`garden_tasks_cache_`)
         scheduleReload()
       })
 
@@ -371,6 +544,7 @@ export const GardenListPage: React.FC = () => {
       if (!gardenIdsRef.current.has(message.gardenId)) return
       // Clear cache on broadcast updates
       taskDataCacheRef.current = null
+      clearLocalStorageCache(`garden_tasks_cache_`)
       scheduleReload()
     })
       .then((unsubscribe) => {
@@ -426,6 +600,8 @@ export const GardenListPage: React.FC = () => {
         // Clear resync cache for affected gardens
         if (broadcastGardenId) {
           delete resyncCacheRef.current[`${broadcastGardenId}::${today}`]
+          // Clear localStorage cache for this garden's tasks
+          clearLocalStorageCache(`garden_tasks_cache_`)
         }
       }
       taskDataCacheRef.current = null
@@ -433,7 +609,7 @@ export const GardenListPage: React.FC = () => {
       await loadAllTodayOccurrences(undefined, undefined, false) // Force resync after user action
       if (broadcastGardenId) emitGardenRealtime(broadcastGardenId, 'tasks')
     }
-  }, [allPlants, emitGardenRealtime, load, loadAllTodayOccurrences, todayTaskOccurrences, serverToday, user?.id])
+  }, [allPlants, emitGardenRealtime, load, loadAllTodayOccurrences, todayTaskOccurrences, serverToday, user?.id, clearLocalStorageCache])
 
   const onCompleteAllForPlant = React.useCallback(async (gardenPlantId: string) => {
     const gp = allPlants.find((p: any) => p.id === gardenPlantId)
@@ -464,13 +640,14 @@ export const GardenListPage: React.FC = () => {
       const today = serverTodayRef.current ?? serverToday
       if (today && gardenId) {
         delete resyncCacheRef.current[`${gardenId}::${today}`]
+        clearLocalStorageCache(`garden_tasks_cache_`)
       }
       taskDataCacheRef.current = null
       await load()
       await loadAllTodayOccurrences(undefined, undefined, false) // Force resync after user action
       if (gardenId) emitGardenRealtime(gardenId, 'tasks')
     }
-  }, [allPlants, emitGardenRealtime, load, loadAllTodayOccurrences, todayTaskOccurrences, serverToday, user?.id])
+  }, [allPlants, emitGardenRealtime, load, loadAllTodayOccurrences, todayTaskOccurrences, serverToday, user?.id, clearLocalStorageCache])
 
   const onMarkAllCompleted = React.useCallback(async () => {
     const affectedGardenIds = new Set<string>()
@@ -496,13 +673,14 @@ export const GardenListPage: React.FC = () => {
         affectedGardenIds.forEach((gid) => {
           delete resyncCacheRef.current[`${gid}::${today}`]
         })
+        clearLocalStorageCache(`garden_tasks_cache_`)
       }
       taskDataCacheRef.current = null
       await load()
       await loadAllTodayOccurrences(undefined, undefined, false) // Force resync after user action
       affectedGardenIds.forEach((gid) => emitGardenRealtime(gid, 'tasks'))
     }
-  }, [allPlants, emitGardenRealtime, load, loadAllTodayOccurrences, todayTaskOccurrences, serverToday, user?.id])
+  }, [allPlants, emitGardenRealtime, load, loadAllTodayOccurrences, todayTaskOccurrences, serverToday, user?.id, clearLocalStorageCache])
 
   const onCreate = async () => {
     if (!user?.id) return
