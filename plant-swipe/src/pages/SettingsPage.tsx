@@ -27,7 +27,6 @@ export default function SettingsPage() {
   const [disableFriendRequests, setDisableFriendRequests] = React.useState(false)
   const [emailExpanded, setEmailExpanded] = React.useState(false)
   const [passwordExpanded, setPasswordExpanded] = React.useState(false)
-  const [privacyExpanded, setPrivacyExpanded] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
