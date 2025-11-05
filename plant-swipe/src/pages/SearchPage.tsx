@@ -20,13 +20,13 @@ export const SearchPage: React.FC<SearchPageProps> = ({ plants, openInfo, likedI
       {plants.map((p) => (
         <Card
           key={p.id}
-          className="relative rounded-2xl overflow-hidden cursor-pointer"
+          className="relative rounded-2xl overflow-hidden cursor-pointer h-40"
           onClick={() => openInfo(p)}
           role="button"
           tabIndex={0}
           onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => { if (e.key === 'Enter') openInfo(p) }}
         >
-          <div className="grid grid-cols-[auto_1fr] items-stretch">
+          <div className="grid grid-cols-[auto_1fr] items-stretch h-full">
             <div className="relative flex-shrink-0 rounded-l-2xl overflow-hidden bg-stone-100" style={{ height: '100%', aspectRatio: '1/1' }}>
               {p.image ? (
                 <img
