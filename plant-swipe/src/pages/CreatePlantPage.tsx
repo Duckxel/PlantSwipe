@@ -138,9 +138,11 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
       
       const translationsToSave = [translation]
       
-      // If translate to all languages is enabled, translate and save
-      // Use inputLanguage for DeepL source language (works in both Simplified and Advanced mode)
-      if (translateToAll && advanced) {
+      // In simplified mode, automatically translate to all languages
+      // In advanced mode, only translate if checkbox is enabled
+      const shouldTranslate = !advanced || translateToAll
+      
+      if (shouldTranslate) {
         setTranslating(true)
         try {
           const allTranslations = await translatePlantToAllLanguages({
@@ -235,26 +237,6 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
             </div>
             {advanced && (
               <>
-                {/* Translation Option */}
-                <div className="flex items-start gap-2 p-4 rounded-xl border bg-stone-50">
-                  <input 
-                    id="translate-to-all" 
-                    type="checkbox" 
-                    checked={translateToAll} 
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTranslateToAll(e.target.checked)}
-                    disabled={translating}
-                    className="mt-1"
-                  />
-                  <div className="flex-1">
-                    <Label htmlFor="translate-to-all" className="font-medium cursor-pointer">
-                      {t('createPlant.translateToAll')}
-                    </Label>
-                    <p className="text-xs opacity-70 mt-1">
-                      {t('createPlant.translateToAllDescription')}
-                    </p>
-                  </div>
-                </div>
-                
                 <div className="grid gap-2">
                   <Label htmlFor="plant-scientific">{t('createPlant.scientificName')}</Label>
                   <Input id="plant-scientific" autoComplete="off" value={scientificName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setScientificName(e.target.value)} />
@@ -345,6 +327,29 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
             {error && <div className="text-sm text-red-600">{error}</div>}
             {ok && <div className="text-sm text-green-600">{ok}</div>}
             {translating && <div className="text-sm text-blue-600">{t('createPlant.translatingToAll')}</div>}
+            
+            {/* Translation Option - Only shown in Advanced mode, at the bottom before save */}
+            {advanced && (
+              <div className="flex items-start gap-2 p-4 rounded-xl border bg-stone-50">
+                <input 
+                  id="translate-to-all" 
+                  type="checkbox" 
+                  checked={translateToAll} 
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTranslateToAll(e.target.checked)}
+                  disabled={translating}
+                  className="mt-1"
+                />
+                <div className="flex-1">
+                  <Label htmlFor="translate-to-all" className="font-medium cursor-pointer">
+                    {t('createPlant.translateToAll')}
+                  </Label>
+                  <p className="text-xs opacity-70 mt-1">
+                    {t('createPlant.translateToAllDescription')}
+                  </p>
+                </div>
+              </div>
+            )}
+            
             <div className="flex gap-2 pt-2">
               <Button type="button" variant="secondary" className="rounded-2xl" onClick={onCancel} disabled={saving || translating}>{t('common.cancel')}</Button>
               <Button type="button" className="rounded-2xl" onClick={save} disabled={saving || translating}>
