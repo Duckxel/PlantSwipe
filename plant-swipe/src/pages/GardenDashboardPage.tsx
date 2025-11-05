@@ -1,7 +1,10 @@
 // @ts-nocheck
 import React from 'react'
 import { useAuth } from '@/context/AuthContext'
-import { useParams, NavLink, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
+import { useParams, Routes, Route, useLocation } from 'react-router-dom'
+import { NavLink } from '@/components/i18n/NavLink'
+import { Navigate } from '@/components/i18n/Navigate'
+import { useLanguageNavigate, removeLanguagePrefix } from '@/lib/i18nRouting'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -18,6 +21,8 @@ import { getGarden, getGardenPlants, getGardenMembers, addMemberByNameOrEmail, d
 import { supabase } from '@/lib/supabaseClient'
 import { addGardenBroadcastListener, broadcastGardenUpdate, type GardenRealtimeKind } from '@/lib/realtime'
 import { getAccentOption } from '@/lib/accent'
+import { useTranslation } from 'react-i18next'
+import { useLanguage } from '@/lib/i18nRouting'
  
 
 
@@ -25,15 +30,19 @@ type TabKey = 'overview' | 'plants' | 'routine' | 'settings'
 
 export const GardenDashboardPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
-  const navigate = useNavigate()
+  const navigate = useLanguageNavigate()
   const location = useLocation()
   const { user, profile, refreshProfile } = useAuth()
+  const { t } = useTranslation('common')
+  const currentLang = useLanguage()
   const [garden, setGarden] = React.useState<Garden | null>(null)
   const [tab, setTab] = React.useState<TabKey>('overview')
   // derive tab from URL path segment after /garden/:id
   React.useEffect(() => {
+    // Remove language prefix first to get the actual path
+    const pathWithoutLang = removeLanguagePrefix(location.pathname)
     const base = `/garden/${id || ''}`
-    const rest = location.pathname.startsWith(base) ? location.pathname.slice(base.length) : ''
+    const rest = pathWithoutLang.startsWith(base) ? pathWithoutLang.slice(base.length) : ''
     const seg = rest.replace(/^\//, '').split('/')[0] as TabKey
     setTab((seg as TabKey) || 'overview')
   }, [location.pathname, id])
@@ -345,7 +354,7 @@ export const GardenDashboardPage: React.FC = () => {
     } finally {
       if (!silent) setLoading(false)
     }
-  }, [id, garden])
+  }, [id, garden, currentLang])
 
   // Lazy heavy loader for tabs that need it
   const loadHeavyForCurrentTab = React.useCallback(async (todayOverride?: string | null) => {
@@ -606,7 +615,7 @@ export const GardenDashboardPage: React.FC = () => {
 
       if (kind === 'plants' || kind === 'general') {
         // Plants: Update plants array while preserving existing items
-        const gpsRaw = await getGardenPlants(id)
+        const gpsRaw = await getGardenPlants(id, currentLang)
         setPlants(prev => {
           // Merge: preserve order and existing items, update changed ones
           const prevMap = new Map(prev.map((p: any) => [p.id, p]))
@@ -1239,17 +1248,17 @@ export const GardenDashboardPage: React.FC = () => {
       if (o && id) {
         const gp = (plants as any[]).find((p: any) => p.id === o.gardenPlantId)
         const type = (o as any).taskType || 'custom'
-        const label = String(type).toUpperCase()
+        const taskTypeLabel = t(`garden.taskTypes.${type}`)
         const plantName = gp?.nickname || gp?.plant?.name || null
         const newCount = Number(o.completedCount || 0) + inc
         const required = Number(o.requiredCount || 1)
         const done = newCount >= required
         const kind = done ? 'task_completed' : 'task_progressed'
         const msg = done
-          ? `has completed "${label}" Task on "${plantName || 'Plant'}"`
-          : `has progressed "${label}" Task on "${plantName || 'Plant'}" (${Math.min(newCount, required)}/${required})`
+          ? t('garden.activity.completedTask', { taskType: taskTypeLabel, plantName: plantName || t('garden.activity.plant') })
+          : t('garden.activity.progressedTask', { taskType: taskTypeLabel, plantName: plantName || t('garden.activity.plant'), completed: Math.min(newCount, required), required })
         const actorColorCss = getActorColorCss()
-        await logGardenActivity({ gardenId: id!, kind: kind as any, message: msg, plantName: plantName || null, taskName: label, actorColor: actorColorCss || null })
+        await logGardenActivity({ gardenId: id!, kind: kind as any, message: msg, plantName: plantName || null, taskName: taskTypeLabel, actorColor: actorColorCss || null })
         setActivityRev((r) => r + 1)
         // Broadcast update BEFORE reload to ensure other clients receive it
         await broadcastGardenUpdate({ gardenId: id, kind: 'tasks', actorId: user?.id ?? null }).catch((err) => {
@@ -1262,11 +1271,11 @@ export const GardenDashboardPage: React.FC = () => {
       // Also emit local event for immediate UI updates
       emitGardenRealtime('tasks')
     }
-  }, [todayTaskOccurrences, id, plants, getActorColorCss, load, loadHeavyForCurrentTab, emitGardenRealtime, user?.id])
+  }, [todayTaskOccurrences, id, plants, getActorColorCss, load, loadHeavyForCurrentTab, emitGardenRealtime, user?.id, t])
 
   return (
     <div className="max-w-6xl mx-auto mt-6 grid grid-cols-1 md:grid-cols-[220px_1fr] lg:grid-cols-[220px_1fr] gap-6">
-      {loading && <div className="p-6 text-sm opacity-60">Loading...</div>}
+      {loading && <div className="p-6 text-sm opacity-60">{t('gardenDashboard.loading')}</div>}
       {error && <div className="p-6 text-sm text-red-600">{error}</div>}
       {!loading && garden && (
         <>
@@ -1274,10 +1283,10 @@ export const GardenDashboardPage: React.FC = () => {
             <div className="text-xl font-semibold">{garden.name}</div>
             <nav className="flex flex-wrap md:flex-col gap-2">
               {([
-                ['overview','Overview'],
-                ['plants','Plants'],
-                ['routine','Routine'],
-                ['settings','Settings'],
+                ['overview', t('gardenDashboard.overview')],
+                ['plants', t('gardenDashboard.plants')],
+                ['routine', t('gardenDashboard.routine')],
+                ['settings', t('gardenDashboard.settings')],
               ] as Array<[TabKey, string]>).map(([k, label]) => (
                 <Button key={k} asChild variant={tab === k ? 'default' : 'secondary'} className="rounded-2xl md:w-full">
                   <NavLink to={`/garden/${id}/${k}`} className="no-underline">{label}</NavLink>
@@ -1291,8 +1300,8 @@ export const GardenDashboardPage: React.FC = () => {
               <Route path="plants" element={(
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
-                    <div className="text-lg font-medium">Plants in this garden</div>
-                    <Button className="rounded-2xl" onClick={() => setAddOpen(true)}>Add Plant</Button>
+                    <div className="text-lg font-medium">{t('gardenDashboard.plantsSection.plantsInGarden')}</div>
+                    <Button className="rounded-2xl" onClick={() => setAddOpen(true)}>{t('gardenDashboard.plantsSection.addPlant')}</Button>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {plants.map((gp: any, idx: number) => (
@@ -1331,7 +1340,7 @@ export const GardenDashboardPage: React.FC = () => {
                             onClick={(e: any) => { e.stopPropagation(); if (gp?.plant) navigate(`/plants/${gp.plant.id}`, { state: { backgroundLocation: location } }) }}
                             onMouseDown={(e: any) => e.stopPropagation()}
                             onTouchStart={(e: any) => e.stopPropagation()}
-                            aria-label="More information"
+                            aria-label={t('gardenDashboard.plantsSection.moreInformation')}
                             className="h-8 w-8 rounded-full flex items-center justify-center shadow border bg-white/90 text-black hover:bg-white"
                           >
                             <Info className="h-4 w-4" />
@@ -1367,7 +1376,7 @@ export const GardenDashboardPage: React.FC = () => {
                                 onTouchStart={(e: any) => e.stopPropagation()}
                                 onClick={() => { setPendingGardenPlantId(gp.id); setTaskOpen(true) }}
                               >
-                                Tasks
+                                {t('gardenDashboard.plantsSection.tasksButton')}
                               </Button>
                               <EditPlantButton gp={gp} gardenId={id!} onChanged={load} serverToday={serverToday} actorColorCss={getActorColorCss()} />
                               <Button
@@ -1406,7 +1415,7 @@ export const GardenDashboardPage: React.FC = () => {
                                 await load()
                                 }}
                               >
-                                Delete
+                                {t('gardenDashboard.plantsSection.delete')}
                               </Button>
                             </div>
                           </div>
@@ -1416,7 +1425,7 @@ export const GardenDashboardPage: React.FC = () => {
                   </div>
                   {plants.length === 0 && (
                     <div className="p-10 text-center opacity-60 text-sm">
-                      No plants yet. Add your first plant to get started.
+                      {t('gardenDashboard.plantsSection.noPlantsYet')}
                     </div>
                   )}
                 </div>
@@ -1426,15 +1435,15 @@ export const GardenDashboardPage: React.FC = () => {
               <Route path="settings" element={(
                 <div className="space-y-6">
                   <div className="space-y-3">
-                    <div className="text-lg font-medium">Garden details</div>
+                    <div className="text-lg font-medium">{t('gardenDashboard.settingsSection.gardenDetails')}</div>
                     <Card className="rounded-2xl p-4">
                       <GardenDetailsEditor garden={garden} onSaved={load} canEdit={viewerIsOwner} />
                     </Card>
                   </div>
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <div className="text-lg font-medium">Manage members</div>
-                      <Button className="rounded-2xl" onClick={() => setInviteOpen(true)}>Add member</Button>
+                      <div className="text-lg font-medium">{t('gardenDashboard.settingsSection.manageMembers')}</div>
+                      <Button className="rounded-2xl" onClick={() => setInviteOpen(true)}>{t('gardenDashboard.settingsSection.addMember')}</Button>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {members.map(m => (
@@ -1444,9 +1453,9 @@ export const GardenDashboardPage: React.FC = () => {
                   </div>
                   <div className="pt-2">
                     {isOwner ? (
-                      <Button variant="destructive" className="rounded-2xl" onClick={async () => { if (!id) return; if (!confirm('Delete this garden? This cannot be undone.')) return; try { await supabase.from('gardens').delete().eq('id', id); navigate('/gardens') } catch (e) { alert('Failed to delete garden') } }}>Delete garden</Button>
+                      <Button variant="destructive" className="rounded-2xl" onClick={async () => { if (!id) return; if (!confirm(t('gardenDashboard.settingsSection.deleteGardenConfirm'))) return; try { await supabase.from('gardens').delete().eq('id', id); navigate('/gardens') } catch (e) { alert(t('gardenDashboard.settingsSection.failedToDeleteGarden')) } }}>{t('gardenDashboard.settingsSection.deleteGarden')}</Button>
                     ) : (
-                      <Button variant="destructive" className="rounded-2xl" onClick={async () => { if (!id || !currentUserId) return; if (!confirm('Quit this garden? You will be removed as a member.')) return; try { await removeGardenMember({ gardenId: id, userId: currentUserId }); navigate('/gardens') } catch (e) { alert('Failed to quit garden') } }}>Quit garden</Button>
+                      <Button variant="destructive" className="rounded-2xl" onClick={async () => { if (!id || !currentUserId) return; if (!confirm(t('gardenDashboard.settingsSection.quitGardenConfirm'))) return; try { await removeGardenMember({ gardenId: id, userId: currentUserId }); navigate('/gardens') } catch (e) { alert(t('gardenDashboard.settingsSection.failedToQuitGarden')) } }}>{t('gardenDashboard.settingsSection.quitGarden')}</Button>
                     )}
                   </div>
                 </div>
@@ -1462,10 +1471,10 @@ export const GardenDashboardPage: React.FC = () => {
           <Dialog open={addOpen} onOpenChange={setAddOpen}>
             <DialogContent className="rounded-2xl">
               <DialogHeader>
-                <DialogTitle>Add plant to garden</DialogTitle>
+                <DialogTitle>{t('gardenDashboard.plantsSection.addPlantToGarden')}</DialogTitle>
               </DialogHeader>
               <div className="space-y-3">
-                <Input placeholder="Search plants by name?" value={plantQuery} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPlantQuery(e.target.value)} />
+                <Input placeholder={t('gardenDashboard.plantsSection.searchPlants')} value={plantQuery} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPlantQuery(e.target.value)} />
                 <div className="max-h-60 overflow-auto rounded-xl border">
                   {plantResults.map(p => (
                     <button key={p.id} onClick={() => setSelectedPlant(p)} className={`w-full text-left px-3 py-2 hover:bg-stone-50 ${selectedPlant?.id === p.id ? 'bg-stone-100' : ''}`}>
@@ -1474,12 +1483,12 @@ export const GardenDashboardPage: React.FC = () => {
                     </button>
                   ))}
                   {plantQuery && plantResults.length === 0 && (
-                    <div className="px-3 py-6 text-sm opacity-60">No results</div>
+                    <div className="px-3 py-6 text-sm opacity-60">{t('gardenDashboard.plantsSection.noResults')}</div>
                   )}
                 </div>
                 <div className="flex justify-end gap-2 pt-2">
-                  <Button variant="secondary" className="rounded-2xl" onClick={() => setAddOpen(false)}>Cancel</Button>
-                  <Button className="rounded-2xl" disabled={!selectedPlant || adding} onClick={addSelectedPlant}>{adding ? 'Adding...' : 'Next'}</Button>
+                  <Button variant="secondary" className="rounded-2xl" onClick={() => setAddOpen(false)}>{t('common.cancel')}</Button>
+                  <Button className="rounded-2xl" disabled={!selectedPlant || adding} onClick={addSelectedPlant}>{adding ? t('gardenDashboard.plantsSection.adding') : t('gardenDashboard.plantsSection.next')}</Button>
                 </div>
               </div>
             </DialogContent>
@@ -1489,20 +1498,20 @@ export const GardenDashboardPage: React.FC = () => {
           <Dialog open={addDetailsOpen} onOpenChange={setAddDetailsOpen}>
             <DialogContent className="rounded-2xl">
               <DialogHeader>
-                <DialogTitle>Add details</DialogTitle>
+                <DialogTitle>{t('gardenDashboard.plantsSection.addDetails')}</DialogTitle>
               </DialogHeader>
               <div className="space-y-3">
                 <div>
-                  <label className="text-sm font-medium">Custom name</label>
-                  <Input value={addNickname} maxLength={30} onChange={(e: any) => setAddNickname(e.target.value)} placeholder="Optional nickname" />
+                  <label className="text-sm font-medium">{t('gardenDashboard.plantsSection.customName')}</label>
+                  <Input value={addNickname} maxLength={30} onChange={(e: any) => setAddNickname(e.target.value)} placeholder={t('gardenDashboard.plantsSection.optionalNickname')} />
                 </div>
                 <div>
-                  <label className="text-sm font-medium">Number of flowers</label>
+                  <label className="text-sm font-medium">{t('gardenDashboard.plantsSection.numberOfFlowers')}</label>
                   <Input ref={countInputRef} autoFocus type="number" min={0} value={String(addCount)} onChange={(e: any) => setAddCount(Number(e.target.value))} />
                 </div>
                 <div className="flex justify-end gap-2 pt-2">
-                  <Button variant="secondary" className="rounded-2xl" onClick={() => setAddDetailsOpen(false)}>Back</Button>
-                  <Button className="rounded-2xl" onClick={confirmAddSelectedPlant} disabled={!selectedPlant}>Add</Button>
+                  <Button variant="secondary" className="rounded-2xl" onClick={() => setAddDetailsOpen(false)}>{t('gardenDashboard.plantsSection.back')}</Button>
+                  <Button className="rounded-2xl" onClick={confirmAddSelectedPlant} disabled={!selectedPlant}>{t('gardenDashboard.plantsSection.add')}</Button>
                 </div>
               </div>
             </DialogContent>
@@ -1544,12 +1553,12 @@ export const GardenDashboardPage: React.FC = () => {
           <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
             <DialogContent className="rounded-2xl">
               <DialogHeader>
-                <DialogTitle>Add member</DialogTitle>
+                <DialogTitle>{t('gardenDashboard.settingsSection.addMemberTitle')}</DialogTitle>
               </DialogHeader>
               <div className="space-y-3">
                 <div className="relative">
                   <Input 
-                    placeholder="Enter display name or email" 
+                    placeholder={t('gardenDashboard.settingsSection.enterDisplayNameOrEmail')} 
                     value={inviteAny} 
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                       setInviteAny(e.target.value)
@@ -1577,7 +1586,7 @@ export const GardenDashboardPage: React.FC = () => {
                             setSuggestionsOpen(false)
                           }}
                         >
-                          <div className="font-medium">{friend.display_name || 'Unknown'}</div>
+                          <div className="font-medium">{friend.display_name || t('gardenDashboard.settingsSection.unknown')}</div>
                           {friend.email && (
                             <div className="text-xs opacity-60">{friend.email}</div>
                           )}
@@ -1594,8 +1603,8 @@ export const GardenDashboardPage: React.FC = () => {
                     setFriendSuggestions([])
                     setSuggestionsOpen(false)
                     setInviteError(null)
-                  }}>Cancel</Button>
-                  <Button className="rounded-2xl" onClick={submitInvite} disabled={!inviteAny.trim()}>Add member</Button>
+                  }}>{t('common.cancel')}</Button>
+                  <Button className="rounded-2xl" onClick={submitInvite} disabled={!inviteAny.trim()}>{t('gardenDashboard.settingsSection.addMember')}</Button>
                 </div>
               </div>
             </DialogContent>
@@ -1607,25 +1616,13 @@ export const GardenDashboardPage: React.FC = () => {
 }
 
 function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts, weekCountsByType, serverToday, dueThisWeekByPlant, todayTaskOccurrences, onProgressOccurrence }: { plants: any[]; duePlantIds: Set<string> | null; onLogWater: (id: string) => Promise<void>; weekDays: string[]; weekCounts: number[]; weekCountsByType: { water: number[]; fertilize: number[]; harvest: number[]; cut: number[]; custom: number[] }; serverToday: string | null; dueThisWeekByPlant: Record<string, number[]>; todayTaskOccurrences: Array<{ id: string; taskId: string; gardenPlantId: string; dueAt: string; requiredCount: number; completedCount: number; completedAt: string | null; taskType?: 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom' }>; onProgressOccurrence: (id: string, inc: number) => Promise<void> }) {
+  const { t } = useTranslation('common')
   const duePlants = React.useMemo(() => {
     if (!duePlantIds) return []
     return plants.filter((gp: any) => duePlantIds.has(gp.id))
   }, [plants, duePlantIds])
   const hasTodayTasks = (todayTaskOccurrences || []).length > 0
-  const emptyPhrases = React.useMemo(() => [
-    'Bored? Maybe it\'s time to get more plants! 🪴',
-    'All quiet in the garden today. Enjoy the calm! 🌿',
-    'Nothing due today – your plants salute you. 🫡',
-    'Free day! Maybe browse for a new leafy friend? 🪴',
-    'Rest day. Hydrate yourself instead of the plants. 💧',
-    'No tasks now. Perfect time to plan your next bloom. 🌸',
-    'Garden\'s on cruise control. You earned it. 😎',
-    'No chores today – maybe prune your playlist? 🎶',
-    'Nothing to do! Consider a new herb for the kitchen. 🌱',
-    'Feet up, gloves off. Tomorrow\'s another grow day. 🧑‍🌾',
-    'Zero tasks. Maximum vibes. ✨',
-    'Your routine is empty – your cart doesn\'t have to be. 🛒🪴',
-  ], [])
+  const emptyPhrases = React.useMemo(() => t('gardenDashboard.routineSection.emptyPhrases', { returnObjects: true }) as string[], [t])
   const randomEmptyPhrase = React.useMemo(() => {
     const idx = Math.floor(Math.random() * emptyPhrases.length)
     return emptyPhrases[idx]
@@ -1658,17 +1655,18 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
     cut: 'bg-orange-500',
     custom: 'bg-purple-500',
   }
+  const dayLabels = [t('gardenDashboard.routineSection.dayLabels.mon'), t('gardenDashboard.routineSection.dayLabels.tue'), t('gardenDashboard.routineSection.dayLabels.wed'), t('gardenDashboard.routineSection.dayLabels.thu'), t('gardenDashboard.routineSection.dayLabels.fri'), t('gardenDashboard.routineSection.dayLabels.sat'), t('gardenDashboard.routineSection.dayLabels.sun')]
   return (
     <div className="space-y-4">
-      <div className="text-lg font-medium">This week</div>
+      <div className="text-lg font-medium">{t('gardenDashboard.routineSection.thisWeek')}</div>
       <Card className="rounded-2xl p-4">
-        <div className="text-sm opacity-60 mb-3">Monday ? Sunday</div>
+        <div className="text-sm opacity-60 mb-3">{t('gardenDashboard.routineSection.mondayToSunday')}</div>
         <div className="grid grid-cols-7 gap-2">
           {weekDays.map((ds, idx) => {
             const count = weekCounts[idx] || 0
             const heightPct = count === 0 ? 0 : Math.round((count / maxCount) * 100)
             const d = new Date(ds)
-            const labels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+            const labels = dayLabels
             const isToday = serverToday === ds
             const water = weekCountsByType.water[idx] || 0
             const fert = weekCountsByType.fertilize[idx] || 0
@@ -1697,7 +1695,7 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
         </div>
       </Card>
       <div className="flex justify-between items-center">
-        <div className="text-base font-medium">Today</div>
+        <div className="text-base font-medium">{t('gardenDashboard.routineSection.today')}</div>
       </div>
       {hasTodayTasks ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1710,7 +1708,7 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
               <Card key={gp.id} className="rounded-2xl p-4">
                 <div className="font-medium">{gp.nickname || gp.plant?.name}</div>
                 {gp.nickname && <div className="text-xs opacity-60">{gp.plant?.name}</div>}
-                <div className="text-sm opacity-70">Tasks due: {totalDone} / {totalReq}</div>
+                <div className="text-sm opacity-70">{t('gardenDashboard.routineSection.tasksDue')} {totalDone} / {totalReq}</div>
                 <div className="mt-2 flex flex-col gap-2">
                   {occs.map((o) => {
                     const tt = (o as any).taskType || 'custom'
@@ -1723,16 +1721,16 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
                       <div key={o.id} className={`flex items-center justify-between gap-3 text-sm rounded-xl border p-2 ${isDone ? 'bg-stone-50' : ''}`}>
                         <div className="flex items-center gap-2">
                           <span className={`h-6 w-6 flex items-center justify-center rounded-md border`}>{icon}</span>
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full ${badgeClass}`}>{String(tt).toUpperCase()}</span>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full ${badgeClass}`}>{t(`garden.taskTypes.${tt}`)}</span>
                         </div>
                         {!isDone ? (
                           <>
                             <div className="opacity-80">{o.completedCount} / {o.requiredCount}</div>
-                            <Button className="rounded-xl" size="sm" onClick={() => onProgressOccurrence(o.id, 1)} disabled={(o.completedCount || 0) >= (o.requiredCount || 1)}>Complete +1</Button>
+                            <Button className="rounded-xl" size="sm" onClick={() => onProgressOccurrence(o.id, 1)} disabled={(o.completedCount || 0) >= (o.requiredCount || 1)}>{t('gardenDashboard.routineSection.completePlus1')}</Button>
                           </>
                         ) : (
                           <div className="text-xs opacity-70 truncate max-w-[50%]">
-                            {completions.length === 0 ? 'Completed' : `Done by ${completions.map(c => c.displayName || 'Someone').join(', ')}`}
+                            {completions.length === 0 ? t('gardenDashboard.routineSection.completed') : `${t('gardenDashboard.routineSection.doneBy')} ${completions.map(c => c.displayName || t('gardenDashboard.settingsSection.unknown')).join(', ')}`}
                           </div>
                         )}
                       </div>
@@ -1749,17 +1747,17 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
         </Card>
       )}
       <div className="pt-2">
-        <div className="text-base font-medium">Due this week</div>
+        <div className="text-base font-medium">{t('gardenDashboard.routineSection.dueThisWeek')}</div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {plants.filter((gp: any) => (dueThisWeekByPlant[gp.id]?.length || 0) > 0 && !(duePlantIds?.has(gp.id))).map((gp: any) => (
           <Card key={gp.id} className="rounded-2xl p-4">
             <div className="font-medium">{gp.nickname || gp.plant?.name}</div>
             {gp.nickname && <div className="text-xs opacity-60">{gp.plant?.name}</div>}
-            <div className="text-sm opacity-70">Water need: {gp.plant?.care.water}</div>
-            <div className="text-xs opacity-70">Due this week: {dueThisWeekByPlant[gp.id]?.map((i) => ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][i]).join(', ') || '-'}</div>
+            <div className="text-sm opacity-70">{t('gardenDashboard.routineSection.waterNeed')} {gp.plant?.care.water}</div>
+            <div className="text-xs opacity-70">{t('gardenDashboard.routineSection.dueThisWeek')}: {dueThisWeekByPlant[gp.id]?.map((i) => dayLabels[i]).join(', ') || '-'}</div>
             <div className="mt-2 flex items-center gap-2">
-              <Button className="rounded-2xl opacity-60" variant="secondary" disabled>Upcoming</Button>
+              <Button className="rounded-2xl opacity-60" variant="secondary" disabled>{t('gardenDashboard.routineSection.upcoming')}</Button>
             </div>
           </Card>
         ))}
@@ -1770,6 +1768,7 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
 
 
 function OverviewSection({ gardenId, activityRev, plants, membersCount, serverToday, dailyStats, totalOnHand, speciesOnHand, baseStreak }: { gardenId: string; activityRev?: number; plants: any[]; membersCount: number; serverToday: string | null; dailyStats: Array<{ date: string; due: number; completed: number; success: boolean }>; totalOnHand: number; speciesOnHand: number; baseStreak: number }) {
+  const { t } = useTranslation('common')
   const [activity, setActivity] = React.useState<Array<{ id: string; actorName?: string | null; actorColor?: string | null; kind: string; message: string; plantName?: string | null; taskName?: string | null; occurredAt: string }>>([])
   const [loadingAct, setLoadingAct] = React.useState(false)
   const [errAct, setErrAct] = React.useState<string | null>(null)
@@ -1783,7 +1782,7 @@ function OverviewSection({ gardenId, activityRev, plants, membersCount, serverTo
         const rows = await listGardenActivityToday(gardenId, serverToday)
         if (!ignore) setActivity(rows)
       } catch (e: any) {
-        if (!ignore) setErrAct(e?.message || 'Failed to load activity')
+        if (!ignore) setErrAct(e?.message || t('gardenDashboard.overviewSection.failedToLoadActivity'))
       } finally {
         if (!ignore) setLoadingAct(false)
       }
@@ -1817,30 +1816,30 @@ function OverviewSection({ gardenId, activityRev, plants, membersCount, serverTo
     <div className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="rounded-2xl p-4">
-          <div className="text-xs opacity-60">Plants</div>
+          <div className="text-xs opacity-60">{t('gardenDashboard.overviewSection.plants')}</div>
           <div className="text-2xl font-semibold">{totalOnHand}</div>
-          <div className="text-[11px] opacity-60">Species: {speciesOnHand}</div>
+          <div className="text-[11px] opacity-60">{t('gardenDashboard.overviewSection.species')} {speciesOnHand}</div>
         </Card>
         <Card className="rounded-2xl p-4">
-          <div className="text-xs opacity-60">Members</div>
+          <div className="text-xs opacity-60">{t('gardenDashboard.overviewSection.members')}</div>
           <div className="text-2xl font-semibold">{membersCount}</div>
         </Card>
         <Card className="rounded-2xl p-4">
-          <div className="text-xs opacity-60">Streak</div>
-          <div className="text-2xl font-semibold">{streak} days</div>
+          <div className="text-xs opacity-60">{t('gardenDashboard.overviewSection.streak')}</div>
+          <div className="text-2xl font-semibold">{streak} {t('gardenDashboard.overviewSection.days')}</div>
         </Card>
       </div>
 
       <Card className="rounded-2xl p-4">
-        <div className="font-medium mb-2">Today's progress</div>
-        <div className="text-sm opacity-60 mb-2">{completedToday} / {totalToDoToday || 0} tasks done</div>
+        <div className="font-medium mb-2">{t('gardenDashboard.overviewSection.todaysProgress')}</div>
+        <div className="text-sm opacity-60 mb-2">{completedToday} / {totalToDoToday || 0} {t('gardenDashboard.overviewSection.tasksDone')}</div>
         <div className="h-3 bg-stone-200 rounded-full overflow-hidden">
           <div className="h-3 bg-emerald-500" style={{ width: `${progressPct}%` }} />
         </div>
       </Card>
 
       <Card className="rounded-2xl p-4">
-        <div className="font-medium mb-3">Last 30 days</div>
+        <div className="font-medium mb-3">{t('gardenDashboard.overviewSection.last30Days')}</div>
         <div className="grid grid-cols-7 gap-x-3 gap-y-3 place-items-center">
           {days.map((d, idx) => (
             <div key={idx} className="flex flex-col items-center">
@@ -1855,10 +1854,10 @@ function OverviewSection({ gardenId, activityRev, plants, membersCount, serverTo
 
       {/* Activity (today) */}
       <Card className="rounded-2xl p-4">
-        <div className="font-medium mb-2">Activity (today)</div>
-        {loadingAct && <div className="text-sm opacity-60">Loading...</div>}
+        <div className="font-medium mb-2">{t('gardenDashboard.overviewSection.activityToday')}</div>
+        {loadingAct && <div className="text-sm opacity-60">{t('gardenDashboard.overviewSection.loadingActivity')}</div>}
         {errAct && <div className="text-sm text-red-600">{errAct}</div>}
-        {!loadingAct && activity.length === 0 && <div className="text-sm opacity-60">No activity yet today.</div>}
+        {!loadingAct && activity.length === 0 && <div className="text-sm opacity-60">{t('gardenDashboard.overviewSection.noActivity')}</div>}
         <div className="space-y-2">
           {activity.map((a) => {
             const color = a.actorColor || null
@@ -1873,7 +1872,7 @@ function OverviewSection({ gardenId, activityRev, plants, membersCount, serverTo
               <div key={a.id} className="text-sm flex items-start gap-2">
                 {ts && <span className="text-xs opacity-60 tabular-nums">{ts}</span>}
                 {ts && <span className="text-xs opacity-40">//</span>}
-                <span className="font-semibold" style={color ? { color } : undefined}>{a.actorName || 'Someone'}</span>
+                <span className="font-semibold" style={color ? { color } : undefined}>{a.actorName || t('gardenDashboard.settingsSection.unknown')}</span>
                 <span className="opacity-80">{a.message}</span>
               </div>
             )
@@ -1894,6 +1893,7 @@ function colorForName(name?: string | null, colorToken?: string | null): string 
 }
 
 function EditPlantButton({ gp, gardenId, onChanged, serverToday, actorColorCss }: { gp: any; gardenId: string; onChanged: () => Promise<void>; serverToday: string | null; actorColorCss?: string | null }) {
+  const { t } = useTranslation('common')
   const [open, setOpen] = React.useState(false)
   const [nickname, setNickname] = React.useState(gp.nickname || '')
   const [count, setCount] = React.useState<number>(Number(gp.plantsOnHand ?? 0))
@@ -1941,24 +1941,24 @@ function EditPlantButton({ gp, gardenId, onChanged, serverToday, actorColorCss }
 
   return (
     <>
-      <Button variant="secondary" className="rounded-2xl" onClick={() => setOpen(true)}>Edit</Button>
+      <Button variant="secondary" className="rounded-2xl" onClick={() => setOpen(true)}>{t('gardenDashboard.taskDialog.edit')}</Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="rounded-2xl">
           <DialogHeader>
-            <DialogTitle>Edit plant</DialogTitle>
+            <DialogTitle>{t('gardenDashboard.plantsSection.editPlant')}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div>
-              <label className="text-sm font-medium">Custom name</label>
-              <Input value={nickname} maxLength={30} onChange={(e: any) => setNickname(e.target.value)} placeholder="Optional nickname" />
+              <label className="text-sm font-medium">{t('gardenDashboard.plantsSection.customName')}</label>
+              <Input value={nickname} maxLength={30} onChange={(e: any) => setNickname(e.target.value)} placeholder={t('gardenDashboard.plantsSection.optionalNickname')} />
             </div>
             <div>
-              <label className="text-sm font-medium">Number of plants</label>
+              <label className="text-sm font-medium">{t('gardenDashboard.plantsSection.numberOfPlants')}</label>
               <Input type="number" min={0} value={String(count)} onChange={(e: any) => setCount(Number(e.target.value))} />
             </div>
             <div className="flex justify-end gap-2 pt-2">
-              <Button variant="secondary" className="rounded-2xl" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button className="rounded-2xl" onClick={save} disabled={submitting}>{submitting ? 'Saving...' : 'Save'}</Button>
+              <Button variant="secondary" className="rounded-2xl" onClick={() => setOpen(false)}>{t('cancel')}</Button>
+              <Button className="rounded-2xl" onClick={save} disabled={submitting}>{submitting ? t('gardenDashboard.settingsSection.saving') : t('save')}</Button>
             </div>
           </div>
         </DialogContent>
@@ -1968,6 +1968,7 @@ function EditPlantButton({ gp, gardenId, onChanged, serverToday, actorColorCss }
 }
 
 function MemberCard({ member, gardenId, onChanged, viewerIsOwner, ownerCount, currentUserId }: { member: { userId: string; displayName?: string | null; email?: string | null; joinedAt?: string | null; role: 'owner' | 'member'; accentKey?: string | null }; gardenId: string; onChanged: () => Promise<void>; viewerIsOwner: boolean; ownerCount: number; currentUserId: string | null }) {
+  const { t } = useTranslation('common')
   const [open, setOpen] = React.useState(false)
   const [busy, setBusy] = React.useState(false)
   const isSelf = !!currentUserId && currentUserId === member.userId
@@ -1975,7 +1976,7 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner, ownerCount, cu
   // Owners can remove members; for owners, allow demote only when multiple owners exist
   const canRemove = viewerIsOwner && (member.role !== 'owner')
   const canDemoteOwner = viewerIsOwner && member.role === 'owner' && ownerCount > 1 && !isSelf
-  const navigate = useNavigate()
+  const navigate = useLanguageNavigate()
   const doPromote = async () => {
     if (!canPromote || busy) return
     setBusy(true)
@@ -2046,13 +2047,13 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner, ownerCount, cu
             {open && (
               <div className="absolute right-0 mt-2 w-48 bg-white border rounded-xl shadow-lg z-10">
                 {member.role !== 'owner' && (
-                  <button disabled={!canPromote || busy} onClick={(e) => { e.stopPropagation(); doPromote() }} className={`w-full text-left px-3 py-2 hover:bg-stone-50 ${!canPromote ? 'opacity-60 cursor-not-allowed' : ''}`}>Promote to owner</button>
+                  <button disabled={!canPromote || busy} onClick={(e) => { e.stopPropagation(); doPromote() }} className={`w-full text-left px-3 py-2 hover:bg-stone-50 ${!canPromote ? 'opacity-60 cursor-not-allowed' : ''}`}>{t('gardenDashboard.settingsSection.promoteToOwner')}</button>
                 )}
                 {member.role === 'owner' && (
-                  <button disabled={!canDemoteOwner || busy} onClick={(e) => { e.stopPropagation(); doDemote() }} className={`w-full text-left px-3 py-2 hover:bg-stone-50 ${!canDemoteOwner ? 'opacity-60 cursor-not-allowed' : ''}`}>Demote to member</button>
+                  <button disabled={!canDemoteOwner || busy} onClick={(e) => { e.stopPropagation(); doDemote() }} className={`w-full text-left px-3 py-2 hover:bg-stone-50 ${!canDemoteOwner ? 'opacity-60 cursor-not-allowed' : ''}`}>{t('gardenDashboard.settingsSection.demoteToMember')}</button>
                 )}
                 {member.role !== 'owner' && (
-                  <button disabled={!canRemove || busy} onClick={(e) => { e.stopPropagation(); doRemove() }} className="w-full text-left px-3 py-2 hover:bg-stone-50 text-red-600">Remove member</button>
+                  <button disabled={!canRemove || busy} onClick={(e) => { e.stopPropagation(); doRemove() }} className="w-full text-left px-3 py-2 hover:bg-stone-50 text-red-600">{t('gardenDashboard.settingsSection.removeMember')}</button>
                 )}
               </div>
             )}
@@ -2063,7 +2064,7 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner, ownerCount, cu
         <div>
           <div className="font-medium max-w-[60vw] truncate" style={member.accentKey ? (() => { const opt = getAccentOption(member.accentKey as any); return opt ? { color: `hsl(${opt.hsl})` } : undefined })() : undefined}>{member.displayName || member.userId}</div>
           {member.email && <div className="text-xs opacity-60">{member.email}</div>}
-          <div className="text-xs opacity-60">{member.role}{member.joinedAt ? ` ? Joined ${new Date(member.joinedAt).toLocaleString()}` : ''}</div>
+          <div className="text-xs opacity-60">{member.role === 'owner' ? t('gardenDashboard.settingsSection.owner') : t('gardenDashboard.settingsSection.member')}{member.joinedAt ? ` • ${t('gardenDashboard.settingsSection.joined')} ${new Date(member.joinedAt).toLocaleString()}` : ''}</div>
         </div>
       </div>
       {/* Self actions for non-owners: Quit button */}
@@ -2074,13 +2075,13 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner, ownerCount, cu
             className="rounded-2xl"
             onClick={async (e: any) => {
               e.stopPropagation()
-              if (!confirm('Quit this garden? You will be removed as a member.')) return
+              if (!confirm(t('gardenDashboard.settingsSection.quitGardenConfirm'))) return
               try {
                 await removeGardenMember({ gardenId, userId: member.userId })
                 navigate('/gardens')
               } catch {}
             }}
-          >Quit</Button>
+          >{t('gardenDashboard.settingsSection.quit')}</Button>
         </div>
       )}
     </Card>
@@ -2088,6 +2089,7 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner, ownerCount, cu
 }
 
 function GardenDetailsEditor({ garden, onSaved, canEdit }: { garden: Garden; onSaved: () => Promise<void>; canEdit?: boolean }) {
+  const { t } = useTranslation('common')
   const [name, setName] = React.useState(garden.name)
   const [imageUrl, setImageUrl] = React.useState(garden.coverImageUrl || '')
   const [submitting, setSubmitting] = React.useState(false)
@@ -2125,16 +2127,16 @@ function GardenDetailsEditor({ garden, onSaved, canEdit }: { garden: Garden; onS
   return (
     <div className="space-y-3">
       <div>
-        <label className="text-sm font-medium">Garden name</label>
+        <label className="text-sm font-medium">{t('gardenDashboard.settingsSection.gardenName')}</label>
         <Input value={name} onChange={(e: any) => setName(e.target.value)} disabled={!canEdit} />
       </div>
       <div>
-        <label className="text-sm font-medium">Cover image URL</label>
+        <label className="text-sm font-medium">{t('gardenDashboard.settingsSection.coverImageUrl')}</label>
         <Input value={imageUrl} onChange={(e: any) => setImageUrl(e.target.value)} placeholder="https://?" disabled={!canEdit} />
       </div>
       {err && <div className="text-sm text-red-600">{err}</div>}
       <div className="flex justify-end gap-2 pt-2">
-        <Button className="rounded-2xl" onClick={save} disabled={submitting || !canEdit}>{submitting ? 'Saving...' : 'Save changes'}</Button>
+        <Button className="rounded-2xl" onClick={save} disabled={submitting || !canEdit}>{submitting ? t('gardenDashboard.settingsSection.saving') : t('gardenDashboard.settingsSection.saveChanges')}</Button>
       </div>
     </div>
   )

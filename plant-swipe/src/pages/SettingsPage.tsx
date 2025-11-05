@@ -1,16 +1,22 @@
 import React from "react"
-import { useNavigate } from "react-router-dom"
+import { useLanguageNavigate } from "@/lib/i18nRouting"
+import { useChangeLanguage, useLanguage } from "@/lib/i18nRouting"
+import { useTranslation } from "react-i18next"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
-import { Settings, Mail, Lock, Trash2, AlertTriangle, Check, ChevronDown, ChevronUp } from "lucide-react"
+import { Settings, Mail, Lock, Trash2, AlertTriangle, Check, ChevronDown, ChevronUp, Globe } from "lucide-react"
+import { SUPPORTED_LANGUAGES } from "@/lib/i18n"
 
 export default function SettingsPage() {
   const { user, profile, refreshProfile, deleteAccount, signOut } = useAuth()
-  const navigate = useNavigate()
+  const navigate = useLanguageNavigate()
+  const changeLanguage = useChangeLanguage()
+  const currentLang = useLanguage()
+  const { t } = useTranslation('common')
 
   const [email, setEmail] = React.useState("")
   const [newEmail, setNewEmail] = React.useState("")
@@ -62,7 +68,7 @@ export default function SettingsPage() {
           }
         }
       } catch (e: any) {
-        setError(e?.message || 'Failed to load settings')
+        setError(e?.message || t('settings.failedToLoad'))
       } finally {
         setLoading(false)
       }
@@ -72,12 +78,12 @@ export default function SettingsPage() {
 
   const handleUpdateEmail = async () => {
     if (!newEmail || newEmail === email) {
-      setError("Please enter a new email address")
+      setError(t('settings.email.enterNewEmail'))
       return
     }
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
-      setError("Please enter a valid email address")
+      setError(t('settings.email.enterValidEmail'))
       return
     }
 
@@ -92,7 +98,7 @@ export default function SettingsPage() {
 
       if (updateError) throw updateError
 
-      setSuccess("Email update request sent! Please check your new email for a confirmation link.")
+      setSuccess(t('settings.email.updateRequestSent'))
       setNewEmail("")
       // Refresh auth state
       const { data: { user: authUser } } = await supabase.auth.getUser()
@@ -100,7 +106,7 @@ export default function SettingsPage() {
         setEmail(authUser.email)
       }
     } catch (e: any) {
-      setError(e?.message || 'Failed to update email')
+      setError(e?.message || t('settings.email.failedToUpdate'))
     } finally {
       setSaving(false)
     }
@@ -108,17 +114,17 @@ export default function SettingsPage() {
 
   const handleUpdatePassword = async () => {
     if (!currentPassword) {
-      setError("Please enter your current password")
+      setError(t('settings.password.enterCurrentPassword'))
       return
     }
 
     if (!newPassword || newPassword.length < 6) {
-      setError("Password must be at least 6 characters")
+      setError(t('settings.password.passwordTooShort'))
       return
     }
 
     if (newPassword !== confirmPassword) {
-      setError("Passwords do not match")
+      setError(t('settings.password.passwordsDontMatch'))
       return
     }
 
@@ -134,7 +140,7 @@ export default function SettingsPage() {
       })
 
       if (signInError) {
-        throw new Error("Current password is incorrect")
+        throw new Error(t('settings.password.currentPasswordIncorrect'))
       }
 
       // If sign in succeeds, update the password
@@ -144,12 +150,12 @@ export default function SettingsPage() {
 
       if (updateError) throw updateError
 
-      setSuccess("Password updated successfully!")
+      setSuccess(t('settings.password.updated'))
       setCurrentPassword("")
       setNewPassword("")
       setConfirmPassword("")
     } catch (e: any) {
-      setError(e?.message || 'Failed to update password')
+      setError(e?.message || t('settings.password.failedToUpdate'))
     } finally {
       setSaving(false)
     }
@@ -172,10 +178,10 @@ export default function SettingsPage() {
       if (updateError) throw updateError
 
       setIsPrivate(newPrivacyValue)
-      setSuccess(`Profile is now ${newPrivacyValue ? 'private' : 'public'}`)
+      setSuccess(newPrivacyValue ? t('settings.privacy.profileNowPrivate') : t('settings.privacy.profileNowPublic'))
       await refreshProfile()
     } catch (e: any) {
-      setError(e?.message || 'Failed to update privacy setting')
+      setError(e?.message || t('settings.privacy.failedToUpdate'))
       setIsPrivate(!newPrivacyValue) // Revert on error
     } finally {
       setSaving(false)
@@ -199,10 +205,10 @@ export default function SettingsPage() {
       if (updateError) throw updateError
 
       setDisableFriendRequests(newValue)
-      setSuccess(`Friend requests are now ${newValue ? 'disabled' : 'enabled'}`)
+      setSuccess(newValue ? t('settings.friendRequests.friendRequestsNowDisabled') : t('settings.friendRequests.friendRequestsNowEnabled'))
       await refreshProfile()
     } catch (e: any) {
-      setError(e?.message || 'Failed to update friend request setting')
+      setError(e?.message || t('settings.friendRequests.failedToUpdate'))
       setDisableFriendRequests(!newValue) // Revert on error
     } finally {
       setSaving(false)
@@ -211,7 +217,7 @@ export default function SettingsPage() {
 
   const handleDeleteAccount = async () => {
     if (!deleteConfirm || deleteConfirmText !== "DELETE") {
-      setError("Please type DELETE to confirm account deletion")
+      setError(t('settings.dangerZone.typeDeleteToConfirm'))
       return
     }
 
@@ -228,7 +234,7 @@ export default function SettingsPage() {
       await signOut()
       navigate("/")
     } catch (e: any) {
-      setError(e?.message || 'Failed to delete account')
+      setError(e?.message || t('settings.dangerZone.failedToDelete'))
       setDeleting(false)
     }
   }
@@ -236,7 +242,7 @@ export default function SettingsPage() {
   if (loading) {
     return (
       <div className="max-w-4xl mx-auto mt-8 px-4 md:px-0">
-        <div className="p-8 text-center text-sm opacity-60">Loading settings…</div>
+        <div className="p-8 text-center text-sm opacity-60">{t('settings.loading')}</div>
       </div>
     )
   }
@@ -246,9 +252,9 @@ export default function SettingsPage() {
       <div className="mb-6">
         <h1 className="text-3xl font-semibold flex items-center gap-3">
           <Settings className="h-6 w-6" />
-          Account Settings
+          {t('settings.title')}
         </h1>
-        <p className="text-xs opacity-70 mt-2">Manage your account preferences and security</p>
+        <p className="text-sm opacity-70 mt-2">{t('settings.description')}</p>
       </div>
 
       {error && (
@@ -274,7 +280,7 @@ export default function SettingsPage() {
           >
             <div className="flex items-center gap-2">
               <Mail className="h-5 w-5" />
-              <CardTitle>Email Address</CardTitle>
+              <CardTitle>{t('settings.email.title')}</CardTitle>
             </div>
             {emailExpanded ? (
               <ChevronUp className="h-5 w-5 opacity-60" />
@@ -283,19 +289,19 @@ export default function SettingsPage() {
             )}
           </button>
           {!emailExpanded ? (
-            <CardDescription className="mt-2 text-xs">
-              Email Address: <span className="font-medium">{email}</span>
+            <CardDescription className="mt-2">
+              {t('settings.email.emailAddressLabel')} <span className="font-medium">{email}</span>
             </CardDescription>
           ) : (
-            <CardDescription className="mt-2 text-xs">
-              Change your email address. You'll need to confirm the new email.
+            <CardDescription className="mt-2">
+              {t('settings.email.description')}
             </CardDescription>
           )}
         </CardHeader>
         {emailExpanded && (
           <CardContent className="space-y-4">
             <div className="grid gap-2">
-              <Label htmlFor="current-email">Current Email</Label>
+              <Label htmlFor="current-email">{t('settings.email.currentEmail')}</Label>
               <Input
                 id="current-email"
                 type="email"
@@ -305,11 +311,11 @@ export default function SettingsPage() {
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="new-email">New Email</Label>
+              <Label htmlFor="new-email">{t('settings.email.newEmail')}</Label>
               <Input
                 id="new-email"
                 type="email"
-                placeholder="newemail@example.com"
+                placeholder={t('settings.email.newEmailPlaceholder')}
                 value={newEmail}
                 onChange={(e) => setNewEmail(e.target.value)}
                 disabled={saving}
@@ -320,7 +326,7 @@ export default function SettingsPage() {
               disabled={saving || !newEmail || newEmail === email}
               className="rounded-2xl"
             >
-              {saving ? "Updating..." : "Update Email"}
+              {saving ? t('settings.email.updating') : t('settings.email.update')}
             </Button>
           </CardContent>
         )}
@@ -335,7 +341,7 @@ export default function SettingsPage() {
           >
             <div className="flex items-center gap-2">
               <Lock className="h-5 w-5" />
-              <CardTitle>Password</CardTitle>
+              <CardTitle>{t('settings.password.title')}</CardTitle>
             </div>
             {passwordExpanded ? (
               <ChevronUp className="h-5 w-5 opacity-60" />
@@ -344,45 +350,45 @@ export default function SettingsPage() {
             )}
           </button>
           {!passwordExpanded ? (
-            <CardDescription className="mt-2 text-xs">
-              Password: <span className="font-medium">••••••••</span>
+            <CardDescription className="mt-2">
+              {t('settings.password.passwordLabel')} <span className="font-medium">••••••••</span>
             </CardDescription>
           ) : (
-            <CardDescription className="mt-2 text-xs">
-              Change your password to keep your account secure.
+            <CardDescription className="mt-2">
+              {t('settings.password.description')}
             </CardDescription>
           )}
         </CardHeader>
         {passwordExpanded && (
           <CardContent className="space-y-4">
             <div className="grid gap-2">
-              <Label htmlFor="current-password">Current Password</Label>
+              <Label htmlFor="current-password">{t('settings.password.currentPassword')}</Label>
               <Input
                 id="current-password"
                 type="password"
-                placeholder="Enter your current password"
+                placeholder={t('settings.password.currentPasswordPlaceholder')}
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
                 disabled={saving}
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="new-password">New Password</Label>
+              <Label htmlFor="new-password">{t('settings.password.newPassword')}</Label>
               <Input
                 id="new-password"
                 type="password"
-                placeholder="Enter new password"
+                placeholder={t('settings.password.newPasswordPlaceholder')}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 disabled={saving}
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="confirm-password">Confirm Password</Label>
+              <Label htmlFor="confirm-password">{t('settings.password.confirmPassword')}</Label>
               <Input
                 id="confirm-password"
                 type="password"
-                placeholder="Confirm new password"
+                placeholder={t('settings.password.confirmPasswordPlaceholder')}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 disabled={saving}
@@ -393,7 +399,7 @@ export default function SettingsPage() {
               disabled={saving || !currentPassword || !newPassword || newPassword !== confirmPassword}
               className="rounded-2xl"
             >
-              {saving ? "Updating..." : "Update Password"}
+              {saving ? t('settings.password.updating') : t('settings.password.update')}
             </Button>
           </CardContent>
         )}
@@ -402,49 +408,54 @@ export default function SettingsPage() {
       {/* Privacy Settings */}
       <Card className="rounded-3xl mb-4">
         <CardHeader>
-          <button
-            onClick={() => setPrivacyExpanded(!privacyExpanded)}
-            className="w-full text-left flex items-center justify-between gap-2 hover:opacity-80 transition-opacity"
-          >
-            <div className="flex items-center gap-2">
-              <Lock className="h-5 w-5" />
-              <CardTitle>Privacy</CardTitle>
-            </div>
-            {privacyExpanded ? (
-              <ChevronUp className="h-5 w-5 opacity-60" />
-            ) : (
-              <ChevronDown className="h-5 w-5 opacity-60" />
-            )}
-          </button>
-          {!privacyExpanded ? (
-            <CardDescription className="mt-2 text-xs">
-              Privacy: <span className="font-medium">{isPrivate ? 'Private' : 'Public'}</span> • Friend Requests: <span className="font-medium">{disableFriendRequests ? 'Disabled' : 'Enabled'}</span>
-            </CardDescription>
-          ) : (
-            <CardDescription className="mt-2 text-xs">
-              Control who can see your profile and send you friend requests.
-            </CardDescription>
-          )}
+          <CardTitle>{t('settings.privacy.title')}</CardTitle>
+          <CardDescription>{t('settings.privacy.description')}</CardDescription>
         </CardHeader>
-        {privacyExpanded && (
-          <CardContent className="space-y-4">
-            <div className="flex items-start gap-3">
-              <input
-                type="checkbox"
-                id="private-profile"
-                checked={isPrivate}
-                onChange={handleTogglePrivacy}
-                disabled={saving}
-                className="mt-1 h-4 w-4 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
-              />
-              <div className="flex-1">
-                <Label htmlFor="private-profile" className="font-medium cursor-pointer">
-                  Private Profile
-                </Label>
-                <p className="text-xs opacity-70 mt-1">
-                  When enabled, only your friends can see your profile and activity. Your profile will be hidden from public searches.
-                </p>
-              </div>
+        <CardContent className="space-y-4">
+          <div className="flex items-start gap-3">
+            <input
+              type="checkbox"
+              id="private-profile"
+              checked={isPrivate}
+              onChange={handleTogglePrivacy}
+              disabled={saving}
+              className="mt-1 h-4 w-4 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
+            />
+            <div className="flex-1">
+              <Label htmlFor="private-profile" className="font-medium cursor-pointer">
+                {t('settings.privacy.privateProfile')}
+              </Label>
+              <p className="text-sm opacity-70 mt-1">
+                {t('settings.privacy.privateProfileDescription')}
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Friend Requests Settings */}
+      <Card className="rounded-3xl mb-4">
+        <CardHeader>
+          <CardTitle>{t('settings.friendRequests.title')}</CardTitle>
+          <CardDescription>{t('settings.friendRequests.description')}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-start gap-3">
+            <input
+              type="checkbox"
+              id="disable-friend-requests"
+              checked={disableFriendRequests}
+              onChange={handleToggleFriendRequests}
+              disabled={saving}
+              className="mt-1 h-4 w-4 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
+            />
+            <div className="flex-1">
+              <Label htmlFor="disable-friend-requests" className="font-medium cursor-pointer">
+                {t('settings.friendRequests.disable')}
+              </Label>
+              <p className="text-sm opacity-70 mt-1">
+                {t('settings.friendRequests.disableDescription')}
+              </p>
             </div>
             <div className="flex items-start gap-3">
               <input
@@ -468,22 +479,52 @@ export default function SettingsPage() {
         )}
       </Card>
 
+      {/* Language Settings */}
+      <Card className="rounded-3xl mb-4">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Globe className="h-5 w-5" />
+            {t('settings.language.title')}
+          </CardTitle>
+          <CardDescription>
+            {t('settings.language.description')}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-2">
+            <Label htmlFor="language-select">{t('settings.language.selectLanguage')}</Label>
+            <select
+              id="language-select"
+              value={currentLang}
+              onChange={(e) => changeLanguage(e.target.value as typeof currentLang)}
+              className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
+            >
+              {SUPPORTED_LANGUAGES.map((lang) => (
+                <option key={lang} value={lang}>
+                  {lang === 'en' ? t('settings.language.english') : t('settings.language.french')}
+                </option>
+              ))}
+            </select>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Danger Zone */}
       <Card className="rounded-3xl border-red-200 bg-red-50/50">
         <CardHeader>
           <CardTitle className="text-red-700 flex items-center gap-2">
             <AlertTriangle className="h-5 w-5" />
-            Danger Zone
+            {t('settings.dangerZone.title')}
           </CardTitle>
-          <CardDescription className="text-red-600/80 text-xs">
-            Irreversible and destructive actions. Please proceed with caution.
+          <CardDescription className="text-red-600/80">
+            {t('settings.dangerZone.description')}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {!deleteConfirm ? (
             <>
-              <p className="text-xs opacity-90">
-                Once you delete your account, there is no going back. This will permanently delete your account, profile, gardens, and all associated data.
+              <p className="text-sm opacity-90">
+                {t('settings.dangerZone.deleteWarning')}
               </p>
               <Button
                 onClick={() => setDeleteConfirm(true)}
@@ -491,18 +532,18 @@ export default function SettingsPage() {
                 className="rounded-2xl"
               >
                 <Trash2 className="h-4 w-4 mr-2" />
-                Delete Account
+                {t('settings.dangerZone.deleteAccount')}
               </Button>
             </>
           ) : (
             <>
               <div className="p-4 rounded-xl bg-white border border-red-200 space-y-4">
-                <p className="text-xs font-medium text-red-700">
-                  Are you absolutely sure? This action cannot be undone.
+                <p className="text-sm font-medium text-red-700">
+                  {t('settings.dangerZone.confirmDelete')}
                 </p>
                 <div className="grid gap-2">
-                  <Label htmlFor="confirm-delete" className="text-xs">
-                    Type <span className="font-mono font-semibold">DELETE</span> to confirm:
+                  <Label htmlFor="confirm-delete" className="text-sm">
+                    {t('settings.dangerZone.typeDelete')}
                   </Label>
                   <Input
                     id="confirm-delete"
@@ -521,7 +562,7 @@ export default function SettingsPage() {
                     disabled={deleting || deleteConfirmText !== "DELETE"}
                     className="rounded-2xl"
                   >
-                    {deleting ? "Deleting..." : "Yes, Delete My Account"}
+                    {deleting ? t('settings.dangerZone.deleting') : t('settings.dangerZone.yesDelete')}
                   </Button>
                   <Button
                     onClick={() => {
@@ -533,7 +574,7 @@ export default function SettingsPage() {
                     disabled={deleting}
                     className="rounded-2xl"
                   >
-                    Cancel
+                    {t('common.cancel')}
                   </Button>
                 </div>
               </div>

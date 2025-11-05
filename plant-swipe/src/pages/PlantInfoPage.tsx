@@ -1,18 +1,28 @@
 import React from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useLocation } from 'react-router-dom'
 import { PlantDetails } from '@/components/plant/PlantDetails'
 import type { Plant } from '@/types/plant'
 import { useAuth } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabaseClient'
+import { useTranslation } from 'react-i18next'
+import { useLanguage, useLanguageNavigate } from '@/lib/i18nRouting'
+import { mergePlantWithTranslation } from '@/lib/plantTranslationLoader'
 
 export const PlantInfoPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
-  const navigate = useNavigate()
+  const navigate = useLanguageNavigate()
+  const location = useLocation()
   const { user, profile, refreshProfile } = useAuth()
+  const { t } = useTranslation('common')
+  const currentLang = useLanguage()
   const [plant, setPlant] = React.useState<Plant | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [likedIds, setLikedIds] = React.useState<string[]>([])
+  
+  // Check if we're in overlay mode (has backgroundLocation) or full page mode
+  const state = location.state as { backgroundLocation?: any } | null
+  const isOverlayMode = !!state?.backgroundLocation
 
   React.useEffect(() => {
     const arr = Array.isArray((profile as any)?.liked_plant_ids)
@@ -28,6 +38,7 @@ export const PlantInfoPage: React.FC = () => {
       setLoading(true)
       setError(null)
       try {
+        // Load base plant data
         const { data, error } = await supabase
           .from('plants')
           .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount')
@@ -37,39 +48,29 @@ export const PlantInfoPage: React.FC = () => {
         if (!data) {
           setPlant(null)
         } else {
-          const p: Plant = {
-            id: String(data.id),
-            name: data.name,
-            scientificName: data.scientific_name || '',
-            colors: Array.isArray(data.colors) ? data.colors.map(String) : [],
-            seasons: Array.isArray(data.seasons) ? (data.seasons as unknown[]).map((s) => String(s)) as Plant['seasons'] : [],
-            rarity: data.rarity,
-            meaning: data.meaning || '',
-            description: data.description || '',
-            image: data.image_url || '',
-            care: {
-              sunlight: (data.care_sunlight || 'Low') as Plant['care']['sunlight'],
-              water: (data.care_water || 'Low') as Plant['care']['water'],
-              soil: String(data.care_soil || ''),
-              difficulty: (data.care_difficulty || 'Easy') as Plant['care']['difficulty'],
-            },
-            seedsAvailable: Boolean(data.seeds_available ?? false),
-            waterFreqUnit: data.water_freq_unit || undefined,
-            waterFreqValue: data.water_freq_value ?? null,
-            waterFreqPeriod: data.water_freq_period || undefined,
-            waterFreqAmount: data.water_freq_amount ?? null,
-          }
-          if (!ignore) setPlant(p)
+          // Always load translation for current language (if available)
+          // This ensures plants created in one language display correctly in another
+          const { data: transData } = await supabase
+            .from('plant_translations')
+            .select('*')
+            .eq('plant_id', id)
+            .eq('language', currentLang)
+            .maybeSingle()
+          const translation = transData
+          
+          // Merge translation with base plant data
+          const mergedPlant = mergePlantWithTranslation(data, translation)
+          if (!ignore) setPlant(mergedPlant)
         }
       } catch (e: any) {
-        if (!ignore) setError(e?.message || 'Failed to load plant')
+        if (!ignore) setError(e?.message || t('plantInfo.failedToLoad'))
       } finally {
         if (!ignore) setLoading(false)
       }
     }
     load()
     return () => { ignore = true }
-  }, [id])
+  }, [id, currentLang])
 
   const toggleLiked = async () => {
     if (!user?.id || !id) return
@@ -92,17 +93,28 @@ export const PlantInfoPage: React.FC = () => {
     })
   }
 
-  if (loading) return <div className="max-w-4xl mx-auto mt-8 px-4">Loading…</div>
+  const handleClose = () => {
+    if (isOverlayMode) {
+      // In overlay mode, go back to previous page
+      navigate(-1)
+    } else {
+      // In full page mode (shared link), navigate to home
+      navigate('/')
+    }
+  }
+
+  if (loading) return <div className="max-w-4xl mx-auto mt-8 px-4">{t('common.loading')}</div>
   if (error) return <div className="max-w-4xl mx-auto mt-8 px-4 text-red-600 text-sm">{error}</div>
-  if (!plant) return <div className="max-w-4xl mx-auto mt-8 px-4">Plant not found.</div>
+  if (!plant) return <div className="max-w-4xl mx-auto mt-8 px-4">{t('plantInfo.plantNotFound')}</div>
 
   return (
     <div className="max-w-4xl mx-auto mt-6 px-4 md:px-0">
       <PlantDetails
         plant={plant}
-        onClose={() => navigate(-1)}
+        onClose={handleClose}
         liked={likedIds.includes(plant.id)}
         onToggleLike={toggleLiked}
+        isOverlayMode={isOverlayMode}
       />
     </div>
   )

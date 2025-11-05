@@ -1,10 +1,12 @@
 import React, { useMemo, useState, lazy, Suspense } from "react";
-import { Routes, Route, useLocation, useNavigate, Navigate } from "react-router-dom";
+import { Routes, Route, useLocation } from "react-router-dom";
+import { useLanguageNavigate, usePathWithoutLanguage } from "@/lib/i18nRouting";
+import { Navigate } from "@/components/i18n/Navigate";
 import { useMotionValue, animate } from "framer-motion";
-import { Search } from "lucide-react";
+import { Search, ChevronDown, ChevronUp, ListFilter } from "lucide-react";
 // Sheet is used for plant info overlay
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -28,6 +30,9 @@ import RequireAdmin from "@/pages/RequireAdmin";
 import { FriendsPage } from "@/pages/FriendsPage";
 import SettingsPage from "@/pages/SettingsPage";
 import { supabase } from "@/lib/supabaseClient";
+import { useLanguage } from "@/lib/i18nRouting";
+import { loadPlantsWithTranslations } from "@/lib/plantTranslationLoader";
+import { useTranslation } from "react-i18next";
 
 // Lazy load heavy pages for code splitting
 const AdminPage = lazy(() => import("@/pages/AdminPage").then(module => ({ default: module.AdminPage })));
@@ -35,12 +40,15 @@ const AdminPage = lazy(() => import("@/pages/AdminPage").then(module => ({ defau
 // --- Main Component ---
 export default function PlantSwipe() {
   const { user, signIn, signUp, signOut, profile, refreshProfile } = useAuth()
+  const currentLang = useLanguage()
+  const { t } = useTranslation('common')
   const [query, setQuery] = useState("")
   const [seasonFilter, setSeasonFilter] = useState<string | null>(null)
   const [colorFilter, setColorFilter] = useState<string | null>(null)
   const [onlySeeds, setOnlySeeds] = useState(false)
   const [onlyFavorites, setOnlyFavorites] = useState(false)
   const [favoritesFirst, setFavoritesFirst] = useState(false)
+  const [showFilters, setShowFilters] = useState(false)
 
   const [index, setIndex] = useState(0)
   const [likedIds, setLikedIds] = useState<string[]>([])
@@ -48,13 +56,14 @@ export default function PlantSwipe() {
   const location = useLocation()
   const state = location.state as { backgroundLocation?: any } | null
   const backgroundLocation = state?.backgroundLocation
-  const navigate = useNavigate()
+  const navigate = useLanguageNavigate()
+  const pathWithoutLang = usePathWithoutLanguage()
   const currentView: "discovery" | "gardens" | "search" | "profile" | "create" =
-    location.pathname === "/" ? "discovery" :
-    location.pathname.startsWith("/gardens") || location.pathname.startsWith('/garden/') ? "gardens" :
-    location.pathname.startsWith("/search") ? "search" :
-    location.pathname.startsWith("/profile") ? "profile" :
-    location.pathname.startsWith("/create") ? "create" : "discovery"
+    pathWithoutLang === "/" ? "discovery" :
+    pathWithoutLang.startsWith("/gardens") || pathWithoutLang.startsWith('/garden/') ? "gardens" :
+    pathWithoutLang.startsWith("/search") ? "search" :
+    pathWithoutLang.startsWith("/profile") ? "profile" :
+    pathWithoutLang.startsWith("/create") ? "create" : "discovery"
   const [authOpen, setAuthOpen] = useState(false)
   const [authMode, setAuthMode] = useState<"login" | "signup">("login")
   const [authError, setAuthError] = useState<string | null>(null)
@@ -80,105 +89,20 @@ export default function PlantSwipe() {
     setLoadError(null)
     let ok = false
     try {
-      // Prefer public API first to ensure anonymous browsing works even without Supabase
-      const resp = await fetch('/api/plants', {
-        credentials: 'same-origin',
-        headers: { 'Accept': 'application/json' },
-      })
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-      const ct = (resp.headers.get('content-type') || '').toLowerCase()
-      const text = await resp.text()
-      if (ct.includes('application/json') || /^[\s\n]*[\[{]/.test(text)) {
-        let arr: unknown = []
-        try { arr = JSON.parse(text) } catch { arr = [] }
-        const parsedFromApi: Plant[] = (Array.isArray(arr) ? arr : []).map((p: any) => ({
-          id: String(p.id),
-          name: String(p.name),
-          scientificName: String(p.scientificName || p.scientific_name || ''),
-          colors: Array.isArray(p.colors) ? p.colors.map((c: unknown) => String(c)) : [],
-          seasons: Array.isArray(p.seasons) ? (p.seasons as unknown[]).map((s) => String(s)) as Plant['seasons'] : [],
-          rarity: (p.rarity || 'Common') as Plant['rarity'],
-          meaning: p.meaning ? String(p.meaning) : '',
-          description: p.description ? String(p.description) : '',
-          image: String(p.image || p.image_url || ''),
-          care: {
-            sunlight: ((p.care && p.care.sunlight) || p.care_sunlight || 'Low') as Plant['care']['sunlight'],
-            water: ((p.care && p.care.water) || p.care_water || 'Low') as Plant['care']['water'],
-            soil: String((p.care && p.care.soil) || p.care_soil || ''),
-            difficulty: ((p.care && p.care.difficulty) || p.care_difficulty || 'Easy') as Plant['care']['difficulty']
-          },
-          seedsAvailable: Boolean((p.seedsAvailable ?? p.seeds_available) ?? false),
-          waterFreqUnit: (p.waterFreqUnit || p.water_freq_unit) || undefined,
-          waterFreqValue: (p.waterFreqValue ?? p.water_freq_value) ?? null,
-          waterFreqPeriod: (p.waterFreqPeriod || p.water_freq_period) || undefined,
-          waterFreqAmount: (p.waterFreqAmount ?? p.water_freq_amount) ?? null
-        }))
-        setPlants(parsedFromApi)
-        ok = true
-      } else {
-        throw new Error('Non-JSON response from /api/plants')
-      }
-    } catch (_apiErr: unknown) {
-      // Fallback to Supabase client if API unavailable
-      try {
-        const { data, error } = await supabase
-          .from('plants')
-          .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount')
-          .order('name', { ascending: true })
-        if (error) throw error
-        type PlantRow = {
-          id: string | number
-          name: string
-          scientific_name?: string | null
-          colors?: unknown
-          seasons?: unknown
-          rarity: Plant['rarity']
-          meaning?: string | null
-          description?: string | null
-          image_url?: string | null
-          care_sunlight?: Plant['care']['sunlight'] | null
-          care_water?: Plant['care']['water'] | null
-          care_soil?: string | null
-          care_difficulty?: Plant['care']['difficulty'] | null
-          seeds_available?: boolean | null
-          water_freq_unit?: Plant['waterFreqUnit'] | null
-          water_freq_value?: number | null
-          water_freq_period?: Plant['waterFreqPeriod'] | null
-          water_freq_amount?: number | null
-        }
-        const parsed: Plant[] = (Array.isArray(data) ? data : []).map((p: PlantRow) => ({
-          id: String(p.id),
-          name: String(p.name),
-          scientificName: String(p.scientific_name || ''),
-          colors: Array.isArray(p.colors as string[] | unknown[]) ? (p.colors as unknown[]).map((c) => String(c)) : [],
-          seasons: Array.isArray(p.seasons as string[] | unknown[]) ? (p.seasons as unknown[]).map((s) => String(s)) as Plant['seasons'] : [],
-          rarity: p.rarity as Plant['rarity'],
-          meaning: p.meaning ? String(p.meaning) : '',
-          description: p.description ? String(p.description) : '',
-          image: p.image_url || '',
-          care: {
-            sunlight: (p.care_sunlight || 'Low') as Plant['care']['sunlight'],
-            water: (p.care_water || 'Low') as Plant['care']['water'],
-            soil: String(p.care_soil || ''),
-            difficulty: (p.care_difficulty || 'Easy') as Plant['care']['difficulty']
-          },
-          seedsAvailable: Boolean(p.seeds_available ?? false),
-          waterFreqUnit: p.water_freq_unit || undefined,
-          waterFreqValue: p.water_freq_value ?? null,
-          waterFreqPeriod: p.water_freq_period || undefined,
-          waterFreqAmount: p.water_freq_amount ?? null
-        }))
-        setPlants(parsed)
-        ok = true
-      } catch (e2: unknown) {
-        const msg = e2 && typeof e2 === 'object' && 'message' in e2 ? String((e2 as { message?: unknown }).message || '') : ''
-        setLoadError(msg || 'Failed to load plants')
-      }
+      // Always use Supabase with translations to ensure plants created in one language
+      // display correctly when viewed in another language
+      // This ensures translations are properly loaded for all languages, including English
+      const plantsWithTranslations = await loadPlantsWithTranslations(currentLang)
+      setPlants(plantsWithTranslations)
+      ok = true
+    } catch (e: unknown) {
+      const msg = e && typeof e === 'object' && 'message' in e ? String((e as { message?: unknown }).message || '') : ''
+      setLoadError(msg || 'Failed to load plants')
     } finally {
       setLoading(false)
     }
     return ok
-  }, [])
+  }, [currentLang])
 
   React.useEffect(() => {
     loadPlants()
@@ -549,16 +473,32 @@ export default function PlantSwipe() {
       <div className={`max-w-6xl mx-auto mt-6 ${currentView === 'search' ? 'lg:grid lg:grid-cols-[260px_1fr] lg:gap-10' : ''}`}>
         {/* Sidebar / Filters */}
         {currentView === 'search' && (
-        <aside className="mb-8 lg:mb-0 space-y-6 lg:sticky lg:top-4 self-start" aria-label="Filters">
+        <>
+          {/* Toggle button for mobile */}
+          <div className="lg:hidden mb-4">
+            <Button
+              onClick={() => setShowFilters(!showFilters)}
+              variant="outline"
+              className="w-full justify-between rounded-2xl"
+              aria-expanded={showFilters}
+            >
+              <span className="flex items-center gap-2">
+                <ListFilter className="h-4 w-4" />
+                <span>{t('plant.refineFilters')}</span>
+              </span>
+              {showFilters ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </Button>
+          </div>
+          <aside className={`${showFilters ? 'block' : 'hidden'} lg:block mb-8 lg:mb-0 space-y-6 lg:sticky lg:top-4 self-start`} aria-label="Filters">
           {/* Search */}
             <div>
-              <Label htmlFor="plant-search" className="sr-only">Search plants</Label>
+              <Label htmlFor="plant-search" className="sr-only">{t('common.search')}</Label>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-60 pointer-events-none" />
                 <Input
                   id="plant-search"
                   className="pl-9 md:pl-9"
-                  placeholder="Search name, meaning, color?"
+                  placeholder={t('plant.searchPlaceholder')}
                   value={query}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                     setQuery(e.target.value)
@@ -570,7 +510,7 @@ export default function PlantSwipe() {
 
             {/* Seasons */}
             <div>
-              <div className="text-xs font-medium mb-2 uppercase tracking-wide opacity-60">Season</div>
+              <div className="text-xs font-medium mb-2 uppercase tracking-wide opacity-60">{t('plant.season')}</div>
               <div className="flex flex-wrap gap-2">
                 {(["Spring", "Summer", "Autumn", "Winter"] as const).map((s) => (
                   <button
@@ -579,7 +519,7 @@ export default function PlantSwipe() {
                     className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${seasonFilter === s ? "bg-black text-white" : "bg-white hover:bg-stone-50"}`}
                     aria-pressed={seasonFilter === s}
                   >
-                    {s}
+                    {t(`plant.${s.toLowerCase()}`)}
                   </button>
                 ))}
               </div>
@@ -587,7 +527,7 @@ export default function PlantSwipe() {
 
             {/* Colors */}
             <div>
-              <div className="text-xs font-medium mb-2 uppercase tracking-wide opacity-60">Color</div>
+              <div className="text-xs font-medium mb-2 uppercase tracking-wide opacity-60">{t('plant.color')}</div>
               <div className="flex flex-wrap gap-2">
                 {["Red", "Pink", "Yellow", "White", "Purple", "Blue", "Orange", "Green"].map((c) => (
                   <button
@@ -596,7 +536,7 @@ export default function PlantSwipe() {
                     className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${colorFilter === c ? "bg-black text-white" : "bg-white hover:bg-stone-50"}`}
                     aria-pressed={colorFilter === c}
                   >
-                    {c}
+                    {t(`plant.${c.toLowerCase()}`)}
                   </button>
                 ))}
               </div>
@@ -611,7 +551,7 @@ export default function PlantSwipe() {
                 }`}
                 aria-pressed={onlySeeds}
               >
-                <span className="inline-block h-2 w-2 rounded-full bg-current" /> Seeds only
+                <span className="inline-block h-2 w-2 rounded-full bg-current" /> {t('plant.seedsOnly')}
               </button>
               <div className="h-2" />
               <button
@@ -621,7 +561,7 @@ export default function PlantSwipe() {
                 }`}
                 aria-pressed={onlyFavorites}
               >
-                <span className="inline-block h-2 w-2 rounded-full bg-current" /> Favorites only
+                <span className="inline-block h-2 w-2 rounded-full bg-current" /> {t('plant.favoritesOnly')}
               </button>
               <div className="h-2" />
               <button
@@ -631,70 +571,42 @@ export default function PlantSwipe() {
                 }`}
                 aria-pressed={favoritesFirst}
               >
-                Favorites first
+                {t('plant.favoritesFirst')}
               </button>
             </div>
 
             {/* Active filters summary */}
             <div className="text-xs space-y-1">
-              <div className="font-medium uppercase tracking-wide opacity-60">Active</div>
+              <div className="font-medium uppercase tracking-wide opacity-60">{t('plant.active')}</div>
               <div className="flex flex-wrap gap-2">
                 {seasonFilter && (
-                  <Badge variant="secondary" className="rounded-xl">{seasonFilter}</Badge>
+                  <Badge variant="secondary" className="rounded-xl">{t(`plant.${seasonFilter.toLowerCase()}`)}</Badge>
                 )}
                 {colorFilter && (
-                  <Badge variant="secondary" className="rounded-xl">{colorFilter}</Badge>
+                  <Badge variant="secondary" className="rounded-xl">{t(`plant.${colorFilter.toLowerCase()}`)}</Badge>
                 )}
                 {onlySeeds && (
-                  <Badge variant="secondary" className="rounded-xl">Seeds</Badge>
+                  <Badge variant="secondary" className="rounded-xl">{t('plant.seedsOnly')}</Badge>
                 )}
                 {onlyFavorites && (
-                  <Badge variant="secondary" className="rounded-xl">Favorites</Badge>
+                  <Badge variant="secondary" className="rounded-xl">{t('plant.favoritesOnly')}</Badge>
                 )}
                 {favoritesFirst && (
-                  <Badge variant="secondary" className="rounded-xl">Favs first</Badge>
+                  <Badge variant="secondary" className="rounded-xl">{t('plant.favoritesFirst')}</Badge>
                 )}
                 {!seasonFilter && !colorFilter && !onlySeeds && (
-                  <span className="opacity-50">None</span>
+                  <span className="opacity-50">{t('plant.none')}</span>
                 )}
               </div>
             </div>
-  </aside>
-  )}
+          </aside>
+        </>
+        )}
 
         {/* Main content area */}
         <main className="min-h-[60vh]" aria-live="polite">
-          {loading && <div className="p-8 text-center text-sm opacity-60">Loading from Supabase...</div>}
-          {loadError && <div className="p-8 text-center text-sm text-red-600">Supabase error: {loadError}</div>}
-          {!loading && !loadError && (
-            <>
-              {plants.length === 0 && !query && !loadError && !loading && (
-                <div className="p-8 text-center text-sm opacity-60">
-                  No plants found. Insert rows into table "plants" (columns: id, name, scientific_name, colors[], seasons[], rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available) then refresh.
-                </div>
-              )}
-              {/* Use background location for primary routes so overlays render on top */}
-              <Routes location={(backgroundLocation as any) || location}>
-                <Route
-                  path="/"
-                  element={plants.length > 0 ? (
-                    <SwipePage
-                      current={current}
-                      index={index}
-                      setIndex={setIndex}
-                      x={x}
-                      y={y}
-                      onDragEnd={onDragEnd}
-                      handleInfo={handleInfo}
-                      handlePass={handlePass}
-                      handlePrevious={handlePrevious}
-                      liked={current ? likedIds.includes(current.id) : false}
-                      onToggleLike={() => { if (current) toggleLiked(current.id) }}
-                    />
-                  ) : (
-                    <></>
-                  )}
-                />
+          {/* Use background location for primary routes so overlays render on top */}
+          <Routes location={(backgroundLocation as any) || location}>
                 <Route path="/gardens" element={<GardenListPage />} />
                 <Route path="/garden/:id/*" element={<GardenDashboardPage />} />
                 <Route
@@ -735,7 +647,38 @@ export default function PlantSwipe() {
                   <Navigate to="/" replace />
                 )} />
                 <Route path="/plants/:id" element={<PlantInfoPage />} />
-                <Route path="*" element={<Navigate to="/" replace />} />
+                <Route
+                  path="/*"
+                  element={plants.length > 0 ? (
+                    <SwipePage
+                      current={current}
+                      index={index}
+                      setIndex={setIndex}
+                      x={x}
+                      y={y}
+                      onDragEnd={onDragEnd}
+                      handleInfo={handleInfo}
+                      handlePass={handlePass}
+                      handlePrevious={handlePrevious}
+                      liked={current ? likedIds.includes(current.id) : false}
+                      onToggleLike={() => { if (current) toggleLiked(current.id) }}
+                    />
+                  ) : (
+                    <>
+                      {loading && <div className="p-8 text-center text-sm opacity-60">{t('common.loading')}</div>}
+                      {loadError && <div className="p-8 text-center text-sm text-red-600">{t('common.error')}: {loadError}</div>}
+                      {!loading && !loadError && (
+                        <>
+                          {plants.length === 0 && !query && !loadError && !loading && (
+                            <div className="p-8 text-center text-sm opacity-60">
+                              {t('plant.noResults')}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </>
+                  )}
+                />
               </Routes>
               {/* When a background location is set, also render the overlay route on top */}
               {backgroundLocation && (
@@ -746,8 +689,6 @@ export default function PlantSwipe() {
                   />
                 </Routes>
               )}
-            </>
-          )}
         </main>
       </div>
 
@@ -756,42 +697,42 @@ export default function PlantSwipe() {
       <Dialog open={authOpen && !user} onOpenChange={setAuthOpen}>
         <DialogContent className="rounded-2xl">
           <DialogHeader>
-            <DialogTitle>{authMode === 'login' ? 'Log in' : 'Create your account'}</DialogTitle>
+            <DialogTitle>{authMode === 'login' ? t('auth.login') : t('auth.signup')}</DialogTitle>
             <DialogDescription>
-              {authMode === 'login' ? 'Access favorites, notes, and seed wishlists.' : 'Start saving favorites, notes, and seed wishlists.'}
+              {authMode === 'login' ? t('auth.loginDescription') : t('auth.signupDescription')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             {authMode === 'signup' && (
               <div className="grid gap-2">
-                <Label htmlFor="name">Display name</Label>
-                <Input id="name" type="text" placeholder="Your name" value={authDisplayName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthDisplayName(e.target.value)} />
+                <Label htmlFor="name">{t('auth.displayName')}</Label>
+                <Input id="name" type="text" placeholder={t('auth.displayNamePlaceholder')} value={authDisplayName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthDisplayName(e.target.value)} />
               </div>
             )}
             
             <div className="grid gap-2">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" placeholder="you@example.com" value={authEmail} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthEmail(e.target.value)} disabled={authSubmitting} />
+              <Label htmlFor="email">{t('auth.email')}</Label>
+              <Input id="email" type="email" placeholder={t('auth.emailPlaceholder')} value={authEmail} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthEmail(e.target.value)} disabled={authSubmitting} />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" placeholder="Password" value={authPassword} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword(e.target.value)} disabled={authSubmitting} />
+              <Label htmlFor="password">{t('auth.password')}</Label>
+              <Input id="password" type="password" placeholder={t('auth.passwordPlaceholder')} value={authPassword} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword(e.target.value)} disabled={authSubmitting} />
             </div>
             {authMode === 'signup' && (
               <div className="grid gap-2">
-                <Label htmlFor="confirm">Confirm password</Label>
-                <Input id="confirm" type="password" placeholder="Confirm password" value={authPassword2} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword2(e.target.value)} disabled={authSubmitting} />
+                <Label htmlFor="confirm">{t('auth.confirmPassword')}</Label>
+                <Input id="confirm" type="password" placeholder={t('auth.confirmPasswordPlaceholder')} value={authPassword2} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword2(e.target.value)} disabled={authSubmitting} />
               </div>
             )}
             {authError && <div className="text-sm text-red-600">{authError}</div>}
             <Button className="w-full rounded-2xl" onClick={submitAuth}>
-              {authMode === 'login' ? 'Continue' : 'Create account'}
+              {authMode === 'login' ? t('auth.continue') : t('auth.createAccount')}
             </Button>
             <div className="text-center text-sm">
               {authMode === 'login' ? (
-                <button className="underline" onClick={() => setAuthMode('signup')}>No account? Sign up</button>
+                <button className="underline" onClick={() => setAuthMode('signup')}>{t('auth.noAccount')}</button>
               ) : (
-                <button className="underline" onClick={() => setAuthMode('login')}>Have an account? Log in</button>
+                <button className="underline" onClick={() => setAuthMode('login')}>{t('auth.haveAccount')}</button>
               )}
             </div>
           </div>
@@ -805,13 +746,17 @@ export default function PlantSwipe() {
 }
 
 function PlantInfoOverlay() {
-  const navigate = useNavigate()
+  const navigate = useLanguageNavigate()
   return (
     <Sheet open onOpenChange={(o) => { if (!o) navigate(-1) }}>
       <SheetContent
         side="bottom"
         className="rounded-t-2xl max-h-[85vh] overflow-y-auto p-4 md:p-6"
       >
+        <SheetHeader>
+          <SheetTitle className="sr-only">Plant Information</SheetTitle>
+          <SheetDescription className="sr-only">View detailed information about this plant</SheetDescription>
+        </SheetHeader>
         <div className="max-w-4xl mx-auto w-full">
           <PlantInfoPage />
         </div>

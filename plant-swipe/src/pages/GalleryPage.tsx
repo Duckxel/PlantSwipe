@@ -3,12 +3,15 @@ import type { Plant } from "@/types/plant"
 import { rarityTone, seasonBadge } from "@/constants/badges"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { useTranslation } from "react-i18next"
 
 interface GalleryPageProps { plants: Plant[]; onOpen: (p: Plant) => void }
 
-export const GalleryPage: React.FC<GalleryPageProps> = ({ plants, onOpen }) => (
+export const GalleryPage: React.FC<GalleryPageProps> = ({ plants, onOpen }) => {
+  const { t } = useTranslation('common')
+  return (
   <div className="max-w-6xl mx-auto mt-8 px-4 md:px-0">
-    <div className="text-sm opacity-60 mb-3">{plants.length} result{plants.length !== 1 ? 's' : ''}</div>
+    <div className="text-sm opacity-60 mb-3">{plants.length} {plants.length !== 1 ? t('common.results') : t('common.result')}</div>
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
       {plants.map((p) => (
         <button key={p.id} onClick={() => onOpen(p)} className="text-left">
@@ -28,6 +31,7 @@ export const GalleryPage: React.FC<GalleryPageProps> = ({ plants, onOpen }) => (
         </button>
       ))}
     </div>
-    {plants.length === 0 && <div className="text-center py-10 opacity-60 text-sm">No results</div>}
+    {plants.length === 0 && <div className="text-center py-10 opacity-60 text-sm">{t('plant.noResults')}</div>}
   </div>
-)
+  )
+}

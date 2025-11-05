@@ -10,9 +10,11 @@ import { useAuth } from '@/context/AuthContext'
 import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
 import { TaskCreateDialog } from '@/components/plant/TaskCreateDialog'
 import { supabase } from '@/lib/supabaseClient'
+import { useTranslation } from 'react-i18next'
 
 export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, onChanged }: { open: boolean; onOpenChange: (o: boolean) => void; gardenId: string; gardenPlantId: string; onChanged?: () => Promise<void> | void }) {
   const { user } = useAuth()
+  const { t } = useTranslation('common')
   const [tasks, setTasks] = React.useState<GardenPlantTask[]>([])
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -33,19 +35,19 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
     try {
       const rows = await listPlantTasks(gardenPlantId)
       // Sort by normalized frequency (descending)
-      const score = (t: GardenPlantTask): number => {
+      const score = (task: GardenPlantTask): number => {
         try {
-          if (t.scheduleKind === 'repeat_pattern') {
-            const amount = Math.max(1, Number(t.amount || 1))
-            const req = Math.max(1, Number(t.requiredCount || 1))
-            const period = (t.period || 'week') as 'week'|'month'|'year'
+          if (task.scheduleKind === 'repeat_pattern') {
+            const amount = Math.max(1, Number(task.amount || 1))
+            const req = Math.max(1, Number(task.requiredCount || 1))
+            const period = (task.period || 'week') as 'week'|'month'|'year'
             const perWeek = period === 'week' ? amount : period === 'month' ? amount / 4.345 : amount / 52
             return perWeek * req
           }
-          if (t.scheduleKind === 'repeat_duration') {
-            const amt = Math.max(1, Number(t.intervalAmount || 1))
-            const unit = String(t.intervalUnit || 'week')
-            const req = Math.max(1, Number(t.requiredCount || 1))
+          if (task.scheduleKind === 'repeat_duration') {
+            const amt = Math.max(1, Number(task.intervalAmount || 1))
+            const unit = String(task.intervalUnit || 'week')
+            const req = Math.max(1, Number(task.requiredCount || 1))
             const weeks = unit === 'day' ? amt / 7 : unit === 'week' ? amt : unit === 'month' ? amt * 4.345 : unit === 'year' ? amt * 52 : amt / 7
             const perWeek = weeks > 0 ? (1 / weeks) : 0
             return perWeek * req
@@ -56,11 +58,11 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
       rows.sort((a, b) => score(b) - score(a))
       setTasks(rows)
     } catch (e: any) {
-      setError(e?.message || 'Failed to load tasks')
+      setError(e?.message || t('gardenDashboard.taskDialog.failedToLoad'))
     } finally {
       setLoading(false)
     }
-  }, [gardenPlantId])
+  }, [gardenPlantId, t])
 
   const emitTasksRealtime = React.useCallback(async (metadata?: Record<string, unknown>) => {
     await broadcastGardenUpdate({ gardenId, kind: 'tasks', metadata, actorId: user?.id ?? null }).catch(() => {})
@@ -142,9 +144,9 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
       } catch {}
       // Log activity so other clients refresh via SSE
       try {
-        const t = tasks.find((x) => x.id === taskId)
-        const label = t ? (t.type === 'custom' ? (t.customName || 'CUSTOM') : String(t.type).toUpperCase()) : 'TASK'
-        await logGardenActivity({ gardenId, kind: 'note' as any, message: `deleted "${label}" Task`, taskName: label, actorColor: null })
+        const task = tasks.find((x) => x.id === taskId)
+        const label = task ? (task.type === 'custom' ? (task.customName || t('garden.taskTypes.custom')) : t(`garden.taskTypes.${task.type}`)) : t('garden.taskTypes.custom')
+        await logGardenActivity({ gardenId, kind: 'note' as any, message: t('gardenDashboard.taskDialog.deletedTask', { taskName: label }), taskName: label, actorColor: null })
         try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
       } catch {}
       // Broadcast update BEFORE reload to ensure other clients receive it
@@ -152,7 +154,7 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
       await load()
       if (onChanged) await onChanged()
     } catch (e: any) {
-      setError(e?.message || 'Failed to delete task')
+      setError(e?.message || t('gardenDashboard.taskDialog.failedToDelete'))
     }
   }
 
@@ -167,55 +169,55 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
         onCloseAutoFocus={(e) => { /* allow */ }}
       >
         <DialogHeader>
-          <DialogTitle>Tasks</DialogTitle>
+          <DialogTitle>{t('gardenDashboard.taskDialog.tasks')}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <div className="text-sm font-medium">Existing tasks</div>
-            <Button className="rounded-2xl" onClick={() => setCreateOpen(true)}>Add Task</Button>
+            <div className="text-sm font-medium">{t('gardenDashboard.taskDialog.existingTasks')}</div>
+            <Button className="rounded-2xl" onClick={() => setCreateOpen(true)}>{t('gardenDashboard.taskDialog.addTask')}</Button>
           </div>
           <div className="rounded-xl border">
-            {loading && <div className="p-3 text-sm opacity-60">Loading…</div>}
+            {loading && <div className="p-3 text-sm opacity-60">{t('gardenDashboard.taskDialog.loading')}</div>}
             {error && <div className="p-3 text-sm text-red-600">{error}</div>}
-            {!loading && tasks.length === 0 && <div className="p-3 text-sm opacity-60">No tasks yet</div>}
+            {!loading && tasks.length === 0 && <div className="p-3 text-sm opacity-60">{t('gardenDashboard.taskDialog.noTasksYet')}</div>}
             <div className="divide-y">
-              {tasks.map(t => (
-                <div key={t.id} className="flex items-center justify-between px-3 py-2">
+              {tasks.map(task => (
+                <div key={task.id} className="flex items-center justify-between px-3 py-2">
                   <div className="text-sm">
                     <div className="font-medium capitalize flex items-center gap-2">
                       <span className="h-6 w-6 rounded-md border bg-stone-100 flex items-center justify-center text-base">
-                        {t.type === 'water' && '💧'}
-                        {t.type === 'fertilize' && '🍽️'}
-                        {t.type === 'harvest' && '🌾'}
-                        {t.type === 'cut' && '✂️'}
-                        {t.type === 'custom' && (t.emoji || '🪴')}
+                        {task.type === 'water' && '💧'}
+                        {task.type === 'fertilize' && '🍽️'}
+                        {task.type === 'harvest' && '🌾'}
+                        {task.type === 'cut' && '✂️'}
+                        {task.type === 'custom' && (task.emoji || '🪴')}
                       </span>
-                      <span>{t.type === 'custom' ? (t.customName || 'Custom') : t.type}</span>
+                      <span>{task.type === 'custom' ? (task.customName || t('garden.taskTypes.custom')) : t(`garden.taskTypes.${task.type}`)}</span>
                     </div>
-                    <div className="text-xs opacity-60">{renderTaskSummary(t)}</div>
+                    <div className="text-xs opacity-60">{renderTaskSummary(task, t)}</div>
                   </div>
                   <TaskRowMenu
-                    onEdit={t.scheduleKind === 'repeat_pattern' ? () => {
-                      setEditingTask(t)
-                      setPatternPeriod((t.period as any) || 'week')
-                      setPatternAmount(Number(t.amount || t.requiredCount || 1))
+                    onEdit={task.scheduleKind === 'repeat_pattern' ? () => {
+                      setEditingTask(task)
+                      setPatternPeriod((task.period as any) || 'week')
+                      setPatternAmount(Number(task.amount || task.requiredCount || 1))
                       setPatternSelection({
-                        weeklyDays: t.weeklyDays || undefined,
-                        monthlyDays: t.monthlyDays || undefined,
-                        yearlyDays: t.yearlyDays || undefined,
-                        monthlyNthWeekdays: t.monthlyNthWeekdays || undefined,
+                        weeklyDays: task.weeklyDays || undefined,
+                        monthlyDays: task.monthlyDays || undefined,
+                        yearlyDays: task.yearlyDays || undefined,
+                        monthlyNthWeekdays: task.monthlyNthWeekdays || undefined,
                       })
                       // Delay open to next tick to avoid menu overlay capturing events
                       setTimeout(() => setPatternOpen(true), 0)
                     } : undefined}
-                    onDelete={() => remove(t.id)}
+                    onDelete={() => remove(task.id)}
                   />
                 </div>
               ))}
             </div>
           </div>
           <div className="flex justify-end">
-            <Button variant="secondary" className="rounded-2xl" onClick={() => { resetEditor(); onOpenChange(false) }}>Close</Button>
+            <Button variant="secondary" className="rounded-2xl" onClick={() => { resetEditor(); onOpenChange(false) }}>{t('gardenDashboard.taskDialog.close')}</Button>
           </div>
         </div>
       </DialogContent>
@@ -247,8 +249,8 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
               } catch {}
               // Log activity so other clients refresh via SSE
               try {
-                const label = editingTask.type === 'custom' ? (editingTask.customName || 'CUSTOM') : String(editingTask.type).toUpperCase()
-                await logGardenActivity({ gardenId, kind: 'note' as any, message: `updated "${label}" Task`, taskName: label, actorColor: null })
+                const label = editingTask.type === 'custom' ? (editingTask.customName || t('garden.taskTypes.custom')) : t(`garden.taskTypes.${editingTask.type}`)
+                await logGardenActivity({ gardenId, kind: 'note' as any, message: t('gardenDashboard.taskDialog.updatedTask', { taskName: label }), taskName: label, actorColor: null })
                 try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
               } catch {}
               // Broadcast update BEFORE reload to ensure other clients receive it
@@ -257,7 +259,7 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
               await load()
               if (onChanged) await onChanged()
             } catch (e: any) {
-              setError(e?.message || 'Failed to update task')
+              setError(e?.message || t('gardenDashboard.taskDialog.failedToUpdate'))
             }
           }
         }}
@@ -286,25 +288,26 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
   )
 }
 
-function renderTaskSummary(t: GardenPlantTask): string {
-  if (t.scheduleKind === 'one_time_date') {
-    return `One time on ${t.dueAt ? new Date(t.dueAt).toLocaleString() : '—'}`
+function renderTaskSummary(task: GardenPlantTask, translate: ReturnType<typeof useTranslation<'common'>>['t']): string {
+  if (task.scheduleKind === 'one_time_date') {
+    return translate('gardenDashboard.taskDialog.taskSummary.oneTimeOn', { date: task.dueAt ? new Date(task.dueAt).toLocaleString() : '—' })
   }
-  if (t.scheduleKind === 'one_time_duration') {
-    return `One time in ${t.intervalAmount} ${t.intervalUnit}`
+  if (task.scheduleKind === 'one_time_duration') {
+    return translate('gardenDashboard.taskDialog.taskSummary.oneTimeIn', { amount: task.intervalAmount, unit: task.intervalUnit })
   }
-  if (t.scheduleKind === 'repeat_duration') {
-    return `Every ${t.intervalAmount} ${t.intervalUnit}, need ${t.requiredCount}`
+  if (task.scheduleKind === 'repeat_duration') {
+    return translate('gardenDashboard.taskDialog.taskSummary.everyNeed', { amount: task.intervalAmount, unit: task.intervalUnit, required: task.requiredCount })
   }
-  if (t.scheduleKind === 'repeat_pattern') {
-    if (t.period === 'week') return `Per week: ${(t.weeklyDays || []).length} day(s)`
-    if (t.period === 'month') return `Per month: ${(t.monthlyNthWeekdays || t.monthlyDays || []).length} time(s)`
-    return `Per year: ${(t.yearlyDays || []).length} time(s)`
+  if (task.scheduleKind === 'repeat_pattern') {
+    if (task.period === 'week') return translate('gardenDashboard.taskDialog.taskSummary.perWeek', { count: (task.weeklyDays || []).length })
+    if (task.period === 'month') return translate('gardenDashboard.taskDialog.taskSummary.perMonth', { count: (task.monthlyNthWeekdays || task.monthlyDays || []).length })
+    return translate('gardenDashboard.taskDialog.taskSummary.perYear', { count: (task.yearlyDays || []).length })
   }
   return ''
 }
 
 function TaskRowMenu({ onEdit, onDelete }: { onEdit?: () => void; onDelete: () => void }) {
+  const { t } = useTranslation('common')
   const [open, setOpen] = React.useState(false)
   const buttonRef = React.useRef<HTMLButtonElement | null>(null)
   const menuRef = React.useRef<HTMLDivElement | null>(null)
@@ -366,9 +369,9 @@ function TaskRowMenu({ onEdit, onDelete }: { onEdit?: () => void; onDelete: () =
           className="absolute right-0 top-full mt-2 w-40 bg-white border rounded-xl shadow-lg z-[80]"
         >
           {onEdit && (
-            <button onClick={(e) => { e.stopPropagation(); setOpen(false); onEdit() }} className="w-full text-left px-3 py-2 rounded-t-xl hover:bg-stone-50">Edit</button>
+            <button onClick={(e) => { e.stopPropagation(); setOpen(false); onEdit() }} className="w-full text-left px-3 py-2 rounded-t-xl hover:bg-stone-50">{t('gardenDashboard.taskDialog.edit')}</button>
           )}
-          <button onClick={(e) => { e.stopPropagation(); setOpen(false); onDelete() }} className={`w-full text-left px-3 py-2 ${onEdit ? '' : 'rounded-t-xl'} rounded-b-xl hover:bg-stone-50 text-red-600`}>Delete</button>
+          <button onClick={(e) => { e.stopPropagation(); setOpen(false); onDelete() }} className={`w-full text-left px-3 py-2 ${onEdit ? '' : 'rounded-t-xl'} rounded-b-xl hover:bg-stone-50 text-red-600`}>{t('gardenDashboard.taskDialog.delete')}</button>
         </div>
       )}
     </div>

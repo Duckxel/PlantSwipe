@@ -6,6 +6,11 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { supabase } from "@/lib/supabaseClient"
 import type { Plant } from "@/types/plant"
+import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE, type SupportedLanguage } from "@/lib/i18n"
+import { translatePlantToAllLanguages } from "@/lib/deepl"
+import { savePlantTranslations } from "@/lib/plantTranslations"
+import { Languages } from "lucide-react"
+import { useTranslation } from "react-i18next"
 
 function generateUUIDv4(): string {
   try {
@@ -35,6 +40,7 @@ interface CreatePlantPageProps {
 }
 
 export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSaved }) => {
+  const { t } = useTranslation('common')
   const [name, setName] = React.useState("")
   const [scientificName, setScientificName] = React.useState("")
   const [colors, setColors] = React.useState<string>("")
@@ -54,6 +60,10 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
   const [ok, setOk] = React.useState<string | null>(null)
   const [advanced, setAdvanced] = React.useState(false)
   const [everAdvanced, setEverAdvanced] = React.useState(false)
+  // Language selection (only in Advanced mode, defaults to English)
+  const [inputLanguage, setInputLanguage] = React.useState<SupportedLanguage>(DEFAULT_LANGUAGE)
+  const [translateToAll, setTranslateToAll] = React.useState(true) // Default to true in Advanced mode
+  const [translating, setTranslating] = React.useState(false)
 
   const toggleSeason = (s: Plant["seasons"][number]) => {
     setSeasons((cur: string[]) => (cur.includes(s) ? cur.filter((x: string) => x !== s) : [...cur, s]))
@@ -114,7 +124,67 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
         water_freq_value: includeAdvanced ? normalizedAmount : defaultAmount,
       })
       if (insErr) { setError(insErr.message); return }
-      setOk('Saved')
+      
+      // Always save translation for the input language (defaults to English in simplified mode)
+      const translation = {
+        plant_id: id,
+        language: inputLanguage,
+        name: nameNorm,
+        scientific_name: sciNorm || null,
+        meaning: meaning || null,
+        description: description || null,
+        care_soil: includeAdvanced ? (careSoil || null) : null,
+      }
+      
+      const translationsToSave = [translation]
+      
+      // In simplified mode, automatically translate to all languages
+      // In advanced mode, only translate if checkbox is enabled
+      const shouldTranslate = !advanced || translateToAll
+      
+      if (shouldTranslate) {
+        setTranslating(true)
+        try {
+          const allTranslations = await translatePlantToAllLanguages({
+            name: nameNorm,
+            scientificName: sciNorm || undefined,
+            meaning: meaning || undefined,
+            description: description || undefined,
+            careSoil: includeAdvanced ? (careSoil || undefined) : undefined,
+          }, inputLanguage)
+          
+          // Convert translations to the format needed for saving
+          for (const [lang, translated] of Object.entries(allTranslations)) {
+            if (lang !== inputLanguage) {
+              translationsToSave.push({
+                plant_id: id,
+                language: lang as SupportedLanguage,
+                name: translated.name || nameNorm,
+                scientific_name: translated.scientificName || sciNorm || null,
+                meaning: translated.meaning || null,
+                description: translated.description || null,
+                care_soil: translated.careSoil || null,
+              })
+            }
+          }
+        } catch (transErr: any) {
+          console.error('Translation error:', transErr)
+          setOk('Plant saved, but translation failed. You can translate later when editing.')
+        } finally {
+          setTranslating(false)
+        }
+      }
+      
+      // Save all translations
+      if (translationsToSave.length > 0) {
+        const { error: transErr } = await savePlantTranslations(translationsToSave)
+        if (transErr) {
+          console.error('Failed to save translations:', transErr)
+          // Don't fail the whole save if translations fail
+        }
+      }
+      
+      setOk(t('createPlant.saved'))
       onSaved && onSaved(id)
       // Notify app to refresh plant lists without full reload
       try {
@@ -132,53 +202,73 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
         <CardContent className="p-6 md:p-8 space-y-4">
           <form autoComplete="off" className="space-y-4">
             <div className="flex items-center justify-between">
-              <div className="text-lg font-semibold">Add plant</div>
-              <button
-                type="button"
-                onClick={() => setAdvanced((prev) => { const next = !prev; if (next) setEverAdvanced(true); return next })}
-                aria-pressed={advanced}
-                className={`px-3 py-1.5 rounded-2xl text-sm border shadow-sm transition flex items-center gap-2 ${advanced ? 'bg-black text-white' : 'bg-white hover:bg-stone-50'}`}
-              >
-                {advanced ? 'Advanced' : 'Simplified'}
-              </button>
+              <div className="text-lg font-semibold">{t('createPlant.title')}</div>
+              <div className="flex items-center gap-2">
+                {/* Language Selector */}
+                <div className="flex items-center gap-1.5">
+                  <Languages className="h-4 w-4 opacity-70" />
+                  <select 
+                    id="plant-language" 
+                    className="flex h-7 px-2 rounded-lg border border-input bg-transparent text-xs shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50" 
+                    value={inputLanguage} 
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setInputLanguage(e.target.value as SupportedLanguage)}
+                  >
+                    {SUPPORTED_LANGUAGES.map((lang) => (
+                      <option key={lang} value={lang}>
+                        {lang === 'en' ? 'EN' : 'FR'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAdvanced((prev) => { const next = !prev; if (next) setEverAdvanced(true); return next })}
+                  aria-pressed={advanced}
+                  className={`px-3 py-1.5 rounded-2xl text-sm border shadow-sm transition flex items-center gap-2 ${advanced ? 'bg-black text-white' : 'bg-white hover:bg-stone-50'}`}
+                >
+                  {advanced ? t('createPlant.advanced') : t('createPlant.simplified')}
+                </button>
+              </div>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="plant-name">Name</Label>
-              <Input id="plant-name" autoComplete="off" placeholder="e.g., Rose" value={name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} />
-              <div className="text-xs opacity-60">Required • must be unique</div>
+              <Label htmlFor="plant-name">{t('createPlant.name')}</Label>
+              <Input id="plant-name" autoComplete="off" placeholder={t('createPlant.namePlaceholder')} value={name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} />
+              <div className="text-xs opacity-60">{t('createPlant.nameRequired')}</div>
             </div>
             {advanced && (
-              <div className="grid gap-2">
-                <Label htmlFor="plant-scientific">Scientific name</Label>
-                <Input id="plant-scientific" autoComplete="off" value={scientificName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setScientificName(e.target.value)} />
-              </div>
+              <>
+                <div className="grid gap-2">
+                  <Label htmlFor="plant-scientific">{t('createPlant.scientificName')}</Label>
+                  <Input id="plant-scientific" autoComplete="off" value={scientificName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setScientificName(e.target.value)} />
+                </div>
+              </>
             )}
             <div className="grid gap-2">
-              <Label htmlFor="plant-colors">Colors (comma separated)</Label>
-              <Input id="plant-colors" autoComplete="off" placeholder="Red, Yellow" value={colors} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setColors(e.target.value)} />
+              <Label htmlFor="plant-colors">{t('createPlant.colors')}</Label>
+              <Input id="plant-colors" autoComplete="off" placeholder={t('createPlant.colorsPlaceholder')} value={colors} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setColors(e.target.value)} />
             </div>
             <div className="grid gap-2">
-              <Label>Seasons</Label>
+              <Label>{t('createPlant.seasons')}</Label>
               <div className="flex flex-wrap gap-2">
                 {(["Spring", "Summer", "Autumn", "Winter"] as const).map((s) => (
                   <button type="button" key={s} onClick={() => toggleSeason(s)} className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${seasons.includes(s) ? "bg-black text-white" : "bg-white hover:bg-stone-50"}`} aria-pressed={seasons.includes(s)}>
-                    {s}
+                    {t(`plant.${s.toLowerCase()}`)}
                   </button>
                 ))}
               </div>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="plant-description">Description</Label>
-              <Textarea id="plant-description" autoComplete="off" placeholder="Optional details about your plant" value={description} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDescription(e.target.value)} />
+              <Label htmlFor="plant-description">{t('createPlant.description')}</Label>
+              <Textarea id="plant-description" autoComplete="off" placeholder={t('createPlant.descriptionPlaceholder')} value={description} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDescription(e.target.value)} />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="plant-image">Image URL</Label>
+              <Label htmlFor="plant-image">{t('createPlant.imageUrl')}</Label>
               <Input id="plant-image" autoComplete="off" value={imageUrl} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setImageUrl(e.target.value)} />
             </div>
             {advanced && (
               <>
                 <div className="grid gap-2">
-                  <Label htmlFor="plant-rarity">Rarity</Label>
+                  <Label htmlFor="plant-rarity">{t('createPlant.rarity')}</Label>
                   <select id="plant-rarity" className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm" value={rarity} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setRarity(e.target.value as Plant["rarity"])}>
                     {(["Common", "Uncommon", "Rare", "Legendary"] as const).map((r) => (
                       <option key={r} value={r}>{r}</option>
@@ -186,11 +276,11 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
                   </select>
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="plant-meaning">Meaning</Label>
+                  <Label htmlFor="plant-meaning">{t('createPlant.meaning')}</Label>
                   <Input id="plant-meaning" autoComplete="off" value={meaning} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMeaning(e.target.value)} />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="plant-sunlight">Care: Sunlight</Label>
+                  <Label htmlFor="plant-sunlight">{t('createPlant.careSunlight')}</Label>
                   <select id="plant-sunlight" className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm" value={careSunlight} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setCareSunlight(e.target.value as Plant["care"]["sunlight"])}>
                     {(["Low", "Medium", "High"] as const).map((v) => (
                       <option key={v} value={v}>{v}</option>
@@ -199,11 +289,11 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
                 </div>
                 {/* Water care is derived from frequency; no manual input */}
                 <div className="grid gap-2">
-                  <Label htmlFor="plant-soil">Care: Soil</Label>
+                  <Label htmlFor="plant-soil">{t('createPlant.careSoil')}</Label>
                   <Input id="plant-soil" autoComplete="off" value={careSoil} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCareSoil(e.target.value)} />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="plant-difficulty">Care: Difficulty</Label>
+                  <Label htmlFor="plant-difficulty">{t('createPlant.careDifficulty')}</Label>
                   <select id="plant-difficulty" className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm" value={careDifficulty} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setCareDifficulty(e.target.value as Plant["care"]["difficulty"]) }>
                     {(["Easy", "Moderate", "Hard"] as const).map((v) => (
                       <option key={v} value={v}>{v}</option>
@@ -212,11 +302,11 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
                 </div>
                 <div className="flex items-center gap-2">
                   <input id="plant-seeds" type="checkbox" checked={seedsAvailable} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSeedsAvailable(e.target.checked)} />
-                  <Label htmlFor="plant-seeds">Seeds available</Label>
+                  <Label htmlFor="plant-seeds">{t('createPlant.seedsAvailable')}</Label>
                 </div>
                 {/* Default watering frequency (shown in Advanced) */}
                 <div className="grid gap-2">
-                  <Label>Default watering frequency</Label>
+                  <Label>{t('createPlant.wateringFrequency')}</Label>
                   <div className="grid grid-cols-2 gap-2">
                     <select className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm" value={waterFreqPeriod} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setWaterFreqPeriod(e.target.value as any)}>
                       {(["week","month","year"] as const).map((p) => (
@@ -226,9 +316,9 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
                     <Input type="number" autoComplete="off" min={1} max={waterFreqPeriod === 'week' ? 7 : waterFreqPeriod === 'month' ? 4 : 12} value={String(waterFreqAmount)} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setWaterFreqAmount(Math.max(1, Number(e.target.value || '1')))} />
                   </div>
                   <div className="text-xs opacity-60">
-                    {waterFreqPeriod === 'week' && 'Max 7 per week.'}
-                    {waterFreqPeriod === 'month' && 'Max 4 per month (otherwise use week).'}
-                    {waterFreqPeriod === 'year' && 'Max 12 per year (otherwise use month).'}
+                    {waterFreqPeriod === 'week' && t('createPlant.maxPerWeek')}
+                    {waterFreqPeriod === 'month' && t('createPlant.maxPerMonth')}
+                    {waterFreqPeriod === 'year' && t('createPlant.maxPerYear')}
                   </div>
                 </div>
               </>
@@ -236,9 +326,35 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
             
             {error && <div className="text-sm text-red-600">{error}</div>}
             {ok && <div className="text-sm text-green-600">{ok}</div>}
+            {translating && <div className="text-sm text-blue-600">{t('createPlant.translatingToAll')}</div>}
+            
+            {/* Translation Option - Only shown in Advanced mode, at the bottom before save */}
+            {advanced && (
+              <div className="flex items-start gap-2 p-4 rounded-xl border bg-stone-50">
+                <input 
+                  id="translate-to-all" 
+                  type="checkbox" 
+                  checked={translateToAll} 
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTranslateToAll(e.target.checked)}
+                  disabled={translating}
+                  className="mt-1"
+                />
+                <div className="flex-1">
+                  <Label htmlFor="translate-to-all" className="font-medium cursor-pointer">
+                    {t('createPlant.translateToAll')}
+                  </Label>
+                  <p className="text-xs opacity-70 mt-1">
+                    {t('createPlant.translateToAllDescription')}
+                  </p>
+                </div>
+              </div>
+            )}
+            
             <div className="flex gap-2 pt-2">
-              <Button type="button" variant="secondary" className="rounded-2xl" onClick={onCancel}>Cancel</Button>
-              <Button type="button" className="rounded-2xl" onClick={save} disabled={saving}>Save</Button>
+              <Button type="button" variant="secondary" className="rounded-2xl" onClick={onCancel} disabled={saving || translating}>{t('common.cancel')}</Button>
+              <Button type="button" className="rounded-2xl" onClick={save} disabled={saving || translating}>
+                {saving ? t('editPlant.saving') : translating ? t('createPlant.translating') : t('common.save')}
+              </Button>
             </div>
           </form>
         </CardContent>

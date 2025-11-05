@@ -9,11 +9,14 @@ import { getUserGardens, createGarden, fetchServerNowISO, getGardenTodayProgress
 import { supabase } from '@/lib/supabaseClient'
 import { addGardenBroadcastListener, broadcastGardenUpdate, type GardenRealtimeKind } from '@/lib/realtime'
 import type { Garden } from '@/types/garden'
-import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import { useLanguageNavigate } from '@/lib/i18nRouting'
+import { Link } from '@/components/i18n/Link'
 
 export const GardenListPage: React.FC = () => {
   const { user } = useAuth()
-  const navigate = useNavigate()
+  const navigate = useLanguageNavigate()
+  const { t } = useTranslation('common')
   const [gardens, setGardens] = React.useState<Garden[]>([])
   const [dragIndex, setDragIndex] = React.useState<number | null>(null)
   const [loading, setLoading] = React.useState(true)
@@ -72,11 +75,11 @@ export const GardenListPage: React.FC = () => {
       for (const [gid, prog] of entries) map[gid] = prog
       setProgressByGarden(map)
     } catch (e: any) {
-      setError(e?.message || 'Failed to load gardens')
+      setError(e?.message || t('garden.failedToLoad'))
     } finally {
       setLoading(false)
     }
-  }, [user?.id])
+  }, [user?.id, t])
 
   React.useEffect(() => { load() }, [load])
 
@@ -290,16 +293,16 @@ export const GardenListPage: React.FC = () => {
           if (gardenId) broadcastGardenId = gardenId
           if (gardenId) {
             const type = (o as any).taskType || 'custom'
-            const label = String(type).toUpperCase()
+            const taskTypeLabel = t(`garden.taskTypes.${type}`)
             const plantName = gp?.nickname || gp?.plant?.name || null
             const newCount = Number(o.completedCount || 0) + inc
             const required = Math.max(1, Number(o.requiredCount || 1))
             const done = newCount >= required
             const kind = done ? 'task_completed' : 'task_progressed'
             const msg = done
-              ? `has completed "${label}" Task on "${plantName || 'Plant'}"`
-              : `has progressed "${label}" Task on "${plantName || 'Plant'}" (${Math.min(newCount, required)}/${required})`
-            await logGardenActivity({ gardenId, kind: kind as any, message: msg, plantName: plantName || null, taskName: label, actorColor: null })
+              ? t('garden.activity.completedTask', { taskType: taskTypeLabel, plantName: plantName || t('garden.activity.plant') })
+              : t('garden.activity.progressedTask', { taskType: taskTypeLabel, plantName: plantName || t('garden.activity.plant'), completed: Math.min(newCount, required), required })
+            await logGardenActivity({ gardenId, kind: kind as any, message: msg, plantName: plantName || null, taskName: taskTypeLabel, actorColor: null })
             // Broadcast update BEFORE reload to ensure other clients receive it
             await broadcastGardenUpdate({ gardenId, kind: 'tasks', actorId: user?.id ?? null }).catch((err) => {
               console.warn('[GardenList] Failed to broadcast task update:', err)
@@ -331,8 +334,8 @@ export const GardenListPage: React.FC = () => {
       try {
         const gp = allPlants.find((p: any) => p.id === gardenPlantId)
         if (gp?.gardenId) {
-          const plantName = gp?.nickname || gp?.plant?.name || 'Plant'
-          await logGardenActivity({ gardenId: gp.gardenId, kind: 'task_completed' as any, message: `completed all due tasks on "${plantName}"`, plantName, actorColor: null })
+          const plantName = gp?.nickname || gp?.plant?.name || t('garden.activity.plant')
+          await logGardenActivity({ gardenId: gp.gardenId, kind: 'task_completed' as any, message: t('garden.activity.completedAllTasks', { plantName }), plantName, actorColor: null })
           // Broadcast update AFTER all task completions finish, BEFORE reload to ensure other clients receive it
           await broadcastGardenUpdate({ gardenId: gp.gardenId, kind: 'tasks', actorId: user?.id ?? null }).catch((err) => {
             console.warn('[GardenList] Failed to broadcast task update:', err)
@@ -423,12 +426,12 @@ export const GardenListPage: React.FC = () => {
       <div className={`grid grid-cols-1 ${user ? 'lg:grid-cols-[minmax(0,1fr)_360px]' : ''} gap-6`}>
         <div className="max-w-3xl mx-auto w-full">
           <div className="flex items-center justify-between mt-6 mb-4">
-            <h1 className="text-2xl font-semibold">Your Gardens</h1>
+            <h1 className="text-2xl font-semibold">{t('garden.yourGardens')}</h1>
             {user && (
-              <Button className="rounded-2xl" onClick={() => setOpen(true)}>Create Garden</Button>
+              <Button className="rounded-2xl" onClick={() => setOpen(true)}>{t('garden.create')}</Button>
             )}
           </div>
-          {loading && <div className="p-6 opacity-60 text-sm">Loading...</div>}
+          {loading && <div className="p-6 opacity-60 text-sm">{t('common.loading')}</div>}
           {error && <div className="p-6 text-sm text-red-600">{error}</div>}
           {!loading && !error && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -447,7 +450,7 @@ export const GardenListPage: React.FC = () => {
                       const done = due === 0 || completed >= due
                       const inProgress = due > 0 && completed > 0 && completed < due
                       const color = done ? 'bg-emerald-500 text-white' : inProgress ? 'bg-amber-500 text-white' : 'bg-red-500 text-white'
-                      const label = done ? 'All done' : `${completed} / ${due}`
+                      const label = done ? t('garden.allDone') : `${completed} / ${due}`
                       return (
                         <div className={`pointer-events-none absolute top-2 right-2 rounded-xl px-2 py-0.5 text-xs font-medium shadow ${color}`}>
                           {label}
@@ -455,13 +458,13 @@ export const GardenListPage: React.FC = () => {
                       )
                     })()
                   )}
-                  <button onClick={() => navigate(`/garden/${g.id}`)} className="grid grid-cols-3 gap-0 w-full text-left">
+                  <Link to={`/garden/${g.id}`} className="grid grid-cols-3 gap-0 w-full text-left">
                     <div className="col-span-1 h-36 bg-cover bg-center rounded-l-2xl" style={{ backgroundImage: `url(${g.coverImageUrl || ''})` }} />
                     <div className="col-span-2 p-4">
                       <div className="font-medium">{g.name}</div>
-                      <div className="text-xs opacity-60">Created {new Date(g.createdAt).toLocaleDateString()}</div>
+                      <div className="text-xs opacity-60">{t('garden.created')} {new Date(g.createdAt).toLocaleDateString()}</div>
                     </div>
-                  </button>
+                  </Link>
                 </Card>
               ))}
             </div>
@@ -471,17 +474,17 @@ export const GardenListPage: React.FC = () => {
               {!user ? (
                 <Card className="rounded-2xl p-6 max-w-md mx-auto">
                   <div className="space-y-4">
-                    <div className="text-lg font-semibold">Login Required</div>
+                    <div className="text-lg font-semibold">{t('common.login')}</div>
                     <div className="text-sm opacity-70">
-                      Please login to create your first garden and start tracking your plants.
+                      {t('garden.noGardens')}. {t('garden.createFirst')}
                     </div>
                     <Button className="rounded-2xl w-full" onClick={() => navigate('/')}>
-                      Go to Login
+                      {t('auth.login')}
                     </Button>
                   </div>
                 </Card>
               ) : (
-                <div className="opacity-60 text-sm">No gardens yet. Create your first garden to get started.</div>
+                <div className="opacity-60 text-sm">{t('garden.noGardens')}. {t('garden.createFirst')}</div>
               )}
             </div>
           )}
@@ -489,20 +492,20 @@ export const GardenListPage: React.FC = () => {
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogContent className="rounded-2xl">
               <DialogHeader>
-                <DialogTitle>Create a Garden</DialogTitle>
+                <DialogTitle>{t('garden.createGarden')}</DialogTitle>
               </DialogHeader>
               <div className="space-y-3">
                 <div className="grid gap-2">
-                  <label className="text-sm font-medium">Name</label>
-                  <Input value={name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} placeholder="My balcony garden" />
+                  <label className="text-sm font-medium">{t('garden.name')}</label>
+                  <Input value={name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} placeholder={t('garden.namePlaceholder')} />
                 </div>
                 <div className="grid gap-2">
-                  <label className="text-sm font-medium">Cover image URL (optional)</label>
-                  <Input value={imageUrl} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setImageUrl(e.target.value)} placeholder="https://?" />
+                  <label className="text-sm font-medium">{t('garden.coverImageUrl')}</label>
+                  <Input value={imageUrl} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setImageUrl(e.target.value)} placeholder={t('garden.coverImageUrlPlaceholder')} />
                 </div>
                 <div className="flex gap-2 justify-end pt-2">
-                  <Button variant="secondary" className="rounded-2xl" onClick={() => setOpen(false)}>Cancel</Button>
-                  <Button className="rounded-2xl" onClick={onCreate} disabled={!name.trim() || submitting}>{submitting ? 'Creating?' : 'Create'}</Button>
+                  <Button variant="secondary" className="rounded-2xl" onClick={() => setOpen(false)}>{t('common.cancel')}</Button>
+                  <Button className="rounded-2xl" onClick={onCreate} disabled={!name.trim() || submitting}>{submitting ? t('garden.creating') : t('common.create')}</Button>
                 </div>
               </div>
             </DialogContent>
@@ -513,31 +516,31 @@ export const GardenListPage: React.FC = () => {
         {user && (
           <aside className="mt-6 lg:mt-6 lg:border-l lg:border-stone-200 lg:pl-6">
             <div className="space-y-3">
-              <div className="text-lg font-semibold">Tasks</div>
-            <Card className="rounded-2xl p-4">
-              <div className="text-sm opacity-60 mb-2">All gardens</div>
+              <div className="text-lg font-semibold">{t('garden.tasks')}</div>
+              <Card className="rounded-2xl p-4">
+              <div className="text-sm opacity-60 mb-2">{t('garden.allGardens')}</div>
               <div className="h-2 bg-stone-200 rounded-full overflow-hidden">
                 <div className="h-2 bg-emerald-500" style={{ width: `${totalTasks === 0 ? 100 : Math.min(100, Math.round((totalDone / totalTasks) * 100))}%` }} />
               </div>
-              <div className="text-xs opacity-70 mt-1">Today: {totalDone} / {totalTasks}</div>
+              <div className="text-xs opacity-70 mt-1">{t('garden.today')}: {totalDone} / {totalTasks}</div>
             </Card>
             {totalTasks > totalDone && (
               <div>
-                <Button className="rounded-2xl w-full" onClick={onMarkAllCompleted}>MARK ALL AS COMPLETED</Button>
+                <Button className="rounded-2xl w-full" onClick={onMarkAllCompleted}>{t('garden.markAllCompleted')}</Button>
               </div>
             )}
             {loadingTasks && (
-              <Card className="rounded-2xl p-4 text-sm opacity-70">Loading tasks...</Card>
+              <Card className="rounded-2xl p-4 text-sm opacity-70">{t('garden.loadingTasks')}</Card>
             )}
             {!loadingTasks && gardensWithTasks.length === 0 && (
-              <Card className="rounded-2xl p-4 text-sm opacity-70">No tasks due today. 🌿</Card>
+              <Card className="rounded-2xl p-4 text-sm opacity-70">{t('garden.noTasksToday')}</Card>
             )}
             {!loadingTasks && gardensWithTasks.map((gw) => (
               <Card key={gw.gardenId} className="rounded-2xl p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="font-medium">{gw.gardenName}</div>
-                    <div className="text-xs opacity-70">{gw.done} / {gw.req} done</div>
+                    <div className="text-xs opacity-70">{gw.done} / {gw.req} {t('garden.done')}</div>
                   </div>
                 </div>
                 <div className="mt-3 space-y-3">
@@ -550,10 +553,10 @@ export const GardenListPage: React.FC = () => {
                         <div className="flex items-center justify-between">
                           <div className="text-sm font-medium">{gp.nickname || gp.plant?.name}</div>
                           {done < req && (
-                            <Button size="sm" className="rounded-xl" onClick={() => onCompleteAllForPlant(gp.id)}>Complete all</Button>
+                            <Button size="sm" className="rounded-xl" onClick={() => onCompleteAllForPlant(gp.id)}>{t('garden.completeAll')}</Button>
                           )}
                         </div>
-                        <div className="text-[11px] opacity-60">{done} / {req} done</div>
+                        <div className="text-[11px] opacity-60">{done} / {req} {t('garden.done')}</div>
                         <div className="mt-2 space-y-2">
                           {occs.map((o: any) => {
                             const tt = (o as any).taskType || 'custom'
@@ -566,7 +569,7 @@ export const GardenListPage: React.FC = () => {
                               <div key={o.id} className={`flex items-center justify-between gap-3 text-sm rounded-xl border p-2 ${isDone ? 'bg-stone-50' : ''}`}>
                                 <div className="flex items-center gap-2">
                                   <span className={`h-6 w-6 flex items-center justify-center rounded-md border`}>{icon}</span>
-                                  <span className={`text-[10px] px-2 py-0.5 rounded-full ${badgeClass}`}>{String(tt).toUpperCase()}</span>
+                                  <span className={`text-[10px] px-2 py-0.5 rounded-full ${badgeClass}`}>{t(`garden.taskTypes.${tt}`)}</span>
                                   <span className="text-xs opacity-70">{gp.nickname || gp.plant?.name}</span>
                                 </div>
                                 {!isDone ? (
@@ -576,7 +579,7 @@ export const GardenListPage: React.FC = () => {
                                   </>
                                 ) : (
                                   <div className="text-xs opacity-70 truncate max-w-[50%]">
-                                    {completions.length === 0 ? 'Completed' : `Done by ${completions.map(c => c.displayName || 'Someone').join(', ')}`}
+                                    {completions.length === 0 ? t('garden.completed') : `${t('garden.doneBy')} ${completions.map(c => c.displayName || t('garden.someone')).join(', ')}`}
                                   </div>
                                 )}
                               </div>
@@ -589,8 +592,8 @@ export const GardenListPage: React.FC = () => {
                 </div>
               </Card>
             ))}
-            </div>
-          </aside>
+          </div>
+        </aside>
         )}
       </div>
     </div>
