@@ -31,7 +31,10 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
     const pathWithLang = currentLang === 'en' ? pathWithoutLang : `/${currentLang}${pathWithoutLang}`
     const shareUrl = `${baseUrl}${pathWithLang}`
     
-    console.log('Copying:', shareUrl)
+    console.log('handleShare called! Copying:', shareUrl)
+    
+    e.preventDefault()
+    e.stopPropagation()
     
     // Create textarea for execCommand method
     const textarea = document.createElement('textarea')
@@ -44,7 +47,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
     textarea.style.opacity = '0'
     textarea.style.pointerEvents = 'none'
     textarea.style.zIndex = '999999'
-    textarea.readOnly = false // Must be editable
+    textarea.readOnly = false
     
     document.body.appendChild(textarea)
     
@@ -53,7 +56,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
     textarea.select()
     textarea.setSelectionRange(0, shareUrl.length)
     
-    // Try execCommand first (synchronous, works in overlays)
+    // Try execCommand first
     let execSuccess = false
     try {
       execSuccess = document.execCommand('copy')
@@ -65,32 +68,24 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
     // Clean up
     document.body.removeChild(textarea)
     
-    // Also try Clipboard API in parallel (async, may work better)
+    // Try Clipboard API
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(shareUrl).then(() => {
         console.log('Clipboard API: Success')
-        if (!execSuccess) {
-          setShareSuccess(true)
-          setTimeout(() => setShareSuccess(false), 3000)
-        }
+        setShareSuccess(true)
+        setTimeout(() => setShareSuccess(false), 3000)
       }).catch((err) => {
         console.warn('Clipboard API failed:', err)
-        // If execCommand also failed, still show success
-        if (!execSuccess) {
+        // Show success if execCommand worked
+        if (execSuccess) {
           setShareSuccess(true)
           setTimeout(() => setShareSuccess(false), 3000)
         }
       })
-    }
-    
-    // Show success if execCommand worked
-    if (execSuccess) {
+    } else if (execSuccess) {
       setShareSuccess(true)
       setTimeout(() => setShareSuccess(false), 3000)
     }
-    
-    e.preventDefault()
-    e.stopPropagation()
   }
 
   const handleExpand = () => {
@@ -145,14 +140,8 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
           <div className="absolute bottom-3 right-3 flex gap-2">
             <button
               onClick={(e) => {
+                console.log('Share button clicked!')
                 handleShare(e)
-              }}
-              onMouseDown={(e) => {
-                // Only prevent default on mousedown to avoid interfering with click
-                // This prevents drag but preserves click event for clipboard API
-                if (e.button === 0) {
-                  e.preventDefault()
-                }
               }}
               type="button"
               aria-label={t('plantInfo.share')}
