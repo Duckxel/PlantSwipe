@@ -37,7 +37,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
     
     console.log('Attempting to copy:', shareUrl)
     
-    // Try modern Clipboard API first
+    // Try modern Clipboard API first - this should work even in overlays
     if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
       try {
         // Clipboard API requires user gesture, which we have here
@@ -53,12 +53,15 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
     }
     
     // Fallback method using execCommand
+    // This must work even when inside a Sheet/Dialog overlay
     try {
-      // Create a temporary textarea element
+      // Create a temporary textarea element that will be appended to body
+      // (outside any Sheet/Dialog overlay)
       const textArea = document.createElement('textarea')
       textArea.value = shareUrl
       
       // Style it to be invisible but still selectable
+      // Use high z-index to ensure it's accessible even if Sheet has high z-index
       textArea.style.position = 'fixed'
       textArea.style.top = '0'
       textArea.style.left = '0'
@@ -71,31 +74,49 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
       textArea.style.background = 'transparent'
       textArea.style.opacity = '0'
       textArea.style.pointerEvents = 'none'
+      textArea.style.zIndex = '99999' // Ensure it's above Sheet overlay
       
       // Make it readonly to prevent keyboard from appearing on mobile
       textArea.setAttribute('readonly', '')
       textArea.setAttribute('aria-hidden', 'true')
       
+      // Append to body (not inside Sheet/Dialog)
       document.body.appendChild(textArea)
       
-      // Focus and select - must be done after appending to DOM
-      textArea.focus()
-      textArea.select()
-      textArea.setSelectionRange(0, shareUrl.length)
-      
-      // Execute copy command
-      const successful = document.execCommand('copy')
-      
-      // Clean up immediately
-      document.body.removeChild(textArea)
-      
-      if (successful) {
-        console.log('Successfully copied using execCommand fallback')
-        setShareSuccess(true)
-        setTimeout(() => setShareSuccess(false), 3000)
-      } else {
-        throw new Error('execCommand returned false')
-      }
+      // Use setTimeout to ensure DOM is ready and focus works properly
+      await new Promise<void>((resolve, reject) => {
+        setTimeout(() => {
+          try {
+            // Focus and select - must be done after appending to DOM
+            textArea.focus()
+            textArea.select()
+            textArea.setSelectionRange(0, shareUrl.length)
+            
+            // Execute copy command
+            const successful = document.execCommand('copy')
+            
+            // Clean up immediately
+            if (textArea.parentNode) {
+              document.body.removeChild(textArea)
+            }
+            
+            if (successful) {
+              console.log('Successfully copied using execCommand fallback')
+              setShareSuccess(true)
+              setTimeout(() => setShareSuccess(false), 3000)
+              resolve()
+            } else {
+              reject(new Error('execCommand returned false'))
+            }
+          } catch (err) {
+            // Clean up on error
+            if (textArea.parentNode) {
+              document.body.removeChild(textArea)
+            }
+            reject(err)
+          }
+        }, 10) // Small delay to ensure DOM is ready
+      })
     } catch (err) {
       console.error('All copy methods failed:', err)
       // Show user-friendly error
