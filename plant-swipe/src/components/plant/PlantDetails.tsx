@@ -3,7 +3,7 @@ import { useLanguageNavigate, useLanguage } from "@/lib/i18nRouting";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { SunMedium, Droplets, Leaf, Heart, Box, ArrowUpRight, Maximize2, ChevronLeft } from "lucide-react";
+import { SunMedium, Droplets, Leaf, Heart, Share2, Maximize2, ChevronLeft } from "lucide-react";
 import type { Plant } from "@/types/plant";
 import { rarityTone, seasonBadge } from "@/constants/badges";
 import { deriveWaterLevelFromFrequency } from "@/lib/utils";
@@ -149,8 +149,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
               title={shareSuccess ? t('plantInfo.shareCopied') : t('plantInfo.share')}
             >
               <span className="relative inline-flex items-center justify-center">
-                <Box className="h-3 w-3 stroke-[1.5]" />
-                <ArrowUpRight className="h-2 w-2 absolute -top-0.5 -right-0.5 stroke-[2]" />
+                <Share2 className="h-4 w-4 stroke-[1.5]" />
               </span>
             </button>
             <button
