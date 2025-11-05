@@ -27,16 +27,19 @@ export const SearchPage: React.FC<SearchPageProps> = ({ plants, openInfo, likedI
           onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => { if (e.key === 'Enter') openInfo(p) }}
         >
           <div className="flex items-stretch">
-            <div className="relative flex-shrink-0 rounded-l-2xl overflow-hidden bg-stone-100" style={{ height: '100%', aspectRatio: '1/1' }}>
+            <div className="relative flex-shrink-0 rounded-l-2xl overflow-hidden bg-stone-100">
               {p.image ? (
-                <img
-                  src={p.image}
-                  alt={p.name}
-                  loading="lazy"
-                  draggable={false}
-                  decoding="async"
-                  className="absolute inset-0 h-full w-full object-cover object-center select-none"
-                />
+                <>
+                  <img
+                    src={p.image}
+                    alt={p.name}
+                    loading="lazy"
+                    draggable={false}
+                    decoding="async"
+                    className="absolute inset-0 h-full w-full object-cover object-center select-none"
+                  />
+                  <div className="relative w-full" style={{ paddingBottom: '100%' }} aria-hidden="true" />
+                </>
               ) : null}
             </div>
             <div className="flex-1 p-3">
