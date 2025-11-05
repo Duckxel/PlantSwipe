@@ -220,6 +220,14 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
                     ))}
                   </select>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setAdvanced((prev) => { const next = !prev; if (next) setEverAdvanced(true); return next })}
+                  aria-pressed={advanced}
+                  className={`px-3 py-1.5 rounded-2xl text-sm border shadow-sm transition flex items-center gap-2 ${advanced ? 'bg-black text-white' : 'bg-white hover:bg-stone-50'}`}
+                >
+                  {advanced ? t('createPlant.advanced') : t('createPlant.simplified')}
+                </button>
               </div>
             </div>
             <div className="grid gap-2">
@@ -229,26 +237,6 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
             </div>
             {advanced && (
               <>
-                {/* Translation Option */}
-                <div className="flex items-start gap-2 p-4 rounded-xl border bg-stone-50">
-                  <input 
-                    id="translate-to-all" 
-                    type="checkbox" 
-                    checked={translateToAll} 
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTranslateToAll(e.target.checked)}
-                    disabled={translating}
-                    className="mt-1"
-                  />
-                  <div className="flex-1">
-                    <Label htmlFor="translate-to-all" className="font-medium cursor-pointer">
-                      {t('createPlant.translateToAll')}
-                    </Label>
-                    <p className="text-xs opacity-70 mt-1">
-                      {t('createPlant.translateToAllDescription')}
-                    </p>
-                  </div>
-                </div>
-                
                 <div className="grid gap-2">
                   <Label htmlFor="plant-scientific">{t('createPlant.scientificName')}</Label>
                   <Input id="plant-scientific" autoComplete="off" value={scientificName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setScientificName(e.target.value)} />
@@ -340,17 +328,27 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
             {ok && <div className="text-sm text-green-600">{ok}</div>}
             {translating && <div className="text-sm text-blue-600">{t('createPlant.translatingToAll')}</div>}
             
-            {/* Advanced/Simplified toggle button moved to bottom */}
-            <div className="flex items-center justify-end pt-2">
-              <button
-                type="button"
-                onClick={() => setAdvanced((prev) => { const next = !prev; if (next) setEverAdvanced(true); return next })}
-                aria-pressed={advanced}
-                className={`px-3 py-1.5 rounded-2xl text-sm border shadow-sm transition flex items-center gap-2 ${advanced ? 'bg-black text-white' : 'bg-white hover:bg-stone-50'}`}
-              >
-                {advanced ? t('createPlant.advanced') : t('createPlant.simplified')}
-              </button>
-            </div>
+            {/* Translation Option - Only shown in Advanced mode, at the bottom before save */}
+            {advanced && (
+              <div className="flex items-start gap-2 p-4 rounded-xl border bg-stone-50">
+                <input 
+                  id="translate-to-all" 
+                  type="checkbox" 
+                  checked={translateToAll} 
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTranslateToAll(e.target.checked)}
+                  disabled={translating}
+                  className="mt-1"
+                />
+                <div className="flex-1">
+                  <Label htmlFor="translate-to-all" className="font-medium cursor-pointer">
+                    {t('createPlant.translateToAll')}
+                  </Label>
+                  <p className="text-xs opacity-70 mt-1">
+                    {t('createPlant.translateToAllDescription')}
+                  </p>
+                </div>
+              </div>
+            )}
             
             <div className="flex gap-2 pt-2">
               <Button type="button" variant="secondary" className="rounded-2xl" onClick={onCancel} disabled={saving || translating}>{t('common.cancel')}</Button>
