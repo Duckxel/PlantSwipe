@@ -470,7 +470,23 @@ export const GardenListPage: React.FC = () => {
             </div>
           )}
           {!loading && !error && gardens.length === 0 && (
-            <div className="p-10 text-center opacity-60 text-sm">{t('garden.noGardens')}. {t('garden.createFirst')}</div>
+            <div className="p-10 text-center">
+              {!user ? (
+                <Card className="rounded-2xl p-6 max-w-md mx-auto">
+                  <div className="space-y-4">
+                    <div className="text-lg font-semibold">{t('common.login')}</div>
+                    <div className="text-sm opacity-70">
+                      {t('garden.noGardens')}. {t('garden.createFirst')}
+                    </div>
+                    <Button className="rounded-2xl w-full" onClick={() => navigate('/')}>
+                      {t('auth.login')}
+                    </Button>
+                  </div>
+                </Card>
+              ) : (
+                <div className="opacity-60 text-sm">{t('garden.noGardens')}. {t('garden.createFirst')}</div>
+              )}
+            </div>
           )}
 
           <Dialog open={open} onOpenChange={setOpen}>
@@ -496,11 +512,12 @@ export const GardenListPage: React.FC = () => {
           </Dialog>
         </div>
 
-        {/* Right-side Tasks sidebar for all gardens */}
-        <aside className="mt-6 lg:mt-6 lg:border-l lg:border-stone-200 lg:pl-6">
-          <div className="space-y-3">
-            <div className="text-lg font-semibold">{t('garden.tasks')}</div>
-            <Card className="rounded-2xl p-4">
+        {/* Right-side Tasks sidebar for all gardens - hidden for non-logged-in users */}
+        {user && (
+          <aside className="mt-6 lg:mt-6 lg:border-l lg:border-stone-200 lg:pl-6">
+            <div className="space-y-3">
+              <div className="text-lg font-semibold">{t('garden.tasks')}</div>
+              <Card className="rounded-2xl p-4">
               <div className="text-sm opacity-60 mb-2">{t('garden.allGardens')}</div>
               <div className="h-2 bg-stone-200 rounded-full overflow-hidden">
                 <div className="h-2 bg-emerald-500" style={{ width: `${totalTasks === 0 ? 100 : Math.min(100, Math.round((totalDone / totalTasks) * 100))}%` }} />
@@ -577,6 +594,7 @@ export const GardenListPage: React.FC = () => {
             ))}
           </div>
         </aside>
+        )}
       </div>
     </div>
   )
