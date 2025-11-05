@@ -13,6 +13,27 @@ import { useTranslation } from 'react-i18next'
 import { useLanguageNavigate } from '@/lib/i18nRouting'
 import { Link } from '@/components/i18n/Link'
 
+async function mapWithConcurrency(items, limit, mapper) {
+  if (!Array.isArray(items) || items.length === 0) return []
+  const results = new Array(items.length)
+  let nextIndex = 0
+  const worker = async () => {
+    while (true) {
+      const current = nextIndex
+      if (current >= items.length) break
+      nextIndex += 1
+      try {
+        results[current] = await mapper(items[current], current)
+      } catch (err) {
+        results[current] = null
+      }
+    }
+  }
+  const poolSize = Math.max(1, Math.min(Number(limit) || 1, items.length))
+  await Promise.all(Array.from({ length: poolSize }, worker))
+  return results
+}
+
 export const GardenListPage: React.FC = () => {
   const { user } = useAuth()
   const navigate = useLanguageNavigate()
@@ -37,6 +58,8 @@ export const GardenListPage: React.FC = () => {
   const gardenIdsRef = React.useRef<Set<string>>(new Set())
   const gardensRef = React.useRef<typeof gardens>([])
   const serverTodayRef = React.useRef<string | null>(null)
+  const progressRunIdRef = React.useRef(0)
+  const tasksLoadIdRef = React.useRef(0)
 
   const emitGardenRealtime = React.useCallback((gardenId: string, kind: GardenRealtimeKind = 'tasks', metadata?: Record<string, unknown>) => {
     try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
@@ -47,36 +70,57 @@ export const GardenListPage: React.FC = () => {
     if (!user?.id) {
       setGardens([])
       gardensRef.current = []
+      setProgressByGarden({})
+      setServerToday(null)
+      serverTodayRef.current = null
       setLoading(false)
       return
     }
     setLoading(true)
     setError(null)
     try {
-      const data = await getUserGardens(user.id)
-      setGardens(data)
-      gardensRef.current = data
-      // Fetch server 'today' and compute per-garden progress
-      const nowIso = await fetchServerNowISO()
-      const today = nowIso.slice(0,10)
+      const [gardensDataRaw, nowIsoRaw] = await Promise.all([
+        getUserGardens(user.id),
+        fetchServerNowISO().catch(() => new Date().toISOString()),
+      ])
+      const gardensData = Array.isArray(gardensDataRaw) ? gardensDataRaw : []
+      const nowIso = typeof nowIsoRaw === 'string' ? nowIsoRaw : new Date().toISOString()
+      const today = nowIso.slice(0, 10)
       setServerToday(today)
       serverTodayRef.current = today
-      // compute progress sequentially to avoid hammering backend on frequent realtime updates
-      const entries: Array<[string, { due: number; completed: number }]> = []
-      for (const g of data) {
-        try {
-          const prog = await getGardenTodayProgress(g.id, today)
-          entries.push([g.id, prog])
-        } catch {
-          entries.push([g.id, { due: 0, completed: 0 }])
-        }
+      setGardens(gardensData)
+      gardensRef.current = gardensData
+      setLoading(false)
+
+      const runId = ++progressRunIdRef.current
+      if (gardensData.length === 0) {
+        if (progressRunIdRef.current === runId) setProgressByGarden({})
+        return
       }
-      const map: Record<string, { due: number; completed: number }> = {}
-      for (const [gid, prog] of entries) map[gid] = prog
-      setProgressByGarden(map)
+
+      mapWithConcurrency(gardensData, 3, async (garden) => {
+        try {
+          const progress = await getGardenTodayProgress(garden.id, today)
+          return { gardenId: garden.id, progress }
+        } catch {
+          return { gardenId: garden.id, progress: { due: 0, completed: 0 } }
+        }
+      }).then((entries) => {
+        if (progressRunIdRef.current !== runId) return
+        const map: Record<string, { due: number; completed: number }> = {}
+        for (const entry of entries) {
+          if (!entry || !entry.gardenId) continue
+          map[entry.gardenId] = entry.progress
+        }
+        setProgressByGarden(map)
+      }).catch(() => {})
     } catch (e: any) {
       setError(e?.message || t('garden.failedToLoad'))
-    } finally {
+      setGardens([])
+      gardensRef.current = []
+      setProgressByGarden({})
+      setServerToday(null)
+      serverTodayRef.current = null
       setLoading(false)
     }
   }, [user?.id, t])
@@ -88,38 +132,70 @@ export const GardenListPage: React.FC = () => {
     gardensOverride?: typeof gardens,
     todayOverride?: string | null,
   ) => {
+    const runId = ++tasksLoadIdRef.current
     const today = todayOverride ?? serverTodayRef.current ?? serverToday
     const gardensList = gardensOverride ?? gardensRef.current ?? gardens
-    if (!today) return
-    if (gardensList.length === 0) { setAllPlants([]); setTodayTaskOccurrences([]); return }
+    if (!today) {
+      if (tasksLoadIdRef.current === runId) setLoadingTasks(false)
+      return
+    }
+    if (gardensList.length === 0) {
+      if (tasksLoadIdRef.current === runId) {
+        setAllPlants([])
+        setTodayTaskOccurrences([])
+        setCompletionsByOcc({})
+        setLoadingTasks(false)
+      }
+      return
+    }
     setLoadingTasks(true)
     try {
       const startIso = `${today}T00:00:00.000Z`
       const endIso = `${today}T23:59:59.999Z`
-      // 1) Fetch tasks per garden sequentially (reduce contention during rapid realtime)
-      const tasksPerGarden: any[] = []
-      for (const g of gardensList) {
-        tasksPerGarden.push(await listGardenTasks(g.id))
-      }
+
+      const taskEntries = await mapWithConcurrency(gardensList, 3, async (garden) => {
+        try {
+          const tasks = await listGardenTasks(garden.id)
+          return { gardenId: garden.id, tasks }
+        } catch {
+          return { gardenId: garden.id, tasks: [] }
+        }
+      })
+
       const taskTypeById: Record<string, 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'> = {}
       const taskEmojiById: Record<string, string | null> = {}
       const taskIdsByGarden: Record<string, string[]> = {}
-      for (let i = 0; i < gardensList.length; i++) {
-        const g = gardensList[i]
-        const tasks = tasksPerGarden[i] || []
-        taskIdsByGarden[g.id] = tasks.map(t => t.id)
-        for (const t of tasks) {
+      for (const entry of taskEntries) {
+        if (!entry) continue
+        taskIdsByGarden[entry.gardenId] = (entry.tasks || []).map((t: any) => t.id)
+        for (const t of entry.tasks || []) {
           taskTypeById[t.id] = (t as any).type
           taskEmojiById[t.id] = (t as any).emoji || null
         }
       }
-      // 2) Resync occurrences per garden in parallel
-      await Promise.all(gardensList.map(g => resyncTaskOccurrencesForGarden(g.id, startIso, endIso)))
-      // 3) Load occurrences per garden
-      const occsPerGarden = await Promise.all(gardensList.map(g => listOccurrencesForTasks(taskIdsByGarden[g.id] || [], startIso, endIso)))
+
+      await mapWithConcurrency(gardensList, 2, async (garden) => {
+        try {
+          await resyncTaskOccurrencesForGarden(garden.id, startIso, endIso)
+        } catch {}
+        return null
+      })
+
+      const occurrenceEntries = await mapWithConcurrency(gardensList, 3, async (garden) => {
+        const ids = taskIdsByGarden[garden.id] || []
+        if (ids.length === 0) return { gardenId: garden.id, occurrences: [] }
+        try {
+          const occurrences = await listOccurrencesForTasks(ids, startIso, endIso)
+          return { gardenId: garden.id, occurrences }
+        } catch {
+          return { gardenId: garden.id, occurrences: [] }
+        }
+      })
+
       const occsAugmented: Array<any> = []
-      for (const arr of occsPerGarden) {
-        for (const o of (arr || [])) {
+      for (const entry of occurrenceEntries) {
+        if (!entry) continue
+        for (const o of entry.occurrences || []) {
           occsAugmented.push({
             ...o,
             taskType: taskTypeById[o.taskId] || 'custom',
@@ -127,23 +203,51 @@ export const GardenListPage: React.FC = () => {
           })
         }
       }
+
+      if (tasksLoadIdRef.current !== runId) return
       setTodayTaskOccurrences(occsAugmented)
-      // Fetch completions for all occurrences
-      const ids = occsAugmented.map(o => o.id)
-      const compMap = await listCompletionsForOccurrences(ids)
+
+      let compMap: Record<string, Array<{ userId: string; displayName: string | null }>> = {}
+      if (occsAugmented.length > 0) {
+        try {
+          compMap = await listCompletionsForOccurrences(occsAugmented.map(o => o.id))
+        } catch {
+          compMap = {}
+        }
+      }
+      if (tasksLoadIdRef.current !== runId) return
       setCompletionsByOcc(compMap)
-      // 4) Load plants for all gardens for display and mapping
-      const plantsPerGarden = await Promise.all(gardensList.map(g => getGardenPlants(g.id)))
-      const idToGardenName = gardensList.reduce<Record<string, string>>((acc, g) => { acc[g.id] = g.name; return acc }, {})
-      const all = plantsPerGarden.flat().map((gp: any) => ({
-        ...gp,
-        gardenName: idToGardenName[gp.gardenId] || '',
-      }))
-      setAllPlants(all)
+
+      const idToGardenName = gardensList.reduce<Record<string, string>>((acc, g) => {
+        acc[g.id] = g.name
+        return acc
+      }, {})
+
+      const plantsEntries = await mapWithConcurrency(gardensList, 3, async (garden) => {
+        try {
+          const plants = await getGardenPlants(garden.id)
+          return { gardenId: garden.id, plants }
+        } catch {
+          return { gardenId: garden.id, plants: [] }
+        }
+      })
+
+      if (tasksLoadIdRef.current !== runId) return
+      const allPlantsCombined: any[] = []
+      for (const entry of plantsEntries) {
+        if (!entry) continue
+        for (const gp of entry.plants || []) {
+          allPlantsCombined.push({
+            ...gp,
+            gardenName: idToGardenName[gp.gardenId] || '',
+          })
+        }
+      }
+      setAllPlants(allPlantsCombined)
     } catch {
       // swallow; page has global error area
     } finally {
-      setLoadingTasks(false)
+      if (tasksLoadIdRef.current === runId) setLoadingTasks(false)
     }
   }, [gardens, serverToday])
 
