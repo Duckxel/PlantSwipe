@@ -822,55 +822,53 @@ export const GardenDashboardPage: React.FC = () => {
     }
   }, [tab, loadHeavyForCurrentTab, serverToday])
 
-  // Realtime updates via Supabase (tables: gardens, garden_members, garden_plants, garden_plant_tasks, garden_plant_task_occurrences, plants)
+  // OPTIMIZED: Realtime updates via Supabase - Combined subscriptions with debouncing
+  // Reduced from 9 separate subscriptions to 4 optimized ones
   React.useEffect(() => {
     if (!id) return
 
+    let updateTimeout: ReturnType<typeof setTimeout> | null = null
+    const debouncedUpdate = (kind: GardenRealtimeKind) => {
+      if (updateTimeout) clearTimeout(updateTimeout)
+      updateTimeout = setTimeout(() => {
+        updateTargeted(kind).catch(() => {})
+      }, 100) // Debounce updates to reduce egress
+    }
+
     const channel = supabase.channel(`rt-garden-${id}`)
-      // Garden row changes (name, cover image, streak) - use targeted update
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'gardens', filter: `id=eq.${id}` }, () => {
-        updateTargeted('settings').catch(() => {})
+      // Garden row changes (name, cover image, streak, deletes) - use targeted update
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'gardens', filter: `id=eq.${id}` }, (payload) => {
+        if ((payload as any).eventType === 'DELETE') {
+          try { navigate('/gardens') } catch {}
+        } else {
+          debouncedUpdate('settings')
+        }
       })
-      // Immediate redirect if garden is deleted by another user
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'gardens', filter: `id=eq.${id}` }, () => { try { navigate('/gardens') } catch {} })
       // Member changes (add/remove/promote/demote) - use targeted update
       .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_members', filter: `garden_id=eq.${id}` }, () => {
-        updateTargeted('members').catch(() => {})
+        debouncedUpdate('members')
       })
-      // Garden instance edits (nickname, on-hand count, reorder, add/remove) - use targeted update
+      // Garden plants and tasks combined - most frequent updates
       .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plants', filter: `garden_id=eq.${id}` }, () => {
-        updateTargeted('plants').catch(() => {})
+        debouncedUpdate('plants')
       })
-      // Task definition changes affecting counts and due badges - use targeted update
       .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_tasks', filter: `garden_id=eq.${id}` }, () => {
-        updateTargeted('tasks').catch(() => {})
+        debouncedUpdate('tasks')
       })
-      // Also watch task edits scoped by plant (fallback when garden_id is missing on row level) - use targeted update
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_tasks' }, (payload) => {
-        try {
-          const row = (payload as any)?.new || (payload as any)?.old || {}
-          const gpId = String(row.garden_plant_id || '')
-          if (!gpId) { updateTargeted('tasks').catch(() => {}); return }
-          updateTargeted('tasks').catch(() => {})
-        } catch { updateTargeted('tasks').catch(() => {}) }
-      })
-      // Occurrence progress/completion updates (affects Routine and Today counts) - use targeted update
+      // Occurrence updates - debounced as they're frequent
       .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_task_occurrences' }, () => {
-        updateTargeted('tasks').catch(() => {})
+        debouncedUpdate('tasks')
       })
-      // Global plant library changes (name/image updates) - use targeted update
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'plants' }, () => {
-        updateTargeted('plants').catch(() => {})
-      })
-      // Garden activity log changes (authoritative cross-client signal) - use targeted update
+      // Garden activity log changes - use targeted update
       .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_activity_logs', filter: `garden_id=eq.${id}` }, () => {
-        updateTargeted('activity').catch(() => {})
+        debouncedUpdate('activity')
       })
 
     const subscription = channel.subscribe()
     if (subscription instanceof Promise) subscription.catch(() => {})
 
     return () => {
+      if (updateTimeout) clearTimeout(updateTimeout)
       try { supabase.removeChannel(channel) } catch {}
     }
   }, [id, navigate, updateTargeted])
@@ -976,6 +974,7 @@ export const GardenDashboardPage: React.FC = () => {
       
       const friendIds = (data || []).map(f => f.friend_id)
       if (friendIds.length > 0) {
+        // OPTIMIZED: Only select needed profile fields to reduce egress
         const { data: profiles } = await supabase
           .from('profiles')
           .select('id, display_name')

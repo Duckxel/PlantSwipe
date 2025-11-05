@@ -4,6 +4,7 @@ import { rarityTone, seasonBadge } from "@/constants/badges"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { useTranslation } from "react-i18next"
+import { LazyImage } from "@/components/ui/lazy-image"
 
 interface GalleryPageProps { plants: Plant[]; onOpen: (p: Plant) => void }
 
@@ -16,7 +17,11 @@ export const GalleryPage: React.FC<GalleryPageProps> = ({ plants, onOpen }) => {
       {plants.map((p) => (
         <button key={p.id} onClick={() => onOpen(p)} className="text-left">
           <Card className="rounded-2xl overflow-hidden hover:shadow-lg transition-shadow">
-            <div className="h-36 bg-cover bg-center rounded-t-2xl" style={{ backgroundImage: `url(${p.image})` }} />
+            <LazyImage 
+              src={p.image} 
+              alt={p.name}
+              className="h-36 rounded-t-2xl"
+            />
             <CardContent className="p-3">
               <div className="flex items-center gap-2 mb-1">
                 <Badge className={`${rarityTone[p.rarity]} rounded-xl`}>{p.rarity}</Badge>

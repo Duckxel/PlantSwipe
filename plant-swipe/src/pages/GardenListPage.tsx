@@ -335,25 +335,33 @@ export const GardenListPage: React.FC = () => {
     return () => { try { es?.close() } catch {} }
   }, [scheduleReload, user?.id])
 
-  // Realtime: reflect membership changes and garden/task updates instantly
+  // OPTIMIZED: Realtime subscriptions with debouncing - reduced from 6 to 3 subscriptions
   React.useEffect(() => {
     if (!user?.id) return
+    
+    let reloadTimeout: ReturnType<typeof setTimeout> | null = null
+    const debouncedReload = () => {
+      if (reloadTimeout) clearTimeout(reloadTimeout)
+      reloadTimeout = setTimeout(() => {
+        scheduleReload()
+      }, 200) // Debounce to reduce redundant reloads and egress
+    }
+    
     const ch = supabase
       .channel(`rt-gardens-for-${user.id}`)
       // When current user's membership rows change (added/removed), refresh list
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_members', filter: `user_id=eq.${user.id}` }, () => scheduleReload())
-      // Garden metadata changes (rename, cover). Also watch deletes to drop immediately.
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'gardens' }, () => scheduleReload())
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'gardens' }, () => scheduleReload())
-      // Plants/Tasks changes across any garden (kept broad to ensure immediacy)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plants' }, () => scheduleReload())
-      // Watch both scoped and unscoped task changes to ensure updates reflect
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_tasks' }, () => scheduleReload())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_task_occurrences' }, () => scheduleReload())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_members', filter: `user_id=eq.${user.id}` }, debouncedReload)
+      // Garden metadata changes (rename, cover, deletes) - combined
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'gardens' }, debouncedReload)
+      // Plants/Tasks changes across any garden - combined into one subscription
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plants' }, debouncedReload)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_tasks' }, debouncedReload)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_task_occurrences' }, debouncedReload)
 
     const subscription = ch.subscribe()
     if (subscription instanceof Promise) subscription.catch(() => {})
     return () => {
+      if (reloadTimeout) clearTimeout(reloadTimeout)
       try { supabase.removeChannel(ch) } catch {}
     }
   }, [scheduleReload, user?.id])

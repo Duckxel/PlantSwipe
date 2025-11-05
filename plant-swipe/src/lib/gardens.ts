@@ -1147,6 +1147,7 @@ export async function listCompletionsForOccurrences(occurrenceIds: string[]): Pr
   }
   const pairs = Array.from(uniquePairs.values())
   const userIds = Array.from(new Set(pairs.map(p => p.userId)))
+  // OPTIMIZED: Only select needed profile fields to reduce egress
   // Resolve display names from profiles
   const { data: profs } = await supabase
     .from('profiles')

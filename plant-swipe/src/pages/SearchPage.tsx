@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { ListFilter } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import { LazyImg } from "@/components/ui/lazy-image"
 
 interface SearchPageProps { plants: Plant[]; openInfo: (p: Plant) => void; likedIds?: string[] }
 
@@ -29,10 +30,9 @@ export const SearchPage: React.FC<SearchPageProps> = ({ plants, openInfo, likedI
           <div className="grid grid-cols-[160px_1fr] items-stretch h-full">
             <div className="relative w-40 h-40 flex-shrink-0 rounded-l-2xl overflow-hidden bg-stone-100">
               {p.image ? (
-                <img
+                <LazyImg
                   src={p.image}
                   alt={p.name}
-                  loading="lazy"
                   draggable={false}
                   decoding="async"
                   className="absolute inset-0 h-full w-full object-cover object-center select-none"
