@@ -138,9 +138,11 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
       
       const translationsToSave = [translation]
       
-      // If translate to all languages is enabled, translate and save
-      // Use inputLanguage for DeepL source language (works in both Simplified and Advanced mode)
-      if (translateToAll && advanced) {
+      // In simplified mode, automatically translate to all languages
+      // In advanced mode, only translate if checkbox is enabled
+      const shouldTranslate = !advanced || translateToAll
+      
+      if (shouldTranslate) {
         setTranslating(true)
         try {
           const allTranslations = await translatePlantToAllLanguages({
@@ -218,14 +220,6 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
                     ))}
                   </select>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setAdvanced((prev) => { const next = !prev; if (next) setEverAdvanced(true); return next })}
-                  aria-pressed={advanced}
-                  className={`px-3 py-1.5 rounded-2xl text-sm border shadow-sm transition flex items-center gap-2 ${advanced ? 'bg-black text-white' : 'bg-white hover:bg-stone-50'}`}
-                >
-                  {advanced ? t('createPlant.advanced') : t('createPlant.simplified')}
-                </button>
               </div>
             </div>
             <div className="grid gap-2">
@@ -345,6 +339,19 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
             {error && <div className="text-sm text-red-600">{error}</div>}
             {ok && <div className="text-sm text-green-600">{ok}</div>}
             {translating && <div className="text-sm text-blue-600">{t('createPlant.translatingToAll')}</div>}
+            
+            {/* Advanced/Simplified toggle button moved to bottom */}
+            <div className="flex items-center justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setAdvanced((prev) => { const next = !prev; if (next) setEverAdvanced(true); return next })}
+                aria-pressed={advanced}
+                className={`px-3 py-1.5 rounded-2xl text-sm border shadow-sm transition flex items-center gap-2 ${advanced ? 'bg-black text-white' : 'bg-white hover:bg-stone-50'}`}
+              >
+                {advanced ? t('createPlant.advanced') : t('createPlant.simplified')}
+              </button>
+            </div>
+            
             <div className="flex gap-2 pt-2">
               <Button type="button" variant="secondary" className="rounded-2xl" onClick={onCancel} disabled={saving || translating}>{t('common.cancel')}</Button>
               <Button type="button" className="rounded-2xl" onClick={save} disabled={saving || translating}>
