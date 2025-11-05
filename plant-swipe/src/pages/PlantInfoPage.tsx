@@ -48,17 +48,15 @@ export const PlantInfoPage: React.FC = () => {
         if (!data) {
           setPlant(null)
         } else {
-          // Load translation if language is not default
-          let translation = null
-          if (currentLang !== 'en') {
-            const { data: transData } = await supabase
-              .from('plant_translations')
-              .select('*')
-              .eq('plant_id', id)
-              .eq('language', currentLang)
-              .maybeSingle()
-            translation = transData
-          }
+          // Always load translation for current language (if available)
+          // This ensures plants created in one language display correctly in another
+          const { data: transData } = await supabase
+            .from('plant_translations')
+            .select('*')
+            .eq('plant_id', id)
+            .eq('language', currentLang)
+            .maybeSingle()
+          const translation = transData
           
           // Merge translation with base plant data
           const mergedPlant = mergePlantWithTranslation(data, translation)

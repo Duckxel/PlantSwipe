@@ -99,9 +99,10 @@ export async function getGardenPlants(gardenId: string, language?: SupportedLang
     .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount')
     .in('id', plantIds)
   
-  // Load translations if language is provided and not default
+  // Always load translations for the specified language (including English)
+  // This ensures plants created in one language display correctly in another
   let translationMap = new Map()
-  if (language && language !== 'en') {
+  if (language) {
     const { data: translations } = await supabase
       .from('plant_translations')
       .select('*')

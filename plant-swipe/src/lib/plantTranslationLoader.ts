@@ -39,6 +39,8 @@ export function mergePlantWithTranslation(
 
 /**
  * Load plants with translations for a specific language
+ * Always loads translations for the specified language, regardless of whether it's the default language.
+ * This ensures plants created in one language display correctly when viewed in another language.
  */
 export async function loadPlantsWithTranslations(language: SupportedLanguage): Promise<Plant[]> {
   try {
@@ -51,7 +53,8 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
     if (error) throw error
     if (!plants || plants.length === 0) return []
     
-    // Load all translations for this language
+    // Always load translations for the specified language (including English)
+    // This ensures plants created in one language display correctly in another
     const plantIds = plants.map(p => p.id)
     const { data: translations } = await supabase
       .from('plant_translations')
@@ -68,6 +71,7 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
     }
     
     // Merge translations with base plants
+    // If a translation exists, it will override the base plant data
     return plants.map(plant => {
       const translation = translationMap.get(plant.id)
       return mergePlantWithTranslation(plant, translation)
