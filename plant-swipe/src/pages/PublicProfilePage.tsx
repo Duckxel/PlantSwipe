@@ -594,7 +594,7 @@ export default function PublicProfilePage() {
                         document.body
                       )}
                     </>
-                  ) : user?.id && !pp.disable_friend_requests && (
+                  ) : user?.id && !pp.disable_friend_requests ? (
                     <>
                       {friendStatus === 'none' && (
                         <Button 
@@ -634,7 +634,7 @@ export default function PublicProfilePage() {
                         </div>
                       )}
                     </>
-                  )}
+                  ) : null}
                 </div>
               </div>
               {canViewProfile && pp.bio && (
