@@ -436,7 +436,7 @@ export const GardenListPage: React.FC = () => {
           {!loading && !error && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {gardens.map((g, idx) => (
-                <Card key={g.id} className={`rounded-2xl overflow-hidden relative ${dragIndex === idx ? 'ring-2 ring-black' : ''}`} draggable onDragStart={() => setDragIndex(idx)} onDragOver={(e) => e.preventDefault()} onDrop={() => {
+                <Card key={g.id} className={`rounded-2xl overflow-hidden relative h-40 ${dragIndex === idx ? 'ring-2 ring-black' : ''}`} draggable onDragStart={() => setDragIndex(idx)} onDragOver={(e) => e.preventDefault()} onDrop={() => {
                   if (dragIndex === null || dragIndex === idx) return;
                   const arr = gardens.slice()
                   const [moved] = arr.splice(dragIndex, 1)
@@ -452,14 +452,14 @@ export const GardenListPage: React.FC = () => {
                       const color = done ? 'bg-emerald-500 text-white' : inProgress ? 'bg-amber-500 text-white' : 'bg-red-500 text-white'
                       const label = done ? t('garden.allDone') : `${completed} / ${due}`
                       return (
-                        <div className={`pointer-events-none absolute top-2 right-2 rounded-xl px-2 py-0.5 text-xs font-medium shadow ${color}`}>
+                        <div className={`pointer-events-none absolute top-2 right-2 rounded-xl px-2 py-0.5 text-xs font-medium shadow z-10 ${color}`}>
                           {label}
                         </div>
                       )
                     })()
                   )}
-                  <Link to={`/garden/${g.id}`} className="grid grid-cols-3 gap-0 w-full text-left">
-                    <div className="col-span-1 rounded-l-2xl overflow-hidden bg-stone-100 dark:bg-[#252526] aspect-[4/3]">
+                  <Link to={`/garden/${g.id}`} className="grid grid-cols-3 gap-0 w-full h-full text-left">
+                    <div className="col-span-1 rounded-l-2xl overflow-hidden bg-stone-100 dark:bg-[#252526]">
                       {g.coverImageUrl ? (
                         <img
                           src={g.coverImageUrl}
@@ -469,9 +469,9 @@ export const GardenListPage: React.FC = () => {
                         />
                       ) : null}
                     </div>
-                    <div className="col-span-2 p-4">
-                      <div className="font-medium">{g.name}</div>
-                      <div className="text-xs opacity-60">{t('garden.created')} {new Date(g.createdAt).toLocaleDateString()}</div>
+                    <div className="col-span-2 p-4 flex flex-col justify-center">
+                      <div className="font-medium truncate">{g.name}</div>
+                      <div className="text-xs opacity-60 mt-1">{t('garden.created')} {new Date(g.createdAt).toLocaleDateString()}</div>
                     </div>
                   </Link>
                 </Card>
