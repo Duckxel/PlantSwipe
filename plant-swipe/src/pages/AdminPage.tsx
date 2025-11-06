@@ -1709,7 +1709,7 @@ export const AdminPage: React.FC = () => {
               <div className="mt-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                 <div className="flex-1 min-w-0">
                   <select
-                    className="w-full rounded-xl border px-3 py-2 text-sm bg-white"
+                    className="w-full rounded-xl border border-stone-300 dark:border-[#3e3e42] px-3 py-2 text-sm bg-white dark:bg-[#2d2d30] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
                     value={selectedBranch}
                     onChange={(e) => setSelectedBranch(e.target.value)}
                     disabled={branchesLoading || branchesRefreshing}
@@ -1945,13 +1945,13 @@ export const AdminPage: React.FC = () => {
                       <div className="flex items-center gap-1">
                         <button
                           type="button"
-                          className={`text-xs px-2 py-1 rounded-lg border ? ${visitorsWindowDays === 7 ? 'bg-black text-white' : 'bg-white'}`}
+                          className={`text-xs px-2 py-1 rounded-lg border ${visitorsWindowDays === 7 ? 'bg-black dark:bg-white text-white dark:text-black' : 'bg-white dark:bg-[#2d2d30]'}`}
                           onClick={() => setVisitorsWindowDays(7)}
                           aria-pressed={visitorsWindowDays === 7}
                         >7d</button>
                         <button
                           type="button"
-                          className={`text-xs px-2 py-1 rounded-lg border ? ${visitorsWindowDays === 30 ? 'bg-black text-white' : 'bg-white'}`}
+                          className={`text-xs px-2 py-1 rounded-lg border ${visitorsWindowDays === 30 ? 'bg-black dark:bg-white text-white dark:text-black' : 'bg-white dark:bg-[#2d2d30]'}`}
                           onClick={() => setVisitorsWindowDays(30)}
                           aria-pressed={visitorsWindowDays === 30}
                         >30d</button>
@@ -3132,7 +3132,7 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
               maxLength={200}
             />
             <select
-              className="rounded-xl border px-3 py-2 text-sm bg-white"
+              className="rounded-xl border border-stone-300 dark:border-[#3e3e42] px-3 py-2 text-sm bg-white dark:bg-[#2d2d30] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
               value={severity || 'warning'}
               onChange={(e) => setSeverity((e.target.value as any) || 'warning')}
               aria-label="Type"
@@ -3142,7 +3142,7 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
               <option value="danger">Danger</option>
             </select>
             <select
-              className="rounded-xl border px-3 py-2 text-sm bg-white"
+              className="rounded-xl border border-stone-300 dark:border-[#3e3e42] px-3 py-2 text-sm bg-white dark:bg-[#2d2d30] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
               value={duration}
               onChange={(e) => setDuration(e.target.value)}
               aria-label="Display time"
@@ -3208,7 +3208,7 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
               <option value="danger">Danger</option>
             </select>
             <select
-              className="rounded-xl border px-3 py-2 text-sm bg-white"
+              className="rounded-xl border border-stone-300 dark:border-[#3e3e42] px-3 py-2 text-sm bg-white dark:bg-[#2d2d30] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
               value={duration}
               onChange={(e) => setDuration(e.target.value)}
               aria-label="Display time"
