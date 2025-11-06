@@ -176,16 +176,16 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
             <div className="text-sm font-medium">{t('gardenDashboard.taskDialog.existingTasks')}</div>
             <Button className="rounded-2xl" onClick={() => setCreateOpen(true)}>{t('gardenDashboard.taskDialog.addTask')}</Button>
           </div>
-          <div className="rounded-xl border">
+          <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526]">
             {loading && <div className="p-3 text-sm opacity-60">{t('gardenDashboard.taskDialog.loading')}</div>}
-            {error && <div className="p-3 text-sm text-red-600">{error}</div>}
+            {error && <div className="p-3 text-sm text-red-600 dark:text-red-400">{error}</div>}
             {!loading && tasks.length === 0 && <div className="p-3 text-sm opacity-60">{t('gardenDashboard.taskDialog.noTasksYet')}</div>}
-            <div className="divide-y">
+            <div className="divide-y divide-stone-200 dark:divide-[#3e3e42]">
               {tasks.map(task => (
                 <div key={task.id} className="flex items-center justify-between px-3 py-2">
                   <div className="text-sm">
                     <div className="font-medium capitalize flex items-center gap-2">
-                      <span className="h-6 w-6 rounded-md border bg-stone-100 flex items-center justify-center text-base">
+                      <span className="h-6 w-6 rounded-md border border-stone-300 dark:border-[#3e3e42] bg-stone-100 dark:bg-[#2d2d30] flex items-center justify-center text-base">
                         {task.type === 'water' && '💧'}
                         {task.type === 'fertilize' && '🍽️'}
                         {task.type === 'harvest' && '🌾'}
@@ -366,12 +366,13 @@ function TaskRowMenu({ onEdit, onDelete }: { onEdit?: () => void; onDelete: () =
       {open && (
         <div
           ref={menuRef as any}
-          className="absolute right-0 top-full mt-2 w-40 bg-white border rounded-xl shadow-lg z-[80]"
+          className="fixed w-40 bg-white dark:bg-[#252526] border border-stone-300 dark:border-[#3e3e42] rounded-xl shadow-lg z-[80]"
+          style={{ top: position.top, left: position.left }}
         >
           {onEdit && (
-            <button onClick={(e) => { e.stopPropagation(); setOpen(false); onEdit() }} className="w-full text-left px-3 py-2 rounded-t-xl hover:bg-stone-50">{t('gardenDashboard.taskDialog.edit')}</button>
+            <button onClick={(e) => { e.stopPropagation(); setOpen(false); onEdit() }} className="w-full text-left px-3 py-2 rounded-t-xl hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white">{t('gardenDashboard.taskDialog.edit')}</button>
           )}
-          <button onClick={(e) => { e.stopPropagation(); setOpen(false); onDelete() }} className={`w-full text-left px-3 py-2 ${onEdit ? '' : 'rounded-t-xl'} rounded-b-xl hover:bg-stone-50 text-red-600`}>{t('gardenDashboard.taskDialog.delete')}</button>
+          <button onClick={(e) => { e.stopPropagation(); setOpen(false); onDelete() }} className={`w-full text-left px-3 py-2 ${onEdit ? '' : 'rounded-t-xl'} rounded-b-xl hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-red-600 dark:text-red-400`}>{t('gardenDashboard.taskDialog.delete')}</button>
         </div>
       )}
     </div>
