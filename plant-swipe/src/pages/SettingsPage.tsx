@@ -19,13 +19,6 @@ export default function SettingsPage() {
   const currentLang = useLanguage()
   const { t } = useTranslation('common')
   const { theme, setTheme } = useTheme()
-  
-  // Get theme translations with fallbacks
-  const themeLabels = React.useMemo(() => ({
-    system: t('settings.theme.system', 'System'),
-    light: t('settings.theme.light', 'Light'),
-    dark: t('settings.theme.dark', 'Dark'),
-  }), [t])
 
   const [email, setEmail] = React.useState("")
   const [newEmail, setNewEmail] = React.useState("")
@@ -513,29 +506,23 @@ export default function SettingsPage() {
         <CardContent className="space-y-4">
           <div className="grid gap-2">
             <Label htmlFor="theme-select">{t('settings.theme.selectTheme')}</Label>
-            <select
-              id="theme-select"
-              value={theme}
-              onChange={(e) => setTheme(e.target.value as 'system' | 'light' | 'dark')}
-              className="w-full rounded-2xl border border-stone-300 bg-white dark:bg-[#2d2d30] dark:border-[#3e3e42] px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
-            >
-              <option value="system">{themeLabels.system}</option>
-              <option value="light">{themeLabels.light}</option>
-              <option value="dark">{themeLabels.dark}</option>
-            </select>
-          </div>
-          <div className="flex items-center gap-3 p-3 rounded-xl bg-stone-50 dark:bg-[#252526]/50 border border-stone-200 dark:border-[#3e3e42]">
-            <div className="flex items-center gap-2 text-sm opacity-70">
-              {theme === 'system' && <Monitor className="h-4 w-4" />}
-              {theme === 'light' && <Sun className="h-4 w-4" />}
-              {theme === 'dark' && <Moon className="h-4 w-4" />}
-              <span>{t('settings.theme.currentTheme')}:</span>
+            <div className="relative">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                {theme === 'system' && <Monitor className="h-4 w-4 opacity-60" />}
+                {theme === 'light' && <Sun className="h-4 w-4 opacity-60" />}
+                {theme === 'dark' && <Moon className="h-4 w-4 opacity-60" />}
+              </div>
+              <select
+                id="theme-select"
+                value={theme}
+                onChange={(e) => setTheme(e.target.value as 'system' | 'light' | 'dark')}
+                className="w-full rounded-2xl border border-stone-300 bg-white dark:bg-[#2d2d30] dark:border-[#3e3e42] pl-10 pr-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors appearance-none"
+              >
+                <option value="system">{t('settings.theme.system')}</option>
+                <option value="light">{t('settings.theme.light')}</option>
+                <option value="dark">{t('settings.theme.dark')}</option>
+              </select>
             </div>
-            <span className="font-medium text-sm">
-              {theme === 'system' && themeLabels.system}
-              {theme === 'light' && themeLabels.light}
-              {theme === 'dark' && themeLabels.dark}
-            </span>
           </div>
         </CardContent>
       </Card>
