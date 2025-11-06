@@ -803,14 +803,14 @@ export const GardenListPage: React.FC = () => {
                       const color = done ? 'bg-emerald-500 text-white' : inProgress ? 'bg-amber-500 text-white' : 'bg-red-500 text-white'
                       const label = done ? t('garden.allDone') : `${completed} / ${due}`
                       return (
-                        <div className={`pointer-events-none absolute top-3 right-3 rounded-xl px-3 py-1.5 text-sm font-semibold shadow-lg z-20 backdrop-blur-sm ${color}`}>
+                        <div className={`pointer-events-none absolute top-2 right-2 rounded-lg px-2.5 py-1 text-sm font-semibold shadow-lg z-20 backdrop-blur-sm ${color}`}>
                           {label}
                         </div>
                       )
                     })()
                   )}
                   <Link to={`/garden/${g.id}`} className="block w-full h-full">
-                    <div className="relative aspect-[3/2] overflow-hidden bg-gradient-to-br from-stone-100 to-stone-200 dark:from-[#2d2d30] dark:to-[#252526]">
+                    <div className="relative aspect-[5/3] overflow-hidden bg-gradient-to-br from-stone-100 to-stone-200 dark:from-[#2d2d30] dark:to-[#252526]">
                       {g.coverImageUrl ? (
                         <img
                           src={g.coverImageUrl}
@@ -820,28 +820,28 @@ export const GardenListPage: React.FC = () => {
                         />
                       ) : (
                         <div className="absolute inset-0 w-full h-full flex items-center justify-center">
-                          <div className="text-6xl opacity-30">🌱</div>
+                          <div className="text-5xl opacity-30">🌱</div>
                         </div>
                       )}
                       {/* Gradient overlay for better text readability */}
                       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                     </div>
-                    <div className="p-4 bg-card">
-                      <div className="flex items-start justify-between gap-4">
+                    <div className="p-3 bg-card">
+                      <div className="flex items-start justify-between gap-3">
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-bold text-xl truncate group-hover:text-accent transition-colors mb-2">
+                          <h3 className="font-bold text-lg truncate group-hover:text-accent transition-colors mb-1.5">
                             {g.name}
                           </h3>
-                          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground">
                             <div className="flex items-center gap-1.5">
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                               </svg>
                               <span>{memberCountsByGarden[g.id] ?? 1} {memberCountsByGarden[g.id] === 1 ? t('garden.member') : t('garden.members')}</span>
                             </div>
                             {(g.streak ?? 0) > 0 && (
                               <div className="flex items-center gap-1.5">
-                                <svg className="w-4 h-4 text-orange-500" fill="currentColor" viewBox="0 0 20 20">
+                                <svg className="w-3.5 h-3.5 text-orange-500" fill="currentColor" viewBox="0 0 20 20">
                                   <path d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" />
                                 </svg>
                                 <span className="font-medium">{g.streak} {t('garden.streak')}</span>
@@ -850,7 +850,7 @@ export const GardenListPage: React.FC = () => {
                           </div>
                         </div>
                         <div className="flex-shrink-0 text-muted-foreground group-hover:text-accent transition-colors">
-                          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                           </svg>
                         </div>
