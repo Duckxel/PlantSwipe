@@ -778,7 +778,7 @@ export const GardenListPage: React.FC = () => {
           {loading && <div className="p-6 opacity-60 text-sm">{t('common.loading')}</div>}
           {error && <div className="p-6 text-sm text-red-600">{error}</div>}
           {!loading && !error && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {gardens.map((g, idx) => (
                 <Card 
                   key={g.id} 
@@ -803,14 +803,14 @@ export const GardenListPage: React.FC = () => {
                       const color = done ? 'bg-emerald-500 text-white' : inProgress ? 'bg-amber-500 text-white' : 'bg-red-500 text-white'
                       const label = done ? t('garden.allDone') : `${completed} / ${due}`
                       return (
-                        <div className={`pointer-events-none absolute top-3 right-3 rounded-xl px-3 py-1 text-xs font-semibold shadow-lg z-20 backdrop-blur-sm ${color}`}>
+                        <div className={`pointer-events-none absolute top-3 right-3 rounded-xl px-3 py-1.5 text-sm font-semibold shadow-lg z-20 backdrop-blur-sm ${color}`}>
                           {label}
                         </div>
                       )
                     })()
                   )}
                   <Link to={`/garden/${g.id}`} className="block w-full h-full">
-                    <div className="relative aspect-[16/9] overflow-hidden bg-gradient-to-br from-stone-100 to-stone-200 dark:from-[#2d2d30] dark:to-[#252526]">
+                    <div className="relative aspect-[3/2] overflow-hidden bg-gradient-to-br from-stone-100 to-stone-200 dark:from-[#2d2d30] dark:to-[#252526]">
                       {g.coverImageUrl ? (
                         <img
                           src={g.coverImageUrl}
@@ -826,10 +826,10 @@ export const GardenListPage: React.FC = () => {
                       {/* Gradient overlay for better text readability */}
                       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                     </div>
-                    <div className="p-6 bg-card">
+                    <div className="p-4 bg-card">
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-bold text-2xl truncate group-hover:text-accent transition-colors mb-2">
+                          <h3 className="font-bold text-xl truncate group-hover:text-accent transition-colors mb-2">
                             {g.name}
                           </h3>
                           <div className="flex items-center gap-4 text-sm text-muted-foreground">
