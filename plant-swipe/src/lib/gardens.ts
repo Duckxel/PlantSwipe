@@ -1589,6 +1589,7 @@ export async function getGardenTodayOccurrencesCached(gardenId: string, dayIso: 
   }
   return occs.map(o => ({
     ...o,
+    completedAt: o.completedAt ?? null,
     taskType: taskTypeById[o.taskId] || 'custom',
     taskEmoji: taskEmojiById[o.taskId] || null,
   }))
