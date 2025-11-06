@@ -37,6 +37,22 @@ export default function SettingsPage() {
   const [deleteConfirmText, setDeleteConfirmText] = React.useState("")
   const [deleting, setDeleting] = React.useState(false)
 
+  // Function to partially censor email
+  const censorEmail = (email: string): string => {
+    if (!email || email.length === 0) return email
+    const [localPart, domain] = email.split('@')
+    if (!domain) return email
+    
+    // Show first 2 characters and last character of local part, censor the rest
+    if (localPart.length <= 3) {
+      return `${localPart[0]}***@${domain}`
+    }
+    const visibleStart = localPart.substring(0, 2)
+    const visibleEnd = localPart.substring(localPart.length - 1)
+    const censored = '*'.repeat(Math.max(3, localPart.length - 3))
+    return `${visibleStart}${censored}${visibleEnd}@${domain}`
+  }
+
   // Load current user data
   React.useEffect(() => {
     const loadData = async () => {
@@ -291,7 +307,7 @@ export default function SettingsPage() {
           </button>
           {!emailExpanded ? (
             <CardDescription className="mt-2">
-              {t('settings.email.emailAddressLabel')} <span className="font-medium">{email}</span>
+              {t('settings.email.emailAddressLabel')} <span className="font-medium">{censorEmail(email)}</span>
             </CardDescription>
           ) : (
             <CardDescription className="mt-2">
@@ -431,16 +447,6 @@ export default function SettingsPage() {
               </p>
             </div>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Friend Requests Settings */}
-      <Card className="rounded-3xl mb-4">
-        <CardHeader>
-          <CardTitle>{t('settings.friendRequests.title')}</CardTitle>
-          <CardDescription>{t('settings.friendRequests.description')}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
           <div className="flex items-start gap-3">
             <input
               type="checkbox"
