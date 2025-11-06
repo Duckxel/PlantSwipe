@@ -36,7 +36,7 @@ function AppShell() {
   
   if (loading) {
     return (
-      <div className="min-h-screen w-full bg-stone-100 dark:bg-[#252526] p-4 md:p-8" aria-busy="true" aria-live="polite" />
+      <div className="min-h-screen w-full bg-gradient-to-b from-stone-100 to-stone-200 dark:from-[#252526] dark:to-[#1e1e1e] p-4 md:p-8" aria-busy="true" aria-live="polite" />
     )
   }
   return <PlantSwipe />
