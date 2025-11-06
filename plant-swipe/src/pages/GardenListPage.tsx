@@ -459,7 +459,7 @@ export const GardenListPage: React.FC = () => {
                     })()
                   )}
                   <Link to={`/garden/${g.id}`} className="grid grid-cols-3 gap-0 w-full text-left">
-                    <div className="col-span-1 h-36 rounded-l-2xl overflow-hidden bg-stone-100 dark:bg-[#252526]">
+                    <div className="col-span-1 rounded-l-2xl overflow-hidden bg-stone-100 dark:bg-[#252526] aspect-[4/3]">
                       {g.coverImageUrl ? (
                         <img
                           src={g.coverImageUrl}
