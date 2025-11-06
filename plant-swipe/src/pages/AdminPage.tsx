@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { LazyCharts, ChartSuspense } from '@/components/admin/LazyChart'
+import { useTheme } from '@/context/ThemeContext'
 // Re-export for convenience
 const {
   ResponsiveContainer,
@@ -37,6 +38,8 @@ import {
 
 export const AdminPage: React.FC = () => {
   const navigate = useNavigate()
+  const { effectiveTheme } = useTheme()
+  const isDark = effectiveTheme === 'dark'
   const shortenMiddle = React.useCallback((value: string, maxChars: number = 28): string => {
     try {
       const s = String(value || '')
@@ -2011,16 +2014,16 @@ export const AdminPage: React.FC = () => {
                       const up = delta > 0
                       const down = delta < 0
                       return (
-                        <div className="rounded-xl border bg-white/90 backdrop-blur p-3 shadow-lg">
-                          <div className="text-xs opacity-60">{formatFullDate(label)}</div>
+                        <div className="rounded-xl border bg-white/90 dark:bg-[#252526] dark:border-[#3e3e42] backdrop-blur p-3 shadow-lg">
+                          <div className="text-xs opacity-60 dark:opacity-70">{formatFullDate(label)}</div>
                           <div className="mt-1 text-base font-semibold tabular-nums">{current}</div>
                           <div className="text-xs mt-0.5">
-                            <span className={up ? 'text-emerald-600' : down ? 'text-rose-600' : 'text-neutral-600'}>
+                            <span className={up ? 'text-emerald-600 dark:text-emerald-400' : down ? 'text-rose-600 dark:text-rose-400' : 'text-neutral-600 dark:text-neutral-400'}>
                               {delta === 0 ? 'No change' : `${up ? '+' : ''}${delta}${pct !== null ? ` (${pct}%)` : ''}`}
                             </span>
-                            <span className="opacity-60"> vs previous day</span>
+                            <span className="opacity-60 dark:opacity-70"> vs previous day</span>
                           </div>
-                          <div className="text-[11px] opacity-70 mt-1">7-day avg: <span className="font-medium">{avgVal}</span></div>
+                          <div className="text-[11px] opacity-70 dark:opacity-80 mt-1">7-day avg: <span className="font-medium">{avgVal}</span></div>
                         </div>
                       )
                     }
@@ -2037,20 +2040,20 @@ export const AdminPage: React.FC = () => {
                               >
                               <defs>
                                 <linearGradient id="visitsLineGrad" x1="0" y1="0" x2="1" y2="0">
-                                  <stop offset="0%" stopColor="#111827" />
-                                  <stop offset="100%" stopColor="#6b7280" />
+                                  <stop offset="0%" stopColor={isDark ? "#60a5fa" : "#111827"} />
+                                  <stop offset="100%" stopColor={isDark ? "#a78bfa" : "#6b7280"} />
                                 </linearGradient>
                                 <linearGradient id="visitsAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="0%" stopColor="#111827" stopOpacity={0.35} />
-                                  <stop offset="100%" stopColor="#111827" stopOpacity={0.05} />
+                                  <stop offset="0%" stopColor={isDark ? "#60a5fa" : "#111827"} stopOpacity={isDark ? 0.4 : 0.35} />
+                                  <stop offset="100%" stopColor={isDark ? "#60a5fa" : "#111827"} stopOpacity={isDark ? 0.1 : 0.05} />
                                 </linearGradient>
                               </defs>
 
-                              <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
+                              <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)"} />
                               <XAxis
                                 dataKey="date"
                                 tickFormatter={formatDow}
-                                tick={{ fontSize: 11, fill: '#525252' }}
+                                tick={{ fontSize: 11, fill: isDark ? '#d1d5db' : '#525252' }}
                                 axisLine={false}
                                 tickLine={false}
                                 interval={0}
@@ -2059,18 +2062,18 @@ export const AdminPage: React.FC = () => {
                               <YAxis
                                 allowDecimals={false}
                                 domain={[0, Math.max(maxVal, 5)]}
-                                tick={{ fontSize: 11, fill: '#525252' }}
+                                tick={{ fontSize: 11, fill: isDark ? '#d1d5db' : '#525252' }}
                                 axisLine={false}
                                 tickLine={false}
                                 width={28}
                               />
-                              <Tooltip content={<TooltipContent />} cursor={{ stroke: 'rgba(0,0,0,0.1)' }} />
+                              <Tooltip content={<TooltipContent />} cursor={{ stroke: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }} />
                               <ReferenceLine
                                 y={avgVal}
-                                stroke="#a3a3a3"
+                                stroke={isDark ? "#9ca3af" : "#a3a3a3"}
                                 strokeDasharray="4 4"
                                 ifOverflow="extendDomain"
-                                label={{ value: 'avg', position: 'insideRight', fill: '#737373', fontSize: 11, dx: -6 }}
+                                label={{ value: 'avg', position: 'insideRight', fill: isDark ? '#d1d5db' : '#737373', fontSize: 11, dx: -6 }}
                               />
 
                               <Area type="monotone" dataKey="uniqueVisitors" fill="url(#visitsAreaGrad)" stroke="none" animationDuration={600} />
@@ -2080,7 +2083,7 @@ export const AdminPage: React.FC = () => {
                                 stroke="url(#visitsLineGrad)"
                                 strokeWidth={3}
                                 dot={false}
-                                activeDot={{ r: 5, strokeWidth: 2, stroke: '#111827', fill: '#ffffff' }}
+                                activeDot={{ r: 5, strokeWidth: 2, stroke: isDark ? "#60a5fa" : "#111827", fill: isDark ? "#1e1e1e" : "#ffffff" }}
                                 animationDuration={700}
                               />
                             </ComposedChart>
@@ -2129,10 +2132,10 @@ export const AdminPage: React.FC = () => {
                                                 pctOther: otherTotal > 0 ? (it.visits / otherTotal) * 100 : 0,
                                               }))
                                               .sort((a: { visits: number }, b: { visits: number }) => (b.visits || 0) - (a.visits || 0))
-                                            return (
-                                              <div className="rounded-xl border bg-white shadow px-3 py-2 max-w-[480px]">
-                                                <div className="text-xs font-medium mb-1">Countries in Other</div>
-                                                <div className="text-[11px] opacity-80 space-y-0.5">
+                      return (
+                        <div className="rounded-xl border bg-white dark:bg-[#252526] dark:border-[#3e3e42] shadow px-3 py-2 max-w-[480px]">
+                          <div className="text-xs font-medium mb-1">Countries in Other</div>
+                          <div className="text-[11px] opacity-80 dark:opacity-70 space-y-0.5">
                                                   {rows.map((r: { name: string; visits: number; pctTotal: number; pctOther: number }, idx: number) => (
                                                     <div key={`${r.name}-${idx}`} className="flex items-center justify-between gap-3">
                                                       <div className="truncate">{r.name}</div>
@@ -2146,9 +2149,9 @@ export const AdminPage: React.FC = () => {
                                           const name = countryCodeToName(d.country)
                                           const pct = Math.round(d.pct ?? (totalVisits > 0 ? (d.visits / totalVisits) * 100 : 0))
                                           return (
-                                            <div className="rounded-xl border bg-white shadow px-3 py-2">
+                                            <div className="rounded-xl border bg-white dark:bg-[#252526] dark:border-[#3e3e42] shadow px-3 py-2">
                                               <div className="text-xs font-medium">{name}</div>
-                                              <div className="text-[11px] opacity-80">{pct}% ? {d.visits}</div>
+                                              <div className="text-[11px] opacity-80 dark:opacity-70">{pct}% ? {d.visits}</div>
                                             </div>
                                           )
                                         }
@@ -2173,13 +2176,13 @@ export const AdminPage: React.FC = () => {
                                                   <Cell 
                                                     key={`cell-${entry.country}-${index}-${color}`} 
                                                     fill={color}
-                                                    stroke={color}
-                                                    strokeWidth={2}
+                                                    stroke={isDark ? color : color}
+                                                    strokeWidth={isDark ? 0 : 2}
                                                   />
                                                 )
                                               })}
                                             </Pie>
-                                            <Tooltip content={<CountryPieTooltip />} cursor={{ stroke: 'rgba(0,0,0,0.1)' }} />
+                                            <Tooltip content={<CountryPieTooltip />} cursor={{ stroke: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }} />
                                           </>
                                         )
                                       })()}
