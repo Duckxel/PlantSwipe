@@ -1842,7 +1842,7 @@ export async function getUserTasksTodayCached(userId: string, dayIso?: string): 
   let totalCompleted = 0
   let gardensWithRemaining = 0
   
-  for (const [gid, prog] of Object.entries(progressMap)) {
+  for (const [, prog] of Object.entries(progressMap)) {
     totalDue += prog.due
     totalCompleted += prog.completed
     if (prog.hasRemainingTasks) {
@@ -1918,9 +1918,9 @@ export async function getUserGardensTasksTodayCached(userId: string, dayIso?: st
     gardenNameMap[g.id] = g.name
   }
   
-  for (const [gid, prog] of Object.entries(progressMap)) {
-    result[gid] = {
-      gardenName: gardenNameMap[gid] || '',
+  for (const [gardenId, prog] of Object.entries(progressMap)) {
+    result[gardenId] = {
+      gardenName: gardenNameMap[gardenId] || '',
       due: prog.due,
       completed: prog.completed,
       hasRemainingTasks: prog.hasRemainingTasks ?? (prog.due > prog.completed),
