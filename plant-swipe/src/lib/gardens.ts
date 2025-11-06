@@ -1478,11 +1478,11 @@ export async function listCompletionsForOccurrences(occurrenceIds: string[]): Pr
 /**
  * Get cached daily progress for a garden (uses cache table)
  */
-export async function getGardenTodayProgressCached(gardenId: string, dayIso: string): Promise<{ due: number; completed: number }> {
+export async function getGardenTodayProgressCached(gardenId: string, dayIso: string): Promise<{ due: number; completed: number; hasRemainingTasks?: boolean; allTasksDone?: boolean }> {
   try {
     const { data, error } = await supabase
       .from('garden_task_daily_cache')
-      .select('due_count, completed_count')
+      .select('due_count, completed_count, has_remaining_tasks, all_tasks_done')
       .eq('garden_id', gardenId)
       .eq('cache_date', dayIso)
       .maybeSingle()
@@ -1491,6 +1491,8 @@ export async function getGardenTodayProgressCached(gardenId: string, dayIso: str
       return {
         due: Number(data.due_count ?? 0),
         completed: Number(data.completed_count ?? 0),
+        hasRemainingTasks: Boolean(data.has_remaining_tasks ?? false),
+        allTasksDone: Boolean(data.all_tasks_done ?? true),
       }
     }
   } catch {
@@ -1498,32 +1500,39 @@ export async function getGardenTodayProgressCached(gardenId: string, dayIso: str
   }
   
   // Fallback: use RPC function
-  return await getGardenTodayProgressUltraFast(gardenId, dayIso)
+  const prog = await getGardenTodayProgressUltraFast(gardenId, dayIso)
+  return {
+    ...prog,
+    hasRemainingTasks: prog.due > prog.completed,
+    allTasksDone: prog.due === 0 || prog.completed >= prog.due,
+  }
 }
 
 /**
  * Get cached batched progress for multiple gardens
  */
-export async function getGardensTodayProgressBatchCached(gardenIds: string[], dayIso: string): Promise<Record<string, { due: number; completed: number }>> {
+export async function getGardensTodayProgressBatchCached(gardenIds: string[], dayIso: string): Promise<Record<string, { due: number; completed: number; hasRemainingTasks?: boolean; allTasksDone?: boolean }>> {
   try {
     const { data, error } = await supabase
       .from('garden_task_daily_cache')
-      .select('garden_id, due_count, completed_count')
+      .select('garden_id, due_count, completed_count, has_remaining_tasks, all_tasks_done')
       .in('garden_id', gardenIds)
       .eq('cache_date', dayIso)
     
     if (!error && data && Array.isArray(data)) {
-      const result: Record<string, { due: number; completed: number }> = {}
+      const result: Record<string, { due: number; completed: number; hasRemainingTasks?: boolean; allTasksDone?: boolean }> = {}
       for (const row of data) {
         result[String(row.garden_id)] = {
           due: Number(row.due_count ?? 0),
           completed: Number(row.completed_count ?? 0),
+          hasRemainingTasks: Boolean(row.has_remaining_tasks ?? false),
+          allTasksDone: Boolean(row.all_tasks_done ?? true),
         }
       }
       // Fill in missing gardens with zeros
       for (const gid of gardenIds) {
         if (!result[gid]) {
-          result[gid] = { due: 0, completed: 0 }
+          result[gid] = { due: 0, completed: 0, hasRemainingTasks: false, allTasksDone: true }
         }
       }
       return result
@@ -1533,7 +1542,16 @@ export async function getGardensTodayProgressBatchCached(gardenIds: string[], da
   }
   
   // Fallback: use RPC function
-  return await getGardensTodayProgressBatch(gardenIds, dayIso)
+  const batch = await getGardensTodayProgressBatch(gardenIds, dayIso)
+  const result: Record<string, { due: number; completed: number; hasRemainingTasks?: boolean; allTasksDone?: boolean }> = {}
+  for (const [gid, prog] of Object.entries(batch)) {
+    result[gid] = {
+      ...prog,
+      hasRemainingTasks: prog.due > prog.completed,
+      allTasksDone: prog.due === 0 || prog.completed >= prog.due,
+    }
+  }
+  return result
 }
 
 /**
@@ -1685,6 +1703,88 @@ export async function cleanupOldGardenTaskCache(): Promise<void> {
   } catch (e) {
     console.warn('[gardens] Failed to cleanup old cache:', e)
   }
+}
+
+/**
+ * Quick check if a garden has remaining tasks (uses cache)
+ */
+export async function gardenHasRemainingTasks(gardenId: string, dayIso?: string): Promise<boolean> {
+  const date = dayIso || new Date().toISOString().slice(0, 10)
+  try {
+    const { data, error } = await supabase.rpc('garden_has_remaining_tasks', {
+      _garden_id: gardenId,
+      _cache_date: date,
+    })
+    if (!error && typeof data === 'boolean') {
+      return data
+    }
+  } catch {
+    // Fallback to computation
+  }
+  
+  // Fallback: compute if cache missing
+  const prog = await getGardenTodayProgressCached(gardenId, date)
+  return prog.due > prog.completed
+}
+
+/**
+ * Quick check if all garden tasks are done (uses cache)
+ */
+export async function gardenAllTasksDone(gardenId: string, dayIso?: string): Promise<boolean> {
+  const date = dayIso || new Date().toISOString().slice(0, 10)
+  try {
+    const { data, error } = await supabase.rpc('garden_all_tasks_done', {
+      _garden_id: gardenId,
+      _cache_date: date,
+    })
+    if (!error && typeof data === 'boolean') {
+      return data
+    }
+  } catch {
+    // Fallback to computation
+  }
+  
+  // Fallback: compute if cache missing
+  const prog = await getGardenTodayProgressCached(gardenId, date)
+  return prog.due === 0 || prog.completed >= prog.due
+}
+
+/**
+ * Batch check remaining tasks for multiple gardens (uses cache)
+ */
+export async function gardensHaveRemainingTasks(gardenIds: string[], dayIso?: string): Promise<Record<string, boolean>> {
+  const date = dayIso || new Date().toISOString().slice(0, 10)
+  try {
+    const { data, error } = await supabase.rpc('gardens_have_remaining_tasks', {
+      _garden_ids: gardenIds,
+      _cache_date: date,
+    })
+    if (!error && data && Array.isArray(data)) {
+      const result: Record<string, boolean> = {}
+      for (const row of data) {
+        result[String(row.garden_id)] = Boolean(row.has_remaining_tasks)
+      }
+      // Fill in missing gardens
+      for (const gid of gardenIds) {
+        if (result[gid] === undefined) {
+          // Fallback to individual check
+          result[gid] = await gardenHasRemainingTasks(gid, date)
+        }
+      }
+      return result
+    }
+  } catch {
+    // Fallback to individual checks
+  }
+  
+  // Fallback: check each garden individually
+  const result: Record<string, boolean> = {}
+  await Promise.all(
+    gardenIds.map(async (gid) => {
+      result[gid] = await gardenHasRemainingTasks(gid, date)
+    })
+  )
+  return result
 }
 
 // ===== Activity logs =====

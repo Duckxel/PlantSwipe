@@ -2790,10 +2790,25 @@ CREATE TABLE IF NOT EXISTS garden_task_daily_cache (
   completed_count integer NOT NULL DEFAULT 0,
   task_count integer NOT NULL DEFAULT 0, -- Total number of tasks
   occurrence_count integer NOT NULL DEFAULT 0, -- Total occurrences for the day
+  has_remaining_tasks boolean NOT NULL DEFAULT false, -- True if there are tasks still to do today
+  all_tasks_done boolean NOT NULL DEFAULT true, -- True if all tasks for today are completed
   updated_at timestamptz NOT NULL DEFAULT now(),
   created_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE(garden_id, cache_date)
 );
+
+-- Add new columns if table already exists (for existing deployments)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'garden_task_daily_cache') THEN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'garden_task_daily_cache' AND column_name = 'has_remaining_tasks') THEN
+      ALTER TABLE garden_task_daily_cache ADD COLUMN has_remaining_tasks boolean NOT NULL DEFAULT false;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'garden_task_daily_cache' AND column_name = 'all_tasks_done') THEN
+      ALTER TABLE garden_task_daily_cache ADD COLUMN all_tasks_done boolean NOT NULL DEFAULT true;
+    END IF;
+  END IF;
+END $$;
 
 -- Cache table for weekly task statistics per garden
 CREATE TABLE IF NOT EXISTS garden_task_weekly_cache (
@@ -2867,6 +2882,8 @@ DECLARE
   _completed_count integer := 0;
   _task_count integer := 0;
   _occurrence_count integer := 0;
+  _has_remaining_tasks boolean := false;
+  _all_tasks_done boolean := true;
 BEGIN
   _start_iso := (_cache_date::text || 'T00:00:00.000Z')::timestamptz;
   _end_iso := (_cache_date::text || 'T23:59:59.999Z')::timestamptz;
@@ -2884,15 +2901,21 @@ BEGIN
     AND occ.due_at >= _start_iso
     AND occ.due_at <= _end_iso;
   
+  -- Calculate task completion status
+  _has_remaining_tasks := (_due_count > 0 AND _completed_count < _due_count);
+  _all_tasks_done := (_due_count = 0 OR _completed_count >= _due_count);
+  
   -- Upsert cache
-  INSERT INTO garden_task_daily_cache (garden_id, cache_date, due_count, completed_count, task_count, occurrence_count, updated_at)
-  VALUES (_garden_id, _cache_date, _due_count, _completed_count, _task_count, _occurrence_count, now())
+  INSERT INTO garden_task_daily_cache (garden_id, cache_date, due_count, completed_count, task_count, occurrence_count, has_remaining_tasks, all_tasks_done, updated_at)
+  VALUES (_garden_id, _cache_date, _due_count, _completed_count, _task_count, _occurrence_count, _has_remaining_tasks, _all_tasks_done, now())
   ON CONFLICT (garden_id, cache_date)
   DO UPDATE SET
     due_count = EXCLUDED.due_count,
     completed_count = EXCLUDED.completed_count,
     task_count = EXCLUDED.task_count,
     occurrence_count = EXCLUDED.occurrence_count,
+    has_remaining_tasks = EXCLUDED.has_remaining_tasks,
+    all_tasks_done = EXCLUDED.all_tasks_done,
     updated_at = now();
 END;
 $$;
@@ -3220,8 +3243,127 @@ SELECT
   c.completed_count,
   c.task_count,
   c.occurrence_count,
+  c.has_remaining_tasks,
+  c.all_tasks_done,
   c.updated_at
 FROM garden_task_daily_cache c
 WHERE c.cache_date = CURRENT_DATE;
 
 GRANT SELECT ON garden_task_cache_today TO authenticated;
+
+-- Function: Quick check if garden has remaining tasks (uses cache)
+CREATE OR REPLACE FUNCTION garden_has_remaining_tasks(_garden_id uuid, _cache_date date DEFAULT CURRENT_DATE)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+AS $$
+DECLARE
+  _has_remaining boolean;
+BEGIN
+  SELECT has_remaining_tasks INTO _has_remaining
+  FROM garden_task_daily_cache
+  WHERE garden_id = _garden_id AND cache_date = _cache_date
+  LIMIT 1;
+  
+  -- If cache exists, return cached value
+  IF _has_remaining IS NOT NULL THEN
+    RETURN _has_remaining;
+  END IF;
+  
+  -- Fallback: compute on the fly if cache missing
+  SELECT EXISTS (
+    SELECT 1
+    FROM garden_plant_task_occurrences occ
+    INNER JOIN garden_plant_tasks t ON t.id = occ.task_id
+    WHERE t.garden_id = _garden_id
+      AND occ.due_at >= (_cache_date::text || 'T00:00:00.000Z')::timestamptz
+      AND occ.due_at <= (_cache_date::text || 'T23:59:59.999Z')::timestamptz
+      AND occ.required_count > occ.completed_count
+    LIMIT 1
+  ) INTO _has_remaining;
+  
+  RETURN COALESCE(_has_remaining, false);
+END;
+$$;
+
+-- Function: Quick check if all garden tasks are done (uses cache)
+CREATE OR REPLACE FUNCTION garden_all_tasks_done(_garden_id uuid, _cache_date date DEFAULT CURRENT_DATE)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+AS $$
+DECLARE
+  _all_done boolean;
+BEGIN
+  SELECT all_tasks_done INTO _all_done
+  FROM garden_task_daily_cache
+  WHERE garden_id = _garden_id AND cache_date = _cache_date
+  LIMIT 1;
+  
+  -- If cache exists, return cached value
+  IF _all_done IS NOT NULL THEN
+    RETURN _all_done;
+  END IF;
+  
+  -- Fallback: compute on the fly if cache missing
+  SELECT NOT EXISTS (
+    SELECT 1
+    FROM garden_plant_task_occurrences occ
+    INNER JOIN garden_plant_tasks t ON t.id = occ.task_id
+    WHERE t.garden_id = _garden_id
+      AND occ.due_at >= (_cache_date::text || 'T00:00:00.000Z')::timestamptz
+      AND occ.due_at <= (_cache_date::text || 'T23:59:59.999Z')::timestamptz
+      AND occ.required_count > occ.completed_count
+    LIMIT 1
+  ) INTO _all_done;
+  
+  RETURN COALESCE(_all_done, true);
+END;
+$$;
+
+-- Function: Batch check remaining tasks for multiple gardens (uses cache)
+CREATE OR REPLACE FUNCTION gardens_have_remaining_tasks(_garden_ids uuid[], _cache_date date DEFAULT CURRENT_DATE)
+RETURNS TABLE (
+  garden_id uuid,
+  has_remaining_tasks boolean
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    c.garden_id,
+    c.has_remaining_tasks
+  FROM garden_task_daily_cache c
+  WHERE c.garden_id = ANY(_garden_ids)
+    AND c.cache_date = _cache_date;
+  
+  -- Fill in missing gardens with computed values
+  RETURN QUERY
+  SELECT
+    g.id as garden_id,
+    EXISTS (
+      SELECT 1
+      FROM garden_plant_task_occurrences occ
+      INNER JOIN garden_plant_tasks t ON t.id = occ.task_id
+      WHERE t.garden_id = g.id
+        AND occ.due_at >= (_cache_date::text || 'T00:00:00.000Z')::timestamptz
+        AND occ.due_at <= (_cache_date::text || 'T23:59:59.999Z')::timestamptz
+        AND occ.required_count > occ.completed_count
+      LIMIT 1
+    ) as has_remaining_tasks
+  FROM unnest(_garden_ids) g(id)
+  WHERE NOT EXISTS (
+    SELECT 1 FROM garden_task_daily_cache c2
+    WHERE c2.garden_id = g.id AND c2.cache_date = _cache_date
+  );
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION garden_has_remaining_tasks(uuid, date) TO authenticated;
+GRANT EXECUTE ON FUNCTION garden_all_tasks_done(uuid, date) TO authenticated;
+GRANT EXECUTE ON FUNCTION gardens_have_remaining_tasks(uuid[], date) TO authenticated;
