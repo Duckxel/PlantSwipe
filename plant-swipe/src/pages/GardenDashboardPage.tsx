@@ -17,7 +17,7 @@ import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
 import { TaskEditorDialog } from '@/components/plant/TaskEditorDialog'
 import type { Garden } from '@/types/garden'
 import type { Plant } from '@/types/plant'
-import { getGarden, getGardenPlants, getGardenMembers, addMemberByNameOrEmail, deleteGardenPlant, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, updateGardenMemberRole, removeGardenMember, listGardenTasks, listOccurrencesForTasks, progressTaskOccurrence, updateGardenPlantsOrder, refreshGardenStreak, listGardenActivityToday, logGardenActivity, resyncTaskOccurrencesForGarden, computeGardenTaskForDay } from '@/lib/gardens'
+import { getGarden, getGardenPlants, getGardenMembers, addMemberByNameOrEmail, deleteGardenPlant, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, updateGardenMemberRole, removeGardenMember, listGardenTasks, listOccurrencesForTasks, progressTaskOccurrence, updateGardenPlantsOrder, refreshGardenStreak, listGardenActivityToday, logGardenActivity, resyncTaskOccurrencesForGarden, computeGardenTaskForDay, getGardenTodayOccurrencesCached, getGardenWeeklyStatsCached, getGardenPlantTaskCountsCached, refreshGardenTaskCache } from '@/lib/gardens'
 import { supabase } from '@/lib/supabaseClient'
 import { addGardenBroadcastListener, broadcastGardenUpdate, type GardenRealtimeKind } from '@/lib/realtime'
 import { getAccentOption } from '@/lib/accent'
@@ -404,53 +404,75 @@ export const GardenDashboardPage: React.FC = () => {
         })()
       ])
       
-      // Load today's occurrences immediately
-      const occs = await listOccurrencesForTasks(allTasks.map(t => t.id), `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`)
-      const taskTypeById: Record<string, 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'> = {}
-      const taskEmojiById: Record<string, string | null> = {}
-      for (const t of allTasks) { taskTypeById[t.id] = t.type as any; taskEmojiById[t.id] = (t as any).emoji || null }
-      const occsWithType = occs.map(o => ({ ...o, taskType: taskTypeById[o.taskId] || 'custom', taskEmoji: taskEmojiById[o.taskId] || null }))
-      setTodayTaskOccurrences(occsWithType as any)
-      const taskCountMap: Record<string, number> = {}
-      for (const t of allTasks) taskCountMap[t.gardenPlantId] = (taskCountMap[t.gardenPlantId] || 0) + 1
-      setTaskCountsByPlant(taskCountMap)
-      const dueMap: Record<string, number> = {}
-      for (const o of occs) {
-        const remaining = Math.max(0, (o.requiredCount || 1) - (o.completedCount || 0))
-        if (remaining > 0) dueMap[o.gardenPlantId] = (dueMap[o.gardenPlantId] || 0) + remaining
+      // Try to load from cache first (much faster)
+      const cachedOccs = await getGardenTodayOccurrencesCached(id, today).catch(() => null)
+      const cachedTaskCounts = await getGardenPlantTaskCountsCached(id).catch(() => ({}))
+      
+      if (cachedOccs && cachedOccs.length > 0) {
+        // Use cached data
+        setTodayTaskOccurrences(cachedOccs as any)
+        
+        // Build task counts from cache
+        const taskCountMap: Record<string, number> = {}
+        for (const t of allTasks) taskCountMap[t.gardenPlantId] = (taskCountMap[t.gardenPlantId] || 0) + 1
+        setTaskCountsByPlant(taskCountMap)
+        
+        // Build due map from cache
+        const dueMap: Record<string, number> = {}
+        for (const o of cachedOccs) {
+          const remaining = Math.max(0, (o.requiredCount || 1) - (o.completedCount || 0))
+          if (remaining > 0) dueMap[o.gardenPlantId] = (dueMap[o.gardenPlantId] || 0) + remaining
+        }
+        setTaskOccDueToday(dueMap)
+      } else {
+        // Fallback: compute from source data
+        const occs = await listOccurrencesForTasks(allTasks.map(t => t.id), `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`)
+        const taskTypeById: Record<string, 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'> = {}
+        const taskEmojiById: Record<string, string | null> = {}
+        for (const t of allTasks) { taskTypeById[t.id] = t.type as any; taskEmojiById[t.id] = (t as any).emoji || null }
+        const occsWithType = occs.map(o => ({ ...o, taskType: taskTypeById[o.taskId] || 'custom', taskEmoji: taskEmojiById[o.taskId] || null }))
+        setTodayTaskOccurrences(occsWithType as any)
+        const taskCountMap: Record<string, number> = {}
+        for (const t of allTasks) taskCountMap[t.gardenPlantId] = (taskCountMap[t.gardenPlantId] || 0) + 1
+        setTaskCountsByPlant(taskCountMap)
+        const dueMap: Record<string, number> = {}
+        for (const o of occs) {
+          const remaining = Math.max(0, (o.requiredCount || 1) - (o.completedCount || 0))
+          if (remaining > 0) dueMap[o.gardenPlantId] = (dueMap[o.gardenPlantId] || 0) + remaining
+        }
+        setTaskOccDueToday(dueMap)
+        
+        // Refresh cache in background for next time
+        refreshGardenTaskCache(id, today).catch(() => {})
       }
-      setTaskOccDueToday(dueMap)
       // Update today's counts in dailyStats
+      const occsForStats = cachedOccs && cachedOccs.length > 0 ? cachedOccs : (await listOccurrencesForTasks(allTasks.map(t => t.id), `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`).catch(() => []))
       setDailyStats(prev => {
-        const reqDone = occs.reduce((acc, o) => acc + Math.max(1, Number(o.requiredCount || 1)), 0)
-        const compDone = occs.reduce((acc, o) => acc + Math.min(Math.max(1, Number(o.requiredCount || 1)), Number(o.completedCount || 0)), 0)
+        const reqDone = occsForStats.reduce((acc: number, o: any) => acc + Math.max(1, Number(o.requiredCount || 1)), 0)
+        const compDone = occsForStats.reduce((acc: number, o: any) => acc + Math.min(Math.max(1, Number(o.requiredCount || 1)), Number(o.completedCount || 0)), 0)
         return prev.map(d => d.date === today ? { ...d, due: reqDone, completed: compDone } : d)
       })
       
       // Only load week data if on routine tab
       if (tab === 'routine') {
-        // Load week occurrences in background
-        const loadWeekData = async () => {
+        // Try to load from cache first
+        const cachedWeekStats = await getGardenWeeklyStatsCached(id, weekDaysIso[0]).catch(() => null)
+        
+        if (cachedWeekStats) {
+          // Use cached weekly stats
+          setWeekCountsByType({
+            water: cachedWeekStats.waterTasksByDay,
+            fertilize: cachedWeekStats.fertilizeTasksByDay,
+            harvest: cachedWeekStats.harvestTasksByDay,
+            cut: cachedWeekStats.cutTasksByDay,
+            custom: cachedWeekStats.customTasksByDay,
+          })
+          setWeekCounts(cachedWeekStats.totalTasksByDay)
+          
+          // Still need to compute dueThisWeekByPlant from occurrences
           const weekStartIso = `${weekDaysIso[0]}T00:00:00.000Z`
           const weekEndIso = `${weekDaysIso[6]}T23:59:59.999Z`
           const weekOccs = await listOccurrencesForTasks(allTasks.map(t => t.id), weekStartIso, weekEndIso)
-          const typeCounts: { water: number[]; fertilize: number[]; harvest: number[]; cut: number[]; custom: number[] } = {
-            water: Array(7).fill(0), fertilize: Array(7).fill(0), harvest: Array(7).fill(0), cut: Array(7).fill(0), custom: Array(7).fill(0),
-          }
-          const tById: Record<string, 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'> = {}
-          for (const t of allTasks) tById[t.id] = t.type as any
-          for (const o of weekOccs) {
-            const dayIso = new Date(o.dueAt).toISOString().slice(0,10)
-            const idx = weekDaysIso.indexOf(dayIso)
-            if (idx >= 0) {
-              const typ = tById[o.taskId] || 'custom'
-              const inc = Math.max(1, Number(o.requiredCount || 1))
-              ;(typeCounts as any)[typ][idx] += inc
-            }
-          }
-          const totals = weekDaysIso.map((_, i) => typeCounts.water[i] + typeCounts.fertilize[i] + typeCounts.harvest[i] + typeCounts.cut[i] + typeCounts.custom[i])
-          setWeekCountsByType(typeCounts)
-          setWeekCounts(totals)
           const dueMapSets: Record<string, Set<number>> = {}
           for (const o of weekOccs) {
             const dayIso = new Date(o.dueAt).toISOString().slice(0,10)
@@ -467,18 +489,62 @@ export const GardenDashboardPage: React.FC = () => {
           const dueMapNext: Record<string, number[]> = {}
           for (const pid of Object.keys(dueMapSets)) dueMapNext[pid] = Array.from(dueMapSets[pid]).sort((a, b) => a - b)
           setDueThisWeekByPlant(dueMapNext)
-        }
-        
-        // Load week data in background
-        if ('requestIdleCallback' in window) {
-          window.requestIdleCallback(() => loadWeekData(), { timeout: 1000 })
         } else {
-          setTimeout(() => loadWeekData(), 200)
+          // Fallback: compute week data
+          const loadWeekData = async () => {
+            const weekStartIso = `${weekDaysIso[0]}T00:00:00.000Z`
+            const weekEndIso = `${weekDaysIso[6]}T23:59:59.999Z`
+            const weekOccs = await listOccurrencesForTasks(allTasks.map(t => t.id), weekStartIso, weekEndIso)
+            const typeCounts: { water: number[]; fertilize: number[]; harvest: number[]; cut: number[]; custom: number[] } = {
+              water: Array(7).fill(0), fertilize: Array(7).fill(0), harvest: Array(7).fill(0), cut: Array(7).fill(0), custom: Array(7).fill(0),
+            }
+            const tById: Record<string, 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'> = {}
+            for (const t of allTasks) tById[t.id] = t.type as any
+            for (const o of weekOccs) {
+              const dayIso = new Date(o.dueAt).toISOString().slice(0,10)
+              const idx = weekDaysIso.indexOf(dayIso)
+              if (idx >= 0) {
+                const typ = tById[o.taskId] || 'custom'
+                const inc = Math.max(1, Number(o.requiredCount || 1))
+                ;(typeCounts as any)[typ][idx] += inc
+              }
+            }
+            const totals = weekDaysIso.map((_, i) => typeCounts.water[i] + typeCounts.fertilize[i] + typeCounts.harvest[i] + typeCounts.cut[i] + typeCounts.custom[i])
+            setWeekCountsByType(typeCounts)
+            setWeekCounts(totals)
+            const dueMapSets: Record<string, Set<number>> = {}
+            for (const o of weekOccs) {
+              const dayIso = new Date(o.dueAt).toISOString().slice(0,10)
+              const remaining = Math.max(0, Number(o.requiredCount || 1) - Number(o.completedCount || 0))
+              if (remaining <= 0) continue
+              if (dayIso <= today) continue
+              const idx = weekDaysIso.indexOf(dayIso)
+              if (idx >= 0) {
+                const pid = String(o.gardenPlantId)
+                if (!dueMapSets[pid]) dueMapSets[pid] = new Set<number>()
+                dueMapSets[pid].add(idx)
+              }
+            }
+            const dueMapNext: Record<string, number[]> = {}
+            for (const pid of Object.keys(dueMapSets)) dueMapNext[pid] = Array.from(dueMapSets[pid]).sort((a, b) => a - b)
+            setDueThisWeekByPlant(dueMapNext)
+            
+            // Refresh cache in background
+            refreshGardenTaskCache(id, today).catch(() => {})
+          }
+          
+          // Load week data in background
+          if ('requestIdleCallback' in window) {
+            window.requestIdleCallback(() => loadWeekData(), { timeout: 1000 })
+          } else {
+            setTimeout(() => loadWeekData(), 200)
+          }
         }
       }
       
+      const occsForDueToday = cachedOccs && cachedOccs.length > 0 ? cachedOccs : (await listOccurrencesForTasks(allTasks.map(t => t.id), `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`).catch(() => []))
       const dueTodaySet = new Set<string>()
-      for (const o of (occs || [])) {
+      for (const o of (occsForDueToday || [])) {
         const remaining = Math.max(0, (o.requiredCount || 1) - (o.completedCount || 0))
         if (remaining > 0) dueTodaySet.add(o.gardenPlantId)
       }

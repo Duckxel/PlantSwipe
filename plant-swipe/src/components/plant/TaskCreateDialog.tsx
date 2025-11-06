@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import type { TaskType } from '@/types/garden'
-import { createPatternTask, logGardenActivity, resyncTaskOccurrencesForGarden } from '@/lib/gardens'
+import { createPatternTask, logGardenActivity, resyncTaskOccurrencesForGarden, refreshGardenTaskCache } from '@/lib/gardens'
 import { broadcastGardenUpdate } from '@/lib/realtime'
 import { useAuth } from '@/context/AuthContext'
 import { useTranslation } from 'react-i18next'
@@ -106,13 +106,16 @@ export function TaskCreateDialog({
         console.warn('[TaskCreateDialog] Failed to broadcast task update:', err)
       })
       
-      // Resync and log activity in background using requestIdleCallback
+      // Resync, refresh cache, and log activity in background using requestIdleCallback
       const backgroundTasks = () => {
         // Resync in background - don't block
         const now = new Date()
         const startIso = new Date(now.getTime() - 7 * 24 * 3600 * 1000).toISOString()
         const endIso = new Date(now.getTime() + 60 * 24 * 3600 * 1000).toISOString()
-        resyncTaskOccurrencesForGarden(gardenId, startIso, endIso).catch(() => {})
+        resyncTaskOccurrencesForGarden(gardenId, startIso, endIso).then(() => {
+          // Refresh cache after resync
+          refreshGardenTaskCache(gardenId).catch(() => {})
+        }).catch(() => {})
         
         // Log activity (non-blocking)
         logGardenActivity({ gardenId, kind: 'note' as any, message: t('gardenDashboard.taskDialog.addedTask', { taskName: taskTypeLabel }), taskName: taskTypeLabel, actorColor: null }).catch(() => {})

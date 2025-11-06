@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import type { GardenPlantTask } from '@/types/garden'
-import { listPlantTasks, deletePlantTask, updatePatternTask, resyncTaskOccurrencesForGarden, logGardenActivity } from '@/lib/gardens'
+import { listPlantTasks, deletePlantTask, updatePatternTask, resyncTaskOccurrencesForGarden, logGardenActivity, refreshGardenTaskCache } from '@/lib/gardens'
 import { broadcastGardenUpdate, addGardenBroadcastListener } from '@/lib/realtime'
 import { useAuth } from '@/context/AuthContext'
 import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
@@ -152,7 +152,10 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
         const now = new Date()
         const startIso = new Date(now.getTime() - 7*24*3600*1000).toISOString()
         const endIso = new Date(now.getTime() + 60*24*3600*1000).toISOString()
-        resyncTaskOccurrencesForGarden(gardenId, startIso, endIso).catch(() => {})
+        resyncTaskOccurrencesForGarden(gardenId, startIso, endIso).then(() => {
+          // Refresh cache after resync
+          refreshGardenTaskCache(gardenId).catch(() => {})
+        }).catch(() => {})
         
         // Log activity (non-blocking)
         logGardenActivity({ gardenId, kind: 'note' as any, message: t('gardenDashboard.taskDialog.deletedTask', { taskName: label }), taskName: label, actorColor: null }).catch(() => {})
@@ -276,7 +279,10 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
                 const now = new Date()
                 const startIso = new Date(now.getTime() - 7*24*3600*1000).toISOString()
                 const endIso = new Date(now.getTime() + 60*24*3600*1000).toISOString()
-                resyncTaskOccurrencesForGarden(gardenId, startIso, endIso).catch(() => {})
+                resyncTaskOccurrencesForGarden(gardenId, startIso, endIso).then(() => {
+                  // Refresh cache after resync
+                  refreshGardenTaskCache(gardenId).catch(() => {})
+                }).catch(() => {})
                 
                 // Log activity (non-blocking)
                 const label = editingTask.type === 'custom' ? (editingTask.customName || t('garden.taskTypes.custom')) : t(`garden.taskTypes.${editingTask.type}`)

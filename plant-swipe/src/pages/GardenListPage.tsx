@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useAuth } from '@/context/AuthContext'
-import { getUserGardens, createGarden, fetchServerNowISO, getGardenTodayProgressUltraFast, getGardensTodayProgressBatch, getGardenPlantsMinimal, listGardenTasksMinimal, listOccurrencesForTasks, listOccurrencesForMultipleGardens, resyncTaskOccurrencesForGarden, progressTaskOccurrence, listCompletionsForOccurrences, logGardenActivity } from '@/lib/gardens'
+import { getUserGardens, createGarden, fetchServerNowISO, getGardenTodayProgressUltraFast, getGardensTodayProgressBatchCached, getGardenPlantsMinimal, listGardenTasksMinimal, listOccurrencesForTasks, listOccurrencesForMultipleGardens, resyncTaskOccurrencesForGarden, progressTaskOccurrence, listCompletionsForOccurrences, logGardenActivity, refreshGardenTaskCache, getGardenTodayOccurrencesCached } from '@/lib/gardens'
 import { supabase } from '@/lib/supabaseClient'
 import { addGardenBroadcastListener, broadcastGardenUpdate, type GardenRealtimeKind } from '@/lib/realtime'
 import type { Garden } from '@/types/garden'
@@ -150,17 +150,17 @@ export const GardenListPage: React.FC = () => {
           setServerToday(today)
           serverTodayRef.current = today
           
-          // Update progress with fresh data - use batched RPC (single query, minimal egress)
-          getGardensTodayProgressBatch(freshData.map(g => g.id), today).then((progMap) => {
+          // Update progress with fresh data - use cached batched query (fastest)
+          getGardensTodayProgressBatchCached(freshData.map(g => g.id), today).then((progMap) => {
             setProgressByGarden(progMap)
           }).catch(() => {})
         }).catch(() => {
           // If background fetch fails, keep using cached data
         })
         
-        // Load progress for cached gardens - use batched RPC (single query, minimal egress)
+        // Load progress for cached gardens - use cached batched query (fastest)
         const today = serverTodayRef.current ?? new Date().toISOString().slice(0, 10)
-        getGardensTodayProgressBatch(data.map(g => g.id), today).then((progMap) => {
+        getGardensTodayProgressBatchCached(data.map(g => g.id), today).then((progMap) => {
           setProgressByGarden(progMap)
         }).catch(() => {})
         
@@ -193,8 +193,8 @@ export const GardenListPage: React.FC = () => {
       // Set loading to false immediately so gardens render
       setLoading(false)
       
-      // Load progress using batched RPC function (minimal egress - single query)
-      getGardensTodayProgressBatch(data.map(g => g.id), today).then((progMap) => {
+      // Load progress using cached batched query (fastest - uses pre-computed cache)
+      getGardensTodayProgressBatchCached(data.map(g => g.id), today).then((progMap) => {
         setProgressByGarden(progMap)
       }).catch(() => {
         // Silently fail - progress will update on next refresh
@@ -615,7 +615,11 @@ export const GardenListPage: React.FC = () => {
       const refreshFn = () => {
         load().catch(() => {})
         loadAllTodayOccurrences(undefined, undefined, false).catch(() => {})
-        if (broadcastGardenId) emitGardenRealtime(broadcastGardenId, 'tasks')
+        // Refresh cache after task progress
+        if (broadcastGardenId) {
+          refreshGardenTaskCache(broadcastGardenId).catch(() => {})
+          emitGardenRealtime(broadcastGardenId, 'tasks')
+        }
       }
       
       if ('requestIdleCallback' in window) {
@@ -678,7 +682,11 @@ export const GardenListPage: React.FC = () => {
       const refreshFn = () => {
         load().catch(() => {})
         loadAllTodayOccurrences(undefined, undefined, false).catch(() => {})
-        if (gardenId) emitGardenRealtime(gardenId, 'tasks')
+        // Refresh cache after task completion
+        if (gardenId) {
+          refreshGardenTaskCache(gardenId).catch(() => {})
+          emitGardenRealtime(gardenId, 'tasks')
+        }
       }
       
       if ('requestIdleCallback' in window) {
@@ -736,7 +744,11 @@ export const GardenListPage: React.FC = () => {
       const refreshFn = () => {
         load().catch(() => {})
         loadAllTodayOccurrences(undefined, undefined, false).catch(() => {})
-        affectedGardenIds.forEach((gid) => emitGardenRealtime(gid, 'tasks'))
+        // Refresh cache for all affected gardens
+        affectedGardenIds.forEach((gid) => {
+          refreshGardenTaskCache(gid).catch(() => {})
+          emitGardenRealtime(gid, 'tasks')
+        })
       }
       
       if ('requestIdleCallback' in window) {

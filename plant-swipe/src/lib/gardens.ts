@@ -837,6 +837,24 @@ export async function listTaskOccurrences(taskId: string, windowDays = 60): Prom
 export async function progressTaskOccurrence(occurrenceId: string, increment = 1): Promise<void> {
   const { error } = await supabase.rpc('progress_task_occurrence', { _occurrence_id: occurrenceId, _increment: increment })
   if (error) throw new Error(error.message)
+  
+  // Refresh cache in background (don't block)
+  // Get garden_id from occurrence
+  try {
+    const { data } = await supabase
+      .from('garden_plant_task_occurrences')
+      .select('task_id, garden_plant_tasks!inner(garden_id)')
+      .eq('id', occurrenceId)
+      .single()
+    
+    if (data && (data as any).garden_plant_tasks) {
+      const gardenId = String((data as any).garden_plant_tasks.garden_id)
+      // Refresh cache asynchronously
+      refreshGardenTaskCache(gardenId).catch(() => {})
+    }
+  } catch {
+    // Silently fail - cache refresh is best effort
+  }
 }
 
 export async function listGardenTasks(gardenId: string): Promise<GardenPlantTask[]> {
@@ -1453,6 +1471,220 @@ export async function listCompletionsForOccurrences(occurrenceIds: string[]): Pr
   return map
 }
 
+
+// ===== Cached Task Data Functions =====
+// These functions use pre-computed cache tables for faster performance
+
+/**
+ * Get cached daily progress for a garden (uses cache table)
+ */
+export async function getGardenTodayProgressCached(gardenId: string, dayIso: string): Promise<{ due: number; completed: number }> {
+  try {
+    const { data, error } = await supabase
+      .from('garden_task_daily_cache')
+      .select('due_count, completed_count')
+      .eq('garden_id', gardenId)
+      .eq('cache_date', dayIso)
+      .maybeSingle()
+    
+    if (!error && data) {
+      return {
+        due: Number(data.due_count ?? 0),
+        completed: Number(data.completed_count ?? 0),
+      }
+    }
+  } catch {
+    // Fallback to RPC if cache miss
+  }
+  
+  // Fallback: use RPC function
+  return await getGardenTodayProgressUltraFast(gardenId, dayIso)
+}
+
+/**
+ * Get cached batched progress for multiple gardens
+ */
+export async function getGardensTodayProgressBatchCached(gardenIds: string[], dayIso: string): Promise<Record<string, { due: number; completed: number }>> {
+  try {
+    const { data, error } = await supabase
+      .from('garden_task_daily_cache')
+      .select('garden_id, due_count, completed_count')
+      .in('garden_id', gardenIds)
+      .eq('cache_date', dayIso)
+    
+    if (!error && data && Array.isArray(data)) {
+      const result: Record<string, { due: number; completed: number }> = {}
+      for (const row of data) {
+        result[String(row.garden_id)] = {
+          due: Number(row.due_count ?? 0),
+          completed: Number(row.completed_count ?? 0),
+        }
+      }
+      // Fill in missing gardens with zeros
+      for (const gid of gardenIds) {
+        if (!result[gid]) {
+          result[gid] = { due: 0, completed: 0 }
+        }
+      }
+      return result
+    }
+  } catch {
+    // Fallback to RPC if cache miss
+  }
+  
+  // Fallback: use RPC function
+  return await getGardensTodayProgressBatch(gardenIds, dayIso)
+}
+
+/**
+ * Get cached today's occurrences for a garden
+ */
+export async function getGardenTodayOccurrencesCached(gardenId: string, dayIso: string): Promise<Array<{
+  id: string
+  taskId: string
+  gardenPlantId: string
+  dueAt: string
+  requiredCount: number
+  completedCount: number
+  completedAt: string | null
+  taskType: 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'
+  taskEmoji: string | null
+}>> {
+  try {
+    const { data, error } = await supabase
+      .from('garden_task_occurrences_today_cache')
+      .select('occurrence_id, task_id, garden_plant_id, task_type, task_emoji, due_at, required_count, completed_count, completed_at')
+      .eq('garden_id', gardenId)
+      .eq('cache_date', dayIso)
+      .order('due_at', { ascending: true })
+    
+    if (!error && data && Array.isArray(data)) {
+      return data.map((r: any) => ({
+        id: String(r.occurrence_id),
+        taskId: String(r.task_id),
+        gardenPlantId: String(r.garden_plant_id),
+        dueAt: String(r.due_at),
+        requiredCount: Number(r.required_count ?? 1),
+        completedCount: Number(r.completed_count ?? 0),
+        completedAt: r.completed_at || null,
+        taskType: (r.task_type || 'custom') as 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom',
+        taskEmoji: r.task_emoji || null,
+      }))
+    }
+  } catch {
+    // Fallback to regular query
+  }
+  
+  // Fallback: use regular query
+  const tasks = await listGardenTasksMinimal(gardenId)
+  if (tasks.length === 0) return []
+  const startIso = `${dayIso}T00:00:00.000Z`
+  const endIso = `${dayIso}T23:59:59.999Z`
+  const occs = await listOccurrencesForTasks(tasks.map(t => t.id), startIso, endIso)
+  const taskTypeById: Record<string, 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'> = {}
+  const taskEmojiById: Record<string, string | null> = {}
+  for (const t of tasks) {
+    taskTypeById[t.id] = t.type
+    taskEmojiById[t.id] = t.emoji || null
+  }
+  return occs.map(o => ({
+    ...o,
+    taskType: taskTypeById[o.taskId] || 'custom',
+    taskEmoji: taskEmojiById[o.taskId] || null,
+  }))
+}
+
+/**
+ * Get cached weekly task statistics for a garden
+ */
+export async function getGardenWeeklyStatsCached(gardenId: string, weekStartDate: string): Promise<{
+  totalTasksByDay: number[]
+  waterTasksByDay: number[]
+  fertilizeTasksByDay: number[]
+  harvestTasksByDay: number[]
+  cutTasksByDay: number[]
+  customTasksByDay: number[]
+} | null> {
+  try {
+    const { data, error } = await supabase
+      .from('garden_task_weekly_cache')
+      .select('total_tasks_by_day, water_tasks_by_day, fertilize_tasks_by_day, harvest_tasks_by_day, cut_tasks_by_day, custom_tasks_by_day')
+      .eq('garden_id', gardenId)
+      .eq('week_start_date', weekStartDate)
+      .maybeSingle()
+    
+    if (!error && data) {
+      return {
+        totalTasksByDay: (data.total_tasks_by_day || [0,0,0,0,0,0,0]).map(Number),
+        waterTasksByDay: (data.water_tasks_by_day || [0,0,0,0,0,0,0]).map(Number),
+        fertilizeTasksByDay: (data.fertilize_tasks_by_day || [0,0,0,0,0,0,0]).map(Number),
+        harvestTasksByDay: (data.harvest_tasks_by_day || [0,0,0,0,0,0,0]).map(Number),
+        cutTasksByDay: (data.cut_tasks_by_day || [0,0,0,0,0,0,0]).map(Number),
+        customTasksByDay: (data.custom_tasks_by_day || [0,0,0,0,0,0,0]).map(Number),
+      }
+    }
+  } catch {
+    // Fallback to computation
+  }
+  
+  return null
+}
+
+/**
+ * Get cached task counts per plant
+ */
+export async function getGardenPlantTaskCountsCached(gardenId: string): Promise<Record<string, { taskCount: number; dueTodayCount: number }>> {
+  try {
+    const { data, error } = await supabase
+      .from('garden_plant_task_counts_cache')
+      .select('garden_plant_id, task_count, due_today_count')
+      .eq('garden_id', gardenId)
+    
+    if (!error && data && Array.isArray(data)) {
+      const result: Record<string, { taskCount: number; dueTodayCount: number }> = {}
+      for (const row of data) {
+        result[String(row.garden_plant_id)] = {
+          taskCount: Number(row.task_count ?? 0),
+          dueTodayCount: Number(row.due_today_count ?? 0),
+        }
+      }
+      return result
+    }
+  } catch {
+    // Fallback to computation
+  }
+  
+  return {}
+}
+
+/**
+ * Refresh cache for a garden (call after mutations)
+ */
+export async function refreshGardenTaskCache(gardenId: string, cacheDate?: string): Promise<void> {
+  const date = cacheDate || new Date().toISOString().slice(0, 10)
+  try {
+    const { error } = await supabase.rpc('refresh_garden_task_cache', {
+      _garden_id: gardenId,
+      _cache_date: date,
+    })
+    if (error) throw new Error(error.message)
+  } catch (e) {
+    // Silently fail - cache refresh is best effort
+    console.warn('[gardens] Failed to refresh cache:', e)
+  }
+}
+
+/**
+ * Cleanup old cache entries (call periodically)
+ */
+export async function cleanupOldGardenTaskCache(): Promise<void> {
+  try {
+    const { error } = await supabase.rpc('cleanup_old_garden_task_cache')
+    if (error) throw new Error(error.message)
+  } catch (e) {
+    console.warn('[gardens] Failed to cleanup old cache:', e)
+  }
+}
 
 // ===== Activity logs =====
 export type GardenActivityKind = 'plant_added' | 'plant_updated' | 'plant_deleted' | 'task_completed' | 'task_progressed' | 'note'
