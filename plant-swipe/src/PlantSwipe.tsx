@@ -456,7 +456,7 @@ export default function PlantSwipe() {
   }, [user])
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-b from-stone-50 to-stone-100 dark:from-stone-800 dark:to-stone-700 p-4 pb-24 md:p-8 md:pb-8 overflow-x-hidden">
+    <div className="min-h-screen w-full bg-gradient-to-b from-stone-50 to-stone-100 dark:from-[#1e1e1e] dark:to-[#252526] p-4 pb-24 md:p-8 md:pb-8 overflow-x-hidden">
   <TopBar
     openLogin={openLogin}
     openSignup={openSignup}
@@ -516,7 +516,7 @@ export default function PlantSwipe() {
                   <button
                     key={s}
                     onClick={() => setSeasonFilter((cur) => (cur === s ? null : s))}
-                    className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${seasonFilter === s ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white dark:bg-stone-600 hover:bg-stone-50 dark:hover:bg-stone-500"}`}
+                    className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${seasonFilter === s ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"}`}
                     aria-pressed={seasonFilter === s}
                   >
                     {t(`plant.${s.toLowerCase()}`)}
@@ -533,7 +533,7 @@ export default function PlantSwipe() {
                   <button
                     key={c}
                     onClick={() => setColorFilter((cur) => (cur === c ? null : c))}
-                    className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${colorFilter === c ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white dark:bg-stone-600 hover:bg-stone-50 dark:hover:bg-stone-500"}`}
+                    className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${colorFilter === c ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"}`}
                     aria-pressed={colorFilter === c}
                   >
                     {t(`plant.${c.toLowerCase()}`)}
@@ -547,7 +547,7 @@ export default function PlantSwipe() {
               <button
                 onClick={() => setOnlySeeds((v) => !v)}
                 className={`w-full justify-center px-3 py-2 rounded-2xl text-sm shadow-sm border flex items-center gap-2 transition ${
-                  onlySeeds ? "bg-emerald-600 text-white" : "bg-white dark:bg-stone-600 hover:bg-stone-50 dark:hover:bg-stone-500"
+                  onlySeeds ? "bg-emerald-600 text-white" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
                 }`}
                 aria-pressed={onlySeeds}
               >
@@ -557,7 +557,7 @@ export default function PlantSwipe() {
               <button
                 onClick={() => setOnlyFavorites((v) => !v)}
                 className={`w-full justify-center px-3 py-2 rounded-2xl text-sm shadow-sm border flex items-center gap-2 transition ${
-                  onlyFavorites ? "bg-rose-600 text-white" : "bg-white dark:bg-stone-600 hover:bg-stone-50 dark:hover:bg-stone-500"
+                  onlyFavorites ? "bg-rose-600 text-white" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
                 }`}
                 aria-pressed={onlyFavorites}
               >
@@ -567,7 +567,7 @@ export default function PlantSwipe() {
               <button
                 onClick={() => setFavoritesFirst((v) => !v)}
                 className={`w-full justify-center px-3 py-2 rounded-2xl text-sm shadow-sm border flex items-center gap-2 transition ${
-                  favoritesFirst ? "bg-rose-100 dark:bg-rose-900/30 text-rose-900 dark:text-rose-300 border-rose-300 dark:border-rose-700" : "bg-white dark:bg-stone-600 hover:bg-stone-50 dark:hover:bg-stone-500"
+                  favoritesFirst ? "bg-rose-100 dark:bg-rose-900/30 text-rose-900 dark:text-rose-300 border-rose-300 dark:border-rose-700" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
                 }`}
                 aria-pressed={favoritesFirst}
               >

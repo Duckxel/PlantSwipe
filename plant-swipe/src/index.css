@@ -88,25 +88,25 @@ button:focus-visible {
   .dark {
     /* Ensure UA controls (inputs, scrollbars) are dark in dark mode */
     color-scheme: dark;
-    /* Lighter dark theme inspired by VSCode/Duolingo */
-    --background: 0 0% 12%;
+    /* Dark theme colors matching VSCode */
+    --background: 0 0% 12%; /* #1e1e1e */
     --foreground: 0 0% 95%;
-    --card: 0 0% 15%;
+    --card: 240 3% 15%; /* #252526 */
     --card-foreground: 0 0% 95%;
-    --popover: 0 0% 15%;
+    --popover: 240 3% 15%; /* #252526 */
     --popover-foreground: 0 0% 95%;
     --primary: 0 0% 95%;
     --primary-foreground: 0 0% 12%;
-    --secondary: 0 0% 20%;
+    --secondary: 240 3% 18%; /* #2d2d30 */
     --secondary-foreground: 0 0% 95%;
-    --muted: 0 0% 20%;
+    --muted: 240 3% 18%; /* #2d2d30 */
     --muted-foreground: 0 0% 65%;
     --accent: 142 72% 40%;
     --accent-foreground: 0 0% 95%;
     --destructive: 0 65% 50%;
     --destructive-foreground: 0 0% 95%;
-    --border: 0 0% 25%;
-    --input: 0 0% 20%;
+    --border: 240 3% 25%; /* #3e3e42 */
+    --input: 240 3% 18%; /* #2d2d30 */
     --ring: 0 0% 70%;
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;

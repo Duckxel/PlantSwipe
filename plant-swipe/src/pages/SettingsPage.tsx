@@ -315,7 +315,7 @@ export default function SettingsPage() {
                 type="email"
                 value={email}
                 disabled
-                className="bg-stone-50 dark:bg-stone-700"
+                className="bg-stone-50 dark:bg-[#252526]"
               />
             </div>
             <div className="grid gap-2">
@@ -487,7 +487,7 @@ export default function SettingsPage() {
               id="language-select"
               value={currentLang}
               onChange={(e) => changeLanguage(e.target.value as typeof currentLang)}
-              className="w-full rounded-2xl border border-stone-300 bg-white dark:bg-stone-600 dark:border-stone-500 px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
+              className="w-full rounded-2xl border border-stone-300 bg-white dark:bg-[#2d2d30] dark:border-[#3e3e42] px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
             >
               {SUPPORTED_LANGUAGES.map((lang) => (
                 <option key={lang} value={lang}>
@@ -517,14 +517,14 @@ export default function SettingsPage() {
               id="theme-select"
               value={theme}
               onChange={(e) => setTheme(e.target.value as 'system' | 'light' | 'dark')}
-              className="w-full rounded-2xl border border-stone-300 bg-white dark:bg-stone-600 dark:border-stone-500 px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
+              className="w-full rounded-2xl border border-stone-300 bg-white dark:bg-[#2d2d30] dark:border-[#3e3e42] px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
             >
               <option value="system">{themeLabels.system}</option>
               <option value="light">{themeLabels.light}</option>
               <option value="dark">{themeLabels.dark}</option>
             </select>
           </div>
-          <div className="flex items-center gap-3 p-3 rounded-xl bg-stone-50 dark:bg-stone-700/50 border border-stone-200 dark:border-stone-600">
+          <div className="flex items-center gap-3 p-3 rounded-xl bg-stone-50 dark:bg-[#252526]/50 border border-stone-200 dark:border-[#3e3e42]">
             <div className="flex items-center gap-2 text-sm opacity-70">
               {theme === 'system' && <Monitor className="h-4 w-4" />}
               {theme === 'light' && <Sun className="h-4 w-4" />}
@@ -568,7 +568,7 @@ export default function SettingsPage() {
             </>
           ) : (
             <>
-              <div className="p-4 rounded-xl bg-white dark:bg-stone-700 border border-red-200 dark:border-red-800/50 space-y-4">
+              <div className="p-4 rounded-xl bg-white dark:bg-[#252526] border border-red-200 dark:border-red-800/50 space-y-4">
                 <p className="text-sm font-medium text-red-700 dark:text-red-400">
                   {t('settings.dangerZone.confirmDelete')}
                 </p>
