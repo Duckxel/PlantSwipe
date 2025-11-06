@@ -2331,12 +2331,12 @@ export const AdminPage: React.FC = () => {
                     }}
                   />
                   {suggestionsOpen && emailSuggestions.length > 0 && (
-                    <div className="absolute z-10 mt-1 w-full rounded-xl border bg-white shadow-md max-h-60 overflow-auto" role="listbox">
+                    <div className="absolute z-10 mt-1 w-full rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526] shadow-md max-h-60 overflow-auto" role="listbox">
                           {emailSuggestions.map((s, idx) => (
                             <button
                               key={s.id}
                               type="button"
-                          className={`w-full text-left px-3 py-2 text-sm rounded-xl ? ${idx === highlightIndex ? 'bg-neutral-100' : ''}`}
+                          className={`w-full text-left px-3 py-2 text-sm rounded-xl ${idx === highlightIndex ? 'bg-neutral-100 dark:bg-[#2d2d30]' : ''}`}
                           role="option"
                           aria-selected={idx === highlightIndex}
                               onMouseEnter={() => setHighlightIndex(idx)}
@@ -2825,29 +2825,29 @@ export const AdminPage: React.FC = () => {
                 {!ipLoading && ipUsed && (
                   <div className="space-y-2">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <div className="rounded-xl border p-3 text-center">
+                      <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 text-center bg-white dark:bg-[#252526]">
                         <div className="text-[11px] opacity-60">IP</div>
                         <div className="text-base font-semibold tabular-nums truncate" title={ipUsed || undefined}>{ipUsed || '-'}</div>
                       </div>
-                      <div className="rounded-xl border p-3 text-center">
+                      <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 text-center bg-white dark:bg-[#252526]">
                         <div className="text-[11px] opacity-60">Users</div>
                         <div className="text-base font-semibold tabular-nums">{ipUsersCount ?? ipResults.length}</div>
                       </div>
-                      <div className="rounded-xl border p-3 text-center">
+                      <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 text-center bg-white dark:bg-[#252526]">
                         <div className="text-[11px] opacity-60">Connections</div>
                         <div className="text-base font-semibold tabular-nums">{ipConnectionsCount ?? '-'}</div>
                       </div>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <div className="rounded-xl border p-3 text-center">
+                      <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 text-center bg-white dark:bg-[#252526]">
                         <div className="text-[11px] opacity-60">Mean RPM (5m)</div>
                         <div className="text-base font-semibold tabular-nums">{typeof ipMeanRpm5m === 'number' ? ipMeanRpm5m.toFixed(2) : '-'}</div>
                       </div>
-                      <div className="rounded-xl border p-3 text-center">
+                      <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 text-center bg-white dark:bg-[#252526]">
                         <div className="text-[11px] opacity-60">Country</div>
                         <div className="text-base font-semibold tabular-nums">{ipCountry ? countryCodeToName(ipCountry) : '-'}</div>
                       </div>
-                      <div className="rounded-xl border p-3">
+                      <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 bg-white dark:bg-[#252526]">
                         <div className="text-[11px] opacity-60 mb-1">Top referrers</div>
                         {(ipTopReferrers.length === 0) ? (
                           <div className="text-xs opacity-60">-</div>
@@ -2867,7 +2867,7 @@ export const AdminPage: React.FC = () => {
                           className="fixed z-[70] pointer-events-none"
                           style={{ top: otherCountriesTooltip.top, left: otherCountriesTooltip.left, transform: 'translate(-50%, -100%)' }}
                         >
-                          <div className="rounded-xl border bg-white shadow px-3 py-2 max-w-[280px]">
+                          <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526] shadow px-3 py-2 max-w-[280px]">
                             <div className="text-xs font-medium mb-1">Countries in Other</div>
                             <div className="text-[11px] opacity-80 space-y-0.5 max-h-48 overflow-auto">
                               {otherCountriesTooltip.names.map((n, idx) => (
@@ -2879,7 +2879,7 @@ export const AdminPage: React.FC = () => {
                         document.body
                       )}
                     </div>
-                    <div className="rounded-xl border p-3">
+                    <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 bg-white dark:bg-[#252526]">
                       <div className="text-[11px] opacity-60 mb-1">Top devices</div>
                       {(ipTopDevices.length === 0) ? (
                         <div className="text-xs opacity-60">-</div>
@@ -2903,7 +2903,7 @@ export const AdminPage: React.FC = () => {
                           <button
                             key={u.id}
                             type="button"
-                            className="text-left rounded-2xl border p-3 bg-white hover:bg-stone-50"
+                            className="text-left rounded-2xl border border-stone-300 dark:border-[#3e3e42] p-3 bg-white dark:bg-[#252526] hover:bg-stone-50 dark:hover:bg-[#2d2d30]"
                             onClick={() => {
                               const nextVal = (u.email || u.display_name || '').trim()
                               if (!nextVal) return
@@ -3334,13 +3334,13 @@ function NoteRow({ note, onRemoved }: { note: { id: string; admin_id: string | n
   }, [note?.id, removing, onRemoved])
   const [confirming, setConfirming] = React.useState(false)
   return (
-    <div className="rounded-xl border p-3 bg-white">
+    <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 bg-white dark:bg-[#252526]">
       <div className="text-xs opacity-60 flex items-center justify-between">
         <span>{note.admin_name || 'Admin'}</span>
         <div className="flex items-center gap-2">
           <span>{note.created_at ? new Date(note.created_at).toLocaleString() : ''}</span>
           {!confirming ? (
-            <button type="button" aria-label="Delete note" className="px-2 py-1 rounded hover:bg-rose-50 text-rose-600" onClick={() => setConfirming(true)}>
+            <button type="button" aria-label="Delete note" className="px-2 py-1 rounded hover:bg-rose-50 dark:hover:bg-rose-950/30 text-rose-600 dark:text-rose-400" onClick={() => setConfirming(true)}>
               <Trash2 className="h-4 w-4" />
             </button>
           ) : (
@@ -3351,7 +3351,7 @@ function NoteRow({ note, onRemoved }: { note: { id: string; admin_id: string | n
           )}
         </div>
       </div>
-      <div className="text-xs mt-1 font-mono whitespace-pre-wrap break-words">
+      <div className="text-xs mt-1 font-mono whitespace-pre-wrap break-words text-black dark:text-white">
         {note.message}
       </div>
     </div>

@@ -955,13 +955,27 @@ export const GardenDashboardPage: React.FC = () => {
         const emailMatch = f.email?.toLowerCase().includes(query)
         return displayNameMatch || emailMatch
       })
+      
+      // Check if input exactly matches any suggestion (case-insensitive)
+      const exactMatch = filtered.some(f => {
+        const displayNameExact = f.display_name?.toLowerCase() === query
+        const emailExact = f.email?.toLowerCase() === query
+        return displayNameExact || emailExact
+      })
+      
+      // Limit to top 5
+      filtered = filtered.slice(0, 5)
+      
+      setFriendSuggestions(filtered)
+      // Hide suggestions if input exactly matches a suggestion or if no matches
+      setSuggestionsOpen(filtered.length > 0 && inviteOpen && !exactMatch)
+    } else {
+      // Limit to top 5
+      filtered = filtered.slice(0, 5)
+      
+      setFriendSuggestions(filtered)
+      setSuggestionsOpen(filtered.length > 0 && inviteOpen)
     }
-    
-    // Limit to top 5
-    filtered = filtered.slice(0, 5)
-    
-    setFriendSuggestions(filtered)
-    setSuggestionsOpen(filtered.length > 0 && inviteOpen)
   }, [inviteAny, friends, members, inviteOpen])
 
   const submitInvite = async () => {
@@ -1475,9 +1489,9 @@ export const GardenDashboardPage: React.FC = () => {
               </DialogHeader>
               <div className="space-y-3">
                 <Input placeholder={t('gardenDashboard.plantsSection.searchPlants')} value={plantQuery} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPlantQuery(e.target.value)} />
-                <div className="max-h-60 overflow-auto rounded-xl border">
+                <div className="max-h-60 overflow-auto rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526]">
                   {plantResults.map(p => (
-                    <button key={p.id} onClick={() => setSelectedPlant(p)} className={`w-full text-left px-3 py-2 hover:bg-stone-50 ${selectedPlant?.id === p.id ? 'bg-stone-100' : ''}`}>
+                    <button key={p.id} onClick={() => setSelectedPlant(p)} className={`w-full text-left px-3 py-2 hover:bg-stone-50 dark:hover:bg-[#2d2d30] ${selectedPlant?.id === p.id ? 'bg-stone-100 dark:bg-[#2d2d30]' : ''}`}>
                       <div className="font-medium">{p.name}</div>
                       <div className="text-xs opacity-60">{p.scientificName}</div>
                     </button>
@@ -1575,12 +1589,12 @@ export const GardenDashboardPage: React.FC = () => {
                     }}
                   />
                   {suggestionsOpen && friendSuggestions.length > 0 && (
-                    <div className="absolute z-10 w-full mt-1 bg-white border rounded-xl shadow-lg max-h-60 overflow-auto">
+                    <div className="absolute z-10 w-full mt-1 bg-white dark:bg-[#252526] border border-stone-300 dark:border-[#3e3e42] rounded-xl shadow-lg max-h-60 overflow-auto">
                       {friendSuggestions.map((friend) => (
                         <button
                           key={friend.id}
                           type="button"
-                          className="w-full text-left px-3 py-2 hover:bg-stone-50 flex flex-col gap-1"
+                          className="w-full text-left px-3 py-2 hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex flex-col gap-1"
                           onClick={() => {
                             setInviteAny(friend.display_name || friend.email || '')
                             setSuggestionsOpen(false)
