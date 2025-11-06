@@ -507,18 +507,19 @@ export default function PublicProfilePage() {
   const maxCount = React.useMemo(() => monthDays.reduce((m, d) => Math.max(m, d.completed || 0), 0), [monthDays])
 
   const colorFor = (cell: { value: number; success: boolean } | null) => {
-    if (!cell) return 'bg-stone-200 dark:bg-stone-800'
+    if (!cell) return 'bg-stone-200 dark:bg-stone-700'
     // Grey: Tasks were not accomplished that day (tasks were due but not all completed)
-    if (!cell.success) return 'bg-stone-200 dark:bg-stone-800'
+    if (!cell.success) return 'bg-stone-200 dark:bg-stone-700'
     // Green: Either no tasks were needed OR all tasks were done
-    // Darker color = fewer tasks completed that day, lighter color = more tasks completed
-    if (maxCount <= 0) return 'bg-emerald-700 dark:bg-emerald-800'
+    // Light mode: lighter color = fewer tasks, darker color = more tasks
+    // Dark mode: darker color = fewer tasks, lighter color = more tasks
+    if (maxCount <= 0) return 'bg-emerald-400 dark:bg-emerald-800'
     const ratio = (cell.value || 0) / maxCount
-    if (ratio <= 0) return 'bg-emerald-800 dark:bg-emerald-900'
-    if (ratio <= 0.25) return 'bg-emerald-700 dark:bg-emerald-800'
-    if (ratio <= 0.5) return 'bg-emerald-600 dark:bg-emerald-600'
-    if (ratio <= 0.75) return 'bg-emerald-500 dark:bg-emerald-400'
-    return 'bg-emerald-400 dark:bg-emerald-300'
+    if (ratio <= 0) return 'bg-emerald-300 dark:bg-emerald-900'
+    if (ratio <= 0.25) return 'bg-emerald-400 dark:bg-emerald-800'
+    if (ratio <= 0.5) return 'bg-emerald-500 dark:bg-emerald-700'
+    if (ratio <= 0.75) return 'bg-emerald-600 dark:bg-emerald-600'
+    return 'bg-emerald-700 dark:bg-emerald-500'
   }
 
   const [tooltip, setTooltip] = React.useState<{ top: number; left: number; date: string; value: number; success: boolean } | null>(null)

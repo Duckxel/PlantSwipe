@@ -1816,16 +1816,17 @@ function OverviewSection({ gardenId, activityRev, plants, membersCount, serverTo
   
   const colorForDay = (completed: number, success: boolean) => {
     // Grey: Tasks were not accomplished that day (tasks were due but not all completed)
-    if (!success) return 'bg-stone-200 dark:bg-stone-800'
+    if (!success) return 'bg-stone-200 dark:bg-stone-700'
     // Green: Tasks were accomplished
-    // Darker color = fewer tasks completed that day, lighter color = more tasks completed
-    if (maxCompleted <= 0) return 'bg-emerald-700 dark:bg-emerald-800'
+    // Light mode: lighter color = fewer tasks, darker color = more tasks
+    // Dark mode: darker color = fewer tasks, lighter color = more tasks
+    if (maxCompleted <= 0) return 'bg-emerald-400 dark:bg-emerald-800'
     const ratio = completed / maxCompleted
-    if (ratio <= 0) return 'bg-emerald-800 dark:bg-emerald-900'
-    if (ratio <= 0.25) return 'bg-emerald-700 dark:bg-emerald-800'
-    if (ratio <= 0.5) return 'bg-emerald-600 dark:bg-emerald-600'
-    if (ratio <= 0.75) return 'bg-emerald-500 dark:bg-emerald-400'
-    return 'bg-emerald-400 dark:bg-emerald-300'
+    if (ratio <= 0) return 'bg-emerald-300 dark:bg-emerald-900'
+    if (ratio <= 0.25) return 'bg-emerald-400 dark:bg-emerald-800'
+    if (ratio <= 0.5) return 'bg-emerald-500 dark:bg-emerald-700'
+    if (ratio <= 0.75) return 'bg-emerald-600 dark:bg-emerald-600'
+    return 'bg-emerald-700 dark:bg-emerald-500'
   }
   
   const days = Array.from({ length: 30 }, (_, i) => {
