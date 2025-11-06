@@ -461,52 +461,72 @@ export const GardenListPage: React.FC = () => {
   }, [scheduleReload, user?.id])
 
   // Defer task loading until after gardens are displayed (non-blocking)
+  // Use requestIdleCallback for better performance when browser is idle
   React.useEffect(() => {
     // Only load tasks after gardens are loaded
     if (!loading && gardens.length > 0) {
       let cancelled = false
       let backgroundTimer: ReturnType<typeof setTimeout> | null = null
       
-      // Small delay to ensure gardens render first
-      // Skip resync on initial load for speed - just query existing occurrences
-      const timer = setTimeout(() => {
+      // Use requestIdleCallback if available, otherwise use setTimeout
+      const scheduleTask = (callback: () => void, delay: number = 0) => {
+        if ('requestIdleCallback' in window) {
+          return window.requestIdleCallback(callback, { timeout: delay + 100 })
+        }
+        return setTimeout(callback, delay)
+      }
+      
+      // Load tasks immediately but skip resync for instant display
+      const timer = scheduleTask(() => {
         if (cancelled) return
         loadAllTodayOccurrences(undefined, undefined, true) // skipResync = true
         
-        // Background resync after a short delay to ensure data is accurate
-        // This happens after the UI is already showing tasks
+        // Background resync after UI is shown - use longer delay to avoid blocking
         backgroundTimer = setTimeout(() => {
           if (cancelled) return
           const today = serverTodayRef.current ?? serverToday
           if (today && gardens.length > 0) {
             const startIso = `${today}T00:00:00.000Z`
             const endIso = `${today}T23:59:59.999Z`
-            // Resync in background without blocking UI
-            Promise.all(gardens.map(g => {
-              const cacheKey = `${g.id}::${today}`
-              const lastResync = resyncCacheRef.current[cacheKey] || 0
-              const now = Date.now()
-              if (now - lastResync >= CACHE_TTL) {
-                return resyncTaskOccurrencesForGarden(g.id, startIso, endIso).then(() => {
-                  if (!cancelled) {
-                    resyncCacheRef.current[cacheKey] = now
-                  }
-                }).catch(() => {})
-              }
-              return Promise.resolve()
-            })).then(() => {
-              // After background resync, reload tasks to show updated data
-              if (!cancelled) {
-                loadAllTodayOccurrences(undefined, undefined, true)
-              }
-            }).catch(() => {})
+            // Resync in background without blocking UI - use requestIdleCallback
+            const resyncFn = () => {
+              Promise.all(gardens.map(g => {
+                const cacheKey = `${g.id}::${today}`
+                const lastResync = resyncCacheRef.current[cacheKey] || 0
+                const now = Date.now()
+                if (now - lastResync >= CACHE_TTL) {
+                  return resyncTaskOccurrencesForGarden(g.id, startIso, endIso).then(() => {
+                    if (!cancelled) {
+                      resyncCacheRef.current[cacheKey] = now
+                    }
+                  }).catch(() => {})
+                }
+                return Promise.resolve()
+              })).then(() => {
+                // After background resync, reload tasks to show updated data
+                if (!cancelled) {
+                  loadAllTodayOccurrences(undefined, undefined, true)
+                }
+              }).catch(() => {})
+            }
+            
+            // Use requestIdleCallback for background resync to avoid blocking
+            if ('requestIdleCallback' in window) {
+              window.requestIdleCallback(resyncFn, { timeout: 3000 })
+            } else {
+              setTimeout(resyncFn, 2000) // Wait 2 seconds after initial load
+            }
           }
-        }, 1000) // Wait 1 second after initial load
-      }, 50)
+        }, 100) // Reduced initial delay
+      }, 0) // Start immediately when idle
       
       return () => {
         cancelled = true
-        clearTimeout(timer)
+        if (typeof timer === 'number') {
+          clearTimeout(timer)
+        } else if ('cancelIdleCallback' in window) {
+          window.cancelIdleCallback(timer as number)
+        }
         if (backgroundTimer) clearTimeout(backgroundTimer)
       }
     }
@@ -541,110 +561,169 @@ export const GardenListPage: React.FC = () => {
 
   const onProgressOccurrence = React.useCallback(async (occId: string, inc: number) => {
     let broadcastGardenId: string | null = null
+    const o = todayTaskOccurrences.find((x: any) => x.id === occId)
+    
+    // Optimistic update - update UI immediately
+    if (o) {
+      const optimisticOcc = { ...o, completedCount: Number(o.completedCount || 0) + inc }
+      setTodayTaskOccurrences(prev => prev.map((x: any) => x.id === occId ? optimisticOcc : x))
+      
+      const gp = allPlants.find((p: any) => p.id === o.gardenPlantId)
+      broadcastGardenId = gp?.gardenId || null
+    }
+    
     try {
       await progressTaskOccurrence(occId, inc)
       // Log activity for the appropriate garden
       try {
-        const o = todayTaskOccurrences.find((x: any) => x.id === occId)
-        if (o) {
+        if (o && broadcastGardenId) {
           const gp = allPlants.find((p: any) => p.id === o.gardenPlantId)
-          const gardenId = gp?.gardenId
-          if (gardenId) broadcastGardenId = gardenId
-          if (gardenId) {
-            const type = (o as any).taskType || 'custom'
-            const taskTypeLabel = t(`garden.taskTypes.${type}`)
-            const plantName = gp?.nickname || gp?.plant?.name || null
-            const newCount = Number(o.completedCount || 0) + inc
-            const required = Math.max(1, Number(o.requiredCount || 1))
-            const done = newCount >= required
-            const kind = done ? 'task_completed' : 'task_progressed'
-            const msg = done
-              ? t('garden.activity.completedTask', { taskType: taskTypeLabel, plantName: plantName || t('garden.activity.plant') })
-              : t('garden.activity.progressedTask', { taskType: taskTypeLabel, plantName: plantName || t('garden.activity.plant'), completed: Math.min(newCount, required), required })
-            await logGardenActivity({ gardenId, kind: kind as any, message: msg, plantName: plantName || null, taskName: taskTypeLabel, actorColor: null })
-            // Broadcast update BEFORE reload to ensure other clients receive it
-            await broadcastGardenUpdate({ gardenId, kind: 'tasks', actorId: user?.id ?? null }).catch((err) => {
-              console.warn('[GardenList] Failed to broadcast task update:', err)
-            })
-          }
-        }
-      } catch {}
-    } finally {
-      // Always refresh gardens and occurrences so UI counts update immediately
-      // Clear cache and force resync after user action
-      const today = serverTodayRef.current ?? serverToday
-      if (today) {
-        // Clear resync cache for affected gardens
-        if (broadcastGardenId) {
-          delete resyncCacheRef.current[`${broadcastGardenId}::${today}`]
-          // Clear localStorage cache for this garden's tasks
-          clearLocalStorageCache(`garden_tasks_cache_`)
-        }
-      }
-      taskDataCacheRef.current = null
-      await load()
-      await loadAllTodayOccurrences(undefined, undefined, false) // Force resync after user action
-      if (broadcastGardenId) emitGardenRealtime(broadcastGardenId, 'tasks')
-    }
-  }, [allPlants, emitGardenRealtime, load, loadAllTodayOccurrences, todayTaskOccurrences, serverToday, user?.id, clearLocalStorageCache])
-
-  const onCompleteAllForPlant = React.useCallback(async (gardenPlantId: string) => {
-    const gp = allPlants.find((p: any) => p.id === gardenPlantId)
-    const gardenId = gp?.gardenId ? String(gp.gardenId) : null
-    try {
-      const occs = todayTaskOccurrences.filter(o => o.gardenPlantId === gardenPlantId)
-      for (const o of occs) {
-        const remaining = Math.max(0, Number(o.requiredCount || 1) - Number(o.completedCount || 0))
-        if (remaining <= 0) continue
-        for (let i = 0; i < remaining; i++) {
-          await progressTaskOccurrence(o.id, 1)
-        }
-      }
-      // Log summary activity for this plant/garden
-      try {
-        const gp = allPlants.find((p: any) => p.id === gardenPlantId)
-        if (gp?.gardenId) {
-          const plantName = gp?.nickname || gp?.plant?.name || t('garden.activity.plant')
-          await logGardenActivity({ gardenId: gp.gardenId, kind: 'task_completed' as any, message: t('garden.activity.completedAllTasks', { plantName }), plantName, actorColor: null })
-          // Broadcast update AFTER all task completions finish, BEFORE reload to ensure other clients receive it
-          await broadcastGardenUpdate({ gardenId: gp.gardenId, kind: 'tasks', actorId: user?.id ?? null }).catch((err) => {
+          const type = (o as any).taskType || 'custom'
+          const taskTypeLabel = t(`garden.taskTypes.${type}`)
+          const plantName = gp?.nickname || gp?.plant?.name || null
+          const newCount = Number(o.completedCount || 0) + inc
+          const required = Math.max(1, Number(o.requiredCount || 1))
+          const done = newCount >= required
+          const kind = done ? 'task_completed' : 'task_progressed'
+          const msg = done
+            ? t('garden.activity.completedTask', { taskType: taskTypeLabel, plantName: plantName || t('garden.activity.plant') })
+            : t('garden.activity.progressedTask', { taskType: taskTypeLabel, plantName: plantName || t('garden.activity.plant'), completed: Math.min(newCount, required), required })
+          // Don't await - fire and forget for speed
+          logGardenActivity({ gardenId: broadcastGardenId, kind: kind as any, message: msg, plantName: plantName || null, taskName: taskTypeLabel, actorColor: null }).catch(() => {})
+          // Broadcast update BEFORE reload to ensure other clients receive it
+          broadcastGardenUpdate({ gardenId: broadcastGardenId, kind: 'tasks', actorId: user?.id ?? null }).catch((err) => {
             console.warn('[GardenList] Failed to broadcast task update:', err)
           })
         }
       } catch {}
+    } catch (error) {
+      // Revert optimistic update on error
+      if (o) {
+        setTodayTaskOccurrences(prev => prev.map((x: any) => x.id === occId ? o : x))
+      }
+      throw error
     } finally {
-      // Clear cache and force resync after user action
+      // Refresh in background without blocking UI
+      const today = serverTodayRef.current ?? serverToday
+      if (today && broadcastGardenId) {
+        delete resyncCacheRef.current[`${broadcastGardenId}::${today}`]
+        clearLocalStorageCache(`garden_tasks_cache_`)
+      }
+      taskDataCacheRef.current = null
+      
+      // Use requestIdleCallback for background refresh
+      const refreshFn = () => {
+        load().catch(() => {})
+        loadAllTodayOccurrences(undefined, undefined, false).catch(() => {})
+        if (broadcastGardenId) emitGardenRealtime(broadcastGardenId, 'tasks')
+      }
+      
+      if ('requestIdleCallback' in window) {
+        window.requestIdleCallback(refreshFn, { timeout: 500 })
+      } else {
+        setTimeout(refreshFn, 100)
+      }
+    }
+  }, [allPlants, emitGardenRealtime, load, loadAllTodayOccurrences, todayTaskOccurrences, serverToday, user?.id, clearLocalStorageCache, t])
+
+  const onCompleteAllForPlant = React.useCallback(async (gardenPlantId: string) => {
+    const gp = allPlants.find((p: any) => p.id === gardenPlantId)
+    const gardenId = gp?.gardenId ? String(gp.gardenId) : null
+    
+    // Optimistic update - mark all as completed immediately
+    const occs = todayTaskOccurrences.filter(o => o.gardenPlantId === gardenPlantId)
+    const optimisticOccs = occs.map(o => ({
+      ...o,
+      completedCount: Math.max(Number(o.requiredCount || 1), Number(o.completedCount || 0))
+    }))
+    setTodayTaskOccurrences(prev => prev.map((x: any) => {
+      const updated = optimisticOccs.find(opt => opt.id === x.id)
+      return updated || x
+    }))
+    
+    try {
+      // Process all completions in parallel for speed
+      const promises = occs.map(async (o) => {
+        const remaining = Math.max(0, Number(o.requiredCount || 1) - Number(o.completedCount || 0))
+        if (remaining <= 0) return
+        // Process all increments in parallel
+        return Promise.all(Array.from({ length: remaining }, () => progressTaskOccurrence(o.id, 1)))
+      })
+      await Promise.all(promises)
+      
+      // Log summary activity for this plant/garden (fire and forget)
+      if (gardenId) {
+        const plantName = gp?.nickname || gp?.plant?.name || t('garden.activity.plant')
+        logGardenActivity({ gardenId, kind: 'task_completed' as any, message: t('garden.activity.completedAllTasks', { plantName }), plantName, actorColor: null }).catch(() => {})
+        broadcastGardenUpdate({ gardenId, kind: 'tasks', actorId: user?.id ?? null }).catch((err) => {
+          console.warn('[GardenList] Failed to broadcast task update:', err)
+        })
+      }
+    } catch (error) {
+      // Revert optimistic update on error
+      setTodayTaskOccurrences(prev => prev.map((x: any) => {
+        const original = occs.find(orig => orig.id === x.id)
+        return original || x
+      }))
+      throw error
+    } finally {
+      // Refresh in background
       const today = serverTodayRef.current ?? serverToday
       if (today && gardenId) {
         delete resyncCacheRef.current[`${gardenId}::${today}`]
         clearLocalStorageCache(`garden_tasks_cache_`)
       }
       taskDataCacheRef.current = null
-      await load()
-      await loadAllTodayOccurrences(undefined, undefined, false) // Force resync after user action
-      if (gardenId) emitGardenRealtime(gardenId, 'tasks')
+      
+      const refreshFn = () => {
+        load().catch(() => {})
+        loadAllTodayOccurrences(undefined, undefined, false).catch(() => {})
+        if (gardenId) emitGardenRealtime(gardenId, 'tasks')
+      }
+      
+      if ('requestIdleCallback' in window) {
+        window.requestIdleCallback(refreshFn, { timeout: 500 })
+      } else {
+        setTimeout(refreshFn, 100)
+      }
     }
-  }, [allPlants, emitGardenRealtime, load, loadAllTodayOccurrences, todayTaskOccurrences, serverToday, user?.id, clearLocalStorageCache])
+  }, [allPlants, emitGardenRealtime, load, loadAllTodayOccurrences, todayTaskOccurrences, serverToday, user?.id, clearLocalStorageCache, t])
 
   const onMarkAllCompleted = React.useCallback(async () => {
     const affectedGardenIds = new Set<string>()
+    
+    // Optimistic update - mark all as completed immediately
+    const optimisticOccs = todayTaskOccurrences.map(o => {
+      const gp = allPlants.find((p: any) => p.id === o.gardenPlantId)
+      if (gp?.gardenId) affectedGardenIds.add(String(gp.gardenId))
+      return {
+        ...o,
+        completedCount: Math.max(Number(o.requiredCount || 1), Number(o.completedCount || 0))
+      }
+    })
+    setTodayTaskOccurrences(optimisticOccs as any)
+    
     try {
+      // Process all completions in parallel for speed
       const ops: Promise<any>[] = []
       for (const o of todayTaskOccurrences) {
         const remaining = Math.max(0, Number(o.requiredCount || 1) - Number(o.completedCount || 0))
         if (remaining > 0) ops.push(progressTaskOccurrence(o.id, remaining))
-        const gp = allPlants.find((p: any) => p.id === o.gardenPlantId)
-        if (gp?.gardenId) affectedGardenIds.add(String(gp.gardenId))
       }
       if (ops.length > 0) await Promise.all(ops)
-      // Broadcast updates for all affected gardens BEFORE reload
-      await Promise.all(Array.from(affectedGardenIds).map((gid) => 
+      
+      // Broadcast updates for all affected gardens (fire and forget)
+      Promise.all(Array.from(affectedGardenIds).map((gid) => 
         broadcastGardenUpdate({ gardenId: gid, kind: 'tasks', actorId: user?.id ?? null }).catch((err) => {
           console.warn('[GardenList] Failed to broadcast task update for garden:', gid, err)
         })
-      ))
+      )).catch(() => {})
+    } catch (error) {
+      // Revert optimistic update on error
+      setTodayTaskOccurrences(todayTaskOccurrences as any)
+      throw error
     } finally {
-      // Clear cache and force resync after user action
+      // Refresh in background
       const today = serverTodayRef.current ?? serverToday
       if (today) {
         affectedGardenIds.forEach((gid) => {
@@ -653,9 +732,18 @@ export const GardenListPage: React.FC = () => {
         clearLocalStorageCache(`garden_tasks_cache_`)
       }
       taskDataCacheRef.current = null
-      await load()
-      await loadAllTodayOccurrences(undefined, undefined, false) // Force resync after user action
-      affectedGardenIds.forEach((gid) => emitGardenRealtime(gid, 'tasks'))
+      
+      const refreshFn = () => {
+        load().catch(() => {})
+        loadAllTodayOccurrences(undefined, undefined, false).catch(() => {})
+        affectedGardenIds.forEach((gid) => emitGardenRealtime(gid, 'tasks'))
+      }
+      
+      if ('requestIdleCallback' in window) {
+        window.requestIdleCallback(refreshFn, { timeout: 500 })
+      } else {
+        setTimeout(refreshFn, 100)
+      }
     }
   }, [allPlants, emitGardenRealtime, load, loadAllTodayOccurrences, todayTaskOccurrences, serverToday, user?.id, clearLocalStorageCache])
 

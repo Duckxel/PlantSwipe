@@ -357,10 +357,17 @@ export const GardenDashboardPage: React.FC = () => {
     }
   }, [id, garden, currentLang])
 
-  // Lazy heavy loader for tabs that need it
+  // Lazy heavy loader for tabs that need it - only load when tab is actually viewed
   const loadHeavyForCurrentTab = React.useCallback(async (todayOverride?: string | null) => {
     const todayValue = todayOverride ?? serverTodayRef.current ?? serverToday
     if (!id || !todayValue) return
+    
+    // Skip if already loading or if not needed for current tab
+    if (heavyLoading) return
+    
+    // Only load heavy data for tabs that need it
+    if (tab !== 'routine' && tab !== 'plants' && tab !== 'overview') return
+    
     setHeavyLoading(true)
     try {
       const parseUTC = (iso: string) => new Date(`${iso}T00:00:00Z`)
@@ -377,10 +384,27 @@ export const GardenDashboardPage: React.FC = () => {
       }
       setWeekDays(weekDaysIso)
       const today = todayValue
-      const allTasks = await listGardenTasks(id)
-      const weekStartIso = `${weekDaysIso[0]}T00:00:00.000Z`
-      const weekEndIso = `${weekDaysIso[6]}T23:59:59.999Z`
-      await resyncTaskOccurrencesForGarden(id, weekStartIso, weekEndIso)
+      
+      // Load tasks in parallel with resync for better performance
+      const [allTasks] = await Promise.all([
+        listGardenTasks(id),
+        // Resync in background - don't block
+        (async () => {
+          const weekStartIso = `${weekDaysIso[0]}T00:00:00.000Z`
+          const weekEndIso = `${weekDaysIso[6]}T23:59:59.999Z`
+          // Use requestIdleCallback for resync to avoid blocking
+          const resyncFn = () => {
+            resyncTaskOccurrencesForGarden(id, weekStartIso, weekEndIso).catch(() => {})
+          }
+          if ('requestIdleCallback' in window) {
+            window.requestIdleCallback(resyncFn, { timeout: 2000 })
+          } else {
+            setTimeout(resyncFn, 500)
+          }
+        })()
+      ])
+      
+      // Load today's occurrences immediately
       const occs = await listOccurrencesForTasks(allTasks.map(t => t.id), `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`)
       const taskTypeById: Record<string, 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'> = {}
       const taskEmojiById: Record<string, string | null> = {}
@@ -402,42 +426,57 @@ export const GardenDashboardPage: React.FC = () => {
         const compDone = occs.reduce((acc, o) => acc + Math.min(Math.max(1, Number(o.requiredCount || 1)), Number(o.completedCount || 0)), 0)
         return prev.map(d => d.date === today ? { ...d, due: reqDone, completed: compDone } : d)
       })
+      
+      // Only load week data if on routine tab
       if (tab === 'routine') {
-        const weekOccs = await listOccurrencesForTasks(allTasks.map(t => t.id), weekStartIso, weekEndIso)
-        const typeCounts: { water: number[]; fertilize: number[]; harvest: number[]; cut: number[]; custom: number[] } = {
-          water: Array(7).fill(0), fertilize: Array(7).fill(0), harvest: Array(7).fill(0), cut: Array(7).fill(0), custom: Array(7).fill(0),
-        }
-        const tById: Record<string, 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'> = {}
-        for (const t of allTasks) tById[t.id] = t.type as any
-        for (const o of weekOccs) {
-          const dayIso = new Date(o.dueAt).toISOString().slice(0,10)
-          const idx = weekDaysIso.indexOf(dayIso)
-          if (idx >= 0) {
-            const typ = tById[o.taskId] || 'custom'
-            const inc = Math.max(1, Number(o.requiredCount || 1))
-            ;(typeCounts as any)[typ][idx] += inc
+        // Load week occurrences in background
+        const loadWeekData = async () => {
+          const weekStartIso = `${weekDaysIso[0]}T00:00:00.000Z`
+          const weekEndIso = `${weekDaysIso[6]}T23:59:59.999Z`
+          const weekOccs = await listOccurrencesForTasks(allTasks.map(t => t.id), weekStartIso, weekEndIso)
+          const typeCounts: { water: number[]; fertilize: number[]; harvest: number[]; cut: number[]; custom: number[] } = {
+            water: Array(7).fill(0), fertilize: Array(7).fill(0), harvest: Array(7).fill(0), cut: Array(7).fill(0), custom: Array(7).fill(0),
           }
-        }
-        const totals = weekDaysIso.map((_, i) => typeCounts.water[i] + typeCounts.fertilize[i] + typeCounts.harvest[i] + typeCounts.cut[i] + typeCounts.custom[i])
-        setWeekCountsByType(typeCounts)
-        setWeekCounts(totals)
-        const dueMapSets: Record<string, Set<number>> = {}
-        for (const o of weekOccs) {
-          const dayIso = new Date(o.dueAt).toISOString().slice(0,10)
-          const remaining = Math.max(0, Number(o.requiredCount || 1) - Number(o.completedCount || 0))
-          if (remaining <= 0) continue
-          if (dayIso <= today) continue
-          const idx = weekDaysIso.indexOf(dayIso)
-          if (idx >= 0) {
-            const pid = String(o.gardenPlantId)
-            if (!dueMapSets[pid]) dueMapSets[pid] = new Set<number>()
-            dueMapSets[pid].add(idx)
+          const tById: Record<string, 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'> = {}
+          for (const t of allTasks) tById[t.id] = t.type as any
+          for (const o of weekOccs) {
+            const dayIso = new Date(o.dueAt).toISOString().slice(0,10)
+            const idx = weekDaysIso.indexOf(dayIso)
+            if (idx >= 0) {
+              const typ = tById[o.taskId] || 'custom'
+              const inc = Math.max(1, Number(o.requiredCount || 1))
+              ;(typeCounts as any)[typ][idx] += inc
+            }
           }
+          const totals = weekDaysIso.map((_, i) => typeCounts.water[i] + typeCounts.fertilize[i] + typeCounts.harvest[i] + typeCounts.cut[i] + typeCounts.custom[i])
+          setWeekCountsByType(typeCounts)
+          setWeekCounts(totals)
+          const dueMapSets: Record<string, Set<number>> = {}
+          for (const o of weekOccs) {
+            const dayIso = new Date(o.dueAt).toISOString().slice(0,10)
+            const remaining = Math.max(0, Number(o.requiredCount || 1) - Number(o.completedCount || 0))
+            if (remaining <= 0) continue
+            if (dayIso <= today) continue
+            const idx = weekDaysIso.indexOf(dayIso)
+            if (idx >= 0) {
+              const pid = String(o.gardenPlantId)
+              if (!dueMapSets[pid]) dueMapSets[pid] = new Set<number>()
+              dueMapSets[pid].add(idx)
+            }
+          }
+          const dueMapNext: Record<string, number[]> = {}
+          for (const pid of Object.keys(dueMapSets)) dueMapNext[pid] = Array.from(dueMapSets[pid]).sort((a, b) => a - b)
+          setDueThisWeekByPlant(dueMapNext)
         }
-        const dueMapNext: Record<string, number[]> = {}
-        for (const pid of Object.keys(dueMapSets)) dueMapNext[pid] = Array.from(dueMapSets[pid]).sort((a, b) => a - b)
-        setDueThisWeekByPlant(dueMapNext)
+        
+        // Load week data in background
+        if ('requestIdleCallback' in window) {
+          window.requestIdleCallback(() => loadWeekData(), { timeout: 1000 })
+        } else {
+          setTimeout(() => loadWeekData(), 200)
+        }
       }
+      
       const dueTodaySet = new Set<string>()
       for (const o of (occs || [])) {
         const remaining = Math.max(0, (o.requiredCount || 1) - (o.completedCount || 0))
@@ -737,10 +776,25 @@ export const GardenDashboardPage: React.FC = () => {
 
   React.useEffect(() => { load() }, [load])
 
+  // Load heavy data when tab changes or when garden loads - use requestIdleCallback for better performance
   React.useEffect(() => {
-    // Always load today's occurrences for the Tasks sidebar; compute weekly only on Routine
-    loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday)
-  }, [tab, loadHeavyForCurrentTab, serverToday])
+    if (!loading && id && serverToday) {
+      // Use requestIdleCallback to defer heavy loading until browser is idle
+      const loadFn = () => {
+        loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday)
+      }
+      
+      if ('requestIdleCallback' in window) {
+        const idleId = window.requestIdleCallback(loadFn, { timeout: 500 })
+        return () => {
+          window.cancelIdleCallback(idleId)
+        }
+      } else {
+        const timer = setTimeout(loadFn, 100)
+        return () => clearTimeout(timer)
+      }
+    }
+  }, [tab, loadHeavyForCurrentTab, serverToday, loading, id])
 
   // Realtime updates via Supabase (tables: gardens, garden_members, garden_plants, garden_plant_tasks, garden_plant_task_occurrences, plants)
   React.useEffect(() => {
