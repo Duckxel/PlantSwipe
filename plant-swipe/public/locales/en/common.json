@@ -201,6 +201,9 @@
       "completedAllTasks": "completed all due tasks on \"{{plantName}}\"",
       "plant": "Plant"
     },
+    "member": "member",
+    "members": "members",
+    "streak": "streak",
     "failedToLoad": "Failed to load gardens"
   },
   "createPlant": {
