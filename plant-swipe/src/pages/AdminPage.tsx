@@ -2693,8 +2693,8 @@ export const AdminPage: React.FC = () => {
                             if (!active || !payload || payload.length === 0) return null
                             const current = payload[0]?.value as number
                             return (
-                              <div className="rounded-xl border bg-white/90 backdrop-blur p-3 shadow-lg">
-                                <div className="text-xs opacity-60">{formatFull(label)}</div>
+                              <div className="rounded-xl border bg-white/90 dark:bg-[#252526] dark:border-[#3e3e42] backdrop-blur p-3 shadow-lg">
+                                <div className="text-xs opacity-60 dark:opacity-70">{formatFull(label)}</div>
                                 <div className="mt-1 text-base font-semibold tabular-nums">{current}</div>
                               </div>
                             )
