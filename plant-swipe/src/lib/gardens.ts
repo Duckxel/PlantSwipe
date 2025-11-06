@@ -849,8 +849,22 @@ export async function progressTaskOccurrence(occurrenceId: string, increment = 1
     
     if (data && (data as any).garden_plant_tasks) {
       const gardenId = String((data as any).garden_plant_tasks.garden_id)
-      // Refresh cache asynchronously
-      refreshGardenTaskCache(gardenId).catch(() => {})
+      const today = new Date().toISOString().slice(0, 10)
+      
+      // Refresh garden cache asynchronously
+      refreshGardenTaskCache(gardenId, today).catch(() => {})
+      
+      // Also refresh user-level cache for all members of this garden
+      const { data: members } = await supabase
+        .from('garden_members')
+        .select('user_id')
+        .eq('garden_id', gardenId)
+      
+      if (members) {
+        for (const member of members) {
+          refreshUserTaskCache(String(member.user_id), today).catch(() => {})
+        }
+      }
     }
   } catch {
     // Silently fail - cache refresh is best effort
@@ -1785,6 +1799,153 @@ export async function gardensHaveRemainingTasks(gardenIds: string[], dayIso?: st
     })
   )
   return result
+}
+
+// ===== User-level Task Cache Functions =====
+
+/**
+ * Get user's total task counts across all gardens (uses cache)
+ */
+export async function getUserTasksTodayCached(userId: string, dayIso?: string): Promise<{
+  totalDueCount: number
+  totalCompletedCount: number
+  gardensWithRemainingTasks: number
+  totalGardens: number
+}> {
+  const date = dayIso || new Date().toISOString().slice(0, 10)
+  try {
+    const { data, error } = await supabase.rpc('get_user_tasks_today_cached', {
+      _user_id: userId,
+      _cache_date: date,
+    })
+    if (!error && data && Array.isArray(data) && data.length > 0) {
+      const row = data[0]
+      return {
+        totalDueCount: Number(row.total_due_count ?? 0),
+        totalCompletedCount: Number(row.total_completed_count ?? 0),
+        gardensWithRemainingTasks: Number(row.gardens_with_remaining_tasks ?? 0),
+        totalGardens: Number(row.total_gardens ?? 0),
+      }
+    }
+  } catch {
+    // Fallback to computation
+  }
+  
+  // Fallback: compute from garden cache
+  const gardens = await getUserGardens(userId)
+  if (gardens.length === 0) {
+    return { totalDueCount: 0, totalCompletedCount: 0, gardensWithRemainingTasks: 0, totalGardens: 0 }
+  }
+  
+  const progressMap = await getGardensTodayProgressBatchCached(gardens.map(g => g.id), date)
+  let totalDue = 0
+  let totalCompleted = 0
+  let gardensWithRemaining = 0
+  
+  for (const [gid, prog] of Object.entries(progressMap)) {
+    totalDue += prog.due
+    totalCompleted += prog.completed
+    if (prog.hasRemainingTasks) {
+      gardensWithRemaining++
+    }
+  }
+  
+  return {
+    totalDueCount: totalDue,
+    totalCompletedCount: totalCompleted,
+    gardensWithRemainingTasks: gardensWithRemaining,
+    totalGardens: gardens.length,
+  }
+}
+
+/**
+ * Get per-garden task counts for a user (uses cache)
+ * Returns progress data for all gardens the user is a member of
+ */
+export async function getUserGardensTasksTodayCached(userId: string, dayIso?: string): Promise<Record<string, {
+  gardenName: string
+  due: number
+  completed: number
+  hasRemainingTasks: boolean
+  allTasksDone: boolean
+}>> {
+  const date = dayIso || new Date().toISOString().slice(0, 10)
+  try {
+    const { data, error } = await supabase.rpc('get_user_gardens_tasks_today_cached', {
+      _user_id: userId,
+      _cache_date: date,
+    })
+    if (!error && data && Array.isArray(data)) {
+      const result: Record<string, {
+        gardenName: string
+        due: number
+        completed: number
+        hasRemainingTasks: boolean
+        allTasksDone: boolean
+      }> = {}
+      for (const row of data) {
+        result[String(row.garden_id)] = {
+          gardenName: String(row.garden_name || ''),
+          due: Number(row.due_count ?? 0),
+          completed: Number(row.completed_count ?? 0),
+          hasRemainingTasks: Boolean(row.has_remaining_tasks ?? false),
+          allTasksDone: Boolean(row.all_tasks_done ?? true),
+        }
+      }
+      return result
+    }
+  } catch {
+    // Fallback to computation
+  }
+  
+  // Fallback: compute from garden cache
+  const gardens = await getUserGardens(userId)
+  if (gardens.length === 0) {
+    return {}
+  }
+  
+  const progressMap = await getGardensTodayProgressBatchCached(gardens.map(g => g.id), date)
+  const result: Record<string, {
+    gardenName: string
+    due: number
+    completed: number
+    hasRemainingTasks: boolean
+    allTasksDone: boolean
+  }> = {}
+  
+  const gardenNameMap: Record<string, string> = {}
+  for (const g of gardens) {
+    gardenNameMap[g.id] = g.name
+  }
+  
+  for (const [gid, prog] of Object.entries(progressMap)) {
+    result[gid] = {
+      gardenName: gardenNameMap[gid] || '',
+      due: prog.due,
+      completed: prog.completed,
+      hasRemainingTasks: prog.hasRemainingTasks ?? (prog.due > prog.completed),
+      allTasksDone: prog.allTasksDone ?? (prog.due === 0 || prog.completed >= prog.due),
+    }
+  }
+  
+  return result
+}
+
+/**
+ * Refresh user-level cache (call after mutations)
+ */
+export async function refreshUserTaskCache(userId: string, cacheDate?: string): Promise<void> {
+  const date = cacheDate || new Date().toISOString().slice(0, 10)
+  try {
+    const { error } = await supabase.rpc('refresh_user_task_daily_cache', {
+      _user_id: userId,
+      _cache_date: date,
+    })
+    if (error) throw new Error(error.message)
+  } catch (e) {
+    // Silently fail - cache refresh is best effort
+    console.warn('[gardens] Failed to refresh user cache:', e)
+  }
 }
 
 // ===== Activity logs =====

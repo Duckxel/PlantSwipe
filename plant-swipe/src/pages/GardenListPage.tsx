@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useAuth } from '@/context/AuthContext'
-import { getUserGardens, createGarden, fetchServerNowISO, getGardenTodayProgressUltraFast, getGardensTodayProgressBatchCached, getGardenPlantsMinimal, listGardenTasksMinimal, listOccurrencesForTasks, listOccurrencesForMultipleGardens, resyncTaskOccurrencesForGarden, progressTaskOccurrence, listCompletionsForOccurrences, logGardenActivity, refreshGardenTaskCache, getGardenTodayOccurrencesCached } from '@/lib/gardens'
+import { getUserGardens, createGarden, fetchServerNowISO, getGardenTodayProgressUltraFast, getGardensTodayProgressBatchCached, getGardenPlantsMinimal, listGardenTasksMinimal, listOccurrencesForTasks, listOccurrencesForMultipleGardens, resyncTaskOccurrencesForGarden, progressTaskOccurrence, listCompletionsForOccurrences, logGardenActivity, refreshGardenTaskCache, getGardenTodayOccurrencesCached, getUserGardensTasksTodayCached, refreshUserTaskCache } from '@/lib/gardens'
 import { supabase } from '@/lib/supabaseClient'
 import { addGardenBroadcastListener, broadcastGardenUpdate, type GardenRealtimeKind } from '@/lib/realtime'
 import type { Garden } from '@/types/garden'
@@ -150,19 +150,49 @@ export const GardenListPage: React.FC = () => {
           setServerToday(today)
           serverTodayRef.current = today
           
-          // Update progress with fresh data - use cached batched query (fastest)
-          getGardensTodayProgressBatchCached(freshData.map(g => g.id), today).then((progMap) => {
-            setProgressByGarden(progMap)
-          }).catch(() => {})
+          // Update progress with fresh data - use cached user-level query (INSTANT)
+          if (user?.id) {
+            getUserGardensTasksTodayCached(user.id, today).then((progMap) => {
+              const converted: Record<string, { due: number; completed: number }> = {}
+              for (const [gid, prog] of Object.entries(progMap)) {
+                converted[gid] = { due: prog.due, completed: prog.completed }
+              }
+              setProgressByGarden(converted)
+            }).catch(() => {
+              // Fallback to garden-level cache
+              getGardensTodayProgressBatchCached(freshData.map(g => g.id), today).then((progMap) => {
+                setProgressByGarden(progMap)
+              }).catch(() => {})
+            })
+          } else {
+            getGardensTodayProgressBatchCached(freshData.map(g => g.id), today).then((progMap) => {
+              setProgressByGarden(progMap)
+            }).catch(() => {})
+          }
         }).catch(() => {
           // If background fetch fails, keep using cached data
         })
         
-        // Load progress for cached gardens - use cached batched query (fastest)
+        // Load progress for cached gardens - use cached user-level query (INSTANT)
         const today = serverTodayRef.current ?? new Date().toISOString().slice(0, 10)
-        getGardensTodayProgressBatchCached(data.map(g => g.id), today).then((progMap) => {
-          setProgressByGarden(progMap)
-        }).catch(() => {})
+        if (user?.id) {
+          getUserGardensTasksTodayCached(user.id, today).then((progMap) => {
+            const converted: Record<string, { due: number; completed: number }> = {}
+            for (const [gid, prog] of Object.entries(progMap)) {
+              converted[gid] = { due: prog.due, completed: prog.completed }
+            }
+            setProgressByGarden(converted)
+          }).catch(() => {
+            // Fallback to garden-level cache
+            getGardensTodayProgressBatchCached(data.map(g => g.id), today).then((progMap) => {
+              setProgressByGarden(progMap)
+            }).catch(() => {})
+          })
+        } else {
+          getGardensTodayProgressBatchCached(data.map(g => g.id), today).then((progMap) => {
+            setProgressByGarden(progMap)
+          }).catch(() => {})
+        }
         
         return
       }
@@ -193,12 +223,32 @@ export const GardenListPage: React.FC = () => {
       // Set loading to false immediately so gardens render
       setLoading(false)
       
-      // Load progress using cached batched query (fastest - uses pre-computed cache)
-      getGardensTodayProgressBatchCached(data.map(g => g.id), today).then((progMap) => {
-        setProgressByGarden(progMap)
-      }).catch(() => {
-        // Silently fail - progress will update on next refresh
-      })
+      // Load progress using cached user-level query (INSTANT - uses pre-computed cache)
+      // This loads all garden progress in a single query
+      if (user?.id) {
+        getUserGardensTasksTodayCached(user.id, today).then((progMap) => {
+          // Convert to the format expected by progressByGarden
+          const converted: Record<string, { due: number; completed: number }> = {}
+          for (const [gid, prog] of Object.entries(progMap)) {
+            converted[gid] = { due: prog.due, completed: prog.completed }
+          }
+          setProgressByGarden(converted)
+        }).catch(() => {
+          // Fallback to garden-level cache if user cache fails
+          getGardensTodayProgressBatchCached(data.map(g => g.id), today).then((progMap) => {
+            setProgressByGarden(progMap)
+          }).catch(() => {
+            // Silently fail - progress will update on next refresh
+          })
+        })
+      } else {
+        // Fallback for non-logged-in users
+        getGardensTodayProgressBatchCached(data.map(g => g.id), today).then((progMap) => {
+          setProgressByGarden(progMap)
+        }).catch(() => {
+          // Silently fail - progress will update on next refresh
+        })
+      }
     } catch (e: any) {
       setError(e?.message || t('garden.failedToLoad'))
       setLoading(false)
@@ -618,6 +668,10 @@ export const GardenListPage: React.FC = () => {
         // Refresh cache after task progress
         if (broadcastGardenId) {
           refreshGardenTaskCache(broadcastGardenId).catch(() => {})
+          // Also refresh user-level cache
+          if (user?.id) {
+            refreshUserTaskCache(user.id, today).catch(() => {})
+          }
           emitGardenRealtime(broadcastGardenId, 'tasks')
         }
       }
@@ -685,6 +739,10 @@ export const GardenListPage: React.FC = () => {
         // Refresh cache after task completion
         if (gardenId) {
           refreshGardenTaskCache(gardenId).catch(() => {})
+          // Also refresh user-level cache
+          if (user?.id) {
+            refreshUserTaskCache(user.id, today).catch(() => {})
+          }
           emitGardenRealtime(gardenId, 'tasks')
         }
       }
@@ -749,6 +807,10 @@ export const GardenListPage: React.FC = () => {
           refreshGardenTaskCache(gid).catch(() => {})
           emitGardenRealtime(gid, 'tasks')
         })
+        // Also refresh user-level cache
+        if (user?.id) {
+          refreshUserTaskCache(user.id, today).catch(() => {})
+        }
       }
       
       if ('requestIdleCallback' in window) {
