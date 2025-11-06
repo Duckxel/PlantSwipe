@@ -1807,6 +1807,27 @@ function OverviewSection({ gardenId, activityRev, plants, membersCount, serverTo
   const completedToday = dailyStats.find(d => d.date === (serverToday || ''))?.completed ?? 0
   const progressPct = totalToDoToday === 0 ? 100 : Math.min(100, Math.round((completedToday / totalToDoToday) * 100))
   const anchor = serverToday ? new Date(serverToday) : new Date()
+  
+  // Compute max completed value to scale color intensity
+  const maxCompleted = React.useMemo(() => 
+    dailyStats.reduce((m, d) => Math.max(m, d.completed || 0), 0), 
+    [dailyStats]
+  )
+  
+  const colorForDay = (completed: number, success: boolean) => {
+    // Grey: Tasks were not accomplished that day (tasks were due but not all completed)
+    if (!success) return 'bg-stone-200 dark:bg-stone-800'
+    // Green: Tasks were accomplished
+    // Darker color = fewer tasks completed that day, lighter color = more tasks completed
+    if (maxCompleted <= 0) return 'bg-emerald-700 dark:bg-emerald-800'
+    const ratio = completed / maxCompleted
+    if (ratio <= 0) return 'bg-emerald-800 dark:bg-emerald-900'
+    if (ratio <= 0.25) return 'bg-emerald-700 dark:bg-emerald-800'
+    if (ratio <= 0.5) return 'bg-emerald-600 dark:bg-emerald-600'
+    if (ratio <= 0.75) return 'bg-emerald-500 dark:bg-emerald-400'
+    return 'bg-emerald-400 dark:bg-emerald-300'
+  }
+  
   const days = Array.from({ length: 30 }, (_, i) => {
     const d = new Date(anchor)
     d.setDate(d.getDate() - (29 - i))
@@ -1815,7 +1836,8 @@ function OverviewSection({ gardenId, activityRev, plants, membersCount, serverTo
     // Treat missing task row as failed per requirement
     const found = dailyStats.find(x => x.date === dateIso)
     const success = found ? found.success : false
-    return { dayNum, isToday: i === 29, success }
+    const completed = found ? (found.completed || 0) : 0
+    return { dayNum, isToday: i === 29, success, completed }
   })
   // Use DB-backed streak as base, but if today is in progress we can show live preview
   const streak = (() => {
@@ -1847,7 +1869,7 @@ function OverviewSection({ gardenId, activityRev, plants, membersCount, serverTo
       <Card className="rounded-2xl p-4">
         <div className="font-medium mb-2">{t('gardenDashboard.overviewSection.todaysProgress')}</div>
         <div className="text-sm opacity-60 mb-2">{completedToday} / {totalToDoToday || 0} {t('gardenDashboard.overviewSection.tasksDone')}</div>
-        <div className="h-3 bg-stone-200 rounded-full overflow-hidden">
+        <div className="h-3 bg-stone-200 dark:bg-stone-800 rounded-full overflow-hidden">
           <div className="h-3 bg-emerald-600 dark:bg-emerald-500" style={{ width: `${progressPct}%` }} />
         </div>
       </Card>
@@ -1857,10 +1879,10 @@ function OverviewSection({ gardenId, activityRev, plants, membersCount, serverTo
         <div className="grid grid-cols-7 gap-x-3 gap-y-3 place-items-center">
           {days.map((d, idx) => (
             <div key={idx} className="flex flex-col items-center">
-              <div className={`w-7 h-7 rounded-md flex items-center justify-center ${d.success ? 'bg-emerald-500 dark:bg-emerald-400' : 'bg-stone-300'}`}>
+              <div className={`w-7 h-7 rounded-md flex items-center justify-center ${colorForDay(d.completed, d.success)}`}>
                 <div className="text-[11px]">{d.dayNum}</div>
               </div>
-              {d.isToday && <div className="mt-1 h-0.5 w-5 bg-black rounded-full" />}
+              {d.isToday && <div className="mt-1 h-0.5 w-5 bg-black dark:bg-white rounded-full" />}
             </div>
           ))}
         </div>
