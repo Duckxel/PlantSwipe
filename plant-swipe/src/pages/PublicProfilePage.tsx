@@ -557,14 +557,14 @@ export default function PublicProfilePage() {
                             <EyeOff className="h-5 w-5 text-stone-500 opacity-70" />
                           </div>
                         )}
-                        <span className={`text-[11px] px-2 py-0.5 rounded-full border ${pp.is_admin ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-stone-50 text-stone-700 border-stone-200'}`}>{pp.is_admin ? t('profile.admin') : t('profile.member')}</span>
+                        <span className={`text-[11px] px-2 py-0.5 rounded-full border ${pp.is_admin ? 'bg-emerald-200 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100 border-emerald-300 dark:border-emerald-700' : 'bg-stone-50 text-stone-700 border-stone-200'}`}>{pp.is_admin ? t('profile.admin') : t('profile.member')}</span>
                       </div>
                   {canViewProfile && (
                     <>
                       <div className="text-sm opacity-70 mt-1 flex items-center gap-1">{pp.country ? (<><MapPin className="h-4 w-4" />{pp.country}</>) : ''}</div>
                       <div className="text-xs opacity-70 mt-1 flex items-center gap-2">
                         {pp.is_online ? (
-                          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" />{t('profile.currentlyOnline')}</span>
+                          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-600 dark:bg-emerald-500" />{t('profile.currentlyOnline')}</span>
                         ) : (
                           <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-stone-300" />{formatLastSeen(pp.last_seen_at)}</span>
                         )}

@@ -230,7 +230,7 @@ function NavPill({ to, isActive, icon, label, showDot }: { to: string; isActive:
       </Button>
       {showDot && (
         <span
-          className="pointer-events-none absolute -top-[2px] -right-[2px] z-20 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white"
+          className="pointer-events-none absolute -top-[2px] -right-[2px] z-20 h-2.5 w-2.5 rounded-full bg-red-600 dark:bg-red-500 ring-2 ring-white dark:ring-[#252526]"
           aria-hidden="true"
         />
       )}

@@ -1663,11 +1663,11 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
     return () => { ignore = true }
   }, [todayTaskOccurrences])
   const typeToColor: Record<'water'|'fertilize'|'harvest'|'cut'|'custom', string> = {
-    water: 'bg-blue-500',
-    fertilize: 'bg-green-500',
-    harvest: 'bg-yellow-400',
-    cut: 'bg-orange-500',
-    custom: 'bg-purple-500',
+    water: 'bg-blue-600 dark:bg-blue-500',
+    fertilize: 'bg-green-600 dark:bg-green-500',
+    harvest: 'bg-yellow-500 dark:bg-yellow-400',
+    cut: 'bg-orange-600 dark:bg-orange-500',
+    custom: 'bg-purple-600 dark:bg-purple-500',
   }
   const dayLabels = [t('gardenDashboard.routineSection.dayLabels.mon'), t('gardenDashboard.routineSection.dayLabels.tue'), t('gardenDashboard.routineSection.dayLabels.wed'), t('gardenDashboard.routineSection.dayLabels.thu'), t('gardenDashboard.routineSection.dayLabels.fri'), t('gardenDashboard.routineSection.dayLabels.sat'), t('gardenDashboard.routineSection.dayLabels.sun')]
   return (
@@ -1848,7 +1848,7 @@ function OverviewSection({ gardenId, activityRev, plants, membersCount, serverTo
         <div className="font-medium mb-2">{t('gardenDashboard.overviewSection.todaysProgress')}</div>
         <div className="text-sm opacity-60 mb-2">{completedToday} / {totalToDoToday || 0} {t('gardenDashboard.overviewSection.tasksDone')}</div>
         <div className="h-3 bg-stone-200 rounded-full overflow-hidden">
-          <div className="h-3 bg-emerald-500" style={{ width: `${progressPct}%` }} />
+          <div className="h-3 bg-emerald-600 dark:bg-emerald-500" style={{ width: `${progressPct}%` }} />
         </div>
       </Card>
 
@@ -1857,7 +1857,7 @@ function OverviewSection({ gardenId, activityRev, plants, membersCount, serverTo
         <div className="grid grid-cols-7 gap-x-3 gap-y-3 place-items-center">
           {days.map((d, idx) => (
             <div key={idx} className="flex flex-col items-center">
-              <div className={`w-7 h-7 rounded-md flex items-center justify-center ${d.success ? 'bg-emerald-400' : 'bg-stone-300'}`}>
+              <div className={`w-7 h-7 rounded-md flex items-center justify-center ${d.success ? 'bg-emerald-500 dark:bg-emerald-400' : 'bg-stone-300'}`}>
                 <div className="text-[11px]">{d.dayNum}</div>
               </div>
               {d.isToday && <div className="mt-1 h-0.5 w-5 bg-black rounded-full" />}

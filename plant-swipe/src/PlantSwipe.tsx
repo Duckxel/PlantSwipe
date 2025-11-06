@@ -547,7 +547,7 @@ export default function PlantSwipe() {
               <button
                 onClick={() => setOnlySeeds((v) => !v)}
                 className={`w-full justify-center px-3 py-2 rounded-2xl text-sm shadow-sm border flex items-center gap-2 transition ${
-                  onlySeeds ? "bg-emerald-600 text-white" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                  onlySeeds ? "bg-emerald-600 dark:bg-emerald-500 text-white" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
                 }`}
                 aria-pressed={onlySeeds}
               >
@@ -557,7 +557,7 @@ export default function PlantSwipe() {
               <button
                 onClick={() => setOnlyFavorites((v) => !v)}
                 className={`w-full justify-center px-3 py-2 rounded-2xl text-sm shadow-sm border flex items-center gap-2 transition ${
-                  onlyFavorites ? "bg-rose-600 text-white" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                  onlyFavorites ? "bg-rose-600 dark:bg-rose-500 text-white" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
                 }`}
                 aria-pressed={onlyFavorites}
               >
@@ -567,7 +567,7 @@ export default function PlantSwipe() {
               <button
                 onClick={() => setFavoritesFirst((v) => !v)}
                 className={`w-full justify-center px-3 py-2 rounded-2xl text-sm shadow-sm border flex items-center gap-2 transition ${
-                  favoritesFirst ? "bg-rose-100 dark:bg-rose-900/30 text-rose-900 dark:text-rose-300 border-rose-300 dark:border-rose-700" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                  favoritesFirst ? "bg-rose-200 dark:bg-rose-800 text-rose-900 dark:text-rose-100 border-rose-400 dark:border-rose-600" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
                 }`}
                 aria-pressed={favoritesFirst}
               >

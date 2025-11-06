@@ -619,7 +619,7 @@ export const AdminPage: React.FC = () => {
   const StatusDot: React.FC<{ ok: boolean | null; title?: string }> = ({ ok, title }) => (
     <span
       className={
-        `inline-block h-3 w-3 rounded-full ? ${ok === null ? 'bg-zinc-400' : ok ? 'bg-emerald-500' : 'bg-rose-500'}`
+        `inline-block h-3 w-3 rounded-full ? ${ok === null ? 'bg-zinc-400' : ok ? 'bg-emerald-600 dark:bg-emerald-500' : 'bg-rose-600 dark:bg-rose-500'}`
       }
       aria-label={ok === null ? 'unknown' : ok ? 'ok' : 'error'}
       title={title}
@@ -629,7 +629,7 @@ export const AdminPage: React.FC = () => {
   const ErrorBadge: React.FC<{ code: string | null }> = ({ code }) => {
     if (!code) return null
     return (
-      <span className="text-[11px] px-1.5 py-0.5 rounded border bg-rose-50 text-rose-700 border-rose-200">
+      <span className="text-[11px] px-1.5 py-0.5 rounded border bg-rose-100 dark:bg-rose-900/40 text-rose-800 dark:text-rose-200 border-rose-300 dark:border-rose-700">
         {code}
       </span>
     )
@@ -2264,14 +2264,14 @@ export const AdminPage: React.FC = () => {
               </Button>
               <Button asChild variant="outline" className="rounded-2xl">
                 <a href="https://supabase.com/dashboard/project/lxnkcguwewrskqnyzjwi" target="_blank" rel="noreferrer">
-                  <span className="inline-block h-3 w-3 rounded-sm bg-emerald-500" />
+                  <span className="inline-block h-3 w-3 rounded-sm bg-emerald-600 dark:bg-emerald-500" />
                   <span>Supabase</span>
                   <ExternalLink className="h-3 w-3 opacity-70" />
                 </a>
               </Button>
               <Button asChild variant="outline" className="rounded-2xl">
                 <a href="https://cloud.linode.com/linodes/84813440/metrics" target="_blank" rel="noreferrer">
-                  <span className="inline-block h-3 w-3 rounded-sm bg-blue-600" />
+                  <span className="inline-block h-3 w-3 rounded-sm bg-blue-600 dark:bg-blue-500" />
                   <span>Linode</span>
                   <ExternalLink className="h-3 w-3 opacity-70" />
                 </a>
@@ -2392,7 +2392,7 @@ export const AdminPage: React.FC = () => {
                     return (
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-center gap-3 min-w-0">
-                          <div className="h-14 w-14 rounded-full bg-gradient-to-br from-emerald-200 to-green-300 text-emerald-900 flex items-center justify-center font-semibold shadow-inner">
+                          <div className="h-14 w-14 rounded-full bg-emerald-600 dark:bg-emerald-500 text-white flex items-center justify-center font-semibold shadow-inner">
                             {initial}
                           </div>
                           <div className="min-w-0">
@@ -2404,7 +2404,7 @@ export const AdminPage: React.FC = () => {
                             </div>
                             <div className="flex flex-wrap gap-1 mt-1">
                               {memberData.profile?.is_admin && (
-                                <Badge variant="outline" className="rounded-full px-2 py-0.5 bg-emerald-100 text-emerald-800 border-emerald-200 flex items-center gap-1">
+                                <Badge variant="outline" className="rounded-full px-2 py-0.5 bg-emerald-200 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100 border-emerald-300 dark:border-emerald-700 flex items-center gap-1">
                                   <ShieldCheck className="h-3 w-3" /> Admin
                                 </Badge>
                               )}
@@ -2749,8 +2749,8 @@ export const AdminPage: React.FC = () => {
                   </Card>
 
                   {(memberData.isBannedEmail || (memberData.bannedIps && memberData.bannedIps.length > 0)) && (
-                    <div className="rounded-xl border p-3 bg-rose-50/60">
-                      <div className="text-sm font-medium text-rose-700 flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Banned details</div>
+                    <div className="rounded-xl border p-3 bg-rose-100 dark:bg-rose-900/40 border-rose-300 dark:border-rose-800">
+                      <div className="text-sm font-medium text-rose-800 dark:text-rose-200 flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Banned details</div>
                       {memberData.isBannedEmail && (
                         <div className="text-sm mt-1">Email banned {memberData.bannedAt ? `on ? ${new Date(memberData.bannedAt).toLocaleString()}` : ''}{memberData.bannedReason ? ` ? ? ${memberData.bannedReason}` : ''}</div>
                       )}
