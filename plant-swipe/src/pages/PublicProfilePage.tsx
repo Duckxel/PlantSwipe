@@ -661,62 +661,69 @@ export default function PublicProfilePage() {
                 <Card className="rounded-3xl">
                   <CardContent className="p-6 md:p-8 space-y-4">
                     <div className="text-lg font-semibold">{t('profile.highlights')}</div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  <div className="rounded-xl border p-3 text-center">
-                    <div className="flex items-center justify-center gap-1.5 mb-1">
-                      <Sprout className="h-4 w-4 text-emerald-600" />
-                      <div className="text-[11px] opacity-60">{t('profile.plantsOwned')}</div>
+                    <div className="flex flex-col md:flex-row gap-6 items-start">
+                      {/* Task completion grid - left side */}
+                      <div className="w-full md:flex-1">
+                        <div className="flex justify-center">
+                          <div className="grid grid-rows-4 grid-flow-col auto-cols-max gap-1 sm:gap-1.5">
+                          {daysFlat.map((item: { date: string; value: number; success: boolean }, idx: number) => (
+                            <div
+                              key={idx}
+                              tabIndex={0}
+                              className={`h-6 w-6 sm:h-8 sm:w-8 rounded-[4px] ${colorFor(item)}`}
+                              onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => showTooltip(e.currentTarget as HTMLDivElement, item)}
+                              onMouseLeave={hideTooltip}
+                              onFocus={(e: React.FocusEvent<HTMLDivElement>) => showTooltip(e.currentTarget as HTMLDivElement, item)}
+                              onBlur={hideTooltip}
+                              title={`${item.value} ${t('profile.tasks')} ${t('profile.tasksOn')} ${new Date(item.date).toLocaleDateString(i18n.language)}`}
+                              aria-label={`${new Date(item.date).toLocaleDateString(i18n.language)}: ${item.value} ${t('profile.tasks')}${item.success ? `, ${t('profile.completedDay')}` : ''}`}
+                            />
+                          ))}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Highlight cards - right side, 2x2 grid */}
+                      <div className="w-full md:w-auto">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="rounded-xl border p-3 text-center">
+                            <div className="flex items-center justify-center gap-1.5 mb-1">
+                              <Sprout className="h-4 w-4 text-emerald-600" />
+                              <div className="text-[11px] opacity-60">{t('profile.plantsOwned')}</div>
+                            </div>
+                            <div className="text-base font-semibold tabular-nums">{stats?.plantsTotal ?? '—'}</div>
+                          </div>
+                          <div className="rounded-xl border p-3 text-center">
+                            <div className="flex items-center justify-center gap-1.5 mb-1">
+                              <Home className="h-4 w-4 text-blue-600" />
+                              <div className="text-[11px] opacity-60">{t('profile.gardens')}</div>
+                            </div>
+                            <div className="text-base font-semibold tabular-nums">{stats?.gardensCount ?? '—'}</div>
+                          </div>
+                          <div className="rounded-xl border p-3 text-center">
+                            <div className="flex items-center justify-center gap-1.5 mb-1">
+                              <Flame className="h-4 w-4 text-orange-500" />
+                              <div className="text-[11px] opacity-60">{t('profile.currentStreak')}</div>
+                            </div>
+                            <div className="text-base font-semibold tabular-nums">{stats?.currentStreak ?? '—'}</div>
+                          </div>
+                          <div className="rounded-xl border p-3 text-center">
+                            <div className="flex items-center justify-center gap-1.5 mb-1">
+                              <Trophy className="h-4 w-4 text-amber-500" />
+                              <div className="text-[11px] opacity-60">{t('profile.longestStreak')}</div>
+                            </div>
+                            <div className="text-base font-semibold tabular-nums">{stats?.bestStreak ?? '—'}</div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-base font-semibold tabular-nums">{stats?.plantsTotal ?? '—'}</div>
-                  </div>
-                  <div className="rounded-xl border p-3 text-center">
-                    <div className="flex items-center justify-center gap-1.5 mb-1">
-                      <Home className="h-4 w-4 text-blue-600" />
-                      <div className="text-[11px] opacity-60">{t('profile.gardens')}</div>
-                    </div>
-                    <div className="text-base font-semibold tabular-nums">{stats?.gardensCount ?? '—'}</div>
-                  </div>
-                  <div className="rounded-xl border p-3 text-center">
-                    <div className="flex items-center justify-center gap-1.5 mb-1">
-                      <Flame className="h-4 w-4 text-orange-500" />
-                      <div className="text-[11px] opacity-60">{t('profile.currentStreak')}</div>
-                    </div>
-                    <div className="text-base font-semibold tabular-nums">{stats?.currentStreak ?? '—'}</div>
-                  </div>
-                  <div className="rounded-xl border p-3 text-center">
-                    <div className="flex items-center justify-center gap-1.5 mb-1">
-                      <Trophy className="h-4 w-4 text-amber-500" />
-                      <div className="text-[11px] opacity-60">{t('profile.longestStreak')}</div>
-                    </div>
-                    <div className="text-base font-semibold tabular-nums">{stats?.bestStreak ?? '—'}</div>
-                  </div>
-                </div>
-                <div className="w-full">
-                  <div className="flex justify-center">
-                    <div className="grid grid-rows-4 grid-flow-col auto-cols-max gap-1 sm:gap-1.5">
-                    {daysFlat.map((item: { date: string; value: number; success: boolean }, idx: number) => (
-                      <div
-                        key={idx}
-                        tabIndex={0}
-                        className={`h-6 w-6 sm:h-8 sm:w-8 rounded-[4px] ${colorFor(item)}`}
-                        onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => showTooltip(e.currentTarget as HTMLDivElement, item)}
-                        onMouseLeave={hideTooltip}
-                        onFocus={(e: React.FocusEvent<HTMLDivElement>) => showTooltip(e.currentTarget as HTMLDivElement, item)}
-                        onBlur={hideTooltip}
-                        title={`${item.value} ${t('profile.tasks')} ${t('profile.tasksOn')} ${new Date(item.date).toLocaleDateString(i18n.language)}`}
-                        aria-label={`${new Date(item.date).toLocaleDateString(i18n.language)}: ${item.value} ${t('profile.tasks')}${item.success ? `, ${t('profile.completedDay')}` : ''}`}
-                      />
-                    ))}
-                    </div>
-                  </div>
-                </div>
                 
                 {tooltip && createPortal(
                   <div
                     className="fixed z-[70] pointer-events-none"
                     style={{ top: tooltip.top, left: tooltip.left, transform: 'translate(-50%, -100%)' }}
                   >
-                    <div className="rounded-xl border bg-white shadow px-3 py-2">
+                    <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526] shadow px-3 py-2">
                       <div className="text-xs font-medium">{new Date(tooltip.date).toLocaleDateString(i18n.language)}</div>
                       <div className="text-[11px] opacity-70">{tooltip.value} {t('profile.tasks')}{tooltip.success ? ` • ${t('profile.completedDay')}` : ''}</div>
                     </div>
