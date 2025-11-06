@@ -456,7 +456,7 @@ export default function PlantSwipe() {
   }, [user])
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-b from-stone-50 to-stone-100 dark:from-stone-950 dark:to-stone-900 p-4 pb-24 md:p-8 md:pb-8 overflow-x-hidden">
+    <div className="min-h-screen w-full bg-gradient-to-b from-stone-50 to-stone-100 dark:from-stone-800 dark:to-stone-700 p-4 pb-24 md:p-8 md:pb-8 overflow-x-hidden">
   <TopBar
     openLogin={openLogin}
     openSignup={openSignup}

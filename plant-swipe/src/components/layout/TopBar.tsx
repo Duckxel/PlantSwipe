@@ -182,25 +182,25 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
             {menuOpen && menuPosition && createPortal(
               <div
                 ref={menuRef}
-                className="w-40 rounded-xl border bg-white dark:bg-stone-800 dark:border-stone-700 shadow z-[60] p-1"
+                className="w-40 rounded-xl border bg-white dark:bg-stone-600 dark:border-stone-500 shadow z-[60] p-1"
                 style={{ position: 'fixed', top: menuPosition.top, right: menuPosition.right }}
                 role="menu"
               >
                 {profile?.is_admin && (
-                  <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/admin') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-stone-700 flex items-center gap-2" role="menuitem">
+                  <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/admin') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-stone-500 flex items-center gap-2" role="menuitem">
                     <Shield className="h-4 w-4" /> {t('common.admin')}
                   </button>
                 )}
-                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); (onProfile ? onProfile : () => navigate('/profile'))() }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-stone-700 flex items-center gap-2" role="menuitem">
+                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); (onProfile ? onProfile : () => navigate('/profile'))() }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-stone-500 flex items-center gap-2" role="menuitem">
                   <User className="h-4 w-4" /> {t('common.profile')}
                 </button>
-                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/friends') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-stone-700 flex items-center gap-2" role="menuitem">
+                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/friends') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-stone-500 flex items-center gap-2" role="menuitem">
                   <HeartHandshake className="h-4 w-4" /> {t('common.friends')}
                 </button>
-                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/settings') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-stone-700 flex items-center gap-2" role="menuitem">
+                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/settings') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-stone-500 flex items-center gap-2" role="menuitem">
                   <Settings className="h-4 w-4" /> {t('common.settings')}
                 </button>
-                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); if (onLogout) { onLogout() } }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-stone-700 text-red-600 dark:text-red-400 flex items-center gap-2" role="menuitem">
+                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); if (onLogout) { onLogout() } }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-stone-500 text-red-600 dark:text-red-400 flex items-center gap-2" role="menuitem">
                   <LogOut className="h-4 w-4" /> {t('common.logout')}
                 </button>
               </div>,
@@ -219,7 +219,7 @@ function NavPill({ to, isActive, icon, label, showDot }: { to: string; isActive:
       <Button
         asChild
         variant={'secondary'}
-        className={isActive ? "rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90 hover:text-white dark:hover:text-black" : "rounded-2xl bg-white dark:bg-stone-800 text-black dark:text-white hover:bg-stone-100 dark:hover:bg-stone-700 hover:text-black dark:hover:text-white"}
+        className={isActive ? "rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90 hover:text-white dark:hover:text-black" : "rounded-2xl bg-white dark:bg-stone-600 text-black dark:text-white hover:bg-stone-100 dark:hover:bg-stone-500 hover:text-black dark:hover:text-white"}
       >
         <Link to={to} className="no-underline">
           <span className="inline-flex items-center gap-2">
