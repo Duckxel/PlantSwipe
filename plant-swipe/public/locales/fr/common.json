@@ -122,6 +122,15 @@
       "selectLanguage": "Sélectionner la langue",
       "english": "Anglais",
       "french": "Français"
+    },
+    "theme": {
+      "title": "Thème",
+      "description": "Choisissez votre schéma de couleurs préféré pour l'interface.",
+      "selectTheme": "Sélectionner le thème",
+      "system": "Système",
+      "light": "Clair",
+      "dark": "Sombre",
+      "currentTheme": "Thème actuel"
     }
   },
   "plant": {

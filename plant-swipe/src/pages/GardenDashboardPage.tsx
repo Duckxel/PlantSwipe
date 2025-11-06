@@ -955,13 +955,27 @@ export const GardenDashboardPage: React.FC = () => {
         const emailMatch = f.email?.toLowerCase().includes(query)
         return displayNameMatch || emailMatch
       })
+      
+      // Check if input exactly matches any suggestion (case-insensitive)
+      const exactMatch = filtered.some(f => {
+        const displayNameExact = f.display_name?.toLowerCase() === query
+        const emailExact = f.email?.toLowerCase() === query
+        return displayNameExact || emailExact
+      })
+      
+      // Limit to top 5
+      filtered = filtered.slice(0, 5)
+      
+      setFriendSuggestions(filtered)
+      // Hide suggestions if input exactly matches a suggestion or if no matches
+      setSuggestionsOpen(filtered.length > 0 && inviteOpen && !exactMatch)
+    } else {
+      // Limit to top 5
+      filtered = filtered.slice(0, 5)
+      
+      setFriendSuggestions(filtered)
+      setSuggestionsOpen(filtered.length > 0 && inviteOpen)
     }
-    
-    // Limit to top 5
-    filtered = filtered.slice(0, 5)
-    
-    setFriendSuggestions(filtered)
-    setSuggestionsOpen(filtered.length > 0 && inviteOpen)
   }, [inviteAny, friends, members, inviteOpen])
 
   const submitInvite = async () => {
@@ -1475,9 +1489,9 @@ export const GardenDashboardPage: React.FC = () => {
               </DialogHeader>
               <div className="space-y-3">
                 <Input placeholder={t('gardenDashboard.plantsSection.searchPlants')} value={plantQuery} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPlantQuery(e.target.value)} />
-                <div className="max-h-60 overflow-auto rounded-xl border">
+                <div className="max-h-60 overflow-auto rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526]">
                   {plantResults.map(p => (
-                    <button key={p.id} onClick={() => setSelectedPlant(p)} className={`w-full text-left px-3 py-2 hover:bg-stone-50 ${selectedPlant?.id === p.id ? 'bg-stone-100' : ''}`}>
+                    <button key={p.id} onClick={() => setSelectedPlant(p)} className={`w-full text-left px-3 py-2 hover:bg-stone-50 dark:hover:bg-[#2d2d30] ${selectedPlant?.id === p.id ? 'bg-stone-100 dark:bg-[#2d2d30]' : ''}`}>
                       <div className="font-medium">{p.name}</div>
                       <div className="text-xs opacity-60">{p.scientificName}</div>
                     </button>
@@ -1575,12 +1589,12 @@ export const GardenDashboardPage: React.FC = () => {
                     }}
                   />
                   {suggestionsOpen && friendSuggestions.length > 0 && (
-                    <div className="absolute z-10 w-full mt-1 bg-white border rounded-xl shadow-lg max-h-60 overflow-auto">
+                    <div className="absolute z-10 w-full mt-1 bg-white dark:bg-[#252526] border border-stone-300 dark:border-[#3e3e42] rounded-xl shadow-lg max-h-60 overflow-auto">
                       {friendSuggestions.map((friend) => (
                         <button
                           key={friend.id}
                           type="button"
-                          className="w-full text-left px-3 py-2 hover:bg-stone-50 flex flex-col gap-1"
+                          className="w-full text-left px-3 py-2 hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex flex-col gap-1"
                           onClick={() => {
                             setInviteAny(friend.display_name || friend.email || '')
                             setSuggestionsOpen(false)
@@ -1649,11 +1663,11 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
     return () => { ignore = true }
   }, [todayTaskOccurrences])
   const typeToColor: Record<'water'|'fertilize'|'harvest'|'cut'|'custom', string> = {
-    water: 'bg-blue-500',
-    fertilize: 'bg-green-500',
-    harvest: 'bg-yellow-400',
-    cut: 'bg-orange-500',
-    custom: 'bg-purple-500',
+    water: 'bg-blue-600 dark:bg-blue-500',
+    fertilize: 'bg-green-600 dark:bg-green-500',
+    harvest: 'bg-yellow-500 dark:bg-yellow-400',
+    cut: 'bg-orange-600 dark:bg-orange-500',
+    custom: 'bg-purple-600 dark:bg-purple-500',
   }
   const dayLabels = [t('gardenDashboard.routineSection.dayLabels.mon'), t('gardenDashboard.routineSection.dayLabels.tue'), t('gardenDashboard.routineSection.dayLabels.wed'), t('gardenDashboard.routineSection.dayLabels.thu'), t('gardenDashboard.routineSection.dayLabels.fri'), t('gardenDashboard.routineSection.dayLabels.sat'), t('gardenDashboard.routineSection.dayLabels.sun')]
   return (
@@ -1793,6 +1807,28 @@ function OverviewSection({ gardenId, activityRev, plants, membersCount, serverTo
   const completedToday = dailyStats.find(d => d.date === (serverToday || ''))?.completed ?? 0
   const progressPct = totalToDoToday === 0 ? 100 : Math.min(100, Math.round((completedToday / totalToDoToday) * 100))
   const anchor = serverToday ? new Date(serverToday) : new Date()
+  
+  // Compute max completed value to scale color intensity
+  const maxCompleted = React.useMemo(() => 
+    dailyStats.reduce((m, d) => Math.max(m, d.completed || 0), 0), 
+    [dailyStats]
+  )
+  
+  const colorForDay = (completed: number, success: boolean) => {
+    // Grey: Tasks were not accomplished that day (tasks were due but not all completed)
+    if (!success) return 'bg-stone-200 dark:bg-stone-700'
+    // Green: Tasks were accomplished
+    // Light mode: lighter color = fewer tasks, darker color = more tasks
+    // Dark mode: darker color = fewer tasks, lighter color = more tasks
+    if (maxCompleted <= 0) return 'bg-emerald-400 dark:bg-emerald-800'
+    const ratio = completed / maxCompleted
+    if (ratio <= 0) return 'bg-emerald-300 dark:bg-emerald-900'
+    if (ratio <= 0.25) return 'bg-emerald-400 dark:bg-emerald-800'
+    if (ratio <= 0.5) return 'bg-emerald-500 dark:bg-emerald-700'
+    if (ratio <= 0.75) return 'bg-emerald-600 dark:bg-emerald-600'
+    return 'bg-emerald-700 dark:bg-emerald-500'
+  }
+  
   const days = Array.from({ length: 30 }, (_, i) => {
     const d = new Date(anchor)
     d.setDate(d.getDate() - (29 - i))
@@ -1801,7 +1837,8 @@ function OverviewSection({ gardenId, activityRev, plants, membersCount, serverTo
     // Treat missing task row as failed per requirement
     const found = dailyStats.find(x => x.date === dateIso)
     const success = found ? found.success : false
-    return { dayNum, isToday: i === 29, success }
+    const completed = found ? (found.completed || 0) : 0
+    return { dayNum, isToday: i === 29, success, completed }
   })
   // Use DB-backed streak as base, but if today is in progress we can show live preview
   const streak = (() => {
@@ -1833,8 +1870,8 @@ function OverviewSection({ gardenId, activityRev, plants, membersCount, serverTo
       <Card className="rounded-2xl p-4">
         <div className="font-medium mb-2">{t('gardenDashboard.overviewSection.todaysProgress')}</div>
         <div className="text-sm opacity-60 mb-2">{completedToday} / {totalToDoToday || 0} {t('gardenDashboard.overviewSection.tasksDone')}</div>
-        <div className="h-3 bg-stone-200 rounded-full overflow-hidden">
-          <div className="h-3 bg-emerald-500" style={{ width: `${progressPct}%` }} />
+        <div className="h-3 bg-stone-200 dark:bg-stone-800 rounded-full overflow-hidden">
+          <div className="h-3 bg-emerald-600 dark:bg-emerald-500" style={{ width: `${progressPct}%` }} />
         </div>
       </Card>
 
@@ -1843,10 +1880,10 @@ function OverviewSection({ gardenId, activityRev, plants, membersCount, serverTo
         <div className="grid grid-cols-7 gap-x-3 gap-y-3 place-items-center">
           {days.map((d, idx) => (
             <div key={idx} className="flex flex-col items-center">
-              <div className={`w-7 h-7 rounded-md flex items-center justify-center ${d.success ? 'bg-emerald-400' : 'bg-stone-300'}`}>
+              <div className={`w-7 h-7 rounded-md flex items-center justify-center ${colorForDay(d.completed, d.success)}`}>
                 <div className="text-[11px]">{d.dayNum}</div>
               </div>
-              {d.isToday && <div className="mt-1 h-0.5 w-5 bg-black rounded-full" />}
+              {d.isToday && <div className="mt-1 h-0.5 w-5 bg-black dark:bg-white rounded-full" />}
             </div>
           ))}
         </div>

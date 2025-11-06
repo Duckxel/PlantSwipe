@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
-import { Settings, Mail, Lock, Trash2, AlertTriangle, Check, ChevronDown, ChevronUp, Globe } from "lucide-react"
+import { useTheme } from "@/context/ThemeContext"
+import { Settings, Mail, Lock, Trash2, AlertTriangle, Check, ChevronDown, ChevronUp, Globe, Monitor, Sun, Moon } from "lucide-react"
 import { SUPPORTED_LANGUAGES } from "@/lib/i18n"
 
 export default function SettingsPage() {
@@ -17,6 +18,7 @@ export default function SettingsPage() {
   const changeLanguage = useChangeLanguage()
   const currentLang = useLanguage()
   const { t } = useTranslation('common')
+  const { theme, setTheme } = useTheme()
 
   const [email, setEmail] = React.useState("")
   const [newEmail, setNewEmail] = React.useState("")
@@ -34,6 +36,22 @@ export default function SettingsPage() {
   const [deleteConfirm, setDeleteConfirm] = React.useState(false)
   const [deleteConfirmText, setDeleteConfirmText] = React.useState("")
   const [deleting, setDeleting] = React.useState(false)
+
+  // Function to partially censor email
+  const censorEmail = (email: string): string => {
+    if (!email || email.length === 0) return email
+    const [localPart, domain] = email.split('@')
+    if (!domain) return email
+    
+    // Show first 2 characters and last character of local part, censor the rest
+    if (localPart.length <= 3) {
+      return `${localPart[0]}***@${domain}`
+    }
+    const visibleStart = localPart.substring(0, 2)
+    const visibleEnd = localPart.substring(localPart.length - 1)
+    const censored = '*'.repeat(Math.max(3, localPart.length - 3))
+    return `${visibleStart}${censored}${visibleEnd}@${domain}`
+  }
 
   // Load current user data
   React.useEffect(() => {
@@ -257,14 +275,14 @@ export default function SettingsPage() {
       </div>
 
       {error && (
-        <div className="mb-4 p-4 rounded-2xl bg-red-50 border border-red-200 text-red-700 flex items-start gap-2">
+        <div className="mb-4 p-4 rounded-2xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 text-red-700 dark:text-red-400 flex items-start gap-2">
           <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" />
           <div className="flex-1">{error}</div>
         </div>
       )}
 
       {success && (
-        <div className="mb-4 p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-start gap-2">
+        <div className="mb-4 p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50 text-emerald-700 dark:text-emerald-400 flex items-start gap-2">
           <Check className="h-5 w-5 mt-0.5 shrink-0" />
           <div className="flex-1">{success}</div>
         </div>
@@ -289,7 +307,7 @@ export default function SettingsPage() {
           </button>
           {!emailExpanded ? (
             <CardDescription className="mt-2">
-              {t('settings.email.emailAddressLabel')} <span className="font-medium">{email}</span>
+              {t('settings.email.emailAddressLabel')} <span className="font-medium">{censorEmail(email)}</span>
             </CardDescription>
           ) : (
             <CardDescription className="mt-2">
@@ -306,7 +324,7 @@ export default function SettingsPage() {
                 type="email"
                 value={email}
                 disabled
-                className="bg-stone-50"
+                className="bg-stone-50 dark:bg-[#252526]"
               />
             </div>
             <div className="grid gap-2">
@@ -429,16 +447,6 @@ export default function SettingsPage() {
               </p>
             </div>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Friend Requests Settings */}
-      <Card className="rounded-3xl mb-4">
-        <CardHeader>
-          <CardTitle>{t('settings.friendRequests.title')}</CardTitle>
-          <CardDescription>{t('settings.friendRequests.description')}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
           <div className="flex items-start gap-3">
             <input
               type="checkbox"
@@ -478,7 +486,7 @@ export default function SettingsPage() {
               id="language-select"
               value={currentLang}
               onChange={(e) => changeLanguage(e.target.value as typeof currentLang)}
-              className="w-full rounded-2xl border border-stone-300 bg-white px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
+              className="w-full rounded-2xl border border-stone-300 bg-white dark:bg-[#2d2d30] dark:border-[#3e3e42] px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
             >
               {SUPPORTED_LANGUAGES.map((lang) => (
                 <option key={lang} value={lang}>
@@ -490,14 +498,49 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Danger Zone */}
-      <Card className="rounded-3xl border-red-200 bg-red-50/50">
+      {/* Theme Settings */}
+      <Card className="rounded-3xl mb-4">
         <CardHeader>
-          <CardTitle className="text-red-700 flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2">
+            <Monitor className="h-5 w-5" />
+            {t('settings.theme.title')}
+          </CardTitle>
+          <CardDescription>
+            {t('settings.theme.description')}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-2">
+            <Label htmlFor="theme-select">{t('settings.theme.selectTheme')}</Label>
+            <div className="relative">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                {theme === 'system' && <Monitor className="h-4 w-4 opacity-60" />}
+                {theme === 'light' && <Sun className="h-4 w-4 opacity-60" />}
+                {theme === 'dark' && <Moon className="h-4 w-4 opacity-60" />}
+              </div>
+              <select
+                id="theme-select"
+                value={theme}
+                onChange={(e) => setTheme(e.target.value as 'system' | 'light' | 'dark')}
+                className="w-full rounded-2xl border border-stone-300 bg-white dark:bg-[#2d2d30] dark:border-[#3e3e42] pl-10 pr-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors appearance-none"
+              >
+                <option value="system">{t('settings.theme.system')}</option>
+                <option value="light">{t('settings.theme.light')}</option>
+                <option value="dark">{t('settings.theme.dark')}</option>
+              </select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Danger Zone */}
+      <Card className="rounded-3xl border-red-200 dark:border-red-800/50 bg-red-50/50 dark:bg-red-900/20">
+        <CardHeader>
+          <CardTitle className="text-red-700 dark:text-red-400 flex items-center gap-2">
             <AlertTriangle className="h-5 w-5" />
             {t('settings.dangerZone.title')}
           </CardTitle>
-          <CardDescription className="text-red-600/80">
+          <CardDescription className="text-red-600/80 dark:text-red-400/80">
             {t('settings.dangerZone.description')}
           </CardDescription>
         </CardHeader>
@@ -518,8 +561,8 @@ export default function SettingsPage() {
             </>
           ) : (
             <>
-              <div className="p-4 rounded-xl bg-white border border-red-200 space-y-4">
-                <p className="text-sm font-medium text-red-700">
+              <div className="p-4 rounded-xl bg-white dark:bg-[#252526] border border-red-200 dark:border-red-800/50 space-y-4">
+                <p className="text-sm font-medium text-red-700 dark:text-red-400">
                   {t('settings.dangerZone.confirmDelete')}
                 </p>
                 <div className="grid gap-2">

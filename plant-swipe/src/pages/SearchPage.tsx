@@ -27,7 +27,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ plants, openInfo, likedI
           onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => { if (e.key === 'Enter') openInfo(p) }}
         >
           <div className="grid grid-cols-[160px_1fr] items-stretch h-full">
-            <div className="relative w-40 h-40 flex-shrink-0 rounded-l-2xl overflow-hidden bg-stone-100">
+            <div className="relative w-40 h-40 flex-shrink-0 rounded-l-2xl overflow-hidden bg-stone-100 dark:bg-[#252526]">
               {p.image ? (
                 <img
                   src={p.image}
@@ -46,7 +46,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ plants, openInfo, likedI
                   <span key={s} className={`text-[10px] px-2 py-0.5 rounded-full ${seasonBadge[s]}`}>{s}</span>
                 ))}
                 {likedIds.includes(p.id) && (
-                  <Badge className="rounded-xl bg-rose-600 text-white">{t('plant.liked')}</Badge>
+                  <Badge className="rounded-xl bg-rose-600 dark:bg-rose-500 text-white">{t('plant.liked')}</Badge>
                 )}
               </div>
               <div className="font-medium truncate">{p.name}</div>

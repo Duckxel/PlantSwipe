@@ -142,12 +142,12 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
   const label = displayName && displayName.trim().length > 0 ? displayName : t('common.profile')
   return (
     <header className="max-w-6xl mx-auto w-full flex items-center gap-3 px-2 overflow-x-hidden">
-      <div className="h-10 w-10 rounded-2xl bg-green-200 flex items-center justify-center shadow">
-        <Leaf className="h-5 w-5" />
+      <div className="h-10 w-10 rounded-2xl bg-green-200 dark:bg-green-800 flex items-center justify-center shadow">
+        <Leaf className="h-5 w-5 text-green-800 dark:text-green-200" />
       </div>
       <Link
         to="/"
-        className="text-2xl md:text-3xl font-semibold tracking-tight no-underline text-black hover:text-black visited:text-black active:text-black focus:text-black focus-visible:outline-none outline-none hover:opacity-90"
+        className="text-2xl md:text-3xl font-semibold tracking-tight no-underline text-black dark:text-white hover:text-black dark:hover:text-white visited:text-black dark:visited:text-white active:text-black dark:active:text-white focus:text-black dark:focus:text-white focus-visible:outline-none outline-none hover:opacity-90"
         style={{ WebkitTapHighlightColor: 'transparent' }}
       >
         {t('common.appName')}
@@ -182,25 +182,25 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
             {menuOpen && menuPosition && createPortal(
               <div
                 ref={menuRef}
-                className="w-40 rounded-xl border bg-white shadow z-[60] p-1"
+                className="w-40 rounded-xl border bg-white dark:bg-[#252526] dark:border-[#3e3e42] shadow z-[60] p-1"
                 style={{ position: 'fixed', top: menuPosition.top, right: menuPosition.right }}
                 role="menu"
               >
                 {profile?.is_admin && (
-                  <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/admin') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 flex items-center gap-2" role="menuitem">
+                  <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/admin') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
                     <Shield className="h-4 w-4" /> {t('common.admin')}
                   </button>
                 )}
-                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); (onProfile ? onProfile : () => navigate('/profile'))() }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 flex items-center gap-2" role="menuitem">
+                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); (onProfile ? onProfile : () => navigate('/profile'))() }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
                   <User className="h-4 w-4" /> {t('common.profile')}
                 </button>
-                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/friends') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 flex items-center gap-2" role="menuitem">
+                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/friends') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
                   <HeartHandshake className="h-4 w-4" /> {t('common.friends')}
                 </button>
-                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/settings') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 flex items-center gap-2" role="menuitem">
+                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/settings') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
                   <Settings className="h-4 w-4" /> {t('common.settings')}
                 </button>
-                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); if (onLogout) { onLogout() } }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 text-red-600 flex items-center gap-2" role="menuitem">
+                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); if (onLogout) { onLogout() } }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-red-600 dark:text-red-400 flex items-center gap-2" role="menuitem">
                   <LogOut className="h-4 w-4" /> {t('common.logout')}
                 </button>
               </div>,
@@ -219,7 +219,7 @@ function NavPill({ to, isActive, icon, label, showDot }: { to: string; isActive:
       <Button
         asChild
         variant={'secondary'}
-        className={isActive ? "rounded-2xl bg-black text-white hover:bg-black/90 hover:text-white" : "rounded-2xl bg-white text-black hover:bg-stone-100 hover:text-black"}
+        className={isActive ? "rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90 hover:text-white dark:hover:text-black" : "rounded-2xl bg-white dark:bg-[#252526] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#2d2d30] hover:text-black dark:hover:text-white"}
       >
         <Link to={to} className="no-underline">
           <span className="inline-flex items-center gap-2">
@@ -230,7 +230,7 @@ function NavPill({ to, isActive, icon, label, showDot }: { to: string; isActive:
       </Button>
       {showDot && (
         <span
-          className="pointer-events-none absolute -top-[2px] -right-[2px] z-20 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white"
+          className="pointer-events-none absolute -top-[2px] -right-[2px] z-20 h-2.5 w-2.5 rounded-full bg-red-600 dark:bg-red-500 ring-2 ring-white dark:ring-[#252526]"
           aria-hidden="true"
         />
       )}

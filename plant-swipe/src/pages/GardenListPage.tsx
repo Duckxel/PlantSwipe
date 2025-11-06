@@ -560,7 +560,7 @@ export const GardenListPage: React.FC = () => {
                         <div className="mt-2 space-y-2">
                           {occs.map((o: any) => {
                             const tt = (o as any).taskType || 'custom'
-                            const badgeClass = `${tt === 'water' ? 'bg-blue-500' : tt === 'fertilize' ? 'bg-green-500' : tt === 'harvest' ? 'bg-yellow-400' : tt === 'cut' ? 'bg-orange-500' : 'bg-purple-500'} ${tt === 'harvest' ? 'text-black' : 'text-white'}`
+                            const badgeClass = `${tt === 'water' ? 'bg-blue-600 dark:bg-blue-500' : tt === 'fertilize' ? 'bg-green-600 dark:bg-green-500' : tt === 'harvest' ? 'bg-yellow-500 dark:bg-yellow-400' : tt === 'cut' ? 'bg-orange-600 dark:bg-orange-500' : 'bg-purple-600 dark:bg-purple-500'} ${tt === 'harvest' ? 'text-black dark:text-black' : 'text-white'}`
                             const taskEmoji = (o as any).taskEmoji
                             const icon = (taskEmoji && taskEmoji !== '??' && taskEmoji !== '???' && taskEmoji.trim() !== '') ? taskEmoji : (tt === 'water' ? '💧' : tt === 'fertilize' ? '🍽️' : tt === 'harvest' ? '🌾' : tt === 'cut' ? '✂️' : '🪴')
                             const isDone = (Number(o.completedCount || 0) >= Number(o.requiredCount || 1))
