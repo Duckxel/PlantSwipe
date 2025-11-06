@@ -514,12 +514,12 @@ export const GardenListPage: React.FC = () => {
 
         {/* Right-side Tasks sidebar for all gardens - hidden for non-logged-in users */}
         {user && (
-          <aside className="mt-6 lg:mt-6 lg:border-l lg:border-stone-200 lg:pl-6">
+          <aside className="mt-6 lg:mt-6 lg:border-l lg:border-stone-200 dark:lg:border-[#3e3e42] lg:pl-6">
             <div className="space-y-3">
               <div className="text-lg font-semibold">{t('garden.tasks')}</div>
               <Card className="rounded-2xl p-4">
               <div className="text-sm opacity-60 mb-2">{t('garden.allGardens')}</div>
-              <div className="h-2 bg-stone-200 rounded-full overflow-hidden">
+              <div className="h-2 bg-stone-200 dark:bg-[#3e3e42] rounded-full overflow-hidden">
                 <div className="h-2 bg-emerald-500" style={{ width: `${totalTasks === 0 ? 100 : Math.min(100, Math.round((totalDone / totalTasks) * 100))}%` }} />
               </div>
               <div className="text-xs opacity-70 mt-1">{t('garden.today')}: {totalDone} / {totalTasks}</div>
@@ -566,19 +566,19 @@ export const GardenListPage: React.FC = () => {
                             const isDone = (Number(o.completedCount || 0) >= Number(o.requiredCount || 1))
                             const completions = completionsByOcc[o.id] || []
                             return (
-                              <div key={o.id} className={`flex items-center justify-between gap-3 text-sm rounded-xl border p-2 ${isDone ? 'bg-stone-50' : ''}`}>
+                              <div key={o.id} className={`flex items-center justify-between gap-3 text-sm rounded-xl border border-stone-300 dark:border-[#3e3e42] p-2 ${isDone ? 'bg-stone-50 dark:bg-[#2d2d30]' : 'bg-white dark:bg-[#252526]'}`}>
                                 <div className="flex items-center gap-2">
-                                  <span className={`h-6 w-6 flex items-center justify-center rounded-md border`}>{icon}</span>
+                                  <span className={`h-6 w-6 flex items-center justify-center rounded-md border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30]`}>{icon}</span>
                                   <span className={`text-[10px] px-2 py-0.5 rounded-full ${badgeClass}`}>{t(`garden.taskTypes.${tt}`)}</span>
-                                  <span className="text-xs opacity-70">{gp.nickname || gp.plant?.name}</span>
+                                  <span className="text-xs opacity-70 text-black dark:text-white">{gp.nickname || gp.plant?.name}</span>
                                 </div>
                                 {!isDone ? (
                                   <>
-                                    <div className="opacity-80">{o.completedCount} / {o.requiredCount}</div>
+                                    <div className="opacity-80 text-black dark:text-white">{o.completedCount} / {o.requiredCount}</div>
                                     <Button className="rounded-xl" size="sm" onClick={() => onProgressOccurrence(o.id, 1)} disabled={(o.completedCount || 0) >= (o.requiredCount || 1)}>+1</Button>
                                   </>
                                 ) : (
-                                  <div className="text-xs opacity-70 truncate max-w-[50%]">
+                                  <div className="text-xs opacity-70 truncate max-w-[50%] text-black dark:text-white">
                                     {completions.length === 0 ? t('garden.completed') : `${t('garden.doneBy')} ${completions.map(c => c.displayName || t('garden.someone')).join(', ')}`}
                                   </div>
                                 )}
