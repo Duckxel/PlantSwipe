@@ -1503,6 +1503,16 @@ export const GardenDashboardPage: React.FC = () => {
               <Route path="routine" element={<RoutineSection plants={plants} duePlantIds={dueToday} onLogWater={logWater} weekDays={weekDays} weekCounts={weekCounts} weekCountsByType={weekCountsByType} serverToday={serverToday} dueThisWeekByPlant={dueThisWeekByPlant} todayTaskOccurrences={todayTaskOccurrences} onProgressOccurrence={progressOccurrenceHandler} />} />
               <Route path="settings" element={(
                 <div className="space-y-6">
+                  {garden && (
+                    <Card className="rounded-2xl p-4 bg-muted/50">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>{t('garden.created')} {new Date(garden.createdAt).toLocaleDateString()}</span>
+                      </div>
+                    </Card>
+                  )}
                   <div className="space-y-3">
                     <div className="text-lg font-medium">{t('gardenDashboard.settingsSection.gardenDetails')}</div>
                     <Card className="rounded-2xl p-4">
@@ -1914,11 +1924,21 @@ function OverviewSection({ gardenId, activityRev, plants, membersCount, serverTo
         </Card>
         <Card className="rounded-2xl p-4">
           <div className="text-xs opacity-60">{t('gardenDashboard.overviewSection.members')}</div>
-          <div className="text-2xl font-semibold">{membersCount}</div>
+          <div className="flex items-center gap-2 mt-1">
+            <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+            </svg>
+            <div className="text-2xl font-semibold">{membersCount}</div>
+          </div>
         </Card>
         <Card className="rounded-2xl p-4">
           <div className="text-xs opacity-60">{t('gardenDashboard.overviewSection.streak')}</div>
-          <div className="text-2xl font-semibold">{streak} {t('gardenDashboard.overviewSection.days')}</div>
+          <div className="flex items-center gap-2 mt-1">
+            <svg className="w-4 h-4 text-orange-500" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" />
+            </svg>
+            <div className="text-2xl font-semibold">{streak} {t('gardenDashboard.overviewSection.days')}</div>
+          </div>
         </Card>
       </div>
 
