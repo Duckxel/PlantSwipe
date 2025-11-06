@@ -1750,13 +1750,13 @@ export const AdminPage: React.FC = () => {
 
               {/* Reload notices */}
               {preRestartNotice && (
-                <div className="mb-3 rounded-xl border bg-yellow-100 dark:bg-yellow-900/40 border-yellow-300 dark:border-yellow-700 p-3 flex items-center justify-between gap-3">
+                <div className="mb-4 mt-4 rounded-xl border bg-yellow-100 dark:bg-yellow-900/40 border-yellow-300 dark:border-yellow-700 p-3 flex items-center justify-between gap-3">
                   <div className="text-sm text-yellow-900 dark:text-yellow-100">New version built. Page info may be outdated. We will restart services now; the site will stay up. You can reload anytime.</div>
                   <Button className="rounded-xl" variant="outline" onClick={reloadPage}>Reload now</Button>
                 </div>
               )}
               {reloadReady && (
-                <div className="mb-3 rounded-xl border bg-yellow-100 dark:bg-yellow-900/40 border-yellow-300 dark:border-yellow-700 p-3 flex items-center justify-between gap-3">
+                <div className="mb-4 mt-4 rounded-xl border bg-yellow-100 dark:bg-yellow-900/40 border-yellow-300 dark:border-yellow-700 p-3 flex items-center justify-between gap-3">
                   <div className="text-sm text-yellow-900 dark:text-yellow-100">Services restart complete. Reload when convenient.</div>
                   <Button className="rounded-xl" onClick={reloadPage}>Reload page</Button>
                 </div>

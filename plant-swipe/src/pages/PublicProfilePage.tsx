@@ -662,16 +662,15 @@ export default function PublicProfilePage() {
                 <Card className="rounded-3xl">
                   <CardContent className="p-6 md:p-8 space-y-4">
                     <div className="text-lg font-semibold">{t('profile.highlights')}</div>
-                    <div className="flex flex-col md:flex-row gap-6 items-start">
+                    <div className="flex flex-col md:flex-row items-center justify-center gap-0">
                       {/* Task completion grid - left side */}
-                      <div className="w-full md:flex-1">
-                        <div className="flex justify-center">
-                          <div className="grid grid-rows-4 grid-flow-col auto-cols-max gap-1 sm:gap-1.5">
+                      <div className="flex-1 flex justify-center items-center">
+                        <div className="grid grid-rows-4 grid-flow-col auto-cols-max gap-1.5 sm:gap-2">
                           {daysFlat.map((item: { date: string; value: number; success: boolean }, idx: number) => (
                             <div
                               key={idx}
                               tabIndex={0}
-                              className={`h-6 w-6 sm:h-8 sm:w-8 rounded-[4px] ${colorFor(item)}`}
+                              className={`h-8 w-8 sm:h-10 sm:w-10 rounded-[4px] ${colorFor(item)}`}
                               onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => showTooltip(e.currentTarget as HTMLDivElement, item)}
                               onMouseLeave={hideTooltip}
                               onFocus={(e: React.FocusEvent<HTMLDivElement>) => showTooltip(e.currentTarget as HTMLDivElement, item)}
@@ -680,40 +679,42 @@ export default function PublicProfilePage() {
                               aria-label={`${new Date(item.date).toLocaleDateString(i18n.language)}: ${item.value} ${t('profile.tasks')}${item.success ? `, ${t('profile.completedDay')}` : ''}`}
                             />
                           ))}
-                          </div>
                         </div>
                       </div>
                       
+                      {/* Thin divider line */}
+                      <div className="hidden md:block w-px h-full min-h-[200px] bg-stone-300 dark:bg-[#3e3e42] mx-2" />
+                      
                       {/* Highlight cards - right side, 2x2 grid */}
-                      <div className="w-full md:w-auto">
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="rounded-xl border p-3 text-center">
-                            <div className="flex items-center justify-center gap-1.5 mb-1">
-                              <Sprout className="h-4 w-4 text-emerald-600" />
-                              <div className="text-[11px] opacity-60">{t('profile.plantsOwned')}</div>
+                      <div className="flex-1 flex justify-center items-center">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="rounded-xl border p-4 text-center min-w-[120px]">
+                            <div className="flex items-center justify-center gap-1.5 mb-2">
+                              <Sprout className="h-5 w-5 text-emerald-600" />
+                              <div className="text-xs opacity-60">{t('profile.plantsOwned')}</div>
                             </div>
-                            <div className="text-base font-semibold tabular-nums">{stats?.plantsTotal ?? '—'}</div>
+                            <div className="text-xl font-semibold tabular-nums">{stats?.plantsTotal ?? '—'}</div>
                           </div>
-                          <div className="rounded-xl border p-3 text-center">
-                            <div className="flex items-center justify-center gap-1.5 mb-1">
-                              <Home className="h-4 w-4 text-blue-600" />
-                              <div className="text-[11px] opacity-60">{t('profile.gardens')}</div>
+                          <div className="rounded-xl border p-4 text-center min-w-[120px]">
+                            <div className="flex items-center justify-center gap-1.5 mb-2">
+                              <Home className="h-5 w-5 text-blue-600" />
+                              <div className="text-xs opacity-60">{t('profile.gardens')}</div>
                             </div>
-                            <div className="text-base font-semibold tabular-nums">{stats?.gardensCount ?? '—'}</div>
+                            <div className="text-xl font-semibold tabular-nums">{stats?.gardensCount ?? '—'}</div>
                           </div>
-                          <div className="rounded-xl border p-3 text-center">
-                            <div className="flex items-center justify-center gap-1.5 mb-1">
-                              <Flame className="h-4 w-4 text-orange-500" />
-                              <div className="text-[11px] opacity-60">{t('profile.currentStreak')}</div>
+                          <div className="rounded-xl border p-4 text-center min-w-[120px]">
+                            <div className="flex items-center justify-center gap-1.5 mb-2">
+                              <Flame className="h-5 w-5 text-orange-500" />
+                              <div className="text-xs opacity-60">{t('profile.currentStreak')}</div>
                             </div>
-                            <div className="text-base font-semibold tabular-nums">{stats?.currentStreak ?? '—'}</div>
+                            <div className="text-xl font-semibold tabular-nums">{stats?.currentStreak ?? '—'}</div>
                           </div>
-                          <div className="rounded-xl border p-3 text-center">
-                            <div className="flex items-center justify-center gap-1.5 mb-1">
-                              <Trophy className="h-4 w-4 text-amber-500" />
-                              <div className="text-[11px] opacity-60">{t('profile.longestStreak')}</div>
+                          <div className="rounded-xl border p-4 text-center min-w-[120px]">
+                            <div className="flex items-center justify-center gap-1.5 mb-2">
+                              <Trophy className="h-5 w-5 text-amber-500" />
+                              <div className="text-xs opacity-60">{t('profile.longestStreak')}</div>
                             </div>
-                            <div className="text-base font-semibold tabular-nums">{stats?.bestStreak ?? '—'}</div>
+                            <div className="text-xl font-semibold tabular-nums">{stats?.bestStreak ?? '—'}</div>
                           </div>
                         </div>
                       </div>
