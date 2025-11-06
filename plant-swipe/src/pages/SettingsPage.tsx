@@ -17,8 +17,15 @@ export default function SettingsPage() {
   const navigate = useLanguageNavigate()
   const changeLanguage = useChangeLanguage()
   const currentLang = useLanguage()
-  const { t } = useTranslation('common')
+  const { t, ready } = useTranslation('common')
   const { theme, setTheme } = useTheme()
+  
+  // Get theme translations with fallbacks
+  const themeLabels = React.useMemo(() => ({
+    system: t('settings.theme.system', 'System'),
+    light: t('settings.theme.light', 'Light'),
+    dark: t('settings.theme.dark', 'Dark'),
+  }), [t])
 
   const [email, setEmail] = React.useState("")
   const [newEmail, setNewEmail] = React.useState("")
@@ -512,9 +519,9 @@ export default function SettingsPage() {
               onChange={(e) => setTheme(e.target.value as 'system' | 'light' | 'dark')}
               className="w-full rounded-2xl border border-stone-300 bg-white dark:bg-stone-800 dark:border-stone-700 px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
             >
-              <option value="system">{t('settings.theme.system')}</option>
-              <option value="light">{t('settings.theme.light')}</option>
-              <option value="dark">{t('settings.theme.dark')}</option>
+              <option value="system">{themeLabels.system}</option>
+              <option value="light">{themeLabels.light}</option>
+              <option value="dark">{themeLabels.dark}</option>
             </select>
           </div>
           <div className="flex items-center gap-3 p-3 rounded-xl bg-stone-50 dark:bg-stone-900/50 border border-stone-200 dark:border-stone-800">
@@ -525,9 +532,9 @@ export default function SettingsPage() {
               <span>{t('settings.theme.currentTheme')}:</span>
             </div>
             <span className="font-medium text-sm">
-              {theme === 'system' && t('settings.theme.system')}
-              {theme === 'light' && t('settings.theme.light')}
-              {theme === 'dark' && t('settings.theme.dark')}
+              {theme === 'system' && themeLabels.system}
+              {theme === 'light' && themeLabels.light}
+              {theme === 'dark' && themeLabels.dark}
             </span>
           </div>
         </CardContent>
