@@ -507,18 +507,19 @@ export default function PublicProfilePage() {
   const maxCount = React.useMemo(() => monthDays.reduce((m, d) => Math.max(m, d.completed || 0), 0), [monthDays])
 
   const colorFor = (cell: { value: number; success: boolean } | null) => {
-    if (!cell) return 'bg-stone-200'
+    if (!cell) return 'bg-stone-200 dark:bg-stone-700'
     // Grey: Tasks were not accomplished that day (tasks were due but not all completed)
-    if (!cell.success) return 'bg-stone-200'
+    if (!cell.success) return 'bg-stone-200 dark:bg-stone-700'
     // Green: Either no tasks were needed OR all tasks were done
-    // Stronger color = more tasks completed that day
-    if (maxCount <= 0) return 'bg-emerald-400'
+    // Light mode: lighter color = fewer tasks, darker color = more tasks
+    // Dark mode: darker color = fewer tasks, lighter color = more tasks
+    if (maxCount <= 0) return 'bg-emerald-400 dark:bg-emerald-800'
     const ratio = (cell.value || 0) / maxCount
-    if (ratio <= 0) return 'bg-emerald-300'
-    if (ratio <= 0.25) return 'bg-emerald-400'
-    if (ratio <= 0.5) return 'bg-emerald-500'
-    if (ratio <= 0.75) return 'bg-emerald-600'
-    return 'bg-emerald-700'
+    if (ratio <= 0) return 'bg-emerald-300 dark:bg-emerald-900'
+    if (ratio <= 0.25) return 'bg-emerald-400 dark:bg-emerald-800'
+    if (ratio <= 0.5) return 'bg-emerald-500 dark:bg-emerald-700'
+    if (ratio <= 0.75) return 'bg-emerald-600 dark:bg-emerald-600'
+    return 'bg-emerald-700 dark:bg-emerald-500'
   }
 
   const [tooltip, setTooltip] = React.useState<{ top: number; left: number; date: string; value: number; success: boolean } | null>(null)
@@ -557,14 +558,14 @@ export default function PublicProfilePage() {
                             <EyeOff className="h-5 w-5 text-stone-500 opacity-70" />
                           </div>
                         )}
-                        <span className={`text-[11px] px-2 py-0.5 rounded-full border ${pp.is_admin ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-stone-50 text-stone-700 border-stone-200'}`}>{pp.is_admin ? t('profile.admin') : t('profile.member')}</span>
+                        <span className={`text-[11px] px-2 py-0.5 rounded-full border ${pp.is_admin ? 'bg-emerald-200 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100 border-emerald-300 dark:border-emerald-700' : 'bg-stone-50 text-stone-700 border-stone-200'}`}>{pp.is_admin ? t('profile.admin') : t('profile.member')}</span>
                       </div>
                   {canViewProfile && (
                     <>
                       <div className="text-sm opacity-70 mt-1 flex items-center gap-1">{pp.country ? (<><MapPin className="h-4 w-4" />{pp.country}</>) : ''}</div>
                       <div className="text-xs opacity-70 mt-1 flex items-center gap-2">
                         {pp.is_online ? (
-                          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" />{t('profile.currentlyOnline')}</span>
+                          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-600 dark:bg-emerald-500" />{t('profile.currentlyOnline')}</span>
                         ) : (
                           <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-stone-300" />{formatLastSeen(pp.last_seen_at)}</span>
                         )}
@@ -585,15 +586,15 @@ export default function PublicProfilePage() {
                     <>
                       <Button className="rounded-2xl" variant="secondary" onClick={() => setMenuOpen((o) => !o)}>⋯</Button>
                       {menuOpen && menuPos && createPortal(
-                        <div ref={menuRef} className="w-40 rounded-xl border bg-white shadow z-[60] p-1" style={{ position: 'fixed', top: menuPos.top, right: menuPos.right }}>
-                          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50" onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); setEditOpen(true) }}>{t('profile.edit')}</button>
-                          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50" onMouseDown={async (e) => { e.stopPropagation(); setMenuOpen(false); await signOut(); navigate('/') }}>{t('profile.logout')}</button>
-                          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 text-red-600" onMouseDown={async (e) => { e.stopPropagation(); setMenuOpen(false); await deleteAccount() }}>{t('profile.deleteAccount')}</button>
+                        <div ref={menuRef} className="w-40 rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526] shadow z-[60] p-1" style={{ position: 'fixed', top: menuPos.top, right: menuPos.right }}>
+                          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white" onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); setEditOpen(true) }}>{t('profile.edit')}</button>
+                          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white" onMouseDown={async (e) => { e.stopPropagation(); setMenuOpen(false); await signOut(); navigate('/') }}>{t('profile.logout')}</button>
+                          <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-red-600 dark:text-red-400" onMouseDown={async (e) => { e.stopPropagation(); setMenuOpen(false); await deleteAccount() }}>{t('profile.deleteAccount')}</button>
                         </div>,
                         document.body
                       )}
                     </>
-                  ) : user?.id && !pp.disable_friend_requests && (
+                  ) : user?.id && !pp.disable_friend_requests ? (
                     <>
                       {friendStatus === 'none' && (
                         <Button 
@@ -633,7 +634,7 @@ export default function PublicProfilePage() {
                         </div>
                       )}
                     </>
-                  )}
+                  ) : null}
                 </div>
               </div>
               {canViewProfile && pp.bio && (
@@ -661,62 +662,70 @@ export default function PublicProfilePage() {
                 <Card className="rounded-3xl">
                   <CardContent className="p-6 md:p-8 space-y-4">
                     <div className="text-lg font-semibold">{t('profile.highlights')}</div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  <div className="rounded-xl border p-3 text-center">
-                    <div className="flex items-center justify-center gap-1.5 mb-1">
-                      <Sprout className="h-4 w-4 text-emerald-600" />
-                      <div className="text-[11px] opacity-60">{t('profile.plantsOwned')}</div>
+                    <div className="flex flex-col md:flex-row items-center justify-center gap-0">
+                      {/* Task completion grid - left side */}
+                      <div className="flex-1 flex justify-center items-center">
+                        <div className="grid grid-rows-4 grid-flow-col auto-cols-max gap-1.5 sm:gap-2">
+                          {daysFlat.map((item: { date: string; value: number; success: boolean }, idx: number) => (
+                            <div
+                              key={idx}
+                              tabIndex={0}
+                              className={`h-8 w-8 sm:h-10 sm:w-10 rounded-[4px] ${colorFor(item)}`}
+                              onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => showTooltip(e.currentTarget as HTMLDivElement, item)}
+                              onMouseLeave={hideTooltip}
+                              onFocus={(e: React.FocusEvent<HTMLDivElement>) => showTooltip(e.currentTarget as HTMLDivElement, item)}
+                              onBlur={hideTooltip}
+                              title={`${item.value} ${t('profile.tasks')} ${t('profile.tasksOn')} ${new Date(item.date).toLocaleDateString(i18n.language)}`}
+                              aria-label={`${new Date(item.date).toLocaleDateString(i18n.language)}: ${item.value} ${t('profile.tasks')}${item.success ? `, ${t('profile.completedDay')}` : ''}`}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                      
+                      {/* Thin divider line */}
+                      <div className="hidden md:block w-px h-full min-h-[200px] bg-stone-300 dark:bg-[#3e3e42] mx-2" />
+                      
+                      {/* Highlight cards - right side, 2x2 grid */}
+                      <div className="flex-1 flex justify-center items-center">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="rounded-xl border p-4 text-center min-w-[120px]">
+                            <div className="flex items-center justify-center gap-1.5 mb-2">
+                              <Sprout className="h-5 w-5 text-emerald-600" />
+                              <div className="text-xs opacity-60">{t('profile.plantsOwned')}</div>
+                            </div>
+                            <div className="text-xl font-semibold tabular-nums">{stats?.plantsTotal ?? '—'}</div>
+                          </div>
+                          <div className="rounded-xl border p-4 text-center min-w-[120px]">
+                            <div className="flex items-center justify-center gap-1.5 mb-2">
+                              <Home className="h-5 w-5 text-blue-600" />
+                              <div className="text-xs opacity-60">{t('profile.gardens')}</div>
+                            </div>
+                            <div className="text-xl font-semibold tabular-nums">{stats?.gardensCount ?? '—'}</div>
+                          </div>
+                          <div className="rounded-xl border p-4 text-center min-w-[120px]">
+                            <div className="flex items-center justify-center gap-1.5 mb-2">
+                              <Flame className="h-5 w-5 text-orange-500" />
+                              <div className="text-xs opacity-60">{t('profile.currentStreak')}</div>
+                            </div>
+                            <div className="text-xl font-semibold tabular-nums">{stats?.currentStreak ?? '—'}</div>
+                          </div>
+                          <div className="rounded-xl border p-4 text-center min-w-[120px]">
+                            <div className="flex items-center justify-center gap-1.5 mb-2">
+                              <Trophy className="h-5 w-5 text-amber-500" />
+                              <div className="text-xs opacity-60">{t('profile.longestStreak')}</div>
+                            </div>
+                            <div className="text-xl font-semibold tabular-nums">{stats?.bestStreak ?? '—'}</div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-base font-semibold tabular-nums">{stats?.plantsTotal ?? '—'}</div>
-                  </div>
-                  <div className="rounded-xl border p-3 text-center">
-                    <div className="flex items-center justify-center gap-1.5 mb-1">
-                      <Home className="h-4 w-4 text-blue-600" />
-                      <div className="text-[11px] opacity-60">{t('profile.gardens')}</div>
-                    </div>
-                    <div className="text-base font-semibold tabular-nums">{stats?.gardensCount ?? '—'}</div>
-                  </div>
-                  <div className="rounded-xl border p-3 text-center">
-                    <div className="flex items-center justify-center gap-1.5 mb-1">
-                      <Flame className="h-4 w-4 text-orange-500" />
-                      <div className="text-[11px] opacity-60">{t('profile.currentStreak')}</div>
-                    </div>
-                    <div className="text-base font-semibold tabular-nums">{stats?.currentStreak ?? '—'}</div>
-                  </div>
-                  <div className="rounded-xl border p-3 text-center">
-                    <div className="flex items-center justify-center gap-1.5 mb-1">
-                      <Trophy className="h-4 w-4 text-amber-500" />
-                      <div className="text-[11px] opacity-60">{t('profile.longestStreak')}</div>
-                    </div>
-                    <div className="text-base font-semibold tabular-nums">{stats?.bestStreak ?? '—'}</div>
-                  </div>
-                </div>
-                <div className="w-full">
-                  <div className="flex justify-center">
-                    <div className="grid grid-rows-4 grid-flow-col auto-cols-max gap-1 sm:gap-1.5">
-                    {daysFlat.map((item: { date: string; value: number; success: boolean }, idx: number) => (
-                      <div
-                        key={idx}
-                        tabIndex={0}
-                        className={`h-6 w-6 sm:h-8 sm:w-8 rounded-[4px] ${colorFor(item)}`}
-                        onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => showTooltip(e.currentTarget as HTMLDivElement, item)}
-                        onMouseLeave={hideTooltip}
-                        onFocus={(e: React.FocusEvent<HTMLDivElement>) => showTooltip(e.currentTarget as HTMLDivElement, item)}
-                        onBlur={hideTooltip}
-                        title={`${item.value} ${t('profile.tasks')} ${t('profile.tasksOn')} ${new Date(item.date).toLocaleDateString(i18n.language)}`}
-                        aria-label={`${new Date(item.date).toLocaleDateString(i18n.language)}: ${item.value} ${t('profile.tasks')}${item.success ? `, ${t('profile.completedDay')}` : ''}`}
-                      />
-                    ))}
-                    </div>
-                  </div>
-                </div>
                 
                 {tooltip && createPortal(
                   <div
                     className="fixed z-[70] pointer-events-none"
                     style={{ top: tooltip.top, left: tooltip.left, transform: 'translate(-50%, -100%)' }}
                   >
-                    <div className="rounded-xl border bg-white shadow px-3 py-2">
+                    <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526] shadow px-3 py-2">
                       <div className="text-xs font-medium">{new Date(tooltip.date).toLocaleDateString(i18n.language)}</div>
                       <div className="text-[11px] opacity-70">{tooltip.value} {t('profile.tasks')}{tooltip.success ? ` • ${t('profile.completedDay')}` : ''}</div>
                     </div>

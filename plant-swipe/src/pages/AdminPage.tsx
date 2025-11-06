@@ -619,7 +619,7 @@ export const AdminPage: React.FC = () => {
   const StatusDot: React.FC<{ ok: boolean | null; title?: string }> = ({ ok, title }) => (
     <span
       className={
-        `inline-block h-3 w-3 rounded-full ? ${ok === null ? 'bg-zinc-400' : ok ? 'bg-emerald-500' : 'bg-rose-500'}`
+        `inline-block h-3 w-3 rounded-full ? ${ok === null ? 'bg-zinc-400' : ok ? 'bg-emerald-600 dark:bg-emerald-500' : 'bg-rose-600 dark:bg-rose-500'}`
       }
       aria-label={ok === null ? 'unknown' : ok ? 'ok' : 'error'}
       title={title}
@@ -629,7 +629,7 @@ export const AdminPage: React.FC = () => {
   const ErrorBadge: React.FC<{ code: string | null }> = ({ code }) => {
     if (!code) return null
     return (
-      <span className="text-[11px] px-1.5 py-0.5 rounded border bg-rose-50 text-rose-700 border-rose-200">
+      <span className="text-[11px] px-1.5 py-0.5 rounded border bg-rose-100 dark:bg-rose-900/40 text-rose-800 dark:text-rose-200 border-rose-300 dark:border-rose-700">
         {code}
       </span>
     )
@@ -1587,18 +1587,6 @@ export const AdminPage: React.FC = () => {
           {/* Health monitor */}
           <Card className="rounded-2xl">
             <CardContent className="p-4">
-              {preRestartNotice && (
-                <div className="mb-3 rounded-xl border bg-amber-100 p-3 flex items-center justify-between gap-3">
-                  <div className="text-sm text-amber-900">New version built. Page info may be outdated. We will restart services now; the site will stay up. You can reload anytime.</div>
-                  <Button className="rounded-xl" variant="outline" onClick={reloadPage}>Reload now</Button>
-                </div>
-              )}
-              {reloadReady && (
-                <div className="mb-3 rounded-xl border bg-amber-50/70 p-3 flex items-center justify-between gap-3">
-                  <div className="text-sm">Services restart complete. Reload when convenient.</div>
-                  <Button className="rounded-xl" onClick={reloadPage}>Reload page</Button>
-                </div>
-              )}
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-sm font-medium">Health monitor</div>
@@ -1759,6 +1747,20 @@ export const AdminPage: React.FC = () => {
                   <span>{syncing ? 'Syncing...' : 'Sync DB Schema'}</span>
                 </Button>
               </div>
+
+              {/* Reload notices */}
+              {preRestartNotice && (
+                <div className="mb-4 mt-4 rounded-xl border bg-yellow-100 dark:bg-yellow-900/40 border-yellow-300 dark:border-yellow-700 p-3 flex items-center justify-between gap-3">
+                  <div className="text-sm text-yellow-900 dark:text-yellow-100">New version built. Page info may be outdated. We will restart services now; the site will stay up. You can reload anytime.</div>
+                  <Button className="rounded-xl" variant="outline" onClick={reloadPage}>Reload now</Button>
+                </div>
+              )}
+              {reloadReady && (
+                <div className="mb-4 mt-4 rounded-xl border bg-yellow-100 dark:bg-yellow-900/40 border-yellow-300 dark:border-yellow-700 p-3 flex items-center justify-between gap-3">
+                  <div className="text-sm text-yellow-900 dark:text-yellow-100">Services restart complete. Reload when convenient.</div>
+                  <Button className="rounded-xl" onClick={reloadPage}>Reload page</Button>
+                </div>
+              )}
 
               {/* Divider before Admin Console */}
               <div className="my-4 border-t" />
@@ -2264,14 +2266,14 @@ export const AdminPage: React.FC = () => {
               </Button>
               <Button asChild variant="outline" className="rounded-2xl">
                 <a href="https://supabase.com/dashboard/project/lxnkcguwewrskqnyzjwi" target="_blank" rel="noreferrer">
-                  <span className="inline-block h-3 w-3 rounded-sm bg-emerald-500" />
+                  <span className="inline-block h-3 w-3 rounded-sm bg-emerald-600 dark:bg-emerald-500" />
                   <span>Supabase</span>
                   <ExternalLink className="h-3 w-3 opacity-70" />
                 </a>
               </Button>
               <Button asChild variant="outline" className="rounded-2xl">
                 <a href="https://cloud.linode.com/linodes/84813440/metrics" target="_blank" rel="noreferrer">
-                  <span className="inline-block h-3 w-3 rounded-sm bg-blue-600" />
+                  <span className="inline-block h-3 w-3 rounded-sm bg-blue-600 dark:bg-blue-500" />
                   <span>Linode</span>
                   <ExternalLink className="h-3 w-3 opacity-70" />
                 </a>
@@ -2331,12 +2333,12 @@ export const AdminPage: React.FC = () => {
                     }}
                   />
                   {suggestionsOpen && emailSuggestions.length > 0 && (
-                    <div className="absolute z-10 mt-1 w-full rounded-xl border bg-white shadow-md max-h-60 overflow-auto" role="listbox">
+                    <div className="absolute z-10 mt-1 w-full rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526] shadow-md max-h-60 overflow-auto" role="listbox">
                           {emailSuggestions.map((s, idx) => (
                             <button
                               key={s.id}
                               type="button"
-                          className={`w-full text-left px-3 py-2 text-sm rounded-xl ? ${idx === highlightIndex ? 'bg-neutral-100' : ''}`}
+                          className={`w-full text-left px-3 py-2 text-sm rounded-xl ${idx === highlightIndex ? 'bg-neutral-100 dark:bg-[#2d2d30]' : ''}`}
                           role="option"
                           aria-selected={idx === highlightIndex}
                               onMouseEnter={() => setHighlightIndex(idx)}
@@ -2392,7 +2394,7 @@ export const AdminPage: React.FC = () => {
                     return (
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-center gap-3 min-w-0">
-                          <div className="h-14 w-14 rounded-full bg-gradient-to-br from-emerald-200 to-green-300 text-emerald-900 flex items-center justify-center font-semibold shadow-inner">
+                          <div className="h-14 w-14 rounded-full bg-emerald-600 dark:bg-emerald-500 text-white flex items-center justify-center font-semibold shadow-inner">
                             {initial}
                           </div>
                           <div className="min-w-0">
@@ -2404,7 +2406,7 @@ export const AdminPage: React.FC = () => {
                             </div>
                             <div className="flex flex-wrap gap-1 mt-1">
                               {memberData.profile?.is_admin && (
-                                <Badge variant="outline" className="rounded-full px-2 py-0.5 bg-emerald-100 text-emerald-800 border-emerald-200 flex items-center gap-1">
+                                <Badge variant="outline" className="rounded-full px-2 py-0.5 bg-emerald-200 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100 border-emerald-300 dark:border-emerald-700 flex items-center gap-1">
                                   <ShieldCheck className="h-3 w-3" /> Admin
                                 </Badge>
                               )}
@@ -2749,8 +2751,8 @@ export const AdminPage: React.FC = () => {
                   </Card>
 
                   {(memberData.isBannedEmail || (memberData.bannedIps && memberData.bannedIps.length > 0)) && (
-                    <div className="rounded-xl border p-3 bg-rose-50/60">
-                      <div className="text-sm font-medium text-rose-700 flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Banned details</div>
+                    <div className="rounded-xl border p-3 bg-rose-100 dark:bg-rose-900/40 border-rose-300 dark:border-rose-800">
+                      <div className="text-sm font-medium text-rose-800 dark:text-rose-200 flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Banned details</div>
                       {memberData.isBannedEmail && (
                         <div className="text-sm mt-1">Email banned {memberData.bannedAt ? `on ? ${new Date(memberData.bannedAt).toLocaleString()}` : ''}{memberData.bannedReason ? ` ? ? ${memberData.bannedReason}` : ''}</div>
                       )}
@@ -2825,29 +2827,29 @@ export const AdminPage: React.FC = () => {
                 {!ipLoading && ipUsed && (
                   <div className="space-y-2">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <div className="rounded-xl border p-3 text-center">
+                      <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 text-center bg-white dark:bg-[#252526]">
                         <div className="text-[11px] opacity-60">IP</div>
                         <div className="text-base font-semibold tabular-nums truncate" title={ipUsed || undefined}>{ipUsed || '-'}</div>
                       </div>
-                      <div className="rounded-xl border p-3 text-center">
+                      <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 text-center bg-white dark:bg-[#252526]">
                         <div className="text-[11px] opacity-60">Users</div>
                         <div className="text-base font-semibold tabular-nums">{ipUsersCount ?? ipResults.length}</div>
                       </div>
-                      <div className="rounded-xl border p-3 text-center">
+                      <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 text-center bg-white dark:bg-[#252526]">
                         <div className="text-[11px] opacity-60">Connections</div>
                         <div className="text-base font-semibold tabular-nums">{ipConnectionsCount ?? '-'}</div>
                       </div>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <div className="rounded-xl border p-3 text-center">
+                      <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 text-center bg-white dark:bg-[#252526]">
                         <div className="text-[11px] opacity-60">Mean RPM (5m)</div>
                         <div className="text-base font-semibold tabular-nums">{typeof ipMeanRpm5m === 'number' ? ipMeanRpm5m.toFixed(2) : '-'}</div>
                       </div>
-                      <div className="rounded-xl border p-3 text-center">
+                      <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 text-center bg-white dark:bg-[#252526]">
                         <div className="text-[11px] opacity-60">Country</div>
                         <div className="text-base font-semibold tabular-nums">{ipCountry ? countryCodeToName(ipCountry) : '-'}</div>
                       </div>
-                      <div className="rounded-xl border p-3">
+                      <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 bg-white dark:bg-[#252526]">
                         <div className="text-[11px] opacity-60 mb-1">Top referrers</div>
                         {(ipTopReferrers.length === 0) ? (
                           <div className="text-xs opacity-60">-</div>
@@ -2867,7 +2869,7 @@ export const AdminPage: React.FC = () => {
                           className="fixed z-[70] pointer-events-none"
                           style={{ top: otherCountriesTooltip.top, left: otherCountriesTooltip.left, transform: 'translate(-50%, -100%)' }}
                         >
-                          <div className="rounded-xl border bg-white shadow px-3 py-2 max-w-[280px]">
+                          <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526] shadow px-3 py-2 max-w-[280px]">
                             <div className="text-xs font-medium mb-1">Countries in Other</div>
                             <div className="text-[11px] opacity-80 space-y-0.5 max-h-48 overflow-auto">
                               {otherCountriesTooltip.names.map((n, idx) => (
@@ -2879,7 +2881,7 @@ export const AdminPage: React.FC = () => {
                         document.body
                       )}
                     </div>
-                    <div className="rounded-xl border p-3">
+                    <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 bg-white dark:bg-[#252526]">
                       <div className="text-[11px] opacity-60 mb-1">Top devices</div>
                       {(ipTopDevices.length === 0) ? (
                         <div className="text-xs opacity-60">-</div>
@@ -2903,7 +2905,7 @@ export const AdminPage: React.FC = () => {
                           <button
                             key={u.id}
                             type="button"
-                            className="text-left rounded-2xl border p-3 bg-white hover:bg-stone-50"
+                            className="text-left rounded-2xl border border-stone-300 dark:border-[#3e3e42] p-3 bg-white dark:bg-[#252526] hover:bg-stone-50 dark:hover:bg-[#2d2d30]"
                             onClick={() => {
                               const nextVal = (u.email || u.display_name || '').trim()
                               if (!nextVal) return
@@ -3334,13 +3336,13 @@ function NoteRow({ note, onRemoved }: { note: { id: string; admin_id: string | n
   }, [note?.id, removing, onRemoved])
   const [confirming, setConfirming] = React.useState(false)
   return (
-    <div className="rounded-xl border p-3 bg-white">
+    <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 bg-white dark:bg-[#252526]">
       <div className="text-xs opacity-60 flex items-center justify-between">
         <span>{note.admin_name || 'Admin'}</span>
         <div className="flex items-center gap-2">
           <span>{note.created_at ? new Date(note.created_at).toLocaleString() : ''}</span>
           {!confirming ? (
-            <button type="button" aria-label="Delete note" className="px-2 py-1 rounded hover:bg-rose-50 text-rose-600" onClick={() => setConfirming(true)}>
+            <button type="button" aria-label="Delete note" className="px-2 py-1 rounded hover:bg-rose-50 dark:hover:bg-rose-950/30 text-rose-600 dark:text-rose-400" onClick={() => setConfirming(true)}>
               <Trash2 className="h-4 w-4" />
             </button>
           ) : (
@@ -3351,7 +3353,7 @@ function NoteRow({ note, onRemoved }: { note: { id: string; admin_id: string | n
           )}
         </div>
       </div>
-      <div className="text-xs mt-1 font-mono whitespace-pre-wrap break-words">
+      <div className="text-xs mt-1 font-mono whitespace-pre-wrap break-words text-black dark:text-white">
         {note.message}
       </div>
     </div>

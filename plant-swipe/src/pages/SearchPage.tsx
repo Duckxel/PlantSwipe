@@ -46,7 +46,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({ plants, openInfo, likedI
                   <span key={s} className={`text-[10px] px-2 py-0.5 rounded-full ${seasonBadge[s]}`}>{s}</span>
                 ))}
                 {likedIds.includes(p.id) && (
-                  <Badge className="rounded-xl bg-rose-600 text-white">{t('plant.liked')}</Badge>
+                  <Badge className="rounded-xl bg-rose-600 dark:bg-rose-500 text-white">{t('plant.liked')}</Badge>
                 )}
               </div>
               <div className="font-medium truncate">{p.name}</div>

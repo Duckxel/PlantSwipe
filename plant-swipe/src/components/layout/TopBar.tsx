@@ -142,8 +142,8 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
   const label = displayName && displayName.trim().length > 0 ? displayName : t('common.profile')
   return (
     <header className="max-w-6xl mx-auto w-full flex items-center gap-3 px-2 overflow-x-hidden">
-      <div className="h-10 w-10 rounded-2xl bg-green-200 flex items-center justify-center shadow">
-        <Leaf className="h-5 w-5" />
+      <div className="h-10 w-10 rounded-2xl bg-green-200 dark:bg-green-800 flex items-center justify-center shadow">
+        <Leaf className="h-5 w-5 text-green-800 dark:text-green-200" />
       </div>
       <Link
         to="/"
@@ -230,7 +230,7 @@ function NavPill({ to, isActive, icon, label, showDot }: { to: string; isActive:
       </Button>
       {showDot && (
         <span
-          className="pointer-events-none absolute -top-[2px] -right-[2px] z-20 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white"
+          className="pointer-events-none absolute -top-[2px] -right-[2px] z-20 h-2.5 w-2.5 rounded-full bg-red-600 dark:bg-red-500 ring-2 ring-white dark:ring-[#252526]"
           aria-hidden="true"
         />
       )}
