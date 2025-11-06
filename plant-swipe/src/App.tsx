@@ -1,6 +1,7 @@
 import React from 'react'
 import PlantSwipe from "@/PlantSwipe"
 import { AuthProvider, useAuth } from '@/context/AuthContext'
+import { ThemeProvider } from '@/context/ThemeContext'
 import { BrowserRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom'
 import { I18nextProvider } from 'react-i18next'
 import i18n, { DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES } from '@/lib/i18n'
@@ -63,11 +64,13 @@ function LanguageRoutes() {
 export default function App() {
   return (
     <I18nextProvider i18n={i18n}>
-      <AuthProvider>
-        <BrowserRouter>
-          <LanguageRoutes />
-        </BrowserRouter>
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <BrowserRouter>
+            <LanguageRoutes />
+          </BrowserRouter>
+        </AuthProvider>
+      </ThemeProvider>
     </I18nextProvider>
   )
 }
