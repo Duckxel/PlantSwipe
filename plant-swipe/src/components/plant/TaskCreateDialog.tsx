@@ -133,7 +133,7 @@ export function TaskCreateDialog({
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-2">
             <select
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm md:text-sm capitalize"
+              className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-base shadow-sm md:text-sm capitalize text-black dark:text-white"
               value={type}
               onChange={(e: any) => setType(e.target.value)}
             >
@@ -149,7 +149,7 @@ export function TaskCreateDialog({
                 onChange={(e: any) => handleAmountChange(Number(e.target.value || '1'))}
               />
               <select
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm md:text-sm capitalize"
+                className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-base shadow-sm md:text-sm capitalize text-black dark:text-white"
                 value={period}
                 onChange={(e: any) => {
                   const p = e.target.value as Period
@@ -184,7 +184,7 @@ export function TaskCreateDialog({
               </div>
               <div className="flex gap-2 flex-wrap">
                 {['💧','🍽️','🌾','✂️','🧴','🧪','🧹','🪴','📌','✅'].map(em => (
-                  <button key={em} type="button" onClick={() => setEmoji(em)} className={`h-9 w-9 rounded-xl border bg-white hover:bg-stone-50 ${emoji === em ? 'ring-2 ring-black' : ''}`}>{em}</button>
+                  <button key={em} type="button" onClick={() => setEmoji(em)} className={`h-9 w-9 rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42] ${emoji === em ? 'ring-2 ring-black dark:ring-white' : ''}`}>{em}</button>
                 ))}
               </div>
             </div>
@@ -322,7 +322,7 @@ function WeekPicker({ selectedNumbers, onToggleNumber, disabledMore }: { selecte
             key={uiIndex}
             type="button"
             onClick={() => onToggleNumber(uiIndex)}
-            className={`h-12 rounded-xl border text-sm ${isOn ? 'bg-black text-white' : 'bg-white hover:bg-stone-50'} ${!isOn && disabledMore ? 'opacity-60 cursor-not-allowed' : ''}`}
+            className={`h-12 rounded-xl border border-stone-300 dark:border-[#3e3e42] text-sm ${isOn ? 'bg-black dark:bg-white text-white dark:text-black' : 'bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42] text-black dark:text-white'} ${!isOn && disabledMore ? 'opacity-60 cursor-not-allowed' : ''}`}
             disabled={!isOn && disabledMore}
           >
             {label}
@@ -353,7 +353,7 @@ function MonthNthWeekdayPicker({ selected, onToggle, onToggleHeader, disabledMor
             key={l}
             type="button"
             onClick={() => onToggleHeader(uiIndex)}
-            className={`h-8 rounded-lg border text-[11px] ${'bg-white hover:bg-stone-50'}`}
+            className={`h-8 rounded-lg border border-stone-300 dark:border-[#3e3e42] text-[11px] bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42] text-black dark:text-white`}
           >
             {l}
           </button>
@@ -371,7 +371,7 @@ function MonthNthWeekdayPicker({ selected, onToggle, onToggleHeader, disabledMor
                 key={uiIndex}
                 type="button"
                 onClick={() => onToggle(rowIdx + 1, uiIndex)}
-                className={`h-10 rounded-xl border text-sm ${isOn ? 'bg-black text-white' : 'bg-white hover:bg-stone-50'} ${!isOn && disabledMore ? 'opacity-60 cursor-not-allowed' : ''}`}
+                className={`h-10 rounded-xl border border-stone-300 dark:border-[#3e3e42] text-sm ${isOn ? 'bg-black dark:bg-white text-white dark:text-black' : 'bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42] text-black dark:text-white'} ${!isOn && disabledMore ? 'opacity-60 cursor-not-allowed' : ''}`}
                 disabled={!isOn && disabledMore}
                 aria-label={`${wk} ${labels[uiIndex]}`}
               />
@@ -413,7 +413,7 @@ function YearMonthNthWeekdayPicker({ selected, onToggle, onToggleHeader, disable
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 max-h-[60vh] overflow-auto pr-1">
       {months.map((label, monthIdx) => (
-        <div key={label} className="rounded-xl border p-2">
+        <div key={label} className="rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526] p-2">
           <div className="text-xs opacity-70 mb-2">{label}</div>
           <div className="space-y-2">
             <div className="grid grid-cols-[60px_repeat(7,minmax(0,1fr))] gap-2 items-center">
@@ -423,7 +423,7 @@ function YearMonthNthWeekdayPicker({ selected, onToggle, onToggleHeader, disable
                   key={l}
                   type="button"
                   onClick={() => onToggleHeader(monthIdx, uiIndex)}
-                  className={`h-8 rounded-lg border text-[11px] ${'bg-white hover:bg-stone-50'}`}
+                  className={`h-8 rounded-lg border border-stone-300 dark:border-[#3e3e42] text-[11px] bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42] text-black dark:text-white`}
                 >
                   {l}
                 </button>
@@ -442,7 +442,7 @@ function YearMonthNthWeekdayPicker({ selected, onToggle, onToggleHeader, disable
                       key={uiIndex}
                       type="button"
                       onClick={() => onToggle(monthIdx, rowIdx + 1, uiIndex)}
-                      className={`h-10 rounded-xl border text-sm ${isOn ? 'bg-black text-white' : 'bg-white hover:bg-stone-50'} ${!isOn && disabledMore ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      className={`h-10 rounded-xl border border-stone-300 dark:border-[#3e3e42] text-sm ${isOn ? 'bg-black dark:bg-white text-white dark:text-black' : 'bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42] text-black dark:text-white'} ${!isOn && disabledMore ? 'opacity-60 cursor-not-allowed' : ''}`}
                       disabled={!isOn && disabledMore}
                       aria-label={`${label} ${wn} ${labels[uiIndex]}`}
                     />

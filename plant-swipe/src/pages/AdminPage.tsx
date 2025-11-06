@@ -1557,25 +1557,25 @@ export const AdminPage: React.FC = () => {
     <div className="max-w-3xl mx-auto mt-8 px-4 md:px-0">
       <Card className="rounded-3xl">
         <CardContent className="p-6 md:p-8 space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
               <div className="text-2xl font-semibold tracking-tight">Admin Controls</div>
               <div className="text-sm opacity-60 mt-1">Admin actions: monitor and manage infrastructure.</div>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button
                 variant={activeTab === 'overview' ? 'default' : 'secondary'}
-                className="rounded-2xl"
+                className="rounded-2xl text-sm md:text-base px-3 md:px-4 py-2"
                 onClick={() => setActiveTab('overview')}
               >Overview</Button>
               <Button
                 variant={activeTab === 'members' ? 'default' : 'secondary'}
-                className="rounded-2xl"
+                className="rounded-2xl text-sm md:text-base px-3 md:px-4 py-2"
                 onClick={() => setActiveTab('members')}
               >Members</Button>
               <Button
                 variant={activeTab === 'admin_logs' ? 'default' : 'secondary'}
-                className="rounded-2xl"
+                className="rounded-2xl text-sm md:text-base px-3 md:px-4 py-2"
                 onClick={() => setActiveTab('admin_logs')}
               >Admin Logs</Button>
             </div>

@@ -436,7 +436,7 @@ export const GardenListPage: React.FC = () => {
           {!loading && !error && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {gardens.map((g, idx) => (
-                <Card key={g.id} className={`rounded-2xl overflow-hidden relative ${dragIndex === idx ? 'ring-2 ring-black' : ''}`} draggable onDragStart={() => setDragIndex(idx)} onDragOver={(e) => e.preventDefault()} onDrop={() => {
+                <Card key={g.id} className={`rounded-2xl overflow-hidden relative h-40 ${dragIndex === idx ? 'ring-2 ring-black' : ''}`} draggable onDragStart={() => setDragIndex(idx)} onDragOver={(e) => e.preventDefault()} onDrop={() => {
                   if (dragIndex === null || dragIndex === idx) return;
                   const arr = gardens.slice()
                   const [moved] = arr.splice(dragIndex, 1)
@@ -452,17 +452,26 @@ export const GardenListPage: React.FC = () => {
                       const color = done ? 'bg-emerald-500 text-white' : inProgress ? 'bg-amber-500 text-white' : 'bg-red-500 text-white'
                       const label = done ? t('garden.allDone') : `${completed} / ${due}`
                       return (
-                        <div className={`pointer-events-none absolute top-2 right-2 rounded-xl px-2 py-0.5 text-xs font-medium shadow ${color}`}>
+                        <div className={`pointer-events-none absolute top-2 right-2 rounded-xl px-2 py-0.5 text-xs font-medium shadow z-10 ${color}`}>
                           {label}
                         </div>
                       )
                     })()
                   )}
-                  <Link to={`/garden/${g.id}`} className="grid grid-cols-3 gap-0 w-full text-left">
-                    <div className="col-span-1 h-36 bg-cover bg-center rounded-l-2xl" style={{ backgroundImage: `url(${g.coverImageUrl || ''})` }} />
-                    <div className="col-span-2 p-4">
-                      <div className="font-medium">{g.name}</div>
-                      <div className="text-xs opacity-60">{t('garden.created')} {new Date(g.createdAt).toLocaleDateString()}</div>
+                  <Link to={`/garden/${g.id}`} className="grid grid-cols-3 gap-0 w-full h-full text-left">
+                    <div className="col-span-1 rounded-l-2xl overflow-hidden bg-stone-100 dark:bg-[#252526]">
+                      {g.coverImageUrl ? (
+                        <img
+                          src={g.coverImageUrl}
+                          alt={g.name}
+                          className="w-full h-full object-cover object-center"
+                          loading="lazy"
+                        />
+                      ) : null}
+                    </div>
+                    <div className="col-span-2 p-4 flex flex-col justify-center">
+                      <div className="font-medium truncate">{g.name}</div>
+                      <div className="text-xs opacity-60 mt-1">{t('garden.created')} {new Date(g.createdAt).toLocaleDateString()}</div>
                     </div>
                   </Link>
                 </Card>
@@ -514,12 +523,12 @@ export const GardenListPage: React.FC = () => {
 
         {/* Right-side Tasks sidebar for all gardens - hidden for non-logged-in users */}
         {user && (
-          <aside className="mt-6 lg:mt-6 lg:border-l lg:border-stone-200 lg:pl-6">
+          <aside className="mt-6 lg:mt-6 lg:border-l lg:border-stone-200 dark:lg:border-[#3e3e42] lg:pl-6">
             <div className="space-y-3">
               <div className="text-lg font-semibold">{t('garden.tasks')}</div>
               <Card className="rounded-2xl p-4">
               <div className="text-sm opacity-60 mb-2">{t('garden.allGardens')}</div>
-              <div className="h-2 bg-stone-200 rounded-full overflow-hidden">
+              <div className="h-2 bg-stone-200 dark:bg-[#3e3e42] rounded-full overflow-hidden">
                 <div className="h-2 bg-emerald-500" style={{ width: `${totalTasks === 0 ? 100 : Math.min(100, Math.round((totalDone / totalTasks) * 100))}%` }} />
               </div>
               <div className="text-xs opacity-70 mt-1">{t('garden.today')}: {totalDone} / {totalTasks}</div>
@@ -566,19 +575,19 @@ export const GardenListPage: React.FC = () => {
                             const isDone = (Number(o.completedCount || 0) >= Number(o.requiredCount || 1))
                             const completions = completionsByOcc[o.id] || []
                             return (
-                              <div key={o.id} className={`flex items-center justify-between gap-3 text-sm rounded-xl border p-2 ${isDone ? 'bg-stone-50' : ''}`}>
+                              <div key={o.id} className={`flex items-center justify-between gap-3 text-sm rounded-xl border border-stone-300 dark:border-[#3e3e42] p-2 ${isDone ? 'bg-stone-50 dark:bg-[#2d2d30]' : 'bg-white dark:bg-[#252526]'}`}>
                                 <div className="flex items-center gap-2">
-                                  <span className={`h-6 w-6 flex items-center justify-center rounded-md border`}>{icon}</span>
+                                  <span className={`h-6 w-6 flex items-center justify-center rounded-md border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30]`}>{icon}</span>
                                   <span className={`text-[10px] px-2 py-0.5 rounded-full ${badgeClass}`}>{t(`garden.taskTypes.${tt}`)}</span>
-                                  <span className="text-xs opacity-70">{gp.nickname || gp.plant?.name}</span>
+                                  <span className="text-xs opacity-70 text-black dark:text-white">{gp.nickname || gp.plant?.name}</span>
                                 </div>
                                 {!isDone ? (
                                   <>
-                                    <div className="opacity-80">{o.completedCount} / {o.requiredCount}</div>
+                                    <div className="opacity-80 text-black dark:text-white">{o.completedCount} / {o.requiredCount}</div>
                                     <Button className="rounded-xl" size="sm" onClick={() => onProgressOccurrence(o.id, 1)} disabled={(o.completedCount || 0) >= (o.requiredCount || 1)}>+1</Button>
                                   </>
                                 ) : (
-                                  <div className="text-xs opacity-70 truncate max-w-[50%]">
+                                  <div className="text-xs opacity-70 truncate max-w-[50%] text-black dark:text-white">
                                     {completions.length === 0 ? t('garden.completed') : `${t('garden.doneBy')} ${completions.map(c => c.displayName || t('garden.someone')).join(', ')}`}
                                   </div>
                                 )}

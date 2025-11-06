@@ -23,6 +23,7 @@ import { addGardenBroadcastListener, broadcastGardenUpdate, type GardenRealtimeK
 import { getAccentOption } from '@/lib/accent'
 import { useTranslation } from 'react-i18next'
 import { useLanguage } from '@/lib/i18nRouting'
+import { mergePlantWithTranslation } from '@/lib/plantTranslationLoader'
  
 
 
@@ -172,7 +173,7 @@ export const GardenDashboardPage: React.FC = () => {
       if (!hydrated) {
         const [g0, gpsRaw, ms, nowIso] = await Promise.all([
           getGarden(id),
-          getGardenPlants(id),
+          getGardenPlants(id, currentLang),
           getGardenMembers(id),
           fetchServerNowISO(),
         ])
@@ -679,7 +680,7 @@ export const GardenDashboardPage: React.FC = () => {
       await load({ silent: true, preserveHeavy: true })
       await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday)
     }
-  }, [id, anyModalOpen, serverToday, tab, weekDays, load, loadHeavyForCurrentTab])
+  }, [id, anyModalOpen, serverToday, tab, weekDays, load, loadHeavyForCurrentTab, currentLang])
 
   const scheduleReload = React.useCallback(() => {
     const executeReload = async () => {
@@ -853,34 +854,88 @@ export const GardenDashboardPage: React.FC = () => {
     let ignore = false
     if (!plantQuery.trim()) { setPlantResults([]); return }
     ;(async () => {
-      const { data, error } = await supabase
+      const queryLower = plantQuery.toLowerCase().trim()
+      
+      // Search in base plants table
+      const { data: basePlants, error: baseError } = await supabase
         .from('plants')
         .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount')
-        .ilike('name', `%${plantQuery}%`)
-        .limit(10)
-      if (!error && !ignore) {
-        const res: Plant[] = (data || []).map((p: any) => ({
-          id: String(p.id),
-          name: p.name,
-          scientificName: p.scientific_name || '',
-          colors: Array.isArray(p.colors) ? p.colors.map(String) : [],
-          seasons: Array.isArray(p.seasons) ? p.seasons.map(String) as any : [],
-          rarity: p.rarity,
-          meaning: p.meaning || '',
-          description: p.description || '',
-          image: p.image_url || '',
-          care: { sunlight: p.care_sunlight || 'Low', water: p.care_water || 'Low', soil: p.care_soil || '', difficulty: p.care_difficulty || 'Easy' },
-          seedsAvailable: Boolean(p.seeds_available ?? false),
-          waterFreqUnit: p.water_freq_unit || undefined,
-          waterFreqValue: p.water_freq_value ?? null,
-          waterFreqPeriod: p.water_freq_period || undefined,
-          waterFreqAmount: p.water_freq_amount ?? null,
-        }))
-        setPlantResults(res)
+        .ilike('name', `%${queryLower}%`)
+        .limit(20)
+      
+      // Search in translations table for current language
+      const { data: translatedPlants, error: transError } = await supabase
+        .from('plant_translations')
+        .select('plant_id, name, scientific_name, meaning, description, care_soil')
+        .eq('language', currentLang)
+        .ilike('name', `%${queryLower}%`)
+        .limit(20)
+      
+      if (baseError || transError) {
+        console.error('Error searching plants:', baseError || transError)
+        if (!ignore) setPlantResults([])
+        return
+      }
+      
+      // Get unique plant IDs from both searches
+      const basePlantIds = new Set((basePlants || []).map((p: any) => p.id))
+      const translatedPlantIds = new Set((translatedPlants || []).map((t: any) => t.plant_id))
+      const allPlantIds = new Set([...basePlantIds, ...translatedPlantIds])
+      
+      if (allPlantIds.size === 0) {
+        if (!ignore) setPlantResults([])
+        return
+      }
+      
+      // Load full plant data for all matching IDs
+      const { data: fullPlants, error: fullError } = await supabase
+        .from('plants')
+        .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount')
+        .in('id', Array.from(allPlantIds))
+        .limit(20)
+      
+      if (fullError || !fullPlants) {
+        console.error('Error loading full plants:', fullError)
+        if (!ignore) setPlantResults([])
+        return
+      }
+      
+      // Load translations for current language
+      const plantIds = fullPlants.map((p: any) => p.id)
+      const { data: translations } = await supabase
+        .from('plant_translations')
+        .select('*')
+        .eq('language', currentLang)
+        .in('plant_id', plantIds)
+      
+      // Create translation map
+      const translationMap = new Map()
+      if (translations) {
+        translations.forEach((t: any) => {
+          translationMap.set(t.plant_id, t)
+        })
+      }
+      
+      // Merge translations with base plants and filter by search query
+      const merged: Plant[] = fullPlants
+        .map((p: any) => {
+          const translation = translationMap.get(p.id)
+          const mergedPlant = mergePlantWithTranslation(p, translation)
+          return mergedPlant
+        })
+        .filter((p: Plant) => {
+          // Filter by translated name or base name
+          const nameMatch = p.name.toLowerCase().includes(queryLower)
+          return nameMatch
+        })
+        .slice(0, 10) // Limit to 10 results
+      
+      if (!ignore) {
+        setPlantResults(merged)
       }
     })()
     return () => { ignore = true }
-  }, [plantQuery])
+  }, [plantQuery, currentLang])
 
   const loadFriends = React.useCallback(async () => {
     if (!user?.id) return
@@ -1376,10 +1431,10 @@ export const GardenDashboardPage: React.FC = () => {
                           <div className="col-span-2 p-3">
                             <div className="font-medium">{gp.nickname || gp.plant?.name}</div>
                             {gp.nickname && <div className="text-xs opacity-60">{gp.plant?.name}</div>}
-                            <div className="text-xs opacity-60">On hand: {Number(gp.plantsOnHand ?? 0)}</div>
-                        <div className="text-xs opacity-60">Tasks: {taskCountsByPlant[gp.id] || 0}</div>
+                            <div className="text-xs opacity-60">{t('gardenDashboard.plantsSection.onHand')} {Number(gp.plantsOnHand ?? 0)}</div>
+                        <div className="text-xs opacity-60">{t('gardenDashboard.plantsSection.tasks')} {taskCountsByPlant[gp.id] || 0}</div>
                         <div className="flex items-center justify-between">
-                          <div className="text-xs opacity-60">Due today: {taskOccDueToday[gp.id] || 0}</div>
+                          <div className="text-xs opacity-60">{t('gardenDashboard.plantsSection.dueToday')} {taskOccDueToday[gp.id] || 0}</div>
                         </div>
                             <div className="mt-2 flex gap-2 flex-wrap">
                               <Button
@@ -1732,18 +1787,18 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
                     const isDone = (Number(o.completedCount || 0) >= Math.max(1, Number(o.requiredCount || 1)))
                     const completions = completionsByOcc[o.id] || []
                     return (
-                      <div key={o.id} className={`flex items-center justify-between gap-3 text-sm rounded-xl border p-2 ${isDone ? 'bg-stone-50' : ''}`}>
+                      <div key={o.id} className={`flex items-center justify-between gap-3 text-sm rounded-xl border border-stone-300 dark:border-[#3e3e42] p-2 ${isDone ? 'bg-stone-50 dark:bg-[#2d2d30]' : 'bg-white dark:bg-[#252526]'}`}>
                         <div className="flex items-center gap-2">
-                          <span className={`h-6 w-6 flex items-center justify-center rounded-md border`}>{icon}</span>
+                          <span className={`h-6 w-6 flex items-center justify-center rounded-md border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30]`}>{icon}</span>
                           <span className={`text-[10px] px-2 py-0.5 rounded-full ${badgeClass}`}>{t(`garden.taskTypes.${tt}`)}</span>
                         </div>
                         {!isDone ? (
                           <>
-                            <div className="opacity-80">{o.completedCount} / {o.requiredCount}</div>
+                            <div className="opacity-80 text-black dark:text-white">{o.completedCount} / {o.requiredCount}</div>
                             <Button className="rounded-xl" size="sm" onClick={() => onProgressOccurrence(o.id, 1)} disabled={(o.completedCount || 0) >= (o.requiredCount || 1)}>{t('gardenDashboard.routineSection.completePlus1')}</Button>
                           </>
                         ) : (
-                          <div className="text-xs opacity-70 truncate max-w-[50%]">
+                          <div className="text-xs opacity-70 truncate max-w-[50%] text-black dark:text-white">
                             {completions.length === 0 ? t('gardenDashboard.routineSection.completed') : `${t('gardenDashboard.routineSection.doneBy')} ${completions.map(c => c.displayName || t('gardenDashboard.settingsSection.unknown')).join(', ')}`}
                           </div>
                         )}
