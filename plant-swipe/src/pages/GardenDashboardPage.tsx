@@ -1787,18 +1787,18 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
                     const isDone = (Number(o.completedCount || 0) >= Math.max(1, Number(o.requiredCount || 1)))
                     const completions = completionsByOcc[o.id] || []
                     return (
-                      <div key={o.id} className={`flex items-center justify-between gap-3 text-sm rounded-xl border p-2 ${isDone ? 'bg-stone-50' : ''}`}>
+                      <div key={o.id} className={`flex items-center justify-between gap-3 text-sm rounded-xl border border-stone-300 dark:border-[#3e3e42] p-2 ${isDone ? 'bg-stone-50 dark:bg-[#2d2d30]' : 'bg-white dark:bg-[#252526]'}`}>
                         <div className="flex items-center gap-2">
-                          <span className={`h-6 w-6 flex items-center justify-center rounded-md border`}>{icon}</span>
+                          <span className={`h-6 w-6 flex items-center justify-center rounded-md border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30]`}>{icon}</span>
                           <span className={`text-[10px] px-2 py-0.5 rounded-full ${badgeClass}`}>{t(`garden.taskTypes.${tt}`)}</span>
                         </div>
                         {!isDone ? (
                           <>
-                            <div className="opacity-80">{o.completedCount} / {o.requiredCount}</div>
+                            <div className="opacity-80 text-black dark:text-white">{o.completedCount} / {o.requiredCount}</div>
                             <Button className="rounded-xl" size="sm" onClick={() => onProgressOccurrence(o.id, 1)} disabled={(o.completedCount || 0) >= (o.requiredCount || 1)}>{t('gardenDashboard.routineSection.completePlus1')}</Button>
                           </>
                         ) : (
-                          <div className="text-xs opacity-70 truncate max-w-[50%]">
+                          <div className="text-xs opacity-70 truncate max-w-[50%] text-black dark:text-white">
                             {completions.length === 0 ? t('gardenDashboard.routineSection.completed') : `${t('gardenDashboard.routineSection.doneBy')} ${completions.map(c => c.displayName || t('gardenDashboard.settingsSection.unknown')).join(', ')}`}
                           </div>
                         )}
