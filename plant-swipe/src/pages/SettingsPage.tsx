@@ -17,7 +17,7 @@ export default function SettingsPage() {
   const navigate = useLanguageNavigate()
   const changeLanguage = useChangeLanguage()
   const currentLang = useLanguage()
-  const { t, ready } = useTranslation('common')
+  const { t } = useTranslation('common')
   const { theme, setTheme } = useTheme()
   
   // Get theme translations with fallbacks
