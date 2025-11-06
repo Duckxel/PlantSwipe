@@ -1587,18 +1587,6 @@ export const AdminPage: React.FC = () => {
           {/* Health monitor */}
           <Card className="rounded-2xl">
             <CardContent className="p-4">
-              {preRestartNotice && (
-                <div className="mb-3 rounded-xl border bg-amber-100 p-3 flex items-center justify-between gap-3">
-                  <div className="text-sm text-amber-900">New version built. Page info may be outdated. We will restart services now; the site will stay up. You can reload anytime.</div>
-                  <Button className="rounded-xl" variant="outline" onClick={reloadPage}>Reload now</Button>
-                </div>
-              )}
-              {reloadReady && (
-                <div className="mb-3 rounded-xl border bg-amber-50/70 p-3 flex items-center justify-between gap-3">
-                  <div className="text-sm">Services restart complete. Reload when convenient.</div>
-                  <Button className="rounded-xl" onClick={reloadPage}>Reload page</Button>
-                </div>
-              )}
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-sm font-medium">Health monitor</div>
@@ -1759,6 +1747,20 @@ export const AdminPage: React.FC = () => {
                   <span>{syncing ? 'Syncing...' : 'Sync DB Schema'}</span>
                 </Button>
               </div>
+
+              {/* Reload notices */}
+              {preRestartNotice && (
+                <div className="mb-3 rounded-xl border bg-yellow-100 dark:bg-yellow-900/40 border-yellow-300 dark:border-yellow-700 p-3 flex items-center justify-between gap-3">
+                  <div className="text-sm text-yellow-900 dark:text-yellow-100">New version built. Page info may be outdated. We will restart services now; the site will stay up. You can reload anytime.</div>
+                  <Button className="rounded-xl" variant="outline" onClick={reloadPage}>Reload now</Button>
+                </div>
+              )}
+              {reloadReady && (
+                <div className="mb-3 rounded-xl border bg-yellow-100 dark:bg-yellow-900/40 border-yellow-300 dark:border-yellow-700 p-3 flex items-center justify-between gap-3">
+                  <div className="text-sm text-yellow-900 dark:text-yellow-100">Services restart complete. Reload when convenient.</div>
+                  <Button className="rounded-xl" onClick={reloadPage}>Reload page</Button>
+                </div>
+              )}
 
               {/* Divider before Admin Console */}
               <div className="my-4 border-t" />
