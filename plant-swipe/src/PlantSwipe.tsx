@@ -516,7 +516,7 @@ export default function PlantSwipe() {
                   <button
                     key={s}
                     onClick={() => setSeasonFilter((cur) => (cur === s ? null : s))}
-                    className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${seasonFilter === s ? "bg-black text-white" : "bg-white hover:bg-stone-50"}`}
+                    className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${seasonFilter === s ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white dark:bg-stone-600 hover:bg-stone-50 dark:hover:bg-stone-500"}`}
                     aria-pressed={seasonFilter === s}
                   >
                     {t(`plant.${s.toLowerCase()}`)}
@@ -533,7 +533,7 @@ export default function PlantSwipe() {
                   <button
                     key={c}
                     onClick={() => setColorFilter((cur) => (cur === c ? null : c))}
-                    className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${colorFilter === c ? "bg-black text-white" : "bg-white hover:bg-stone-50"}`}
+                    className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${colorFilter === c ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white dark:bg-stone-600 hover:bg-stone-50 dark:hover:bg-stone-500"}`}
                     aria-pressed={colorFilter === c}
                   >
                     {t(`plant.${c.toLowerCase()}`)}
@@ -547,7 +547,7 @@ export default function PlantSwipe() {
               <button
                 onClick={() => setOnlySeeds((v) => !v)}
                 className={`w-full justify-center px-3 py-2 rounded-2xl text-sm shadow-sm border flex items-center gap-2 transition ${
-                  onlySeeds ? "bg-emerald-600 text-white" : "bg-white hover:bg-stone-50"
+                  onlySeeds ? "bg-emerald-600 text-white" : "bg-white dark:bg-stone-600 hover:bg-stone-50 dark:hover:bg-stone-500"
                 }`}
                 aria-pressed={onlySeeds}
               >
@@ -557,7 +557,7 @@ export default function PlantSwipe() {
               <button
                 onClick={() => setOnlyFavorites((v) => !v)}
                 className={`w-full justify-center px-3 py-2 rounded-2xl text-sm shadow-sm border flex items-center gap-2 transition ${
-                  onlyFavorites ? "bg-rose-600 text-white" : "bg-white hover:bg-stone-50"
+                  onlyFavorites ? "bg-rose-600 text-white" : "bg-white dark:bg-stone-600 hover:bg-stone-50 dark:hover:bg-stone-500"
                 }`}
                 aria-pressed={onlyFavorites}
               >
@@ -567,7 +567,7 @@ export default function PlantSwipe() {
               <button
                 onClick={() => setFavoritesFirst((v) => !v)}
                 className={`w-full justify-center px-3 py-2 rounded-2xl text-sm shadow-sm border flex items-center gap-2 transition ${
-                  favoritesFirst ? "bg-rose-100 text-rose-900 border-rose-300" : "bg-white hover:bg-stone-50"
+                  favoritesFirst ? "bg-rose-100 dark:bg-rose-900/30 text-rose-900 dark:text-rose-300 border-rose-300 dark:border-rose-700" : "bg-white dark:bg-stone-600 hover:bg-stone-50 dark:hover:bg-stone-500"
                 }`}
                 aria-pressed={favoritesFirst}
               >

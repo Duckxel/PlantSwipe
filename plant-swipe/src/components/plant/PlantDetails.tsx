@@ -238,7 +238,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
             onClick={handleExpand}
             type="button"
             aria-label="Expand to full page"
-            className="h-8 w-8 rounded-full flex items-center justify-center border bg-white/90 text-black hover:bg-white transition shadow-sm"
+            className="h-8 w-8 rounded-full flex items-center justify-center border bg-white/90 dark:bg-stone-600 dark:border-stone-500 text-black dark:text-white hover:bg-white dark:hover:bg-stone-500 transition shadow-sm"
             title="Expand to full page"
           >
             <Maximize2 className="h-4 w-4" />
@@ -253,7 +253,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
             onClick={handleBackToSearch}
             type="button"
             aria-label="Back to search"
-            className="h-8 w-8 rounded-full flex items-center justify-center border bg-white/90 text-black hover:bg-white transition shadow-sm"
+            className="h-8 w-8 rounded-full flex items-center justify-center border bg-white/90 dark:bg-stone-600 dark:border-stone-500 text-black dark:text-white hover:bg-white dark:hover:bg-stone-500 transition shadow-sm"
             title="Back to search"
           >
             <ChevronLeft className="h-4 w-4" />
@@ -290,7 +290,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
               }}
               type="button"
               aria-label={t('plantInfo.share')}
-              className={`h-8 w-8 rounded-full flex items-center justify-center border transition shadow-[0_4px_12px_rgba(0,0,0,0.28)] ${shareSuccess ? 'bg-green-600 text-white' : 'bg-white/90 text-black hover:bg-white'}`}
+              className={`h-8 w-8 rounded-full flex items-center justify-center border transition shadow-[0_4px_12px_rgba(0,0,0,0.28)] ${shareSuccess ? 'bg-green-600 text-white' : 'bg-white/90 dark:bg-stone-600 dark:border-stone-500 text-black dark:text-white hover:bg-white dark:hover:bg-stone-500'}`}
               title={shareSuccess ? t('plantInfo.shareCopied') : t('plantInfo.share')}
             >
               <span className="relative inline-flex items-center justify-center">
@@ -304,7 +304,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
               }}
               aria-pressed={liked}
               aria-label={liked ? t('plantInfo.unlike') : t('plantInfo.like')}
-              className={`h-8 w-8 rounded-full flex items-center justify-center border transition shadow-[0_4px_12px_rgba(0,0,0,0.28)] ${liked ? 'bg-rose-600 text-white' : 'bg-white/90 text-black hover:bg-white'}`}
+              className={`h-8 w-8 rounded-full flex items-center justify-center border transition shadow-[0_4px_12px_rgba(0,0,0,0.28)] ${liked ? 'bg-rose-600 text-white' : 'bg-white/90 dark:bg-stone-600 dark:border-stone-500 text-black dark:text-white hover:bg-white dark:hover:bg-stone-500'}`}
             >
               <Heart className={liked ? 'fill-current' : ''} />
             </button>
@@ -482,12 +482,12 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
 };
 
 const Fact = ({ icon, label, value, sub }: { icon: React.ReactNode; label: string; value: React.ReactNode; sub?: React.ReactNode }) => (
-  <div className="flex items-center gap-3 rounded-2xl border bg-white p-3 shadow-sm">
-    <div className="h-9 w-9 rounded-xl bg-stone-100 flex items-center justify-center">{icon}</div>
+  <div className="flex items-center gap-3 rounded-2xl border bg-white dark:bg-stone-600 dark:border-stone-500 p-3 shadow-sm">
+    <div className="h-9 w-9 rounded-xl bg-stone-100 dark:bg-stone-700 flex items-center justify-center">{icon}</div>
     <div>
-      <div className="text-xs opacity-60">{label}</div>
+      <div className="text-xs opacity-60 dark:opacity-70">{label}</div>
       <div className="text-sm font-medium">{value}</div>
-      {sub ? <div className="text-xs opacity-70 mt-0.5">{sub}</div> : null}
+      {sub ? <div className="text-xs opacity-70 dark:opacity-80 mt-0.5">{sub}</div> : null}
     </div>
   </div>
 );
