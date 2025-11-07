@@ -201,6 +201,9 @@
       "completedAllTasks": "a terminé toutes les tâches dues sur \"{{plantName}}\"",
       "plant": "Plante"
     },
+    "member": "membre",
+    "members": "membres",
+    "streak": "série",
     "failedToLoad": "Échec du chargement des jardins"
   },
   "createPlant": {

@@ -239,6 +239,26 @@ export const GardenListPage: React.FC = () => {
             .catch(() => {})
         }
         
+        // Fetch member counts for cached gardens
+        if (data.length > 0) {
+          const gardenIds = data.map(g => g.id)
+          supabase
+            .from('garden_members')
+            .select('garden_id')
+            .in('garden_id', gardenIds)
+            .then(({ data: memberRows }) => {
+              if (memberRows) {
+                const counts: Record<string, number> = {}
+                for (const row of memberRows) {
+                  const gid = String(row.garden_id)
+                  counts[gid] = (counts[gid] || 0) + 1
+                }
+                setMemberCountsByGarden(counts)
+              }
+            })
+            .catch(() => {})
+        }
+        
         return
       }
       
