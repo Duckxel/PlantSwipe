@@ -612,26 +612,38 @@ export const AdminPage: React.FC = () => {
         const staticToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
         if (staticToken) headers['X-Admin-Token'] = staticToken
       } catch {}
-      const resp = await fetch(url, { headers, credentials: 'same-origin' })
-      const body = await safeJson(resp)
-      const isOk = (typeof okCheck === 'function') ? (resp.ok && okCheck(body)) : (resp.ok && body?.ok === true)
-      const latency = Date.now() - started
-      if (isOk) {
-        return { ok: true, latencyMs: latency, updatedAt: Date.now(), status: resp.status, errorCode: null, errorMessage: null }
-      }
-      // Derive error info when not ok
-      const errorCodeFromBody = typeof body?.errorCode === 'string' && body.errorCode ? body.errorCode : null
-      const errorMessageFromBody = typeof body?.error === 'string' && body.error ? body.error : null
-      const fallbackCode = !resp.ok
-        ? `HTTP_${resp.status}`
-        : (errorCodeFromBody || 'CHECK_FAILED')
-      return {
-        ok: false,
-        latencyMs: null,
-        updatedAt: Date.now(),
-        status: resp.status,
-        errorCode: errorCodeFromBody || fallbackCode,
-        errorMessage: errorMessageFromBody,
+      // Use fetchWithRetry with shorter timeout for health checks (10 seconds)
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 10000)
+      try {
+        const resp = await fetch(url, { headers, credentials: 'same-origin', signal: controller.signal })
+        clearTimeout(timeoutId)
+        const body = await safeJson(resp)
+        const isOk = (typeof okCheck === 'function') ? (resp.ok && okCheck(body)) : (resp.ok && body?.ok === true)
+        const latency = Date.now() - started
+        if (isOk) {
+          return { ok: true, latencyMs: latency, updatedAt: Date.now(), status: resp.status, errorCode: null, errorMessage: null }
+        }
+        // Derive error info when not ok
+        const errorCodeFromBody = typeof body?.errorCode === 'string' && body.errorCode ? body.errorCode : null
+        const errorMessageFromBody = typeof body?.error === 'string' && body.error ? body.error : null
+        const fallbackCode = !resp.ok
+          ? `HTTP_${resp.status}`
+          : (errorCodeFromBody || 'CHECK_FAILED')
+        return {
+          ok: false,
+          latencyMs: null,
+          updatedAt: Date.now(),
+          status: resp.status,
+          errorCode: errorCodeFromBody || fallbackCode,
+          errorMessage: errorMessageFromBody,
+        }
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId)
+        if (fetchError.name === 'AbortError') {
+          return { ok: false, latencyMs: null, updatedAt: Date.now(), status: null, errorCode: 'TIMEOUT', errorMessage: 'Request timed out' }
+        }
+        throw fetchError
       }
     } catch {
       // Network/other failure
@@ -697,7 +709,7 @@ export const AdminPage: React.FC = () => {
   
   // Run health probes on initial load and periodically
   React.useEffect(() => {
-    // Run immediately on mount
+    // Run immediately on mount (no delay)
     runHealthProbes()
     // Then every 60 seconds
     const intervalId = setInterval(() => {
@@ -742,27 +754,29 @@ export const AdminPage: React.FC = () => {
   const [lastUpdateTime, setLastUpdateTime] = React.useState<string | null>(null)
   
   // Add loading state timeouts to prevent infinite loading (moved after state declarations)
+  // IMPORTANT: Only clear loading states, NEVER clear data values
   React.useEffect(() => {
-    const MAX_LOADING_TIMEOUT = 15000 // 15 seconds max loading time
+    const MAX_LOADING_TIMEOUT = 30000 // 30 seconds max loading time (increased)
     const timeoutId = setTimeout(() => {
+      // Only clear loading states if they're still loading - don't touch data
       if (branchesLoading) {
-        console.warn('[AdminPage] Branches loading timeout - clearing loading state')
+        console.warn('[AdminPage] Branches loading timeout - clearing loading state only')
         setBranchesLoading(false)
       }
       if (registeredLoading) {
-        console.warn('[AdminPage] Registered count loading timeout - clearing loading state')
+        console.warn('[AdminPage] Registered count loading timeout - clearing loading state only')
         setRegisteredLoading(false)
       }
       if (onlineLoading) {
-        console.warn('[AdminPage] Online users loading timeout - clearing loading state')
+        console.warn('[AdminPage] Online users loading timeout - clearing loading state only')
         setOnlineLoading(false)
       }
       if (ipsLoading) {
-        console.warn('[AdminPage] IPs loading timeout - clearing loading state')
+        console.warn('[AdminPage] IPs loading timeout - clearing loading state only')
         setIpsLoading(false)
       }
       if (visitorsLoading) {
-        console.warn('[AdminPage] Visitors loading timeout - clearing loading state')
+        console.warn('[AdminPage] Visitors loading timeout - clearing loading state only')
         setVisitorsLoading(false)
       }
     }, MAX_LOADING_TIMEOUT)
@@ -817,16 +831,16 @@ export const AdminPage: React.FC = () => {
       })
     } catch (e) {
       console.error('[AdminPage] Failed to load branches:', e)
-      if (isInitial) {
-        setBranchOptions([])
-        setCurrentBranch('')
-        setSelectedBranch('')
+      // Don't clear existing data on error - keep what we have
+      // Only clear on initial load if we have no data yet
+      if (isInitial && branchOptions.length === 0) {
+        // Only clear if we truly have no data
       }
     } finally {
       if (isInitial) setBranchesLoading(false)
       else setBranchesRefreshing(false)
     }
-  }, [safeJson, fetchWithRetry])
+  }, [safeJson, fetchWithRetry, branchOptions.length])
 
   React.useEffect(() => {
     // Stagger initial load to avoid blocking
@@ -986,28 +1000,30 @@ export const AdminPage: React.FC = () => {
         const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
         if (adminToken) headers['X-Admin-Token'] = String(adminToken)
       } catch {}
-      const resp = await fetch('/api/admin/stats', { headers, credentials: 'same-origin' })
-      const data = await safeJson(resp)
-      if (resp.ok && typeof data?.profilesCount === 'number') {
-        setRegisteredCount(data.profilesCount)
-        setRegisteredUpdatedAt(Date.now())
-        return
+      const resp = await fetchWithRetry('/api/admin/stats', { headers, credentials: 'same-origin' }).catch(() => null)
+      if (resp && resp.ok) {
+        const data = await safeJson(resp)
+        if (typeof data?.profilesCount === 'number') {
+          setRegisteredCount(data.profilesCount)
+          setRegisteredUpdatedAt(Date.now())
+          return
+        }
       }
       // Fallback: client-side count (may be limited by RLS)
       const { count, error } = await supabase.from('profiles').select('id', { count: 'exact', head: true })
-      setRegisteredCount(error ? null : (count ?? 0))
-      setRegisteredUpdatedAt(Date.now())
-    } catch {
-      try {
-        const { count, error } = await supabase.from('profiles').select('id', { count: 'exact', head: true })
-        setRegisteredCount(error ? null : (count ?? 0))
+      if (!error && typeof count === 'number') {
+        setRegisteredCount(count)
         setRegisteredUpdatedAt(Date.now())
-      } catch {}
+      }
+      // Don't set to 0 on error - keep previous value
+    } catch (e) {
+      console.error('[AdminPage] Failed to load registered count:', e)
+      // Keep last known value on error - don't set to 0
     } finally {
       if (isInitial) setRegisteredLoading(false)
       else setRegisteredRefreshing(false)
     }
-  }, [safeJson])
+  }, [safeJson, fetchWithRetry])
 
   React.useEffect(() => {
     // Stagger initial load to avoid blocking
@@ -1032,7 +1048,7 @@ export const AdminPage: React.FC = () => {
     try {
       // Use dedicated endpoint backed by DB counts; forward Authorization so REST fallback can pass RLS
       const token = (await supabase.auth.getSession()).data.session?.access_token
-      const resp = await fetch('/api/admin/online-users', {
+      const resp = await fetchWithRetry('/api/admin/online-users', {
         headers: (() => {
           const h: Record<string, string> = { 'Accept': 'application/json' }
           if (token) h['Authorization'] = `Bearer ? ${token}`
@@ -1041,21 +1057,25 @@ export const AdminPage: React.FC = () => {
           return h
         })(),
         credentials: 'same-origin',
-      })
-      const data = await safeJson(resp)
-      if (!resp.ok) {
-        throw new Error(data?.error || `Request failed (${resp.status})`)
+      }).catch(() => null)
+      if (resp && resp.ok) {
+        const data = await safeJson(resp)
+        const num = Number(data?.onlineUsers ?? data?.count)
+        if (Number.isFinite(num) && num >= 0) {
+          setOnlineUsers(num)
+          setOnlineUpdatedAt(Date.now())
+          return
+        }
       }
-      const num = Number(data?.onlineUsers)
-      setOnlineUsers(Number.isFinite(num) ? num : 0)
-      setOnlineUpdatedAt(Date.now())
-    } catch {
-      // Keep last known value on error
+      // Don't set to 0 on error - keep last known value
+    } catch (e) {
+      console.error('[AdminPage] Failed to load online users:', e)
+      // Keep last known value on error - don't set to 0
     } finally {
       if (isInitial) setOnlineLoading(false)
       else setOnlineRefreshing(false)
     }
-  }, [])
+  }, [fetchWithRetry, safeJson])
 
   // Initial load (page load only) - staggered
   React.useEffect(() => {
@@ -1088,18 +1108,22 @@ export const AdminPage: React.FC = () => {
         const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
         if (adminToken) headers['X-Admin-Token'] = String(adminToken)
       } catch {}
-      const resp = await fetch(`/api/admin/online-ips?minutes=${encodeURIComponent(String(minutes))}` , { headers, credentials: 'same-origin' })
-      const data = await safeJson(resp)
-      if (!resp.ok) throw new Error(data?.error || `HTTP ? ${resp.status}`)
-      const list: string[] = Array.isArray(data?.ips) ? data.ips.map((s: any) => String(s)).filter(Boolean) : []
-      setIps(list)
-    } catch {
-      // keep last
+      const resp = await fetchWithRetry(`/api/admin/online-ips?minutes=${encodeURIComponent(String(minutes))}` , { headers, credentials: 'same-origin' }).catch(() => null)
+      if (resp && resp.ok) {
+        const data = await safeJson(resp)
+        const list: string[] = Array.isArray(data?.ips) ? data.ips.map((s: any) => String(s)).filter(Boolean) : []
+        setIps(list)
+        return
+      }
+      // Don't clear IPs on error - keep last known value
+    } catch (e) {
+      console.error('[AdminPage] Failed to load IPs:', e)
+      // keep last known value
     } finally {
       if (isInitial) setIpsLoading(false)
       else setIpsRefreshing(false)
     }
-  }, [safeJson])
+  }, [safeJson, fetchWithRetry])
 
   // Initial load and auto-refresh every 60s - staggered
   React.useEffect(() => {
@@ -1120,33 +1144,38 @@ export const AdminPage: React.FC = () => {
     if (isInitial) setVisitorsLoading(true)
     else setVisitorsRefreshing(true)
     try {
-      const resp = await fetch(`/api/admin/visitors-stats?days=${visitorsWindowDays}`, {
+      const resp = await fetchWithRetry(`/api/admin/visitors-stats?days=${visitorsWindowDays}`, {
         headers: { 'Accept': 'application/json' },
         credentials: 'same-origin',
-      })
+      }).catch(() => null)
+      if (!resp || !resp.ok) {
+        // Keep last known value on error
+        return
+      }
       const data = await safeJson(resp)
-      if (!resp.ok) throw new Error(data?.error || `Request failed (${resp.status})`)
       const series: Array<{ date: string; uniqueVisitors: number }> = Array.isArray(data?.series7d)
         ? data.series7d.map((d: any) => ({ date: String(d.date), uniqueVisitors: Number(d.uniqueVisitors ?? d.unique_visitors ?? 0) }))
         : []
       setVisitorsSeries(series)
       // Fetch weekly unique total from dedicated endpoint to keep requests separate
       try {
-        const totalResp = await fetch('/api/admin/visitors-unique-7d', {
+        const totalResp = await fetchWithRetry('/api/admin/visitors-unique-7d', {
           headers: { 'Accept': 'application/json' },
           credentials: 'same-origin',
-        })
-        const totalData = await safeJson(totalResp)
-        if (totalResp.ok) {
+        }).catch(() => null)
+        if (totalResp && totalResp.ok) {
+          const totalData = await safeJson(totalResp)
           const total7d = Number(totalData?.uniqueIps7d ?? totalData?.weeklyUniqueIps7d ?? 0)
-          setVisitorsTotalUnique7d(Number.isFinite(total7d) ? total7d : 0)
+          if (Number.isFinite(total7d) && total7d >= 0) {
+            setVisitorsTotalUnique7d(total7d)
+          }
         }
       } catch {}
       // Load sources breakdown in parallel
       try {
-        const sb = await fetch(`/api/admin/sources-breakdown?days=${visitorsWindowDays}`, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
-        const sbd = await safeJson(sb)
-        if (sb.ok) {
+        const sb = await fetchWithRetry(`/api/admin/sources-breakdown?days=${visitorsWindowDays}`, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' }).catch(() => null)
+        if (sb && sb.ok) {
+          const sbd = await safeJson(sb)
           const tc = Array.isArray(sbd?.topCountries)
             ? sbd.topCountries.map((r: { country?: string; visits?: number }) => ({ country: String(r.country || ''), visits: Number(r.visits || 0) }))
                 .filter((x: { country: string }) => !!x.country)
@@ -1186,13 +1215,14 @@ export const AdminPage: React.FC = () => {
         }
       } catch {}
       setVisitorsUpdatedAt(Date.now())
-    } catch {
-      // keep last known
+    } catch (e) {
+      console.error('[AdminPage] Failed to load visitors stats:', e)
+      // keep last known value
     } finally {
       if (isInitial) setVisitorsLoading(false)
       else setVisitorsRefreshing(false)
     }
-  }, [visitorsWindowDays, safeJson])
+  }, [visitorsWindowDays, safeJson, fetchWithRetry])
 
   React.useEffect(() => {
     // Stagger initial load to avoid blocking - visitors stats are heavy
@@ -2093,7 +2123,7 @@ export const AdminPage: React.FC = () => {
                     </Button>
                   </div>
                   <div className="text-2xl font-semibold tabular-nums mt-1">
-                    {registeredLoading ? '-' : (registeredCount ?? '-')}
+                    {registeredLoading ? '-' : (registeredUpdatedAt !== null ? (registeredCount ?? '-') : '-')}
                   </div>
                 </CardContent>
               </Card>
