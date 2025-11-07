@@ -3101,23 +3101,26 @@ BEGIN
 END;
 $$;
 
--- Function: Cleanup old cache entries (delete entries older than 7 days)
+-- Function: Cleanup old cache entries (delete entries older than 1 day to prevent accumulation)
 CREATE OR REPLACE FUNCTION cleanup_old_garden_task_cache()
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
-  _cutoff_date date := CURRENT_DATE - INTERVAL '7 days';
+  _cutoff_date date := CURRENT_DATE - INTERVAL '1 day'; -- Keep only today and yesterday
 BEGIN
-  -- Delete old daily cache
+  -- Delete old daily cache (keep only today and yesterday)
   DELETE FROM garden_task_daily_cache WHERE cache_date < _cutoff_date;
   
-  -- Delete old weekly cache
+  -- Delete old weekly cache (keep only current and last week)
   DELETE FROM garden_task_weekly_cache WHERE week_end_date < _cutoff_date;
   
-  -- Delete old today occurrences cache
+  -- Delete old today occurrences cache (keep only today and yesterday)
   DELETE FROM garden_task_occurrences_today_cache WHERE cache_date < _cutoff_date;
+  
+  -- Delete old user cache (keep only today and yesterday)
+  DELETE FROM user_task_daily_cache WHERE cache_date < _cutoff_date;
   
   -- Also clean up stale plant task counts (older than 1 day)
   DELETE FROM garden_plant_task_counts_cache 
@@ -3125,17 +3128,26 @@ BEGIN
 END;
 $$;
 
--- Function: Initialize cache for all gardens (run once after migration)
-CREATE OR REPLACE FUNCTION initialize_garden_task_cache()
+-- Schedule daily cleanup job to run at 2 AM UTC every day
+-- This prevents cache accumulation and keeps database clean
+SELECT cron.schedule(
+  'cleanup-old-task-cache',
+  '0 2 * * *', -- 2 AM UTC daily
+  $$SELECT cleanup_old_garden_task_cache();$$
+) ON CONFLICT (jobname) DO UPDATE SET schedule = '0 2 * * *', command = $$SELECT cleanup_old_garden_task_cache();$$;
+
+-- Function: Initialize cache for all gardens AND users (run on startup/periodically)
+CREATE OR REPLACE FUNCTION initialize_all_task_cache()
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
   _garden_record RECORD;
+  _user_record RECORD;
   _today date := CURRENT_DATE;
 BEGIN
-  -- Refresh cache for all gardens
+  -- Refresh cache for all gardens first
   FOR _garden_record IN SELECT id FROM gardens LOOP
     BEGIN
       PERFORM refresh_garden_task_cache(_garden_record.id, _today);
@@ -3144,10 +3156,21 @@ BEGIN
       NULL;
     END;
   END LOOP;
+  
+  -- Then refresh user cache for all users
+  FOR _user_record IN SELECT DISTINCT user_id FROM garden_members LOOP
+    BEGIN
+      PERFORM refresh_user_task_daily_cache(_user_record.user_id, _today);
+    EXCEPTION WHEN OTHERS THEN
+      -- Continue on error
+      NULL;
+    END;
+  END LOOP;
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION initialize_garden_task_cache() TO authenticated;
+GRANT EXECUTE ON FUNCTION initialize_all_task_cache() TO authenticated;
+GRANT EXECUTE ON FUNCTION initialize_all_task_cache() TO service_role;
 
 -- Trigger function: Auto-refresh cache when task occurrences change
 CREATE OR REPLACE FUNCTION trigger_refresh_garden_task_cache()
@@ -3173,12 +3196,12 @@ BEGIN
   END IF;
   
   IF _garden_id IS NOT NULL THEN
-    -- Refresh cache asynchronously via notification (don't block the transaction)
-    PERFORM pg_notify('garden_task_cache_refresh', _garden_id::text || '|' || _cache_date::text);
-    
-    -- Also refresh immediately in background (non-blocking)
-    -- Use a separate connection or defer to avoid blocking
+    -- Refresh cache SYNCHRONOUSLY to ensure it's always available
+    -- This is critical for performance - cache must be ready immediately
     PERFORM refresh_garden_task_cache(_garden_id, _cache_date);
+    
+    -- Also notify for async user cache refresh
+    PERFORM pg_notify('garden_task_cache_refresh', _garden_id::text || '|' || _cache_date::text);
   END IF;
   
   RETURN COALESCE(NEW, OLD);
@@ -3201,6 +3224,10 @@ BEGIN
   END IF;
   
   IF _garden_id IS NOT NULL THEN
+    -- Refresh cache SYNCHRONOUSLY to ensure it's always available
+    PERFORM refresh_garden_task_cache(_garden_id, _cache_date);
+    
+    -- Also notify for async operations
     PERFORM pg_notify('garden_task_cache_refresh', _garden_id::text || '|' || _cache_date::text);
   END IF;
   
@@ -3226,6 +3253,56 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON garden_task_daily_cache TO authenticated
 GRANT SELECT, INSERT, UPDATE, DELETE ON garden_task_weekly_cache TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON garden_plant_task_counts_cache TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON garden_task_occurrences_today_cache TO authenticated;
+
+-- Enable RLS on cache tables for security
+ALTER TABLE garden_task_daily_cache ENABLE ROW LEVEL SECURITY;
+ALTER TABLE garden_task_weekly_cache ENABLE ROW LEVEL SECURITY;
+ALTER TABLE garden_plant_task_counts_cache ENABLE ROW LEVEL SECURITY;
+ALTER TABLE garden_task_occurrences_today_cache ENABLE ROW LEVEL SECURITY;
+
+-- RLS policies for cache tables - users can only see cache for gardens they're members of
+DO $$
+BEGIN
+  -- Policy for garden_task_daily_cache
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='garden_task_daily_cache' AND policyname='cache_select_member') THEN
+    CREATE POLICY cache_select_member ON garden_task_daily_cache FOR SELECT TO authenticated
+      USING (EXISTS (
+        SELECT 1 FROM garden_members gm
+        WHERE gm.garden_id = garden_task_daily_cache.garden_id
+        AND gm.user_id = auth.uid()
+      ));
+  END IF;
+  
+  -- Policy for garden_task_weekly_cache
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='garden_task_weekly_cache' AND policyname='cache_select_member') THEN
+    CREATE POLICY cache_select_member ON garden_task_weekly_cache FOR SELECT TO authenticated
+      USING (EXISTS (
+        SELECT 1 FROM garden_members gm
+        WHERE gm.garden_id = garden_task_weekly_cache.garden_id
+        AND gm.user_id = auth.uid()
+      ));
+  END IF;
+  
+  -- Policy for garden_plant_task_counts_cache
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='garden_plant_task_counts_cache' AND policyname='cache_select_member') THEN
+    CREATE POLICY cache_select_member ON garden_plant_task_counts_cache FOR SELECT TO authenticated
+      USING (EXISTS (
+        SELECT 1 FROM garden_members gm
+        WHERE gm.garden_id = garden_plant_task_counts_cache.garden_id
+        AND gm.user_id = auth.uid()
+      ));
+  END IF;
+  
+  -- Policy for garden_task_occurrences_today_cache
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='garden_task_occurrences_today_cache' AND policyname='cache_select_member') THEN
+    CREATE POLICY cache_select_member ON garden_task_occurrences_today_cache FOR SELECT TO authenticated
+      USING (EXISTS (
+        SELECT 1 FROM garden_members gm
+        WHERE gm.garden_id = garden_task_occurrences_today_cache.garden_id
+        AND gm.user_id = auth.uid()
+      ));
+  END IF;
+END $$;
 
 GRANT EXECUTE ON FUNCTION refresh_garden_daily_cache(uuid, date) TO authenticated;
 GRANT EXECUTE ON FUNCTION refresh_garden_weekly_cache(uuid, date) TO authenticated;
@@ -3367,3 +3444,272 @@ $$;
 GRANT EXECUTE ON FUNCTION garden_has_remaining_tasks(uuid, date) TO authenticated;
 GRANT EXECUTE ON FUNCTION garden_all_tasks_done(uuid, date) TO authenticated;
 GRANT EXECUTE ON FUNCTION gardens_have_remaining_tasks(uuid[], date) TO authenticated;
+
+-- ========== User-level task cache (aggregates across all user's gardens) ==========
+
+-- Cache table for user-level task statistics (total tasks across all gardens)
+CREATE TABLE IF NOT EXISTS user_task_daily_cache (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  cache_date date NOT NULL, -- YYYY-MM-DD format
+  total_due_count integer NOT NULL DEFAULT 0, -- Total tasks due across all gardens
+  total_completed_count integer NOT NULL DEFAULT 0, -- Total completed across all gardens
+  gardens_with_remaining_tasks integer NOT NULL DEFAULT 0, -- Number of gardens with remaining tasks
+  total_gardens integer NOT NULL DEFAULT 0, -- Total number of gardens user is member of
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(user_id, cache_date)
+);
+
+-- Index for fast lookups
+CREATE INDEX IF NOT EXISTS idx_user_task_daily_cache_user_date ON user_task_daily_cache(user_id, cache_date DESC);
+
+-- Function: Refresh user-level cache for a user and date
+CREATE OR REPLACE FUNCTION refresh_user_task_daily_cache(
+  _user_id uuid,
+  _cache_date date DEFAULT CURRENT_DATE
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  _total_due integer := 0;
+  _total_completed integer := 0;
+  _gardens_with_remaining integer := 0;
+  _total_gardens integer := 0;
+BEGIN
+  -- Get all gardens user is a member of
+  SELECT COUNT(*) INTO _total_gardens
+  FROM garden_members
+  WHERE user_id = _user_id;
+  
+  -- Aggregate task counts from garden cache
+  SELECT 
+    COALESCE(SUM(due_count), 0),
+    COALESCE(SUM(completed_count), 0),
+    COUNT(*) FILTER (WHERE has_remaining_tasks = true)
+  INTO _total_due, _total_completed, _gardens_with_remaining
+  FROM garden_task_daily_cache c
+  INNER JOIN garden_members gm ON gm.garden_id = c.garden_id
+  WHERE gm.user_id = _user_id
+    AND c.cache_date = _cache_date;
+  
+  -- Upsert cache entry
+  INSERT INTO user_task_daily_cache (
+    user_id,
+    cache_date,
+    total_due_count,
+    total_completed_count,
+    gardens_with_remaining_tasks,
+    total_gardens,
+    updated_at
+  )
+  VALUES (
+    _user_id,
+    _cache_date,
+    _total_due,
+    _total_completed,
+    _gardens_with_remaining,
+    _total_gardens,
+    now()
+  )
+  ON CONFLICT (user_id, cache_date)
+  DO UPDATE SET
+    total_due_count = EXCLUDED.total_due_count,
+    total_completed_count = EXCLUDED.total_completed_count,
+    gardens_with_remaining_tasks = EXCLUDED.gardens_with_remaining_tasks,
+    total_gardens = EXCLUDED.total_gardens,
+    updated_at = EXCLUDED.updated_at;
+END;
+$$;
+
+-- Function: Get user's cached task counts (ONLY reads from cache, never computes)
+CREATE OR REPLACE FUNCTION get_user_tasks_today_cached(
+  _user_id uuid,
+  _cache_date date DEFAULT CURRENT_DATE
+)
+RETURNS TABLE (
+  total_due_count integer,
+  total_completed_count integer,
+  gardens_with_remaining_tasks integer,
+  total_gardens integer
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+AS $$
+DECLARE
+  _cached RECORD;
+BEGIN
+  -- ONLY read from cache - never compute
+  SELECT 
+    total_due_count,
+    total_completed_count,
+    gardens_with_remaining_tasks,
+    total_gardens
+  INTO _cached
+  FROM user_task_daily_cache
+  WHERE user_id = _user_id AND cache_date = _cache_date
+  LIMIT 1;
+  
+  -- If cache exists, return it (even if stale - we'll refresh in background)
+  IF _cached IS NOT NULL THEN
+    RETURN QUERY SELECT 
+      _cached.total_due_count,
+      _cached.total_completed_count,
+      _cached.gardens_with_remaining_tasks,
+      _cached.total_gardens;
+    RETURN;
+  END IF;
+  
+  -- If cache doesn't exist, return zeros and trigger background refresh
+  -- This ensures instant response even if cache is missing
+  PERFORM pg_notify('user_task_cache_refresh', _user_id::text || '|' || _cache_date::text);
+  
+  RETURN QUERY SELECT 
+    0::integer as total_due_count,
+    0::integer as total_completed_count,
+    0::integer as gardens_with_remaining_tasks,
+    0::integer as total_gardens;
+END;
+$$;
+
+-- Function: Get per-garden task counts for a user (ONLY reads from cache, never computes)
+CREATE OR REPLACE FUNCTION get_user_gardens_tasks_today_cached(
+  _user_id uuid,
+  _cache_date date DEFAULT CURRENT_DATE
+)
+RETURNS TABLE (
+  garden_id uuid,
+  garden_name text,
+  due_count integer,
+  completed_count integer,
+  has_remaining_tasks boolean,
+  all_tasks_done boolean
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+AS $$
+BEGIN
+  -- ONLY read from cache - never compute
+  -- Join with gardens to get names, but only return cached data
+  RETURN QUERY
+  SELECT 
+    g.id as garden_id,
+    g.name as garden_name,
+    COALESCE(c.due_count, 0)::integer as due_count,
+    COALESCE(c.completed_count, 0)::integer as completed_count,
+    COALESCE(c.has_remaining_tasks, false) as has_remaining_tasks,
+    COALESCE(c.all_tasks_done, true) as all_tasks_done
+  FROM garden_members gm
+  INNER JOIN gardens g ON g.id = gm.garden_id
+  LEFT JOIN garden_task_daily_cache c ON c.garden_id = g.id AND c.cache_date = _cache_date
+  WHERE gm.user_id = _user_id
+  ORDER BY g.name;
+  
+  -- If any gardens don't have cache, trigger background refresh
+  -- But don't block - return what we have
+  IF EXISTS (
+    SELECT 1 FROM garden_members gm2
+    LEFT JOIN garden_task_daily_cache c2 ON c2.garden_id = gm2.garden_id AND c2.cache_date = _cache_date
+    WHERE gm2.user_id = _user_id AND c2.garden_id IS NULL
+  ) THEN
+    PERFORM pg_notify('garden_task_cache_refresh', _user_id::text || '|' || _cache_date::text);
+  END IF;
+END;
+$$;
+
+-- Trigger function: Refresh user cache when garden cache changes
+CREATE OR REPLACE FUNCTION trigger_refresh_user_task_cache()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  _user_record RECORD;
+  _cache_date date;
+BEGIN
+  -- Get cache date from the change
+  IF TG_OP = 'DELETE' THEN
+    _cache_date := OLD.cache_date;
+  ELSE
+    _cache_date := NEW.cache_date;
+  END IF;
+  
+  -- Refresh cache for all users who are members of this garden
+  -- Do this SYNCHRONOUSLY to ensure cache is always ready
+  FOR _user_record IN 
+    SELECT DISTINCT user_id 
+    FROM garden_members 
+    WHERE garden_id = COALESCE(NEW.garden_id, OLD.garden_id)
+  LOOP
+    -- Refresh immediately (synchronous) to ensure cache is ready
+    PERFORM refresh_user_task_daily_cache(_user_record.user_id, _cache_date);
+    
+    -- Also notify for async operations
+    PERFORM pg_notify('user_task_cache_refresh', _user_record.user_id::text || '|' || _cache_date::text);
+  END LOOP;
+  
+  RETURN COALESCE(NEW, OLD);
+END;
+$$;
+
+-- Create trigger to refresh user cache when garden cache changes
+DROP TRIGGER IF EXISTS trigger_refresh_user_cache_on_garden_cache_change ON garden_task_daily_cache;
+CREATE TRIGGER trigger_refresh_user_cache_on_garden_cache_change
+  AFTER INSERT OR UPDATE ON garden_task_daily_cache
+  FOR EACH ROW
+  EXECUTE FUNCTION trigger_refresh_user_task_cache();
+
+-- Trigger to refresh user cache when garden membership changes
+CREATE OR REPLACE FUNCTION trigger_refresh_user_cache_on_membership_change()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  _user_id uuid;
+  _cache_date date := CURRENT_DATE;
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    _user_id := OLD.user_id;
+  ELSE
+    _user_id := NEW.user_id;
+  END IF;
+  
+  IF _user_id IS NOT NULL THEN
+    -- Refresh SYNCHRONOUSLY to ensure cache is ready
+    PERFORM refresh_user_task_daily_cache(_user_id, _cache_date);
+  END IF;
+  
+  RETURN COALESCE(NEW, OLD);
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trigger_refresh_user_cache_on_membership_change ON garden_members;
+CREATE TRIGGER trigger_refresh_user_cache_on_membership_change
+  AFTER INSERT OR DELETE ON garden_members
+  FOR EACH ROW
+  EXECUTE FUNCTION trigger_refresh_user_cache_on_membership_change();
+
+-- Grant permissions
+GRANT SELECT, INSERT, UPDATE, DELETE ON user_task_daily_cache TO authenticated;
+GRANT EXECUTE ON FUNCTION refresh_user_task_daily_cache(uuid, date) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_user_tasks_today_cached(uuid, date) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_user_gardens_tasks_today_cached(uuid, date) TO authenticated;
+
+-- Enable RLS on user cache table
+ALTER TABLE user_task_daily_cache ENABLE ROW LEVEL SECURITY;
+
+-- RLS policy for user_task_daily_cache - users can only see their own cache
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='user_task_daily_cache' AND policyname='user_cache_select_self') THEN
+    CREATE POLICY user_cache_select_self ON user_task_daily_cache FOR SELECT TO authenticated
+      USING (user_id = auth.uid());
+  END IF;
+END $$;
+
+-- Initialize cache for all gardens and users (runs automatically when script executes)
+-- This ensures cache is populated immediately after schema setup
+SELECT initialize_all_task_cache();

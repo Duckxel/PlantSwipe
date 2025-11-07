@@ -200,8 +200,19 @@ export const AdminPage: React.FC = () => {
   // Heuristic to mark the console as error. Keep strict to avoid false positives
   // from JSON keys like "error" or benign words. Prefer lines that clearly
   // signal errors (severity prefixes) and common failure words.
+  // Exclude warnings (⚠) and lines starting with [sync] ⚠ from being treated as errors
   const errorLineRx = React.useMemo(
-    () => /(^\s*\[?(ERROR|FATAL)\]?|^\s*(error:|fatal:)|npm\s+ERR!|\b(failed|failure|exception|traceback)\b)/i,
+    () => {
+      // Match error patterns, but exclude warning lines
+      return (line: string) => {
+        // Skip lines that are clearly warnings
+        if (/^\s*\[.*\]\s*⚠|⚠|WARNING:/i.test(line)) {
+          return false
+        }
+        // Match actual error patterns
+        return /(^\s*\[?(ERROR|FATAL)\]?|^\s*(error:|fatal:)|npm\s+ERR!|^\s*✗|^\s*\[.*\]\s*✗)/i.test(line)
+      }
+    },
     [],
   )
 
@@ -209,7 +220,7 @@ export const AdminPage: React.FC = () => {
     return consoleLines.join('\n')
   }, [consoleLines])
 
-  const hasConsoleError = React.useMemo(() => consoleLines.some(l => errorLineRx.test(l)), [consoleLines, errorLineRx])
+  const hasConsoleError = React.useMemo(() => consoleLines.some(l => errorLineRx(l)), [consoleLines, errorLineRx])
 
   const appendConsole = React.useCallback((line: string) => {
     setConsoleLines(prev => [...prev, line])
@@ -217,6 +228,60 @@ export const AdminPage: React.FC = () => {
 
   const reloadPage = React.useCallback(() => {
     try { window.location.reload() } catch {}
+  }, [])
+
+  // Helper function to retry API calls with exponential backoff
+  const fetchWithRetry = React.useCallback(async (
+    url: string,
+    options: RequestInit = {},
+    maxRetries: number = 3
+  ): Promise<Response> => {
+    let lastError: Error | null = null
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 30000) // 30s timeout per attempt
+        
+        try {
+          const response = await fetch(url, {
+            ...options,
+            signal: controller.signal,
+          })
+          clearTimeout(timeoutId)
+          
+          // If successful or client error (4xx), return immediately
+          if (response.ok || (response.status >= 400 && response.status < 500)) {
+            return response
+          }
+          
+          // Server error (5xx) - retry
+          if (response.status >= 500 && attempt < maxRetries) {
+            const delay = Math.min(1000 * Math.pow(2, attempt), 10000) // Exponential backoff, max 10s
+            await new Promise(resolve => setTimeout(resolve, delay))
+            continue
+          }
+          
+          return response
+        } catch (fetchError: any) {
+          clearTimeout(timeoutId)
+          throw fetchError
+        }
+      } catch (error: any) {
+        lastError = error
+        
+        // Network error or timeout - retry
+        if (attempt < maxRetries && (error.name === 'AbortError' || error.name === 'TypeError' || error.message?.includes('fetch') || !error.message?.includes('4'))) {
+          const delay = Math.min(1000 * Math.pow(2, attempt), 10000)
+          await new Promise(resolve => setTimeout(resolve, delay))
+          continue
+        }
+        
+        throw error
+      }
+    }
+    
+    throw lastError || new Error('Request failed after retries')
   }, [])
 
   // Safely parse response body into JSON, tolerating HTML/error pages
@@ -238,7 +303,7 @@ export const AdminPage: React.FC = () => {
     setSyncing(true)
     try {
       setConsoleOpen(true)
-      appendConsole('[sync] Sync DB Schema: starting?')
+      appendConsole('[sync] Sync DB Schema: starting...')
       const session = (await supabase.auth.getSession()).data.session
       const token = session?.access_token
       if (!token) {
@@ -246,69 +311,102 @@ export const AdminPage: React.FC = () => {
         return
       }
       // Try Node API first
-      let resp = await fetch('/api/admin/sync-schema', {
+      let resp = await fetchWithRetry('/api/admin/sync-schema', {
         method: 'GET',
         headers: (() => {
           const h: Record<string, string> = { 'Accept': 'application/json' }
-          if (token) h['Authorization'] = `Bearer ? ${token}`
+          if (token) h['Authorization'] = `Bearer ${token}`
           const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
           if (adminToken) h['X-Admin-Token'] = String(adminToken)
           return h
         })(),
         credentials: 'same-origin',
-      })
-      if (resp.status === 405) {
-        // Try POST on Node if GET blocked
-        resp = await fetch('/api/admin/sync-schema', {
+      }).catch(() => null)
+      if (!resp || resp.status === 405) {
+        // Try POST on Node if GET blocked or failed
+        resp = await fetchWithRetry('/api/admin/sync-schema', {
           method: 'POST',
           headers: (() => {
             const h: Record<string, string> = { 'Content-Type': 'application/json', 'Accept': 'application/json' }
-            if (token) h['Authorization'] = `Bearer ? ${token}`
+            if (token) h['Authorization'] = `Bearer ${token}`
             const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
             if (adminToken) h['X-Admin-Token'] = String(adminToken)
             return h
           })(),
           credentials: 'same-origin',
-        })
+        }).catch(() => null)
       }
       // If Node API failed, fallback to local Admin API proxied by nginx
-      if (!resp.ok) {
+      if (!resp || !resp.ok) {
         const adminHeaders: Record<string, string> = { 'Accept': 'application/json' }
         try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) adminHeaders['X-Admin-Token'] = String(adminToken) } catch {}
-        let respAdmin = await fetch('/admin/sync-schema', { method: 'GET', headers: adminHeaders, credentials: 'same-origin' })
-        if (respAdmin.status === 405) {
-          respAdmin = await fetch('/admin/sync-schema', { method: 'POST', headers: { ...adminHeaders, 'Content-Type': 'application/json' }, credentials: 'same-origin', body: '{}' })
+        let respAdmin = await fetchWithRetry('/admin/sync-schema', { method: 'GET', headers: adminHeaders, credentials: 'same-origin' }).catch(() => null)
+        if (!respAdmin || respAdmin.status === 405) {
+          respAdmin = await fetchWithRetry('/admin/sync-schema', { method: 'POST', headers: { ...adminHeaders, 'Content-Type': 'application/json' }, credentials: 'same-origin', body: '{}' }).catch(() => null)
         }
-        resp = respAdmin
+        resp = respAdmin || resp
+      }
+      if (!resp) {
+        throw new Error('Failed to connect to API. Please check your connection and try again.')
       }
       const body = await safeJson(resp)
       if (!resp.ok) {
         throw new Error(body?.error || `Request failed (${resp.status})`)
       }
       appendConsole('[sync] Schema synchronized successfully')
-      const summary = body?.summary
-      if (summary && typeof summary === 'object') {
-        try {
-          const missingTables: string[] = Array.isArray(summary?.tables?.missing) ? summary.tables.missing : []
-          const missingFunctions: string[] = Array.isArray(summary?.functions?.missing) ? summary.functions.missing : []
-          const missingExtensions: string[] = Array.isArray(summary?.extensions?.missing) ? summary.extensions.missing : []
-          const hasMissing = missingTables.length + missingFunctions.length + missingExtensions.length > 0
-          appendConsole('[sync] Post?sync verification:')
-          appendConsole(`- Tables OK: ? ${(summary?.tables?.present || []).length}/${(summary?.tables?.required || []).length}`)
-          appendConsole(`- Functions OK: ? ${(summary?.functions?.present || []).length}/${(summary?.functions?.required || []).length}`)
-          appendConsole(`- Extensions OK: ? ${(summary?.extensions?.present || []).length}/${(summary?.extensions?.required || []).length}`)
-          if (hasMissing) {
-            if (missingTables.length) appendConsole(`- Missing tables: ? ${missingTables.join(', ')}`)
-            if (missingFunctions.length) appendConsole(`- Missing functions: ? ${missingFunctions.join(', ')}`)
-            if (missingExtensions.length) appendConsole(`- Missing extensions: ? ${missingExtensions.join(', ')}`)
+      
+      // Show SQL execution output if available
+      if (body?.stdoutTail) {
+        appendConsole('[sync] SQL execution output:')
+        const outputLines = String(body.stdoutTail).split('\n').filter(l => l.trim())
+        let hasErrors = false
+        outputLines.forEach(line => {
+          // Check for error patterns in SQL output
+          const isError = /ERROR:|error:|failed|FAILED/i.test(line) && !/⚠/.test(line)
+          if (isError) {
+            hasErrors = true
+            appendConsole(`[sync] ✗ ERROR: ${line}`)
+          } else if (/WARNING:|NOTICE:/i.test(line)) {
+            appendConsole(`[sync] ⚠ ${line}`)
           } else {
-            appendConsole('- All required objects present')
+            // Only show non-error lines if they're relevant (CREATE, ALTER, etc.)
+            if (/CREATE|ALTER|DROP|SELECT|INSERT|UPDATE|DELETE|GRANT|REVOKE/i.test(line)) {
+              appendConsole(`[sync]   ${line}`)
+            }
           }
-        } catch {}
+        })
+        if (hasErrors) {
+          appendConsole('[sync] ✗ SQL execution encountered errors. Check the output above.')
+        }
       }
+      
+      // Show warnings array if available
+      if (body?.warnings && Array.isArray(body.warnings) && body.warnings.length > 0) {
+        appendConsole('[sync] SQL execution warnings:')
+        body.warnings.forEach((warning: string) => {
+          appendConsole(`[sync] ⚠ ${warning}`)
+        })
+      }
+      
+      // Check for errors in stderr
+      if (body?.stderr) {
+        const stderrLines = String(body.stderr).split('\n').filter(l => l.trim())
+        if (stderrLines.length > 0) {
+          appendConsole('[sync] SQL execution stderr output:')
+          stderrLines.forEach(line => {
+            if (/ERROR:|error:/i.test(line)) {
+              appendConsole(`[sync] ✗ ${line}`)
+            } else {
+              appendConsole(`[sync] ⚠ ${line}`)
+            }
+          })
+        }
+      }
+      
+      appendConsole('[sync] ✓ Database sync completed!')
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e)
-      appendConsole(`[sync] Failed to sync schema: ? ${message}`)
+      appendConsole(`[sync] ✗ Failed to sync schema: ${message}`)
     } finally {
       setSyncing(false)
     }
@@ -514,26 +612,38 @@ export const AdminPage: React.FC = () => {
         const staticToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
         if (staticToken) headers['X-Admin-Token'] = staticToken
       } catch {}
-      const resp = await fetch(url, { headers, credentials: 'same-origin' })
-      const body = await safeJson(resp)
-      const isOk = (typeof okCheck === 'function') ? (resp.ok && okCheck(body)) : (resp.ok && body?.ok === true)
-      const latency = Date.now() - started
-      if (isOk) {
-        return { ok: true, latencyMs: latency, updatedAt: Date.now(), status: resp.status, errorCode: null, errorMessage: null }
-      }
-      // Derive error info when not ok
-      const errorCodeFromBody = typeof body?.errorCode === 'string' && body.errorCode ? body.errorCode : null
-      const errorMessageFromBody = typeof body?.error === 'string' && body.error ? body.error : null
-      const fallbackCode = !resp.ok
-        ? `HTTP_${resp.status}`
-        : (errorCodeFromBody || 'CHECK_FAILED')
-      return {
-        ok: false,
-        latencyMs: null,
-        updatedAt: Date.now(),
-        status: resp.status,
-        errorCode: errorCodeFromBody || fallbackCode,
-        errorMessage: errorMessageFromBody,
+      // Use fetchWithRetry with shorter timeout for health checks (10 seconds)
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 10000)
+      try {
+        const resp = await fetch(url, { headers, credentials: 'same-origin', signal: controller.signal })
+        clearTimeout(timeoutId)
+        const body = await safeJson(resp)
+        const isOk = (typeof okCheck === 'function') ? (resp.ok && okCheck(body)) : (resp.ok && body?.ok === true)
+        const latency = Date.now() - started
+        if (isOk) {
+          return { ok: true, latencyMs: latency, updatedAt: Date.now(), status: resp.status, errorCode: null, errorMessage: null }
+        }
+        // Derive error info when not ok
+        const errorCodeFromBody = typeof body?.errorCode === 'string' && body.errorCode ? body.errorCode : null
+        const errorMessageFromBody = typeof body?.error === 'string' && body.error ? body.error : null
+        const fallbackCode = !resp.ok
+          ? `HTTP_${resp.status}`
+          : (errorCodeFromBody || 'CHECK_FAILED')
+        return {
+          ok: false,
+          latencyMs: null,
+          updatedAt: Date.now(),
+          status: resp.status,
+          errorCode: errorCodeFromBody || fallbackCode,
+          errorMessage: errorMessageFromBody,
+        }
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId)
+        if (fetchError.name === 'AbortError') {
+          return { ok: false, latencyMs: null, updatedAt: Date.now(), status: null, errorCode: 'TIMEOUT', errorMessage: 'Request timed out' }
+        }
+        throw fetchError
       }
     } catch {
       // Network/other failure
@@ -576,9 +686,9 @@ export const AdminPage: React.FC = () => {
 
   const runHealthProbes = React.useCallback(async () => {
     const [apiRes, adminRes, dbRes] = await Promise.all([
-      probeEndpoint('/api/health', (b) => b?.ok === true),
-      probeEndpoint('/api/admin/stats', (b) => b?.ok === true && typeof b?.profilesCount === 'number'),
-      probeDbWithFallback(),
+      probeEndpoint('/api/health', (b) => b?.ok === true).catch(() => ({ ok: false, latencyMs: null, updatedAt: Date.now(), status: null, errorCode: 'NETWORK_ERROR', errorMessage: 'Failed to probe API' })),
+      probeEndpoint('/api/admin/stats', (b) => b?.ok === true && typeof b?.profilesCount === 'number').catch(() => ({ ok: false, latencyMs: null, updatedAt: Date.now(), status: null, errorCode: 'NETWORK_ERROR', errorMessage: 'Failed to probe Admin API' })),
+      probeDbWithFallback().catch(() => ({ ok: false, latencyMs: null, updatedAt: Date.now(), status: null, errorCode: 'NETWORK_ERROR', errorMessage: 'Failed to probe Database' })),
     ])
     if (isMountedRef.current) {
       setApiProbe(apiRes)
@@ -596,25 +706,23 @@ export const AdminPage: React.FC = () => {
       if (isMountedRef.current) setHealthRefreshing(false)
     }
   }, [healthRefreshing, runHealthProbes])
+  
+  // Run health probes on initial load and periodically
+  React.useEffect(() => {
+    // Run immediately on mount (no delay)
+    runHealthProbes()
+    // Then every 60 seconds
+    const intervalId = setInterval(() => {
+      runHealthProbes()
+    }, 60000)
+    return () => clearInterval(intervalId)
+  }, [runHealthProbes])
 
   const softRefreshAdmin = React.useCallback(() => {
     try {
       refreshHealth()
     } catch {}
   }, [refreshHealth])
-
-  React.useEffect(() => {
-    // Initial probe and auto-refresh every 60s
-    // Stagger initial load to avoid blocking
-    const timeoutId = setTimeout(() => {
-      runHealthProbes()
-    }, 100)
-    const id = setInterval(runHealthProbes, 60_000)
-    return () => {
-      clearTimeout(timeoutId)
-      clearInterval(id)
-    }
-  }, [runHealthProbes])
 
   const StatusDot: React.FC<{ ok: boolean | null; title?: string }> = ({ ok, title }) => (
     <span
@@ -644,6 +752,37 @@ export const AdminPage: React.FC = () => {
   const [currentBranch, setCurrentBranch] = React.useState<string>("")
   const [selectedBranch, setSelectedBranch] = React.useState<string>("")
   const [lastUpdateTime, setLastUpdateTime] = React.useState<string | null>(null)
+  
+  // Add loading state timeouts to prevent infinite loading (moved after state declarations)
+  // IMPORTANT: Only clear loading states, NEVER clear data values
+  React.useEffect(() => {
+    const MAX_LOADING_TIMEOUT = 30000 // 30 seconds max loading time (increased)
+    const timeoutId = setTimeout(() => {
+      // Only clear loading states if they're still loading - don't touch data
+      if (branchesLoading) {
+        console.warn('[AdminPage] Branches loading timeout - clearing loading state only')
+        setBranchesLoading(false)
+      }
+      if (registeredLoading) {
+        console.warn('[AdminPage] Registered count loading timeout - clearing loading state only')
+        setRegisteredLoading(false)
+      }
+      if (onlineLoading) {
+        console.warn('[AdminPage] Online users loading timeout - clearing loading state only')
+        setOnlineLoading(false)
+      }
+      if (ipsLoading) {
+        console.warn('[AdminPage] IPs loading timeout - clearing loading state only')
+        setIpsLoading(false)
+      }
+      if (visitorsLoading) {
+        console.warn('[AdminPage] Visitors loading timeout - clearing loading state only')
+        setVisitorsLoading(false)
+      }
+    }, MAX_LOADING_TIMEOUT)
+    
+    return () => clearTimeout(timeoutId)
+  }, [branchesLoading, registeredLoading, onlineLoading, ipsLoading, visitorsLoading])
 
   const loadBranches = React.useCallback(async (opts?: { initial?: boolean }) => {
     const isInitial = !!opts?.initial
@@ -656,25 +795,29 @@ export const AdminPage: React.FC = () => {
         const token = session?.access_token
         if (token) headersNode['Authorization'] = `Bearer ? ${token}`
       } catch {}
-      const respNode = await fetch('/api/admin/branches', { headers: headersNode, credentials: 'same-origin' })
-      let data = await safeJson(respNode)
+      const respNode = await fetchWithRetry('/api/admin/branches', { headers: headersNode, credentials: 'same-origin' }).catch(() => null)
+      let data = await safeJson(respNode || new Response())
       // Guard against accidental inclusion of non-branch items
       if (Array.isArray(data?.branches)) {
         data.branches = data.branches.filter((b: string) => b && b !== 'origin' && b !== 'HEAD')
       }
-      let ok = respNode.ok && Array.isArray(data?.branches)
+      let ok = respNode?.ok && Array.isArray(data?.branches)
       if (!ok) {
         const adminHeaders: Record<string, string> = { 'Accept': 'application/json' }
         try {
           const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
           if (adminToken) adminHeaders['X-Admin-Token'] = String(adminToken)
         } catch {}
-        const respAdmin = await fetch('/admin/branches', { headers: adminHeaders, credentials: 'same-origin' })
-        data = await safeJson(respAdmin)
-        if (Array.isArray(data?.branches)) {
-          data.branches = data.branches.filter((b: string) => b && b !== 'origin' && b !== 'HEAD')
+        const respAdmin = await fetchWithRetry('/admin/branches', { headers: adminHeaders, credentials: 'same-origin' }).catch(() => null)
+        if (respAdmin) {
+          data = await safeJson(respAdmin)
+          if (Array.isArray(data?.branches)) {
+            data.branches = data.branches.filter((b: string) => b && b !== 'origin' && b !== 'HEAD')
+          }
+          if (!respAdmin.ok || !Array.isArray(data?.branches)) throw new Error(data?.error || `HTTP ${respAdmin.status}`)
+        } else {
+          throw new Error('Failed to connect to API')
         }
-        if (!respAdmin.ok || !Array.isArray(data?.branches)) throw new Error(data?.error || `HTTP ? ${respAdmin.status}`)
       }
       const branches: string[] = data.branches
       const current: string = String(data.current || '')
@@ -686,17 +829,18 @@ export const AdminPage: React.FC = () => {
         if (!prev) return current
         return branches.includes(prev) ? prev : current
       })
-    } catch {
-      if (isInitial) {
-        setBranchOptions([])
-        setCurrentBranch('')
-        setSelectedBranch('')
+    } catch (e) {
+      console.error('[AdminPage] Failed to load branches:', e)
+      // Don't clear existing data on error - keep what we have
+      // Only clear on initial load if we have no data yet
+      if (isInitial && branchOptions.length === 0) {
+        // Only clear if we truly have no data
       }
     } finally {
       if (isInitial) setBranchesLoading(false)
       else setBranchesRefreshing(false)
     }
-  }, [safeJson])
+  }, [safeJson, fetchWithRetry, branchOptions.length])
 
   React.useEffect(() => {
     // Stagger initial load to avoid blocking
@@ -856,28 +1000,30 @@ export const AdminPage: React.FC = () => {
         const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
         if (adminToken) headers['X-Admin-Token'] = String(adminToken)
       } catch {}
-      const resp = await fetch('/api/admin/stats', { headers, credentials: 'same-origin' })
-      const data = await safeJson(resp)
-      if (resp.ok && typeof data?.profilesCount === 'number') {
-        setRegisteredCount(data.profilesCount)
-        setRegisteredUpdatedAt(Date.now())
-        return
+      const resp = await fetchWithRetry('/api/admin/stats', { headers, credentials: 'same-origin' }).catch(() => null)
+      if (resp && resp.ok) {
+        const data = await safeJson(resp)
+        if (typeof data?.profilesCount === 'number') {
+          setRegisteredCount(data.profilesCount)
+          setRegisteredUpdatedAt(Date.now())
+          return
+        }
       }
       // Fallback: client-side count (may be limited by RLS)
       const { count, error } = await supabase.from('profiles').select('id', { count: 'exact', head: true })
-      setRegisteredCount(error ? null : (count ?? 0))
-      setRegisteredUpdatedAt(Date.now())
-    } catch {
-      try {
-        const { count, error } = await supabase.from('profiles').select('id', { count: 'exact', head: true })
-        setRegisteredCount(error ? null : (count ?? 0))
+      if (!error && typeof count === 'number') {
+        setRegisteredCount(count)
         setRegisteredUpdatedAt(Date.now())
-      } catch {}
+      }
+      // Don't set to 0 on error - keep previous value
+    } catch (e) {
+      console.error('[AdminPage] Failed to load registered count:', e)
+      // Keep last known value on error - don't set to 0
     } finally {
       if (isInitial) setRegisteredLoading(false)
       else setRegisteredRefreshing(false)
     }
-  }, [safeJson])
+  }, [safeJson, fetchWithRetry])
 
   React.useEffect(() => {
     // Stagger initial load to avoid blocking
@@ -902,7 +1048,7 @@ export const AdminPage: React.FC = () => {
     try {
       // Use dedicated endpoint backed by DB counts; forward Authorization so REST fallback can pass RLS
       const token = (await supabase.auth.getSession()).data.session?.access_token
-      const resp = await fetch('/api/admin/online-users', {
+      const resp = await fetchWithRetry('/api/admin/online-users', {
         headers: (() => {
           const h: Record<string, string> = { 'Accept': 'application/json' }
           if (token) h['Authorization'] = `Bearer ? ${token}`
@@ -911,21 +1057,25 @@ export const AdminPage: React.FC = () => {
           return h
         })(),
         credentials: 'same-origin',
-      })
-      const data = await safeJson(resp)
-      if (!resp.ok) {
-        throw new Error(data?.error || `Request failed (${resp.status})`)
+      }).catch(() => null)
+      if (resp && resp.ok) {
+        const data = await safeJson(resp)
+        const num = Number(data?.onlineUsers ?? data?.count)
+        if (Number.isFinite(num) && num >= 0) {
+          setOnlineUsers(num)
+          setOnlineUpdatedAt(Date.now())
+          return
+        }
       }
-      const num = Number(data?.onlineUsers)
-      setOnlineUsers(Number.isFinite(num) ? num : 0)
-      setOnlineUpdatedAt(Date.now())
-    } catch {
-      // Keep last known value on error
+      // Don't set to 0 on error - keep last known value
+    } catch (e) {
+      console.error('[AdminPage] Failed to load online users:', e)
+      // Keep last known value on error - don't set to 0
     } finally {
       if (isInitial) setOnlineLoading(false)
       else setOnlineRefreshing(false)
     }
-  }, [])
+  }, [fetchWithRetry, safeJson])
 
   // Initial load (page load only) - staggered
   React.useEffect(() => {
@@ -958,18 +1108,22 @@ export const AdminPage: React.FC = () => {
         const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
         if (adminToken) headers['X-Admin-Token'] = String(adminToken)
       } catch {}
-      const resp = await fetch(`/api/admin/online-ips?minutes=${encodeURIComponent(String(minutes))}` , { headers, credentials: 'same-origin' })
-      const data = await safeJson(resp)
-      if (!resp.ok) throw new Error(data?.error || `HTTP ? ${resp.status}`)
-      const list: string[] = Array.isArray(data?.ips) ? data.ips.map((s: any) => String(s)).filter(Boolean) : []
-      setIps(list)
-    } catch {
-      // keep last
+      const resp = await fetchWithRetry(`/api/admin/online-ips?minutes=${encodeURIComponent(String(minutes))}` , { headers, credentials: 'same-origin' }).catch(() => null)
+      if (resp && resp.ok) {
+        const data = await safeJson(resp)
+        const list: string[] = Array.isArray(data?.ips) ? data.ips.map((s: any) => String(s)).filter(Boolean) : []
+        setIps(list)
+        return
+      }
+      // Don't clear IPs on error - keep last known value
+    } catch (e) {
+      console.error('[AdminPage] Failed to load IPs:', e)
+      // keep last known value
     } finally {
       if (isInitial) setIpsLoading(false)
       else setIpsRefreshing(false)
     }
-  }, [safeJson])
+  }, [safeJson, fetchWithRetry])
 
   // Initial load and auto-refresh every 60s - staggered
   React.useEffect(() => {
@@ -990,33 +1144,38 @@ export const AdminPage: React.FC = () => {
     if (isInitial) setVisitorsLoading(true)
     else setVisitorsRefreshing(true)
     try {
-      const resp = await fetch(`/api/admin/visitors-stats?days=${visitorsWindowDays}`, {
+      const resp = await fetchWithRetry(`/api/admin/visitors-stats?days=${visitorsWindowDays}`, {
         headers: { 'Accept': 'application/json' },
         credentials: 'same-origin',
-      })
+      }).catch(() => null)
+      if (!resp || !resp.ok) {
+        // Keep last known value on error
+        return
+      }
       const data = await safeJson(resp)
-      if (!resp.ok) throw new Error(data?.error || `Request failed (${resp.status})`)
       const series: Array<{ date: string; uniqueVisitors: number }> = Array.isArray(data?.series7d)
         ? data.series7d.map((d: any) => ({ date: String(d.date), uniqueVisitors: Number(d.uniqueVisitors ?? d.unique_visitors ?? 0) }))
         : []
       setVisitorsSeries(series)
       // Fetch weekly unique total from dedicated endpoint to keep requests separate
       try {
-        const totalResp = await fetch('/api/admin/visitors-unique-7d', {
+        const totalResp = await fetchWithRetry('/api/admin/visitors-unique-7d', {
           headers: { 'Accept': 'application/json' },
           credentials: 'same-origin',
-        })
-        const totalData = await safeJson(totalResp)
-        if (totalResp.ok) {
+        }).catch(() => null)
+        if (totalResp && totalResp.ok) {
+          const totalData = await safeJson(totalResp)
           const total7d = Number(totalData?.uniqueIps7d ?? totalData?.weeklyUniqueIps7d ?? 0)
-          setVisitorsTotalUnique7d(Number.isFinite(total7d) ? total7d : 0)
+          if (Number.isFinite(total7d) && total7d >= 0) {
+            setVisitorsTotalUnique7d(total7d)
+          }
         }
       } catch {}
       // Load sources breakdown in parallel
       try {
-        const sb = await fetch(`/api/admin/sources-breakdown?days=${visitorsWindowDays}`, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
-        const sbd = await safeJson(sb)
-        if (sb.ok) {
+        const sb = await fetchWithRetry(`/api/admin/sources-breakdown?days=${visitorsWindowDays}`, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' }).catch(() => null)
+        if (sb && sb.ok) {
+          const sbd = await safeJson(sb)
           const tc = Array.isArray(sbd?.topCountries)
             ? sbd.topCountries.map((r: { country?: string; visits?: number }) => ({ country: String(r.country || ''), visits: Number(r.visits || 0) }))
                 .filter((x: { country: string }) => !!x.country)
@@ -1056,13 +1215,14 @@ export const AdminPage: React.FC = () => {
         }
       } catch {}
       setVisitorsUpdatedAt(Date.now())
-    } catch {
-      // keep last known
+    } catch (e) {
+      console.error('[AdminPage] Failed to load visitors stats:', e)
+      // keep last known value
     } finally {
       if (isInitial) setVisitorsLoading(false)
       else setVisitorsRefreshing(false)
     }
-  }, [visitorsWindowDays, safeJson])
+  }, [visitorsWindowDays, safeJson, fetchWithRetry])
 
   React.useEffect(() => {
     // Stagger initial load to avoid blocking - visitors stats are heavy
@@ -1555,6 +1715,36 @@ export const AdminPage: React.FC = () => {
 
   return (
     <div className="max-w-3xl mx-auto mt-8 px-4 md:px-0">
+      {/* Connection Status Banner - Show when APIs are down */}
+      {(apiProbe.ok === false || adminProbe.ok === false || dbProbe.ok === false) && (
+        <Card className="rounded-2xl mb-4 border-red-500 dark:border-red-500 bg-red-50 dark:bg-red-950/20">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0" />
+              <div className="flex-1">
+                <div className="text-sm font-medium text-red-900 dark:text-red-100">Connection Issues Detected</div>
+                <div className="text-xs text-red-700 dark:text-red-300 mt-1">
+                  {!apiProbe.ok && 'API '}
+                  {!adminProbe.ok && 'Admin API '}
+                  {!dbProbe.ok && 'Database '}
+                  {(!apiProbe.ok || !adminProbe.ok || !dbProbe.ok) && 'may be unavailable. Some features may not work correctly.'}
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-xl border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30"
+                onClick={refreshHealth}
+                disabled={healthRefreshing}
+              >
+                <RefreshCw className={`h-4 w-4 mr-1 ${healthRefreshing ? 'animate-spin' : ''}`} />
+                Retry
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      
       <Card className="rounded-3xl">
         <CardContent className="p-6 md:p-8 space-y-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -1933,7 +2123,7 @@ export const AdminPage: React.FC = () => {
                     </Button>
                   </div>
                   <div className="text-2xl font-semibold tabular-nums mt-1">
-                    {registeredLoading ? '-' : (registeredCount ?? '-')}
+                    {registeredLoading ? '-' : (registeredUpdatedAt !== null ? (registeredCount ?? '-') : '-')}
                   </div>
                 </CardContent>
               </Card>
