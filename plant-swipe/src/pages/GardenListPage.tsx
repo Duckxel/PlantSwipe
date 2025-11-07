@@ -4,6 +4,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { RefreshCw } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { getUserGardens, createGarden, fetchServerNowISO, getGardenTodayProgressUltraFast, getGardensTodayProgressBatchCached, getGardenPlantsMinimal, listGardenTasksMinimal, listOccurrencesForTasks, listOccurrencesForMultipleGardens, resyncTaskOccurrencesForGarden, progressTaskOccurrence, listCompletionsForOccurrences, logGardenActivity, getGardenTodayOccurrencesCached, getUserGardensTasksTodayCached, refreshGardenTaskCache, refreshUserTaskCache } from '@/lib/gardens'
 import { supabase } from '@/lib/supabaseClient'
@@ -276,37 +277,96 @@ export const GardenListPage: React.FC = () => {
     // 1. Check memory cache first (fastest)
     const cached = taskDataCacheRef.current
     if (cached && cached.today === today && (now - cached.timestamp) < TASK_DATA_CACHE_TTL) {
-      setTodayTaskOccurrences(cached.data.occurrences)
-      setCompletionsByOcc(cached.data.completions)
-      setAllPlants(cached.data.plants)
-      setLoadingTasks(false)
-      return
+      // IMPORTANT: If memory cache has empty occurrences but skipResync=false, invalidate cache
+      // This ensures we reload when resync is requested
+      if (cached.data.occurrences.length === 0 && !skipResync) {
+        const cacheAge = now - cached.timestamp
+        if (cacheAge < 1000) {
+          // Very fresh cache with no tasks - might be stale, clear it
+          console.warn('[GardenList] Fresh memory cache has no tasks, clearing to force reload')
+          taskDataCacheRef.current = null
+          // Fall through to load from DB
+        } else {
+          // Use cache but it's empty - mismatch detection will catch this
+          setTodayTaskOccurrences(cached.data.occurrences)
+          setCompletionsByOcc(cached.data.completions)
+          setAllPlants(cached.data.plants)
+          setLoadingTasks(false)
+          return
+        }
+      } else {
+        // Cache has tasks or skipResync is true - use it
+        setTodayTaskOccurrences(cached.data.occurrences)
+        setCompletionsByOcc(cached.data.completions)
+        setAllPlants(cached.data.plants)
+        setLoadingTasks(false)
+        return
+      }
     }
     
     // 2. Check localStorage cache (persists across page reloads)
     const localStorageKey = `garden_tasks_cache_${cacheKey}`
     const localStorageCache = getLocalStorageCache(localStorageKey)
     if (localStorageCache && localStorageCache.data) {
-      setTodayTaskOccurrences(localStorageCache.data.occurrences || [])
-      setCompletionsByOcc(localStorageCache.data.completions || {})
-      setAllPlants(localStorageCache.data.plants || [])
-      setLoadingTasks(false)
-      
-      // Also update memory cache
-      taskDataCacheRef.current = {
-        data: localStorageCache.data,
-        timestamp: localStorageCache.timestamp || now,
-        today,
+      // IMPORTANT: If cache has empty occurrences but progress shows tasks exist, invalidate cache
+      const cachedOccs = localStorageCache.data.occurrences || []
+      if (cachedOccs.length === 0 && !skipResync) {
+        // Check if progress indicates tasks should exist - if so, invalidate cache
+        // We can't check progressByGarden here (it's not in scope), so we'll rely on mismatch detection
+        // But we can still check if cache is very fresh (< 1 second) - if so, it might be stale
+        const cacheAge = localStorageCache.timestamp ? (now - localStorageCache.timestamp) : Infinity
+        if (cacheAge < 1000) {
+          // Very fresh cache with no tasks - might be stale, clear it
+          console.warn('[GardenList] Fresh cache has no tasks, clearing to force reload')
+          clearLocalStorageCache(localStorageKey)
+          taskDataCacheRef.current = null
+          // Fall through to load from DB
+        } else {
+          // Cache is older, use it but refresh in background
+          setTodayTaskOccurrences(cachedOccs)
+          setCompletionsByOcc(localStorageCache.data.completions || {})
+          setAllPlants(localStorageCache.data.plants || [])
+          setLoadingTasks(false)
+          
+          // Also update memory cache
+          taskDataCacheRef.current = {
+            data: localStorageCache.data,
+            timestamp: localStorageCache.timestamp || now,
+            today,
+          }
+          
+          // Refresh in background if cache is getting stale
+          if (localStorageCache.timestamp && (now - localStorageCache.timestamp) > LOCALSTORAGE_TASK_CACHE_TTL / 2) {
+            // Cache is half-expired, refresh in background
+            setTimeout(() => {
+              loadAllTodayOccurrences(gardensOverride, todayOverride, skipResync)
+            }, 100)
+          }
+          return
+        }
+      } else {
+        // Cache has tasks or skipResync is true - use it
+        setTodayTaskOccurrences(cachedOccs)
+        setCompletionsByOcc(localStorageCache.data.completions || {})
+        setAllPlants(localStorageCache.data.plants || [])
+        setLoadingTasks(false)
+        
+        // Also update memory cache
+        taskDataCacheRef.current = {
+          data: localStorageCache.data,
+          timestamp: localStorageCache.timestamp || now,
+          today,
+        }
+        
+        // Refresh in background if cache is getting stale
+        if (localStorageCache.timestamp && (now - localStorageCache.timestamp) > LOCALSTORAGE_TASK_CACHE_TTL / 2) {
+          // Cache is half-expired, refresh in background
+          setTimeout(() => {
+            loadAllTodayOccurrences(gardensOverride, todayOverride, skipResync)
+          }, 100)
+        }
+        return
       }
-      
-      // Refresh in background if cache is getting stale
-      if (localStorageCache.timestamp && (now - localStorageCache.timestamp) > LOCALSTORAGE_TASK_CACHE_TTL / 2) {
-        // Cache is half-expired, refresh in background
-        setTimeout(() => {
-          loadAllTodayOccurrences(gardensOverride, todayOverride, skipResync)
-        }, 100)
-      }
-      return
     }
     
     setLoadingTasks(true)
@@ -1063,6 +1123,7 @@ export const GardenListPage: React.FC = () => {
   }, [todayTaskOccurrences])
 
   // Detect mismatch: progress shows tasks but task list is empty - force reload
+  // This runs whenever progress or task list changes
   React.useEffect(() => {
     if (loadingTasks) return // Don't check while loading
     if (todayTaskOccurrences.length > 0) return // Tasks exist, no mismatch
@@ -1071,8 +1132,8 @@ export const GardenListPage: React.FC = () => {
     const totalDueFromProgress = Object.values(progressByGarden).reduce((sum, prog) => sum + (prog.due || 0), 0)
     if (totalDueFromProgress > 0) {
       // Progress shows tasks exist but task list is empty - cache is stale!
-      console.warn('[GardenList] Mismatch detected: progress shows tasks but list is empty - forcing reload')
-      // Clear all caches
+      console.warn('[GardenList] Mismatch detected: progress shows', totalDueFromProgress, 'tasks but list is empty - forcing reload')
+      // Clear all caches immediately
       taskDataCacheRef.current = null
       clearLocalStorageCache(`garden_tasks_cache_`)
       // Clear resync cache to force resync
@@ -1084,12 +1145,46 @@ export const GardenListPage: React.FC = () => {
           }
         })
       }
-      // Force reload with resync
-      setTimeout(() => {
-        loadAllTodayOccurrences(undefined, undefined, false).catch(() => {})
-      }, 100)
+      // Set loading state
+      setLoadingTasks(true)
+      // Force reload with resync immediately (no delay)
+      loadAllTodayOccurrences(undefined, undefined, false).catch((e) => {
+        console.error('[GardenList] Failed to reload tasks after mismatch:', e)
+        setLoadingTasks(false)
+      })
     }
   }, [progressByGarden, todayTaskOccurrences.length, loadingTasks, loadAllTodayOccurrences, clearLocalStorageCache, serverToday])
+  
+  // Also check mismatch periodically (every 2 seconds) as a fail-safe
+  React.useEffect(() => {
+    if (!user?.id) return
+    const interval = setInterval(() => {
+      if (loadingTasks) return
+      if (todayTaskOccurrences.length > 0) return
+      
+      const totalDueFromProgress = Object.values(progressByGarden).reduce((sum, prog) => sum + (prog.due || 0), 0)
+      if (totalDueFromProgress > 0) {
+        console.warn('[GardenList] Periodic mismatch check: progress shows tasks but list is empty - forcing reload')
+        taskDataCacheRef.current = null
+        clearLocalStorageCache(`garden_tasks_cache_`)
+        const today = serverTodayRef.current ?? serverToday
+        if (today) {
+          Object.keys(resyncCacheRef.current).forEach(key => {
+            if (key.endsWith(`::${today}`)) {
+              delete resyncCacheRef.current[key]
+            }
+          })
+        }
+        setLoadingTasks(true)
+        loadAllTodayOccurrences(undefined, undefined, false).catch((e) => {
+          console.error('[GardenList] Failed to reload tasks after periodic mismatch:', e)
+          setLoadingTasks(false)
+        })
+      }
+    }, 2000) // Check every 2 seconds
+    
+    return () => clearInterval(interval)
+  }, [user?.id, progressByGarden, todayTaskOccurrences.length, loadingTasks, loadAllTodayOccurrences, clearLocalStorageCache, serverToday])
 
   const gardensWithTasks = React.useMemo(() => {
     const byGarden: Array<{ gardenId: string; gardenName: string; plants: any[]; req: number; done: number }> = []
@@ -1245,8 +1340,37 @@ export const GardenListPage: React.FC = () => {
             {loadingTasks && (
               <Card className="rounded-2xl p-4 text-sm opacity-70">{t('garden.loadingTasks')}</Card>
             )}
-            {!loadingTasks && gardensWithTasks.length === 0 && (
-              <Card className="rounded-2xl p-4 text-sm opacity-70">{t('garden.noTasksToday')}</Card>
+            {!loadingTasks && gardensWithTasks.length === 0 && todayTaskOccurrences.length === 0 && (
+              <Card className="rounded-2xl p-4">
+                <div className="text-sm opacity-70 mb-2">{t('garden.noTasksToday')}</div>
+                {/* Show reload button if progress indicates tasks exist */}
+                {Object.values(progressByGarden).some(prog => (prog.due || 0) > 0) && (
+                  <Button 
+                    className="rounded-xl w-full mt-2" 
+                    variant="outline"
+                    onClick={() => {
+                      // Clear all caches and force reload
+                      taskDataCacheRef.current = null
+                      clearLocalStorageCache(`garden_tasks_cache_`)
+                      const today = serverTodayRef.current ?? serverToday
+                      if (today) {
+                        Object.keys(resyncCacheRef.current).forEach(key => {
+                          if (key.endsWith(`::${today}`)) {
+                            delete resyncCacheRef.current[key]
+                          }
+                        })
+                      }
+                      setLoadingTasks(true)
+                      loadAllTodayOccurrences(undefined, undefined, false).catch(() => {
+                        setLoadingTasks(false)
+                      })
+                    }}
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Reload Tasks
+                  </Button>
+                )}
+              </Card>
             )}
             {!loadingTasks && gardensWithTasks.map((gw) => (
               <Card key={gw.gardenId} className="rounded-2xl p-4">
