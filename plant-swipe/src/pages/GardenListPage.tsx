@@ -229,16 +229,47 @@ export const GardenListPage: React.FC = () => {
           for (const [gid, prog] of Object.entries(progMap)) {
             converted[gid] = { due: prog.due, completed: prog.completed }
           }
-          setProgressByGarden(converted)
           
-          // If cache returned empty/zeros, trigger background refresh
-          // But don't block - user sees instant response
-          if (Object.keys(progMap).length === 0 || Object.values(progMap).every(p => p.due === 0 && p.completed === 0)) {
-            refreshUserTaskCache(user.id, today).catch(() => {})
+          // If cache is empty, fallback to computing from garden cache (still fast)
+          if (Object.keys(converted).length === 0) {
+            getGardensTodayProgressBatchCached(data.map(g => g.id), today).then((fallbackProgMap) => {
+              setProgressByGarden(fallbackProgMap)
+              // Trigger background cache refresh
+              refreshUserTaskCache(user.id, today).catch(() => {})
+            }).catch(() => {
+              setProgressByGarden({})
+            })
+          } else {
+            setProgressByGarden(converted)
+            
+            // If cache returned zeros for all, trigger background refresh
+            if (Object.values(progMap).every(p => p.due === 0 && p.completed === 0)) {
+              // Try to populate cache in background
+              refreshUserTaskCache(user.id, today).catch(() => {})
+              // Also try to refresh garden cache for all gardens
+              Promise.all(data.map(g => refreshGardenTaskCache(g.id, today).catch(() => {}))).then(() => {
+                // Retry loading progress after cache refresh
+                setTimeout(() => {
+                  getUserGardensTasksTodayCached(user.id, today).then((retryProgMap) => {
+                    const retryConverted: Record<string, { due: number; completed: number }> = {}
+                    for (const [gid, prog] of Object.entries(retryProgMap)) {
+                      retryConverted[gid] = { due: prog.due, completed: prog.completed }
+                    }
+                    if (Object.keys(retryConverted).length > 0) {
+                      setProgressByGarden(retryConverted)
+                    }
+                  }).catch(() => {})
+                }, 2000) // Wait 2 seconds for cache to populate
+              }).catch(() => {})
+            }
           }
         }).catch(() => {
-          // On error, set empty progress (cache will refresh in background)
-          setProgressByGarden({})
+          // On error, fallback to garden-level cache
+          getGardensTodayProgressBatchCached(data.map(g => g.id), today).then((progMap) => {
+            setProgressByGarden(progMap)
+          }).catch(() => {
+            setProgressByGarden({})
+          })
         })
       } else {
         // For non-logged-in users, use garden-level cache
@@ -891,7 +922,7 @@ export const GardenListPage: React.FC = () => {
                   setGardens(arr)
                   setDragIndex(null)
                 }}>
-                  {progressByGarden[g.id] && (
+                  {progressByGarden[g.id] ? (
                     (() => {
                       const { due, completed } = progressByGarden[g.id]
                       const done = due === 0 || completed >= due
@@ -904,6 +935,11 @@ export const GardenListPage: React.FC = () => {
                         </div>
                       )
                     })()
+                  ) : (
+                    // Show loading indicator if cache is being populated
+                    <div className="pointer-events-none absolute top-2 right-2 rounded-xl px-2 py-0.5 text-xs font-medium shadow z-10 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400">
+                      ...
+                    </div>
                   )}
                   <Link to={`/garden/${g.id}`} className="grid grid-cols-3 gap-0 w-full h-full text-left">
                     <div className="col-span-1 rounded-l-2xl overflow-hidden bg-stone-100 dark:bg-[#252526]">

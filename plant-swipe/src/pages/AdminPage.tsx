@@ -238,7 +238,7 @@ export const AdminPage: React.FC = () => {
     setSyncing(true)
     try {
       setConsoleOpen(true)
-      appendConsole('[sync] Sync DB Schema: starting?')
+      appendConsole('[sync] Sync DB Schema: starting...')
       const session = (await supabase.auth.getSession()).data.session
       const token = session?.access_token
       if (!token) {
@@ -250,7 +250,7 @@ export const AdminPage: React.FC = () => {
         method: 'GET',
         headers: (() => {
           const h: Record<string, string> = { 'Accept': 'application/json' }
-          if (token) h['Authorization'] = `Bearer ? ${token}`
+          if (token) h['Authorization'] = `Bearer ${token}`
           const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
           if (adminToken) h['X-Admin-Token'] = String(adminToken)
           return h
@@ -263,7 +263,7 @@ export const AdminPage: React.FC = () => {
           method: 'POST',
           headers: (() => {
             const h: Record<string, string> = { 'Content-Type': 'application/json', 'Accept': 'application/json' }
-            if (token) h['Authorization'] = `Bearer ? ${token}`
+            if (token) h['Authorization'] = `Bearer ${token}`
             const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
             if (adminToken) h['X-Admin-Token'] = String(adminToken)
             return h
@@ -293,22 +293,88 @@ export const AdminPage: React.FC = () => {
           const missingFunctions: string[] = Array.isArray(summary?.functions?.missing) ? summary.functions.missing : []
           const missingExtensions: string[] = Array.isArray(summary?.extensions?.missing) ? summary.extensions.missing : []
           const hasMissing = missingTables.length + missingFunctions.length + missingExtensions.length > 0
-          appendConsole('[sync] Post?sync verification:')
-          appendConsole(`- Tables OK: ? ${(summary?.tables?.present || []).length}/${(summary?.tables?.required || []).length}`)
-          appendConsole(`- Functions OK: ? ${(summary?.functions?.present || []).length}/${(summary?.functions?.required || []).length}`)
-          appendConsole(`- Extensions OK: ? ${(summary?.extensions?.present || []).length}/${(summary?.extensions?.required || []).length}`)
+          appendConsole('[sync] Post-sync verification:')
+          appendConsole(`- Tables OK: ${(summary?.tables?.present || []).length}/${(summary?.tables?.required || []).length}`)
+          appendConsole(`- Functions OK: ${(summary?.functions?.present || []).length}/${(summary?.functions?.required || []).length}`)
+          appendConsole(`- Extensions OK: ${(summary?.extensions?.present || []).length}/${(summary?.extensions?.required || []).length}`)
           if (hasMissing) {
-            if (missingTables.length) appendConsole(`- Missing tables: ? ${missingTables.join(', ')}`)
-            if (missingFunctions.length) appendConsole(`- Missing functions: ? ${missingFunctions.join(', ')}`)
-            if (missingExtensions.length) appendConsole(`- Missing extensions: ? ${missingExtensions.join(', ')}`)
+            if (missingTables.length) appendConsole(`- Missing tables: ${missingTables.join(', ')}`)
+            if (missingFunctions.length) appendConsole(`- Missing functions: ${missingFunctions.join(', ')}`)
+            if (missingExtensions.length) appendConsole(`- Missing extensions: ${missingExtensions.join(', ')}`)
           } else {
             appendConsole('- All required objects present')
           }
         } catch {}
       }
+      
+      // Verify cache tables exist and have data
+      appendConsole('[sync] Verifying cache tables...')
+      try {
+        // Check garden_task_daily_cache
+        const { data: gardenCache, error: gardenCacheErr } = await supabase
+          .from('garden_task_daily_cache')
+          .select('garden_id, cache_date, due_count, completed_count', { count: 'exact', head: false })
+          .limit(1)
+        
+        if (gardenCacheErr) {
+          appendConsole(`[sync] WARNING: garden_task_daily_cache table check failed: ${gardenCacheErr.message}`)
+        } else {
+          const count = gardenCache?.length || 0
+          appendConsole(`[sync] ✓ garden_task_daily_cache: ${count > 0 ? `${count} entries found` : 'table exists but empty'}`)
+        }
+        
+        // Check user_task_daily_cache
+        const { data: userCache, error: userCacheErr } = await supabase
+          .from('user_task_daily_cache')
+          .select('user_id, cache_date, total_due_count, total_completed_count', { count: 'exact', head: false })
+          .limit(1)
+        
+        if (userCacheErr) {
+          appendConsole(`[sync] WARNING: user_task_daily_cache table check failed: ${userCacheErr.message}`)
+        } else {
+          const count = userCache?.length || 0
+          appendConsole(`[sync] ✓ user_task_daily_cache: ${count > 0 ? `${count} entries found` : 'table exists but empty'}`)
+        }
+        
+        // Check if initialize_all_task_cache function exists and can be called
+        appendConsole('[sync] Verifying cache initialization function...')
+        const { data: initResult, error: initErr } = await supabase.rpc('initialize_all_task_cache')
+        
+        if (initErr) {
+          appendConsole(`[sync] WARNING: initialize_all_task_cache() failed: ${initErr.message}`)
+          appendConsole('[sync] Cache may need manual initialization. Run: SELECT initialize_all_task_cache();')
+        } else {
+          appendConsole('[sync] ✓ Cache initialization function executed successfully')
+          
+          // Re-check cache after initialization
+          await new Promise(resolve => setTimeout(resolve, 1000)) // Wait 1 second for cache to populate
+          
+          const { count: gardenCount } = await supabase
+            .from('garden_task_daily_cache')
+            .select('*', { count: 'exact', head: true })
+          
+          const { count: userCount } = await supabase
+            .from('user_task_daily_cache')
+            .select('*', { count: 'exact', head: true })
+          
+          appendConsole(`[sync] Cache status after initialization:`)
+          appendConsole(`[sync] - Garden cache entries: ${gardenCount || 0}`)
+          appendConsole(`[sync] - User cache entries: ${userCount || 0}`)
+          
+          if ((gardenCount || 0) > 0 || (userCount || 0) > 0) {
+            appendConsole('[sync] ✓ Cache successfully populated!')
+          } else {
+            appendConsole('[sync] ⚠ Cache tables exist but are empty. This is normal if you have no gardens/tasks yet.')
+          }
+        }
+      } catch (verifyErr: any) {
+        appendConsole(`[sync] Cache verification error: ${verifyErr?.message || String(verifyErr)}`)
+      }
+      
+      appendConsole('[sync] ✓ Database sync completed successfully!')
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e)
-      appendConsole(`[sync] Failed to sync schema: ? ${message}`)
+      appendConsole(`[sync] ✗ Failed to sync schema: ${message}`)
     } finally {
       setSyncing(false)
     }
