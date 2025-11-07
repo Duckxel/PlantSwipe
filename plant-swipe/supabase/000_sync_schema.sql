@@ -3636,3 +3636,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON user_task_daily_cache TO authenticated;
 GRANT EXECUTE ON FUNCTION refresh_user_task_daily_cache(uuid, date) TO authenticated;
 GRANT EXECUTE ON FUNCTION get_user_tasks_today_cached(uuid, date) TO authenticated;
 GRANT EXECUTE ON FUNCTION get_user_gardens_tasks_today_cached(uuid, date) TO authenticated;
+
+-- Initialize cache for all gardens and users (runs automatically when script executes)
+-- This ensures cache is populated immediately after schema setup
+SELECT initialize_all_task_cache();
