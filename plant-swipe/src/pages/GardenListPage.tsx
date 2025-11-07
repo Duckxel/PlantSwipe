@@ -30,7 +30,9 @@ export const GardenListPage: React.FC = () => {
   const [loadingTasks, setLoadingTasks] = React.useState(false)
   const [allPlants, setAllPlants] = React.useState<any[]>([])
   const [todayTaskOccurrences, setTodayTaskOccurrences] = React.useState<Array<{ id: string; taskId: string; gardenPlantId: string; dueAt: string; requiredCount: number; completedCount: number; completedAt: string | null; taskType?: 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'; taskEmoji?: string | null }>>([])
-  const [completionsByOcc, setCompletionsByOcc] = React.useState<Record<string, Array<{ userId: string; displayName: string | null }>>>({})
+  const [progressingOccIds, setProgressingOccIds] = React.useState<Set<string>>(new Set())
+  const [completingPlantIds, setCompletingPlantIds] = React.useState<Set<string>>(new Set())
+  const [markingAllCompleted, setMarkingAllCompleted] = React.useState(false)
 
   const reloadTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastReloadRef = React.useRef<number>(0)
@@ -722,6 +724,9 @@ export const GardenListPage: React.FC = () => {
   }, [scheduleReload, user?.id, clearLocalStorageCache])
 
   const onProgressOccurrence = React.useCallback(async (occId: string, inc: number) => {
+    // Set loading state
+    setProgressingOccIds(prev => new Set(prev).add(occId))
+    
     let broadcastGardenId: string | null = null
     const o = todayTaskOccurrences.find((x: any) => x.id === occId)
     
@@ -765,6 +770,13 @@ export const GardenListPage: React.FC = () => {
       }
       throw error
     } finally {
+      // Clear loading state
+      setProgressingOccIds(prev => {
+        const next = new Set(prev)
+        next.delete(occId)
+        return next
+      })
+      
       // Refresh in background without blocking UI
       const today = serverTodayRef.current ?? serverToday
       if (today && broadcastGardenId) {
@@ -800,9 +812,12 @@ export const GardenListPage: React.FC = () => {
         setTimeout(refreshFn, 100)
       }
     }
-  }, [allPlants, emitGardenRealtime, load, loadAllTodayOccurrences, todayTaskOccurrences, serverToday, user?.id, clearLocalStorageCache, t])
+  }, [allPlants, emitGardenRealtime, loadAllTodayOccurrences, todayTaskOccurrences, serverToday, user?.id, clearLocalStorageCache, t])
 
   const onCompleteAllForPlant = React.useCallback(async (gardenPlantId: string) => {
+    // Set loading state
+    setCompletingPlantIds(prev => new Set(prev).add(gardenPlantId))
+    
     const gp = allPlants.find((p: any) => p.id === gardenPlantId)
     const gardenId = gp?.gardenId ? String(gp.gardenId) : null
     
@@ -843,6 +858,13 @@ export const GardenListPage: React.FC = () => {
       }))
       throw error
     } finally {
+      // Clear loading state
+      setCompletingPlantIds(prev => {
+        const next = new Set(prev)
+        next.delete(gardenPlantId)
+        return next
+      })
+      
       // Refresh in background
       const today = serverTodayRef.current ?? serverToday
       if (today && gardenId) {
@@ -877,9 +899,12 @@ export const GardenListPage: React.FC = () => {
         setTimeout(refreshFn, 100)
       }
     }
-  }, [allPlants, emitGardenRealtime, load, loadAllTodayOccurrences, todayTaskOccurrences, serverToday, user?.id, clearLocalStorageCache, t])
+  }, [allPlants, emitGardenRealtime, loadAllTodayOccurrences, todayTaskOccurrences, serverToday, user?.id, clearLocalStorageCache, t])
 
   const onMarkAllCompleted = React.useCallback(async () => {
+    // Set loading state
+    setMarkingAllCompleted(true)
+    
     const affectedGardenIds = new Set<string>()
     
     // Optimistic update - mark all as completed immediately
@@ -913,6 +938,9 @@ export const GardenListPage: React.FC = () => {
       setTodayTaskOccurrences(todayTaskOccurrences as any)
       throw error
     } finally {
+      // Clear loading state
+      setMarkingAllCompleted(false)
+      
       // Refresh in background
       const today = serverTodayRef.current ?? serverToday
       if (today) {
@@ -950,7 +978,7 @@ export const GardenListPage: React.FC = () => {
         setTimeout(refreshFn, 100)
       }
     }
-  }, [allPlants, emitGardenRealtime, load, loadAllTodayOccurrences, todayTaskOccurrences, serverToday, user?.id, clearLocalStorageCache])
+  }, [allPlants, emitGardenRealtime, loadAllTodayOccurrences, todayTaskOccurrences, serverToday, user?.id, clearLocalStorageCache])
 
   const onCreate = async () => {
     if (!user?.id) return
@@ -1119,7 +1147,16 @@ export const GardenListPage: React.FC = () => {
             </Card>
             {totalTasks > totalDone && (
               <div>
-                <Button className="rounded-2xl w-full" onClick={onMarkAllCompleted}>{t('garden.markAllCompleted')}</Button>
+                <Button className="rounded-2xl w-full" onClick={onMarkAllCompleted} disabled={markingAllCompleted}>
+                  {markingAllCompleted ? (
+                    <span className="flex items-center gap-2">
+                      <span className="animate-spin">⏳</span>
+                      {t('garden.completing')}
+                    </span>
+                  ) : (
+                    t('garden.markAllCompleted')
+                  )}
+                </Button>
               </div>
             )}
             {loadingTasks && (
@@ -1146,7 +1183,21 @@ export const GardenListPage: React.FC = () => {
                         <div className="flex items-center justify-between">
                           <div className="text-sm font-medium">{gp.nickname || gp.plant?.name}</div>
                           {done < req && (
-                            <Button size="sm" className="rounded-xl" onClick={() => onCompleteAllForPlant(gp.id)}>{t('garden.completeAll')}</Button>
+                            <Button 
+                              size="sm" 
+                              className="rounded-xl" 
+                              onClick={() => onCompleteAllForPlant(gp.id)}
+                              disabled={completingPlantIds.has(gp.id)}
+                            >
+                              {completingPlantIds.has(gp.id) ? (
+                                <span className="flex items-center gap-1">
+                                  <span className="animate-spin">⏳</span>
+                                  {t('garden.completing')}
+                                </span>
+                              ) : (
+                                t('garden.completeAll')
+                              )}
+                            </Button>
                           )}
                         </div>
                         <div className="text-[11px] opacity-60">{done} / {req} {t('garden.done')}</div>
@@ -1168,7 +1219,18 @@ export const GardenListPage: React.FC = () => {
                                 {!isDone ? (
                                   <>
                                     <div className="opacity-80 text-black dark:text-white">{o.completedCount} / {o.requiredCount}</div>
-                                    <Button className="rounded-xl" size="sm" onClick={() => onProgressOccurrence(o.id, 1)} disabled={(o.completedCount || 0) >= (o.requiredCount || 1)}>+1</Button>
+                                    <Button 
+                                      className="rounded-xl" 
+                                      size="sm" 
+                                      onClick={() => onProgressOccurrence(o.id, 1)} 
+                                      disabled={(o.completedCount || 0) >= (o.requiredCount || 1) || progressingOccIds.has(o.id)}
+                                    >
+                                      {progressingOccIds.has(o.id) ? (
+                                        <span className="animate-spin">⏳</span>
+                                      ) : (
+                                        '+1'
+                                      )}
+                                    </Button>
                                   </>
                                 ) : (
                                   <div className="text-xs opacity-70 truncate max-w-[50%] text-black dark:text-white">
