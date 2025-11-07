@@ -694,37 +694,6 @@ export const AdminPage: React.FC = () => {
       if (isMountedRef.current) setHealthRefreshing(false)
     }
   }, [healthRefreshing, runHealthProbes])
-
-  // Add loading state timeouts to prevent infinite loading
-  const MAX_LOADING_TIMEOUT = 15000 // 15 seconds max loading time
-  
-  React.useEffect(() => {
-    // Set timeout for initial loading states
-    const timeoutId = setTimeout(() => {
-      if (branchesLoading) {
-        console.warn('[AdminPage] Branches loading timeout - clearing loading state')
-        setBranchesLoading(false)
-      }
-      if (registeredLoading) {
-        console.warn('[AdminPage] Registered count loading timeout - clearing loading state')
-        setRegisteredLoading(false)
-      }
-      if (onlineLoading) {
-        console.warn('[AdminPage] Online users loading timeout - clearing loading state')
-        setOnlineLoading(false)
-      }
-      if (ipsLoading) {
-        console.warn('[AdminPage] IPs loading timeout - clearing loading state')
-        setIpsLoading(false)
-      }
-      if (visitorsLoading) {
-        console.warn('[AdminPage] Visitors loading timeout - clearing loading state')
-        setVisitorsLoading(false)
-      }
-    }, MAX_LOADING_TIMEOUT)
-    
-    return () => clearTimeout(timeoutId)
-  }, [branchesLoading, registeredLoading, onlineLoading, ipsLoading, visitorsLoading])
   
   // Run health probes on initial load and periodically
   React.useEffect(() => {
