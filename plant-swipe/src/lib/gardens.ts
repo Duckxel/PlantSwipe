@@ -546,17 +546,16 @@ export async function getGardenPlantsMinimal(gardenIds: string[], limitPerGarden
 }
 
 export async function userHasUnfinishedTasksToday(userId: string): Promise<boolean> {
-  const gardens = await getUserGardens(userId)
-  if (gardens.length === 0) return false
-  const nowIso = await fetchServerNowISO()
-  const today = nowIso.slice(0, 10)
-  for (const g of gardens) {
-    try {
-      const prog = await getGardenTodayProgress(g.id, today)
-      if (prog.due > prog.completed) return true
-    } catch {}
+  // Use cache for instant check - FASTEST approach
+  const today = new Date().toISOString().slice(0, 10)
+  try {
+    const tasks = await getUserTasksTodayCached(userId, today)
+    // Has unfinished tasks if there are gardens with remaining tasks OR if due > completed
+    return tasks.gardensWithRemainingTasks > 0 || tasks.totalDueCount > tasks.totalCompletedCount
+  } catch {
+    // Fallback: return false on error (don't show notification)
+    return false
   }
-  return false
 }
 
 export async function getGardenInventory(gardenId: string): Promise<Array<{ plantId: string; seedsOnHand: number; plantsOnHand: number; plant?: Plant | null }>> {
