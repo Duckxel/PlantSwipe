@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useAuth } from '@/context/AuthContext'
-import { getUserGardens, createGarden, fetchServerNowISO, getGardenTodayProgressUltraFast, getGardensTodayProgressBatchCached, getGardenPlantsMinimal, listGardenTasksMinimal, listOccurrencesForTasks, listOccurrencesForMultipleGardens, resyncTaskOccurrencesForGarden, progressTaskOccurrence, listCompletionsForOccurrences, logGardenActivity, getGardenTodayOccurrencesCached, getUserGardensTasksTodayCached } from '@/lib/gardens'
+import { getUserGardens, createGarden, fetchServerNowISO, getGardenTodayProgressUltraFast, getGardensTodayProgressBatchCached, getGardenPlantsMinimal, listGardenTasksMinimal, listOccurrencesForTasks, listOccurrencesForMultipleGardens, resyncTaskOccurrencesForGarden, progressTaskOccurrence, listCompletionsForOccurrences, logGardenActivity, getGardenTodayOccurrencesCached, getUserGardensTasksTodayCached, refreshGardenTaskCache, refreshUserTaskCache } from '@/lib/gardens'
 import { supabase } from '@/lib/supabaseClient'
 import { addGardenBroadcastListener, broadcastGardenUpdate, type GardenRealtimeKind } from '@/lib/realtime'
 import type { Garden } from '@/types/garden'
@@ -481,53 +481,117 @@ export const GardenListPage: React.FC = () => {
     return () => { try { es?.close() } catch {} }
   }, [scheduleReload, user?.id])
 
-  // Realtime: Database triggers update cache automatically, so we just read from cache (INSTANT)
+  // Realtime: Refresh cache on changes, then read from cache (FAST - cache-first approach)
   React.useEffect(() => {
     if (!user?.id) return
     const today = serverTodayRef.current ?? new Date().toISOString().slice(0, 10)
     
-    // Helper to read from cache and update UI (instant - cache is already updated by triggers)
-    const updateUIFromCache = () => {
-      // Read from cache immediately (triggers have already updated it)
-      getUserGardensTasksTodayCached(user.id, today).then((progMap) => {
-        const converted: Record<string, { due: number; completed: number }> = {}
-        for (const [gid, prog] of Object.entries(progMap)) {
-          converted[gid] = { due: prog.due, completed: prog.completed }
+    // Helper to refresh cache and update UI from cache
+    const refreshCacheAndUpdate = async (gardenId?: string) => {
+      try {
+        // Refresh cache explicitly to ensure it's up-to-date (non-blocking)
+        const promises: Promise<any>[] = []
+        if (gardenId) {
+          promises.push(refreshGardenTaskCache(gardenId, today))
         }
-        setProgressByGarden(converted)
-      }).catch(() => {})
+        promises.push(refreshUserTaskCache(user.id, today))
+        
+        // Wait for cache refresh, then read from cache
+        await Promise.all(promises).catch(() => {}) // Don't fail if refresh fails
+        
+        // Read from cache and update UI (instant)
+        getUserGardensTasksTodayCached(user.id, today).then((progMap) => {
+          const converted: Record<string, { due: number; completed: number }> = {}
+          for (const [gid, prog] of Object.entries(progMap)) {
+            converted[gid] = { due: prog.due, completed: prog.completed }
+          }
+          setProgressByGarden(converted)
+        }).catch(() => {})
+      } catch {}
     }
     
     const ch = supabase
       .channel(`rt-gardens-for-${user.id}`)
       // Membership changes - reload garden list (metadata changed)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_members', filter: `user_id=eq.${user.id}` }, () => {
+        refreshUserTaskCache(user.id, today).catch(() => {})
         scheduleReload() // Need to reload garden list
       })
       // Garden metadata changes - reload garden list only
       .on('postgres_changes', { event: '*', schema: 'public', table: 'gardens' }, () => {
         scheduleReload() // Need to reload garden metadata
       })
-      // Task/occurrence changes - triggers update cache automatically, just read from cache (FASTEST)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_task_occurrences' }, () => {
-        // Database triggers have already updated cache synchronously
-        // Just read from cache and update UI (instant)
-        setTimeout(updateUIFromCache, 50) // Small delay to ensure trigger completed
-        // Clear task sidebar cache
-        taskDataCacheRef.current = null
-        clearLocalStorageCache(`garden_tasks_cache_`)
+      // Task/occurrence changes - refresh cache and update UI (FAST)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_task_occurrences' }, (payload) => {
+        // Get garden_id from the change
+        const occurrenceId = payload.new?.id || payload.old?.id
+        if (occurrenceId) {
+          // Find garden_id from occurrence (via task) - fast query
+          supabase
+            .from('garden_plant_task_occurrences')
+            .select('task_id, garden_plant_tasks!inner(garden_id)')
+            .eq('id', occurrenceId)
+            .single()
+            .then(({ data }) => {
+              const gardenId = data?.garden_plant_tasks ? (data.garden_plant_tasks as any).garden_id : null
+              if (gardenId) {
+                refreshCacheAndUpdate(gardenId)
+              } else {
+                // Fallback: refresh all user gardens cache
+                refreshCacheAndUpdate()
+              }
+              // Clear task sidebar cache
+              taskDataCacheRef.current = null
+              clearLocalStorageCache(`garden_tasks_cache_`)
+              // Reload task sidebar
+              setTimeout(() => {
+                loadAllTodayOccurrences(undefined, undefined, false).catch(() => {})
+              }, 200)
+            })
+            .catch(() => {
+              // Fallback: refresh all user gardens cache
+              refreshCacheAndUpdate()
+              taskDataCacheRef.current = null
+              clearLocalStorageCache(`garden_tasks_cache_`)
+            })
+        } else {
+          // No occurrence ID - refresh all
+          refreshCacheAndUpdate()
+          taskDataCacheRef.current = null
+          clearLocalStorageCache(`garden_tasks_cache_`)
+        }
       })
-      // Task changes - triggers update cache automatically
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_tasks' }, () => {
-        setTimeout(updateUIFromCache, 50)
-        taskDataCacheRef.current = null
-        clearLocalStorageCache(`garden_tasks_cache_`)
+      // Task changes - refresh cache for affected gardens
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_tasks' }, (payload) => {
+        const gardenId = payload.new?.garden_id || payload.old?.garden_id
+        if (gardenId) {
+          refreshCacheAndUpdate(gardenId)
+          taskDataCacheRef.current = null
+          clearLocalStorageCache(`garden_tasks_cache_`)
+          setTimeout(() => {
+            loadAllTodayOccurrences(undefined, undefined, false).catch(() => {})
+          }, 200)
+        } else {
+          refreshCacheAndUpdate()
+          taskDataCacheRef.current = null
+          clearLocalStorageCache(`garden_tasks_cache_`)
+        }
       })
-      // Plant changes - triggers update cache automatically
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plants' }, () => {
-        setTimeout(updateUIFromCache, 50)
-        taskDataCacheRef.current = null
-        clearLocalStorageCache(`garden_tasks_cache_`)
+      // Plant changes - refresh cache for affected gardens
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plants' }, (payload) => {
+        const gardenId = payload.new?.garden_id || payload.old?.garden_id
+        if (gardenId) {
+          refreshCacheAndUpdate(gardenId)
+          taskDataCacheRef.current = null
+          clearLocalStorageCache(`garden_tasks_cache_`)
+          setTimeout(() => {
+            loadAllTodayOccurrences(undefined, undefined, false).catch(() => {})
+          }, 200)
+        } else {
+          refreshCacheAndUpdate()
+          taskDataCacheRef.current = null
+          clearLocalStorageCache(`garden_tasks_cache_`)
+        }
       })
 
     const subscription = ch.subscribe()
@@ -535,7 +599,7 @@ export const GardenListPage: React.FC = () => {
     return () => {
       try { supabase.removeChannel(ch) } catch {}
     }
-  }, [user?.id, clearLocalStorageCache])
+  }, [user?.id, clearLocalStorageCache, loadAllTodayOccurrences])
 
   // Defer task loading until after gardens are displayed (non-blocking)
   // Use requestIdleCallback for better performance when browser is idle
@@ -616,6 +680,27 @@ export const GardenListPage: React.FC = () => {
     addGardenBroadcastListener((message) => {
       if (message.actorId && user?.id && message.actorId === user.id) return
       if (!gardenIdsRef.current.has(message.gardenId)) return
+      
+      // Refresh cache and update UI when we receive a broadcast
+      const today = serverTodayRef.current ?? new Date().toISOString().slice(0, 10)
+      refreshGardenTaskCache(message.gardenId, today).catch(() => {})
+      if (user?.id) {
+        refreshUserTaskCache(user.id, today).catch(() => {})
+      }
+      
+      // Read from cache and update UI
+      if (user?.id) {
+        setTimeout(() => {
+          getUserGardensTasksTodayCached(user.id, today).then((progMap) => {
+            const converted: Record<string, { due: number; completed: number }> = {}
+            for (const [gid, prog] of Object.entries(progMap)) {
+              converted[gid] = { due: prog.due, completed: prog.completed }
+            }
+            setProgressByGarden(converted)
+          }).catch(() => {})
+        }, 100)
+      }
+      
       // Clear cache on broadcast updates
       taskDataCacheRef.current = null
       clearLocalStorageCache(`garden_tasks_cache_`)
@@ -634,7 +719,7 @@ export const GardenListPage: React.FC = () => {
       active = false
       if (teardown) teardown().catch(() => {})
     }
-  }, [scheduleReload, user?.id])
+  }, [scheduleReload, user?.id, clearLocalStorageCache])
 
   const onProgressOccurrence = React.useCallback(async (occId: string, inc: number) => {
     let broadcastGardenId: string | null = null
