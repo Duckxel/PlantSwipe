@@ -27,6 +27,7 @@ export const GardenListPage: React.FC = () => {
   const [imageUrl, setImageUrl] = React.useState('')
   const [submitting, setSubmitting] = React.useState(false)
   const [progressByGarden, setProgressByGarden] = React.useState<Record<string, { due: number; completed: number }>>({})
+  const [memberCountsByGarden, setMemberCountsByGarden] = React.useState<Record<string, number>>({})
   const [serverToday, setServerToday] = React.useState<string | null>(null)
   const [loadingTasks, setLoadingTasks] = React.useState(false)
   const [mismatchReloadAttempts, setMismatchReloadAttempts] = React.useState(0)
@@ -173,6 +174,26 @@ export const GardenListPage: React.FC = () => {
               setProgressByGarden(progMap)
             }).catch(() => {})
           }
+          
+          // Fetch member counts for fresh gardens
+          if (freshData.length > 0) {
+            const gardenIds = freshData.map(g => g.id)
+            supabase
+              .from('garden_members')
+              .select('garden_id')
+              .in('garden_id', gardenIds)
+              .then(({ data: memberRows }) => {
+                if (memberRows) {
+                  const counts: Record<string, number> = {}
+                  for (const row of memberRows) {
+                    const gid = String(row.garden_id)
+                    counts[gid] = (counts[gid] || 0) + 1
+                  }
+                  setMemberCountsByGarden(counts)
+                }
+              })
+              .catch(() => {})
+          }
         }).catch(() => {
           // If background fetch fails, keep using cached data
         })
@@ -196,6 +217,26 @@ export const GardenListPage: React.FC = () => {
           }).catch(() => {
             setProgressByGarden({})
           })
+        }
+        
+        // Fetch member counts for cached gardens
+        if (data.length > 0) {
+          const gardenIds = data.map(g => g.id)
+          supabase
+            .from('garden_members')
+            .select('garden_id')
+            .in('garden_id', gardenIds)
+            .then(({ data: memberRows }) => {
+              if (memberRows) {
+                const counts: Record<string, number> = {}
+                for (const row of memberRows) {
+                  const gid = String(row.garden_id)
+                  counts[gid] = (counts[gid] || 0) + 1
+                }
+                setMemberCountsByGarden(counts)
+              }
+            })
+            .catch(() => {})
         }
         
         return
@@ -223,6 +264,23 @@ export const GardenListPage: React.FC = () => {
       const serverTime = new Date(nowIso).getTime()
       const offset = serverTime - clientTime
       setLocalStorageCache('server_time_offset', { offset }, 24 * 60 * 60 * 1000) // 24 hours
+      
+      // Fetch member counts for all gardens
+      if (data.length > 0) {
+        const gardenIds = data.map(g => g.id)
+        const { data: memberRows } = await supabase
+          .from('garden_members')
+          .select('garden_id')
+          .in('garden_id', gardenIds)
+        if (memberRows) {
+          const counts: Record<string, number> = {}
+          for (const row of memberRows) {
+            const gid = String(row.garden_id)
+            counts[gid] = (counts[gid] || 0) + 1
+          }
+          setMemberCountsByGarden(counts)
+        }
+      }
       
       // Set loading to false immediately so gardens render
       setLoading(false)
@@ -1268,15 +1326,22 @@ export const GardenListPage: React.FC = () => {
           {!loading && !error && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {gardens.map((g, idx) => (
-                <Card key={g.id} className={`rounded-2xl overflow-hidden relative h-40 ${dragIndex === idx ? 'ring-2 ring-black' : ''}`} draggable onDragStart={() => setDragIndex(idx)} onDragOver={(e) => e.preventDefault()} onDrop={() => {
-                  if (dragIndex === null || dragIndex === idx) return;
-                  const arr = gardens.slice()
-                  const [moved] = arr.splice(dragIndex, 1)
-                  arr.splice(idx, 0, moved)
-                  setGardens(arr)
-                  setDragIndex(null)
-                }}>
-                  {progressByGarden[g.id] ? (
+                <Card 
+                  key={g.id} 
+                  className={`group rounded-2xl overflow-hidden relative transition-all duration-300 hover:shadow-xl hover:scale-[1.02] cursor-pointer border-2 hover:border-accent/50 ${dragIndex === idx ? 'ring-2 ring-black' : ''}`} 
+                  draggable 
+                  onDragStart={() => setDragIndex(idx)} 
+                  onDragOver={(e) => e.preventDefault()} 
+                  onDrop={() => {
+                    if (dragIndex === null || dragIndex === idx) return;
+                    const arr = gardens.slice()
+                    const [moved] = arr.splice(dragIndex, 1)
+                    arr.splice(idx, 0, moved)
+                    setGardens(arr)
+                    setDragIndex(null)
+                  }}
+                >
+                  {progressByGarden[g.id] && (
                     (() => {
                       const { due, completed } = progressByGarden[g.id]
                       const done = due === 0 || completed >= due
@@ -1284,31 +1349,64 @@ export const GardenListPage: React.FC = () => {
                       const color = done ? 'bg-emerald-500 text-white' : inProgress ? 'bg-amber-500 text-white' : 'bg-red-500 text-white'
                       const label = done ? t('garden.allDone') : `${completed} / ${due}`
                       return (
-                        <div className={`pointer-events-none absolute top-2 right-2 rounded-xl px-2 py-0.5 text-xs font-medium shadow z-10 ${color}`}>
+                        <div className={`pointer-events-none absolute top-3 right-3 rounded-xl px-3 py-1.5 text-sm font-semibold shadow-lg z-20 backdrop-blur-sm ${color}`}>
                           {label}
                         </div>
                       )
                     })()
-                  ) : (
+                  )}
+                  {!progressByGarden[g.id] && (
                     // Show loading indicator if cache is being populated
                     <div className="pointer-events-none absolute top-2 right-2 rounded-xl px-2 py-0.5 text-xs font-medium shadow z-10 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400">
                       ...
                     </div>
                   )}
-                  <Link to={`/garden/${g.id}`} className="grid grid-cols-3 gap-0 w-full h-full text-left">
-                    <div className="col-span-1 rounded-l-2xl overflow-hidden bg-stone-100 dark:bg-[#252526]">
+                  <Link to={`/garden/${g.id}`} className="block w-full h-full">
+                    <div className="relative aspect-[5/3] overflow-hidden bg-gradient-to-br from-stone-100 to-stone-200 dark:from-[#2d2d30] dark:to-[#252526]">
                       {g.coverImageUrl ? (
                         <img
                           src={g.coverImageUrl}
                           alt={g.name}
-                          className="w-full h-full object-cover object-center"
+                          className="absolute inset-0 w-full h-full object-cover object-center transition-transform duration-300 group-hover:scale-105"
                           loading="lazy"
                         />
-                      ) : null}
+                      ) : (
+                        <div className="absolute inset-0 w-full h-full flex items-center justify-center">
+                          <div className="text-6xl opacity-30">🌱</div>
+                        </div>
+                      )}
+                      {/* Gradient overlay for better text readability */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                     </div>
-                    <div className="col-span-2 p-4 flex flex-col justify-center">
-                      <div className="font-medium truncate">{g.name}</div>
-                      <div className="text-xs opacity-60 mt-1">{t('garden.created')} {new Date(g.createdAt).toLocaleDateString()}</div>
+                    <div className="p-4 bg-card">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-bold text-xl truncate group-hover:text-accent transition-colors mb-2">
+                            {g.name}
+                          </h3>
+                          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                            <div className="flex items-center gap-1.5">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                              </svg>
+                              <span>{memberCountsByGarden[g.id] ?? 1} {memberCountsByGarden[g.id] === 1 ? t('garden.member') : t('garden.members')}</span>
+                            </div>
+                            {(g.streak ?? 0) > 0 && (
+                              <div className="flex items-center gap-1.5">
+                                <svg className="w-4 h-4 text-orange-500" fill="currentColor" viewBox="0 0 20 20">
+                                  <path d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" />
+                                </svg>
+                                <span className="font-medium">{g.streak} {t('garden.streak')}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex-shrink-0 text-muted-foreground group-hover:text-accent transition-colors">
+                          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </div>
+                      </div>
                     </div>
                   </Link>
                 </Card>
