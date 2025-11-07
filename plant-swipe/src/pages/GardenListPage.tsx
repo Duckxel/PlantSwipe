@@ -29,6 +29,8 @@ export const GardenListPage: React.FC = () => {
   const [progressByGarden, setProgressByGarden] = React.useState<Record<string, { due: number; completed: number }>>({})
   const [serverToday, setServerToday] = React.useState<string | null>(null)
   const [loadingTasks, setLoadingTasks] = React.useState(false)
+  const [mismatchReloadAttempts, setMismatchReloadAttempts] = React.useState(0)
+  const mismatchReloadAttemptsRef = React.useRef(0)
   const [allPlants, setAllPlants] = React.useState<any[]>([])
   const [todayTaskOccurrences, setTodayTaskOccurrences] = React.useState<Array<{ id: string; taskId: string; gardenPlantId: string; dueAt: string; requiredCount: number; completedCount: number; completedAt: string | null; taskType?: 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'; taskEmoji?: string | null }>>([])
   const [progressingOccIds, setProgressingOccIds] = React.useState<Set<string>>(new Set())
@@ -1126,13 +1128,26 @@ export const GardenListPage: React.FC = () => {
   // This runs whenever progress or task list changes
   React.useEffect(() => {
     if (loadingTasks) return // Don't check while loading
-    if (todayTaskOccurrences.length > 0) return // Tasks exist, no mismatch
+    if (todayTaskOccurrences.length > 0) {
+      // Reset mismatch counter when tasks are found
+      mismatchReloadAttemptsRef.current = 0
+      return
+    }
+    
+    // Prevent infinite loops - max 3 reload attempts
+    if (mismatchReloadAttemptsRef.current >= 3) {
+      console.warn('[GardenList] Mismatch detected but max reload attempts reached, stopping')
+      return
+    }
     
     // Check if progress shows tasks exist
     const totalDueFromProgress = Object.values(progressByGarden).reduce((sum, prog) => sum + (prog.due || 0), 0)
     if (totalDueFromProgress > 0) {
       // Progress shows tasks exist but task list is empty - cache is stale!
-      console.warn('[GardenList] Mismatch detected: progress shows', totalDueFromProgress, 'tasks but list is empty - forcing reload')
+      console.warn('[GardenList] Mismatch detected: progress shows', totalDueFromProgress, 'tasks but list is empty - forcing reload (attempt', mismatchReloadAttemptsRef.current + 1, ')')
+      mismatchReloadAttemptsRef.current += 1
+      setMismatchReloadAttempts(mismatchReloadAttemptsRef.current)
+      
       // Clear all caches immediately
       taskDataCacheRef.current = null
       clearLocalStorageCache(`garden_tasks_cache_`)
@@ -1155,16 +1170,25 @@ export const GardenListPage: React.FC = () => {
     }
   }, [progressByGarden, todayTaskOccurrences.length, loadingTasks, loadAllTodayOccurrences, clearLocalStorageCache, serverToday])
   
-  // Also check mismatch periodically (every 2 seconds) as a fail-safe
+  // Also check mismatch periodically (every 5 seconds) as a fail-safe, but only if no recent attempts
   React.useEffect(() => {
     if (!user?.id) return
     const interval = setInterval(() => {
       if (loadingTasks) return
-      if (todayTaskOccurrences.length > 0) return
+      if (todayTaskOccurrences.length > 0) {
+        mismatchReloadAttemptsRef.current = 0
+        return
+      }
+      
+      // Don't trigger if we've already tried recently
+      if (mismatchReloadAttemptsRef.current >= 3) return
       
       const totalDueFromProgress = Object.values(progressByGarden).reduce((sum, prog) => sum + (prog.due || 0), 0)
       if (totalDueFromProgress > 0) {
         console.warn('[GardenList] Periodic mismatch check: progress shows tasks but list is empty - forcing reload')
+        mismatchReloadAttemptsRef.current += 1
+        setMismatchReloadAttempts(mismatchReloadAttemptsRef.current)
+        
         taskDataCacheRef.current = null
         clearLocalStorageCache(`garden_tasks_cache_`)
         const today = serverTodayRef.current ?? serverToday
@@ -1181,7 +1205,7 @@ export const GardenListPage: React.FC = () => {
           setLoadingTasks(false)
         })
       }
-    }, 2000) // Check every 2 seconds
+    }, 5000) // Check every 5 seconds (less aggressive)
     
     return () => clearInterval(interval)
   }, [user?.id, progressByGarden, todayTaskOccurrences.length, loadingTasks, loadAllTodayOccurrences, clearLocalStorageCache, serverToday])
@@ -1338,7 +1362,12 @@ export const GardenListPage: React.FC = () => {
               </div>
             )}
             {loadingTasks && (
-              <Card className="rounded-2xl p-4 text-sm opacity-70">{t('garden.loadingTasks')}</Card>
+              <Card className="rounded-2xl p-4 text-sm opacity-70">
+                {t('garden.loadingTasks')}
+                {mismatchReloadAttempts > 0 && (
+                  <div className="text-xs opacity-60 mt-1">Reload attempt {mismatchReloadAttempts}/3</div>
+                )}
+              </Card>
             )}
             {!loadingTasks && gardensWithTasks.length === 0 && todayTaskOccurrences.length === 0 && (
               <Card className="rounded-2xl p-4">
@@ -1349,6 +1378,9 @@ export const GardenListPage: React.FC = () => {
                     className="rounded-xl w-full mt-2" 
                     variant="outline"
                     onClick={() => {
+                      // Reset mismatch counter
+                      mismatchReloadAttemptsRef.current = 0
+                      setMismatchReloadAttempts(0)
                       // Clear all caches and force reload
                       taskDataCacheRef.current = null
                       clearLocalStorageCache(`garden_tasks_cache_`)
@@ -1372,7 +1404,7 @@ export const GardenListPage: React.FC = () => {
                 )}
               </Card>
             )}
-            {!loadingTasks && gardensWithTasks.map((gw) => (
+            {!loadingTasks && gardensWithTasks.length > 0 && gardensWithTasks.map((gw) => (
               <Card key={gw.gardenId} className="rounded-2xl p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
