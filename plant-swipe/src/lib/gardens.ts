@@ -1501,9 +1501,30 @@ export async function getGardenTodayProgressCached(gardenId: string, dayIso: str
       .maybeSingle()
     
     if (!error && data) {
+      const due = Number(data.due_count ?? 0)
+      const completed = Number(data.completed_count ?? 0)
+      
+      // Verify cache: if cache says no tasks, verify by computing from real data
+      if (due === 0 && completed === 0 && Boolean(data.all_tasks_done ?? true)) {
+        // Cache says no tasks - verify this is correct
+        const verified = await getGardenTodayProgressUltraFast(gardenId, dayIso)
+        if (verified.due > 0 || verified.completed > 0) {
+          // Cache is wrong - use real data and trigger refresh
+          const hasRemaining = verified.due > verified.completed
+          setTimeout(() => {
+            refreshGardenTaskCache(gardenId, dayIso).catch(() => {})
+          }, 0)
+          return {
+            ...verified,
+            hasRemainingTasks: hasRemaining,
+            allTasksDone: !hasRemaining && verified.due > 0,
+          }
+        }
+      }
+      
       return {
-        due: Number(data.due_count ?? 0),
-        completed: Number(data.completed_count ?? 0),
+        due,
+        completed,
         hasRemainingTasks: Boolean(data.has_remaining_tasks ?? false),
         allTasksDone: Boolean(data.all_tasks_done ?? true),
       }
@@ -1512,18 +1533,24 @@ export async function getGardenTodayProgressCached(gardenId: string, dayIso: str
     // Fallback to RPC if cache miss
   }
   
-  // Fallback: use RPC function
+  // Fallback: use RPC function (computes from real data)
   const prog = await getGardenTodayProgressUltraFast(gardenId, dayIso)
+  const hasRemaining = prog.due > prog.completed
+  // Trigger background cache refresh
+  setTimeout(() => {
+    refreshGardenTaskCache(gardenId, dayIso).catch(() => {})
+  }, 0)
   return {
     ...prog,
-    hasRemainingTasks: prog.due > prog.completed,
-    allTasksDone: prog.due === 0 || prog.completed >= prog.due,
+    hasRemainingTasks: hasRemaining,
+    allTasksDone: !hasRemaining && prog.due > 0,
   }
 }
 
 /**
  * Get batched progress for multiple gardens (DIRECT cache read - FASTEST)
  * Directly queries cache table without RPC overhead
+ * WITH FALLBACK: Verifies cache correctness and computes from real data if cache is wrong
  */
 export async function getGardensTodayProgressBatchCached(gardenIds: string[], dayIso: string): Promise<Record<string, { due: number; completed: number; hasRemainingTasks?: boolean; allTasksDone?: boolean }>> {
   if (gardenIds.length === 0) return {}
@@ -1543,30 +1570,75 @@ export async function getGardensTodayProgressBatchCached(gardenIds: string[], da
     if (!cacheErr && cacheData) {
       for (const row of cacheData) {
         const gid = String(row.garden_id)
+        const due = Number(row.due_count ?? 0)
+        const completed = Number(row.completed_count ?? 0)
         result[gid] = {
-          due: Number(row.due_count ?? 0),
-          completed: Number(row.completed_count ?? 0),
+          due,
+          completed,
           hasRemainingTasks: Boolean(row.has_remaining_tasks ?? false),
           allTasksDone: Boolean(row.all_tasks_done ?? true),
         }
       }
     }
     
-    // Fill in missing gardens with zeros (immediate return - no computation)
+    // Fill in missing gardens - VERIFY by computing from real data
+    const gardensToVerify: string[] = []
     for (const gid of gardenIds) {
       if (!result[gid]) {
-        result[gid] = { due: 0, completed: 0, hasRemainingTasks: false, allTasksDone: true }
+        gardensToVerify.push(gid)
+      } else {
+        // Verify cache: if cache says all done but we suspect there might be tasks, verify
+        const cached = result[gid]
+        if (cached.due === 0 && cached.completed === 0 && cached.allTasksDone) {
+          gardensToVerify.push(gid)
+        }
+      }
+    }
+    
+    // Compute from real data for gardens without cache or suspicious cache
+    if (gardensToVerify.length > 0) {
+      const verifiedProg = await getGardensTodayProgressBatch(gardensToVerify, dayIso)
+      for (const gid of gardensToVerify) {
+        const prog = verifiedProg[gid] || { due: 0, completed: 0 }
+        const hasRemaining = prog.due > prog.completed
+        result[gid] = {
+          due: prog.due,
+          completed: prog.completed,
+          hasRemainingTasks: hasRemaining,
+          allTasksDone: !hasRemaining && prog.due > 0,
+        }
+        // Trigger background cache refresh for missing/wrong cache
+        setTimeout(() => {
+          refreshGardenTaskCache(gid, dayIso).catch(() => {})
+        }, 0)
       }
     }
     
     return result
   } catch {
-    // On error, return zeros for all gardens immediately
-    const result: Record<string, { due: number; completed: number; hasRemainingTasks?: boolean; allTasksDone?: boolean }> = {}
-    for (const gid of gardenIds) {
-      result[gid] = { due: 0, completed: 0, hasRemainingTasks: false, allTasksDone: true }
+    // On error, compute from real data as fallback
+    try {
+      const verifiedProg = await getGardensTodayProgressBatch(gardenIds, dayIso)
+      const result: Record<string, { due: number; completed: number; hasRemainingTasks?: boolean; allTasksDone?: boolean }> = {}
+      for (const gid of gardenIds) {
+        const prog = verifiedProg[gid] || { due: 0, completed: 0 }
+        const hasRemaining = prog.due > prog.completed
+        result[gid] = {
+          due: prog.due,
+          completed: prog.completed,
+          hasRemainingTasks: hasRemaining,
+          allTasksDone: !hasRemaining && prog.due > 0,
+        }
+      }
+      return result
+    } catch {
+      // Final fallback: return zeros for all gardens
+      const result: Record<string, { due: number; completed: number; hasRemainingTasks?: boolean; allTasksDone?: boolean }> = {}
+      for (const gid of gardenIds) {
+        result[gid] = { due: 0, completed: 0, hasRemainingTasks: false, allTasksDone: true }
+      }
+      return result
     }
-    return result
   }
 }
 
@@ -1808,6 +1880,7 @@ export async function gardensHaveRemainingTasks(gardenIds: string[], dayIso?: st
 /**
  * Get user's total task counts across all gardens (DIRECT cache read - FASTEST)
  * Directly queries cache tables without RPC overhead
+ * WITH FALLBACK: Verifies cache correctness and computes from real data if cache is wrong
  */
 export async function getUserTasksTodayCached(userId: string, dayIso?: string): Promise<{
   totalDueCount: number
@@ -1827,9 +1900,60 @@ export async function getUserTasksTodayCached(userId: string, dayIso?: string): 
       .maybeSingle()
     
     if (!userCacheErr && userCache) {
+      const totalDue = Number(userCache.total_due_count ?? 0)
+      const totalCompleted = Number(userCache.total_completed_count ?? 0)
+      
+      // Verify cache: if cache says no tasks, verify by checking garden cache
+      if (totalDue === 0 && totalCompleted === 0) {
+        // Cache says no tasks - verify this is correct by checking garden cache
+        const { data: memberships } = await supabase
+          .from('garden_members')
+          .select('garden_id')
+          .eq('user_id', userId)
+        
+        if (memberships && memberships.length > 0) {
+          const gardenIds = memberships.map((m: any) => m.garden_id)
+          const { data: gardenCache } = await supabase
+            .from('garden_task_daily_cache')
+            .select('due_count, completed_count, has_remaining_tasks')
+            .in('garden_id', gardenIds)
+            .eq('cache_date', date)
+          
+          // If garden cache shows tasks but user cache says zero, compute from garden cache
+          if (gardenCache && gardenCache.length > 0) {
+            let verifiedDue = 0
+            let verifiedCompleted = 0
+            let gardensWithRemaining = 0
+            
+            for (const row of gardenCache) {
+              verifiedDue += Number(row.due_count ?? 0)
+              verifiedCompleted += Number(row.completed_count ?? 0)
+              if (row.has_remaining_tasks) {
+                gardensWithRemaining++
+              }
+            }
+            
+            // If garden cache shows different values, use garden cache (more accurate)
+            if (verifiedDue > 0 || verifiedCompleted > 0) {
+              // Trigger background refresh of user cache
+              setTimeout(() => {
+                refreshUserTaskCache(userId, date).catch(() => {})
+              }, 0)
+              
+              return {
+                totalDueCount: verifiedDue,
+                totalCompletedCount: verifiedCompleted,
+                gardensWithRemainingTasks: gardensWithRemaining,
+                totalGardens: gardenIds.length,
+              }
+            }
+          }
+        }
+      }
+      
       return {
-        totalDueCount: Number(userCache.total_due_count ?? 0),
-        totalCompletedCount: Number(userCache.total_completed_count ?? 0),
+        totalDueCount: totalDue,
+        totalCompletedCount: totalCompleted,
         gardensWithRemainingTasks: Number(userCache.gardens_with_remaining_tasks ?? 0),
         totalGardens: Number(userCache.total_gardens ?? 0),
       }
@@ -1854,7 +1978,7 @@ export async function getUserTasksTodayCached(userId: string, dayIso?: string): 
       .in('garden_id', gardenIds)
       .eq('cache_date', date)
     
-    if (!gardenCacheErr && gardenCache) {
+    if (!gardenCacheErr && gardenCache && gardenCache.length > 0) {
       let totalDue = 0
       let totalCompleted = 0
       let gardensWithRemaining = 0
@@ -1880,14 +2004,69 @@ export async function getUserTasksTodayCached(userId: string, dayIso?: string): 
       }
     }
     
-    // If no cache exists, return zeros
-    // Cache refresh will happen automatically via triggers
+    // If no cache exists, COMPUTE FROM REAL DATA (fail-safe)
+    // This ensures we never show wrong information
+    const verifiedProg = await getGardensTodayProgressBatch(gardenIds, date)
+    let totalDue = 0
+    let totalCompleted = 0
+    let gardensWithRemaining = 0
+    
+    for (const gid of gardenIds) {
+      const prog = verifiedProg[gid] || { due: 0, completed: 0 }
+      totalDue += prog.due
+      totalCompleted += prog.completed
+      if (prog.due > prog.completed) {
+        gardensWithRemaining++
+      }
+    }
+    
+    // Trigger background cache refresh (non-blocking)
     setTimeout(() => {
       refreshUserTaskCache(userId, date).catch(() => {})
+      gardenIds.forEach(gid => {
+        refreshGardenTaskCache(gid, date).catch(() => {})
+      })
     }, 0)
-    return { totalDueCount: 0, totalCompletedCount: 0, gardensWithRemainingTasks: 0, totalGardens: gardenIds.length }
+    
+    return {
+      totalDueCount: totalDue,
+      totalCompletedCount: totalCompleted,
+      gardensWithRemainingTasks: gardensWithRemaining,
+      totalGardens: gardenIds.length,
+    }
   } catch {
-    // On error, return zeros
+    // On error, try to compute from real data as fallback
+    try {
+      const { data: memberships } = await supabase
+        .from('garden_members')
+        .select('garden_id')
+        .eq('user_id', userId)
+      
+      if (memberships && memberships.length > 0) {
+        const gardenIds = memberships.map((m: any) => m.garden_id)
+        const verifiedProg = await getGardensTodayProgressBatch(gardenIds, date)
+        let totalDue = 0
+        let totalCompleted = 0
+        let gardensWithRemaining = 0
+        
+        for (const gid of gardenIds) {
+          const prog = verifiedProg[gid] || { due: 0, completed: 0 }
+          totalDue += prog.due
+          totalCompleted += prog.completed
+          if (prog.due > prog.completed) {
+            gardensWithRemaining++
+          }
+        }
+        
+        return {
+          totalDueCount: totalDue,
+          totalCompletedCount: totalCompleted,
+          gardensWithRemainingTasks: gardensWithRemaining,
+          totalGardens: gardenIds.length,
+        }
+      }
+    } catch {}
+    // Final fallback: return zeros
     return { totalDueCount: 0, totalCompletedCount: 0, gardensWithRemainingTasks: 0, totalGardens: 0 }
   }
 }
@@ -1895,6 +2074,7 @@ export async function getUserTasksTodayCached(userId: string, dayIso?: string): 
 /**
  * Get per-garden task counts for a user (DIRECT cache read - FASTEST)
  * Directly queries cache tables without RPC overhead
+ * WITH FALLBACK: Verifies cache correctness and computes from real data if cache is wrong
  */
 export async function getUserGardensTasksTodayCached(userId: string, dayIso?: string): Promise<Record<string, {
   gardenName: string
@@ -1950,32 +2130,94 @@ export async function getUserGardensTasksTodayCached(userId: string, dayIso?: st
     if (!cacheErr && filteredCache.length > 0) {
       for (const row of filteredCache) {
         const gid = String(row.garden_id)
+        const due = Number(row.due_count ?? 0)
+        const completed = Number(row.completed_count ?? 0)
         result[gid] = {
           gardenName: gardenNameMap[gid] || '',
-          due: Number(row.due_count ?? 0),
-          completed: Number(row.completed_count ?? 0),
+          due,
+          completed,
           hasRemainingTasks: Boolean(row.has_remaining_tasks ?? false),
           allTasksDone: Boolean(row.all_tasks_done ?? true),
         }
       }
     }
     
-    // Fill in gardens without cache (return zeros immediately - no computation)
+    // Fill in gardens without cache - VERIFY by computing from real data
+    const gardensToVerify: string[] = []
     for (const gid of gardenIds) {
       if (!result[gid]) {
+        gardensToVerify.push(gid)
+      } else {
+        // Verify cache correctness: if cache says all done but we suspect there might be tasks, verify
+        const cached = result[gid]
+        if (cached.due === 0 && cached.completed === 0 && cached.allTasksDone) {
+          // Cache says no tasks - verify this is correct
+          gardensToVerify.push(gid)
+        }
+      }
+    }
+    
+    // Compute from real data for gardens without cache or suspicious cache
+    if (gardensToVerify.length > 0) {
+      const verifiedProg = await getGardensTodayProgressBatch(gardensToVerify, date)
+      for (const gid of gardensToVerify) {
+        const prog = verifiedProg[gid] || { due: 0, completed: 0 }
+        const hasRemaining = prog.due > prog.completed
         result[gid] = {
           gardenName: gardenNameMap[gid] || '',
-          due: 0,
-          completed: 0,
-          hasRemainingTasks: false,
-          allTasksDone: true,
+          due: prog.due,
+          completed: prog.completed,
+          hasRemainingTasks: hasRemaining,
+          allTasksDone: !hasRemaining && prog.due > 0,
         }
+        // Trigger background cache refresh for missing/wrong cache
+        setTimeout(() => {
+          refreshGardenTaskCache(gid, date).catch(() => {})
+        }, 0)
       }
     }
     
     return result
   } catch {
-    // On error, return empty object immediately
+    // On error, try to compute from real data as fallback
+    try {
+      const memberships = await supabase
+        .from('garden_members')
+        .select('garden_id, gardens!inner(id, name)')
+        .eq('user_id', userId)
+      
+      if (memberships.data && memberships.data.length > 0) {
+        const gardenIds = memberships.data.map((m: any) => m.garden_id)
+        const gardenNameMap: Record<string, string> = {}
+        memberships.data.forEach((m: any) => {
+          const g = m.gardens
+          if (g) gardenNameMap[g.id] = g.name
+        })
+        
+        const verifiedProg = await getGardensTodayProgressBatch(gardenIds, date)
+        const result: Record<string, {
+          gardenName: string
+          due: number
+          completed: number
+          hasRemainingTasks: boolean
+          allTasksDone: boolean
+        }> = {}
+        
+        for (const gid of gardenIds) {
+          const prog = verifiedProg[gid] || { due: 0, completed: 0 }
+          const hasRemaining = prog.due > prog.completed
+          result[gid] = {
+            gardenName: gardenNameMap[gid] || '',
+            due: prog.due,
+            completed: prog.completed,
+            hasRemainingTasks: hasRemaining,
+            allTasksDone: !hasRemaining && prog.due > 0,
+          }
+        }
+        return result
+      }
+    } catch {}
+    // Final fallback: return empty object
     return {}
   }
 }
