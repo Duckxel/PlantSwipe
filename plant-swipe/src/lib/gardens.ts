@@ -1523,49 +1523,52 @@ export async function getGardenTodayProgressCached(gardenId: string, dayIso: str
 }
 
 /**
- * Get cached batched progress for multiple gardens
+ * Get batched progress for multiple gardens (DIRECT cache read - FASTEST)
+ * Directly queries cache table without RPC overhead
  */
 export async function getGardensTodayProgressBatchCached(gardenIds: string[], dayIso: string): Promise<Record<string, { due: number; completed: number; hasRemainingTasks?: boolean; allTasksDone?: boolean }>> {
+  if (gardenIds.length === 0) return {}
+  
   try {
-    const { data, error } = await supabase
+    // OPTIMIZED: Direct query to cache table - FASTEST approach
+    // If table doesn't exist, cacheErr will indicate that - handle gracefully
+    const { data: cacheData, error: cacheErr } = await supabase
       .from('garden_task_daily_cache')
       .select('garden_id, due_count, completed_count, has_remaining_tasks, all_tasks_done')
       .in('garden_id', gardenIds)
       .eq('cache_date', dayIso)
     
-    if (!error && data && Array.isArray(data)) {
-      const result: Record<string, { due: number; completed: number; hasRemainingTasks?: boolean; allTasksDone?: boolean }> = {}
-      for (const row of data) {
-        result[String(row.garden_id)] = {
+    const result: Record<string, { due: number; completed: number; hasRemainingTasks?: boolean; allTasksDone?: boolean }> = {}
+    
+    // Build result from cache (if available and no error)
+    if (!cacheErr && cacheData) {
+      for (const row of cacheData) {
+        const gid = String(row.garden_id)
+        result[gid] = {
           due: Number(row.due_count ?? 0),
           completed: Number(row.completed_count ?? 0),
           hasRemainingTasks: Boolean(row.has_remaining_tasks ?? false),
           allTasksDone: Boolean(row.all_tasks_done ?? true),
         }
       }
-      // Fill in missing gardens with zeros
-      for (const gid of gardenIds) {
-        if (!result[gid]) {
-          result[gid] = { due: 0, completed: 0, hasRemainingTasks: false, allTasksDone: true }
-        }
+    }
+    
+    // Fill in missing gardens with zeros (immediate return - no computation)
+    for (const gid of gardenIds) {
+      if (!result[gid]) {
+        result[gid] = { due: 0, completed: 0, hasRemainingTasks: false, allTasksDone: true }
       }
-      return result
     }
+    
+    return result
   } catch {
-    // Fallback to RPC if cache miss
-  }
-  
-  // Fallback: use RPC function
-  const batch = await getGardensTodayProgressBatch(gardenIds, dayIso)
-  const result: Record<string, { due: number; completed: number; hasRemainingTasks?: boolean; allTasksDone?: boolean }> = {}
-  for (const [gid, prog] of Object.entries(batch)) {
-    result[gid] = {
-      ...prog,
-      hasRemainingTasks: prog.due > prog.completed,
-      allTasksDone: prog.due === 0 || prog.completed >= prog.due,
+    // On error, return zeros for all gardens immediately
+    const result: Record<string, { due: number; completed: number; hasRemainingTasks?: boolean; allTasksDone?: boolean }> = {}
+    for (const gid of gardenIds) {
+      result[gid] = { due: 0, completed: 0, hasRemainingTasks: false, allTasksDone: true }
     }
+    return result
   }
-  return result
 }
 
 /**
@@ -1804,8 +1807,8 @@ export async function gardensHaveRemainingTasks(gardenIds: string[], dayIso?: st
 // ===== User-level Task Cache Functions =====
 
 /**
- * Get user's total task counts across all gardens (ONLY reads from cache, never computes)
- * Returns zeros if cache doesn't exist (cache will be populated in background)
+ * Get user's total task counts across all gardens (DIRECT cache read - FASTEST)
+ * Directly queries cache tables without RPC overhead
  */
 export async function getUserTasksTodayCached(userId: string, dayIso?: string): Promise<{
   totalDueCount: number
@@ -1814,32 +1817,85 @@ export async function getUserTasksTodayCached(userId: string, dayIso?: string): 
   totalGardens: number
 }> {
   const date = dayIso || new Date().toISOString().slice(0, 10)
+  
   try {
-    const { data, error } = await supabase.rpc('get_user_tasks_today_cached', {
-      _user_id: userId,
-      _cache_date: date,
-    })
-    if (!error && data && Array.isArray(data) && data.length > 0) {
-      const row = data[0]
+    // Direct query to user cache table - FASTEST approach
+    const { data: userCache, error: userCacheErr } = await supabase
+      .from('user_task_daily_cache')
+      .select('total_due_count, total_completed_count, gardens_with_remaining_tasks, total_gardens')
+      .eq('user_id', userId)
+      .eq('cache_date', date)
+      .maybeSingle()
+    
+    if (!userCacheErr && userCache) {
       return {
-        totalDueCount: Number(row.total_due_count ?? 0),
-        totalCompletedCount: Number(row.total_completed_count ?? 0),
-        gardensWithRemainingTasks: Number(row.gardens_with_remaining_tasks ?? 0),
-        totalGardens: Number(row.total_gardens ?? 0),
+        totalDueCount: Number(userCache.total_due_count ?? 0),
+        totalCompletedCount: Number(userCache.total_completed_count ?? 0),
+        gardensWithRemainingTasks: Number(userCache.gardens_with_remaining_tasks ?? 0),
+        totalGardens: Number(userCache.total_gardens ?? 0),
       }
     }
+    
+    // If user cache doesn't exist, try aggregating from garden cache (still fast)
+    const { data: memberships } = await supabase
+      .from('garden_members')
+      .select('garden_id')
+      .eq('user_id', userId)
+    
+    if (!memberships || memberships.length === 0) {
+      return { totalDueCount: 0, totalCompletedCount: 0, gardensWithRemainingTasks: 0, totalGardens: 0 }
+    }
+    
+    const gardenIds = memberships.map((m: any) => m.garden_id)
+    
+    // Direct query to garden cache - aggregate in one query
+    const { data: gardenCache, error: gardenCacheErr } = await supabase
+      .from('garden_task_daily_cache')
+      .select('due_count, completed_count, has_remaining_tasks')
+      .in('garden_id', gardenIds)
+      .eq('cache_date', date)
+    
+    if (!gardenCacheErr && gardenCache) {
+      let totalDue = 0
+      let totalCompleted = 0
+      let gardensWithRemaining = 0
+      
+      for (const row of gardenCache) {
+        totalDue += Number(row.due_count ?? 0)
+        totalCompleted += Number(row.completed_count ?? 0)
+        if (row.has_remaining_tasks) {
+          gardensWithRemaining++
+        }
+      }
+      
+      // Trigger background refresh of user cache (non-blocking)
+      setTimeout(() => {
+        refreshUserTaskCache(userId, date).catch(() => {})
+      }, 0)
+      
+      return {
+        totalDueCount: totalDue,
+        totalCompletedCount: totalCompleted,
+        gardensWithRemainingTasks: gardensWithRemaining,
+        totalGardens: gardenIds.length,
+      }
+    }
+    
+    // If no cache exists, return zeros
+    // Cache refresh will happen automatically via triggers
+    setTimeout(() => {
+      refreshUserTaskCache(userId, date).catch(() => {})
+    }, 0)
+    return { totalDueCount: 0, totalCompletedCount: 0, gardensWithRemainingTasks: 0, totalGardens: gardenIds.length }
   } catch {
-    // If cache read fails, return zeros
+    // On error, return zeros
+    return { totalDueCount: 0, totalCompletedCount: 0, gardensWithRemainingTasks: 0, totalGardens: 0 }
   }
-  
-  // Return zeros if cache doesn't exist - cache will be populated in background
-  // This ensures instant response
-  return { totalDueCount: 0, totalCompletedCount: 0, gardensWithRemainingTasks: 0, totalGardens: 0 }
 }
 
 /**
- * Get per-garden task counts for a user (ONLY reads from cache, never computes)
- * Returns zeros for gardens without cache (cache will be populated in background)
+ * Get per-garden task counts for a user (DIRECT cache read - FASTEST)
+ * Directly queries cache tables without RPC overhead
  */
 export async function getUserGardensTasksTodayCached(userId: string, dayIso?: string): Promise<Record<string, {
   gardenName: string
@@ -1849,37 +1905,80 @@ export async function getUserGardensTasksTodayCached(userId: string, dayIso?: st
   allTasksDone: boolean
 }>> {
   const date = dayIso || new Date().toISOString().slice(0, 10)
+  
   try {
-    const { data, error } = await supabase.rpc('get_user_gardens_tasks_today_cached', {
-      _user_id: userId,
-      _cache_date: date,
+    // OPTIMIZED: Get gardens and cache in parallel - FASTEST approach
+    const [membershipsResult, cacheResult] = await Promise.all([
+      supabase
+        .from('garden_members')
+        .select('garden_id, gardens!inner(id, name)')
+        .eq('user_id', userId),
+      supabase
+        .from('garden_task_daily_cache')
+        .select('garden_id, due_count, completed_count, has_remaining_tasks, all_tasks_done')
+        .eq('cache_date', date)
+    ])
+    
+    const { data: memberships, error: memErr } = membershipsResult
+    const { data: cacheData, error: cacheErr } = cacheResult
+    
+    // If cache table doesn't exist, cacheErr will indicate that - handle gracefully
+    if (memErr || !memberships || memberships.length === 0) {
+      return {}
+    }
+    
+    const gardenIds = memberships.map((m: any) => m.garden_id)
+    const gardenNameMap: Record<string, string> = {}
+    memberships.forEach((m: any) => {
+      const g = m.gardens
+      if (g) gardenNameMap[g.id] = g.name
     })
-    if (!error && data && Array.isArray(data)) {
-      const result: Record<string, {
-        gardenName: string
-        due: number
-        completed: number
-        hasRemainingTasks: boolean
-        allTasksDone: boolean
-      }> = {}
-      for (const row of data) {
-        result[String(row.garden_id)] = {
-          gardenName: String(row.garden_name || ''),
+    
+    // Filter cache data to only gardens user is member of (if cache exists)
+    const filteredCache = (cacheData || []).filter((row: any) => 
+      gardenIds.includes(String(row.garden_id))
+    )
+    
+    const result: Record<string, {
+      gardenName: string
+      due: number
+      completed: number
+      hasRemainingTasks: boolean
+      allTasksDone: boolean
+    }> = {}
+    
+    // Build result from cache (if available and no error)
+    if (!cacheErr && filteredCache.length > 0) {
+      for (const row of filteredCache) {
+        const gid = String(row.garden_id)
+        result[gid] = {
+          gardenName: gardenNameMap[gid] || '',
           due: Number(row.due_count ?? 0),
           completed: Number(row.completed_count ?? 0),
           hasRemainingTasks: Boolean(row.has_remaining_tasks ?? false),
           allTasksDone: Boolean(row.all_tasks_done ?? true),
         }
       }
-      return result
     }
+    
+    // Fill in gardens without cache (return zeros immediately - no computation)
+    for (const gid of gardenIds) {
+      if (!result[gid]) {
+        result[gid] = {
+          gardenName: gardenNameMap[gid] || '',
+          due: 0,
+          completed: 0,
+          hasRemainingTasks: false,
+          allTasksDone: true,
+        }
+      }
+    }
+    
+    return result
   } catch {
-    // If cache read fails, return empty object
+    // On error, return empty object immediately
+    return {}
   }
-  
-  // Return empty object if cache doesn't exist - cache will be populated in background
-  // This ensures instant response
-  return {}
 }
 
 /**

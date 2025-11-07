@@ -150,7 +150,7 @@ export const GardenListPage: React.FC = () => {
           setServerToday(today)
           serverTodayRef.current = today
           
-          // Update progress with fresh data - use cached user-level query (INSTANT)
+          // Update progress with fresh data - use DIRECT cache queries (FASTEST)
           if (user?.id) {
             getUserGardensTasksTodayCached(user.id, today).then((progMap) => {
               const converted: Record<string, { due: number; completed: number }> = {}
@@ -170,7 +170,7 @@ export const GardenListPage: React.FC = () => {
           // If background fetch fails, keep using cached data
         })
         
-        // Load progress for cached gardens - use cached user-level query (INSTANT)
+        // Load progress for cached gardens - use DIRECT cache queries (FASTEST)
         const today = serverTodayRef.current ?? new Date().toISOString().slice(0, 10)
         if (user?.id) {
           getUserGardensTasksTodayCached(user.id, today).then((progMap) => {
@@ -220,51 +220,20 @@ export const GardenListPage: React.FC = () => {
       // Set loading to false immediately so gardens render
       setLoading(false)
       
-      // Load progress using cached user-level query (INSTANT - ONLY reads cache, never computes)
-      // This loads all garden progress in a single query from pre-computed cache
+      // Load progress using DIRECT cache table queries (INSTANT - no RPC overhead)
+      // This is the FASTEST approach - directly reads from cache tables
+      // Cache should already be populated by database triggers, so we just read it
       if (user?.id) {
+        // Use direct cache query - fastest possible, no blocking operations
         getUserGardensTasksTodayCached(user.id, today).then((progMap) => {
           // Convert to the format expected by progressByGarden
           const converted: Record<string, { due: number; completed: number }> = {}
           for (const [gid, prog] of Object.entries(progMap)) {
             converted[gid] = { due: prog.due, completed: prog.completed }
           }
-          
-          // If cache is empty, fallback to computing from garden cache (still fast)
-          if (Object.keys(converted).length === 0) {
-            getGardensTodayProgressBatchCached(data.map(g => g.id), today).then((fallbackProgMap) => {
-              setProgressByGarden(fallbackProgMap)
-              // Trigger background cache refresh
-              refreshUserTaskCache(user.id, today).catch(() => {})
-            }).catch(() => {
-              setProgressByGarden({})
-            })
-          } else {
-            setProgressByGarden(converted)
-            
-            // If cache returned zeros for all, trigger background refresh
-            if (Object.values(progMap).every(p => p.due === 0 && p.completed === 0)) {
-              // Try to populate cache in background
-              refreshUserTaskCache(user.id, today).catch(() => {})
-              // Also try to refresh garden cache for all gardens
-              Promise.all(data.map(g => refreshGardenTaskCache(g.id, today).catch(() => {}))).then(() => {
-                // Retry loading progress after cache refresh
-                setTimeout(() => {
-                  getUserGardensTasksTodayCached(user.id, today).then((retryProgMap) => {
-                    const retryConverted: Record<string, { due: number; completed: number }> = {}
-                    for (const [gid, prog] of Object.entries(retryProgMap)) {
-                      retryConverted[gid] = { due: prog.due, completed: prog.completed }
-                    }
-                    if (Object.keys(retryConverted).length > 0) {
-                      setProgressByGarden(retryConverted)
-                    }
-                  }).catch(() => {})
-                }, 2000) // Wait 2 seconds for cache to populate
-              }).catch(() => {})
-            }
-          }
+          setProgressByGarden(converted)
         }).catch(() => {
-          // On error, fallback to garden-level cache
+          // On error, try fallback
           getGardensTodayProgressBatchCached(data.map(g => g.id), today).then((progMap) => {
             setProgressByGarden(progMap)
           }).catch(() => {
