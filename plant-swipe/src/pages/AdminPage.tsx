@@ -230,6 +230,51 @@ export const AdminPage: React.FC = () => {
     try { window.location.reload() } catch {}
   }, [])
 
+  // Helper function to retry API calls with exponential backoff
+  const fetchWithRetry = React.useCallback(async (
+    url: string,
+    options: RequestInit = {},
+    maxRetries: number = 3
+  ): Promise<Response> => {
+    let lastError: Error | null = null
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await fetch(url, {
+          ...options,
+          signal: AbortSignal.timeout(30000), // 30s timeout per attempt
+        })
+        
+        // If successful or client error (4xx), return immediately
+        if (response.ok || (response.status >= 400 && response.status < 500)) {
+          return response
+        }
+        
+        // Server error (5xx) - retry
+        if (response.status >= 500 && attempt < maxRetries) {
+          const delay = Math.min(1000 * Math.pow(2, attempt), 10000) // Exponential backoff, max 10s
+          await new Promise(resolve => setTimeout(resolve, delay))
+          continue
+        }
+        
+        return response
+      } catch (error: any) {
+        lastError = error
+        
+        // Network error - retry
+        if (attempt < maxRetries && (error.name === 'AbortError' || error.name === 'TypeError' || !error.message?.includes('4'))) {
+          const delay = Math.min(1000 * Math.pow(2, attempt), 10000)
+          await new Promise(resolve => setTimeout(resolve, delay))
+          continue
+        }
+        
+        throw error
+      }
+    }
+    
+    throw lastError || new Error('Request failed after retries')
+  }, [])
+
   // Safely parse response body into JSON, tolerating HTML/error pages
   const safeJson = React.useCallback(async (resp: Response): Promise<any> => {
     try {
@@ -257,7 +302,7 @@ export const AdminPage: React.FC = () => {
         return
       }
       // Try Node API first
-      let resp = await fetch('/api/admin/sync-schema', {
+      let resp = await fetchWithRetry('/api/admin/sync-schema', {
         method: 'GET',
         headers: (() => {
           const h: Record<string, string> = { 'Accept': 'application/json' }
@@ -267,10 +312,10 @@ export const AdminPage: React.FC = () => {
           return h
         })(),
         credentials: 'same-origin',
-      })
-      if (resp.status === 405) {
-        // Try POST on Node if GET blocked
-        resp = await fetch('/api/admin/sync-schema', {
+      }).catch(() => null)
+      if (!resp || resp.status === 405) {
+        // Try POST on Node if GET blocked or failed
+        resp = await fetchWithRetry('/api/admin/sync-schema', {
           method: 'POST',
           headers: (() => {
             const h: Record<string, string> = { 'Content-Type': 'application/json', 'Accept': 'application/json' }
@@ -280,17 +325,20 @@ export const AdminPage: React.FC = () => {
             return h
           })(),
           credentials: 'same-origin',
-        })
+        }).catch(() => null)
       }
       // If Node API failed, fallback to local Admin API proxied by nginx
-      if (!resp.ok) {
+      if (!resp || !resp.ok) {
         const adminHeaders: Record<string, string> = { 'Accept': 'application/json' }
         try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) adminHeaders['X-Admin-Token'] = String(adminToken) } catch {}
-        let respAdmin = await fetch('/admin/sync-schema', { method: 'GET', headers: adminHeaders, credentials: 'same-origin' })
-        if (respAdmin.status === 405) {
-          respAdmin = await fetch('/admin/sync-schema', { method: 'POST', headers: { ...adminHeaders, 'Content-Type': 'application/json' }, credentials: 'same-origin', body: '{}' })
+        let respAdmin = await fetchWithRetry('/admin/sync-schema', { method: 'GET', headers: adminHeaders, credentials: 'same-origin' }).catch(() => null)
+        if (!respAdmin || respAdmin.status === 405) {
+          respAdmin = await fetchWithRetry('/admin/sync-schema', { method: 'POST', headers: { ...adminHeaders, 'Content-Type': 'application/json' }, credentials: 'same-origin', body: '{}' }).catch(() => null)
         }
-        resp = respAdmin
+        resp = respAdmin || resp
+      }
+      if (!resp) {
+        throw new Error('Failed to connect to API. Please check your connection and try again.')
       }
       const body = await safeJson(resp)
       if (!resp.ok) {
@@ -823,25 +871,29 @@ export const AdminPage: React.FC = () => {
         const token = session?.access_token
         if (token) headersNode['Authorization'] = `Bearer ? ${token}`
       } catch {}
-      const respNode = await fetch('/api/admin/branches', { headers: headersNode, credentials: 'same-origin' })
-      let data = await safeJson(respNode)
+      const respNode = await fetchWithRetry('/api/admin/branches', { headers: headersNode, credentials: 'same-origin' }).catch(() => null)
+      let data = await safeJson(respNode || new Response())
       // Guard against accidental inclusion of non-branch items
       if (Array.isArray(data?.branches)) {
         data.branches = data.branches.filter((b: string) => b && b !== 'origin' && b !== 'HEAD')
       }
-      let ok = respNode.ok && Array.isArray(data?.branches)
+      let ok = respNode?.ok && Array.isArray(data?.branches)
       if (!ok) {
         const adminHeaders: Record<string, string> = { 'Accept': 'application/json' }
         try {
           const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
           if (adminToken) adminHeaders['X-Admin-Token'] = String(adminToken)
         } catch {}
-        const respAdmin = await fetch('/admin/branches', { headers: adminHeaders, credentials: 'same-origin' })
-        data = await safeJson(respAdmin)
-        if (Array.isArray(data?.branches)) {
-          data.branches = data.branches.filter((b: string) => b && b !== 'origin' && b !== 'HEAD')
+        const respAdmin = await fetchWithRetry('/admin/branches', { headers: adminHeaders, credentials: 'same-origin' }).catch(() => null)
+        if (respAdmin) {
+          data = await safeJson(respAdmin)
+          if (Array.isArray(data?.branches)) {
+            data.branches = data.branches.filter((b: string) => b && b !== 'origin' && b !== 'HEAD')
+          }
+          if (!respAdmin.ok || !Array.isArray(data?.branches)) throw new Error(data?.error || `HTTP ${respAdmin.status}`)
+        } else {
+          throw new Error('Failed to connect to API')
         }
-        if (!respAdmin.ok || !Array.isArray(data?.branches)) throw new Error(data?.error || `HTTP ? ${respAdmin.status}`)
       }
       const branches: string[] = data.branches
       const current: string = String(data.current || '')
