@@ -338,7 +338,7 @@ export const AdminPage: React.FC = () => {
         
         // Check if initialize_all_task_cache function exists and can be called
         appendConsole('[sync] Verifying cache initialization function...')
-        const { data: initResult, error: initErr } = await supabase.rpc('initialize_all_task_cache')
+        const { error: initErr } = await supabase.rpc('initialize_all_task_cache')
         
         if (initErr) {
           appendConsole(`[sync] WARNING: initialize_all_task_cache() failed: ${initErr.message}`)
