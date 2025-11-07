@@ -31,6 +31,7 @@ export const GardenListPage: React.FC = () => {
   const [loadingTasks, setLoadingTasks] = React.useState(false)
   const [mismatchReloadAttempts, setMismatchReloadAttempts] = React.useState(0)
   const mismatchReloadAttemptsRef = React.useRef(0)
+  const lastSuccessfulLoadRef = React.useRef<number>(0)
   const [allPlants, setAllPlants] = React.useState<any[]>([])
   const [todayTaskOccurrences, setTodayTaskOccurrences] = React.useState<Array<{ id: string; taskId: string; gardenPlantId: string; dueAt: string; requiredCount: number; completedCount: number; completedAt: string | null; taskType?: 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'; taskEmoji?: string | null }>>([])
   const [progressingOccIds, setProgressingOccIds] = React.useState<Set<string>>(new Set())
@@ -420,7 +421,7 @@ export const GardenListPage: React.FC = () => {
       setTodayTaskOccurrences(occsAugmented)
       // Fetch completions for all occurrences
       const ids = occsAugmented.map(o => o.id)
-      const compMap = await listCompletionsForOccurrences(ids)
+      const compMap = ids.length > 0 ? await listCompletionsForOccurrences(ids) : {}
       setCompletionsByOcc(compMap)
       // 4) Load plants for all gardens - use minimal version to reduce egress by ~80%
       const gardenIds = gardensList.map(g => g.id)
@@ -434,6 +435,13 @@ export const GardenListPage: React.FC = () => {
         gardenName: idToGardenName[gp.gardenId] || '',
       }))
       setAllPlants(all)
+      
+      // Reset mismatch counter on successful load
+      mismatchReloadAttemptsRef.current = 0
+      setMismatchReloadAttempts(0)
+      lastSuccessfulLoadRef.current = Date.now()
+      
+      console.log('[GardenList] Successfully loaded', occsAugmented.length, 'task occurrences and', all.length, 'plants')
       
       // Cache the results in both memory and localStorage
       const cacheData = {
@@ -1128,9 +1136,17 @@ export const GardenListPage: React.FC = () => {
   // This runs whenever progress or task list changes
   React.useEffect(() => {
     if (loadingTasks) return // Don't check while loading
+    
+    // Don't check mismatch immediately after a successful load (give it 500ms to render)
+    const timeSinceLastLoad = Date.now() - lastSuccessfulLoadRef.current
+    if (timeSinceLastLoad < 500) {
+      return
+    }
+    
     if (todayTaskOccurrences.length > 0) {
       // Reset mismatch counter when tasks are found
       mismatchReloadAttemptsRef.current = 0
+      setMismatchReloadAttempts(0)
       return
     }
     
@@ -1163,7 +1179,12 @@ export const GardenListPage: React.FC = () => {
       // Set loading state
       setLoadingTasks(true)
       // Force reload with resync immediately (no delay)
-      loadAllTodayOccurrences(undefined, undefined, false).catch((e) => {
+      loadAllTodayOccurrences(undefined, undefined, false).then(() => {
+        // Reset mismatch counter on successful load
+        mismatchReloadAttemptsRef.current = 0
+        setMismatchReloadAttempts(0)
+        lastSuccessfulLoadRef.current = Date.now()
+      }).catch((e) => {
         console.error('[GardenList] Failed to reload tasks after mismatch:', e)
         setLoadingTasks(false)
       })
@@ -1224,8 +1245,9 @@ export const GardenListPage: React.FC = () => {
       }
       byGarden.push({ gardenId: g.id, gardenName: idToGardenName[g.id] || '', plants, req, done })
     }
+    console.log('[GardenList] gardensWithTasks computed:', byGarden.length, 'gardens with tasks,', todayTaskOccurrences.length, 'occurrences,', allPlants.length, 'plants')
     return byGarden
-  }, [gardens, allPlants, occsByPlant])
+  }, [gardens, allPlants, occsByPlant, todayTaskOccurrences.length])
 
   const totalTasks = React.useMemo(() => todayTaskOccurrences.reduce((a, o) => a + Math.max(1, Number(o.requiredCount || 1)), 0), [todayTaskOccurrences])
   const totalDone = React.useMemo(() => todayTaskOccurrences.reduce((a, o) => a + Math.min(Math.max(1, Number(o.requiredCount || 1)), Number(o.completedCount || 0)), 0), [todayTaskOccurrences])
