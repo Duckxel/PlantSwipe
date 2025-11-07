@@ -240,29 +240,38 @@ export const AdminPage: React.FC = () => {
     
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        const response = await fetch(url, {
-          ...options,
-          signal: AbortSignal.timeout(30000), // 30s timeout per attempt
-        })
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 30000) // 30s timeout per attempt
         
-        // If successful or client error (4xx), return immediately
-        if (response.ok || (response.status >= 400 && response.status < 500)) {
+        try {
+          const response = await fetch(url, {
+            ...options,
+            signal: controller.signal,
+          })
+          clearTimeout(timeoutId)
+          
+          // If successful or client error (4xx), return immediately
+          if (response.ok || (response.status >= 400 && response.status < 500)) {
+            return response
+          }
+          
+          // Server error (5xx) - retry
+          if (response.status >= 500 && attempt < maxRetries) {
+            const delay = Math.min(1000 * Math.pow(2, attempt), 10000) // Exponential backoff, max 10s
+            await new Promise(resolve => setTimeout(resolve, delay))
+            continue
+          }
+          
           return response
+        } catch (fetchError: any) {
+          clearTimeout(timeoutId)
+          throw fetchError
         }
-        
-        // Server error (5xx) - retry
-        if (response.status >= 500 && attempt < maxRetries) {
-          const delay = Math.min(1000 * Math.pow(2, attempt), 10000) // Exponential backoff, max 10s
-          await new Promise(resolve => setTimeout(resolve, delay))
-          continue
-        }
-        
-        return response
       } catch (error: any) {
         lastError = error
         
-        // Network error - retry
-        if (attempt < maxRetries && (error.name === 'AbortError' || error.name === 'TypeError' || !error.message?.includes('4'))) {
+        // Network error or timeout - retry
+        if (attempt < maxRetries && (error.name === 'AbortError' || error.name === 'TypeError' || error.message?.includes('fetch') || !error.message?.includes('4'))) {
           const delay = Math.min(1000 * Math.pow(2, attempt), 10000)
           await new Promise(resolve => setTimeout(resolve, delay))
           continue
@@ -663,28 +672,47 @@ export const AdminPage: React.FC = () => {
     }
   }, [safeJson])
 
-  const runHealthProbes = React.useCallback(async () => {
-    const [apiRes, adminRes, dbRes] = await Promise.all([
-      probeEndpoint('/api/health', (b) => b?.ok === true),
-      probeEndpoint('/api/admin/stats', (b) => b?.ok === true && typeof b?.profilesCount === 'number'),
-      probeDbWithFallback(),
-    ])
-    if (isMountedRef.current) {
-      setApiProbe(apiRes)
-      setAdminProbe(adminRes)
-      setDbProbe(dbRes)
-    }
-  }, [probeEndpoint, probeDbWithFallback])
-
-  const refreshHealth = React.useCallback(async () => {
-    if (healthRefreshing) return
-    setHealthRefreshing(true)
-    try {
-      await runHealthProbes()
-    } finally {
-      if (isMountedRef.current) setHealthRefreshing(false)
-    }
-  }, [healthRefreshing, runHealthProbes])
+  // Add loading state timeouts to prevent infinite loading
+  const MAX_LOADING_TIMEOUT = 15000 // 15 seconds max loading time
+  
+  React.useEffect(() => {
+    // Set timeout for initial loading states
+    const timeoutId = setTimeout(() => {
+      if (branchesLoading) {
+        console.warn('[AdminPage] Branches loading timeout - clearing loading state')
+        setBranchesLoading(false)
+      }
+      if (registeredLoading) {
+        console.warn('[AdminPage] Registered count loading timeout - clearing loading state')
+        setRegisteredLoading(false)
+      }
+      if (onlineLoading) {
+        console.warn('[AdminPage] Online users loading timeout - clearing loading state')
+        setOnlineLoading(false)
+      }
+      if (ipsLoading) {
+        console.warn('[AdminPage] IPs loading timeout - clearing loading state')
+        setIpsLoading(false)
+      }
+      if (visitorsLoading) {
+        console.warn('[AdminPage] Visitors loading timeout - clearing loading state')
+        setVisitorsLoading(false)
+      }
+    }, MAX_LOADING_TIMEOUT)
+    
+    return () => clearTimeout(timeoutId)
+  }, [branchesLoading, registeredLoading, onlineLoading, ipsLoading, visitorsLoading])
+  
+  // Run health probes on initial load and periodically
+  React.useEffect(() => {
+    // Run immediately on mount
+    runHealthProbes()
+    // Then every 60 seconds
+    const intervalId = setInterval(() => {
+      runHealthProbes()
+    }, 60000)
+    return () => clearInterval(intervalId)
+  }, [runHealthProbes])
 
   const softRefreshAdmin = React.useCallback(() => {
     try {
@@ -779,7 +807,8 @@ export const AdminPage: React.FC = () => {
         if (!prev) return current
         return branches.includes(prev) ? prev : current
       })
-    } catch {
+    } catch (e) {
+      console.error('[AdminPage] Failed to load branches:', e)
       if (isInitial) {
         setBranchOptions([])
         setCurrentBranch('')
@@ -789,7 +818,7 @@ export const AdminPage: React.FC = () => {
       if (isInitial) setBranchesLoading(false)
       else setBranchesRefreshing(false)
     }
-  }, [safeJson])
+  }, [safeJson, fetchWithRetry])
 
   React.useEffect(() => {
     // Stagger initial load to avoid blocking
@@ -1648,6 +1677,36 @@ export const AdminPage: React.FC = () => {
 
   return (
     <div className="max-w-3xl mx-auto mt-8 px-4 md:px-0">
+      {/* Connection Status Banner - Show when APIs are down */}
+      {(apiProbe.ok === false || adminProbe.ok === false || dbProbe.ok === false) && (
+        <Card className="rounded-2xl mb-4 border-red-500 dark:border-red-500 bg-red-50 dark:bg-red-950/20">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0" />
+              <div className="flex-1">
+                <div className="text-sm font-medium text-red-900 dark:text-red-100">Connection Issues Detected</div>
+                <div className="text-xs text-red-700 dark:text-red-300 mt-1">
+                  {!apiProbe.ok && 'API '}
+                  {!adminProbe.ok && 'Admin API '}
+                  {!dbProbe.ok && 'Database '}
+                  {(!apiProbe.ok || !adminProbe.ok || !dbProbe.ok) && 'may be unavailable. Some features may not work correctly.'}
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-xl border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30"
+                onClick={refreshHealth}
+                disabled={healthRefreshing}
+              >
+                <RefreshCw className={`h-4 w-4 mr-1 ${healthRefreshing ? 'animate-spin' : ''}`} />
+                Retry
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      
       <Card className="rounded-3xl">
         <CardContent className="p-6 md:p-8 space-y-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
