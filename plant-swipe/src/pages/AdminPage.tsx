@@ -672,6 +672,29 @@ export const AdminPage: React.FC = () => {
     }
   }, [safeJson])
 
+  const runHealthProbes = React.useCallback(async () => {
+    const [apiRes, adminRes, dbRes] = await Promise.all([
+      probeEndpoint('/api/health', (b) => b?.ok === true).catch(() => ({ ok: false, latencyMs: null, updatedAt: Date.now(), status: null, errorCode: 'NETWORK_ERROR', errorMessage: 'Failed to probe API' })),
+      probeEndpoint('/api/admin/stats', (b) => b?.ok === true && typeof b?.profilesCount === 'number').catch(() => ({ ok: false, latencyMs: null, updatedAt: Date.now(), status: null, errorCode: 'NETWORK_ERROR', errorMessage: 'Failed to probe Admin API' })),
+      probeDbWithFallback().catch(() => ({ ok: false, latencyMs: null, updatedAt: Date.now(), status: null, errorCode: 'NETWORK_ERROR', errorMessage: 'Failed to probe Database' })),
+    ])
+    if (isMountedRef.current) {
+      setApiProbe(apiRes)
+      setAdminProbe(adminRes)
+      setDbProbe(dbRes)
+    }
+  }, [probeEndpoint, probeDbWithFallback])
+
+  const refreshHealth = React.useCallback(async () => {
+    if (healthRefreshing) return
+    setHealthRefreshing(true)
+    try {
+      await runHealthProbes()
+    } finally {
+      if (isMountedRef.current) setHealthRefreshing(false)
+    }
+  }, [healthRefreshing, runHealthProbes])
+
   // Add loading state timeouts to prevent infinite loading
   const MAX_LOADING_TIMEOUT = 15000 // 15 seconds max loading time
   
@@ -720,19 +743,6 @@ export const AdminPage: React.FC = () => {
     } catch {}
   }, [refreshHealth])
 
-  React.useEffect(() => {
-    // Initial probe and auto-refresh every 60s
-    // Stagger initial load to avoid blocking
-    const timeoutId = setTimeout(() => {
-      runHealthProbes()
-    }, 100)
-    const id = setInterval(runHealthProbes, 60_000)
-    return () => {
-      clearTimeout(timeoutId)
-      clearInterval(id)
-    }
-  }, [runHealthProbes])
-
   const StatusDot: React.FC<{ ok: boolean | null; title?: string }> = ({ ok, title }) => (
     <span
       className={
@@ -761,6 +771,35 @@ export const AdminPage: React.FC = () => {
   const [currentBranch, setCurrentBranch] = React.useState<string>("")
   const [selectedBranch, setSelectedBranch] = React.useState<string>("")
   const [lastUpdateTime, setLastUpdateTime] = React.useState<string | null>(null)
+  
+  // Add loading state timeouts to prevent infinite loading (moved after state declarations)
+  React.useEffect(() => {
+    const MAX_LOADING_TIMEOUT = 15000 // 15 seconds max loading time
+    const timeoutId = setTimeout(() => {
+      if (branchesLoading) {
+        console.warn('[AdminPage] Branches loading timeout - clearing loading state')
+        setBranchesLoading(false)
+      }
+      if (registeredLoading) {
+        console.warn('[AdminPage] Registered count loading timeout - clearing loading state')
+        setRegisteredLoading(false)
+      }
+      if (onlineLoading) {
+        console.warn('[AdminPage] Online users loading timeout - clearing loading state')
+        setOnlineLoading(false)
+      }
+      if (ipsLoading) {
+        console.warn('[AdminPage] IPs loading timeout - clearing loading state')
+        setIpsLoading(false)
+      }
+      if (visitorsLoading) {
+        console.warn('[AdminPage] Visitors loading timeout - clearing loading state')
+        setVisitorsLoading(false)
+      }
+    }, MAX_LOADING_TIMEOUT)
+    
+    return () => clearTimeout(timeoutId)
+  }, [branchesLoading, registeredLoading, onlineLoading, ipsLoading, visitorsLoading])
 
   const loadBranches = React.useCallback(async (opts?: { initial?: boolean }) => {
     const isInitial = !!opts?.initial
