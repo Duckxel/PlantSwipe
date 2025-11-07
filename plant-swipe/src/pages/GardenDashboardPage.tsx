@@ -54,8 +54,10 @@ export const GardenDashboardPage: React.FC = () => {
   const [error, setError] = React.useState<string | null>(null)
   const [serverToday, setServerToday] = React.useState<string | null>(null)
   const serverTodayRef = React.useRef<string | null>(null)
+  const dailyStatsRequestRef = React.useRef(0)
   const [dueToday, setDueToday] = React.useState<Set<string> | null>(null)
   const [dailyStats, setDailyStats] = React.useState<Array<{ date: string; due: number; completed: number; success: boolean }>>([])
+  const [dailyStatsLoading, setDailyStatsLoading] = React.useState(true)
   const [taskOccDueToday, setTaskOccDueToday] = React.useState<Record<string, number>>({})
   const [taskCountsByPlant, setTaskCountsByPlant] = React.useState<Record<string, number>>({})
   const [todayTaskOccurrences, setTodayTaskOccurrences] = React.useState<Array<{ id: string; taskId: string; gardenPlantId: string; dueAt: string; requiredCount: number; completedCount: number; completedAt: string | null }>>([])
@@ -136,6 +138,7 @@ export const GardenDashboardPage: React.FC = () => {
     const silent = opts?.silent ?? (garden !== null)
     if (!silent) setLoading(true)
     setError(null)
+    let gardenCreatedDayIso: string | null = null
     try {
       // Fast-path: hydrate via batched API, then continue with detailed computations
       let hydratedPlants: any[] | null = null
@@ -147,30 +150,34 @@ export const GardenDashboardPage: React.FC = () => {
         const headers: Record<string, string> = { 'Accept': 'application/json' }
         if (token) headers['Authorization'] = `Bearer ${token}`
         const resp = await fetch(`/api/garden/${id}/overview`, { headers, credentials: 'same-origin' })
-        if (resp.ok) {
-          const data = await resp.json().catch(() => ({}))
-          if (data?.ok) {
-            if (data.garden) setGarden({
-              id: String(data.garden.id),
-              name: String(data.garden.name),
-              coverImageUrl: data.garden.coverImageUrl || null,
-              createdBy: String(data.garden.createdBy || ''),
-              createdAt: String(data.garden.createdAt || ''),
-              streak: Number(data.garden.streak || 0),
-            } as any)
-            if (Array.isArray(data.plants)) { setPlants(data.plants); hydratedPlants = data.plants }
-            if (Array.isArray(data.members)) setMembers(data.members.map((m: any) => ({ userId: String(m.userId || m.user_id), displayName: m.displayName ?? m.display_name ?? null, email: m.email ?? null, role: m.role, joinedAt: m.joinedAt ?? m.joined_at ?? null, accentKey: m.accentKey ?? null })))
-          if (data.serverNow) {
-            const todayIso = String(data.serverNow).slice(0,10)
-            setServerToday(todayIso)
-            serverTodayRef.current = todayIso
+          if (resp.ok) {
+            const data = await resp.json().catch(() => ({}))
+            if (data?.ok) {
+              if (data.garden) {
+                setGarden({
+                  id: String(data.garden.id),
+                  name: String(data.garden.name),
+                  coverImageUrl: data.garden.coverImageUrl || null,
+                  createdBy: String(data.garden.createdBy || ''),
+                  createdAt: String(data.garden.createdAt || ''),
+                  streak: Number(data.garden.streak || 0),
+                } as any)
+                gardenCreatedDayIso = data.garden?.createdAt
+                  ? new Date(data.garden.createdAt).toISOString().slice(0, 10)
+                  : gardenCreatedDayIso
+              }
+              if (Array.isArray(data.plants)) { setPlants(data.plants); hydratedPlants = data.plants }
+              if (Array.isArray(data.members)) setMembers(data.members.map((m: any) => ({ userId: String(m.userId || m.user_id), displayName: m.displayName ?? m.display_name ?? null, email: m.email ?? null, role: m.role, joinedAt: m.joinedAt ?? m.joined_at ?? null, accentKey: m.accentKey ?? null })))
+              if (data.serverNow) {
+                const todayIso = String(data.serverNow).slice(0,10)
+                setServerToday(todayIso)
+                serverTodayRef.current = todayIso
+              }
+              hydrated = true
+            }
           }
-            hydrated = true
-          }
-        }
       } catch {}
 
-      let gardenCreatedDayIso: string | null = null
       let todayLocal: string | null = null
       if (!hydrated) {
         const [g0, gpsRaw, ms, nowIso] = await Promise.all([
@@ -188,26 +195,29 @@ export const GardenDashboardPage: React.FC = () => {
         todayLocal = nowIso.slice(0,10)
         setServerToday(todayLocal)
         serverTodayRef.current = todayLocal
-      }
-      // Resolve 'today' for subsequent computations regardless of hydration path
-      let today = (serverToday || todayLocal || '')
-      if (!today) {
-        const nowIso2 = await fetchServerNowISO()
-        today = nowIso2.slice(0,10)
-        setServerToday(today)
-        serverTodayRef.current = today
-      }
-      // Ensure base streak is refreshed from server, at most once per session
-      try {
+        }
+        // Resolve 'today' for subsequent computations regardless of hydration path
+        let today = (serverToday || todayLocal || '')
+        if (!today) {
+          const nowIso2 = await fetchServerNowISO()
+          today = nowIso2.slice(0,10)
+          setServerToday(today)
+          serverTodayRef.current = today
+        }
+        // Ensure base streak is refreshed from server, at most once per session
         if (!streakRefreshedRef.current) {
           streakRefreshedRef.current = true
-          await refreshGardenStreak(id, new Date(new Date(today).getTime() - 24*3600*1000).toISOString().slice(0,10))
-          const g1 = await getGarden(id)
-          setGarden(g1)
-          // Prefer refreshed garden's createdAt if available
-          gardenCreatedDayIso = g1?.createdAt ? new Date(g1.createdAt).toISOString().slice(0,10) : gardenCreatedDayIso
+          const refreshAnchor = new Date(today)
+          refreshAnchor.setDate(refreshAnchor.getDate() - 1)
+          const anchorIso = refreshAnchor.toISOString().slice(0,10)
+          ;(async () => {
+            try {
+              await refreshGardenStreak(id, anchorIso)
+              const g1 = await getGarden(id)
+              if (g1) setGarden(g1)
+            } catch {}
+          })()
         }
-      } catch {}
       // Do not recompute today's task here to avoid overriding recent actions; rely on action-specific updates
       const start = new Date(today)
       start.setDate(start.getDate() - 29)
@@ -330,28 +340,49 @@ export const GardenDashboardPage: React.FC = () => {
       }
       setInstanceCounts(perInstanceCounts)
       setTotalOnHand(total)
-      setSpeciesOnHand(species)
-      // Build last-30-days success using garden_tasks (fast, no occurrences)
-      try {
+        setSpeciesOnHand(species)
+        // Build last-30-days success using garden_tasks (fast, no occurrences)
         const statsStart = new Date(today)
         statsStart.setDate(statsStart.getDate() - 29)
         const statsStartIso = statsStart.toISOString().slice(0,10)
-        const rows = await getGardenTasks(id, statsStartIso, today)
-        const successByDay: Record<string, boolean> = {}
-        for (const r of rows) successByDay[r.day] = Boolean(r.success)
-        const days: Array<{ date: string; due: number; completed: number; success: boolean }> = []
+        const baseDays: Array<{ date: string; due: number; completed: number; success: boolean }> = []
         const anchor30 = new Date(today)
         for (let i = 29; i >= 0; i--) {
           const d = new Date(anchor30)
           d.setDate(d.getDate() - i)
           const ds = d.toISOString().slice(0,10)
-          const beforeCreation = gardenCreatedDayIso ? (ds < gardenCreatedDayIso) : false
-          const success = beforeCreation ? false : Boolean(successByDay[ds])
-          days.push({ date: ds, due: 0, completed: 0, success })
+          baseDays.push({ date: ds, due: 0, completed: 0, success: false })
         }
-        setDailyStats(days)
-      } catch {}
-      serverTodayRef.current = today
+        const statsRequestId = dailyStatsRequestRef.current + 1
+        dailyStatsRequestRef.current = statsRequestId
+        if (!silent && dailyStats.length === 0) {
+          setDailyStats(baseDays)
+          setDailyStatsLoading(true)
+        }
+        ;(async () => {
+          try {
+            const rows = await getGardenTasks(id, statsStartIso, today)
+            const successByDay: Record<string, boolean> = {}
+            for (const r of rows) successByDay[r.day] = Boolean(r.success)
+            const nextDays = baseDays.map((day) => {
+              const beforeCreation = gardenCreatedDayIso ? (day.date < gardenCreatedDayIso) : false
+              const success = beforeCreation ? false : Boolean(successByDay[day.date])
+              return { ...day, success }
+            })
+            if (dailyStatsRequestRef.current === statsRequestId) {
+              setDailyStats(nextDays)
+            }
+          } catch {
+            if (dailyStatsRequestRef.current === statsRequestId && dailyStats.length === 0) {
+              setDailyStats(baseDays)
+            }
+          } finally {
+            if (dailyStatsRequestRef.current === statsRequestId) {
+              setDailyStatsLoading(false)
+            }
+          }
+        })()
+        serverTodayRef.current = today
     } catch (e: any) {
       setError(e?.message || 'Failed to load garden')
     } finally {
@@ -1507,7 +1538,23 @@ export const GardenDashboardPage: React.FC = () => {
           </aside>
           <main className="min-h-[60vh]">
             <Routes>
-              <Route path="overview" element={<OverviewSection gardenId={id!} activityRev={activityRev} plants={plants} membersCount={members.length} serverToday={serverToday} dailyStats={dailyStats} totalOnHand={totalOnHand} speciesOnHand={speciesOnHand} baseStreak={garden.streak || 0} />} />
+              <Route
+                path="overview"
+                element={
+                  <OverviewSection
+                    gardenId={id!}
+                    activityRev={activityRev}
+                    plants={plants}
+                    membersCount={members.length}
+                    serverToday={serverToday}
+                    dailyStats={dailyStats}
+                    dailyStatsLoading={dailyStatsLoading}
+                    totalOnHand={totalOnHand}
+                    speciesOnHand={speciesOnHand}
+                    baseStreak={garden.streak || 0}
+                  />
+                }
+              />
               <Route path="plants" element={(
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
@@ -2020,7 +2067,7 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
 }
 
 
-function OverviewSection({ gardenId, activityRev, plants, membersCount, serverToday, dailyStats, totalOnHand, speciesOnHand, baseStreak }: { gardenId: string; activityRev?: number; plants: any[]; membersCount: number; serverToday: string | null; dailyStats: Array<{ date: string; due: number; completed: number; success: boolean }>; totalOnHand: number; speciesOnHand: number; baseStreak: number }) {
+function OverviewSection({ gardenId, activityRev, plants, membersCount, serverToday, dailyStats, dailyStatsLoading, totalOnHand, speciesOnHand, baseStreak }: { gardenId: string; activityRev?: number; plants: any[]; membersCount: number; serverToday: string | null; dailyStats: Array<{ date: string; due: number; completed: number; success: boolean }>; dailyStatsLoading: boolean; totalOnHand: number; speciesOnHand: number; baseStreak: number }) {
   const { t } = useTranslation('common')
   const [activity, setActivity] = React.useState<Array<{ id: string; actorName?: string | null; actorColor?: string | null; kind: string; message: string; plantName?: string | null; taskName?: string | null; occurredAt: string }>>([])
   const [loadingAct, setLoadingAct] = React.useState(false)
@@ -2042,15 +2089,27 @@ function OverviewSection({ gardenId, activityRev, plants, membersCount, serverTo
     })()
     return () => { ignore = true }
   }, [gardenId, serverToday, activityRev])
-  const totalToDoToday = dailyStats.find(d => d.date === (serverToday || ''))?.due ?? 0
-  const completedToday = dailyStats.find(d => d.date === (serverToday || ''))?.completed ?? 0
-  const progressPct = totalToDoToday === 0 ? 100 : Math.min(100, Math.round((completedToday / totalToDoToday) * 100))
-  const anchor = serverToday ? new Date(serverToday) : new Date()
+  const fallbackStats = React.useMemo(() => {
+    const reference = serverToday ? new Date(serverToday) : new Date()
+    const arr: Array<{ date: string; due: number; completed: number; success: boolean }> = []
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(reference)
+      d.setDate(d.getDate() - i)
+      arr.push({ date: d.toISOString().slice(0,10), due: 0, completed: 0, success: false })
+    }
+    return arr
+  }, [serverToday])
+  const statsSource = dailyStats.length > 0 ? dailyStats : fallbackStats
+  const statsReady = !dailyStatsLoading && dailyStats.length > 0
+  const todayEntry = statsSource.find(d => d.date === (serverToday || ''))
+  const totalToDoToday = todayEntry?.due ?? 0
+  const completedToday = todayEntry?.completed ?? 0
+  const progressPct = statsReady && totalToDoToday > 0 ? Math.min(100, Math.round((completedToday / totalToDoToday) * 100)) : 0
   
   // Compute max completed value to scale color intensity
   const maxCompleted = React.useMemo(() => 
-    dailyStats.reduce((m, d) => Math.max(m, d.completed || 0), 0), 
-    [dailyStats]
+    statsSource.reduce((m, d) => Math.max(m, d.completed || 0), 0), 
+    [statsSource]
   )
   
   const colorForDay = (completed: number, success: boolean) => {
@@ -2068,25 +2127,22 @@ function OverviewSection({ gardenId, activityRev, plants, membersCount, serverTo
     return 'bg-emerald-700 dark:bg-emerald-500'
   }
   
-  const days = Array.from({ length: 30 }, (_, i) => {
-    const d = new Date(anchor)
-    d.setDate(d.getDate() - (29 - i))
-    const dateIso = d.toISOString().slice(0,10)
+  const days = statsSource.map((item, idx) => {
+    const d = new Date(item.date)
     const dayNum = d.getDate()
-    // Treat missing task row as failed per requirement
-    const found = dailyStats.find(x => x.date === dateIso)
-    const success = found ? found.success : false
-    const completed = found ? (found.completed || 0) : 0
-    return { dayNum, isToday: i === 29, success, completed }
+    const isToday = serverToday ? item.date === serverToday : idx === statsSource.length - 1
+    const success = item.success
+    const completed = item.completed || 0
+    return { dayNum, isToday, success, completed }
   })
   // Use DB-backed streak as base, but if today is in progress we can show live preview
   const streak = (() => {
-    let s = baseStreak
+    if (!statsReady) return baseStreak
     if (serverToday) {
-      const today = dailyStats.find(d => d.date === serverToday)
-      if (today && today.success) s = baseStreak + 1
+      const today = statsSource.find(d => d.date === serverToday)
+      if (today && today.success) return baseStreak + 1
     }
-    return s
+    return baseStreak
   })()
   return (
     <div className="space-y-4">
@@ -2116,27 +2172,41 @@ function OverviewSection({ gardenId, activityRev, plants, membersCount, serverTo
         </Card>
       </div>
 
-      <Card className="rounded-2xl p-4">
-        <div className="font-medium mb-2">{t('gardenDashboard.overviewSection.todaysProgress')}</div>
-        <div className="text-sm opacity-60 mb-2">{completedToday} / {totalToDoToday || 0} {t('gardenDashboard.overviewSection.tasksDone')}</div>
-        <div className="h-3 bg-stone-200 dark:bg-stone-800 rounded-full overflow-hidden">
-          <div className="h-3 bg-emerald-600 dark:bg-emerald-500" style={{ width: `${progressPct}%` }} />
-        </div>
-      </Card>
-
-      <Card className="rounded-2xl p-4">
-        <div className="font-medium mb-3">{t('gardenDashboard.overviewSection.last30Days')}</div>
-        <div className="grid grid-cols-7 gap-x-3 gap-y-3 place-items-center">
-          {days.map((d, idx) => (
-            <div key={idx} className="flex flex-col items-center">
-              <div className={`w-7 h-7 rounded-md flex items-center justify-center ${colorForDay(d.completed, d.success)}`}>
-                <div className="text-[11px]">{d.dayNum}</div>
+        <Card className="rounded-2xl p-4">
+          <div className="font-medium mb-2">{t('gardenDashboard.overviewSection.todaysProgress')}</div>
+          {statsReady ? (
+            <>
+              <div className="text-sm opacity-60 mb-2">{completedToday} / {totalToDoToday || 0} {t('gardenDashboard.overviewSection.tasksDone')}</div>
+              <div className="h-3 bg-stone-200 dark:bg-stone-800 rounded-full overflow-hidden">
+                <div className="h-3 bg-emerald-600 dark:bg-emerald-500 transition-all duration-300" style={{ width: `${progressPct}%` }} />
               </div>
-              {d.isToday && <div className="mt-1 h-0.5 w-5 bg-black dark:bg-white rounded-full" />}
+            </>
+          ) : (
+            <div className="space-y-2">
+              <div className="h-4 bg-stone-200 dark:bg-stone-700 rounded animate-pulse w-1/2" />
+              <div className="h-3 bg-stone-200 dark:bg-stone-800 rounded-full animate-pulse w-full" />
             </div>
-          ))}
-        </div>
-      </Card>
+          )}
+        </Card>
+
+        <Card className="rounded-2xl p-4">
+          <div className="font-medium mb-3">{t('gardenDashboard.overviewSection.last30Days')}</div>
+          <div className="grid grid-cols-7 gap-x-3 gap-y-3 place-items-center">
+            {days.map((d, idx) => {
+              const cellClasses = statsReady
+                ? `w-7 h-7 rounded-md flex items-center justify-center ${colorForDay(d.completed, d.success)}`
+                : 'w-7 h-7 rounded-md flex items-center justify-center bg-stone-200 dark:bg-stone-700 animate-pulse'
+              return (
+                <div key={idx} className="flex flex-col items-center">
+                  <div className={cellClasses}>
+                    {statsReady && <div className="text-[11px]">{d.dayNum}</div>}
+                  </div>
+                  {d.isToday && statsReady && <div className="mt-1 h-0.5 w-5 bg-black dark:bg-white rounded-full" />}
+                </div>
+              )
+            })}
+          </div>
+        </Card>
 
       {/* Activity (today) */}
       <Card className="rounded-2xl p-4">
