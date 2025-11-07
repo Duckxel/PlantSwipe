@@ -470,14 +470,20 @@ def sync_schema():
                 _log_admin_action("sync_schema_failed", detail={"error": "psql failed", "detail": tail})
             except Exception:
                 pass
-            return jsonify({"ok": False, "error": "psql failed", "detail": tail}), 500
+            return jsonify({"ok": False, "error": "psql failed", "detail": tail, "stdout": out, "stderr": err}), 500
         # Success
-        tail = "\n".join((res.stdout or "").splitlines()[-20:])
+        tail = "\n".join((res.stdout or "").splitlines()[-50:])  # Show more lines
+        stderr_tail = "\n".join((res.stderr or "").splitlines()[-20:]) if res.stderr else None
         try:
-            _log_admin_action("sync_schema", detail={"stdoutTail": tail})
+            _log_admin_action("sync_schema", detail={"stdoutTail": tail, "stderrTail": stderr_tail})
         except Exception:
             pass
-        return jsonify({"ok": True, "message": "Schema synchronized successfully", "stdoutTail": tail})
+        return jsonify({
+            "ok": True, 
+            "message": "Schema synchronized successfully", 
+            "stdoutTail": tail,
+            "stderr": stderr_tail
+        })
     except Exception as e:
         try:
             _log_admin_action("sync_schema_failed", detail={"error": str(e) or "Failed to run psql"})

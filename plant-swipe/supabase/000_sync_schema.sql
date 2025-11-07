@@ -3243,6 +3243,56 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON garden_task_weekly_cache TO authenticate
 GRANT SELECT, INSERT, UPDATE, DELETE ON garden_plant_task_counts_cache TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON garden_task_occurrences_today_cache TO authenticated;
 
+-- Enable RLS on cache tables for security
+ALTER TABLE garden_task_daily_cache ENABLE ROW LEVEL SECURITY;
+ALTER TABLE garden_task_weekly_cache ENABLE ROW LEVEL SECURITY;
+ALTER TABLE garden_plant_task_counts_cache ENABLE ROW LEVEL SECURITY;
+ALTER TABLE garden_task_occurrences_today_cache ENABLE ROW LEVEL SECURITY;
+
+-- RLS policies for cache tables - users can only see cache for gardens they're members of
+DO $$
+BEGIN
+  -- Policy for garden_task_daily_cache
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='garden_task_daily_cache' AND policyname='cache_select_member') THEN
+    CREATE POLICY cache_select_member ON garden_task_daily_cache FOR SELECT TO authenticated
+      USING (EXISTS (
+        SELECT 1 FROM garden_members gm
+        WHERE gm.garden_id = garden_task_daily_cache.garden_id
+        AND gm.user_id = auth.uid()
+      ));
+  END IF;
+  
+  -- Policy for garden_task_weekly_cache
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='garden_task_weekly_cache' AND policyname='cache_select_member') THEN
+    CREATE POLICY cache_select_member ON garden_task_weekly_cache FOR SELECT TO authenticated
+      USING (EXISTS (
+        SELECT 1 FROM garden_members gm
+        WHERE gm.garden_id = garden_task_weekly_cache.garden_id
+        AND gm.user_id = auth.uid()
+      ));
+  END IF;
+  
+  -- Policy for garden_plant_task_counts_cache
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='garden_plant_task_counts_cache' AND policyname='cache_select_member') THEN
+    CREATE POLICY cache_select_member ON garden_plant_task_counts_cache FOR SELECT TO authenticated
+      USING (EXISTS (
+        SELECT 1 FROM garden_members gm
+        WHERE gm.garden_id = garden_plant_task_counts_cache.garden_id
+        AND gm.user_id = auth.uid()
+      ));
+  END IF;
+  
+  -- Policy for garden_task_occurrences_today_cache
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='garden_task_occurrences_today_cache' AND policyname='cache_select_member') THEN
+    CREATE POLICY cache_select_member ON garden_task_occurrences_today_cache FOR SELECT TO authenticated
+      USING (EXISTS (
+        SELECT 1 FROM garden_members gm
+        WHERE gm.garden_id = garden_task_occurrences_today_cache.garden_id
+        AND gm.user_id = auth.uid()
+      ));
+  END IF;
+END $$;
+
 GRANT EXECUTE ON FUNCTION refresh_garden_daily_cache(uuid, date) TO authenticated;
 GRANT EXECUTE ON FUNCTION refresh_garden_weekly_cache(uuid, date) TO authenticated;
 GRANT EXECUTE ON FUNCTION refresh_garden_plant_task_counts_cache(uuid) TO authenticated;
@@ -3636,6 +3686,18 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON user_task_daily_cache TO authenticated;
 GRANT EXECUTE ON FUNCTION refresh_user_task_daily_cache(uuid, date) TO authenticated;
 GRANT EXECUTE ON FUNCTION get_user_tasks_today_cached(uuid, date) TO authenticated;
 GRANT EXECUTE ON FUNCTION get_user_gardens_tasks_today_cached(uuid, date) TO authenticated;
+
+-- Enable RLS on user cache table
+ALTER TABLE user_task_daily_cache ENABLE ROW LEVEL SECURITY;
+
+-- RLS policy for user_task_daily_cache - users can only see their own cache
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='user_task_daily_cache' AND policyname='user_cache_select_self') THEN
+    CREATE POLICY user_cache_select_self ON user_task_daily_cache FOR SELECT TO authenticated
+      USING (user_id = auth.uid());
+  END IF;
+END $$;
 
 -- Initialize cache for all gardens and users (runs automatically when script executes)
 -- This ensures cache is populated immediately after schema setup

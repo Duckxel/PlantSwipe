@@ -200,8 +200,19 @@ export const AdminPage: React.FC = () => {
   // Heuristic to mark the console as error. Keep strict to avoid false positives
   // from JSON keys like "error" or benign words. Prefer lines that clearly
   // signal errors (severity prefixes) and common failure words.
+  // Exclude warnings (⚠) and lines starting with [sync] ⚠ from being treated as errors
   const errorLineRx = React.useMemo(
-    () => /(^\s*\[?(ERROR|FATAL)\]?|^\s*(error:|fatal:)|npm\s+ERR!|\b(failed|failure|exception|traceback)\b)/i,
+    () => {
+      // Match error patterns, but exclude warning lines
+      return (line: string) => {
+        // Skip lines that are clearly warnings
+        if (/^\s*\[.*\]\s*⚠|⚠|WARNING:/i.test(line)) {
+          return false
+        }
+        // Match actual error patterns
+        return /(^\s*\[?(ERROR|FATAL)\]?|^\s*(error:|fatal:)|npm\s+ERR!|^\s*✗|^\s*\[.*\]\s*✗)/i.test(line)
+      }
+    },
     [],
   )
 
@@ -209,7 +220,7 @@ export const AdminPage: React.FC = () => {
     return consoleLines.join('\n')
   }, [consoleLines])
 
-  const hasConsoleError = React.useMemo(() => consoleLines.some(l => errorLineRx.test(l)), [consoleLines, errorLineRx])
+  const hasConsoleError = React.useMemo(() => consoleLines.some(l => errorLineRx(l)), [consoleLines, errorLineRx])
 
   const appendConsole = React.useCallback((line: string) => {
     setConsoleLines(prev => [...prev, line])
@@ -286,6 +297,32 @@ export const AdminPage: React.FC = () => {
         throw new Error(body?.error || `Request failed (${resp.status})`)
       }
       appendConsole('[sync] Schema synchronized successfully')
+      
+      // Show SQL execution output if available
+      if (body?.stdoutTail) {
+        appendConsole('[sync] SQL execution output:')
+        const outputLines = String(body.stdoutTail).split('\n').filter(l => l.trim())
+        outputLines.forEach(line => {
+          // Check for error patterns in SQL output
+          if (/error|ERROR|failed|FAILED/i.test(line) && !/⚠/.test(line)) {
+            appendConsole(`[sync] ⚠ ${line}`)
+          } else {
+            appendConsole(`[sync]   ${line}`)
+          }
+        })
+      }
+      
+      // Check for errors in stderr
+      if (body?.stderr) {
+        const stderrLines = String(body.stderr).split('\n').filter(l => l.trim())
+        if (stderrLines.length > 0) {
+          appendConsole('[sync] SQL execution warnings/errors:')
+          stderrLines.forEach(line => {
+            appendConsole(`[sync] ⚠ ${line}`)
+          })
+        }
+      }
+      
       const summary = body?.summary
       if (summary && typeof summary === 'object') {
         try {
@@ -309,69 +346,106 @@ export const AdminPage: React.FC = () => {
       
       // Verify cache tables exist and have data
       appendConsole('[sync] Verifying cache tables...')
+      let cacheTablesExist = true
       try {
-        // Check garden_task_daily_cache
-        const { data: gardenCache, error: gardenCacheErr } = await supabase
+        // Check garden_task_daily_cache - use a simple query to test if table exists
+        const { error: gardenCacheErr } = await supabase
           .from('garden_task_daily_cache')
-          .select('garden_id, cache_date, due_count, completed_count', { count: 'exact', head: false })
-          .limit(1)
+          .select('garden_id')
+          .limit(0) // Just check if table exists, don't fetch data
         
         if (gardenCacheErr) {
-          appendConsole(`[sync] WARNING: garden_task_daily_cache table check failed: ${gardenCacheErr.message}`)
+          if (gardenCacheErr.message.includes('Could not find the table') || gardenCacheErr.message.includes('relation') || gardenCacheErr.message.includes('does not exist')) {
+            appendConsole(`[sync] ⚠ WARNING: garden_task_daily_cache table does not exist`)
+            appendConsole(`[sync] ⚠ This means the cache tables were not created. The SQL file may have failed to execute these sections.`)
+            cacheTablesExist = false
+          } else {
+            appendConsole(`[sync] ⚠ WARNING: garden_task_daily_cache table check failed: ${gardenCacheErr.message}`)
+          }
         } else {
-          const count = gardenCache?.length || 0
-          appendConsole(`[sync] ✓ garden_task_daily_cache: ${count > 0 ? `${count} entries found` : 'table exists but empty'}`)
-        }
-        
-        // Check user_task_daily_cache
-        const { data: userCache, error: userCacheErr } = await supabase
-          .from('user_task_daily_cache')
-          .select('user_id, cache_date, total_due_count, total_completed_count', { count: 'exact', head: false })
-          .limit(1)
-        
-        if (userCacheErr) {
-          appendConsole(`[sync] WARNING: user_task_daily_cache table check failed: ${userCacheErr.message}`)
-        } else {
-          const count = userCache?.length || 0
-          appendConsole(`[sync] ✓ user_task_daily_cache: ${count > 0 ? `${count} entries found` : 'table exists but empty'}`)
-        }
-        
-        // Check if initialize_all_task_cache function exists and can be called
-        appendConsole('[sync] Verifying cache initialization function...')
-        const { error: initErr } = await supabase.rpc('initialize_all_task_cache')
-        
-        if (initErr) {
-          appendConsole(`[sync] WARNING: initialize_all_task_cache() failed: ${initErr.message}`)
-          appendConsole('[sync] Cache may need manual initialization. Run: SELECT initialize_all_task_cache();')
-        } else {
-          appendConsole('[sync] ✓ Cache initialization function executed successfully')
-          
-          // Re-check cache after initialization
-          await new Promise(resolve => setTimeout(resolve, 1000)) // Wait 1 second for cache to populate
-          
+          // Table exists, check if it has data
           const { count: gardenCount } = await supabase
             .from('garden_task_daily_cache')
             .select('*', { count: 'exact', head: true })
           
+          appendConsole(`[sync] ✓ garden_task_daily_cache: table exists${gardenCount ? `, ${gardenCount} entries` : ', empty'}`)
+        }
+        
+        // Check user_task_daily_cache
+        const { error: userCacheErr } = await supabase
+          .from('user_task_daily_cache')
+          .select('user_id')
+          .limit(0) // Just check if table exists
+        
+        if (userCacheErr) {
+          if (userCacheErr.message.includes('Could not find the table') || userCacheErr.message.includes('relation') || userCacheErr.message.includes('does not exist')) {
+            appendConsole(`[sync] ⚠ WARNING: user_task_daily_cache table does not exist`)
+            appendConsole(`[sync] ⚠ This means the cache tables were not created. The SQL file may have failed to execute these sections.`)
+            cacheTablesExist = false
+          } else {
+            appendConsole(`[sync] ⚠ WARNING: user_task_daily_cache table check failed: ${userCacheErr.message}`)
+          }
+        } else {
+          // Table exists, check if it has data
           const { count: userCount } = await supabase
             .from('user_task_daily_cache')
             .select('*', { count: 'exact', head: true })
           
-          appendConsole(`[sync] Cache status after initialization:`)
-          appendConsole(`[sync] - Garden cache entries: ${gardenCount || 0}`)
-          appendConsole(`[sync] - User cache entries: ${userCount || 0}`)
+          appendConsole(`[sync] ✓ user_task_daily_cache: table exists${userCount ? `, ${userCount} entries` : ', empty'}`)
+        }
+        
+        // Only try to initialize cache if tables exist
+        if (cacheTablesExist) {
+          // Check if initialize_all_task_cache function exists and can be called
+          appendConsole('[sync] Verifying cache initialization function...')
+          const { error: initErr } = await supabase.rpc('initialize_all_task_cache')
           
-          if ((gardenCount || 0) > 0 || (userCount || 0) > 0) {
-            appendConsole('[sync] ✓ Cache successfully populated!')
+          if (initErr) {
+            if (initErr.message.includes('Could not find the function') || initErr.message.includes('does not exist')) {
+              appendConsole(`[sync] ⚠ WARNING: initialize_all_task_cache() function does not exist`)
+              appendConsole(`[sync] ⚠ The cache initialization function was not created. Check SQL execution logs.`)
+            } else {
+              appendConsole(`[sync] ⚠ WARNING: initialize_all_task_cache() failed: ${initErr.message}`)
+            }
+            appendConsole('[sync] ⚠ Cache may need manual initialization. Run: SELECT initialize_all_task_cache();')
           } else {
-            appendConsole('[sync] ⚠ Cache tables exist but are empty. This is normal if you have no gardens/tasks yet.')
+            appendConsole('[sync] ✓ Cache initialization function executed successfully')
+            
+            // Re-check cache after initialization
+            await new Promise(resolve => setTimeout(resolve, 1000)) // Wait 1 second for cache to populate
+            
+            const { count: gardenCount } = await supabase
+              .from('garden_task_daily_cache')
+              .select('*', { count: 'exact', head: true })
+            
+            const { count: userCount } = await supabase
+              .from('user_task_daily_cache')
+              .select('*', { count: 'exact', head: true })
+            
+            appendConsole(`[sync] Cache status after initialization:`)
+            appendConsole(`[sync] - Garden cache entries: ${gardenCount || 0}`)
+            appendConsole(`[sync] - User cache entries: ${userCount || 0}`)
+            
+            if ((gardenCount || 0) > 0 || (userCount || 0) > 0) {
+              appendConsole('[sync] ✓ Cache successfully populated!')
+            } else {
+              appendConsole('[sync] ⚠ Cache tables exist but are empty. This is normal if you have no gardens/tasks yet.')
+            }
           }
+        } else {
+          appendConsole('[sync] ⚠ Cache tables are missing. Please check the SQL file execution logs.')
+          appendConsole('[sync] ⚠ The cache-related SQL may have failed. Check for errors in the sync output above.')
         }
       } catch (verifyErr: any) {
-        appendConsole(`[sync] Cache verification error: ${verifyErr?.message || String(verifyErr)}`)
+        appendConsole(`[sync] ⚠ Cache verification error: ${verifyErr?.message || String(verifyErr)}`)
       }
       
-      appendConsole('[sync] ✓ Database sync completed successfully!')
+      if (cacheTablesExist) {
+        appendConsole('[sync] ✓ Database sync completed successfully!')
+      } else {
+        appendConsole('[sync] ⚠ Database sync completed, but cache tables are missing!')
+        appendConsole('[sync] ⚠ Please review the SQL execution output above for errors.')
+      }
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e)
       appendConsole(`[sync] ✗ Failed to sync schema: ${message}`)
