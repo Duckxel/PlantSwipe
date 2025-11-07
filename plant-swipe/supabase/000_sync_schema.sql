@@ -3101,29 +3101,40 @@ BEGIN
 END;
 $$;
 
--- Function: Cleanup old cache entries (delete entries older than 7 days)
+-- Function: Cleanup old cache entries (delete entries older than 1 day to prevent accumulation)
 CREATE OR REPLACE FUNCTION cleanup_old_garden_task_cache()
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
-  _cutoff_date date := CURRENT_DATE - INTERVAL '7 days';
+  _cutoff_date date := CURRENT_DATE - INTERVAL '1 day'; -- Keep only today and yesterday
 BEGIN
-  -- Delete old daily cache
+  -- Delete old daily cache (keep only today and yesterday)
   DELETE FROM garden_task_daily_cache WHERE cache_date < _cutoff_date;
   
-  -- Delete old weekly cache
+  -- Delete old weekly cache (keep only current and last week)
   DELETE FROM garden_task_weekly_cache WHERE week_end_date < _cutoff_date;
   
-  -- Delete old today occurrences cache
+  -- Delete old today occurrences cache (keep only today and yesterday)
   DELETE FROM garden_task_occurrences_today_cache WHERE cache_date < _cutoff_date;
+  
+  -- Delete old user cache (keep only today and yesterday)
+  DELETE FROM user_task_daily_cache WHERE cache_date < _cutoff_date;
   
   -- Also clean up stale plant task counts (older than 1 day)
   DELETE FROM garden_plant_task_counts_cache 
   WHERE updated_at < (CURRENT_TIMESTAMP - INTERVAL '1 day');
 END;
 $$;
+
+-- Schedule daily cleanup job to run at 2 AM UTC every day
+-- This prevents cache accumulation and keeps database clean
+SELECT cron.schedule(
+  'cleanup-old-task-cache',
+  '0 2 * * *', -- 2 AM UTC daily
+  $$SELECT cleanup_old_garden_task_cache();$$
+) ON CONFLICT (jobname) DO UPDATE SET schedule = '0 2 * * *', command = $$SELECT cleanup_old_garden_task_cache();$$;
 
 -- Function: Initialize cache for all gardens AND users (run on startup/periodically)
 CREATE OR REPLACE FUNCTION initialize_all_task_cache()
