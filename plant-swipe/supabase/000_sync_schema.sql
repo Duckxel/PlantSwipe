@@ -3125,17 +3125,18 @@ BEGIN
 END;
 $$;
 
--- Function: Initialize cache for all gardens (run once after migration)
-CREATE OR REPLACE FUNCTION initialize_garden_task_cache()
+-- Function: Initialize cache for all gardens AND users (run on startup/periodically)
+CREATE OR REPLACE FUNCTION initialize_all_task_cache()
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
   _garden_record RECORD;
+  _user_record RECORD;
   _today date := CURRENT_DATE;
 BEGIN
-  -- Refresh cache for all gardens
+  -- Refresh cache for all gardens first
   FOR _garden_record IN SELECT id FROM gardens LOOP
     BEGIN
       PERFORM refresh_garden_task_cache(_garden_record.id, _today);
@@ -3144,10 +3145,21 @@ BEGIN
       NULL;
     END;
   END LOOP;
+  
+  -- Then refresh user cache for all users
+  FOR _user_record IN SELECT DISTINCT user_id FROM garden_members LOOP
+    BEGIN
+      PERFORM refresh_user_task_daily_cache(_user_record.user_id, _today);
+    EXCEPTION WHEN OTHERS THEN
+      -- Continue on error
+      NULL;
+    END;
+  END LOOP;
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION initialize_garden_task_cache() TO authenticated;
+GRANT EXECUTE ON FUNCTION initialize_all_task_cache() TO authenticated;
+GRANT EXECUTE ON FUNCTION initialize_all_task_cache() TO service_role;
 
 -- Trigger function: Auto-refresh cache when task occurrences change
 CREATE OR REPLACE FUNCTION trigger_refresh_garden_task_cache()
@@ -3173,12 +3185,12 @@ BEGIN
   END IF;
   
   IF _garden_id IS NOT NULL THEN
-    -- Refresh cache asynchronously via notification (don't block the transaction)
-    PERFORM pg_notify('garden_task_cache_refresh', _garden_id::text || '|' || _cache_date::text);
-    
-    -- Also refresh immediately in background (non-blocking)
-    -- Use a separate connection or defer to avoid blocking
+    -- Refresh cache SYNCHRONOUSLY to ensure it's always available
+    -- This is critical for performance - cache must be ready immediately
     PERFORM refresh_garden_task_cache(_garden_id, _cache_date);
+    
+    -- Also notify for async user cache refresh
+    PERFORM pg_notify('garden_task_cache_refresh', _garden_id::text || '|' || _cache_date::text);
   END IF;
   
   RETURN COALESCE(NEW, OLD);
@@ -3201,10 +3213,11 @@ BEGIN
   END IF;
   
   IF _garden_id IS NOT NULL THEN
-    PERFORM pg_notify('garden_task_cache_refresh', _garden_id::text || '|' || _cache_date::text);
-    
-    -- Also refresh immediately in background (non-blocking)
+    -- Refresh cache SYNCHRONOUSLY to ensure it's always available
     PERFORM refresh_garden_task_cache(_garden_id, _cache_date);
+    
+    -- Also notify for async operations
+    PERFORM pg_notify('garden_task_cache_refresh', _garden_id::text || '|' || _cache_date::text);
   END IF;
   
   RETURN COALESCE(NEW, OLD);
@@ -3450,7 +3463,7 @@ BEGIN
 END;
 $$;
 
--- Function: Get user's cached task counts (with fallback computation)
+-- Function: Get user's cached task counts (ONLY reads from cache, never computes)
 CREATE OR REPLACE FUNCTION get_user_tasks_today_cached(
   _user_id uuid,
   _cache_date date DEFAULT CURRENT_DATE
@@ -3468,7 +3481,7 @@ AS $$
 DECLARE
   _cached RECORD;
 BEGIN
-  -- Try to get from cache first
+  -- ONLY read from cache - never compute
   SELECT 
     total_due_count,
     total_completed_count,
@@ -3479,11 +3492,8 @@ BEGIN
   WHERE user_id = _user_id AND cache_date = _cache_date
   LIMIT 1;
   
-  -- If cache exists and is recent (within last hour), return it
-  IF _cached IS NOT NULL AND (
-    SELECT updated_at FROM user_task_daily_cache 
-    WHERE user_id = _user_id AND cache_date = _cache_date
-  ) > (now() - INTERVAL '1 hour') THEN
+  -- If cache exists, return it (even if stale - we'll refresh in background)
+  IF _cached IS NOT NULL THEN
     RETURN QUERY SELECT 
       _cached.total_due_count,
       _cached.total_completed_count,
@@ -3492,20 +3502,19 @@ BEGIN
     RETURN;
   END IF;
   
-  -- Fallback: compute from garden cache (still fast)
-  RETURN QUERY
-  SELECT 
-    COALESCE(SUM(c.due_count), 0)::integer as total_due_count,
-    COALESCE(SUM(c.completed_count), 0)::integer as total_completed_count,
-    COUNT(*) FILTER (WHERE c.has_remaining_tasks = true)::integer as gardens_with_remaining_tasks,
-    COUNT(DISTINCT gm.garden_id)::integer as total_gardens
-  FROM garden_members gm
-  LEFT JOIN garden_task_daily_cache c ON c.garden_id = gm.garden_id AND c.cache_date = _cache_date
-  WHERE gm.user_id = _user_id;
+  -- If cache doesn't exist, return zeros and trigger background refresh
+  -- This ensures instant response even if cache is missing
+  PERFORM pg_notify('user_task_cache_refresh', _user_id::text || '|' || _cache_date::text);
+  
+  RETURN QUERY SELECT 
+    0::integer as total_due_count,
+    0::integer as total_completed_count,
+    0::integer as gardens_with_remaining_tasks,
+    0::integer as total_gardens;
 END;
 $$;
 
--- Function: Get per-garden task counts for a user (uses cache)
+-- Function: Get per-garden task counts for a user (ONLY reads from cache, never computes)
 CREATE OR REPLACE FUNCTION get_user_gardens_tasks_today_cached(
   _user_id uuid,
   _cache_date date DEFAULT CURRENT_DATE
@@ -3523,6 +3532,8 @@ SECURITY DEFINER
 STABLE
 AS $$
 BEGIN
+  -- ONLY read from cache - never compute
+  -- Join with gardens to get names, but only return cached data
   RETURN QUERY
   SELECT 
     g.id as garden_id,
@@ -3536,6 +3547,16 @@ BEGIN
   LEFT JOIN garden_task_daily_cache c ON c.garden_id = g.id AND c.cache_date = _cache_date
   WHERE gm.user_id = _user_id
   ORDER BY g.name;
+  
+  -- If any gardens don't have cache, trigger background refresh
+  -- But don't block - return what we have
+  IF EXISTS (
+    SELECT 1 FROM garden_members gm2
+    LEFT JOIN garden_task_daily_cache c2 ON c2.garden_id = gm2.garden_id AND c2.cache_date = _cache_date
+    WHERE gm2.user_id = _user_id AND c2.garden_id IS NULL
+  ) THEN
+    PERFORM pg_notify('garden_task_cache_refresh', _user_id::text || '|' || _cache_date::text);
+  END IF;
 END;
 $$;
 
@@ -3556,16 +3577,17 @@ BEGIN
   END IF;
   
   -- Refresh cache for all users who are members of this garden
+  -- Do this SYNCHRONOUSLY to ensure cache is always ready
   FOR _user_record IN 
     SELECT DISTINCT user_id 
     FROM garden_members 
     WHERE garden_id = COALESCE(NEW.garden_id, OLD.garden_id)
   LOOP
-    -- Refresh asynchronously (non-blocking)
-    PERFORM pg_notify('user_task_cache_refresh', _user_record.user_id::text || '|' || _cache_date::text);
-    
-    -- Also refresh immediately in background
+    -- Refresh immediately (synchronous) to ensure cache is ready
     PERFORM refresh_user_task_daily_cache(_user_record.user_id, _cache_date);
+    
+    -- Also notify for async operations
+    PERFORM pg_notify('user_task_cache_refresh', _user_record.user_id::text || '|' || _cache_date::text);
   END LOOP;
   
   RETURN COALESCE(NEW, OLD);
@@ -3595,6 +3617,7 @@ BEGIN
   END IF;
   
   IF _user_id IS NOT NULL THEN
+    -- Refresh SYNCHRONOUSLY to ensure cache is ready
     PERFORM refresh_user_task_daily_cache(_user_id, _cache_date);
   END IF;
   

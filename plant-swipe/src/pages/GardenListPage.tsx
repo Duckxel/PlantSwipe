@@ -159,10 +159,7 @@ export const GardenListPage: React.FC = () => {
               }
               setProgressByGarden(converted)
             }).catch(() => {
-              // Fallback to garden-level cache
-              getGardensTodayProgressBatchCached(freshData.map(g => g.id), today).then((progMap) => {
-                setProgressByGarden(progMap)
-              }).catch(() => {})
+              // On error, keep existing progress
             })
           } else {
             getGardensTodayProgressBatchCached(freshData.map(g => g.id), today).then((progMap) => {
@@ -183,15 +180,15 @@ export const GardenListPage: React.FC = () => {
             }
             setProgressByGarden(converted)
           }).catch(() => {
-            // Fallback to garden-level cache
-            getGardensTodayProgressBatchCached(data.map(g => g.id), today).then((progMap) => {
-              setProgressByGarden(progMap)
-            }).catch(() => {})
+            // On error, set empty progress
+            setProgressByGarden({})
           })
         } else {
           getGardensTodayProgressBatchCached(data.map(g => g.id), today).then((progMap) => {
             setProgressByGarden(progMap)
-          }).catch(() => {})
+          }).catch(() => {
+            setProgressByGarden({})
+          })
         }
         
         return
@@ -223,8 +220,8 @@ export const GardenListPage: React.FC = () => {
       // Set loading to false immediately so gardens render
       setLoading(false)
       
-      // Load progress using cached user-level query (INSTANT - uses pre-computed cache)
-      // This loads all garden progress in a single query
+      // Load progress using cached user-level query (INSTANT - ONLY reads cache, never computes)
+      // This loads all garden progress in a single query from pre-computed cache
       if (user?.id) {
         getUserGardensTasksTodayCached(user.id, today).then((progMap) => {
           // Convert to the format expected by progressByGarden
@@ -233,20 +230,22 @@ export const GardenListPage: React.FC = () => {
             converted[gid] = { due: prog.due, completed: prog.completed }
           }
           setProgressByGarden(converted)
+          
+          // If cache returned empty/zeros, trigger background refresh
+          // But don't block - user sees instant response
+          if (Object.keys(progMap).length === 0 || Object.values(progMap).every(p => p.due === 0 && p.completed === 0)) {
+            refreshUserTaskCache(user.id, today).catch(() => {})
+          }
         }).catch(() => {
-          // Fallback to garden-level cache if user cache fails
-          getGardensTodayProgressBatchCached(data.map(g => g.id), today).then((progMap) => {
-            setProgressByGarden(progMap)
-          }).catch(() => {
-            // Silently fail - progress will update on next refresh
-          })
+          // On error, set empty progress (cache will refresh in background)
+          setProgressByGarden({})
         })
       } else {
-        // Fallback for non-logged-in users
+        // For non-logged-in users, use garden-level cache
         getGardensTodayProgressBatchCached(data.map(g => g.id), today).then((progMap) => {
           setProgressByGarden(progMap)
         }).catch(() => {
-          // Silently fail - progress will update on next refresh
+          setProgressByGarden({})
         })
       }
     } catch (e: any) {

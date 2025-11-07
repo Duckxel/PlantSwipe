@@ -1804,7 +1804,8 @@ export async function gardensHaveRemainingTasks(gardenIds: string[], dayIso?: st
 // ===== User-level Task Cache Functions =====
 
 /**
- * Get user's total task counts across all gardens (uses cache)
+ * Get user's total task counts across all gardens (ONLY reads from cache, never computes)
+ * Returns zeros if cache doesn't exist (cache will be populated in background)
  */
 export async function getUserTasksTodayCached(userId: string, dayIso?: string): Promise<{
   totalDueCount: number
@@ -1828,39 +1829,17 @@ export async function getUserTasksTodayCached(userId: string, dayIso?: string): 
       }
     }
   } catch {
-    // Fallback to computation
+    // If cache read fails, return zeros
   }
   
-  // Fallback: compute from garden cache
-  const gardens = await getUserGardens(userId)
-  if (gardens.length === 0) {
-    return { totalDueCount: 0, totalCompletedCount: 0, gardensWithRemainingTasks: 0, totalGardens: 0 }
-  }
-  
-  const progressMap = await getGardensTodayProgressBatchCached(gardens.map(g => g.id), date)
-  let totalDue = 0
-  let totalCompleted = 0
-  let gardensWithRemaining = 0
-  
-  for (const [, prog] of Object.entries(progressMap)) {
-    totalDue += prog.due
-    totalCompleted += prog.completed
-    if (prog.hasRemainingTasks) {
-      gardensWithRemaining++
-    }
-  }
-  
-  return {
-    totalDueCount: totalDue,
-    totalCompletedCount: totalCompleted,
-    gardensWithRemainingTasks: gardensWithRemaining,
-    totalGardens: gardens.length,
-  }
+  // Return zeros if cache doesn't exist - cache will be populated in background
+  // This ensures instant response
+  return { totalDueCount: 0, totalCompletedCount: 0, gardensWithRemainingTasks: 0, totalGardens: 0 }
 }
 
 /**
- * Get per-garden task counts for a user (uses cache)
- * Returns progress data for all gardens the user is a member of
+ * Get per-garden task counts for a user (ONLY reads from cache, never computes)
+ * Returns zeros for gardens without cache (cache will be populated in background)
  */
 export async function getUserGardensTasksTodayCached(userId: string, dayIso?: string): Promise<Record<string, {
   gardenName: string
@@ -1895,40 +1874,12 @@ export async function getUserGardensTasksTodayCached(userId: string, dayIso?: st
       return result
     }
   } catch {
-    // Fallback to computation
+    // If cache read fails, return empty object
   }
   
-  // Fallback: compute from garden cache
-  const gardens = await getUserGardens(userId)
-  if (gardens.length === 0) {
-    return {}
-  }
-  
-  const progressMap = await getGardensTodayProgressBatchCached(gardens.map(g => g.id), date)
-  const result: Record<string, {
-    gardenName: string
-    due: number
-    completed: number
-    hasRemainingTasks: boolean
-    allTasksDone: boolean
-  }> = {}
-  
-  const gardenNameMap: Record<string, string> = {}
-  for (const g of gardens) {
-    gardenNameMap[g.id] = g.name
-  }
-  
-  for (const [gardenId, prog] of Object.entries(progressMap)) {
-    result[gardenId] = {
-      gardenName: gardenNameMap[gardenId] || '',
-      due: prog.due,
-      completed: prog.completed,
-      hasRemainingTasks: prog.hasRemainingTasks ?? (prog.due > prog.completed),
-      allTasksDone: prog.allTasksDone ?? (prog.due === 0 || prog.completed >= prog.due),
-    }
-  }
-  
-  return result
+  // Return empty object if cache doesn't exist - cache will be populated in background
+  // This ensures instant response
+  return {}
 }
 
 /**
