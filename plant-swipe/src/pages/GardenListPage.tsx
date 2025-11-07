@@ -34,6 +34,7 @@ export const GardenListPage: React.FC = () => {
   const lastSuccessfulLoadRef = React.useRef<number>(0)
   const [allPlants, setAllPlants] = React.useState<any[]>([])
   const [todayTaskOccurrences, setTodayTaskOccurrences] = React.useState<Array<{ id: string; taskId: string; gardenPlantId: string; dueAt: string; requiredCount: number; completedCount: number; completedAt: string | null; taskType?: 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'; taskEmoji?: string | null }>>([])
+  const [completionsByOcc, setCompletionsByOcc] = React.useState<Record<string, any[]>>({})
   const [progressingOccIds, setProgressingOccIds] = React.useState<Set<string>>(new Set())
   const [completingPlantIds, setCompletingPlantIds] = React.useState<Set<string>>(new Set())
   const [markingAllCompleted, setMarkingAllCompleted] = React.useState(false)
@@ -292,7 +293,7 @@ export const GardenListPage: React.FC = () => {
         } else {
           // Use cache but it's empty - mismatch detection will catch this
           setTodayTaskOccurrences(cached.data.occurrences)
-          setCompletionsByOcc(cached.data.completions)
+          setCompletionsByOcc(cached.data.completions || {})
           setAllPlants(cached.data.plants)
           setLoadingTasks(false)
           return
@@ -300,7 +301,7 @@ export const GardenListPage: React.FC = () => {
       } else {
         // Cache has tasks or skipResync is true - use it
         setTodayTaskOccurrences(cached.data.occurrences)
-        setCompletionsByOcc(cached.data.completions)
+        setCompletionsByOcc(cached.data.completions || {})
         setAllPlants(cached.data.plants)
         setLoadingTasks(false)
         return
@@ -422,7 +423,7 @@ export const GardenListPage: React.FC = () => {
       // Fetch completions for all occurrences
       const ids = occsAugmented.map(o => o.id)
       const compMap = ids.length > 0 ? await listCompletionsForOccurrences(ids) : {}
-      setCompletionsByOcc(compMap)
+      setCompletionsByOcc(compMap || {})
       // 4) Load plants for all gardens - use minimal version to reduce egress by ~80%
       const gardenIds = gardensList.map(g => g.id)
       const plantsMinimal = await getGardenPlantsMinimal(gardenIds)
