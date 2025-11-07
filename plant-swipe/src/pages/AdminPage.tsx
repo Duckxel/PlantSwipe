@@ -302,13 +302,32 @@ export const AdminPage: React.FC = () => {
       if (body?.stdoutTail) {
         appendConsole('[sync] SQL execution output:')
         const outputLines = String(body.stdoutTail).split('\n').filter(l => l.trim())
+        let hasErrors = false
         outputLines.forEach(line => {
           // Check for error patterns in SQL output
-          if (/error|ERROR|failed|FAILED/i.test(line) && !/⚠/.test(line)) {
+          const isError = /ERROR:|error:|failed|FAILED/i.test(line) && !/⚠/.test(line)
+          if (isError) {
+            hasErrors = true
+            appendConsole(`[sync] ✗ ERROR: ${line}`)
+          } else if (/WARNING:|NOTICE:/i.test(line)) {
             appendConsole(`[sync] ⚠ ${line}`)
           } else {
-            appendConsole(`[sync]   ${line}`)
+            // Only show non-error lines if they're relevant (CREATE, ALTER, etc.)
+            if (/CREATE|ALTER|DROP|SELECT|INSERT|UPDATE|DELETE|GRANT|REVOKE/i.test(line)) {
+              appendConsole(`[sync]   ${line}`)
+            }
           }
+        })
+        if (hasErrors) {
+          appendConsole('[sync] ✗ SQL execution encountered errors. Check the output above.')
+        }
+      }
+      
+      // Show warnings array if available
+      if (body?.warnings && Array.isArray(body.warnings) && body.warnings.length > 0) {
+        appendConsole('[sync] SQL execution warnings:')
+        body.warnings.forEach((warning: string) => {
+          appendConsole(`[sync] ⚠ ${warning}`)
         })
       }
       
@@ -316,9 +335,13 @@ export const AdminPage: React.FC = () => {
       if (body?.stderr) {
         const stderrLines = String(body.stderr).split('\n').filter(l => l.trim())
         if (stderrLines.length > 0) {
-          appendConsole('[sync] SQL execution warnings/errors:')
+          appendConsole('[sync] SQL execution stderr output:')
           stderrLines.forEach(line => {
-            appendConsole(`[sync] ⚠ ${line}`)
+            if (/ERROR:|error:/i.test(line)) {
+              appendConsole(`[sync] ✗ ${line}`)
+            } else {
+              appendConsole(`[sync] ⚠ ${line}`)
+            }
           })
         }
       }
@@ -348,20 +371,34 @@ export const AdminPage: React.FC = () => {
       appendConsole('[sync] Verifying cache tables...')
       let cacheTablesExist = true
       try {
-        // Check garden_task_daily_cache - use a simple query to test if table exists
+        // Check tables via direct Supabase queries
+        let gardenTableExists = false
+        let userTableExists = false
+        
         const { error: gardenCacheErr } = await supabase
           .from('garden_task_daily_cache')
           .select('garden_id')
-          .limit(0) // Just check if table exists, don't fetch data
+          .limit(0)
+        gardenTableExists = !gardenCacheErr || !(
+          gardenCacheErr.message.includes('Could not find the table') || 
+          gardenCacheErr.message.includes('relation') || 
+          gardenCacheErr.message.includes('does not exist')
+        )
         
-        if (gardenCacheErr) {
-          if (gardenCacheErr.message.includes('Could not find the table') || gardenCacheErr.message.includes('relation') || gardenCacheErr.message.includes('does not exist')) {
-            appendConsole(`[sync] ⚠ WARNING: garden_task_daily_cache table does not exist`)
-            appendConsole(`[sync] ⚠ This means the cache tables were not created. The SQL file may have failed to execute these sections.`)
-            cacheTablesExist = false
-          } else {
-            appendConsole(`[sync] ⚠ WARNING: garden_task_daily_cache table check failed: ${gardenCacheErr.message}`)
-          }
+        const { error: userCacheErr } = await supabase
+          .from('user_task_daily_cache')
+          .select('user_id')
+          .limit(0)
+        userTableExists = !userCacheErr || !(
+          userCacheErr.message.includes('Could not find the table') || 
+          userCacheErr.message.includes('relation') || 
+          userCacheErr.message.includes('does not exist')
+        )
+        
+        if (!gardenTableExists) {
+          appendConsole(`[sync] ⚠ WARNING: garden_task_daily_cache table does not exist`)
+          appendConsole(`[sync] ⚠ This means the cache tables were not created. The SQL file may have failed to execute these sections.`)
+          cacheTablesExist = false
         } else {
           // Table exists, check if it has data
           const { count: gardenCount } = await supabase
@@ -371,20 +408,10 @@ export const AdminPage: React.FC = () => {
           appendConsole(`[sync] ✓ garden_task_daily_cache: table exists${gardenCount ? `, ${gardenCount} entries` : ', empty'}`)
         }
         
-        // Check user_task_daily_cache
-        const { error: userCacheErr } = await supabase
-          .from('user_task_daily_cache')
-          .select('user_id')
-          .limit(0) // Just check if table exists
-        
-        if (userCacheErr) {
-          if (userCacheErr.message.includes('Could not find the table') || userCacheErr.message.includes('relation') || userCacheErr.message.includes('does not exist')) {
-            appendConsole(`[sync] ⚠ WARNING: user_task_daily_cache table does not exist`)
-            appendConsole(`[sync] ⚠ This means the cache tables were not created. The SQL file may have failed to execute these sections.`)
-            cacheTablesExist = false
-          } else {
-            appendConsole(`[sync] ⚠ WARNING: user_task_daily_cache table check failed: ${userCacheErr.message}`)
-          }
+        if (!userTableExists) {
+          appendConsole(`[sync] ⚠ WARNING: user_task_daily_cache table does not exist`)
+          appendConsole(`[sync] ⚠ This means the cache tables were not created. The SQL file may have failed to execute these sections.`)
+          cacheTablesExist = false
         } else {
           // Table exists, check if it has data
           const { count: userCount } = await supabase

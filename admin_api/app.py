@@ -451,38 +451,63 @@ def sync_schema():
         return jsonify({"ok": False, "error": "psql not available on server"}), 500
 
     try:
-        # Run psql with ON_ERROR_STOP for atomic failure; quiet mode to limit noise
+        # Run psql with ON_ERROR_STOP for atomic failure
+        # Use -a (echo all commands) and -e (echo errors) for better debugging
+        # Remove -q to see all output
         cmd = [
             "psql",
             db_url,
             "-v", "ON_ERROR_STOP=1",
             "-X",
-            "-q",
+            "-a",  # Echo all commands
+            "-e",  # Echo errors
             "-f", sql_path,
         ]
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=180, check=False)
-        if res.returncode != 0:
-            out = (res.stdout or "")
-            err = (res.stderr or "")
-            # Return tail to avoid huge payloads
-            tail = "\n".join((out + "\n" + err).splitlines()[-80:])
+        out = (res.stdout or "")
+        err = (res.stderr or "")
+        
+        # Check for errors even if returncode is 0 (some errors might not set it)
+        has_errors = res.returncode != 0 or "ERROR:" in out.upper() or "ERROR:" in err.upper()
+        
+        if has_errors or res.returncode != 0:
+            # Return more context for errors
+            full_output = out + "\n" + err if err else out
+            # Show last 100 lines for errors
+            tail = "\n".join(full_output.splitlines()[-100:])
             try:
-                _log_admin_action("sync_schema_failed", detail={"error": "psql failed", "detail": tail})
+                _log_admin_action("sync_schema_failed", detail={"error": "psql failed", "detail": tail, "returncode": res.returncode})
             except Exception:
                 pass
-            return jsonify({"ok": False, "error": "psql failed", "detail": tail, "stdout": out, "stderr": err}), 500
-        # Success
-        tail = "\n".join((res.stdout or "").splitlines()[-50:])  # Show more lines
-        stderr_tail = "\n".join((res.stderr or "").splitlines()[-20:]) if res.stderr else None
+            return jsonify({
+                "ok": False, 
+                "error": "psql failed", 
+                "detail": tail, 
+                "stdout": out, 
+                "stderr": err,
+                "returncode": res.returncode
+            }), 500
+        
+        # Success - show more output for debugging
+        tail = "\n".join((out or "").splitlines()[-100:])  # Show more lines
+        stderr_tail = "\n".join((err or "").splitlines()[-50:]) if err else None
+        
+        # Check for warnings in output
+        warnings = []
+        for line in (out + "\n" + (err or "")).splitlines():
+            if "WARNING:" in line.upper() or "NOTICE:" in line.upper():
+                warnings.append(line)
+        
         try:
-            _log_admin_action("sync_schema", detail={"stdoutTail": tail, "stderrTail": stderr_tail})
+            _log_admin_action("sync_schema", detail={"stdoutTail": tail, "stderrTail": stderr_tail, "warnings": warnings})
         except Exception:
             pass
         return jsonify({
             "ok": True, 
             "message": "Schema synchronized successfully", 
             "stdoutTail": tail,
-            "stderr": stderr_tail
+            "stderr": stderr_tail,
+            "warnings": warnings
         })
     except Exception as e:
         try:
