@@ -8,6 +8,7 @@ import { useAuth } from "@/context/AuthContext"
 import { EditProfileDialog, type EditProfileValues } from "@/components/profile/EditProfileDialog"
 import { applyAccentByKey, saveAccentKey } from "@/lib/accent"
 import { MapPin, User as UserIcon, UserPlus, Check } from "lucide-react"
+import { ProfilePageSkeleton } from "@/components/loading/ProfilePageSkeleton"
 
 type PublicProfile = {
   id: string
@@ -437,7 +438,7 @@ export default function PublicProfilePage() {
 
   return (
     <div className="max-w-5xl mx-auto mt-8 px-4 md:px-0">
-      {loading && <div className="p-8 text-center text-sm opacity-60">Loading profile…</div>}
+      {loading && <ProfilePageSkeleton />}
       {error && !loading && (
         <div className="p-8 text-center">
           <div className="text-sm text-red-600 mb-2">{error}</div>
