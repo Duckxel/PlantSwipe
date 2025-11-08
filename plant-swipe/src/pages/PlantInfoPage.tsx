@@ -4,6 +4,7 @@ import { PlantDetails } from '@/components/plant/PlantDetails'
 import type { Plant } from '@/types/plant'
 import { useAuth } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabaseClient'
+import { PlantInfoSkeleton } from '@/components/loading/PlantInfoSkeleton'
 
 export const PlantInfoPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
@@ -92,7 +93,7 @@ export const PlantInfoPage: React.FC = () => {
     })
   }
 
-  if (loading) return <div className="max-w-4xl mx-auto mt-8 px-4">Loading…</div>
+  if (loading) return <PlantInfoSkeleton />
   if (error) return <div className="max-w-4xl mx-auto mt-8 px-4 text-red-600 text-sm">{error}</div>
   if (!plant) return <div className="max-w-4xl mx-auto mt-8 px-4">Plant not found.</div>
 

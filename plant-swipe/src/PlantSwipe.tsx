@@ -27,6 +27,8 @@ import PublicProfilePage from "@/pages/PublicProfilePage";
 import RequireAdmin from "@/pages/RequireAdmin";
 import { FriendsPage } from "@/pages/FriendsPage";
 import { supabase } from "@/lib/supabaseClient";
+import { SwipePageSkeleton } from "@/components/loading/SwipePageSkeleton";
+import { SearchPageSkeleton } from "@/components/loading/SearchPageSkeleton";
 
 // Lazy load heavy pages for code splitting
 const AdminPage = lazy(() => import("@/pages/AdminPage").then(module => ({ default: module.AdminPage })));
@@ -663,7 +665,15 @@ export default function PlantSwipe() {
 
         {/* Main content area */}
         <main className="min-h-[60vh]" aria-live="polite">
-          {loading && <div className="p-8 text-center text-sm opacity-60">Loading from Supabase...</div>}
+          {loading && (
+            <>
+              {currentView === "discovery" && <SwipePageSkeleton />}
+              {currentView === "search" && <SearchPageSkeleton />}
+              {currentView !== "discovery" && currentView !== "search" && (
+                <div className="p-8 text-center text-sm opacity-60">Loading...</div>
+              )}
+            </>
+          )}
           {loadError && <div className="p-8 text-center text-sm text-red-600">Supabase error: {loadError}</div>}
           {!loading && !loadError && (
             <>

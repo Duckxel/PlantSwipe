@@ -10,6 +10,7 @@ import { supabase } from '@/lib/supabaseClient'
 import { addGardenBroadcastListener, broadcastGardenUpdate, type GardenRealtimeKind } from '@/lib/realtime'
 import type { Garden } from '@/types/garden'
 import { useNavigate } from 'react-router-dom'
+import { GardenListSkeleton } from '@/components/loading/GardenListSkeleton'
 
 export const GardenListPage: React.FC = () => {
   const { user } = useAuth()
@@ -428,7 +429,7 @@ export const GardenListPage: React.FC = () => {
               <Button className="rounded-2xl" onClick={() => setOpen(true)}>Create Garden</Button>
             )}
           </div>
-          {loading && <div className="p-6 opacity-60 text-sm">Loading...</div>}
+          {loading && <GardenListSkeleton />}
           {error && <div className="p-6 text-sm text-red-600">{error}</div>}
           {!loading && !error && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
