@@ -3135,60 +3135,55 @@ SECURITY DEFINER
 AS $$
 DECLARE
   _week_end_date date;
-  _start_iso timestamptz;
-  _end_iso timestamptz;
-  _day_idx integer;
-  _day_iso date;
   _totals integer[] := ARRAY[0,0,0,0,0,0,0];
   _water integer[] := ARRAY[0,0,0,0,0,0,0];
   _fertilize integer[] := ARRAY[0,0,0,0,0,0,0];
   _harvest integer[] := ARRAY[0,0,0,0,0,0,0];
   _cut integer[] := ARRAY[0,0,0,0,0,0,0];
   _custom integer[] := ARRAY[0,0,0,0,0,0,0];
-  _daily_total integer;
-  _daily_water integer;
-  _daily_fertilize integer;
-  _daily_harvest integer;
-  _daily_cut integer;
-  _daily_custom integer;
 BEGIN
   _week_end_date := _week_start_date + INTERVAL '6 days';
-  _start_iso := (_week_start_date::text || 'T00:00:00.000Z')::timestamptz;
-  _end_iso := (_week_end_date::text || 'T23:59:59.999Z')::timestamptz;
   
   -- Calculate weekly statistics by day and type
-  FOR _day_idx IN 0..6 LOOP
-    _day_iso := _week_start_date + (_day_idx || ' days')::interval;
-    
+  SELECT
+    ARRAY_AGG(stats.total ORDER BY stats.day_idx),
+    ARRAY_AGG(stats.water ORDER BY stats.day_idx),
+    ARRAY_AGG(stats.fertilize ORDER BY stats.day_idx),
+    ARRAY_AGG(stats.harvest ORDER BY stats.day_idx),
+    ARRAY_AGG(stats.cut ORDER BY stats.day_idx),
+    ARRAY_AGG(stats.custom ORDER BY stats.day_idx)
+  INTO
+    _totals,
+    _water,
+    _fertilize,
+    _harvest,
+    _cut,
+    _custom
+  FROM (
     SELECT
-      COALESCE(SUM(GREATEST(1, occ.required_count)), 0),
-      COALESCE(SUM(CASE WHEN t.type = 'water' THEN GREATEST(1, occ.required_count) ELSE 0 END), 0),
-      COALESCE(SUM(CASE WHEN t.type = 'fertilize' THEN GREATEST(1, occ.required_count) ELSE 0 END), 0),
-      COALESCE(SUM(CASE WHEN t.type = 'harvest' THEN GREATEST(1, occ.required_count) ELSE 0 END), 0),
-      COALESCE(SUM(CASE WHEN t.type = 'cut' THEN GREATEST(1, occ.required_count) ELSE 0 END), 0),
-      COALESCE(SUM(CASE WHEN t.type = 'custom' THEN GREATEST(1, occ.required_count) ELSE 0 END), 0)
-    INTO
-      _daily_total,
-      _daily_water,
-      _daily_fertilize,
-      _daily_harvest,
-      _daily_cut,
-      _daily_custom
-    FROM garden_plant_task_occurrences occ
-    INNER JOIN garden_plant_tasks t ON t.id = occ.task_id
-    WHERE t.garden_id = _garden_id
-      AND occ.due_at >= (_day_iso::text || 'T00:00:00.000Z')::timestamptz
-      AND occ.due_at <= (_day_iso::text || 'T23:59:59.999Z')::timestamptz;
-
-    _totals := array_set(_totals, ARRAY[_day_idx + 1], COALESCE(_daily_total, 0));
-    _water := array_set(_water, ARRAY[_day_idx + 1], COALESCE(_daily_water, 0));
-    _fertilize := array_set(_fertilize, ARRAY[_day_idx + 1], COALESCE(_daily_fertilize, 0));
-    _harvest := array_set(_harvest, ARRAY[_day_idx + 1], COALESCE(_daily_harvest, 0));
-    _cut := array_set(_cut, ARRAY[_day_idx + 1], COALESCE(_daily_cut, 0));
-    _custom := array_set(_custom, ARRAY[_day_idx + 1], COALESCE(_daily_custom, 0));
-  END LOOP;
+      ds.day_idx,
+      COALESCE(SUM(CASE WHEN t.id IS NOT NULL THEN GREATEST(1, occ.required_count) ELSE 0 END), 0)::integer AS total,
+      COALESCE(SUM(CASE WHEN t.type = 'water' THEN GREATEST(1, occ.required_count) ELSE 0 END), 0)::integer AS water,
+      COALESCE(SUM(CASE WHEN t.type = 'fertilize' THEN GREATEST(1, occ.required_count) ELSE 0 END), 0)::integer AS fertilize,
+      COALESCE(SUM(CASE WHEN t.type = 'harvest' THEN GREATEST(1, occ.required_count) ELSE 0 END), 0)::integer AS harvest,
+      COALESCE(SUM(CASE WHEN t.type = 'cut' THEN GREATEST(1, occ.required_count) ELSE 0 END), 0)::integer AS cut,
+      COALESCE(SUM(CASE WHEN t.type = 'custom' THEN GREATEST(1, occ.required_count) ELSE 0 END), 0)::integer AS custom
+    FROM generate_series(0, 6) AS ds(day_idx)
+    LEFT JOIN garden_plant_task_occurrences occ
+      ON occ.due_at >= (((_week_start_date + ds.day_idx)::text || 'T00:00:00.000Z')::timestamptz)
+     AND occ.due_at <= (((_week_start_date + ds.day_idx)::text || 'T23:59:59.999Z')::timestamptz)
+    LEFT JOIN garden_plant_tasks t
+      ON t.id = occ.task_id
+     AND t.garden_id = _garden_id
+    GROUP BY ds.day_idx
+    ORDER BY ds.day_idx
+  ) AS stats;
   
-  -- Upsert cache
+  -- Replace existing cache row for this week
+  DELETE FROM garden_task_weekly_cache
+  WHERE garden_id = _garden_id
+    AND week_start_date = _week_start_date;
+
   INSERT INTO garden_task_weekly_cache (
     garden_id, week_start_date, week_end_date,
     total_tasks_by_day, water_tasks_by_day, fertilize_tasks_by_day,
@@ -3199,17 +3194,7 @@ BEGIN
     _garden_id, _week_start_date, _week_end_date,
     _totals, _water, _fertilize, _harvest, _cut, _custom,
     now()
-  )
-  ON CONFLICT (garden_id, week_start_date)
-  DO UPDATE SET
-    week_end_date = EXCLUDED.week_end_date,
-    total_tasks_by_day = EXCLUDED.total_tasks_by_day,
-    water_tasks_by_day = EXCLUDED.water_tasks_by_day,
-    fertilize_tasks_by_day = EXCLUDED.fertilize_tasks_by_day,
-    harvest_tasks_by_day = EXCLUDED.harvest_tasks_by_day,
-    cut_tasks_by_day = EXCLUDED.cut_tasks_by_day,
-    custom_tasks_by_day = EXCLUDED.custom_tasks_by_day,
-    updated_at = now();
+  );
 END;
 $$;
 
