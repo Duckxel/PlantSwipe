@@ -350,11 +350,33 @@ export const AdminPage: React.FC = () => {
       if (!resp) {
         throw new Error('Failed to connect to API. Please check your connection and try again.')
       }
-      const body = await safeJson(resp)
-      if (!resp.ok) {
-        throw new Error(body?.error || `Request failed (${resp.status})`)
-      }
-      appendConsole('[sync] Schema synchronized successfully')
+        const body = await safeJson(resp)
+        if (!resp.ok) {
+          if (body?.stdoutTail) {
+            const lines = String(body.stdoutTail).split('\n').filter(Boolean)
+            if (lines.length) {
+              appendConsole('[sync] SQL stdout (tail):')
+              lines.slice(-25).forEach(line => appendConsole(`[sync]   ${line}`))
+            }
+          }
+          if (body?.stderr) {
+            const lines = String(body.stderr).split('\n').filter(Boolean)
+            if (lines.length) {
+              appendConsole('[sync] SQL stderr:')
+              lines.slice(-25).forEach(line => appendConsole(`[sync] ✗ ${line}`))
+            }
+          }
+          if (body?.detail) {
+            appendConsole(`[sync] Detail: ${String(body.detail)}`)
+          }
+          const parts: string[] = []
+          if (body?.error) parts.push(String(body.error))
+          if (body?.detail) parts.push(String(body.detail))
+          if (body?.stderr) parts.push(String(body.stderr))
+          const msg = parts.length > 0 ? parts.join(' | ') : `Request failed (${resp.status})`
+          throw new Error(msg)
+        }
+        appendConsole('[sync] Schema synchronized successfully')
       
       // Show SQL execution output if available
       if (body?.stdoutTail) {

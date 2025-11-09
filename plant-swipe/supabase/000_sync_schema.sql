@@ -3096,12 +3096,18 @@ DECLARE
   _end_iso timestamptz;
   _day_idx integer;
   _day_iso date;
-  _totals integer[7] := ARRAY[0,0,0,0,0,0,0];
-  _water integer[7] := ARRAY[0,0,0,0,0,0,0];
-  _fertilize integer[7] := ARRAY[0,0,0,0,0,0,0];
-  _harvest integer[7] := ARRAY[0,0,0,0,0,0,0];
-  _cut integer[7] := ARRAY[0,0,0,0,0,0,0];
-  _custom integer[7] := ARRAY[0,0,0,0,0,0,0];
+  _totals integer[] := ARRAY[0,0,0,0,0,0,0];
+  _water integer[] := ARRAY[0,0,0,0,0,0,0];
+  _fertilize integer[] := ARRAY[0,0,0,0,0,0,0];
+  _harvest integer[] := ARRAY[0,0,0,0,0,0,0];
+  _cut integer[] := ARRAY[0,0,0,0,0,0,0];
+  _custom integer[] := ARRAY[0,0,0,0,0,0,0];
+  _daily_total integer;
+  _daily_water integer;
+  _daily_fertilize integer;
+  _daily_harvest integer;
+  _daily_cut integer;
+  _daily_custom integer;
 BEGIN
   _week_end_date := _week_start_date + INTERVAL '6 days';
   _start_iso := (_week_start_date::text || 'T00:00:00.000Z')::timestamptz;
@@ -3119,17 +3125,24 @@ BEGIN
       COALESCE(SUM(CASE WHEN t.type = 'cut' THEN GREATEST(1, occ.required_count) ELSE 0 END), 0),
       COALESCE(SUM(CASE WHEN t.type = 'custom' THEN GREATEST(1, occ.required_count) ELSE 0 END), 0)
     INTO
-      _totals[_day_idx + 1],
-      _water[_day_idx + 1],
-      _fertilize[_day_idx + 1],
-      _harvest[_day_idx + 1],
-      _cut[_day_idx + 1],
-      _custom[_day_idx + 1]
+      _daily_total,
+      _daily_water,
+      _daily_fertilize,
+      _daily_harvest,
+      _daily_cut,
+      _daily_custom
     FROM garden_plant_task_occurrences occ
     INNER JOIN garden_plant_tasks t ON t.id = occ.task_id
     WHERE t.garden_id = _garden_id
       AND occ.due_at >= (_day_iso::text || 'T00:00:00.000Z')::timestamptz
       AND occ.due_at <= (_day_iso::text || 'T23:59:59.999Z')::timestamptz;
+
+      _totals[_day_idx + 1] := COALESCE(_daily_total, 0);
+      _water[_day_idx + 1] := COALESCE(_daily_water, 0);
+      _fertilize[_day_idx + 1] := COALESCE(_daily_fertilize, 0);
+      _harvest[_day_idx + 1] := COALESCE(_daily_harvest, 0);
+      _cut[_day_idx + 1] := COALESCE(_daily_cut, 0);
+      _custom[_day_idx + 1] := COALESCE(_daily_custom, 0);
   END LOOP;
   
   -- Upsert cache
