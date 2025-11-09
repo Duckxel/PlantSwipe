@@ -1,4 +1,5 @@
-import { ChangeEvent, FormEvent, useState } from "react"
+import { useState } from "react"
+import type { ChangeEvent, FormEvent } from "react"
 import { useTranslation } from "react-i18next"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { AlertTriangle, CheckCircle2, Clock, HelpCircle, Loader2, Mail, MessageCircle } from "lucide-react"
