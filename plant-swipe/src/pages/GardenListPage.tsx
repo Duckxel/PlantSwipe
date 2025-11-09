@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { RefreshCw } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { getUserGardens, createGarden, fetchServerNowISO, getGardenTodayProgressUltraFast, getGardensTodayProgressBatchCached, getGardenPlantsMinimal, listGardenTasksMinimal, listOccurrencesForTasks, listOccurrencesForMultipleGardens, resyncTaskOccurrencesForGarden, progressTaskOccurrence, listCompletionsForOccurrences, logGardenActivity, getGardenTodayOccurrencesCached, getUserGardensTasksTodayCached, refreshGardenTaskCache, refreshUserTaskCache } from '@/lib/gardens'
+import { useAuthActions } from '@/context/AuthActionsContext'
 import { supabase } from '@/lib/supabaseClient'
 import { addGardenBroadcastListener, broadcastGardenUpdate, type GardenRealtimeKind } from '@/lib/realtime'
 import type { Garden } from '@/types/garden'
@@ -16,6 +17,7 @@ import { Link } from '@/components/i18n/Link'
 
 export const GardenListPage: React.FC = () => {
   const { user } = useAuth()
+  const { openLogin } = useAuthActions()
   const navigate = useLanguageNavigate()
   const { t } = useTranslation('common')
   const [gardens, setGardens] = React.useState<Garden[]>([])
@@ -1442,7 +1444,7 @@ export const GardenListPage: React.FC = () => {
                     <div className="text-sm opacity-70">
                       {t('garden.noGardens')}. {t('garden.createFirst')}
                     </div>
-                    <Button className="rounded-2xl w-full" onClick={() => navigate('/')}>
+                    <Button className="rounded-2xl w-full" onClick={openLogin}>
                       {t('auth.login')}
                     </Button>
                   </div>
