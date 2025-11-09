@@ -541,6 +541,25 @@ create table if not exists public.garden_instance_inventory (
   unique (garden_plant_id)
 );
 
+with instance_duplicates as (
+  select id
+  from (
+    select id,
+           row_number() over (
+             partition by garden_plant_id
+             order by id desc
+           ) as rn
+    from public.garden_instance_inventory
+  ) ranked
+  where ranked.rn > 1
+)
+delete from public.garden_instance_inventory gii
+using instance_duplicates dup
+where gii.id = dup.id;
+
+create unique index if not exists garden_instance_inventory_garden_plant_id_key
+  on public.garden_instance_inventory (garden_plant_id);
+
 -- Transactions
 create table if not exists public.garden_transactions (
   id uuid primary key default gen_random_uuid(),
@@ -563,6 +582,25 @@ create table if not exists public.garden_tasks (
   unique (garden_id, day, task_type)
 );
 create index if not exists garden_tasks_garden_day_idx on public.garden_tasks (garden_id, day);
+
+with task_duplicates as (
+  select id
+  from (
+    select id,
+           row_number() over (
+             partition by garden_id, day, task_type
+             order by id desc
+           ) as rn
+    from public.garden_tasks
+  ) ranked
+  where ranked.rn > 1
+)
+delete from public.garden_tasks gt
+using task_duplicates dup
+where gt.id = dup.id;
+
+create unique index if not exists garden_tasks_garden_id_day_task_type_key
+  on public.garden_tasks (garden_id, day, task_type);
 
 -- Watering schedule pattern per plant
 create table if not exists public.garden_plant_schedule (
@@ -2736,6 +2774,25 @@ create table if not exists public.friend_requests (
   check (requester_id <> recipient_id)
 );
 
+with friend_request_duplicates as (
+  select id
+  from (
+    select id,
+           row_number() over (
+             partition by requester_id, recipient_id
+             order by id desc
+           ) as rn
+    from public.friend_requests
+  ) ranked
+  where ranked.rn > 1
+)
+delete from public.friend_requests fr
+using friend_request_duplicates dup
+where fr.id = dup.id;
+
+create unique index if not exists friend_requests_requester_id_recipient_id_key
+  on public.friend_requests (requester_id, recipient_id);
+
 -- Friends table (bidirectional friendships)
 create table if not exists public.friends (
   id uuid primary key default gen_random_uuid(),
@@ -2745,6 +2802,25 @@ create table if not exists public.friends (
   unique(user_id, friend_id),
   check (user_id <> friend_id)
 );
+
+with friend_duplicates as (
+  select id
+  from (
+    select id,
+           row_number() over (
+             partition by user_id, friend_id
+             order by id desc
+           ) as rn
+    from public.friends
+  ) ranked
+  where ranked.rn > 1
+)
+delete from public.friends f
+using friend_duplicates dup
+where f.id = dup.id;
+
+create unique index if not exists friends_user_id_friend_id_key
+  on public.friends (user_id, friend_id);
 
 -- Indexes for efficient queries
 create index if not exists friend_requests_requester_idx on public.friend_requests(requester_id);
@@ -3192,11 +3268,6 @@ BEGIN
     ORDER BY ds.day_idx
   ) AS stats;
   
-  -- Replace existing cache row for this week
-  DELETE FROM garden_task_weekly_cache
-  WHERE garden_id = _garden_id
-    AND week_start_date = _week_start_date;
-
   INSERT INTO garden_task_weekly_cache (
     garden_id, week_start_date, week_end_date,
     total_tasks_by_day, water_tasks_by_day, fertilize_tasks_by_day,
@@ -3207,7 +3278,17 @@ BEGIN
     _garden_id, _week_start_date, _week_end_date,
     _totals, _water, _fertilize, _harvest, _cut, _custom,
     now()
-  );
+  )
+  ON CONFLICT (garden_id, week_start_date)
+  DO UPDATE SET
+    week_end_date = EXCLUDED.week_end_date,
+    total_tasks_by_day = EXCLUDED.total_tasks_by_day,
+    water_tasks_by_day = EXCLUDED.water_tasks_by_day,
+    fertilize_tasks_by_day = EXCLUDED.fertilize_tasks_by_day,
+    harvest_tasks_by_day = EXCLUDED.harvest_tasks_by_day,
+    cut_tasks_by_day = EXCLUDED.cut_tasks_by_day,
+    custom_tasks_by_day = EXCLUDED.custom_tasks_by_day,
+    updated_at = now();
 END;
 $$;
 
