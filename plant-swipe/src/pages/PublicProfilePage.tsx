@@ -10,6 +10,7 @@ import { applyAccentByKey, saveAccentKey } from "@/lib/accent"
 import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff, Flame, Sprout, Home, Trophy } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import i18n from "@/lib/i18n"
+import { ProfilePageSkeleton } from "@/components/garden/GardenSkeletons"
 
 type PublicProfile = {
   id: string
@@ -533,7 +534,7 @@ export default function PublicProfilePage() {
 
   return (
     <div className="max-w-5xl mx-auto mt-8 px-4 md:px-0">
-      {loading && <div className="p-8 text-center text-sm opacity-60">{t('profile.loading')}</div>}
+      {loading && <ProfilePageSkeleton />}
       {error && !loading && (
         <div className="p-8 text-center">
           <div className="text-sm text-red-600 mb-2">{error}</div>
