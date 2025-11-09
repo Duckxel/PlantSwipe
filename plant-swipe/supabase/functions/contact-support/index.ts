@@ -1,8 +1,8 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts"
+import { SmtpClient } from "https://deno.land/x/smtp@v0.7.0/mod.ts"
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts"
 
 const SUPPORT_EMAIL = "support@aphylia.app"
-const RESEND_ENDPOINT = "https://api.resend.com/emails"
 
 const contactSchema = z.object({
   name: z.string().trim().min(1).max(120),
@@ -85,12 +85,25 @@ serve(async (req) => {
 
   const { name, email, message, submittedAt } = parsed.data
 
-  const resendApiKey = getFirstEnv("RESEND_API_KEY", "SUPABASE_RESEND_API_KEY")
-  if (!resendApiKey) {
-    console.error("contact-support: missing Resend API key")
+  const smtpHost = getFirstEnv("SMTP_HOST", "SUPABASE_SMTP_HOST") ?? "smtp.resend.com"
+  const smtpPortRaw = getFirstEnv("SMTP_PORT", "SUPABASE_SMTP_PORT") ?? "465"
+  const smtpUser = getFirstEnv("SMTP_USER", "SUPABASE_SMTP_USER", "RESEND_SMTP_USER") ?? "resend"
+  const smtpPass = getFirstEnv("SMTP_PASS", "SUPABASE_SMTP_PASS", "RESEND_API_KEY", "SUPABASE_RESEND_API_KEY")
+
+  if (!smtpPass) {
+    console.error("contact-support: missing SMTP credentials (password/API key)")
     return jsonResponse(500, {
-      error: "resend_not_configured",
-      message: "Missing RESEND_API_KEY (or SUPABASE_RESEND_API_KEY) environment variable.",
+      error: "smtp_not_configured",
+      message: "Missing SMTP password/API key (set RESEND_API_KEY or SMTP_PASS).",
+    })
+  }
+
+  const smtpPort = Number(smtpPortRaw)
+  if (Number.isNaN(smtpPort)) {
+    console.error("contact-support: invalid SMTP port", smtpPortRaw)
+    return jsonResponse(500, {
+      error: "invalid_smtp_port",
+      message: `SMTP port value "${smtpPortRaw}" is not a number.`,
     })
   }
 
@@ -124,44 +137,38 @@ serve(async (req) => {
   `
 
   try {
-    const response = await fetch(RESEND_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${resendApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: fromAddress,
-        to: [SUPPORT_EMAIL],
-        reply_to: email,
-        subject,
-        text: plainBody,
-        html: htmlBody,
-        tags: [{ name: "source", value: "contact-form" }],
-      }),
-    })
-
-    if (!response.ok) {
-      let errorDetail: unknown = null
-      try {
-        errorDetail = await response.json()
-      } catch {
-        // Ignore JSON parsing errors; fall back to status text.
-      }
-      console.error("contact-support: Resend API error", response.status, response.statusText, errorDetail)
-      return jsonResponse(502, {
-        error: "resend_error",
-        message: "Failed to send email via Resend.",
-        status: response.status,
+    const client = new SmtpClient()
+    if (smtpPort === 465) {
+      await client.connectTLS({
+        hostname: smtpHost,
+        port: smtpPort,
+        username: smtpUser,
+        password: smtpPass,
+      })
+    } else {
+      await client.connect({
+        hostname: smtpHost,
+        port: smtpPort,
+        username: smtpUser,
+        password: smtpPass,
       })
     }
 
+    await client.send({
+      from: fromAddress,
+      to: SUPPORT_EMAIL,
+      subject,
+      content: plainBody,
+      html: htmlBody,
+    })
+
+    await client.close()
     return jsonResponse(200, { success: true })
   } catch (error) {
-    console.error("contact-support: failed to call Resend API", error)
+    console.error("contact-support: failed to send email via SMTP", error)
     return jsonResponse(500, {
-      error: "resend_request_failed",
-      message: "Unable to reach Resend API.",
+      error: "smtp_error",
+      message: "Failed to send support email.",
     })
   }
 })

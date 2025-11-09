@@ -4,15 +4,18 @@ This Edge Function receives contact form submissions from the Plant Swipe applic
 
 ## Environment variables
 
-Configure the function with your Resend API credentials.
+Configure the function with your Resend SMTP credentials.
 
 | Variable | Description |
 | --- | --- |
-| `RESEND_API_KEY` | Resend API key (or set `SUPABASE_RESEND_API_KEY`) |
-| `RESEND_FROM` | From email address (defaults to `support@aphylia.app`) |
-| `RESEND_FROM_NAME` | Display name for the sender (defaults to `Plant Swipe Contact`) |
+| `RESEND_API_KEY` | Resend API key used as the SMTP password (you may also set it via `SMTP_PASS`) |
+| `SMTP_HOST` | SMTP host (defaults to `smtp.resend.com` if unset) |
+| `SMTP_PORT` | SMTP port (defaults to `465`) |
+| `SMTP_USER` | SMTP username (defaults to `resend`) |
+| `RESEND_FROM` | From email address (optional, defaults to `support@aphylia.app`) |
+| `RESEND_FROM_NAME` | Display name for the sender (optional, defaults to `Plant Swipe Contact`) |
 
-> The function still accepts the legacy `SMTP_FROM` / `SUPABASE_SMTP_SENDER` / `SMTP_FROM_NAME` environment variables for backward compatibility when computing the `from` header, but the SMTP transport has been replaced by Resend.
+> For backwards compatibility, the function still honors `SMTP_FROM`, `SUPABASE_SMTP_SENDER`, and `SMTP_FROM_NAME` when computing the `from` header.
 
 ## Local development
 
@@ -33,7 +36,7 @@ supabase functions deploy contact-support --project-ref <project-ref> --no-verif
 ```
 
 - Use `--no-verify-jwt` so the function can be called from the public website without requiring authentication.
-- After deploying, assign the Resend environment variables in the Supabase dashboard (`Project Settings → Functions → contact-support → Environment variables`).
+- After deploying, assign the Resend SMTP environment variables in the Supabase dashboard (`Project Settings → Functions → contact-support → Environment variables`).
 
 Once deployed, the front-end invokes the function through the Supabase client using `supabase.functions.invoke('contact-support', { body })`.
 
