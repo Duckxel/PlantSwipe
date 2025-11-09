@@ -46,25 +46,25 @@ export const Footer: React.FC = () => {
             to="/about"
             className="text-stone-600 dark:text-stone-400 hover:text-black dark:hover:text-white transition-colors no-underline"
           >
-            {t('common.footer.about')}
+            {t('footer.about')}
           </Link>
           <Link
             to="/blog"
             className="text-stone-600 dark:text-stone-400 hover:text-black dark:hover:text-white transition-colors no-underline"
           >
-            {t('common.footer.blog')}
+            {t('footer.blog')}
           </Link>
           <Link
             to="/contact"
             className="text-stone-600 dark:text-stone-400 hover:text-black dark:hover:text-white transition-colors no-underline"
           >
-            {t('common.footer.contactUs')}
+            {t('footer.contactUs')}
           </Link>
           <Link
             to="/terms"
             className="text-stone-600 dark:text-stone-400 hover:text-black dark:hover:text-white transition-colors no-underline"
           >
-            {t('common.footer.termsOfServices')}
+            {t('footer.termsOfServices')}
           </Link>
         </nav>
 
