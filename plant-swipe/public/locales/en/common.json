@@ -24,6 +24,7 @@
     "edit": "Edit",
     "create": "Create",
     "update": "Update",
+    "submitting": "Submitting...",
     "result": "result",
     "results": "results",
     "allRightsReserved": "All rights reserved",
@@ -573,5 +574,17 @@
       "failedToSendFriendRequest": "Failed to send friend request",
       "failedToAcceptFriendRequest": "Failed to accept friend request"
     }
+  },
+  "requestPlant": {
+    "button": "Request Plant",
+    "title": "Request a Plant",
+    "description": "Let us know which plant you would like to see added to the encyclopedia.",
+    "plantName": "Plant Name",
+    "placeholder": "Enter plant name...",
+    "submit": "Submit Request",
+    "success": "Thank you! Your request has been submitted.",
+    "error": "Failed to submit request",
+    "nameRequired": "Plant name is required",
+    "mustBeLoggedIn": "You must be logged in to request a plant"
   }
 }

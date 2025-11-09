@@ -1,7 +1,7 @@
 import React from "react"
 import { createPortal } from "react-dom"
 import { Link } from "@/components/i18n/Link"
-import { Leaf, Sprout, Sparkles, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Plus, Shield, HeartHandshake, Settings } from "lucide-react"
+import { Leaf, Sprout, Sparkles, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Shield, HeartHandshake, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useTranslation } from "react-i18next"
 
@@ -192,11 +192,6 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
         <NavPill to="/search" isActive={pathWithoutLang.startsWith('/search')} icon={<Search className="h-4 w-4" />} label={t('common.encyclopedia')} />
       </nav>
   <div className="ml-auto flex items-center gap-2 flex-wrap sm:flex-nowrap min-w-0 justify-end">
-        {user && (
-          <Button className="rounded-2xl" variant="default" onClick={() => navigate('/create')}>
-            <Plus className="h-4 w-4 sm:mr-2" /> <span className="hidden sm:inline">{t('common.addPlant')}</span>
-          </Button>
-        )}
         {!user ? (
           <>
             <Button className="rounded-2xl" variant="secondary" onClick={openSignup}>

@@ -24,6 +24,7 @@
     "edit": "Modifier",
     "create": "Créer",
     "update": "Mettre à jour",
+    "submitting": "Envoi en cours...",
     "result": "résultat",
     "results": "résultats",
     "allRightsReserved": "Tous droits réservés",
@@ -573,5 +574,17 @@
       "failedToSendFriendRequest": "Échec de l'envoi de la demande d'ami",
       "failedToAcceptFriendRequest": "Échec de l'acceptation de la demande d'ami"
     }
+  },
+  "requestPlant": {
+    "button": "Demander une plante",
+    "title": "Demander une plante",
+    "description": "Dites-nous quelle plante vous aimeriez voir ajoutée à l'encyclopédie.",
+    "plantName": "Nom de la plante",
+    "placeholder": "Entrez le nom de la plante...",
+    "submit": "Soumettre la demande",
+    "success": "Merci ! Votre demande a été soumise.",
+    "error": "Échec de l'envoi de la demande",
+    "nameRequired": "Le nom de la plante est requis",
+    "mustBeLoggedIn": "Vous devez être connecté pour demander une plante"
   }
 }

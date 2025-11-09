@@ -275,6 +275,70 @@ do $$ begin
   create policy plant_translations_delete on public.plant_translations for delete to authenticated using (true);
 end $$;
 
+-- ========== Requested plants (user requests for new plants) ==========
+create table if not exists public.requested_plants (
+  id uuid primary key default gen_random_uuid(),
+  plant_name text not null,
+  requested_by uuid not null references auth.users(id) on delete cascade,
+  request_count integer not null default 1 check (request_count > 0),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- Index for faster lookups by plant name (case-insensitive)
+create index if not exists requested_plants_plant_name_idx on public.requested_plants(lower(plant_name));
+create index if not exists requested_plants_requested_by_idx on public.requested_plants(requested_by);
+create index if not exists requested_plants_created_at_idx on public.requested_plants(created_at desc);
+
+-- RLS policies for requested_plants
+alter table public.requested_plants enable row level security;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='requested_plants' and policyname='requested_plants_select_all') then
+    drop policy requested_plants_select_all on public.requested_plants;
+  end if;
+  -- Allow authenticated users to read all requests (for admin purposes)
+  -- Allow users to see their own requests
+  create policy requested_plants_select_all on public.requested_plants for select to authenticated
+    using (
+      true
+      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='requested_plants' and policyname='requested_plants_insert') then
+    drop policy requested_plants_insert on public.requested_plants;
+  end if;
+  -- Allow authenticated users to insert requests
+  create policy requested_plants_insert on public.requested_plants for insert to authenticated
+    with check (
+      requested_by = (select auth.uid())
+      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='requested_plants' and policyname='requested_plants_update') then
+    drop policy requested_plants_update on public.requested_plants;
+  end if;
+  -- Allow authenticated users to update request counts (for incrementing)
+  create policy requested_plants_update on public.requested_plants for update to authenticated
+    using (true)
+    with check (true);
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='requested_plants' and policyname='requested_plants_delete') then
+    drop policy requested_plants_delete on public.requested_plants;
+  end if;
+  -- Only admins can delete requests
+  create policy requested_plants_delete on public.requested_plants for delete to authenticated
+    using (
+      exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+    );
+end $$;
+
 -- ========== Core tables ==========
 create table if not exists public.gardens (
   id uuid primary key default gen_random_uuid(),
