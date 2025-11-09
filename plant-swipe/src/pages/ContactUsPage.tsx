@@ -1,11 +1,11 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
-  CardDescription,
 } from "@/components/ui/card";
 import {
   Mail,
@@ -13,6 +13,7 @@ import {
   Clock,
   HelpCircle,
   Copy as CopyIcon,
+  Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +27,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { motion } from "framer-motion";
 
 const SUPPORT_EMAIL = "support@aphylia.app";
 
@@ -33,6 +35,9 @@ type ContactUsSectionCopy = {
   title?: string;
   description?: string;
 };
+
+type ContactFormStatus = "idle" | "loading" | "success" | "error";
+type CopyState = "idle" | "copied";
 
 export default function ContactUsPage() {
   const { t, ready } = useTranslation("common", { keyPrefix: "contactUs" });
@@ -43,6 +48,20 @@ export default function ContactUsPage() {
     subject: "",
     message: "",
   });
+  const [formStatus, setFormStatus] = useState<ContactFormStatus>("idle");
+  const [formErrorMessage, setFormErrorMessage] = useState<string | null>(null);
+  const [copyState, setCopyState] = useState<CopyState>("idle");
+
+  const copyResetRef = useRef<number | null>(null);
+  const formCloseTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyResetRef.current) window.clearTimeout(copyResetRef.current);
+      if (formCloseTimeoutRef.current)
+        window.clearTimeout(formCloseTimeoutRef.current);
+    };
+  }, []);
 
   const resetForm = () => {
     setFormValues({
@@ -56,7 +75,20 @@ export default function ContactUsPage() {
   const handleDialogOpenChange = (open: boolean) => {
     setFormOpen(open);
     if (!open) {
+      if (copyResetRef.current) {
+        window.clearTimeout(copyResetRef.current);
+        copyResetRef.current = null;
+      }
+      if (formCloseTimeoutRef.current) {
+        window.clearTimeout(formCloseTimeoutRef.current);
+        formCloseTimeoutRef.current = null;
+      }
       resetForm();
+      setFormStatus("idle");
+      setFormErrorMessage(null);
+    } else {
+      setFormStatus("idle");
+      setFormErrorMessage(null);
     }
   };
 
@@ -68,47 +100,65 @@ export default function ContactUsPage() {
     const email = SUPPORT_EMAIL;
 
     const fallbackCopy = () => {
-      const textarea = document.createElement("textarea");
-      textarea.value = email;
-      textarea.setAttribute("readonly", "");
-      textarea.style.position = "fixed";
-      textarea.style.left = "-9999px";
-      textarea.style.top = "0";
-      document.body.appendChild(textarea);
-
-      const selection = window.getSelection();
-      const selectedRange =
-        selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
-
-      let successful = false;
       try {
-        textarea.focus();
-        textarea.select();
-        successful = document.execCommand("copy");
-      } catch {
-        successful = false;
-      } finally {
-        document.body.removeChild(textarea);
-        if (selectedRange && selection) {
-          selection.removeAllRanges();
-          selection.addRange(selectedRange);
-        }
-      }
+        const textarea = document.createElement("textarea");
+        textarea.value = email;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "fixed";
+        textarea.style.left = "-9999px";
+        textarea.style.top = "0";
+        document.body.appendChild(textarea);
 
-      return successful;
+        const selection = window.getSelection();
+        const selectedRange =
+          selection && selection.rangeCount > 0
+            ? selection.getRangeAt(0)
+            : null;
+
+        let successful = false;
+        try {
+          textarea.focus();
+          textarea.select();
+          successful = document.execCommand("copy");
+        } catch {
+          successful = false;
+        } finally {
+          document.body.removeChild(textarea);
+          if (selectedRange && selection) {
+            selection.removeAllRanges();
+            selection.addRange(selectedRange);
+          }
+        }
+
+        return successful;
+      } catch {
+        return false;
+      }
     };
 
+    let copied = false;
     try {
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(email);
-      } else if (!fallbackCopy()) {
-        throw new Error("Clipboard API unavailable");
+        copied = true;
       }
-      // You could add a toast notification here if needed
-    } catch (err) {
-      if (!fallbackCopy()) {
-        console.error("Failed to copy email:", err);
-      }
+    } catch {
+      copied = false;
+    }
+
+    if (!copied) {
+      copied = fallbackCopy();
+    }
+
+    if (copied) {
+      setCopyState("copied");
+      if (copyResetRef.current) window.clearTimeout(copyResetRef.current);
+      copyResetRef.current = window.setTimeout(() => {
+        setCopyState("idle");
+        copyResetRef.current = null;
+      }, 1600);
+    } else {
+      console.error("Failed to copy email address");
     }
   };
 
@@ -132,6 +182,7 @@ export default function ContactUsPage() {
   const description = t("description", {
     defaultValue: "We're here to help! Get in touch with our support team.",
   });
+  const copySuccessLabel = t("copySuccess", { defaultValue: "Copied!" });
   const formTitle = t("form.title", { defaultValue: "Send a message" });
   const formDescription = t("form.description", {
     defaultValue: "Fill out the form and we'll reach out soon.",
@@ -155,7 +206,24 @@ export default function ContactUsPage() {
   const formSubmitLabel = t("form.submitButton", {
     defaultValue: "Send message",
   });
+  const formSubmitSendingLabel = t("form.submitSending", {
+    defaultValue: "Sending...",
+  });
   const formCancelLabel = t("form.cancelButton", { defaultValue: "Cancel" });
+  const formSuccessTitle = t("form.successTitle", {
+    defaultValue: "Message sent",
+  });
+  const formSuccessDescription = t("form.successDescription", {
+    defaultValue: "Thanks for your message! We'll reach out soon.",
+  });
+  const formErrorFallback = t("form.errorMessage", {
+    defaultValue:
+      "We couldn't send your message. Please try again in a moment.",
+  });
+  const formRateLimitedMessage = t("form.rateLimitedMessage", {
+    defaultValue: "Please wait a little before sending another message.",
+  });
+
   const supportEmailTitle = t("supportEmail", {
     defaultValue: "Support Email",
   });
@@ -183,6 +251,87 @@ export default function ContactUsPage() {
     helpfulInfo?.description ??
     "Please include details about your question or issue to help us assist you better.";
 
+  const handleFormSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (formStatus === "loading") return;
+
+    setFormStatus("loading");
+    setFormErrorMessage(null);
+
+    let closeTimer: number | null = null;
+
+    try {
+      const payload = {
+        name: formValues.name.trim(),
+        email: formValues.email.trim(),
+        subject: formValues.subject.trim(),
+        message: formValues.message.trim(),
+      };
+
+      if (!payload.email || !payload.message) {
+        setFormStatus("error");
+        setFormErrorMessage(formErrorFallback);
+        return;
+      }
+
+      const response = await fetch("/api/contact", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        let body: any = null;
+        try {
+          body = await response.json();
+        } catch {
+          body = null;
+        }
+
+        const message =
+          response.status === 429
+            ? formRateLimitedMessage
+            : typeof body?.error === "string" && body.error.trim().length > 0
+              ? body.error
+              : formErrorFallback;
+
+        throw new Error(message);
+      }
+
+      const result = await response.json().catch(() => ({}));
+      if (!result?.ok) {
+        throw new Error(formErrorFallback);
+      }
+
+      setFormStatus("success");
+      setFormErrorMessage(null);
+      if (formCloseTimeoutRef.current) {
+        window.clearTimeout(formCloseTimeoutRef.current);
+        formCloseTimeoutRef.current = null;
+      }
+      closeTimer = window.setTimeout(() => {
+        handleDialogOpenChange(false);
+      }, 1500);
+      formCloseTimeoutRef.current = closeTimer;
+    } catch (error) {
+      if (closeTimer) {
+        window.clearTimeout(closeTimer);
+        closeTimer = null;
+      }
+      const message =
+        (error as Error)?.message &&
+        (error as Error).message !== "Failed to send message"
+          ? (error as Error).message
+          : formErrorFallback;
+      setFormErrorMessage(message);
+      setFormStatus("error");
+    }
+  };
+
+  const inputsDisabled = formStatus === "loading" || formStatus === "success";
+
   return (
     <div className="max-w-4xl mx-auto mt-8 px-4 md:px-0">
       <div className="mb-6">
@@ -193,7 +342,6 @@ export default function ContactUsPage() {
         <p className="text-sm opacity-70 mt-2">{description}</p>
       </div>
 
-      {/* Main Contact Card */}
       <Card className="rounded-3xl mb-6">
         <CardHeader>
           <div className="flex items-center gap-3">
@@ -228,10 +376,41 @@ export default function ContactUsPage() {
                 <Button
                   onClick={handleEmailCopy}
                   variant="outline"
-                  className="rounded-2xl"
+                  className={`relative overflow-hidden rounded-2xl border transition ${
+                    copyState === "copied"
+                      ? "border-emerald-500 bg-emerald-600 text-white hover:bg-emerald-600"
+                      : ""
+                  }`}
                 >
-                  <CopyIcon className="h-4 w-4 mr-2" />
-                  {copyEmailLabel}
+                  {copyState === "copied" && (
+                    <motion.span
+                      className="absolute inset-0 rounded-2xl bg-emerald-500/30"
+                      initial={{ scale: 0.2, opacity: 0.8 }}
+                      animate={{ scale: 1.4, opacity: 0 }}
+                      transition={{ duration: 0.6, ease: "easeOut" }}
+                    />
+                  )}
+                  <motion.span
+                    className="relative inline-flex items-center gap-2"
+                    animate={
+                      copyState === "copied"
+                        ? { scale: [1, 1.08, 1], rotate: [0, -1.5, 0] }
+                        : { scale: 1, rotate: 0 }
+                    }
+                    transition={{ duration: 0.4 }}
+                  >
+                    {copyState === "copied" ? (
+                      <>
+                        <Check className="h-4 w-4" />
+                        <span>{copySuccessLabel}</span>
+                      </>
+                    ) : (
+                      <>
+                        <CopyIcon className="h-4 w-4" />
+                        <span>{copyEmailLabel}</span>
+                      </>
+                    )}
+                  </motion.span>
                 </Button>
               </div>
             </div>
@@ -239,7 +418,6 @@ export default function ContactUsPage() {
         </CardContent>
       </Card>
 
-      {/* Additional Information */}
       <div className="grid md:grid-cols-2 gap-4">
         <Card className="rounded-3xl">
           <CardHeader>
@@ -272,34 +450,20 @@ export default function ContactUsPage() {
             <DialogTitle>{formTitle}</DialogTitle>
             <DialogDescription>{formDescription}</DialogDescription>
           </DialogHeader>
-          <form
-            className="space-y-4"
-            onSubmit={(event: FormEvent<HTMLFormElement>) => {
-              event.preventDefault();
-
-              const name = formValues.name.trim();
-              const email = formValues.email.trim();
-              const subject = formValues.subject.trim();
-              const message = formValues.message.trim();
-
-              const mailSubject =
-                subject || `Support request from ${name || "Plant Swipe user"}`;
-              const bodyLines = [
-                `Name: ${name || "N/A"}`,
-                `Email: ${email || "N/A"}`,
-                "",
-                message || "No additional message provided.",
-              ];
-
-              const params = new URLSearchParams({
-                subject: mailSubject,
-                body: bodyLines.join("\n"),
-              });
-
-              handleDialogOpenChange(false);
-              window.location.href = `mailto:${SUPPORT_EMAIL}?${params.toString()}`;
-            }}
-          >
+          <form className="space-y-4" onSubmit={handleFormSubmit}>
+            {formStatus === "success" && (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4 text-sm text-emerald-700">
+                <p className="font-medium">{formSuccessTitle}</p>
+                <p className="mt-1 text-emerald-600">
+                  {formSuccessDescription}
+                </p>
+              </div>
+            )}
+            {formStatus === "error" && formErrorMessage && (
+              <div className="rounded-2xl border border-rose-200 bg-rose-50/80 p-4 text-sm text-rose-700">
+                {formErrorMessage}
+              </div>
+            )}
             <div className="grid gap-2">
               <Label htmlFor="contact-name">{formNameLabel}</Label>
               <Input
@@ -313,6 +477,7 @@ export default function ContactUsPage() {
                     name: event.target.value,
                   }))
                 }
+                disabled={inputsDisabled}
               />
             </div>
             <div className="grid gap-2">
@@ -330,6 +495,7 @@ export default function ContactUsPage() {
                     email: event.target.value,
                   }))
                 }
+                disabled={inputsDisabled}
               />
             </div>
             <div className="grid gap-2">
@@ -346,6 +512,7 @@ export default function ContactUsPage() {
                     subject: event.target.value,
                   }))
                 }
+                disabled={inputsDisabled}
               />
             </div>
             <div className="grid gap-2">
@@ -363,6 +530,7 @@ export default function ContactUsPage() {
                     message: event.target.value,
                   }))
                 }
+                disabled={inputsDisabled}
               />
             </div>
             <DialogFooter className="pt-2">
@@ -371,11 +539,18 @@ export default function ContactUsPage() {
                 variant="outline"
                 className="rounded-2xl"
                 onClick={() => handleDialogOpenChange(false)}
+                disabled={formStatus === "loading"}
               >
                 {formCancelLabel}
               </Button>
-              <Button type="submit" className="rounded-2xl">
-                {formSubmitLabel}
+              <Button
+                type="submit"
+                className="rounded-2xl"
+                disabled={formStatus === "loading" || formStatus === "success"}
+              >
+                {formStatus === "loading"
+                  ? formSubmitSendingLabel
+                  : formSubmitLabel}
               </Button>
             </DialogFooter>
           </form>

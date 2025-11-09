@@ -42,6 +42,7 @@
     "emailLabel": "Adresse e-mail",
     "sendEmail": "Envoyer un e-mail",
     "copyEmail": "Copier",
+    "copySuccess": "Copié !",
     "responseTime": {
       "title": "Temps de réponse",
       "description": "Nous répondons généralement dans les 24 à 48 heures pendant les jours ouvrables."
@@ -62,7 +63,12 @@
       "messageLabel": "Message",
       "messagePlaceholder": "Dites-nous en un peu plus sur votre demande...",
       "submitButton": "Envoyer le message",
-      "cancelButton": "Annuler"
+      "submitSending": "Envoi...",
+      "cancelButton": "Annuler",
+      "successTitle": "Message envoyé",
+      "successDescription": "Merci pour votre message ! Nous vous répondrons rapidement.",
+      "errorMessage": "Impossible d'envoyer votre message. Veuillez réessayer dans un instant.",
+      "rateLimitedMessage": "Veuillez patienter un peu avant d'envoyer un nouveau message."
     }
   },
   "auth": {

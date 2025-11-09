@@ -123,6 +123,13 @@ const supabaseServer = (supabaseUrlEnv && supabaseAnonKey)
   ? createSupabaseClient(supabaseUrlEnv, supabaseAnonKey, { auth: { persistSession: false, autoRefreshToken: false } })
   : null
 
+const supportEmailTargetsRaw = process.env.SUPPORT_EMAIL_TO || process.env.SUPPORT_EMAIL || 'support@aphylia.app'
+const supportEmailTargets = supportEmailTargetsRaw.split(',').map(s => s.trim()).filter(Boolean)
+const supportEmailFrom = process.env.SUPPORT_EMAIL_FROM || process.env.RESEND_FROM || (supportEmailTargets[0] ? `Plant Swipe <${supportEmailTargets[0]}>` : 'Plant Swipe <support@aphylia.app>')
+const resendApiKey = process.env.RESEND_API_KEY || process.env.RESEND_KEY || ''
+const supportEmailWebhook = process.env.SUPPORT_EMAIL_WEBHOOK_URL || process.env.CONTACT_WEBHOOK_URL || ''
+const contactRateLimitStore = new Map()
+
 // Admin bypass configuration
 // Support both server-only and Vite-style env variable names
 const adminStaticToken = process.env.ADMIN_STATIC_TOKEN || process.env.VITE_ADMIN_STATIC_TOKEN || ''
@@ -782,6 +789,101 @@ function getClientIp(req) {
   const real = (h['x-real-ip'] || h['X-Real-IP'] || '').toString()
   if (real) return normalizeIp(real)
   return normalizeIp(req.ip || req.connection?.remoteAddress || '')
+}
+
+const htmlEscapeMap = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+}
+
+function escapeHtml(value) {
+  if (value === null || value === undefined) return ''
+  return String(value).replace(/[&<>"']/g, (ch) => htmlEscapeMap[ch] || ch)
+}
+
+function isContactRateLimited(key) {
+  const now = Date.now()
+  const windowMs = Number(process.env.CONTACT_FORM_WINDOW_MS || 5 * 60 * 1000)
+  const limit = Number(process.env.CONTACT_FORM_MAX_ATTEMPTS || 5)
+  const history = contactRateLimitStore.get(key) || []
+  const recent = history.filter((ts) => now - ts < windowMs)
+  if (recent.length >= limit) {
+    contactRateLimitStore.set(key, recent)
+    return true
+  }
+  recent.push(now)
+  contactRateLimitStore.set(key, recent)
+  return false
+}
+
+async function dispatchSupportEmail({ name, email, subject, message }) {
+  const targets = supportEmailTargets.length ? supportEmailTargets : ['support@aphylia.app']
+  const safeName = name ? name.slice(0, 200) : ''
+  const safeSubject = subject && subject.trim() ? subject.trim().slice(0, 180) : null
+  const sanitizedMessage = (message || '').replace(/\r\n/g, '\n').slice(0, 5000)
+  const plainText = [
+    'New contact form submission',
+    '',
+    `Name: ${safeName || 'N/A'}`,
+    `Email: ${email || 'N/A'}`,
+    '',
+    sanitizedMessage || 'No additional message provided.',
+  ].join('\n')
+  const htmlBody = [
+    '<h2 style="font-family:system-ui,sans-serif;margin:0 0 12px;">New contact form submission</h2>',
+    `<p style="font-family:system-ui,sans-serif;margin:0 0 8px;"><strong>Name:</strong> ${escapeHtml(safeName) || 'N/A'}</p>`,
+    `<p style="font-family:system-ui,sans-serif;margin:0 0 16px;"><strong>Email:</strong> ${escapeHtml(email || '') || 'N/A'}</p>`,
+    `<p style="font-family:system-ui,sans-serif;margin:0;">${escapeHtml(sanitizedMessage || 'No additional message provided.').replace(/\n/g, '<br />')}</p>`,
+  ].join('')
+  const finalSubject = safeSubject || `Contact form message from ${safeName || email || 'Plant Swipe user'}`
+
+  if (resendApiKey) {
+    const payload = {
+      from: supportEmailFrom,
+      to: targets,
+      subject: finalSubject,
+      text: plainText,
+      html: htmlBody,
+    }
+    if (email) payload.reply_to = email
+    const resp = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${resendApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    })
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => '')
+      throw new Error(text || `Resend API error (${resp.status})`)
+    }
+    return
+  }
+
+  if (supportEmailWebhook) {
+    const resp = await fetch(supportEmailWebhook, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to: targets,
+        subject: finalSubject,
+        text: plainText,
+        html: htmlBody,
+        replyTo: email || null,
+      }),
+    })
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => '')
+      throw new Error(text || `Webhook delivery failed (${resp.status})`)
+    }
+    return
+  }
+
+  throw new Error('Email delivery not configured')
 }
 
 function getGeoFromHeaders(req) {
@@ -2953,6 +3055,37 @@ async function loadPlantsViaSupabase() {
     return null
   }
 }
+
+app.post('/api/contact', async (req, res) => {
+  try {
+    const body = req.body || {}
+    const name = typeof body.name === 'string' ? body.name.trim().slice(0, 200) : ''
+    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
+    const subject = typeof body.subject === 'string' ? body.subject.trim().slice(0, 180) : ''
+    const message = typeof body.message === 'string' ? body.message.trim().slice(0, 5000) : ''
+
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      res.status(400).json({ error: 'A valid email address is required.' })
+      return
+    }
+    if (!message) {
+      res.status(400).json({ error: 'Message is required.' })
+      return
+    }
+
+    const ip = getClientIp(req) || 'unknown'
+    if (isContactRateLimited(ip)) {
+      res.status(429).json({ error: 'Too many messages in a short period. Please try again later.' })
+      return
+    }
+
+    await dispatchSupportEmail({ name, email, subject, message })
+    res.json({ ok: true })
+  } catch (error) {
+    console.error('[contact] failed to send support email:', error)
+    res.status(500).json({ error: 'Failed to send message. Please try again later.' })
+  }
+})
 
 // DeepL Translation API endpoint
 app.post('/api/translate', async (req, res) => {
