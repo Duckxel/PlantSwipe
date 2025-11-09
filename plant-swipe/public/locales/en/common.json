@@ -43,6 +43,32 @@
     "emailLabel": "Email Address",
     "sendEmail": "Send Email",
     "copyEmail": "Copy",
+    "form": {
+      "title": "Send us a message",
+      "description": "Fill out the form and our team will respond as soon as possible.",
+      "nameLabel": "Full name",
+      "namePlaceholder": "Your name",
+      "emailLabel": "Email address",
+      "emailPlaceholder": "you@example.com",
+      "messageLabel": "How can we help?",
+      "messagePlaceholder": "Tell us about your question, request, or issue...",
+      "messageHelper": "Include as many details as you can.",
+      "submit": "Send message",
+      "submitting": "Sending...",
+      "successTitle": "Message sent",
+      "successDescription": "Thanks for reaching out! We'll get back to you shortly.",
+      "errorTitle": "We couldn't send your message",
+      "errorDescription": "Please try again or email support@aphylia.app directly.",
+      "validation": {
+        "name": "Please enter your name",
+        "nameMax": "Name must be 120 characters or fewer",
+        "email": "Please enter your email address",
+        "emailInvalid": "Please enter a valid email address",
+        "message": "Please enter a message",
+        "messageMin": "Message must be at least 10 characters",
+        "messageMax": "Message must be 4,000 characters or fewer"
+      }
+    },
     "responseTime": {
       "title": "Response Time",
       "description": "We typically respond within 24-48 hours during business days."
