@@ -24,6 +24,7 @@ import { getAccentOption } from '@/lib/accent'
 import { useTranslation } from 'react-i18next'
 import { useLanguage } from '@/lib/i18nRouting'
 import { mergePlantWithTranslation } from '@/lib/plantTranslationLoader'
+import { OverviewSectionSkeleton } from '@/components/garden/GardenSkeletons'
  
 
 
@@ -1513,8 +1514,23 @@ export const GardenDashboardPage: React.FC = () => {
 
   return (
     <div className="max-w-6xl mx-auto mt-6 grid grid-cols-1 md:grid-cols-[220px_1fr] lg:grid-cols-[220px_1fr] gap-6">
-      {loading && <div className="p-6 text-sm opacity-60">{t('gardenDashboard.loading')}</div>}
       {error && <div className="p-6 text-sm text-red-600">{error}</div>}
+      {loading && (
+        <>
+          <aside className="space-y-2 md:sticky md:top-4 self-start">
+            <div className="h-7 w-32 bg-stone-200 dark:bg-stone-700 rounded animate-pulse mb-4" />
+            <nav className="flex flex-wrap md:flex-col gap-2">
+              {Array.from({ length: 4 }).map((_, idx) => (
+                <div key={idx} className="h-10 w-full bg-stone-200 dark:bg-stone-700 rounded-2xl animate-pulse" />
+              ))}
+            </nav>
+          </aside>
+          <main className="min-h-[60vh]">
+            {tab === 'overview' && <OverviewSectionSkeleton />}
+            {tab !== 'overview' && <div className="p-6 text-sm opacity-60">{t('gardenDashboard.loading')}</div>}
+          </main>
+        </>
+      )}
       {!loading && garden && (
         <>
           <aside className="space-y-2 md:sticky md:top-4 self-start">
