@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { TopBar } from "@/components/layout/TopBar";
-import { BottomBar } from "@/components/layout/BottomBar";
+import { Footer } from "@/components/layout/Footer";
 import BroadcastToast from "@/components/layout/BroadcastToast";
 import MobileNavBar from "@/components/layout/MobileNavBar";
 import { SwipePage } from "@/pages/SwipePage";
@@ -750,7 +750,7 @@ export default function PlantSwipe() {
         </DialogContent>
       </Dialog>
 
-      <BottomBar />
+      <Footer />
       <BroadcastToast />
     </div>
     </AuthActionsProvider>
