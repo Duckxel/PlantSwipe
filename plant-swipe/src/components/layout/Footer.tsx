@@ -1,0 +1,78 @@
+import React from "react"
+import { Link } from "@/components/i18n/Link"
+import { Youtube, Twitter, Instagram } from "lucide-react"
+import { useTranslation } from "react-i18next"
+
+export const Footer: React.FC = () => {
+  const { t } = useTranslation('common')
+  
+  return (
+    <footer className="max-w-6xl mx-auto mt-10 pt-8 pb-6 px-2 border-t border-stone-300 dark:border-[#3e3e42]">
+      <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+        {/* Social Media Icons */}
+        <div className="flex items-center gap-4">
+          <a
+            href="https://youtube.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-stone-600 dark:text-stone-400 hover:text-red-600 dark:hover:text-red-500 transition-colors"
+            aria-label="YouTube"
+          >
+            <Youtube className="h-5 w-5" />
+          </a>
+          <a
+            href="https://twitter.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-stone-600 dark:text-stone-400 hover:text-black dark:hover:text-white transition-colors"
+            aria-label="X (Twitter)"
+          >
+            <Twitter className="h-5 w-5" />
+          </a>
+          <a
+            href="https://instagram.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-stone-600 dark:text-stone-400 hover:text-pink-600 dark:hover:text-pink-500 transition-colors"
+            aria-label="Instagram"
+          >
+            <Instagram className="h-5 w-5" />
+          </a>
+        </div>
+
+        {/* Footer Links */}
+        <nav className="flex flex-wrap items-center justify-center gap-4 text-sm">
+          <Link
+            to="/about"
+            className="text-stone-600 dark:text-stone-400 hover:text-black dark:hover:text-white transition-colors no-underline"
+          >
+            {t('footer.about')}
+          </Link>
+          <Link
+            to="/blog"
+            className="text-stone-600 dark:text-stone-400 hover:text-black dark:hover:text-white transition-colors no-underline"
+          >
+            {t('footer.blog')}
+          </Link>
+          <Link
+            to="/contact"
+            className="text-stone-600 dark:text-stone-400 hover:text-black dark:hover:text-white transition-colors no-underline"
+          >
+            {t('footer.contactUs')}
+          </Link>
+          <Link
+            to="/terms"
+            className="text-stone-600 dark:text-stone-400 hover:text-black dark:hover:text-white transition-colors no-underline"
+          >
+            {t('footer.termsOfServices')}
+          </Link>
+        </nav>
+
+        {/* Copyright */}
+        <div className="text-xs text-stone-500 dark:text-stone-500 text-center md:text-right">
+          © {new Date().getFullYear()} {t('common.appName')}. {t('common.allRightsReserved')}.
+        </div>
+      </div>
+    </footer>
+  )
+}

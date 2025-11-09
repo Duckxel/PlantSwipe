@@ -28,6 +28,12 @@
     "results": "results",
     "allRightsReserved": "All rights reserved"
   },
+  "footer": {
+    "about": "About",
+    "blog": "Blog",
+    "contactUs": "Contact Us",
+    "termsOfServices": "Terms of Services"
+  },
   "auth": {
     "login": "Log in",
     "signup": "Create your account",
