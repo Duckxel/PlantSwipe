@@ -15,7 +15,7 @@ import { useTranslation } from "react-i18next";
 export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?: boolean; onToggleLike?: () => void; isOverlayMode?: boolean }> = ({ plant, onClose, liked = false, onToggleLike, isOverlayMode = false }) => {
   const navigate = useLanguageNavigate()
   const currentLang = useLanguage()
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
   const { t } = useTranslation('common')
   const [shareSuccess, setShareSuccess] = React.useState(false)
   const shareTimeoutRef = React.useRef<number | null>(null)
@@ -363,7 +363,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
       </Card>
 
       <div className="flex justify-between gap-2">
-        {user && (
+        {user && profile?.is_admin && (
           <Button variant="destructive" className="rounded-2xl" onClick={async () => {
             const yes = window.confirm(t('plantInfo.deleteConfirm'))
             if (!yes) return
@@ -374,7 +374,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
           }}>{t('common.delete')}</Button>
         )}
         <div className="flex gap-2 ml-auto">
-          {user && (
+          {user && profile?.is_admin && (
             <Button
               variant="secondary"
               className="rounded-2xl"
