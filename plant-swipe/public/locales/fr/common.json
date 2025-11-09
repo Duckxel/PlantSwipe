@@ -26,13 +26,13 @@
     "update": "Mettre à jour",
     "result": "résultat",
     "results": "résultats",
-    "allRightsReserved": "Tous droits réservés"
-  },
-  "footer": {
-    "about": "À propos",
-    "blog": "Blog",
-    "contactUs": "Nous contacter",
-    "termsOfServices": "Conditions d'utilisation"
+    "allRightsReserved": "Tous droits réservés",
+    "footer": {
+      "about": "À propos",
+      "blog": "Blog",
+      "contactUs": "Nous contacter",
+      "termsOfServices": "Conditions d'utilisation"
+    }
   },
   "auth": {
     "login": "Se connecter",
