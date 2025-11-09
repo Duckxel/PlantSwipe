@@ -18,6 +18,7 @@ import MobileNavBar from "@/components/layout/MobileNavBar";
 import { RequestPlantDialog } from "@/components/plant/RequestPlantDialog";
 // GardenListPage and GardenDashboardPage are lazy loaded below
 import { SearchPage } from "@/pages/SearchPage";
+import { SwipePage } from "@/pages/SwipePage";
 import { CreatePlantPage } from "@/pages/CreatePlantPage";
 import { EditPlantPage } from "@/pages/EditPlantPage";
 import type { Plant } from "@/types/plant";
