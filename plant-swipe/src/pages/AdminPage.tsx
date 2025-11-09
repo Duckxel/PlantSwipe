@@ -403,6 +403,23 @@ export const AdminPage: React.FC = () => {
           })
         }
       }
+
+        if (body?.summary) {
+          try {
+            const missingTables = Array.isArray(body.summary?.tables?.missing) ? body.summary.tables.missing : []
+            if (missingTables.length > 0) {
+              appendConsole(`[sync] ⚠ Missing tables after sync: ${missingTables.join(', ')}`)
+            }
+            const missingFunctions = Array.isArray(body.summary?.functions?.missing) ? body.summary.functions.missing : []
+            if (missingFunctions.length > 0) {
+              appendConsole(`[sync] ⚠ Missing functions after sync: ${missingFunctions.join(', ')}`)
+            }
+            const missingExtensions = Array.isArray(body.summary?.extensions?.missing) ? body.summary.extensions.missing : []
+            if (missingExtensions.length > 0) {
+              appendConsole(`[sync] ⚠ Missing extensions after sync: ${missingExtensions.join(', ')}`)
+            }
+          } catch {}
+        }
       
       appendConsole('[sync] ✓ Database sync completed!')
     } catch (e: unknown) {

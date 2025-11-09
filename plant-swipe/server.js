@@ -1383,6 +1383,61 @@ async function ensureBroadcastTable() {
   } catch {}
 }
 
+async function ensureRequestedPlantsSchema() {
+  if (!sql) return
+  const ddl = `
+create table if not exists public.requested_plants (
+  id uuid primary key default gen_random_uuid(),
+  plant_name text not null,
+  plant_name_normalized text not null,
+  requested_by uuid not null references auth.users(id) on delete cascade,
+  request_count integer not null default 1 check (request_count > 0),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  completed_at timestamptz,
+  completed_by uuid references auth.users(id) on delete set null
+);
+
+alter table if exists public.requested_plants add column if not exists plant_name text;
+alter table if exists public.requested_plants add column if not exists plant_name_normalized text;
+alter table if exists public.requested_plants add column if not exists requested_by uuid references auth.users(id) on delete cascade;
+alter table if exists public.requested_plants add column if not exists request_count integer not null default 1;
+alter table if exists public.requested_plants add column if not exists created_at timestamptz not null default now();
+alter table if exists public.requested_plants add column if not exists updated_at timestamptz not null default now();
+alter table if exists public.requested_plants add column if not exists completed_at timestamptz;
+alter table if exists public.requested_plants add column if not exists completed_by uuid;
+
+do $do$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'requested_plants_request_count_check') then
+    alter table public.requested_plants add constraint requested_plants_request_count_check check (request_count > 0);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'requested_plants_requested_by_fkey') then
+    alter table public.requested_plants add constraint requested_plants_requested_by_fkey
+      foreign key (requested_by) references auth.users(id) on delete cascade;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'requested_plants_completed_by_fkey') then
+    alter table public.requested_plants add constraint requested_plants_completed_by_fkey
+      foreign key (completed_by) references auth.users(id) on delete set null;
+  end if;
+end
+$do$;
+
+create index if not exists requested_plants_plant_name_normalized_idx on public.requested_plants(plant_name_normalized);
+create unique index if not exists requested_plants_active_name_unique_idx on public.requested_plants(plant_name_normalized) where completed_at is null;
+create index if not exists requested_plants_completed_at_idx on public.requested_plants(completed_at);
+create index if not exists requested_plants_requested_by_idx on public.requested_plants(requested_by);
+create index if not exists requested_plants_created_at_idx on public.requested_plants(created_at desc);
+`
+  try {
+    await sql.unsafe(ddl, [], { simple: true })
+    await sql`update public.requested_plants set plant_name_normalized = lower(trim(plant_name)) where plant_name_normalized is null and plant_name is not null`
+    await sql`alter table public.requested_plants alter column plant_name_normalized set not null`
+  } catch (err) {
+    console.error('[sync] failed to ensure requested_plants schema', err)
+  }
+}
+
 // Helper: verify key schema objects exist after sync for operator assurance
 async function verifySchemaAfterSync() {
   if (!sql) return null
@@ -1396,6 +1451,7 @@ async function verifySchemaAfterSync() {
     'garden_task_user_completions',
     'garden_watering_schedule',
     'web_visits',
+    'requested_plants',
   ]
   const requiredFunctions = [
     'get_profile_public_by_display_name',
@@ -1449,6 +1505,9 @@ async function handleSyncSchema(req, res) {
 
     // Execute allowing multiple statements
     await sql.unsafe(sqlText, [], { simple: true })
+
+    // Ensure critical tables that power new features exist even if the SQL script was partially applied.
+    await ensureRequestedPlantsSchema()
 
     // Verify important objects exist after sync
     let summary = null
