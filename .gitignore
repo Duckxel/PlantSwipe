@@ -44,3 +44,8 @@ TIME
 # hosting/platform folders (if you use them)
 .vercel/
 .netlify/
+
+# Supabase CLI artifacts
+/supabase/
+plant-swipe/supabase/.temp/
+plant-swipe/supabase/config.toml

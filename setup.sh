@@ -68,6 +68,8 @@ SERVICE_ADMIN="admin-api"
 SERVICE_NGINX="nginx"
 # Service account that runs Node/Admin services (and git operations)
 SERVICE_USER="${SERVICE_USER:-www-data}"
+SERVICE_USER_HOME="$(getent passwd "$SERVICE_USER" | cut -d: -f6 2>/dev/null || true)"
+[[ -z "$SERVICE_USER_HOME" ]] && SERVICE_USER_HOME="/var/www"
 SUPABASE_PROJECT_REF="${SUPABASE_PROJECT_REF:-}"
 SUPABASE_SERVICE_ROLE_KEY="${SUPABASE_SERVICE_ROLE_KEY:-}"
 
@@ -129,6 +131,16 @@ prepare_repo_permissions() {
 }
 
 prepare_repo_permissions "$REPO_DIR"
+
+prepare_service_user_supabase_home() {
+  local home="$SERVICE_USER_HOME"
+  $SUDO mkdir -p "$home/.supabase" "$home/.cache"
+  $SUDO chown -R "$SERVICE_USER:$SERVICE_USER" "$home/.supabase" "$home/.cache"
+  $SUDO touch "$home/.gitconfig"
+  $SUDO chown "$SERVICE_USER:$SERVICE_USER" "$home/.gitconfig"
+}
+
+prepare_service_user_supabase_home
 
 ensure_supabase_cli() {
   if command -v supabase >/dev/null 2>&1; then
