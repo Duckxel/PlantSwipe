@@ -3,9 +3,16 @@ import { Link } from "@/components/i18n/Link"
 import { Youtube, Twitter, Instagram } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
+const footerLinks = [
+  { to: '/about', labelKey: 'about', fallback: 'About' },
+  { to: '/blog', labelKey: 'blog', fallback: 'Blog' },
+  { to: '/contact', labelKey: 'contactUs', fallback: 'Contact Us' },
+  { to: '/terms', labelKey: 'termsOfServices', fallback: 'Terms of Services' },
+] as const
+
 export const Footer: React.FC = () => {
   const { t } = useTranslation('common')
-  
+
   return (
     <footer className="max-w-6xl mx-auto mt-10 pt-8 pb-6 px-2 border-t border-stone-300 dark:border-[#3e3e42]">
       <div className="flex flex-col md:flex-row items-center justify-between gap-6">
@@ -42,30 +49,15 @@ export const Footer: React.FC = () => {
 
         {/* Footer Links */}
         <nav className="flex flex-wrap items-center justify-center gap-4 text-sm">
-          <Link
-            to="/about"
-            className="text-stone-600 dark:text-stone-400 hover:text-black dark:hover:text-white transition-colors no-underline"
-          >
-            {t('footer.about')}
-          </Link>
-          <Link
-            to="/blog"
-            className="text-stone-600 dark:text-stone-400 hover:text-black dark:hover:text-white transition-colors no-underline"
-          >
-            {t('footer.blog')}
-          </Link>
-          <Link
-            to="/contact"
-            className="text-stone-600 dark:text-stone-400 hover:text-black dark:hover:text-white transition-colors no-underline"
-          >
-            {t('footer.contactUs')}
-          </Link>
-          <Link
-            to="/terms"
-            className="text-stone-600 dark:text-stone-400 hover:text-black dark:hover:text-white transition-colors no-underline"
-          >
-            {t('footer.termsOfServices')}
-          </Link>
+          {footerLinks.map(({ to, labelKey, fallback }) => (
+            <Link
+              key={labelKey}
+              to={to}
+              className="text-stone-600 dark:text-stone-400 hover:text-black dark:hover:text-white transition-colors no-underline"
+            >
+              {t(`common.footer.${labelKey}`, { defaultValue: fallback })}
+            </Link>
+          ))}
         </nav>
 
         {/* Copyright */}
