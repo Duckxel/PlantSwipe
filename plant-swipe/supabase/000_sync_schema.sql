@@ -3137,12 +3137,12 @@ BEGIN
       AND occ.due_at >= (_day_iso::text || 'T00:00:00.000Z')::timestamptz
       AND occ.due_at <= (_day_iso::text || 'T23:59:59.999Z')::timestamptz;
 
-      _totals[_day_idx + 1] := COALESCE(_daily_total, 0);
-      _water[_day_idx + 1] := COALESCE(_daily_water, 0);
-      _fertilize[_day_idx + 1] := COALESCE(_daily_fertilize, 0);
-      _harvest[_day_idx + 1] := COALESCE(_daily_harvest, 0);
-      _cut[_day_idx + 1] := COALESCE(_daily_cut, 0);
-      _custom[_day_idx + 1] := COALESCE(_daily_custom, 0);
+    _totals := array_set(_totals, ARRAY[_day_idx + 1], COALESCE(_daily_total, 0));
+    _water := array_set(_water, ARRAY[_day_idx + 1], COALESCE(_daily_water, 0));
+    _fertilize := array_set(_fertilize, ARRAY[_day_idx + 1], COALESCE(_daily_fertilize, 0));
+    _harvest := array_set(_harvest, ARRAY[_day_idx + 1], COALESCE(_daily_harvest, 0));
+    _cut := array_set(_cut, ARRAY[_day_idx + 1], COALESCE(_daily_cut, 0));
+    _custom := array_set(_custom, ARRAY[_day_idx + 1], COALESCE(_daily_custom, 0));
   END LOOP;
   
   -- Upsert cache
