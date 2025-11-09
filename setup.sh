@@ -68,6 +68,8 @@ SERVICE_ADMIN="admin-api"
 SERVICE_NGINX="nginx"
 # Service account that runs Node/Admin services (and git operations)
 SERVICE_USER="${SERVICE_USER:-www-data}"
+SUPABASE_PROJECT_REF="${SUPABASE_PROJECT_REF:-}"
+SUPABASE_SERVICE_ROLE_KEY="${SUPABASE_SERVICE_ROLE_KEY:-}"
 
 NGINX_SITE_AVAIL="/etc/nginx/sites-available/plant-swipe.conf"
 NGINX_SITE_ENABL="/etc/nginx/sites-enabled/plant-swipe.conf"
@@ -127,6 +129,119 @@ prepare_repo_permissions() {
 }
 
 prepare_repo_permissions "$REPO_DIR"
+
+ensure_supabase_cli() {
+  if command -v supabase >/dev/null 2>&1; then
+    log "Supabase CLI already installed ($(supabase --version 2>/dev/null || echo unknown))."
+    return 0
+  fi
+
+  local arch asset tmpdir
+  arch="$(uname -m)"
+  case "$arch" in
+    x86_64|amd64) asset="supabase_linux_amd64.tar.gz" ;;
+    arm64|aarch64) asset="supabase_linux_arm64.tar.gz" ;;
+    *) log "[WARN] Unsupported architecture ($arch) for Supabase CLI automatic install."; return 1 ;;
+  esac
+
+  log "Installing Supabase CLI…"
+  tmpdir="$(mktemp -d)"
+  if curl -fsSL "https://github.com/supabase/cli/releases/latest/download/${asset}" -o "$tmpdir/supabase.tgz"; then
+    tar -xzf "$tmpdir/supabase.tgz" -C "$tmpdir" supabase >/dev/null 2>&1 || {
+      log "[WARN] Failed to extract Supabase CLI archive."
+      rm -rf "$tmpdir"
+      return 1
+    }
+    install -m 0755 "$tmpdir/supabase" /usr/local/bin/supabase || {
+      log "[WARN] Failed to install Supabase CLI binary."
+      rm -rf "$tmpdir"
+      return 1
+    }
+    rm -rf "$tmpdir"
+    log "Supabase CLI installed."
+    return 0
+  else
+    log "[WARN] Unable to download Supabase CLI. Skipping CLI install."
+    rm -rf "$tmpdir"
+    return 1
+  fi
+}
+
+supabase_logged_in=false
+
+ensure_supabase_login_and_link() {
+  local cli_ok=false
+  if ensure_supabase_cli; then
+    cli_ok=true
+  elif command -v supabase >/dev/null 2>&1; then
+    cli_ok=true
+  fi
+
+  if [[ "$cli_ok" != "true" ]]; then
+    log "[WARN] Supabase CLI unavailable; skipping function deployment."
+    return 1
+  fi
+
+  if [[ -n "${SUPABASE_ACCESS_TOKEN:-}" ]]; then
+    log "Authenticating Supabase CLI using provided access token…"
+    if sudo -u "$SERVICE_USER" -H bash -lc "SUPABASE_ACCESS_TOKEN='$SUPABASE_ACCESS_TOKEN' supabase login --token '$SUPABASE_ACCESS_TOKEN' >/dev/null"; then
+      supabase_logged_in=true
+    else
+      log "[WARN] Supabase CLI login failed. Continuing without deployment."
+      supabase_logged_in=false
+    fi
+  else
+    log "[WARN] SUPABASE_ACCESS_TOKEN not set; skipping Supabase CLI login."
+  fi
+
+  if [[ -n "$SUPABASE_PROJECT_REF" && -n "$SUPABASE_SERVICE_ROLE_KEY" ]]; then
+    if [[ ! -f "$NODE_DIR/supabase/config.toml" ]]; then
+      log "Linking Supabase project $SUPABASE_PROJECT_REF to repository (non-interactive)…"
+      if ! sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && supabase link --project-ref '$SUPABASE_PROJECT_REF' --password '$SUPABASE_SERVICE_ROLE_KEY' >/dev/null"; then
+        log "[WARN] Supabase project link failed."
+      fi
+    else
+      log "Supabase project already linked at $NODE_DIR/supabase/config.toml"
+    fi
+  else
+    log "[WARN] SUPABASE_PROJECT_REF and/or SUPABASE_SERVICE_ROLE_KEY not set; skipping supabase link."
+  fi
+}
+
+deploy_supabase_contact_function() {
+  ensure_supabase_login_and_link
+  if ! command -v supabase >/dev/null 2>&1; then
+    log "[WARN] Supabase CLI missing; skipping Edge Function deployment."
+    return
+  fi
+  if [[ "$supabase_logged_in" != "true" ]]; then
+    log "[WARN] Supabase CLI not authenticated; skipping Edge Function deployment."
+    return
+  fi
+
+  local tmp_env
+  tmp_env=""
+  if [[ -n "${RESEND_API_KEY:-}" || -n "${RESEND_FROM:-}" || -n "${RESEND_FROM_NAME:-}" ]]; then
+    tmp_env="$(mktemp)"
+    [[ -n "${RESEND_API_KEY:-}" ]] && printf "RESEND_API_KEY=%s\n" "$RESEND_API_KEY" >>"$tmp_env"
+    [[ -n "${RESEND_FROM:-}" ]] && printf "RESEND_FROM=%s\n" "$RESEND_FROM" >>"$tmp_env"
+    [[ -n "${RESEND_FROM_NAME:-}" ]] && printf "RESEND_FROM_NAME=%s\n" "$RESEND_FROM_NAME" >>"$tmp_env"
+    log "Syncing Supabase function secrets from environment…"
+    if ! sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && supabase functions secrets set --env-file '$tmp_env' >/dev/null"; then
+      log "[WARN] Failed to push Supabase function secrets."
+    fi
+    rm -f "$tmp_env"
+  else
+    log "[INFO] RESEND_* environment variables not set; skipping secrets sync."
+  fi
+
+  log "Deploying Supabase Edge Function contact-support…"
+  if ! sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && supabase functions deploy contact-support --no-verify-jwt >/dev/null"; then
+    log "[WARN] Supabase Edge Function deployment failed."
+  else
+    log "Supabase Edge Function contact-support deployed."
+  fi
+}
 
 # Detect package manager (Debian/Ubuntu assumed). Fallback with message.
 if command -v apt-get >/dev/null 2>&1; then
@@ -524,6 +639,9 @@ if command -v git >/dev/null 2>&1; then
   sudo -u "$SERVICE_USER" -H git config --global --add safe.directory "$REPO_DIR" || true
   git config --global --add safe.directory "$REPO_DIR" || true
 fi
+
+log "Attempting Supabase Edge Function deployment (if credentials provided)…"
+deploy_supabase_contact_function
 
 # Verify
 log "Verifying services are active…"
