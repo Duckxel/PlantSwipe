@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { LazyCharts, ChartSuspense } from '@/components/admin/LazyChart'
 import { useTheme } from '@/context/ThemeContext'
+import { useAuth } from '@/context/AuthContext'
 // Re-export for convenience
 const {
   ResponsiveContainer,
@@ -39,6 +40,7 @@ import {
 export const AdminPage: React.FC = () => {
   const navigate = useNavigate()
   const { effectiveTheme } = useTheme()
+  const { user } = useAuth()
   const isDark = effectiveTheme === 'dark'
   const shortenMiddle = React.useCallback((value: string, maxChars: number = 28): string => {
     try {
@@ -57,25 +59,24 @@ export const AdminPage: React.FC = () => {
     try {
       const date = new Date(timeStr)
       if (isNaN(date.getTime())) return ''
-      // Format as relative time (e.g., "2 hours ago") or absolute if older than 24 hours
       const now = new Date()
       const diffMs = now.getTime() - date.getTime()
       const diffHours = diffMs / (1000 * 60 * 60)
       const diffDays = diffMs / (1000 * 60 * 60 * 24)
-      
+
       if (diffHours < 1) {
         const diffMins = Math.floor(diffMs / (1000 * 60))
         return diffMins < 1 ? 'just now' : `${diffMins}m ago`
-      } else if (diffHours < 24) {
+      }
+      if (diffHours < 24) {
         const hours = Math.floor(diffHours)
         return `${hours}h ago`
-      } else if (diffDays < 7) {
+      }
+      if (diffDays < 7) {
         const days = Math.floor(diffDays)
         return `${days}d ago`
-      } else {
-        // Format as date: "Jan 15, 2024"
-        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
       }
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
     } catch {
       return ''
     }
@@ -578,6 +579,110 @@ export const AdminPage: React.FC = () => {
     const d = Math.floor(h / 24)
     return `${d}d ago`
   }
+
+  type PlantRequestRow = {
+    id: string
+    plant_name: string
+    request_count: number
+    created_at: string | null
+    updated_at: string | null
+  }
+  const [plantRequests, setPlantRequests] = React.useState<PlantRequestRow[]>([])
+  const [plantRequestsLoading, setPlantRequestsLoading] = React.useState<boolean>(false)
+  const [plantRequestsRefreshing, setPlantRequestsRefreshing] = React.useState<boolean>(false)
+  const [plantRequestsError, setPlantRequestsError] = React.useState<string | null>(null)
+  const [plantRequestsInitialized, setPlantRequestsInitialized] = React.useState<boolean>(false)
+  const [completingRequestId, setCompletingRequestId] = React.useState<string | null>(null)
+
+  const loadPlantRequests = React.useCallback(async ({ initial = false }: { initial?: boolean } = {}) => {
+    setPlantRequestsError(null)
+    if (initial) {
+      setPlantRequestsLoading(true)
+    } else {
+      setPlantRequestsRefreshing(true)
+    }
+    try {
+      const { data, error } = await supabase
+        .from('requested_plants')
+        .select('id, plant_name, plant_name_normalized, request_count, created_at, updated_at')
+        .is('completed_at', null)
+        .order('request_count', { ascending: false })
+        .order('updated_at', { ascending: false })
+
+      if (error) throw new Error(error.message)
+
+      const rows: PlantRequestRow[] = (data ?? [])
+        .map((row: any) => {
+          const id = row?.id ? String(row.id) : null
+          if (!id) return null
+          const requestCountRaw = row?.request_count
+          const requestCount =
+            typeof requestCountRaw === 'number'
+              ? requestCountRaw
+              : Number(requestCountRaw ?? 0)
+          return {
+            id,
+            plant_name: row?.plant_name
+              ? String(row.plant_name)
+              : row?.plant_name_normalized
+              ? String(row.plant_name_normalized)
+              : 'Unknown request',
+            request_count: Number.isFinite(requestCount) ? requestCount : 0,
+            created_at: row?.created_at ?? null,
+            updated_at: row?.updated_at ?? null,
+          }
+        })
+        .filter((row): row is PlantRequestRow => row !== null)
+
+      setPlantRequests(rows)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setPlantRequestsError(msg)
+      if (initial) setPlantRequests([])
+    } finally {
+      if (initial) {
+        setPlantRequestsLoading(false)
+      } else {
+        setPlantRequestsRefreshing(false)
+      }
+      if (initial) {
+        setPlantRequestsInitialized(true)
+      }
+    }
+  }, [supabase])
+
+  const completePlantRequest = React.useCallback(async (id: string) => {
+    if (!id || completingRequestId) return
+    if (!user?.id) {
+      setPlantRequestsError('You must be signed in to complete requests.')
+      return
+    }
+    setCompletingRequestId(id)
+    setPlantRequestsError(null)
+    try {
+      const { error } = await supabase
+        .from('requested_plants')
+        .update({
+          completed_at: new Date().toISOString(),
+          completed_by: user.id,
+        })
+        .eq('id', id)
+
+      if (error) throw new Error(error.message)
+
+      await loadPlantRequests({ initial: false })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setPlantRequestsError(msg)
+    } finally {
+      setCompletingRequestId(null)
+    }
+  }, [completingRequestId, loadPlantRequests, supabase, user?.id])
+
+  React.useEffect(() => {
+    if (activeTab !== 'requests' || plantRequestsInitialized) return
+    loadPlantRequests({ initial: true })
+  }, [activeTab, plantRequestsInitialized, loadPlantRequests])
 
   // Presence fallback removed by request: rely on DB-backed API only
 
@@ -1241,7 +1346,7 @@ export const AdminPage: React.FC = () => {
   }, [loadVisitorsStats])
 
   // ---- Members tab state ----
-  const [activeTab, setActiveTab] = React.useState<'overview' | 'members' | 'admin_logs'>('overview')
+  const [activeTab, setActiveTab] = React.useState<'overview' | 'members' | 'requests' | 'admin_logs'>('overview')
   const [lookupEmail, setLookupEmail] = React.useState('')
   const [memberLoading, setMemberLoading] = React.useState(false)
   const [memberError, setMemberError] = React.useState<string | null>(null)
@@ -1753,21 +1858,26 @@ export const AdminPage: React.FC = () => {
               <div className="text-sm opacity-60 mt-1">Admin actions: monitor and manage infrastructure.</div>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button
-                variant={activeTab === 'overview' ? 'default' : 'secondary'}
-                className="rounded-2xl text-sm md:text-base px-3 md:px-4 py-2"
-                onClick={() => setActiveTab('overview')}
-              >Overview</Button>
-              <Button
-                variant={activeTab === 'members' ? 'default' : 'secondary'}
-                className="rounded-2xl text-sm md:text-base px-3 md:px-4 py-2"
-                onClick={() => setActiveTab('members')}
-              >Members</Button>
-              <Button
-                variant={activeTab === 'admin_logs' ? 'default' : 'secondary'}
-                className="rounded-2xl text-sm md:text-base px-3 md:px-4 py-2"
-                onClick={() => setActiveTab('admin_logs')}
-              >Admin Logs</Button>
+                <Button
+                  variant={activeTab === 'overview' ? 'default' : 'secondary'}
+                  className="rounded-2xl text-sm md:text-base px-3 md:px-4 py-2"
+                  onClick={() => setActiveTab('overview')}
+                >Overview</Button>
+                <Button
+                  variant={activeTab === 'members' ? 'default' : 'secondary'}
+                  className="rounded-2xl text-sm md:text-base px-3 md:px-4 py-2"
+                  onClick={() => setActiveTab('members')}
+                >Members</Button>
+                <Button
+                  variant={activeTab === 'requests' ? 'default' : 'secondary'}
+                  className="rounded-2xl text-sm md:text-base px-3 md:px-4 py-2"
+                  onClick={() => setActiveTab('requests')}
+                >Requests</Button>
+                <Button
+                  variant={activeTab === 'admin_logs' ? 'default' : 'secondary'}
+                  className="rounded-2xl text-sm md:text-base px-3 md:px-4 py-2"
+                  onClick={() => setActiveTab('admin_logs')}
+                >Admin Logs</Button>
             </div>
           </div>
 
@@ -2471,6 +2581,79 @@ export const AdminPage: React.FC = () => {
             </div>
           </div>
           </>
+          )}
+
+          {/* Requests Tab */}
+          {activeTab === 'requests' && (
+            <div className="space-y-4">
+              <Card className="rounded-2xl">
+                <CardContent className="p-4 space-y-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-medium">Pending plant requests</div>
+                      <div className="text-xs opacity-60">Sorted by request count and most recent updates.</div>
+                    </div>
+                    <Button
+                      variant="outline"
+                      className="rounded-xl"
+                      onClick={() => loadPlantRequests({ initial: false })}
+                      disabled={plantRequestsLoading || plantRequestsRefreshing}
+                    >
+                      <RefreshCw className={`h-4 w-4 mr-2 ${plantRequestsLoading || plantRequestsRefreshing ? 'animate-spin' : ''}`} />
+                      <span className="hidden sm:inline">Refresh</span>
+                      <span className="sm:hidden inline">Reload</span>
+                    </Button>
+                  </div>
+                  {plantRequestsError && (
+                    <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-900/30 dark:text-red-200">
+                      {plantRequestsError}
+                    </div>
+                  )}
+                  {plantRequestsLoading ? (
+                    <div className="text-sm opacity-60">Loading requests...</div>
+                  ) : plantRequests.length === 0 ? (
+                    <div className="text-sm opacity-60">No pending requests.</div>
+                  ) : (
+                    <div className="flex flex-col gap-3">
+                      {plantRequests.map((req) => {
+                        const updatedSource = req.updated_at ?? req.created_at
+                        const updatedMs = updatedSource ? Date.parse(updatedSource) : NaN
+                        const hasTimestamp = Number.isFinite(updatedMs)
+                        const requestCountLabel = req.request_count === 1 ? '1 request' : `${req.request_count} requests`
+                        const timeLabel = hasTimestamp ? `Last update ${formatTimeAgo(updatedMs)}` : 'Last update unknown'
+                        const updatedTitle = hasTimestamp ? new Date(updatedMs).toLocaleString() : undefined
+                        return (
+                          <div
+                            key={req.id}
+                            className="flex flex-col gap-3 rounded-xl border bg-white p-3 dark:bg-[#252526] dark:border-[#3e3e42] md:flex-row md:items-center md:justify-between"
+                          >
+                            <div>
+                              <div className="text-sm font-medium">{req.plant_name}</div>
+                              <div className="text-xs opacity-60" title={updatedTitle}>
+                                {requestCountLabel} • {timeLabel}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <Badge variant="secondary" className="rounded-xl px-2 py-1 text-xs">
+                                {req.request_count}
+                              </Badge>
+                              <Button
+                                variant="outline"
+                                className="rounded-2xl"
+                                onClick={() => completePlantRequest(req.id)}
+                                disabled={completingRequestId === req.id}
+                              >
+                                {completingRequestId === req.id ? 'Completing...' : 'Complete'}
+                              </Button>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           )}
 
           {/* Admin Logs Tab */}

@@ -36,35 +36,40 @@ export const RequestPlantDialog: React.FC<RequestPlantDialogProps> = ({ open, on
     setSuccess(false)
 
     try {
-      // Normalize the plant name for similarity matching (lowercase, trim)
-      const normalizedName = plantName.trim().toLowerCase()
+      const displayName = plantName.trim()
+      const normalizedName = displayName.toLowerCase()
 
-      if (!normalizedName) {
+      if (!displayName || !normalizedName) {
         setError(t('requestPlant.nameRequired') || 'Plant name is required')
         return
       }
 
-      // Get all existing requests to check for similar names
+      const normalize = (value: string | null | undefined) => (value ?? '').toLowerCase().trim()
+
+      // Get all existing active requests to check for similar names
       // We fetch all because we need to do client-side similarity matching
       const { data: existingRequests, error: searchError } = await supabase
         .from('requested_plants')
-        .select('id, request_count, plant_name')
+        .select('id, request_count, plant_name, plant_name_normalized')
+        .is('completed_at', null)
 
       if (searchError) {
         throw new Error(searchError.message)
       }
 
       // Check for exact match first (case-insensitive)
-      const exactMatch = existingRequests?.find(
-        req => req.plant_name.toLowerCase().trim() === normalizedName
-      )
+      const exactMatch = existingRequests?.find((req) => {
+        const existingNormalized = normalize(req.plant_name_normalized ?? req.plant_name)
+        return existingNormalized === normalizedName
+      })
 
       if (exactMatch) {
-        // Increment the count for exact match
         const { error: updateError } = await supabase
           .from('requested_plants')
-          .update({ 
-            request_count: (exactMatch.request_count || 1) + 1,
+          .update({
+            plant_name: displayName,
+            plant_name_normalized: normalizedName,
+            request_count: (exactMatch.request_count ?? 0) + 1,
             updated_at: new Date().toISOString()
           })
           .eq('id', exactMatch.id)
@@ -74,46 +79,49 @@ export const RequestPlantDialog: React.FC<RequestPlantDialogProps> = ({ open, on
         }
       } else {
         // Check for similar names (fuzzy match)
-        // Simple similarity: check if names are very close
-        const similarMatch = existingRequests?.find(req => {
-          const existing = req.plant_name.toLowerCase().trim()
-          
-          // If names are identical (after normalization), it's a match
+        const similarMatch = existingRequests?.find((req) => {
+          const existing = normalize(req.plant_name_normalized ?? req.plant_name)
+
+          if (!existing) return false
           if (existing === normalizedName) return true
-          
-          // Check if one contains the other (for partial matches like "Rose" vs "Red Rose")
+
+          // Check for partial overlap (e.g., "Rose" vs "Red Rose")
           if (existing.includes(normalizedName) || normalizedName.includes(existing)) {
-            // Only consider it similar if the length difference is small
             const lengthDiff = Math.abs(existing.length - normalizedName.length)
-            return lengthDiff <= 3
+            if (lengthDiff <= 3) return true
           }
-          
-          // Check character similarity using simple Levenshtein distance approximation
+
+          // Simple character difference heuristic
           const maxLen = Math.max(existing.length, normalizedName.length)
           const minLen = Math.min(existing.length, normalizedName.length)
-          
-          // If length difference is too large, not similar
           if (maxLen - minLen > 3) return false
-          
-          // Count character differences
+
           let differences = 0
           for (let i = 0; i < minLen; i++) {
             if (existing[i] !== normalizedName[i]) differences++
           }
           differences += maxLen - minLen
-          
-          // Consider similar if differences <= 2 (allowing for typos)
+
           return differences <= 2
         })
 
         if (similarMatch) {
-          // Increment count for similar match
+          const stored = similarMatch.plant_name ?? ''
+          const storedNormalized = normalize(similarMatch.plant_name_normalized ?? stored)
+
+          const updatePayload: Record<string, any> = {
+            request_count: (similarMatch.request_count ?? 0) + 1,
+            updated_at: new Date().toISOString(),
+            plant_name_normalized: similarMatch.plant_name_normalized ?? storedNormalized || normalizedName
+          }
+
+          if (!stored || storedNormalized === stored) {
+            updatePayload.plant_name = displayName
+          }
+
           const { error: updateError } = await supabase
             .from('requested_plants')
-            .update({ 
-              request_count: (similarMatch.request_count || 1) + 1,
-              updated_at: new Date().toISOString()
-            })
+            .update(updatePayload)
             .eq('id', similarMatch.id)
 
           if (updateError) {
@@ -124,7 +132,8 @@ export const RequestPlantDialog: React.FC<RequestPlantDialogProps> = ({ open, on
           const { error: insertError } = await supabase
             .from('requested_plants')
             .insert({
-              plant_name: normalizedName,
+              plant_name: displayName,
+              plant_name_normalized: normalizedName,
               requested_by: user.id,
               request_count: 1
             })
@@ -137,8 +146,7 @@ export const RequestPlantDialog: React.FC<RequestPlantDialogProps> = ({ open, on
 
       setSuccess(true)
       setPlantName("")
-      
-      // Close dialog after a short delay
+
       setTimeout(() => {
         onOpenChange(false)
         setSuccess(false)

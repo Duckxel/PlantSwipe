@@ -279,18 +279,46 @@ end $$;
 create table if not exists public.requested_plants (
   id uuid primary key default gen_random_uuid(),
   plant_name text not null,
+  plant_name_normalized text not null,
   requested_by uuid not null references auth.users(id) on delete cascade,
   request_count integer not null default 1 check (request_count > 0),
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  completed_at timestamptz,
+  completed_by uuid references auth.users(id) on delete set null
 );
 
 -- Ensure columns exist for existing deployments
 alter table if exists public.requested_plants add column if not exists plant_name text;
+alter table if exists public.requested_plants add column if not exists plant_name_normalized text;
 alter table if exists public.requested_plants add column if not exists requested_by uuid references auth.users(id) on delete cascade;
 alter table if exists public.requested_plants add column if not exists request_count integer not null default 1;
 alter table if exists public.requested_plants add column if not exists created_at timestamptz not null default now();
 alter table if exists public.requested_plants add column if not exists updated_at timestamptz not null default now();
+alter table if exists public.requested_plants add column if not exists completed_at timestamptz;
+alter table if exists public.requested_plants add column if not exists completed_by uuid;
+
+do $$ begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'requested_plants'
+      and column_name = 'plant_name_normalized'
+  ) then
+    update public.requested_plants
+      set plant_name_normalized = lower(trim(plant_name))
+      where plant_name_normalized is null and plant_name is not null;
+
+    begin
+      alter table public.requested_plants
+        alter column plant_name_normalized set not null;
+    exception
+      when others then
+        null;
+    end;
+  end if;
+end $$;
 
 -- Add constraints if they don't exist
 do $$ begin
@@ -304,19 +332,29 @@ do $$ begin
       check (request_count > 0);
   end if;
   
-  -- Add foreign key constraint if it doesn't exist
-  if not exists (
-    select 1 from pg_constraint 
-    where conname = 'requested_plants_requested_by_fkey'
-  ) then
-    alter table public.requested_plants 
-      add constraint requested_plants_requested_by_fkey 
-      foreign key (requested_by) references auth.users(id) on delete cascade;
-  end if;
+    -- Add foreign key constraint if it doesn't exist
+    if not exists (
+      select 1 from pg_constraint 
+      where conname = 'requested_plants_requested_by_fkey'
+    ) then
+      alter table public.requested_plants 
+        add constraint requested_plants_requested_by_fkey 
+        foreign key (requested_by) references auth.users(id) on delete cascade;
+    end if;
+    if not exists (
+      select 1 from pg_constraint
+      where conname = 'requested_plants_completed_by_fkey'
+    ) then
+      alter table public.requested_plants
+        add constraint requested_plants_completed_by_fkey
+        foreign key (completed_by) references auth.users(id) on delete set null;
+    end if;
 end $$;
 
--- Index for faster lookups by plant name (case-insensitive)
-create index if not exists requested_plants_plant_name_idx on public.requested_plants(lower(plant_name));
+-- Indexes for requested plant lookups
+create index if not exists requested_plants_plant_name_normalized_idx on public.requested_plants(plant_name_normalized);
+create unique index if not exists requested_plants_active_name_unique_idx on public.requested_plants(plant_name_normalized) where completed_at is null;
+create index if not exists requested_plants_completed_at_idx on public.requested_plants(completed_at);
 create index if not exists requested_plants_requested_by_idx on public.requested_plants(requested_by);
 create index if not exists requested_plants_created_at_idx on public.requested_plants(created_at desc);
 
@@ -343,11 +381,14 @@ alter table public.requested_plants enable row level security;
 
 -- Add table comment for documentation
 comment on table public.requested_plants is 'Stores user requests for plants to be added to the encyclopedia. Similar requests increment the count instead of creating duplicates.';
-comment on column public.requested_plants.plant_name is 'Normalized (lowercase) plant name requested by users';
+comment on column public.requested_plants.plant_name is 'Display plant name requested by users (original casing preserved)';
+comment on column public.requested_plants.plant_name_normalized is 'Lowercase, trimmed plant name used for deduplication and search';
 comment on column public.requested_plants.requested_by is 'User ID of the person who made the request';
 comment on column public.requested_plants.request_count is 'Number of times this plant has been requested (incremented for similar names)';
 comment on column public.requested_plants.created_at is 'Timestamp when the first request for this plant was created';
-comment on column public.requested_plants.updated_at is 'Timestamp when the request count was last updated';
+comment on column public.requested_plants.updated_at is 'Timestamp when the request was last updated or incremented';
+comment on column public.requested_plants.completed_at is 'Timestamp when the request was marked as completed by an admin';
+comment on column public.requested_plants.completed_by is 'Admin user who completed the request';
 
 do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='requested_plants' and policyname='requested_plants_select_all') then

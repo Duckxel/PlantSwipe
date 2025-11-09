@@ -1,6 +1,7 @@
 import React from 'react'
 import { useParams, useLocation } from 'react-router-dom'
 import { PlantDetails } from '@/components/plant/PlantDetails'
+import { RequestPlantDialog } from '@/components/plant/RequestPlantDialog'
 import type { Plant } from '@/types/plant'
 import { useAuth } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabaseClient'
@@ -10,15 +11,16 @@ import { mergePlantWithTranslation } from '@/lib/plantTranslationLoader'
 
 export const PlantInfoPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
-  const navigate = useLanguageNavigate()
-  const location = useLocation()
-  const { user, profile, refreshProfile } = useAuth()
-  const { t } = useTranslation('common')
-  const currentLang = useLanguage()
-  const [plant, setPlant] = React.useState<Plant | null>(null)
-  const [loading, setLoading] = React.useState(true)
-  const [error, setError] = React.useState<string | null>(null)
-  const [likedIds, setLikedIds] = React.useState<string[]>([])
+    const navigate = useLanguageNavigate()
+    const location = useLocation()
+    const { user, profile, refreshProfile } = useAuth()
+    const { t } = useTranslation('common')
+    const currentLang = useLanguage()
+    const [plant, setPlant] = React.useState<Plant | null>(null)
+    const [loading, setLoading] = React.useState(true)
+    const [error, setError] = React.useState<string | null>(null)
+    const [likedIds, setLikedIds] = React.useState<string[]>([])
+    const [requestDialogOpen, setRequestDialogOpen] = React.useState(false)
   
   // Check if we're in overlay mode (has backgroundLocation) or full page mode
   const state = location.state as { backgroundLocation?: any } | null
@@ -107,17 +109,19 @@ export const PlantInfoPage: React.FC = () => {
   if (error) return <div className="max-w-4xl mx-auto mt-8 px-4 text-red-600 text-sm">{error}</div>
   if (!plant) return <div className="max-w-4xl mx-auto mt-8 px-4">{t('plantInfo.plantNotFound')}</div>
 
-  return (
-    <div className="max-w-4xl mx-auto mt-6 px-4 md:px-0">
-      <PlantDetails
-        plant={plant}
-        onClose={handleClose}
-        liked={likedIds.includes(plant.id)}
-        onToggleLike={toggleLiked}
-        isOverlayMode={isOverlayMode}
-      />
-    </div>
-  )
+    return (
+      <div className="max-w-4xl mx-auto mt-6 px-4 md:px-0">
+        <PlantDetails
+          plant={plant}
+          onClose={handleClose}
+          liked={likedIds.includes(plant.id)}
+          onToggleLike={toggleLiked}
+          isOverlayMode={isOverlayMode}
+          onRequestPlant={user ? () => setRequestDialogOpen(true) : undefined}
+        />
+        <RequestPlantDialog open={requestDialogOpen} onOpenChange={setRequestDialogOpen} />
+      </div>
+    )
 }
 
 export default PlantInfoPage
