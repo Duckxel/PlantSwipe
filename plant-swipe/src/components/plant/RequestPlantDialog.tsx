@@ -108,11 +108,12 @@ export const RequestPlantDialog: React.FC<RequestPlantDialogProps> = ({ open, on
         if (similarMatch) {
           const stored = similarMatch.plant_name ?? ''
           const storedNormalized = normalize(similarMatch.plant_name_normalized ?? stored)
+          const computedNormalized = similarMatch.plant_name_normalized ?? (storedNormalized || normalizedName)
 
           const updatePayload: Record<string, any> = {
             request_count: (similarMatch.request_count ?? 0) + 1,
             updated_at: new Date().toISOString(),
-            plant_name_normalized: similarMatch.plant_name_normalized ?? storedNormalized || normalizedName
+            plant_name_normalized: computedNormalized || normalizedName
           }
 
           if (!stored || storedNormalized === stored) {

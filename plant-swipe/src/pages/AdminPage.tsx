@@ -679,11 +679,6 @@ export const AdminPage: React.FC = () => {
     }
   }, [completingRequestId, loadPlantRequests, supabase, user?.id])
 
-  React.useEffect(() => {
-    if (activeTab !== 'requests' || plantRequestsInitialized) return
-    loadPlantRequests({ initial: true })
-  }, [activeTab, plantRequestsInitialized, loadPlantRequests])
-
   // Presence fallback removed by request: rely on DB-backed API only
 
   // --- Health monitor: ping API, Admin, DB every minute ---
@@ -1347,6 +1342,10 @@ export const AdminPage: React.FC = () => {
 
   // ---- Members tab state ----
   const [activeTab, setActiveTab] = React.useState<'overview' | 'members' | 'requests' | 'admin_logs'>('overview')
+  React.useEffect(() => {
+    if (activeTab !== 'requests' || plantRequestsInitialized) return
+    loadPlantRequests({ initial: true })
+  }, [activeTab, plantRequestsInitialized, loadPlantRequests])
   const [lookupEmail, setLookupEmail] = React.useState('')
   const [memberLoading, setMemberLoading] = React.useState(false)
   const [memberError, setMemberError] = React.useState<string | null>(null)
