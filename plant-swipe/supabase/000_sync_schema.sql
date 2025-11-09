@@ -124,17 +124,19 @@ end $$;
 -- ========== Purge old web_visits (retention) ==========
 -- Keep only the last 35 days of visit data
 do $$ begin
-  if exists (select 1 from cron.job where jobname = 'purge_old_web_visits') then
-    perform cron.unschedule(jobid) from cron.job where jobname = 'purge_old_web_visits';
-  end if;
-  perform cron.schedule(
-    'purge_old_web_visits',
-    '0 3 * * *',
-    $cron$
-    delete from public.web_visits
-    where timezone('utc', occurred_at) < ((now() at time zone 'utc')::date - interval '35 days');
-    $cron$
-  );
+  begin
+    perform cron.schedule(
+      'purge_old_web_visits',
+      '0 3 * * *',
+      $_cron$
+      delete from public.web_visits
+      where timezone('utc', occurred_at) < ((now() at time zone 'utc')::date - interval '35 days');
+      $_cron$
+    );
+  exception
+    when others then
+      null;
+  end;
 end $$;
 
 -- ========== Plants (catalog) ==========
@@ -512,6 +514,30 @@ create table if not exists public.garden_inventory (
   unique (garden_id, plant_id)
 );
 
+do $$
+begin
+  if exists (
+    select 1 from information_schema.tables
+    where table_schema = 'public' and table_name = 'garden_inventory'
+  ) then
+    with inventory_duplicates as (
+      select id
+      from (
+        select id,
+               row_number() over (
+                 partition by garden_id, plant_id
+                 order by id desc
+               ) as rn
+        from public.garden_inventory
+      ) ranked
+      where ranked.rn > 1
+    )
+    delete from public.garden_inventory gi
+    using inventory_duplicates dup
+    where gi.id = dup.id;
+  end if;
+end $$;
+
 -- Per-instance inventory (by garden_plant)
 create table if not exists public.garden_instance_inventory (
   id uuid primary key default gen_random_uuid(),
@@ -521,6 +547,30 @@ create table if not exists public.garden_instance_inventory (
   plants_on_hand integer not null default 0,
   unique (garden_plant_id)
 );
+
+do $$
+begin
+  if exists (
+    select 1 from information_schema.tables
+    where table_schema = 'public' and table_name = 'garden_instance_inventory'
+  ) then
+    with instance_duplicates as (
+      select id
+      from (
+        select id,
+               row_number() over (
+                 partition by garden_plant_id
+                 order by id desc
+               ) as rn
+        from public.garden_instance_inventory
+      ) ranked
+      where ranked.rn > 1
+    )
+    delete from public.garden_instance_inventory gii
+    using instance_duplicates dup
+    where gii.id = dup.id;
+  end if;
+end $$;
 
 -- Transactions
 create table if not exists public.garden_transactions (
@@ -544,6 +594,30 @@ create table if not exists public.garden_tasks (
   unique (garden_id, day, task_type)
 );
 create index if not exists garden_tasks_garden_day_idx on public.garden_tasks (garden_id, day);
+
+do $$
+begin
+  if exists (
+    select 1 from information_schema.tables
+    where table_schema = 'public' and table_name = 'garden_tasks'
+  ) then
+    with task_duplicates as (
+      select id
+      from (
+        select id,
+               row_number() over (
+                 partition by garden_id, day, task_type
+                 order by id desc
+               ) as rn
+        from public.garden_tasks
+      ) ranked
+      where ranked.rn > 1
+    )
+    delete from public.garden_tasks gt
+    using task_duplicates dup
+    where gt.id = dup.id;
+  end if;
+end $$;
 
 -- Watering schedule pattern per plant
 create table if not exists public.garden_plant_schedule (
@@ -2090,14 +2164,16 @@ end; $$;
 -- ========== Scheduling (optional) ==========
 -- Schedule daily computation at 00:05 UTC to update streaks and create daily tasks
 do $$ begin
-  if exists (select 1 from cron.job where jobname = 'compute_daily_garden_tasks') then
-    perform cron.unschedule(jobid) from cron.job where jobname = 'compute_daily_garden_tasks';
-  end if;
-  perform cron.schedule(
-    'compute_daily_garden_tasks',
-    '5 0 * * *',
-    $cron$select public.compute_daily_tasks_for_all_gardens((now() at time zone 'utc')::date)$cron$
-  );
+  begin
+    perform cron.schedule(
+      'compute_daily_garden_tasks',
+      '5 0 * * *',
+      $_cron$select public.compute_daily_tasks_for_all_gardens((now() at time zone 'utc')::date)$_cron$
+    );
+  exception
+    when others then
+      null;
+  end;
 end $$;
 
 -- ========== Web visits tracking ==========
@@ -2577,10 +2653,15 @@ end $$;
 create or replace function public.schedule_admin_logs_purge()
 returns void language plpgsql as $$
 begin
-  perform cron.schedule('purge_admin_activity_logs', '0 3 * * *', $cron$
-    delete from public.admin_activity_logs
-    where timezone('utc', occurred_at) < ((now() at time zone 'utc')::date - interval '30 days');
-  $cron$);
+  begin
+    perform cron.schedule('purge_admin_activity_logs', '0 3 * * *', $cron$
+      delete from public.admin_activity_logs
+      where timezone('utc', occurred_at) < ((now() at time zone 'utc')::date - interval '30 days');
+    $cron$);
+  exception
+    when others then
+      null;
+  end;
 end$$;
 select public.schedule_admin_logs_purge();
 
@@ -2717,6 +2798,31 @@ create table if not exists public.friend_requests (
   check (requester_id <> recipient_id)
 );
 
+do $$
+begin
+  if exists (
+    select 1 from information_schema.tables
+    where table_schema = 'public' and table_name = 'friend_requests'
+  ) then
+    with friend_request_duplicates as (
+      select id
+      from (
+        select id,
+               row_number() over (
+                 partition by requester_id, recipient_id
+                 order by id desc
+               ) as rn
+        from public.friend_requests
+      ) ranked
+      where ranked.rn > 1
+    )
+    delete from public.friend_requests fr
+    using friend_request_duplicates dup
+    where fr.id = dup.id;
+
+  end if;
+end $$;
+
 -- Friends table (bidirectional friendships)
 create table if not exists public.friends (
   id uuid primary key default gen_random_uuid(),
@@ -2726,6 +2832,31 @@ create table if not exists public.friends (
   unique(user_id, friend_id),
   check (user_id <> friend_id)
 );
+
+do $$
+begin
+  if exists (
+    select 1 from information_schema.tables
+    where table_schema = 'public' and table_name = 'friends'
+  ) then
+    with friend_duplicates as (
+      select id
+      from (
+        select id,
+               row_number() over (
+                 partition by user_id, friend_id
+                 order by id desc
+               ) as rn
+        from public.friends
+      ) ranked
+      where ranked.rn > 1
+    )
+    delete from public.friends f
+    using friend_duplicates dup
+    where f.id = dup.id;
+
+  end if;
+end $$;
 
 -- Indexes for efficient queries
 create index if not exists friend_requests_requester_idx on public.friend_requests(requester_id);
@@ -2958,15 +3089,58 @@ CREATE TABLE IF NOT EXISTS garden_task_daily_cache (
   UNIQUE(garden_id, cache_date)
 );
 
--- Add new columns if table already exists (for existing deployments)
+-- Ensure legacy deployments have no duplicate daily cache rows and enforce uniqueness
 DO $$
 BEGIN
-  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'garden_task_daily_cache') THEN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'garden_task_daily_cache' AND column_name = 'has_remaining_tasks') THEN
-      ALTER TABLE garden_task_daily_cache ADD COLUMN has_remaining_tasks boolean NOT NULL DEFAULT false;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'garden_task_daily_cache'
+  ) THEN
+    WITH daily_duplicates AS (
+      SELECT id
+      FROM (
+        SELECT id,
+               ROW_NUMBER() OVER (
+                 PARTITION BY garden_id, cache_date
+                 ORDER BY updated_at DESC, created_at DESC, id DESC
+               ) AS rn
+        FROM garden_task_daily_cache
+      ) ranked
+      WHERE ranked.rn > 1
+    )
+    DELETE FROM garden_task_daily_cache gtdc
+    USING daily_duplicates dup
+    WHERE gtdc.id = dup.id;
+
+    IF NOT EXISTS (
+      SELECT 1
+      FROM pg_constraint
+      WHERE conname = 'garden_task_daily_cache_garden_id_cache_date_key'
+        AND conrelid = 'garden_task_daily_cache'::regclass
+    ) THEN
+      ALTER TABLE garden_task_daily_cache
+        ADD CONSTRAINT garden_task_daily_cache_garden_id_cache_date_key
+        UNIQUE (garden_id, cache_date);
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'garden_task_daily_cache' AND column_name = 'all_tasks_done') THEN
-      ALTER TABLE garden_task_daily_cache ADD COLUMN all_tasks_done boolean NOT NULL DEFAULT true;
+
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'garden_task_daily_cache'
+        AND column_name = 'has_remaining_tasks'
+    ) THEN
+      ALTER TABLE garden_task_daily_cache
+        ADD COLUMN has_remaining_tasks boolean NOT NULL DEFAULT false;
+    END IF;
+
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'garden_task_daily_cache'
+        AND column_name = 'all_tasks_done'
+    ) THEN
+      ALTER TABLE garden_task_daily_cache
+        ADD COLUMN all_tasks_done boolean NOT NULL DEFAULT true;
     END IF;
   END IF;
 END $$;
@@ -2987,6 +3161,42 @@ CREATE TABLE IF NOT EXISTS garden_task_weekly_cache (
   created_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE(garden_id, week_start_date)
 );
+
+-- Ensure legacy deployments have no duplicate weekly cache rows and enforce uniqueness
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'garden_task_weekly_cache'
+  ) THEN
+    WITH weekly_duplicates AS (
+      SELECT id
+      FROM (
+        SELECT id,
+               ROW_NUMBER() OVER (
+                 PARTITION BY garden_id, week_start_date
+                 ORDER BY updated_at DESC, created_at DESC, id DESC
+               ) AS rn
+        FROM garden_task_weekly_cache
+      ) ranked
+      WHERE ranked.rn > 1
+    )
+    DELETE FROM garden_task_weekly_cache gtwc
+    USING weekly_duplicates dup
+    WHERE gtwc.id = dup.id;
+
+    IF NOT EXISTS (
+      SELECT 1
+      FROM pg_constraint
+      WHERE conname = 'garden_task_weekly_cache_garden_id_week_start_date_key'
+        AND conrelid = 'garden_task_weekly_cache'::regclass
+    ) THEN
+      ALTER TABLE garden_task_weekly_cache
+        ADD CONSTRAINT garden_task_weekly_cache_garden_id_week_start_date_key
+        UNIQUE (garden_id, week_start_date);
+    END IF;
+  END IF;
+END $$;
 
 -- Cache table for task counts per plant
 CREATE TABLE IF NOT EXISTS garden_plant_task_counts_cache (
@@ -3066,18 +3276,13 @@ BEGIN
   _has_remaining_tasks := (_due_count > 0 AND _completed_count < _due_count);
   _all_tasks_done := (_due_count = 0 OR _completed_count >= _due_count);
   
-  -- Upsert cache
+  -- Replace existing cache row
+  DELETE FROM garden_task_daily_cache
+  WHERE garden_id = _garden_id
+    AND cache_date = _cache_date;
+
   INSERT INTO garden_task_daily_cache (garden_id, cache_date, due_count, completed_count, task_count, occurrence_count, has_remaining_tasks, all_tasks_done, updated_at)
-  VALUES (_garden_id, _cache_date, _due_count, _completed_count, _task_count, _occurrence_count, _has_remaining_tasks, _all_tasks_done, now())
-  ON CONFLICT (garden_id, cache_date)
-  DO UPDATE SET
-    due_count = EXCLUDED.due_count,
-    completed_count = EXCLUDED.completed_count,
-    task_count = EXCLUDED.task_count,
-    occurrence_count = EXCLUDED.occurrence_count,
-    has_remaining_tasks = EXCLUDED.has_remaining_tasks,
-    all_tasks_done = EXCLUDED.all_tasks_done,
-    updated_at = now();
+  VALUES (_garden_id, _cache_date, _due_count, _completed_count, _task_count, _occurrence_count, _has_remaining_tasks, _all_tasks_done, now());
 END;
 $$;
 
@@ -3092,10 +3297,8 @@ SECURITY DEFINER
 AS $$
 DECLARE
   _week_end_date date;
-  _start_iso timestamptz;
-  _end_iso timestamptz;
   _day_idx integer;
-  _day_iso date;
+  _day_date date;
   _totals integer[] := ARRAY[0,0,0,0,0,0,0];
   _water integer[] := ARRAY[0,0,0,0,0,0,0];
   _fertilize integer[] := ARRAY[0,0,0,0,0,0,0];
@@ -3110,13 +3313,11 @@ DECLARE
   _daily_custom integer;
 BEGIN
   _week_end_date := _week_start_date + INTERVAL '6 days';
-  _start_iso := (_week_start_date::text || 'T00:00:00.000Z')::timestamptz;
-  _end_iso := (_week_end_date::text || 'T23:59:59.999Z')::timestamptz;
   
   -- Calculate weekly statistics by day and type
   FOR _day_idx IN 0..6 LOOP
-    _day_iso := _week_start_date + (_day_idx || ' days')::interval;
-    
+    _day_date := (_week_start_date + (_day_idx || ' days')::interval)::date;
+
     SELECT
       COALESCE(SUM(GREATEST(1, occ.required_count)), 0),
       COALESCE(SUM(CASE WHEN t.type = 'water' THEN GREATEST(1, occ.required_count) ELSE 0 END), 0),
@@ -3134,18 +3335,22 @@ BEGIN
     FROM garden_plant_task_occurrences occ
     INNER JOIN garden_plant_tasks t ON t.id = occ.task_id
     WHERE t.garden_id = _garden_id
-      AND occ.due_at >= (_day_iso::text || 'T00:00:00.000Z')::timestamptz
-      AND occ.due_at <= (_day_iso::text || 'T23:59:59.999Z')::timestamptz;
+      AND occ.due_at >= (_day_date::text || 'T00:00:00.000Z')::timestamptz
+      AND occ.due_at <= (_day_date::text || 'T23:59:59.999Z')::timestamptz;
 
-      _totals[_day_idx + 1] := COALESCE(_daily_total, 0);
-      _water[_day_idx + 1] := COALESCE(_daily_water, 0);
-      _fertilize[_day_idx + 1] := COALESCE(_daily_fertilize, 0);
-      _harvest[_day_idx + 1] := COALESCE(_daily_harvest, 0);
-      _cut[_day_idx + 1] := COALESCE(_daily_cut, 0);
-      _custom[_day_idx + 1] := COALESCE(_daily_custom, 0);
+    _totals := array_set(_totals, ARRAY[_day_idx + 1], COALESCE(_daily_total, 0));
+    _water := array_set(_water, ARRAY[_day_idx + 1], COALESCE(_daily_water, 0));
+    _fertilize := array_set(_fertilize, ARRAY[_day_idx + 1], COALESCE(_daily_fertilize, 0));
+    _harvest := array_set(_harvest, ARRAY[_day_idx + 1], COALESCE(_daily_harvest, 0));
+    _cut := array_set(_cut, ARRAY[_day_idx + 1], COALESCE(_daily_cut, 0));
+    _custom := array_set(_custom, ARRAY[_day_idx + 1], COALESCE(_daily_custom, 0));
   END LOOP;
+
+  -- Replace existing cache row for this week
+  DELETE FROM garden_task_weekly_cache
+  WHERE garden_id = _garden_id
+    AND week_start_date = _week_start_date;
   
-  -- Upsert cache
   INSERT INTO garden_task_weekly_cache (
     garden_id, week_start_date, week_end_date,
     total_tasks_by_day, water_tasks_by_day, fertilize_tasks_by_day,
@@ -3156,17 +3361,7 @@ BEGIN
     _garden_id, _week_start_date, _week_end_date,
     _totals, _water, _fertilize, _harvest, _cut, _custom,
     now()
-  )
-  ON CONFLICT (garden_id, week_start_date)
-  DO UPDATE SET
-    week_end_date = EXCLUDED.week_end_date,
-    total_tasks_by_day = EXCLUDED.total_tasks_by_day,
-    water_tasks_by_day = EXCLUDED.water_tasks_by_day,
-    fertilize_tasks_by_day = EXCLUDED.fertilize_tasks_by_day,
-    harvest_tasks_by_day = EXCLUDED.harvest_tasks_by_day,
-    cut_tasks_by_day = EXCLUDED.cut_tasks_by_day,
-    custom_tasks_by_day = EXCLUDED.custom_tasks_by_day,
-    updated_at = now();
+  );
 END;
 $$;
 
@@ -3304,15 +3499,19 @@ $$;
 
 -- Schedule daily cleanup job to run at 2 AM UTC every day
 -- This prevents cache accumulation and keeps database clean
-INSERT INTO cron.job (jobname, schedule, command)
-VALUES (
-  'cleanup-old-task-cache',
-  '0 2 * * *', -- 2 AM UTC daily
-  $$SELECT cleanup_old_garden_task_cache();$$
-)
-ON CONFLICT (jobname) DO UPDATE
-SET schedule = EXCLUDED.schedule,
-    command = EXCLUDED.command;
+DO $$
+BEGIN
+  BEGIN
+    PERFORM cron.schedule(
+      'cleanup-old-task-cache',
+      '0 2 * * *',
+        $_cron$SELECT cleanup_old_garden_task_cache();$_cron$
+    );
+  EXCEPTION
+    WHEN others THEN
+      NULL;
+  END;
+END $$;
 
 -- Function: Initialize cache for all gardens AND users (run on startup/periodically)
 CREATE OR REPLACE FUNCTION initialize_all_task_cache()
@@ -3639,6 +3838,27 @@ CREATE TABLE IF NOT EXISTS user_task_daily_cache (
   UNIQUE(user_id, cache_date)
 );
 
+-- Ensure legacy deployments have no duplicate user cache rows
+WITH user_duplicates AS (
+  SELECT id
+  FROM (
+    SELECT id,
+           ROW_NUMBER() OVER (
+             PARTITION BY user_id, cache_date
+             ORDER BY updated_at DESC, created_at DESC, id DESC
+           ) AS rn
+    FROM user_task_daily_cache
+  ) ranked
+  WHERE ranked.rn > 1
+)
+DELETE FROM user_task_daily_cache utdc
+USING user_duplicates dup
+WHERE utdc.id = dup.id;
+
+-- Ensure uniqueness for user cache rows on legacy deployments
+CREATE UNIQUE INDEX IF NOT EXISTS user_task_daily_cache_user_id_cache_date_key
+  ON user_task_daily_cache (user_id, cache_date);
+
 -- Index for fast lookups
 CREATE INDEX IF NOT EXISTS idx_user_task_daily_cache_user_date ON user_task_daily_cache(user_id, cache_date DESC);
 
@@ -3673,7 +3893,11 @@ BEGIN
   WHERE gm.user_id = _user_id
     AND c.cache_date = _cache_date;
   
-  -- Upsert cache entry
+  -- Replace existing cache entry
+  DELETE FROM user_task_daily_cache
+  WHERE user_id = _user_id
+    AND cache_date = _cache_date;
+
   INSERT INTO user_task_daily_cache (
     user_id,
     cache_date,
@@ -3691,14 +3915,7 @@ BEGIN
     _gardens_with_remaining,
     _total_gardens,
     now()
-  )
-  ON CONFLICT (user_id, cache_date)
-  DO UPDATE SET
-    total_due_count = EXCLUDED.total_due_count,
-    total_completed_count = EXCLUDED.total_completed_count,
-    gardens_with_remaining_tasks = EXCLUDED.gardens_with_remaining_tasks,
-    total_gardens = EXCLUDED.total_gardens,
-    updated_at = EXCLUDED.updated_at;
+  );
 END;
 $$;
 
