@@ -3291,11 +3291,15 @@ $$;
 
 -- Schedule daily cleanup job to run at 2 AM UTC every day
 -- This prevents cache accumulation and keeps database clean
-SELECT cron.schedule(
+INSERT INTO cron.job (jobname, schedule, command)
+VALUES (
   'cleanup-old-task-cache',
   '0 2 * * *', -- 2 AM UTC daily
   $$SELECT cleanup_old_garden_task_cache();$$
-) ON CONFLICT (jobname) DO UPDATE SET schedule = '0 2 * * *', command = $$SELECT cleanup_old_garden_task_cache();$$;
+)
+ON CONFLICT (jobname) DO UPDATE
+SET schedule = EXCLUDED.schedule,
+    command = EXCLUDED.command;
 
 -- Function: Initialize cache for all gardens AND users (run on startup/periodically)
 CREATE OR REPLACE FUNCTION initialize_all_task_cache()
