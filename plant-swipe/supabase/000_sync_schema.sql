@@ -128,10 +128,10 @@ do $$ begin
     perform cron.schedule(
       'purge_old_web_visits',
       '0 3 * * *',
-      $cron$
+      $_cron$
       delete from public.web_visits
       where timezone('utc', occurred_at) < ((now() at time zone 'utc')::date - interval '35 days');
-      $cron$
+      $_cron$
     );
   exception
     when others then
@@ -2195,7 +2195,7 @@ do $$ begin
     perform cron.schedule(
       'compute_daily_garden_tasks',
       '5 0 * * *',
-      $cron$select public.compute_daily_tasks_for_all_gardens((now() at time zone 'utc')::date)$cron$
+      $_cron$select public.compute_daily_tasks_for_all_gardens((now() at time zone 'utc')::date)$_cron$
     );
   exception
     when others then
@@ -3542,7 +3542,7 @@ BEGIN
     PERFORM cron.schedule(
       'cleanup-old-task-cache',
       '0 2 * * *',
-      $$SELECT cleanup_old_garden_task_cache();$$
+        $_cron$SELECT cleanup_old_garden_task_cache();$_cron$
     );
   EXCEPTION
     WHEN others THEN
