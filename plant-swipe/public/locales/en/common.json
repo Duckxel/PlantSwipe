@@ -34,6 +34,23 @@
     "contactUs": "Contact Us",
     "termsOfServices": "Terms of Services"
   },
+  "contactUs": {
+    "title": "Contact Us",
+    "description": "We're here to help! Get in touch with our support team.",
+    "supportEmail": "Support Email",
+    "supportEmailDescription": "Send us an email and we'll get back to you as soon as possible.",
+    "emailLabel": "Email Address",
+    "sendEmail": "Send Email",
+    "copyEmail": "Copy",
+    "responseTime": {
+      "title": "Response Time",
+      "description": "We typically respond within 24-48 hours during business days."
+    },
+    "helpfulInfo": {
+      "title": "Helpful Information",
+      "description": "Please include details about your question or issue to help us assist you better."
+    }
+  },
   "auth": {
     "login": "Log in",
     "signup": "Create your account",

@@ -34,6 +34,23 @@
     "contactUs": "Nous contacter",
     "termsOfServices": "Conditions d'utilisation"
   },
+  "contactUs": {
+    "title": "Nous contacter",
+    "description": "Nous sommes là pour vous aider ! Contactez notre équipe de support.",
+    "supportEmail": "E-mail de support",
+    "supportEmailDescription": "Envoyez-nous un e-mail et nous vous répondrons dans les plus brefs délais.",
+    "emailLabel": "Adresse e-mail",
+    "sendEmail": "Envoyer un e-mail",
+    "copyEmail": "Copier",
+    "responseTime": {
+      "title": "Temps de réponse",
+      "description": "Nous répondons généralement dans les 24 à 48 heures pendant les jours ouvrables."
+    },
+    "helpfulInfo": {
+      "title": "Informations utiles",
+      "description": "Veuillez inclure des détails sur votre question ou problème pour nous aider à mieux vous assister."
+    }
+  },
   "auth": {
     "login": "Se connecter",
     "signup": "Créer votre compte",
