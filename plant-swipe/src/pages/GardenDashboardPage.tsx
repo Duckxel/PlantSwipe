@@ -437,50 +437,51 @@ export const GardenDashboardPage: React.FC = () => {
           } else {
             setTimeout(resyncFn, 500)
           }
-        })()
+        })(),
       ])
       
-        const skipCache = skipTodayCacheRef.current
-        if (skipCache) skipTodayCacheRef.current = false
+      const skipCache = skipTodayCacheRef.current
+      if (skipCache) skipTodayCacheRef.current = false
 
-        let occsDetailed: Array<any> = []
-        let usedCache = false
+      let occsDetailed: Array<any> = []
+      let usedCache = false
+      let cachedOccs: Array<any> | null = null
 
-        if (!skipCache) {
-          const cachedOccs = await getGardenTodayOccurrencesCached(id, today).catch(() => null)
-          if (cachedOccs && cachedOccs.length > 0) {
-            occsDetailed = cachedOccs as any
-            usedCache = true
-          }
+      if (!skipCache) {
+        cachedOccs = await getGardenTodayOccurrencesCached(id, today).catch(() => null)
+        if (cachedOccs && cachedOccs.length > 0) {
+          occsDetailed = cachedOccs as any
+          usedCache = true
         }
+      }
 
-        if (!usedCache) {
-          const occs = await listOccurrencesForTasks(allTasks.map(t => t.id), `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`)
-          const taskTypeById: Record<string, 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'> = {}
-          const taskEmojiById: Record<string, string | null> = {}
-          for (const t of allTasks) { taskTypeById[t.id] = t.type as any; taskEmojiById[t.id] = (t as any).emoji || null }
-          occsDetailed = occs.map(o => ({ ...o, taskType: taskTypeById[o.taskId] || 'custom', taskEmoji: taskEmojiById[o.taskId] || null }))
-          refreshGardenTaskCache(id, today).catch(() => {})
-        }
+      if (!usedCache) {
+        const occs = await listOccurrencesForTasks(allTasks.map(t => t.id), `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`)
+        const taskTypeById: Record<string, 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'> = {}
+        const taskEmojiById: Record<string, string | null> = {}
+        for (const t of allTasks) { taskTypeById[t.id] = t.type as any; taskEmojiById[t.id] = (t as any).emoji || null }
+        occsDetailed = occs.map(o => ({ ...o, taskType: taskTypeById[o.taskId] || 'custom', taskEmoji: taskEmojiById[o.taskId] || null }))
+        refreshGardenTaskCache(id, today).catch(() => {})
+      }
 
-        setTodayTaskOccurrences(occsDetailed as any)
+      setTodayTaskOccurrences(occsDetailed as any)
 
-        const taskCountMap: Record<string, number> = {}
-        for (const t of allTasks) taskCountMap[t.gardenPlantId] = (taskCountMap[t.gardenPlantId] || 0) + 1
-        setTaskCountsByPlant(taskCountMap)
+      const taskCountMap: Record<string, number> = {}
+      for (const t of allTasks) taskCountMap[t.gardenPlantId] = (taskCountMap[t.gardenPlantId] || 0) + 1
+      setTaskCountsByPlant(taskCountMap)
 
-        const dueMap: Record<string, number> = {}
-        for (const o of occsDetailed) {
-          const remaining = Math.max(0, (o.requiredCount || 1) - (o.completedCount || 0))
-          if (remaining > 0) dueMap[o.gardenPlantId] = (dueMap[o.gardenPlantId] || 0) + remaining
-        }
-        setTaskOccDueToday(dueMap)
+      const dueMap: Record<string, number> = {}
+      for (const o of occsDetailed) {
+        const remaining = Math.max(0, (o.requiredCount || 1) - (o.completedCount || 0))
+        if (remaining > 0) dueMap[o.gardenPlantId] = (dueMap[o.gardenPlantId] || 0) + remaining
+      }
+      setTaskOccDueToday(dueMap)
 
-        setDailyStats(prev => {
-          const reqDone = occsDetailed.reduce((acc: number, o: any) => acc + Math.max(1, Number(o.requiredCount || 1)), 0)
-          const compDone = occsDetailed.reduce((acc: number, o: any) => acc + Math.min(Math.max(1, Number(o.requiredCount || 1)), Number(o.completedCount || 0)), 0)
-          return prev.map(d => d.date === today ? { ...d, due: reqDone, completed: compDone } : d)
-        })
+      setDailyStats(prev => {
+        const reqDone = occsDetailed.reduce((acc: number, o: any) => acc + Math.max(1, Number(o.requiredCount || 1)), 0)
+        const compDone = occsDetailed.reduce((acc: number, o: any) => acc + Math.min(Math.max(1, Number(o.requiredCount || 1)), Number(o.completedCount || 0)), 0)
+        return prev.map(d => d.date === today ? { ...d, due: reqDone, completed: compDone } : d)
+      })
       
       // Only load week data if on routine tab
       if (tab === 'routine') {
