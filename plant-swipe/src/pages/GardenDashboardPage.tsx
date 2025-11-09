@@ -17,7 +17,7 @@ import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
 import { TaskEditorDialog } from '@/components/plant/TaskEditorDialog'
 import type { Garden } from '@/types/garden'
 import type { Plant } from '@/types/plant'
-import { getGarden, getGardenPlants, getGardenMembers, addMemberByNameOrEmail, deleteGardenPlant, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, updateGardenMemberRole, removeGardenMember, listGardenTasks, listOccurrencesForTasks, progressTaskOccurrence, updateGardenPlantsOrder, refreshGardenStreak, listGardenActivityToday, logGardenActivity, resyncTaskOccurrencesForGarden, computeGardenTaskForDay, getGardenTodayOccurrencesCached, getGardenWeeklyStatsCached, getGardenPlantTaskCountsCached, refreshGardenTaskCache } from '@/lib/gardens'
+import { getGarden, getGardenPlants, getGardenMembers, addMemberByNameOrEmail, deleteGardenPlant, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, updateGardenMemberRole, removeGardenMember, listGardenTasks, listOccurrencesForTasks, progressTaskOccurrence, updateGardenPlantsOrder, refreshGardenStreak, listGardenActivityToday, logGardenActivity, resyncTaskOccurrencesForGarden, computeGardenTaskForDay, getGardenTodayOccurrencesCached, getGardenWeeklyStatsCached, getGardenTodayProgressUltraFast, refreshGardenTaskCache } from '@/lib/gardens'
 import { supabase } from '@/lib/supabaseClient'
 import { addGardenBroadcastListener, broadcastGardenUpdate, type GardenRealtimeKind } from '@/lib/realtime'
 import { getAccentOption } from '@/lib/accent'
@@ -97,6 +97,7 @@ export const GardenDashboardPage: React.FC = () => {
 
   const [activityRev, setActivityRev] = React.useState(0)
   const streakRefreshedRef = React.useRef(false)
+  const skipTodayCacheRef = React.useRef(false)
   const [progressingOccIds, setProgressingOccIds] = React.useState<Set<string>>(new Set())
   const [completingPlantIds, setCompletingPlantIds] = React.useState<Set<string>>(new Set())
 
@@ -129,6 +130,33 @@ export const GardenDashboardPage: React.FC = () => {
     if (!id) return
     broadcastGardenUpdate({ gardenId: id, kind, metadata, actorId: user?.id ?? null }).catch(() => {})
   }, [id, user?.id])
+
+  const updateTodayProgressState = React.useCallback(async () => {
+    const gardenId = id
+    const todayIso = serverTodayRef.current ?? serverToday
+    if (!gardenId || !todayIso) return
+    try {
+      const { due, completed } = await getGardenTodayProgressUltraFast(gardenId, todayIso)
+      const success = due === 0 ? true : (completed >= due)
+      setDailyStats(prev => {
+        let found = false
+        const next = prev.map(d => {
+          if (d.date === todayIso) {
+            found = true
+            return { ...d, due, completed, success }
+          }
+          return d
+        })
+        if (found) return next
+        const appended = [...prev, { date: todayIso, due, completed, success }]
+        appended.sort((a, b) => a.date.localeCompare(b.date))
+        return appended.slice(-30)
+      })
+      await upsertGardenTask({ gardenId, day: todayIso, gardenPlantId: null, success })
+    } catch (err) {
+      console.warn('[GardenDashboard] Failed to update today progress state:', err)
+    }
+  }, [id, serverToday])
 
   const load = React.useCallback(async (opts?: { silent?: boolean; preserveHeavy?: boolean }) => {
     if (!id) return
@@ -406,54 +434,47 @@ export const GardenDashboardPage: React.FC = () => {
         })()
       ])
       
-      // Try to load from cache first (much faster)
-      const cachedOccs = await getGardenTodayOccurrencesCached(id, today).catch(() => null)
-      const cachedTaskCounts = await getGardenPlantTaskCountsCached(id).catch(() => ({}))
-      
-      if (cachedOccs && cachedOccs.length > 0) {
-        // Use cached data
-        setTodayTaskOccurrences(cachedOccs as any)
-        
-        // Build task counts from cache
+        const skipCache = skipTodayCacheRef.current
+        if (skipCache) skipTodayCacheRef.current = false
+
+        let occsDetailed: Array<any> = []
+        let usedCache = false
+
+        if (!skipCache) {
+          const cachedOccs = await getGardenTodayOccurrencesCached(id, today).catch(() => null)
+          if (cachedOccs && cachedOccs.length > 0) {
+            occsDetailed = cachedOccs as any
+            usedCache = true
+          }
+        }
+
+        if (!usedCache) {
+          const occs = await listOccurrencesForTasks(allTasks.map(t => t.id), `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`)
+          const taskTypeById: Record<string, 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'> = {}
+          const taskEmojiById: Record<string, string | null> = {}
+          for (const t of allTasks) { taskTypeById[t.id] = t.type as any; taskEmojiById[t.id] = (t as any).emoji || null }
+          occsDetailed = occs.map(o => ({ ...o, taskType: taskTypeById[o.taskId] || 'custom', taskEmoji: taskEmojiById[o.taskId] || null }))
+          refreshGardenTaskCache(id, today).catch(() => {})
+        }
+
+        setTodayTaskOccurrences(occsDetailed as any)
+
         const taskCountMap: Record<string, number> = {}
         for (const t of allTasks) taskCountMap[t.gardenPlantId] = (taskCountMap[t.gardenPlantId] || 0) + 1
         setTaskCountsByPlant(taskCountMap)
-        
-        // Build due map from cache
+
         const dueMap: Record<string, number> = {}
-        for (const o of cachedOccs) {
+        for (const o of occsDetailed) {
           const remaining = Math.max(0, (o.requiredCount || 1) - (o.completedCount || 0))
           if (remaining > 0) dueMap[o.gardenPlantId] = (dueMap[o.gardenPlantId] || 0) + remaining
         }
         setTaskOccDueToday(dueMap)
-      } else {
-        // Fallback: compute from source data
-        const occs = await listOccurrencesForTasks(allTasks.map(t => t.id), `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`)
-        const taskTypeById: Record<string, 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'> = {}
-        const taskEmojiById: Record<string, string | null> = {}
-        for (const t of allTasks) { taskTypeById[t.id] = t.type as any; taskEmojiById[t.id] = (t as any).emoji || null }
-        const occsWithType = occs.map(o => ({ ...o, taskType: taskTypeById[o.taskId] || 'custom', taskEmoji: taskEmojiById[o.taskId] || null }))
-        setTodayTaskOccurrences(occsWithType as any)
-        const taskCountMap: Record<string, number> = {}
-        for (const t of allTasks) taskCountMap[t.gardenPlantId] = (taskCountMap[t.gardenPlantId] || 0) + 1
-        setTaskCountsByPlant(taskCountMap)
-        const dueMap: Record<string, number> = {}
-        for (const o of occs) {
-          const remaining = Math.max(0, (o.requiredCount || 1) - (o.completedCount || 0))
-          if (remaining > 0) dueMap[o.gardenPlantId] = (dueMap[o.gardenPlantId] || 0) + remaining
-        }
-        setTaskOccDueToday(dueMap)
-        
-        // Refresh cache in background for next time
-        refreshGardenTaskCache(id, today).catch(() => {})
-      }
-      // Update today's counts in dailyStats
-      const occsForStats = cachedOccs && cachedOccs.length > 0 ? cachedOccs : (await listOccurrencesForTasks(allTasks.map(t => t.id), `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`).catch(() => []))
-      setDailyStats(prev => {
-        const reqDone = occsForStats.reduce((acc: number, o: any) => acc + Math.max(1, Number(o.requiredCount || 1)), 0)
-        const compDone = occsForStats.reduce((acc: number, o: any) => acc + Math.min(Math.max(1, Number(o.requiredCount || 1)), Number(o.completedCount || 0)), 0)
-        return prev.map(d => d.date === today ? { ...d, due: reqDone, completed: compDone } : d)
-      })
+
+        setDailyStats(prev => {
+          const reqDone = occsDetailed.reduce((acc: number, o: any) => acc + Math.max(1, Number(o.requiredCount || 1)), 0)
+          const compDone = occsDetailed.reduce((acc: number, o: any) => acc + Math.min(Math.max(1, Number(o.requiredCount || 1)), Number(o.completedCount || 0)), 0)
+          return prev.map(d => d.date === today ? { ...d, due: reqDone, completed: compDone } : d)
+        })
       
       // Only load week data if on routine tab
       if (tab === 'routine') {
@@ -1357,7 +1378,9 @@ export const GardenDashboardPage: React.FC = () => {
           }
           const success = due === 0 ? true : (completed >= due)
           await upsertGardenTask({ gardenId: garden.id, day: today, gardenPlantId: null, success })
-      } catch {}
+          skipTodayCacheRef.current = true
+          await updateTodayProgressState()
+        } catch {}
       }
       await load({ silent: true, preserveHeavy: true })
       if (tab === 'routine') {
@@ -1374,32 +1397,34 @@ export const GardenDashboardPage: React.FC = () => {
     // Set loading state
     setCompletingPlantIds(prev => new Set(prev).add(gardenPlantId))
     
-    try {
-      const occs = todayTaskOccurrences.filter(o => o.gardenPlantId === gardenPlantId)
-      for (const o of occs) {
-        const remaining = Math.max(0, Number(o.requiredCount || 1) - Number(o.completedCount || 0))
-        if (remaining <= 0) continue
-        // Some backends increment by exactly 1 regardless of provided amount.
-        // Perform deterministic 1-step increments to guarantee full completion.
-        for (let i = 0; i < remaining; i++) {
-          await progressTaskOccurrence(o.id, 1)
-        }
-      }
-      // Log summary activity for this plant
       try {
-        if (id) {
-          const gp = (plants as any[]).find((p: any) => p.id === gardenPlantId)
-          const plantName = gp?.nickname || gp?.plant?.name || 'Plant'
-          const actorColorCss = getActorColorCss()
-          await logGardenActivity({ gardenId: id, kind: 'task_completed' as any, message: `completed all due tasks on "${plantName}"`, plantName, actorColor: actorColorCss || null })
-          setActivityRev((r) => r + 1)
-          // Broadcast update BEFORE reload to ensure other clients receive it
-          await broadcastGardenUpdate({ gardenId: id, kind: 'tasks', actorId: user?.id ?? null }).catch((err) => {
-            console.warn('[GardenDashboard] Failed to broadcast task update:', err)
-          })
+        const occs = todayTaskOccurrences.filter(o => o.gardenPlantId === gardenPlantId)
+        for (const o of occs) {
+          const remaining = Math.max(0, Number(o.requiredCount || 1) - Number(o.completedCount || 0))
+          if (remaining <= 0) continue
+          // Some backends increment by exactly 1 regardless of provided amount.
+          // Perform deterministic 1-step increments to guarantee full completion.
+          for (let i = 0; i < remaining; i++) {
+            await progressTaskOccurrence(o.id, 1)
+          }
         }
-      } catch {}
-      await load()
+        // Log summary activity for this plant
+        try {
+          if (id) {
+            const gp = (plants as any[]).find((p: any) => p.id === gardenPlantId)
+            const plantName = gp?.nickname || gp?.plant?.name || 'Plant'
+            const actorColorCss = getActorColorCss()
+            await logGardenActivity({ gardenId: id, kind: 'task_completed' as any, message: `completed all due tasks on "${plantName}"`, plantName, actorColor: actorColorCss || null })
+            setActivityRev((r) => r + 1)
+            // Broadcast update BEFORE reload to ensure other clients receive it
+            await broadcastGardenUpdate({ gardenId: id, kind: 'tasks', actorId: user?.id ?? null }).catch((err) => {
+              console.warn('[GardenDashboard] Failed to broadcast task update:', err)
+            })
+          }
+        } catch {}
+        skipTodayCacheRef.current = true
+        await updateTodayProgressState()
+        await load()
       // Signal other UI (nav bars) to refresh notification badges
       emitGardenRealtime('tasks')
     } catch (e) {
@@ -1469,6 +1494,8 @@ export const GardenDashboardPage: React.FC = () => {
           console.warn('[GardenDashboard] Failed to broadcast task update:', err)
         })
       }
+      skipTodayCacheRef.current = true
+      await updateTodayProgressState()
     } finally {
       // Clear loading state
       setProgressingOccIds(prev => {
