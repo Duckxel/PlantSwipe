@@ -218,6 +218,10 @@ deploy_supabase_contact_function() {
     log "[WARN] Supabase CLI not authenticated; skipping Edge Function deployment."
     return
   fi
+  if [[ ! -f "$NODE_DIR/supabase/config.toml" ]]; then
+    log "[WARN] Supabase project not linked for $NODE_DIR; skipping Edge Function deployment."
+    return
+  fi
 
   local tmp_env
   tmp_env=""
@@ -295,6 +299,31 @@ for f in "$NODE_DIR/.env.server" "$NODE_DIR/.env" "$ADMIN_ENV_FILE"; do
   if [[ -z "$SUPA_URL" ]]; then SUPA_URL="$(read_env_kv "$f" SUPABASE_URL)"; fi
   if [[ -z "$SUPA_URL" ]]; then SUPA_URL="$(read_env_kv "$f" VITE_SUPABASE_URL)"; fi
 done
+
+# Seed Supabase/Resend configuration from .env files when not provided explicitly
+if [[ -z "${RESEND_API_KEY:-}" ]]; then RESEND_API_KEY="$(read_env_kv "$NODE_DIR/.env" RESEND_API_KEY)"; fi
+if [[ -z "${RESEND_FROM:-}" ]]; then RESEND_FROM="$(read_env_kv "$NODE_DIR/.env" RESEND_FROM)"; fi
+if [[ -z "${RESEND_FROM_NAME:-}" ]]; then RESEND_FROM_NAME="$(read_env_kv "$NODE_DIR/.env" RESEND_FROM_NAME)"; fi
+if [[ -z "${SUPABASE_ACCESS_TOKEN:-}" ]]; then SUPABASE_ACCESS_TOKEN="$(read_env_kv "$NODE_DIR/.env" SUPABASE_ACCESS_TOKEN)"; fi
+if [[ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]]; then SUPABASE_SERVICE_ROLE_KEY="$(read_env_kv "$NODE_DIR/.env" SUPABASE_SERVICE_ROLE_KEY)"; fi
+if [[ -z "${SUPABASE_PROJECT_REF:-}" ]]; then
+  SUPA_URL_FALLBACK="$(read_env_kv "$NODE_DIR/.env" SUPABASE_URL)"
+  [[ -z "$SUPA_URL_FALLBACK" ]] && SUPA_URL_FALLBACK="$(read_env_kv "$NODE_DIR/.env" VITE_SUPABASE_URL)"
+  if [[ -n "$SUPA_URL_FALLBACK" ]]; then
+    SUPABASE_PROJECT_REF="$(SUPA_URL_FALLBACK="$SUPA_URL_FALLBACK" python3 - <<'PY'
+import os
+from urllib.parse import urlparse
+url = os.environ.get("SUPA_URL_FALLBACK","")
+try:
+    host = urlparse(url).hostname or ""
+    ref = host.split(".")[0] if host else ""
+except Exception:
+    ref = ""
+print(ref, end="")
+PY
+)"
+  fi
+fi
 
 DB_HOST=""; DB_PORT="5432"
 if [[ -n "$DB_URL" ]]; then
