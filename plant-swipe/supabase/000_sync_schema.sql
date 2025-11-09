@@ -512,6 +512,25 @@ create table if not exists public.garden_inventory (
   unique (garden_id, plant_id)
 );
 
+with inventory_duplicates as (
+  select id
+  from (
+    select id,
+           row_number() over (
+             partition by garden_id, plant_id
+             order by id desc
+           ) as rn
+    from public.garden_inventory
+  ) ranked
+  where ranked.rn > 1
+)
+delete from public.garden_inventory gi
+using inventory_duplicates dup
+where gi.id = dup.id;
+
+create unique index if not exists garden_inventory_garden_id_plant_id_key
+  on public.garden_inventory (garden_id, plant_id);
+
 -- Per-instance inventory (by garden_plant)
 create table if not exists public.garden_instance_inventory (
   id uuid primary key default gen_random_uuid(),
@@ -3326,15 +3345,14 @@ $$;
 
 -- Schedule daily cleanup job to run at 2 AM UTC every day
 -- This prevents cache accumulation and keeps database clean
+DELETE FROM cron.job WHERE jobname = 'cleanup-old-task-cache';
+
 INSERT INTO cron.job (jobname, schedule, command)
 VALUES (
   'cleanup-old-task-cache',
   '0 2 * * *', -- 2 AM UTC daily
   $$SELECT cleanup_old_garden_task_cache();$$
-)
-ON CONFLICT (jobname) DO UPDATE
-SET schedule = EXCLUDED.schedule,
-    command = EXCLUDED.command;
+);
 
 -- Function: Initialize cache for all gardens AND users (run on startup/periodically)
 CREATE OR REPLACE FUNCTION initialize_all_task_cache()
