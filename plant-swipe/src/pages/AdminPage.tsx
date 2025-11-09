@@ -305,42 +305,42 @@ export const AdminPage: React.FC = () => {
     try {
       setConsoleOpen(true)
       appendConsole('[sync] Sync DB Schema: starting...')
-      const session = (await supabase.auth.getSession()).data.session
-      const token = session?.access_token
-      if (!token) {
-        appendConsole('[sync] You must be signed in to run schema sync')
-        return
-      }
+    const session = (await supabase.auth.getSession()).data.session
+    const token = session?.access_token || null
+    const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+    if (!token && !adminToken) {
+      appendConsole('[sync] Unable to locate credentials for schema sync. Sign in as an admin or configure VITE_ADMIN_STATIC_TOKEN.')
+      return
+    }
       // Try Node API first
-      let resp = await fetchWithRetry('/api/admin/sync-schema', {
+        let resp = await fetchWithRetry('/api/admin/sync-schema', {
         method: 'GET',
         headers: (() => {
-          const h: Record<string, string> = { 'Accept': 'application/json' }
-          if (token) h['Authorization'] = `Bearer ${token}`
-          const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
-          if (adminToken) h['X-Admin-Token'] = String(adminToken)
+            const h: Record<string, string> = { 'Accept': 'application/json' }
+            if (token) h['Authorization'] = `Bearer ${token}`
+            if (adminToken) h['X-Admin-Token'] = String(adminToken)
           return h
         })(),
         credentials: 'same-origin',
       }).catch(() => null)
       if (!resp || resp.status === 405) {
         // Try POST on Node if GET blocked or failed
-        resp = await fetchWithRetry('/api/admin/sync-schema', {
+          resp = await fetchWithRetry('/api/admin/sync-schema', {
           method: 'POST',
           headers: (() => {
             const h: Record<string, string> = { 'Content-Type': 'application/json', 'Accept': 'application/json' }
             if (token) h['Authorization'] = `Bearer ${token}`
-            const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
-            if (adminToken) h['X-Admin-Token'] = String(adminToken)
+              if (adminToken) h['X-Admin-Token'] = String(adminToken)
             return h
           })(),
           credentials: 'same-origin',
+            body: '{}',
         }).catch(() => null)
       }
       // If Node API failed, fallback to local Admin API proxied by nginx
       if (!resp || !resp.ok) {
         const adminHeaders: Record<string, string> = { 'Accept': 'application/json' }
-        try { const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN; if (adminToken) adminHeaders['X-Admin-Token'] = String(adminToken) } catch {}
+          try { if (adminToken) adminHeaders['X-Admin-Token'] = String(adminToken) } catch {}
         let respAdmin = await fetchWithRetry('/admin/sync-schema', { method: 'GET', headers: adminHeaders, credentials: 'same-origin' }).catch(() => null)
         if (!respAdmin || respAdmin.status === 405) {
           respAdmin = await fetchWithRetry('/admin/sync-schema', { method: 'POST', headers: { ...adminHeaders, 'Content-Type': 'application/json' }, credentials: 'same-origin', body: '{}' }).catch(() => null)
