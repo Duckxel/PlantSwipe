@@ -14,6 +14,7 @@ import type { Garden } from '@/types/garden'
 import { useTranslation } from 'react-i18next'
 import { useLanguageNavigate } from '@/lib/i18nRouting'
 import { Link } from '@/components/i18n/Link'
+import { GardenListSkeleton } from '@/components/garden/GardenSkeletons'
 
 export const GardenListPage: React.FC = () => {
   const { user } = useAuth()
@@ -1343,7 +1344,7 @@ export const GardenListPage: React.FC = () => {
               <Button className="rounded-2xl" onClick={() => setOpen(true)}>{t('garden.create')}</Button>
             )}
           </div>
-          {loading && <div className="p-6 opacity-60 text-sm">{t('common.loading')}</div>}
+          {loading && <GardenListSkeleton />}
           {error && <div className="p-6 text-sm text-red-600">{error}</div>}
           {!loading && !error && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
