@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import type { GardenPlantTask } from '@/types/garden'
-import { listPlantTasks, deletePlantTask, updatePatternTask, resyncTaskOccurrencesForGarden, logGardenActivity } from '@/lib/gardens'
+import { listPlantTasks, deletePlantTask, updatePatternTask, resyncTaskOccurrencesForGarden, logGardenActivity, refreshGardenTaskCache } from '@/lib/gardens'
 import { broadcastGardenUpdate, addGardenBroadcastListener } from '@/lib/realtime'
 import { useAuth } from '@/context/AuthContext'
 import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
@@ -133,27 +133,49 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
   }
 
   const remove = async (taskId: string) => {
+    const task = tasks.find((x) => x.id === taskId)
+    const label = task ? (task.type === 'custom' ? (task.customName || t('garden.taskTypes.custom')) : t(`garden.taskTypes.${task.type}`)) : t('garden.taskTypes.custom')
+    
+    // Optimistic update - remove from UI immediately
+    setTasks(prev => prev.filter(t => t.id !== taskId))
+    
     try {
       await deletePlantTask(taskId)
-      // Resync occurrences to purge old ones for the deleted task
-      try {
+      
+      // Broadcast immediately (non-blocking)
+      emitTasksRealtime({ action: 'delete', taskId }).catch(() => {})
+      try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
+      
+      // Background tasks - don't block UI
+      const backgroundTasks = () => {
+        // Resync occurrences in background
         const now = new Date()
         const startIso = new Date(now.getTime() - 7*24*3600*1000).toISOString()
         const endIso = new Date(now.getTime() + 60*24*3600*1000).toISOString()
-        await resyncTaskOccurrencesForGarden(gardenId, startIso, endIso)
-      } catch {}
-      // Log activity so other clients refresh via SSE
-      try {
-        const task = tasks.find((x) => x.id === taskId)
-        const label = task ? (task.type === 'custom' ? (task.customName || t('garden.taskTypes.custom')) : t(`garden.taskTypes.${task.type}`)) : t('garden.taskTypes.custom')
-        await logGardenActivity({ gardenId, kind: 'note' as any, message: t('gardenDashboard.taskDialog.deletedTask', { taskName: label }), taskName: label, actorColor: null })
-        try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
-      } catch {}
-      // Broadcast update BEFORE reload to ensure other clients receive it
-      await emitTasksRealtime({ action: 'delete', taskId })
-      await load()
-      if (onChanged) await onChanged()
+        resyncTaskOccurrencesForGarden(gardenId, startIso, endIso).then(() => {
+          // Refresh cache after resync
+          refreshGardenTaskCache(gardenId).catch(() => {})
+        }).catch(() => {})
+        
+        // Log activity (non-blocking)
+        logGardenActivity({ gardenId, kind: 'note' as any, message: t('gardenDashboard.taskDialog.deletedTask', { taskName: label }), taskName: label, actorColor: null }).catch(() => {})
+        
+        // Reload tasks in background
+        load().catch(() => {})
+        if (onChanged) {
+          Promise.resolve(onChanged()).catch(() => {})
+        }
+      }
+      
+      // Use requestIdleCallback to avoid blocking UI
+      if ('requestIdleCallback' in window) {
+        window.requestIdleCallback(backgroundTasks, { timeout: 1000 })
+      } else {
+        setTimeout(backgroundTasks, 100)
+      }
     } catch (e: any) {
+      // Revert optimistic update on error
+      setTasks(tasks)
       setError(e?.message || t('gardenDashboard.taskDialog.failedToDelete'))
     }
   }
@@ -230,6 +252,12 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
           setPatternSelection(sel)
           if (editingTask && editingTask.scheduleKind === 'repeat_pattern') {
             try {
+              // Optimistic update - update UI immediately
+              const updatedTask = { ...editingTask, period: patternPeriod, amount: patternAmount }
+              setTasks(prev => prev.map(t => t.id === editingTask.id ? updatedTask : t))
+              setEditingTask(null)
+              
+              // Update task in database
               await updatePatternTask({
                 taskId: editingTask.id,
                 period: patternPeriod,
@@ -240,25 +268,43 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
                 monthlyNthWeekdays: patternPeriod === 'month' ? (sel.monthlyNthWeekdays || []) : null,
                 requiredCount: editingTask.requiredCount || 1,
               })
-              // After updating, resync occurrences to remove stale dates
-              try {
+              
+              // Broadcast immediately (non-blocking)
+              emitTasksRealtime({ action: 'update', taskId: editingTask.id }).catch(() => {})
+              try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
+              
+              // Background tasks - don't block UI
+              const backgroundTasks = () => {
+                // Resync occurrences in background
                 const now = new Date()
                 const startIso = new Date(now.getTime() - 7*24*3600*1000).toISOString()
                 const endIso = new Date(now.getTime() + 60*24*3600*1000).toISOString()
-                await resyncTaskOccurrencesForGarden(gardenId, startIso, endIso)
-              } catch {}
-              // Log activity so other clients refresh via SSE
-              try {
+                resyncTaskOccurrencesForGarden(gardenId, startIso, endIso).then(() => {
+                  // Refresh cache after resync
+                  refreshGardenTaskCache(gardenId).catch(() => {})
+                }).catch(() => {})
+                
+                // Log activity (non-blocking)
                 const label = editingTask.type === 'custom' ? (editingTask.customName || t('garden.taskTypes.custom')) : t(`garden.taskTypes.${editingTask.type}`)
-                await logGardenActivity({ gardenId, kind: 'note' as any, message: t('gardenDashboard.taskDialog.updatedTask', { taskName: label }), taskName: label, actorColor: null })
-                try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
-              } catch {}
-              // Broadcast update BEFORE reload to ensure other clients receive it
-              await emitTasksRealtime({ action: 'update', taskId: editingTask.id })
-              setEditingTask(null)
-              await load()
-              if (onChanged) await onChanged()
+                logGardenActivity({ gardenId, kind: 'note' as any, message: t('gardenDashboard.taskDialog.updatedTask', { taskName: label }), taskName: label, actorColor: null }).catch(() => {})
+                
+                // Reload tasks in background
+                load().catch(() => {})
+                if (onChanged) {
+                  Promise.resolve(onChanged()).catch(() => {})
+                }
+              }
+              
+              // Use requestIdleCallback to avoid blocking UI
+              if ('requestIdleCallback' in window) {
+                window.requestIdleCallback(backgroundTasks, { timeout: 1000 })
+              } else {
+                setTimeout(backgroundTasks, 100)
+              }
             } catch (e: any) {
+              // Revert optimistic update on error
+              setTasks(prev => prev.map(t => t.id === editingTask.id ? editingTask : t))
+              setEditingTask(editingTask)
               setError(e?.message || t('gardenDashboard.taskDialog.failedToUpdate'))
             }
           }
@@ -276,12 +322,23 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
         gardenId={gardenId}
         gardenPlantId={gardenPlantId}
         onCreated={async () => {
-          // Broadcast update BEFORE reload to ensure other clients receive it
-          await emitTasksRealtime({ action: 'create', gardenPlantId })
-          await load()
-          // Notify global UI to refresh nav badges immediately on task creation
+          // Broadcast update immediately (non-blocking)
+          emitTasksRealtime({ action: 'create', gardenPlantId }).catch(() => {})
           try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}
-          if (onChanged) await onChanged()
+          
+          // Reload in background
+          const reloadFn = () => {
+            load().catch(() => {})
+            if (onChanged) {
+              Promise.resolve(onChanged()).catch(() => {})
+            }
+          }
+          
+          if ('requestIdleCallback' in window) {
+            window.requestIdleCallback(reloadFn, { timeout: 500 })
+          } else {
+            setTimeout(reloadFn, 100)
+          }
         }}
       />
     </Dialog>

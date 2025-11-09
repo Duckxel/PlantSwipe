@@ -15,7 +15,7 @@ interface TopBarProps {
 }
 
 import { useAuth } from "@/context/AuthContext"
-import { userHasUnfinishedTasksToday } from "@/lib/gardens"
+import { getUserTasksTodayCached } from "@/lib/gardens"
 import { addGardenBroadcastListener } from "@/lib/realtime"
 import { supabase } from "@/lib/supabaseClient"
 import { usePathWithoutLanguage, useLanguageNavigate } from "@/lib/i18nRouting"
@@ -31,11 +31,15 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
   const [menuPosition, setMenuPosition] = React.useState<{ top: number; right: number } | null>(null)
   const [hasUnfinished, setHasUnfinished] = React.useState(false)
   
-  // Refresh notification state
+  // Refresh notification state - use cache for instant check
   const refreshNotification = React.useCallback(async () => {
     try {
       if (!user?.id) { setHasUnfinished(false); return }
-      const has = await userHasUnfinishedTasksToday(user.id)
+      // Use cache for instant check - FASTEST
+      const today = new Date().toISOString().slice(0, 10)
+      const tasks = await getUserTasksTodayCached(user.id, today)
+      // Has unfinished tasks if there are gardens with remaining tasks OR if due > completed
+      const has = tasks.gardensWithRemainingTasks > 0 || tasks.totalDueCount > tasks.totalCompletedCount
       setHasUnfinished(has)
     } catch {
       setHasUnfinished(false)
@@ -118,9 +122,23 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
   }, [user?.id, refreshNotification])
 
   // Also listen to postgres changes for task occurrences (direct fallback)
+  // Database triggers update cache automatically, so we just read from cache
   React.useEffect(() => {
     if (!user?.id) return
     let active = true
+    const today = new Date().toISOString().slice(0, 10)
+    
+    // Helper to read from cache and update notification (instant)
+    const updateFromCache = () => {
+      if (!active || !user?.id) return
+      getUserTasksTodayCached(user.id, today).then((tasks) => {
+        if (!active) return
+        const has = tasks.gardensWithRemainingTasks > 0 || tasks.totalDueCount > tasks.totalCompletedCount
+        setHasUnfinished(has)
+      }).catch(() => {
+        if (active) setHasUnfinished(false)
+      })
+    }
     
     const channel = supabase.channel('rt-navbar-tasks')
       .on('postgres_changes', { 
@@ -128,7 +146,23 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
         schema: 'public', 
         table: 'garden_plant_task_occurrences' 
       }, () => {
-        if (active) refreshNotification()
+        // Database triggers have already updated cache synchronously
+        // Just read from cache and update notification (instant)
+        setTimeout(updateFromCache, 50) // Small delay to ensure trigger completed
+      })
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'garden_plant_tasks' 
+      }, () => {
+        setTimeout(updateFromCache, 50)
+      })
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'garden_plants' 
+      }, () => {
+        setTimeout(updateFromCache, 50)
       })
     
     const subscription = channel.subscribe()
@@ -138,7 +172,7 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
       active = false
       try { supabase.removeChannel(channel) } catch {}
     }
-  }, [user?.id, refreshNotification])
+  }, [user?.id])
   const label = displayName && displayName.trim().length > 0 ? displayName : t('common.profile')
   return (
     <header className="max-w-6xl mx-auto w-full flex items-center gap-3 px-2 overflow-x-hidden">

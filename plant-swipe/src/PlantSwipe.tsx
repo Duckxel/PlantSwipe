@@ -16,8 +16,7 @@ import { BottomBar } from "@/components/layout/BottomBar";
 import BroadcastToast from "@/components/layout/BroadcastToast";
 import MobileNavBar from "@/components/layout/MobileNavBar";
 import { SwipePage } from "@/pages/SwipePage";
-import { GardenListPage } from "@/pages/GardenListPage";
-import { GardenDashboardPage } from "@/pages/GardenDashboardPage";
+// GardenListPage and GardenDashboardPage are lazy loaded below
 import { SearchPage } from "@/pages/SearchPage";
 import { CreatePlantPage } from "@/pages/CreatePlantPage";
 import { EditPlantPage } from "@/pages/EditPlantPage";
@@ -37,6 +36,8 @@ import { useTranslation } from "react-i18next";
 
 // Lazy load heavy pages for code splitting
 const AdminPage = lazy(() => import("@/pages/AdminPage").then(module => ({ default: module.AdminPage })));
+const GardenDashboardPage = lazy(() => import("@/pages/GardenDashboardPage").then(module => ({ default: module.GardenDashboardPage })));
+const GardenListPage = lazy(() => import("@/pages/GardenListPage").then(module => ({ default: module.GardenListPage })));
 
 // --- Main Component ---
 export default function PlantSwipe() {
@@ -609,8 +610,16 @@ export default function PlantSwipe() {
         <main className="min-h-[60vh]" aria-live="polite">
           {/* Use background location for primary routes so overlays render on top */}
           <Routes location={(backgroundLocation as any) || location}>
-                <Route path="/gardens" element={<GardenListPage />} />
-                <Route path="/garden/:id/*" element={<GardenDashboardPage />} />
+                <Route path="/gardens" element={
+                  <Suspense fallback={<div className="p-8 text-center text-sm opacity-60">{t('common.loading')}</div>}>
+                    <GardenListPage />
+                  </Suspense>
+                } />
+                <Route path="/garden/:id/*" element={
+                  <Suspense fallback={<div className="p-8 text-center text-sm opacity-60">{t('common.loading')}</div>}>
+                    <GardenDashboardPage />
+                  </Suspense>
+                } />
                 <Route
                   path="/search"
                   element={

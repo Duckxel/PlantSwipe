@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import type { TaskType } from '@/types/garden'
-import { createPatternTask, logGardenActivity, resyncTaskOccurrencesForGarden } from '@/lib/gardens'
+import { createPatternTask, logGardenActivity, resyncTaskOccurrencesForGarden, refreshGardenTaskCache } from '@/lib/gardens'
 import { broadcastGardenUpdate } from '@/lib/realtime'
 import { useAuth } from '@/context/AuthContext'
 import { useTranslation } from 'react-i18next'
@@ -80,6 +80,7 @@ export function TaskCreateDialog({
     }
     setSaving(true)
     try {
+      // Create task - this is the critical operation
       await createPatternTask({
         gardenId,
         gardenPlantId,
@@ -93,26 +94,46 @@ export function TaskCreateDialog({
         yearlyDays: period === 'year' ? [...yearlyDays].sort() : null,
         monthlyNthWeekdays: period === 'month' ? [...monthlyNthWeekdays].sort() : null,
       })
-      try {
+      
+      // Close dialog immediately for better UX
+      onOpenChange(false)
+      
+      // Fire and forget - don't block UI
+      const taskTypeLabel = type === 'custom' ? (customName || t('garden.taskTypes.custom')) : t(`garden.taskTypes.${type}`)
+      
+      // Broadcast immediately (non-blocking)
+      broadcastGardenUpdate({ gardenId, kind: 'tasks', metadata: { action: 'create', gardenPlantId }, actorId: user?.id ?? null }).catch((err) => {
+        console.warn('[TaskCreateDialog] Failed to broadcast task update:', err)
+      })
+      
+      // Resync, refresh cache, and log activity in background using requestIdleCallback
+      const backgroundTasks = () => {
+        // Resync in background - don't block
         const now = new Date()
         const startIso = new Date(now.getTime() - 7 * 24 * 3600 * 1000).toISOString()
         const endIso = new Date(now.getTime() + 60 * 24 * 3600 * 1000).toISOString()
-        await resyncTaskOccurrencesForGarden(gardenId, startIso, endIso)
-      } catch {}
-      // Log activity so other clients' SSE streams trigger reloads
-      try {
-        const taskTypeLabel = type === 'custom' ? (customName || t('garden.taskTypes.custom')) : t(`garden.taskTypes.${type}`)
-        await logGardenActivity({ gardenId, kind: 'note' as any, message: t('gardenDashboard.taskDialog.addedTask', { taskName: taskTypeLabel }), taskName: taskTypeLabel, actorColor: null })
-      } catch {}
-      // Broadcast update BEFORE onCreated callback to ensure other clients receive it
-      await broadcastGardenUpdate({ gardenId, kind: 'tasks', metadata: { action: 'create', gardenPlantId }, actorId: user?.id ?? null }).catch((err) => {
-        console.warn('[TaskCreateDialog] Failed to broadcast task update:', err)
-      })
-      if (onCreated) await onCreated()
-      onOpenChange(false)
+        resyncTaskOccurrencesForGarden(gardenId, startIso, endIso).then(() => {
+          // Refresh cache after resync
+          refreshGardenTaskCache(gardenId).catch(() => {})
+        }).catch(() => {})
+        
+        // Log activity (non-blocking)
+        logGardenActivity({ gardenId, kind: 'note' as any, message: t('gardenDashboard.taskDialog.addedTask', { taskName: taskTypeLabel }), taskName: taskTypeLabel, actorColor: null }).catch(() => {})
+        
+        // Call onCreated callback
+        if (onCreated) {
+          Promise.resolve(onCreated()).catch(() => {})
+        }
+      }
+      
+      // Use requestIdleCallback to avoid blocking UI
+      if ('requestIdleCallback' in window) {
+        window.requestIdleCallback(backgroundTasks, { timeout: 1000 })
+      } else {
+        setTimeout(backgroundTasks, 100)
+      }
     } catch (e: any) {
       setError(e?.message || t('gardenDashboard.taskDialog.failedToCreate'))
-    } finally {
       setSaving(false)
     }
   }

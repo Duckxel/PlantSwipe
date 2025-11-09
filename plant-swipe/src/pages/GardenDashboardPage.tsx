@@ -17,7 +17,7 @@ import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
 import { TaskEditorDialog } from '@/components/plant/TaskEditorDialog'
 import type { Garden } from '@/types/garden'
 import type { Plant } from '@/types/plant'
-import { getGarden, getGardenPlants, getGardenMembers, addMemberByNameOrEmail, deleteGardenPlant, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, updateGardenMemberRole, removeGardenMember, listGardenTasks, listOccurrencesForTasks, progressTaskOccurrence, updateGardenPlantsOrder, refreshGardenStreak, listGardenActivityToday, logGardenActivity, resyncTaskOccurrencesForGarden, computeGardenTaskForDay } from '@/lib/gardens'
+import { getGarden, getGardenPlants, getGardenMembers, addMemberByNameOrEmail, deleteGardenPlant, addPlantToGarden, fetchServerNowISO, upsertGardenTask, getGardenTasks, ensureDailyTasksForGardens, upsertGardenPlantSchedule, getGardenPlantSchedule, updateGardenMemberRole, removeGardenMember, listGardenTasks, listOccurrencesForTasks, progressTaskOccurrence, updateGardenPlantsOrder, refreshGardenStreak, listGardenActivityToday, logGardenActivity, resyncTaskOccurrencesForGarden, computeGardenTaskForDay, getGardenTodayOccurrencesCached, getGardenWeeklyStatsCached, getGardenTodayProgressUltraFast, refreshGardenTaskCache } from '@/lib/gardens'
 import { supabase } from '@/lib/supabaseClient'
 import { addGardenBroadcastListener, broadcastGardenUpdate, type GardenRealtimeKind } from '@/lib/realtime'
 import { getAccentOption } from '@/lib/accent'
@@ -97,6 +97,9 @@ export const GardenDashboardPage: React.FC = () => {
 
   const [activityRev, setActivityRev] = React.useState(0)
   const streakRefreshedRef = React.useRef(false)
+  const skipTodayCacheRef = React.useRef(false)
+  const [progressingOccIds, setProgressingOccIds] = React.useState<Set<string>>(new Set())
+  const [completingPlantIds, setCompletingPlantIds] = React.useState<Set<string>>(new Set())
 
   const [infoPlant, setInfoPlant] = React.useState<Plant | null>(null)
   // Favorites (liked plants)
@@ -127,6 +130,33 @@ export const GardenDashboardPage: React.FC = () => {
     if (!id) return
     broadcastGardenUpdate({ gardenId: id, kind, metadata, actorId: user?.id ?? null }).catch(() => {})
   }, [id, user?.id])
+
+  const updateTodayProgressState = React.useCallback(async () => {
+    const gardenId = id
+    const todayIso = serverTodayRef.current ?? serverToday
+    if (!gardenId || !todayIso) return
+    try {
+      const { due, completed } = await getGardenTodayProgressUltraFast(gardenId, todayIso)
+      const success = due === 0 ? true : (completed >= due)
+      setDailyStats(prev => {
+        let found = false
+        const next = prev.map(d => {
+          if (d.date === todayIso) {
+            found = true
+            return { ...d, due, completed, success }
+          }
+          return d
+        })
+        if (found) return next
+        const appended = [...prev, { date: todayIso, due, completed, success }]
+        appended.sort((a, b) => a.date.localeCompare(b.date))
+        return appended.slice(-30)
+      })
+      await upsertGardenTask({ gardenId, day: todayIso, gardenPlantId: null, success })
+    } catch (err) {
+      console.warn('[GardenDashboard] Failed to update today progress state:', err)
+    }
+  }, [id, serverToday])
 
   const load = React.useCallback(async (opts?: { silent?: boolean; preserveHeavy?: boolean }) => {
     if (!id) return
@@ -357,10 +387,17 @@ export const GardenDashboardPage: React.FC = () => {
     }
   }, [id, garden, currentLang])
 
-  // Lazy heavy loader for tabs that need it
+  // Lazy heavy loader for tabs that need it - only load when tab is actually viewed
   const loadHeavyForCurrentTab = React.useCallback(async (todayOverride?: string | null) => {
     const todayValue = todayOverride ?? serverTodayRef.current ?? serverToday
     if (!id || !todayValue) return
+    
+    // Skip if already loading or if not needed for current tab
+    if (heavyLoading) return
+    
+    // Only load heavy data for tabs that need it
+    if (tab !== 'routine' && tab !== 'plants' && tab !== 'overview') return
+    
     setHeavyLoading(true)
     try {
       const parseUTC = (iso: string) => new Date(`${iso}T00:00:00Z`)
@@ -377,69 +414,160 @@ export const GardenDashboardPage: React.FC = () => {
       }
       setWeekDays(weekDaysIso)
       const today = todayValue
-      const allTasks = await listGardenTasks(id)
-      const weekStartIso = `${weekDaysIso[0]}T00:00:00.000Z`
-      const weekEndIso = `${weekDaysIso[6]}T23:59:59.999Z`
-      await resyncTaskOccurrencesForGarden(id, weekStartIso, weekEndIso)
-      const occs = await listOccurrencesForTasks(allTasks.map(t => t.id), `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`)
-      const taskTypeById: Record<string, 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'> = {}
-      const taskEmojiById: Record<string, string | null> = {}
-      for (const t of allTasks) { taskTypeById[t.id] = t.type as any; taskEmojiById[t.id] = (t as any).emoji || null }
-      const occsWithType = occs.map(o => ({ ...o, taskType: taskTypeById[o.taskId] || 'custom', taskEmoji: taskEmojiById[o.taskId] || null }))
-      setTodayTaskOccurrences(occsWithType as any)
-      const taskCountMap: Record<string, number> = {}
-      for (const t of allTasks) taskCountMap[t.gardenPlantId] = (taskCountMap[t.gardenPlantId] || 0) + 1
-      setTaskCountsByPlant(taskCountMap)
-      const dueMap: Record<string, number> = {}
-      for (const o of occs) {
-        const remaining = Math.max(0, (o.requiredCount || 1) - (o.completedCount || 0))
-        if (remaining > 0) dueMap[o.gardenPlantId] = (dueMap[o.gardenPlantId] || 0) + remaining
-      }
-      setTaskOccDueToday(dueMap)
-      // Update today's counts in dailyStats
-      setDailyStats(prev => {
-        const reqDone = occs.reduce((acc, o) => acc + Math.max(1, Number(o.requiredCount || 1)), 0)
-        const compDone = occs.reduce((acc, o) => acc + Math.min(Math.max(1, Number(o.requiredCount || 1)), Number(o.completedCount || 0)), 0)
-        return prev.map(d => d.date === today ? { ...d, due: reqDone, completed: compDone } : d)
-      })
+      
+      // Load tasks in parallel with resync for better performance
+      const [allTasks] = await Promise.all([
+        listGardenTasks(id),
+        // Resync in background - don't block
+        (async () => {
+          const weekStartIso = `${weekDaysIso[0]}T00:00:00.000Z`
+          const weekEndIso = `${weekDaysIso[6]}T23:59:59.999Z`
+          // Use requestIdleCallback for resync to avoid blocking
+          const resyncFn = () => {
+            resyncTaskOccurrencesForGarden(id, weekStartIso, weekEndIso).catch(() => {})
+          }
+          if ('requestIdleCallback' in window) {
+            window.requestIdleCallback(resyncFn, { timeout: 2000 })
+          } else {
+            setTimeout(resyncFn, 500)
+          }
+        })()
+      ])
+      
+        const skipCache = skipTodayCacheRef.current
+        if (skipCache) skipTodayCacheRef.current = false
+
+        let occsDetailed: Array<any> = []
+        let usedCache = false
+
+        if (!skipCache) {
+          const cachedOccs = await getGardenTodayOccurrencesCached(id, today).catch(() => null)
+          if (cachedOccs && cachedOccs.length > 0) {
+            occsDetailed = cachedOccs as any
+            usedCache = true
+          }
+        }
+
+        if (!usedCache) {
+          const occs = await listOccurrencesForTasks(allTasks.map(t => t.id), `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`)
+          const taskTypeById: Record<string, 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'> = {}
+          const taskEmojiById: Record<string, string | null> = {}
+          for (const t of allTasks) { taskTypeById[t.id] = t.type as any; taskEmojiById[t.id] = (t as any).emoji || null }
+          occsDetailed = occs.map(o => ({ ...o, taskType: taskTypeById[o.taskId] || 'custom', taskEmoji: taskEmojiById[o.taskId] || null }))
+          refreshGardenTaskCache(id, today).catch(() => {})
+        }
+
+        setTodayTaskOccurrences(occsDetailed as any)
+
+        const taskCountMap: Record<string, number> = {}
+        for (const t of allTasks) taskCountMap[t.gardenPlantId] = (taskCountMap[t.gardenPlantId] || 0) + 1
+        setTaskCountsByPlant(taskCountMap)
+
+        const dueMap: Record<string, number> = {}
+        for (const o of occsDetailed) {
+          const remaining = Math.max(0, (o.requiredCount || 1) - (o.completedCount || 0))
+          if (remaining > 0) dueMap[o.gardenPlantId] = (dueMap[o.gardenPlantId] || 0) + remaining
+        }
+        setTaskOccDueToday(dueMap)
+
+        setDailyStats(prev => {
+          const reqDone = occsDetailed.reduce((acc: number, o: any) => acc + Math.max(1, Number(o.requiredCount || 1)), 0)
+          const compDone = occsDetailed.reduce((acc: number, o: any) => acc + Math.min(Math.max(1, Number(o.requiredCount || 1)), Number(o.completedCount || 0)), 0)
+          return prev.map(d => d.date === today ? { ...d, due: reqDone, completed: compDone } : d)
+        })
+      
+      // Only load week data if on routine tab
       if (tab === 'routine') {
-        const weekOccs = await listOccurrencesForTasks(allTasks.map(t => t.id), weekStartIso, weekEndIso)
-        const typeCounts: { water: number[]; fertilize: number[]; harvest: number[]; cut: number[]; custom: number[] } = {
-          water: Array(7).fill(0), fertilize: Array(7).fill(0), harvest: Array(7).fill(0), cut: Array(7).fill(0), custom: Array(7).fill(0),
-        }
-        const tById: Record<string, 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'> = {}
-        for (const t of allTasks) tById[t.id] = t.type as any
-        for (const o of weekOccs) {
-          const dayIso = new Date(o.dueAt).toISOString().slice(0,10)
-          const idx = weekDaysIso.indexOf(dayIso)
-          if (idx >= 0) {
-            const typ = tById[o.taskId] || 'custom'
-            const inc = Math.max(1, Number(o.requiredCount || 1))
-            ;(typeCounts as any)[typ][idx] += inc
+        // Try to load from cache first
+        const cachedWeekStats = await getGardenWeeklyStatsCached(id, weekDaysIso[0]).catch(() => null)
+        
+        if (cachedWeekStats) {
+          // Use cached weekly stats
+          setWeekCountsByType({
+            water: cachedWeekStats.waterTasksByDay,
+            fertilize: cachedWeekStats.fertilizeTasksByDay,
+            harvest: cachedWeekStats.harvestTasksByDay,
+            cut: cachedWeekStats.cutTasksByDay,
+            custom: cachedWeekStats.customTasksByDay,
+          })
+          setWeekCounts(cachedWeekStats.totalTasksByDay)
+          
+          // Still need to compute dueThisWeekByPlant from occurrences
+          const weekStartIso = `${weekDaysIso[0]}T00:00:00.000Z`
+          const weekEndIso = `${weekDaysIso[6]}T23:59:59.999Z`
+          const weekOccs = await listOccurrencesForTasks(allTasks.map(t => t.id), weekStartIso, weekEndIso)
+          const dueMapSets: Record<string, Set<number>> = {}
+          for (const o of weekOccs) {
+            const dayIso = new Date(o.dueAt).toISOString().slice(0,10)
+            const remaining = Math.max(0, Number(o.requiredCount || 1) - Number(o.completedCount || 0))
+            if (remaining <= 0) continue
+            if (dayIso <= today) continue
+            const idx = weekDaysIso.indexOf(dayIso)
+            if (idx >= 0) {
+              const pid = String(o.gardenPlantId)
+              if (!dueMapSets[pid]) dueMapSets[pid] = new Set<number>()
+              dueMapSets[pid].add(idx)
+            }
+          }
+          const dueMapNext: Record<string, number[]> = {}
+          for (const pid of Object.keys(dueMapSets)) dueMapNext[pid] = Array.from(dueMapSets[pid]).sort((a, b) => a - b)
+          setDueThisWeekByPlant(dueMapNext)
+        } else {
+          // Fallback: compute week data
+          const loadWeekData = async () => {
+            const weekStartIso = `${weekDaysIso[0]}T00:00:00.000Z`
+            const weekEndIso = `${weekDaysIso[6]}T23:59:59.999Z`
+            const weekOccs = await listOccurrencesForTasks(allTasks.map(t => t.id), weekStartIso, weekEndIso)
+            const typeCounts: { water: number[]; fertilize: number[]; harvest: number[]; cut: number[]; custom: number[] } = {
+              water: Array(7).fill(0), fertilize: Array(7).fill(0), harvest: Array(7).fill(0), cut: Array(7).fill(0), custom: Array(7).fill(0),
+            }
+            const tById: Record<string, 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'> = {}
+            for (const t of allTasks) tById[t.id] = t.type as any
+            for (const o of weekOccs) {
+              const dayIso = new Date(o.dueAt).toISOString().slice(0,10)
+              const idx = weekDaysIso.indexOf(dayIso)
+              if (idx >= 0) {
+                const typ = tById[o.taskId] || 'custom'
+                const inc = Math.max(1, Number(o.requiredCount || 1))
+                ;(typeCounts as any)[typ][idx] += inc
+              }
+            }
+            const totals = weekDaysIso.map((_, i) => typeCounts.water[i] + typeCounts.fertilize[i] + typeCounts.harvest[i] + typeCounts.cut[i] + typeCounts.custom[i])
+            setWeekCountsByType(typeCounts)
+            setWeekCounts(totals)
+            const dueMapSets: Record<string, Set<number>> = {}
+            for (const o of weekOccs) {
+              const dayIso = new Date(o.dueAt).toISOString().slice(0,10)
+              const remaining = Math.max(0, Number(o.requiredCount || 1) - Number(o.completedCount || 0))
+              if (remaining <= 0) continue
+              if (dayIso <= today) continue
+              const idx = weekDaysIso.indexOf(dayIso)
+              if (idx >= 0) {
+                const pid = String(o.gardenPlantId)
+                if (!dueMapSets[pid]) dueMapSets[pid] = new Set<number>()
+                dueMapSets[pid].add(idx)
+              }
+            }
+            const dueMapNext: Record<string, number[]> = {}
+            for (const pid of Object.keys(dueMapSets)) dueMapNext[pid] = Array.from(dueMapSets[pid]).sort((a, b) => a - b)
+            setDueThisWeekByPlant(dueMapNext)
+            
+            // Refresh cache in background
+            refreshGardenTaskCache(id, today).catch(() => {})
+          }
+          
+          // Load week data in background
+          if ('requestIdleCallback' in window) {
+            window.requestIdleCallback(() => loadWeekData(), { timeout: 1000 })
+          } else {
+            setTimeout(() => loadWeekData(), 200)
           }
         }
-        const totals = weekDaysIso.map((_, i) => typeCounts.water[i] + typeCounts.fertilize[i] + typeCounts.harvest[i] + typeCounts.cut[i] + typeCounts.custom[i])
-        setWeekCountsByType(typeCounts)
-        setWeekCounts(totals)
-        const dueMapSets: Record<string, Set<number>> = {}
-        for (const o of weekOccs) {
-          const dayIso = new Date(o.dueAt).toISOString().slice(0,10)
-          const remaining = Math.max(0, Number(o.requiredCount || 1) - Number(o.completedCount || 0))
-          if (remaining <= 0) continue
-          if (dayIso <= today) continue
-          const idx = weekDaysIso.indexOf(dayIso)
-          if (idx >= 0) {
-            const pid = String(o.gardenPlantId)
-            if (!dueMapSets[pid]) dueMapSets[pid] = new Set<number>()
-            dueMapSets[pid].add(idx)
-          }
-        }
-        const dueMapNext: Record<string, number[]> = {}
-        for (const pid of Object.keys(dueMapSets)) dueMapNext[pid] = Array.from(dueMapSets[pid]).sort((a, b) => a - b)
-        setDueThisWeekByPlant(dueMapNext)
       }
+      
+      const occsForDueToday = cachedOccs && cachedOccs.length > 0 ? cachedOccs : (await listOccurrencesForTasks(allTasks.map(t => t.id), `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`).catch(() => []))
       const dueTodaySet = new Set<string>()
-      for (const o of (occs || [])) {
+      for (const o of (occsForDueToday || [])) {
         const remaining = Math.max(0, (o.requiredCount || 1) - (o.completedCount || 0))
         if (remaining > 0) dueTodaySet.add(o.gardenPlantId)
       }
@@ -737,10 +865,25 @@ export const GardenDashboardPage: React.FC = () => {
 
   React.useEffect(() => { load() }, [load])
 
+  // Load heavy data when tab changes or when garden loads - use requestIdleCallback for better performance
   React.useEffect(() => {
-    // Always load today's occurrences for the Tasks sidebar; compute weekly only on Routine
-    loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday)
-  }, [tab, loadHeavyForCurrentTab, serverToday])
+    if (!loading && id && serverToday) {
+      // Use requestIdleCallback to defer heavy loading until browser is idle
+      const loadFn = () => {
+        loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday)
+      }
+      
+      if ('requestIdleCallback' in window) {
+        const idleId = window.requestIdleCallback(loadFn, { timeout: 500 })
+        return () => {
+          window.cancelIdleCallback(idleId)
+        }
+      } else {
+        const timer = setTimeout(loadFn, 100)
+        return () => clearTimeout(timer)
+      }
+    }
+  }, [tab, loadHeavyForCurrentTab, serverToday, loading, id])
 
   // Realtime updates via Supabase (tables: gardens, garden_members, garden_plants, garden_plant_tasks, garden_plant_task_occurrences, plants)
   React.useEffect(() => {
@@ -1235,7 +1378,9 @@ export const GardenDashboardPage: React.FC = () => {
           }
           const success = due === 0 ? true : (completed >= due)
           await upsertGardenTask({ gardenId: garden.id, day: today, gardenPlantId: null, success })
-      } catch {}
+          skipTodayCacheRef.current = true
+          await updateTodayProgressState()
+        } catch {}
       }
       await load({ silent: true, preserveHeavy: true })
       if (tab === 'routine') {
@@ -1249,36 +1394,48 @@ export const GardenDashboardPage: React.FC = () => {
   }
 
   const completeAllTodayForPlant = async (gardenPlantId: string) => {
-    try {
-      const occs = todayTaskOccurrences.filter(o => o.gardenPlantId === gardenPlantId)
-      for (const o of occs) {
-        const remaining = Math.max(0, Number(o.requiredCount || 1) - Number(o.completedCount || 0))
-        if (remaining <= 0) continue
-        // Some backends increment by exactly 1 regardless of provided amount.
-        // Perform deterministic 1-step increments to guarantee full completion.
-        for (let i = 0; i < remaining; i++) {
-          await progressTaskOccurrence(o.id, 1)
-        }
-      }
-      // Log summary activity for this plant
+    // Set loading state
+    setCompletingPlantIds(prev => new Set(prev).add(gardenPlantId))
+    
       try {
-        if (id) {
-          const gp = (plants as any[]).find((p: any) => p.id === gardenPlantId)
-          const plantName = gp?.nickname || gp?.plant?.name || 'Plant'
-          const actorColorCss = getActorColorCss()
-          await logGardenActivity({ gardenId: id, kind: 'task_completed' as any, message: `completed all due tasks on "${plantName}"`, plantName, actorColor: actorColorCss || null })
-          setActivityRev((r) => r + 1)
-          // Broadcast update BEFORE reload to ensure other clients receive it
-          await broadcastGardenUpdate({ gardenId: id, kind: 'tasks', actorId: user?.id ?? null }).catch((err) => {
-            console.warn('[GardenDashboard] Failed to broadcast task update:', err)
-          })
+        const occs = todayTaskOccurrences.filter(o => o.gardenPlantId === gardenPlantId)
+        for (const o of occs) {
+          const remaining = Math.max(0, Number(o.requiredCount || 1) - Number(o.completedCount || 0))
+          if (remaining <= 0) continue
+          // Some backends increment by exactly 1 regardless of provided amount.
+          // Perform deterministic 1-step increments to guarantee full completion.
+          for (let i = 0; i < remaining; i++) {
+            await progressTaskOccurrence(o.id, 1)
+          }
         }
-      } catch {}
-      await load()
+        // Log summary activity for this plant
+        try {
+          if (id) {
+            const gp = (plants as any[]).find((p: any) => p.id === gardenPlantId)
+            const plantName = gp?.nickname || gp?.plant?.name || 'Plant'
+            const actorColorCss = getActorColorCss()
+            await logGardenActivity({ gardenId: id, kind: 'task_completed' as any, message: `completed all due tasks on "${plantName}"`, plantName, actorColor: actorColorCss || null })
+            setActivityRev((r) => r + 1)
+            // Broadcast update BEFORE reload to ensure other clients receive it
+            await broadcastGardenUpdate({ gardenId: id, kind: 'tasks', actorId: user?.id ?? null }).catch((err) => {
+              console.warn('[GardenDashboard] Failed to broadcast task update:', err)
+            })
+          }
+        } catch {}
+        skipTodayCacheRef.current = true
+        await updateTodayProgressState()
+        await load()
       // Signal other UI (nav bars) to refresh notification badges
       emitGardenRealtime('tasks')
     } catch (e) {
       // swallow; global error display exists
+    } finally {
+      // Clear loading state
+      setCompletingPlantIds(prev => {
+        const next = new Set(prev)
+        next.delete(gardenPlantId)
+        return next
+      })
     }
   }
 
@@ -1311,6 +1468,9 @@ export const GardenDashboardPage: React.FC = () => {
 
   // Shared progress handler for Task occurrences (used by Routine and Tasks sidebar)
   const progressOccurrenceHandler = React.useCallback(async (occId: string, inc: number) => {
+    // Set loading state
+    setProgressingOccIds(prev => new Set(prev).add(occId))
+    
     try {
       await progressTaskOccurrence(occId, inc)
       const o = todayTaskOccurrences.find((x: any) => x.id === occId)
@@ -1334,7 +1494,16 @@ export const GardenDashboardPage: React.FC = () => {
           console.warn('[GardenDashboard] Failed to broadcast task update:', err)
         })
       }
+      skipTodayCacheRef.current = true
+      await updateTodayProgressState()
     } finally {
+      // Clear loading state
+      setProgressingOccIds(prev => {
+        const next = new Set(prev)
+        next.delete(occId)
+        return next
+      })
+      
       await load({ silent: true, preserveHeavy: true })
       await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday)
       // Also emit local event for immediate UI updates
@@ -1500,7 +1669,7 @@ export const GardenDashboardPage: React.FC = () => {
                 </div>
               )} />
               {/* Routine route kept for weekly chart; item rows show completers instead of button */}
-              <Route path="routine" element={<RoutineSection plants={plants} duePlantIds={dueToday} onLogWater={logWater} weekDays={weekDays} weekCounts={weekCounts} weekCountsByType={weekCountsByType} serverToday={serverToday} dueThisWeekByPlant={dueThisWeekByPlant} todayTaskOccurrences={todayTaskOccurrences} onProgressOccurrence={progressOccurrenceHandler} />} />
+              <Route path="routine" element={<RoutineSection plants={plants} duePlantIds={dueToday} onLogWater={logWater} weekDays={weekDays} weekCounts={weekCounts} weekCountsByType={weekCountsByType} serverToday={serverToday} dueThisWeekByPlant={dueThisWeekByPlant} todayTaskOccurrences={todayTaskOccurrences} onProgressOccurrence={progressOccurrenceHandler} progressingOccIds={progressingOccIds} completingPlantIds={completingPlantIds} completeAllTodayForPlant={completeAllTodayForPlant} />} />
               <Route path="settings" element={(
                 <div className="space-y-6">
                   {garden && (
@@ -1694,7 +1863,7 @@ export const GardenDashboardPage: React.FC = () => {
   )
 }
 
-function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts, weekCountsByType, serverToday, dueThisWeekByPlant, todayTaskOccurrences, onProgressOccurrence }: { plants: any[]; duePlantIds: Set<string> | null; onLogWater: (id: string) => Promise<void>; weekDays: string[]; weekCounts: number[]; weekCountsByType: { water: number[]; fertilize: number[]; harvest: number[]; cut: number[]; custom: number[] }; serverToday: string | null; dueThisWeekByPlant: Record<string, number[]>; todayTaskOccurrences: Array<{ id: string; taskId: string; gardenPlantId: string; dueAt: string; requiredCount: number; completedCount: number; completedAt: string | null; taskType?: 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom' }>; onProgressOccurrence: (id: string, inc: number) => Promise<void> }) {
+function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts, weekCountsByType, serverToday, dueThisWeekByPlant, todayTaskOccurrences, onProgressOccurrence, progressingOccIds, completingPlantIds, completeAllTodayForPlant }: { plants: any[]; duePlantIds: Set<string> | null; onLogWater: (id: string) => Promise<void>; weekDays: string[]; weekCounts: number[]; weekCountsByType: { water: number[]; fertilize: number[]; harvest: number[]; cut: number[]; custom: number[] }; serverToday: string | null; dueThisWeekByPlant: Record<string, number[]>; todayTaskOccurrences: Array<{ id: string; taskId: string; gardenPlantId: string; dueAt: string; requiredCount: number; completedCount: number; completedAt: string | null; taskType?: 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom' }>; onProgressOccurrence: (id: string, inc: number) => Promise<void>; progressingOccIds: Set<string>; completingPlantIds: Set<string>; completeAllTodayForPlant: (gardenPlantId: string) => Promise<void> }) {
   const { t } = useTranslation('common')
   const duePlants = React.useMemo(() => {
     if (!duePlantIds) return []
@@ -1785,8 +1954,29 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
             if (occs.length === 0) return null
             return (
               <Card key={gp.id} className="rounded-2xl p-4">
-                <div className="font-medium">{gp.nickname || gp.plant?.name}</div>
-                {gp.nickname && <div className="text-xs opacity-60">{gp.plant?.name}</div>}
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <div className="font-medium">{gp.nickname || gp.plant?.name}</div>
+                    {gp.nickname && <div className="text-xs opacity-60">{gp.plant?.name}</div>}
+                  </div>
+                  {totalDone < totalReq && (
+                    <Button 
+                      size="sm" 
+                      className="rounded-xl" 
+                      onClick={() => completeAllTodayForPlant(gp.id)}
+                      disabled={completingPlantIds.has(gp.id)}
+                    >
+                      {completingPlantIds.has(gp.id) ? (
+                        <span className="flex items-center gap-1">
+                          <span className="animate-spin">⏳</span>
+                          {t('garden.completing')}
+                        </span>
+                      ) : (
+                        t('garden.completeAll')
+                      )}
+                    </Button>
+                  )}
+                </div>
                 <div className="text-sm opacity-70">{t('gardenDashboard.routineSection.tasksDue')} {totalDone} / {totalReq}</div>
                 <div className="mt-2 flex flex-col gap-2">
                   {occs.map((o) => {
@@ -1805,7 +1995,18 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
                         {!isDone ? (
                           <>
                             <div className="opacity-80 text-black dark:text-white">{o.completedCount} / {o.requiredCount}</div>
-                            <Button className="rounded-xl" size="sm" onClick={() => onProgressOccurrence(o.id, 1)} disabled={(o.completedCount || 0) >= (o.requiredCount || 1)}>{t('gardenDashboard.routineSection.completePlus1')}</Button>
+                            <Button 
+                              className="rounded-xl" 
+                              size="sm" 
+                              onClick={() => onProgressOccurrence(o.id, 1)} 
+                              disabled={(o.completedCount || 0) >= (o.requiredCount || 1) || progressingOccIds.has(o.id)}
+                            >
+                              {progressingOccIds.has(o.id) ? (
+                                <span className="animate-spin">⏳</span>
+                              ) : (
+                                t('gardenDashboard.routineSection.completePlus1')
+                              )}
+                            </Button>
                           </>
                         ) : (
                           <div className="text-xs opacity-70 truncate max-w-[50%] text-black dark:text-white">
