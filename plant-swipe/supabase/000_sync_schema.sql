@@ -2988,6 +2988,49 @@ CREATE TABLE IF NOT EXISTS garden_task_weekly_cache (
   UNIQUE(garden_id, week_start_date)
 );
 
+-- Ensure legacy deployments have uniqueness and no duplicate weekly cache rows
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.tables
+    WHERE table_schema = 'public'
+      AND table_name = 'garden_task_weekly_cache'
+  ) THEN
+    DELETE FROM garden_task_weekly_cache AS gtwc
+    USING (
+      SELECT id
+      FROM (
+        SELECT id,
+               ROW_NUMBER() OVER (
+                 PARTITION BY garden_id, week_start_date
+                 ORDER BY updated_at DESC, created_at DESC, id DESC
+               ) AS rn
+        FROM garden_task_weekly_cache
+      ) ranked
+      WHERE ranked.rn > 1
+    ) dup
+    WHERE gtwc.id = dup.id;
+
+    IF NOT EXISTS (
+      SELECT 1
+      FROM information_schema.table_constraints tc
+      JOIN information_schema.key_column_usage kcu
+        ON tc.constraint_name = kcu.constraint_name
+       AND tc.table_schema = kcu.table_schema
+      WHERE tc.table_schema = 'public'
+        AND tc.table_name = 'garden_task_weekly_cache'
+        AND tc.constraint_type IN ('UNIQUE', 'PRIMARY KEY')
+      GROUP BY tc.constraint_name
+      HAVING string_agg(kcu.column_name, ',' ORDER BY kcu.ordinal_position) = 'garden_id,week_start_date'
+    ) THEN
+      ALTER TABLE garden_task_weekly_cache
+        ADD CONSTRAINT garden_task_weekly_cache_garden_id_week_start_date_key
+        UNIQUE (garden_id, week_start_date);
+    END IF;
+  END IF;
+END $$;
+
 -- Cache table for task counts per plant
 CREATE TABLE IF NOT EXISTS garden_plant_task_counts_cache (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
