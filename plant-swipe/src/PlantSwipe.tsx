@@ -512,16 +512,18 @@ export default function PlantSwipe() {
                   }}
                 />
               </div>
-              <div className="mt-2">
-                <Button
-                  variant="secondary"
-                  className="w-full rounded-2xl"
-                  onClick={() => setRequestPlantDialogOpen(true)}
-                >
-                  <MessageSquarePlus className="h-4 w-4 mr-2" />
-                  {t('requestPlant.button') || 'Request Plant'}
-                </Button>
-              </div>
+              {user && (
+                <div className="mt-2">
+                  <Button
+                    variant="secondary"
+                    className="w-full rounded-2xl"
+                    onClick={() => setRequestPlantDialogOpen(true)}
+                  >
+                    <MessageSquarePlus className="h-4 w-4 mr-2" />
+                    {t('requestPlant.button') || 'Request Plant'}
+                  </Button>
+                </div>
+              )}
             </div>
 
             {/* Seasons */}
