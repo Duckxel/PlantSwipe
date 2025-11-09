@@ -26,13 +26,13 @@
     "update": "Update",
     "result": "result",
     "results": "results",
-    "allRightsReserved": "All rights reserved"
-  },
-  "footer": {
-    "about": "About",
-    "blog": "Blog",
-    "contactUs": "Contact Us",
-    "termsOfServices": "Terms of Services"
+    "allRightsReserved": "All rights reserved",
+    "footer": {
+      "about": "About",
+      "blog": "Blog",
+      "contactUs": "Contact Us",
+      "termsOfServices": "Terms of Services"
+    }
   },
   "auth": {
     "login": "Log in",
