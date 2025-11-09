@@ -65,11 +65,50 @@ export default function ContactUsPage() {
   };
 
   const handleEmailCopy = async () => {
+    const email = SUPPORT_EMAIL;
+
+    const fallbackCopy = () => {
+      const textarea = document.createElement("textarea");
+      textarea.value = email;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.left = "-9999px";
+      textarea.style.top = "0";
+      document.body.appendChild(textarea);
+
+      const selection = window.getSelection();
+      const selectedRange =
+        selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+
+      let successful = false;
+      try {
+        textarea.focus();
+        textarea.select();
+        successful = document.execCommand("copy");
+      } catch {
+        successful = false;
+      } finally {
+        document.body.removeChild(textarea);
+        if (selectedRange && selection) {
+          selection.removeAllRanges();
+          selection.addRange(selectedRange);
+        }
+      }
+
+      return successful;
+    };
+
     try {
-      await navigator.clipboard.writeText(SUPPORT_EMAIL);
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(email);
+      } else if (!fallbackCopy()) {
+        throw new Error("Clipboard API unavailable");
+      }
       // You could add a toast notification here if needed
     } catch (err) {
-      console.error("Failed to copy email:", err);
+      if (!fallbackCopy()) {
+        console.error("Failed to copy email:", err);
+      }
     }
   };
 
