@@ -285,13 +285,69 @@ create table if not exists public.requested_plants (
   updated_at timestamptz not null default now()
 );
 
+-- Ensure columns exist for existing deployments
+alter table if exists public.requested_plants add column if not exists plant_name text;
+alter table if exists public.requested_plants add column if not exists requested_by uuid references auth.users(id) on delete cascade;
+alter table if exists public.requested_plants add column if not exists request_count integer not null default 1;
+alter table if exists public.requested_plants add column if not exists created_at timestamptz not null default now();
+alter table if exists public.requested_plants add column if not exists updated_at timestamptz not null default now();
+
+-- Add constraints if they don't exist
+do $$ begin
+  -- Add check constraint for request_count
+  if not exists (
+    select 1 from pg_constraint 
+    where conname = 'requested_plants_request_count_check'
+  ) then
+    alter table public.requested_plants 
+      add constraint requested_plants_request_count_check 
+      check (request_count > 0);
+  end if;
+  
+  -- Add foreign key constraint if it doesn't exist
+  if not exists (
+    select 1 from pg_constraint 
+    where conname = 'requested_plants_requested_by_fkey'
+  ) then
+    alter table public.requested_plants 
+      add constraint requested_plants_requested_by_fkey 
+      foreign key (requested_by) references auth.users(id) on delete cascade;
+  end if;
+end $$;
+
 -- Index for faster lookups by plant name (case-insensitive)
 create index if not exists requested_plants_plant_name_idx on public.requested_plants(lower(plant_name));
 create index if not exists requested_plants_requested_by_idx on public.requested_plants(requested_by);
 create index if not exists requested_plants_created_at_idx on public.requested_plants(created_at desc);
 
+-- Trigger function to automatically update updated_at timestamp
+create or replace function update_requested_plants_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+-- Create trigger to update updated_at on row update
+drop trigger if exists update_requested_plants_updated_at_trigger on public.requested_plants;
+create trigger update_requested_plants_updated_at_trigger
+  before update on public.requested_plants
+  for each row
+  execute function update_requested_plants_updated_at();
+
 -- RLS policies for requested_plants
 alter table public.requested_plants enable row level security;
+
+-- Add table comment for documentation
+comment on table public.requested_plants is 'Stores user requests for plants to be added to the encyclopedia. Similar requests increment the count instead of creating duplicates.';
+comment on column public.requested_plants.plant_name is 'Normalized (lowercase) plant name requested by users';
+comment on column public.requested_plants.requested_by is 'User ID of the person who made the request';
+comment on column public.requested_plants.request_count is 'Number of times this plant has been requested (incremented for similar names)';
+comment on column public.requested_plants.created_at is 'Timestamp when the first request for this plant was created';
+comment on column public.requested_plants.updated_at is 'Timestamp when the request count was last updated';
 
 do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='requested_plants' and policyname='requested_plants_select_all') then
