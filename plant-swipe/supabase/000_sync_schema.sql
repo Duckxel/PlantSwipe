@@ -522,28 +522,19 @@ begin
   ) then
     with inventory_duplicates as (
       select id
-        from (
-          select id,
-                 row_number() over (
-                   partition by garden_id, plant_id
-                   order by id desc
-                 ) as rn
-          from public.garden_inventory
-        ) ranked
+      from (
+        select id,
+               row_number() over (
+                 partition by garden_id, plant_id
+                 order by id desc
+               ) as rn
+        from public.garden_inventory
+      ) ranked
       where ranked.rn > 1
     )
     delete from public.garden_inventory gi
     using inventory_duplicates dup
     where gi.id = dup.id;
-
-    begin
-      alter table public.garden_inventory
-        add constraint garden_inventory_garden_id_plant_id_key
-        unique (garden_id, plant_id);
-    exception
-      when duplicate_object or duplicate_table then
-        null;
-    end;
   end if;
 end $$;
 
@@ -565,28 +556,19 @@ begin
   ) then
     with instance_duplicates as (
       select id
-        from (
-          select id,
-                 row_number() over (
-                   partition by garden_plant_id
-                   order by id desc
-                 ) as rn
-          from public.garden_instance_inventory
-        ) ranked
+      from (
+        select id,
+               row_number() over (
+                 partition by garden_plant_id
+                 order by id desc
+               ) as rn
+        from public.garden_instance_inventory
+      ) ranked
       where ranked.rn > 1
     )
     delete from public.garden_instance_inventory gii
     using instance_duplicates dup
     where gii.id = dup.id;
-
-    begin
-      alter table public.garden_instance_inventory
-        add constraint garden_instance_inventory_garden_plant_id_key
-        unique (garden_plant_id);
-    exception
-      when duplicate_object or duplicate_table then
-        null;
-    end;
   end if;
 end $$;
 
@@ -634,15 +616,6 @@ begin
     delete from public.garden_tasks gt
     using task_duplicates dup
     where gt.id = dup.id;
-
-    begin
-      alter table public.garden_tasks
-        add constraint garden_tasks_garden_id_day_task_type_key
-        unique (garden_id, day, task_type);
-    exception
-      when duplicate_object or duplicate_table then
-        null;
-    end;
   end if;
 end $$;
 
@@ -2847,14 +2820,6 @@ begin
     using friend_request_duplicates dup
     where fr.id = dup.id;
 
-    begin
-      alter table public.friend_requests
-        add constraint friend_requests_requester_id_recipient_id_key
-        unique (requester_id, recipient_id);
-    exception
-      when duplicate_object or duplicate_table then
-        null;
-    end;
   end if;
 end $$;
 
@@ -2890,14 +2855,6 @@ begin
     using friend_duplicates dup
     where f.id = dup.id;
 
-    begin
-      alter table public.friends
-        add constraint friends_user_id_friend_id_key
-        unique (user_id, friend_id);
-    exception
-      when duplicate_object or duplicate_table then
-        null;
-    end;
   end if;
 end $$;
 
@@ -3155,15 +3112,16 @@ BEGIN
     USING daily_duplicates dup
     WHERE gtdc.id = dup.id;
 
-    BEGIN
+    IF NOT EXISTS (
+      SELECT 1
+      FROM pg_constraint
+      WHERE conname = 'garden_task_daily_cache_garden_id_cache_date_key'
+        AND conrelid = 'garden_task_daily_cache'::regclass
+    ) THEN
       ALTER TABLE garden_task_daily_cache
         ADD CONSTRAINT garden_task_daily_cache_garden_id_cache_date_key
         UNIQUE (garden_id, cache_date);
-    EXCEPTION WHEN duplicate_object THEN
-      NULL;
-    EXCEPTION WHEN duplicate_table THEN
-      NULL;
-    END;
+    END IF;
 
     IF NOT EXISTS (
       SELECT 1 FROM information_schema.columns
@@ -3227,15 +3185,16 @@ BEGIN
     USING weekly_duplicates dup
     WHERE gtwc.id = dup.id;
 
-    BEGIN
+    IF NOT EXISTS (
+      SELECT 1
+      FROM pg_constraint
+      WHERE conname = 'garden_task_weekly_cache_garden_id_week_start_date_key'
+        AND conrelid = 'garden_task_weekly_cache'::regclass
+    ) THEN
       ALTER TABLE garden_task_weekly_cache
         ADD CONSTRAINT garden_task_weekly_cache_garden_id_week_start_date_key
         UNIQUE (garden_id, week_start_date);
-    EXCEPTION WHEN duplicate_object THEN
-      NULL;
-    EXCEPTION WHEN duplicate_table THEN
-      NULL;
-    END;
+    END IF;
   END IF;
 END $$;
 
