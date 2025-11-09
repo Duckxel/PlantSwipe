@@ -2958,6 +2958,27 @@ CREATE TABLE IF NOT EXISTS garden_task_daily_cache (
   UNIQUE(garden_id, cache_date)
 );
 
+-- Ensure legacy deployments have no duplicate daily cache rows
+WITH daily_duplicates AS (
+  SELECT id
+  FROM (
+    SELECT id,
+           ROW_NUMBER() OVER (
+             PARTITION BY garden_id, cache_date
+             ORDER BY updated_at DESC, created_at DESC, id DESC
+           ) AS rn
+    FROM garden_task_daily_cache
+  ) ranked
+  WHERE ranked.rn > 1
+)
+DELETE FROM garden_task_daily_cache gtdc
+USING daily_duplicates dup
+WHERE gtdc.id = dup.id;
+
+-- Ensure uniqueness for daily cache rows on legacy deployments
+CREATE UNIQUE INDEX IF NOT EXISTS garden_task_daily_cache_garden_id_cache_date_key
+  ON garden_task_daily_cache (garden_id, cache_date);
+
 -- Add new columns if table already exists (for existing deployments)
 DO $$
 BEGIN
@@ -3087,18 +3108,13 @@ BEGIN
   _has_remaining_tasks := (_due_count > 0 AND _completed_count < _due_count);
   _all_tasks_done := (_due_count = 0 OR _completed_count >= _due_count);
   
-  -- Upsert cache
+  -- Replace existing cache row
+  DELETE FROM garden_task_daily_cache
+  WHERE garden_id = _garden_id
+    AND cache_date = _cache_date;
+
   INSERT INTO garden_task_daily_cache (garden_id, cache_date, due_count, completed_count, task_count, occurrence_count, has_remaining_tasks, all_tasks_done, updated_at)
-  VALUES (_garden_id, _cache_date, _due_count, _completed_count, _task_count, _occurrence_count, _has_remaining_tasks, _all_tasks_done, now())
-  ON CONFLICT (garden_id, cache_date)
-  DO UPDATE SET
-    due_count = EXCLUDED.due_count,
-    completed_count = EXCLUDED.completed_count,
-    task_count = EXCLUDED.task_count,
-    occurrence_count = EXCLUDED.occurrence_count,
-    has_remaining_tasks = EXCLUDED.has_remaining_tasks,
-    all_tasks_done = EXCLUDED.all_tasks_done,
-    updated_at = now();
+  VALUES (_garden_id, _cache_date, _due_count, _completed_count, _task_count, _occurrence_count, _has_remaining_tasks, _all_tasks_done, now());
 END;
 $$;
 
@@ -3645,6 +3661,27 @@ CREATE TABLE IF NOT EXISTS user_task_daily_cache (
   UNIQUE(user_id, cache_date)
 );
 
+-- Ensure legacy deployments have no duplicate user cache rows
+WITH user_duplicates AS (
+  SELECT id
+  FROM (
+    SELECT id,
+           ROW_NUMBER() OVER (
+             PARTITION BY user_id, cache_date
+             ORDER BY updated_at DESC, created_at DESC, id DESC
+           ) AS rn
+    FROM user_task_daily_cache
+  ) ranked
+  WHERE ranked.rn > 1
+)
+DELETE FROM user_task_daily_cache utdc
+USING user_duplicates dup
+WHERE utdc.id = dup.id;
+
+-- Ensure uniqueness for user cache rows on legacy deployments
+CREATE UNIQUE INDEX IF NOT EXISTS user_task_daily_cache_user_id_cache_date_key
+  ON user_task_daily_cache (user_id, cache_date);
+
 -- Index for fast lookups
 CREATE INDEX IF NOT EXISTS idx_user_task_daily_cache_user_date ON user_task_daily_cache(user_id, cache_date DESC);
 
@@ -3679,7 +3716,11 @@ BEGIN
   WHERE gm.user_id = _user_id
     AND c.cache_date = _cache_date;
   
-  -- Upsert cache entry
+  -- Replace existing cache entry
+  DELETE FROM user_task_daily_cache
+  WHERE user_id = _user_id
+    AND cache_date = _cache_date;
+
   INSERT INTO user_task_daily_cache (
     user_id,
     cache_date,
@@ -3697,14 +3738,7 @@ BEGIN
     _gardens_with_remaining,
     _total_gardens,
     now()
-  )
-  ON CONFLICT (user_id, cache_date)
-  DO UPDATE SET
-    total_due_count = EXCLUDED.total_due_count,
-    total_completed_count = EXCLUDED.total_completed_count,
-    gardens_with_remaining_tasks = EXCLUDED.gardens_with_remaining_tasks,
-    total_gardens = EXCLUDED.total_gardens,
-    updated_at = EXCLUDED.updated_at;
+  );
 END;
 $$;
 
