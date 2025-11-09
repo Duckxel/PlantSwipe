@@ -514,7 +514,7 @@ export const FriendsPage: React.FC = () => {
       <div className="max-w-3xl mx-auto mt-8 px-4 md:px-0">
         <Card className="rounded-3xl">
           <CardContent className="p-6 md:p-8 text-center">
-            <p className="text-sm opacity-60">{t('friends.pleaseLogin')}</p>
+            <p className="text-sm opacity-60 text-black dark:text-white">{t('friends.pleaseLogin')}</p>
           </CardContent>
         </Card>
       </div>
@@ -537,22 +537,22 @@ export const FriendsPage: React.FC = () => {
         {pendingRequests.length > 0 && (
           <Card className="rounded-3xl w-full lg:w-[300px] lg:flex-shrink-0 order-1 lg:order-1 h-full">
             <CardContent className="p-6 md:p-8 space-y-4 h-full flex flex-col">
-              <div className="text-xl font-semibold">{t('friends.pendingInvitations')}</div>
+              <div className="text-xl font-semibold text-black dark:text-white">{t('friends.pendingInvitations')}</div>
               <div className="space-y-2">
                 {pendingRequests.map((request) => (
                   <div
                     key={request.id}
-                    className="flex items-center justify-between p-3 rounded-xl border bg-white"
+                    className="flex items-center justify-between p-3 rounded-xl border bg-white dark:bg-[#252526] dark:border-[#3e3e42]"
                   >
                     <div className="flex flex-col gap-1 flex-1">
                       <div className="flex items-center gap-2">
-                        <User className="h-5 w-5 opacity-60" />
-                        <span className="font-medium">
+                        <User className="h-5 w-5 opacity-60 text-black dark:text-white" />
+                        <span className="font-medium text-black dark:text-white">
                           {request.requester_profile?.display_name || t('friends.unknown')}
                         </span>
                       </div>
                       {request.requester_profile?.email && (
-                        <div className="text-xs opacity-60 pl-7">
+                        <div className="text-xs opacity-60 pl-7 text-black dark:text-white">
                           {request.requester_profile.email}
                         </div>
                       )}
@@ -593,11 +593,11 @@ export const FriendsPage: React.FC = () => {
         )}
         
         {/* Friends List Card - Middle */}
-        <Card className="rounded-3xl w-full lg:max-w-2xl lg:mx-auto order-2 lg:order-2 h-full">
+        <Card className="rounded-3xl w-full order-2 lg:order-2 h-full">
           <CardContent className="p-6 md:p-8 space-y-6 h-full flex flex-col">
             {/* Title and Add Friend Button */}
             <div className="flex items-center justify-between">
-              <div className="text-2xl font-semibold">{t('friends.title')}</div>
+              <div className="text-2xl font-semibold text-black dark:text-white">{t('friends.title')}</div>
               <Button
                 className="rounded-xl"
                 variant="default"
@@ -612,18 +612,18 @@ export const FriendsPage: React.FC = () => {
             </div>
             
             {error && (
-              <div className="text-sm text-red-600 bg-red-50 p-3 rounded-xl">{error}</div>
+              <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-3 rounded-xl border border-red-200 dark:border-red-800">{error}</div>
             )}
 
             {/* Friends list */}
             <div className="space-y-2">
-              <div className="text-sm font-medium">
+              <div className="text-sm font-medium text-black dark:text-white">
                 {t('friends.yourFriends')} ({friends.length})
               </div>
               {loading ? (
-                <div className="text-xs opacity-60">{t('common.loading')}</div>
+                <div className="text-xs opacity-60 text-black dark:text-white">{t('common.loading')}</div>
               ) : friends.length === 0 ? (
-                <div className="text-xs opacity-60 p-4 rounded-xl border text-center">
+                <div className="text-xs opacity-60 p-4 rounded-xl border text-center bg-white dark:bg-[#252526] dark:border-[#3e3e42] text-black dark:text-white">
                   {t('friends.noFriendsYet')}
                 </div>
               ) : (
@@ -631,17 +631,17 @@ export const FriendsPage: React.FC = () => {
                   {friends.map((friend) => (
                     <div
                       key={friend.id}
-                      className="flex items-center justify-between p-3 rounded-xl border bg-white"
+                      className="flex items-center justify-between p-3 rounded-xl border bg-white dark:bg-[#252526] dark:border-[#3e3e42]"
                     >
                       <div className="flex flex-col gap-1 flex-1">
                         <div className="flex items-center gap-2">
-                          <User className="h-5 w-5 opacity-60" />
-                          <span className="font-medium">
+                          <User className="h-5 w-5 opacity-60 text-black dark:text-white" />
+                          <span className="font-medium text-black dark:text-white">
                             {friend.friend_profile?.display_name || t('friends.unknown')}
                           </span>
                         </div>
                         {friend.friend_profile?.email && (
-                          <div className="text-xs opacity-60 pl-7">
+                          <div className="text-xs opacity-60 pl-7 text-black dark:text-white">
                             {friend.friend_profile.email}
                           </div>
                         )}
@@ -675,23 +675,23 @@ export const FriendsPage: React.FC = () => {
                           {menuOpenFriendId === friend.id && menuPos && createPortal(
                             <div 
                               ref={(el) => { if (el) menuRefs.current.set(friend.id, el) }}
-                              className="w-40 rounded-xl border bg-white shadow z-[60] p-1" 
+                              className="w-40 rounded-xl border bg-white dark:bg-[#252526] dark:border-[#3e3e42] shadow z-[60] p-1" 
                               style={{ position: 'fixed', top: menuPos.top, right: menuPos.right }}
                             >
                               {confirmingRemove === friend.id ? (
                                 <>
-                                  <div className="px-3 py-2 text-xs text-red-600 mb-1">
+                                  <div className="px-3 py-2 text-xs text-red-600 dark:text-red-400 mb-1">
                                     {t('friends.removeFriend')} {friend.friend_profile?.display_name || t('friends.unknown')}?
                                   </div>
                                   <div className="flex gap-1">
                                     <button 
-                                      className="flex-1 px-2 py-1.5 rounded-lg hover:bg-red-50 text-red-600 text-xs font-medium"
+                                      className="flex-1 px-2 py-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 text-xs font-medium"
                                       onMouseDown={(e) => { e.stopPropagation(); removeFriend(friend.friend_id) }}
                                     >
                                       {t('common.confirm')}
                                     </button>
                                     <button 
-                                      className="flex-1 px-2 py-1.5 rounded-lg hover:bg-stone-50 text-xs"
+                                      className="flex-1 px-2 py-1.5 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-xs text-black dark:text-white"
                                       onMouseDown={(e) => { e.stopPropagation(); setConfirmingRemove(null); setMenuOpenFriendId(null) }}
                                     >
                                       {t('common.cancel')}
@@ -700,7 +700,7 @@ export const FriendsPage: React.FC = () => {
                                 </>
                               ) : (
                                 <button 
-                                  className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 text-red-600"
+                                  className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-red-600 dark:text-red-400"
                                   onMouseDown={(e) => { e.stopPropagation(); setConfirmingRemove(friend.id) }}
                                 >
                                   {t('friends.removeFriend')}
@@ -723,22 +723,22 @@ export const FriendsPage: React.FC = () => {
         {sentPendingRequests.length > 0 && (
           <Card className="rounded-3xl w-full lg:w-[300px] lg:flex-shrink-0 order-3 lg:order-3 h-full">
             <CardContent className="p-6 md:p-8 space-y-4 h-full flex flex-col">
-              <div className="text-xl font-semibold">{t('friends.sentRequests')}</div>
+              <div className="text-xl font-semibold text-black dark:text-white">{t('friends.sentRequests')}</div>
               <div className="space-y-2">
                 {sentPendingRequests.map((request) => (
                   <div
                     key={request.id}
-                    className="flex items-center justify-between p-3 rounded-xl border bg-white"
+                    className="flex items-center justify-between p-3 rounded-xl border bg-white dark:bg-[#252526] dark:border-[#3e3e42]"
                   >
                     <div className="flex flex-col gap-1 flex-1">
                       <div className="flex items-center gap-2">
-                        <User className="h-5 w-5 opacity-60" />
-                        <span className="font-medium">
+                        <User className="h-5 w-5 opacity-60 text-black dark:text-white" />
+                        <span className="font-medium text-black dark:text-white">
                           {request.recipient_profile?.display_name || t('friends.unknown')}
                         </span>
                       </div>
                       {request.recipient_profile?.email && (
-                        <div className="text-xs opacity-60 pl-7">
+                        <div className="text-xs opacity-60 pl-7 text-black dark:text-white">
                           {request.recipient_profile.email}
                         </div>
                       )}
@@ -796,21 +796,21 @@ export const FriendsPage: React.FC = () => {
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDialogSearchQuery(e.target.value)}
               />
             </div>
-            {dialogSearching && <div className="text-xs opacity-60">{t('friends.addFriendDialog.searching')}</div>}
+            {dialogSearching && <div className="text-xs opacity-60 text-black dark:text-white">{t('friends.addFriendDialog.searching')}</div>}
             {dialogSearchResults.length > 0 && (
               <div className="space-y-2">
                 {dialogSearchResults.map((result) => (
                   <div
                     key={result.id}
-                    className="flex items-center justify-between p-3 rounded-xl border bg-white"
+                    className="flex items-center justify-between p-3 rounded-xl border bg-white dark:bg-[#252526] dark:border-[#3e3e42]"
                   >
                     <div className="flex flex-col gap-1 flex-1">
                       <div className="flex items-center gap-2">
-                        <User className="h-5 w-5 opacity-60" />
-                        <span className="font-medium">{result.display_name || t('friends.unknown')}</span>
+                        <User className="h-5 w-5 opacity-60 text-black dark:text-white" />
+                        <span className="font-medium text-black dark:text-white">{result.display_name || t('friends.unknown')}</span>
                       </div>
                       {result.email && (
-                        <div className="text-xs opacity-60 pl-7">{result.email}</div>
+                        <div className="text-xs opacity-60 pl-7 text-black dark:text-white">{result.email}</div>
                       )}
                     </div>
                     <Button
@@ -839,7 +839,7 @@ export const FriendsPage: React.FC = () => {
               </div>
             )}
             {dialogSearchQuery && !dialogSearching && dialogSearchResults.length === 0 && (
-              <div className="text-xs opacity-60 text-center py-4">{t('friends.addFriendDialog.noUsersFound')}</div>
+              <div className="text-xs opacity-60 text-center py-4 text-black dark:text-white">{t('friends.addFriendDialog.noUsersFound')}</div>
             )}
           </div>
         </DialogContent>

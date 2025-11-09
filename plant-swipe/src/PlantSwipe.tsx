@@ -25,6 +25,7 @@ import type { Plant } from "@/types/plant";
 // PlantDetails imported in PlantInfoPage route component
 import PlantInfoPage from "@/pages/PlantInfoPage";
 import { useAuth } from "@/context/AuthContext";
+import { AuthActionsProvider } from "@/context/AuthActionsContext";
 import PublicProfilePage from "@/pages/PublicProfilePage";
 import RequireAdmin from "@/pages/RequireAdmin";
 import { FriendsPage } from "@/pages/FriendsPage";
@@ -405,8 +406,8 @@ export default function PlantSwipe() {
     })
   }
 
-  const openLogin = () => { setAuthMode("login"); setAuthOpen(true) }
-  const openSignup = () => { setAuthMode("signup"); setAuthOpen(true) }
+  const openLogin = React.useCallback(() => { setAuthMode("login"); setAuthOpen(true) }, [])
+  const openSignup = React.useCallback(() => { setAuthMode("signup"); setAuthOpen(true) }, [])
 
   const submitAuth = async () => {
     if (authSubmitting) return
@@ -456,6 +457,7 @@ export default function PlantSwipe() {
   }, [user])
 
   return (
+    <AuthActionsProvider openLogin={openLogin} openSignup={openSignup}>
     <div className="min-h-screen w-full bg-gradient-to-b from-stone-100 to-stone-200 dark:from-[#252526] dark:to-[#1e1e1e] p-4 pb-24 md:p-8 md:pb-8 overflow-x-hidden">
   <TopBar
     openLogin={openLogin}
@@ -742,6 +744,7 @@ export default function PlantSwipe() {
       <BottomBar />
       <BroadcastToast />
     </div>
+    </AuthActionsProvider>
   )
 }
 
