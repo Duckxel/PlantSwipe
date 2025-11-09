@@ -541,7 +541,7 @@ begin
         add constraint garden_inventory_garden_id_plant_id_key
         unique (garden_id, plant_id);
     exception
-      when duplicate_object then
+      when duplicate_object or duplicate_table then
         null;
     end;
   end if;
@@ -584,7 +584,7 @@ begin
         add constraint garden_instance_inventory_garden_plant_id_key
         unique (garden_plant_id);
     exception
-      when duplicate_object then
+      when duplicate_object or duplicate_table then
         null;
     end;
   end if;
@@ -640,7 +640,7 @@ begin
         add constraint garden_tasks_garden_id_day_task_type_key
         unique (garden_id, day, task_type);
     exception
-      when duplicate_object then
+      when duplicate_object or duplicate_table then
         null;
     end;
   end if;
@@ -2852,7 +2852,7 @@ begin
         add constraint friend_requests_requester_id_recipient_id_key
         unique (requester_id, recipient_id);
     exception
-      when duplicate_object then
+      when duplicate_object or duplicate_table then
         null;
     end;
   end if;
@@ -2895,7 +2895,7 @@ begin
         add constraint friends_user_id_friend_id_key
         unique (user_id, friend_id);
     exception
-      when duplicate_object then
+      when duplicate_object or duplicate_table then
         null;
     end;
   end if;
@@ -3161,6 +3161,8 @@ BEGIN
         UNIQUE (garden_id, cache_date);
     EXCEPTION WHEN duplicate_object THEN
       NULL;
+    EXCEPTION WHEN duplicate_table THEN
+      NULL;
     END;
 
     IF NOT EXISTS (
@@ -3230,6 +3232,8 @@ BEGIN
         ADD CONSTRAINT garden_task_weekly_cache_garden_id_week_start_date_key
         UNIQUE (garden_id, week_start_date);
     EXCEPTION WHEN duplicate_object THEN
+      NULL;
+    EXCEPTION WHEN duplicate_table THEN
       NULL;
     END;
   END IF;
