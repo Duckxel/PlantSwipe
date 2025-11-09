@@ -118,3 +118,94 @@ export const OverviewSectionSkeleton: React.FC = () => {
     </div>
   )
 }
+
+// Skeleton for Profile Page Stat Card
+const ProfileStatCardSkeleton: React.FC = () => {
+  return (
+    <div className="rounded-xl border p-4 text-center min-w-[120px]">
+      <div className="flex items-center justify-center gap-1.5 mb-2">
+        <Skeleton className="h-5 w-5 rounded" />
+        <Skeleton className="h-3 w-20" />
+      </div>
+      <Skeleton className="h-6 w-12 mx-auto" />
+    </div>
+  )
+}
+
+// Skeleton for Profile Page
+export const ProfilePageSkeleton: React.FC = () => {
+  return (
+    <div className="max-w-5xl mx-auto mt-8 px-4 md:px-0 space-y-4">
+      {/* Main profile card skeleton */}
+      <Card className="rounded-3xl">
+        <div className="p-6 md:p-8 space-y-4">
+          <div className="flex items-start gap-4">
+            {/* Avatar skeleton */}
+            <Skeleton className="h-16 w-16 rounded-2xl flex-shrink-0" />
+            
+            <div className="flex-1 min-w-0">
+              {/* Name and badge skeleton */}
+              <div className="flex items-center gap-2 mb-2">
+                <Skeleton className="h-7 w-48" />
+                <Skeleton className="h-5 w-16 rounded-full" />
+              </div>
+              
+              {/* Location skeleton */}
+              <div className="flex items-center gap-1 mb-1">
+                <Skeleton className="h-4 w-4 rounded" />
+                <Skeleton className="h-4 w-24" />
+              </div>
+              
+              {/* Status and joined date skeleton */}
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-3 w-20" />
+                <Skeleton className="h-3 w-32" />
+              </div>
+            </div>
+            
+            {/* Action button skeleton */}
+            <div className="ml-auto">
+              <Skeleton className="h-10 w-32 rounded-2xl" />
+            </div>
+          </div>
+          
+          {/* Bio skeleton */}
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-3/4" />
+        </div>
+      </Card>
+
+      {/* Highlights card skeleton */}
+      <Card className="rounded-3xl">
+        <div className="p-6 md:p-8 space-y-4">
+          {/* Title skeleton */}
+          <Skeleton className="h-6 w-32" />
+          
+          <div className="flex flex-col md:flex-row items-center justify-center gap-0">
+            {/* Heatmap skeleton - left side */}
+            <div className="flex-1 flex justify-center items-center">
+              <div className="grid grid-rows-4 grid-flow-col auto-cols-max gap-1.5 sm:gap-2">
+                {Array.from({ length: 28 }).map((_, idx) => (
+                  <Skeleton key={idx} className="h-8 w-8 sm:h-10 sm:w-10 rounded-[4px]" />
+                ))}
+              </div>
+            </div>
+            
+            {/* Divider skeleton */}
+            <div className="hidden md:block w-px h-full min-h-[200px] bg-stone-300 dark:bg-[#3e3e42] mx-2" />
+            
+            {/* Stat cards skeleton - right side, 2x2 grid */}
+            <div className="flex-1 flex justify-center items-center">
+              <div className="grid grid-cols-2 gap-3">
+                <ProfileStatCardSkeleton />
+                <ProfileStatCardSkeleton />
+                <ProfileStatCardSkeleton />
+                <ProfileStatCardSkeleton />
+              </div>
+            </div>
+          </div>
+        </div>
+      </Card>
+    </div>
+  )
+}
