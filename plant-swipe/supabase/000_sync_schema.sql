@@ -719,6 +719,21 @@ do $$ begin
       or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
     );
 end $$;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='garden_task_user_completions' and policyname='gtuc_insert') then
+    drop policy gtuc_insert on public.garden_task_user_completions;
+  end if;
+  create policy gtuc_insert on public.garden_task_user_completions for insert to authenticated
+    with check (
+      exists (
+        select 1 from public.garden_plant_task_occurrences o
+        join public.garden_plant_tasks t on t.id = o.task_id
+        join public.garden_members gm on gm.garden_id = t.garden_id
+        where o.id = occurrence_id and gm.user_id = (select auth.uid())
+      )
+      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+    );
+end $$;
 
 -- ========== RLS ==========
 alter table public.gardens enable row level security;
