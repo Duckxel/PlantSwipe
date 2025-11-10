@@ -1,5 +1,5 @@
 [Unit]
-Description=PlantSwipe Admin API
+Description=APHYLIA Admin API
 After=network.target
 
 [Service]

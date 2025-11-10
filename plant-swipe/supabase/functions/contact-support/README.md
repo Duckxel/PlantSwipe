@@ -1,6 +1,6 @@
 # contact-support Supabase Function
 
-This Edge Function receives contact form submissions from the Plant Swipe application and relays them to `support@aphylia.app` using [Resend](https://resend.com/).
+This Edge Function receives contact form submissions from the APHYLIA application and relays them to `support@aphylia.app` using [Resend](https://resend.com/).
 
 ## Environment variables
 
@@ -10,7 +10,7 @@ Configure the function with your Resend API credentials.
 | --- | --- |
 | `RESEND_API_KEY` | Resend API key (or `SUPABASE_RESEND_API_KEY`) |
 | `RESEND_FROM` | From email address (optional, defaults to `support@aphylia.app`) |
-| `RESEND_FROM_NAME` | Display name for the sender (optional, defaults to `Plant Swipe Contact`) |
+| `RESEND_FROM_NAME` | Display name for the sender (optional, defaults to `APHYLIA Contact`) |
 
 > For backwards compatibility, the function still honours `SMTP_FROM`, `SUPABASE_SMTP_SENDER`, and `SMTP_FROM_NAME` when computing the `from` header if `RESEND_FROM` isn’t set.
 

@@ -47,13 +47,13 @@ export function applyAccentByKey(key: AccentKey) {
 
 export function saveAccentKey(key: AccentKey) {
   try {
-    localStorage.setItem('plantswipe.accent', key)
+    localStorage.setItem('aphylia.accent', key)
   } catch {}
 }
 
 export function getSavedAccentKey(): AccentKey | null {
   try {
-    const v = localStorage.getItem('plantswipe.accent') as AccentKey | null
+    const v = localStorage.getItem('aphylia.accent') as AccentKey | null
     return v && (ACCENT_OPTIONS.some((o) => o.key === v) ? v : null)
   } catch {
     return null

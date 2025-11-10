@@ -10,7 +10,7 @@ type ThemeContextValue = {
 
 const ThemeContext = React.createContext<ThemeContextValue | undefined>(undefined)
 
-const THEME_STORAGE_KEY = 'plantswipe.theme'
+const THEME_STORAGE_KEY = 'aphylia.theme'
 
 // Get system preference
 const getSystemTheme = (): 'light' | 'dark' => {

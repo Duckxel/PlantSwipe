@@ -19,7 +19,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     // Disable URL session detection to avoid any unnecessary waiting on success paths
     detectSessionInUrl: false,
-    storageKey: 'plantswipe.auth',
+    storageKey: 'aphylia.auth',
   },
   realtime: {
     // Reconnect automatically with exponential backoff

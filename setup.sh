@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Idempotent provisioning for PlantSwipe on fresh or existing servers.
+# Idempotent provisioning for APHYLIA on fresh or existing servers.
 # - Reconciles and REPLACES nginx, systemd, and sudoers to a canonical setup
 # - Installs system packages (nginx, python venv, nodejs)
 # - Builds Node app
@@ -63,7 +63,7 @@ else
   NODE_DIR="$REPO_DIR"
 fi
 
-SERVICE_NODE="plant-swipe-node"
+SERVICE_NODE="aphylia-node"
 SERVICE_ADMIN="admin-api"
 SERVICE_NGINX="nginx"
 # Service account that runs Node/Admin services (and git operations)
@@ -623,9 +623,9 @@ if [[ ! -f "$ADMIN_ENV_FILE" ]]; then
 # Change this secret! If blank, only static token auth (if provided) is used.
 ADMIN_BUTTON_SECRET=change-me
 # Which services Admin API may restart (systemd unit names without or with .service)
-ADMIN_ALLOWED_SERVICES=nginx,plant-swipe-node,admin-api
+ADMIN_ALLOWED_SERVICES=nginx,aphylia-node,admin-api
 # Default when /admin/restart-app is called without payload
-ADMIN_DEFAULT_SERVICE=plant-swipe-node
+ADMIN_DEFAULT_SERVICE=aphylia-node
 # Optional: a shared static token to authorize admin actions via X-Admin-Token
 ADMIN_STATIC_TOKEN=
 EOF
@@ -650,7 +650,7 @@ EOF
 NODE_SERVICE_FILE="/etc/systemd/system/$SERVICE_NODE.service"
 $SUDO bash -c "cat > '$NODE_SERVICE_FILE' <<EOF
 [Unit]
-Description=PlantSwipe Node API
+Description=APHYLIA Node API
 Wants=network-online.target
 After=network-online.target
 

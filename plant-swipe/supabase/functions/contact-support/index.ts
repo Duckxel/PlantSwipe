@@ -98,7 +98,7 @@ serve(async (req) => {
   }
 
   const fromAddressRaw = getFirstEnv("RESEND_FROM", "SMTP_FROM", "SUPABASE_SMTP_SENDER") ?? SUPPORT_EMAIL
-  const fromName = getFirstEnv("RESEND_FROM_NAME", "SMTP_FROM_NAME") ?? "Plant Swipe Contact"
+  const fromName = getFirstEnv("RESEND_FROM_NAME", "SMTP_FROM_NAME") ?? "APHYLIA Contact"
 
   const fromAddress = fromAddressRaw.includes("<")
     ? fromAddressRaw

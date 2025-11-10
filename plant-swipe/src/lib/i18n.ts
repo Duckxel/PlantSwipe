@@ -17,7 +17,7 @@ export const DEFAULT_LANGUAGE: SupportedLanguage = 'en'
 function detectInitialLanguage(): SupportedLanguage {
   // Check localStorage first
   try {
-    const saved = localStorage.getItem('plant-swipe-language')
+    const saved = localStorage.getItem('aphylia-language')
     if (saved && SUPPORTED_LANGUAGES.includes(saved as SupportedLanguage)) {
       return saved as SupportedLanguage
     }

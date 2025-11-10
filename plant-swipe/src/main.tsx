@@ -9,7 +9,7 @@ try { initAccentFromStorage() } catch {}
 
 // Apply theme before rendering to avoid flash
 try {
-  const savedTheme = localStorage.getItem('plantswipe.theme') || 'system'
+  const savedTheme = localStorage.getItem('aphylia.theme') || 'system'
   const getSystemTheme = () => {
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
   }

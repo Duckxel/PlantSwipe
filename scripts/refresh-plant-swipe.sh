@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Refresh PlantSwipe deployment: git pull -> npm ci -> build -> reload nginx -> restart services
+# Refresh APHYLIA deployment: git pull -> npm ci -> build -> reload nginx -> restart services
 
 trap 'echo "[ERROR] Command failed at line $LINENO" >&2' ERR
 
 # Determine working directories based on where the command is RUN (caller cwd)
-# Allow explicit override via PLANTSWIPE_REPO_DIR when provided by the caller
-WORK_DIR="${PLANTSWIPE_REPO_DIR:-$(pwd -P)}"
+# Allow explicit override via APHYLIA_REPO_DIR when provided by the caller
+WORK_DIR="${APHYLIA_REPO_DIR:-$(pwd -P)}"
 # Prefer nested plant-swipe app if present; otherwise use current dir as Node app
 if [[ -f "$WORK_DIR/plant-swipe/package.json" ]]; then
   NODE_DIR="$WORK_DIR/plant-swipe"
@@ -20,7 +20,7 @@ fi
 GIT_SAFE_DIR="$WORK_DIR"
 
 # Fixed service names
-SERVICE_NODE="plant-swipe-node"
+SERVICE_NODE="aphylia-node"
 SERVICE_ADMIN="admin-api"
 SERVICE_NGINX="nginx"
 
@@ -72,7 +72,7 @@ if [[ $EUID -ne 0 ]]; then
   if [[ -n "${PSSWORD_KEY:-}" && -n "$(command -v sudo 2>/dev/null)" ]]; then
     # Create a secure askpass helper that echoes the password on request.
     # Embed the resolved password directly to avoid env-sanitization issues.
-    ASKPASS_HELPER="$(mktemp -t plantswipe-askpass.XXXXXX)"
+    ASKPASS_HELPER="$(mktemp -t aphylia-askpass.XXXXXX)"
     chmod 0700 "$ASKPASS_HELPER"
     cat >"$ASKPASS_HELPER" <<EOF
 #!/usr/bin/env bash
@@ -139,7 +139,7 @@ attempt_git_permission_repair() {
 
 # Determine repository owner and, when running as root, run git as owner
 # Allow explicit override to force operations as a specific user (e.g., www-data)
-REPO_OWNER="${PLANTSWIPE_REPO_OWNER:-$(stat -c '%U' "$WORK_DIR/.git" 2>/dev/null || stat -c '%U' "$WORK_DIR" 2>/dev/null || echo root)}"
+REPO_OWNER="${APHYLIA_REPO_OWNER:-$(stat -c '%U' "$WORK_DIR/.git" 2>/dev/null || stat -c '%U' "$WORK_DIR" 2>/dev/null || echo root)}"
 RUN_AS_PREFIX=()
 CURRENT_USER="$(id -un 2>/dev/null || echo "")"
 if [[ -n "$(command -v sudo 2>/dev/null)" && -n "$REPO_OWNER" && "$REPO_OWNER" != "$CURRENT_USER" ]]; then
@@ -182,10 +182,10 @@ case "${SKIP_SERVICE_RESTARTS:-}" in
 esac
 
 # Control behavior when the current branch has no valid upstream
-# - PLANTSWIPE_DISABLE_DEFAULT_BRANCH_FALLBACK=true|1 to stay on the current branch
+# - APHYLIA_DISABLE_DEFAULT_BRANCH_FALLBACK=true|1 to stay on the current branch
 #   instead of switching to a default branch (e.g., main) when upstream is missing
 DISABLE_DEFAULT_FALLBACK=false
-case "${PLANTSWIPE_DISABLE_DEFAULT_BRANCH_FALLBACK:-}" in
+case "${APHYLIA_DISABLE_DEFAULT_BRANCH_FALLBACK:-}" in
   1|true|TRUE|yes|YES)
     DISABLE_DEFAULT_FALLBACK=true
     ;;
@@ -297,7 +297,7 @@ if ! "${GIT_LOCAL_CMD[@]}" fetch --all --prune; then
 fi
 
 # Optionally switch to a requested target branch before pulling
-TARGET_BRANCH="${PLANTSWIPE_TARGET_BRANCH:-}"
+TARGET_BRANCH="${APHYLIA_TARGET_BRANCH:-}"
 if [[ -n "$TARGET_BRANCH" && "$TARGET_BRANCH" != "$BRANCH_NAME" ]]; then
   log "Target branch requested: $TARGET_BRANCH (current: $BRANCH_NAME)"
   # If local branch already exists, try checking it out
@@ -340,7 +340,7 @@ if [[ -n "$TARGET_BRANCH" && "$TARGET_BRANCH" != "$BRANCH_NAME" ]]; then
 fi
 
 # Ensure current branch has a valid upstream; if missing or deleted on remote, switch
-# to a sane default (origin/HEAD, PLANTSWIPE_DEFAULT_BRANCH, main or master)
+# to a sane default (origin/HEAD, APHYLIA_DEFAULT_BRANCH, main or master)
 log "Validating upstream for current branch…"
 UPSTREAM_REF="$(${GIT_LOCAL_CMD[@]} rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || true)"
 UPSTREAM_OK=true
@@ -429,7 +429,7 @@ if [[ "$UPSTREAM_OK" != "true" ]]; then
 
   # If still no valid upstream and fallback not disabled, fall back to a default branch.
   if [[ "$UPSTREAM_OK" != "true" && "$DISABLE_DEFAULT_FALLBACK" != "true" ]]; then
-    DEFAULT_BRANCH="${PLANTSWIPE_DEFAULT_BRANCH:-}"
+    DEFAULT_BRANCH="${APHYLIA_DEFAULT_BRANCH:-}"
     if [[ -z "$DEFAULT_BRANCH" ]]; then
       # Prefer origin/HEAD if available
       remote_head_short="$(${GIT_LOCAL_CMD[@]} symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null || ${GIT_CMD[@]} symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null || true)"
@@ -446,7 +446,7 @@ if [[ "$UPSTREAM_OK" != "true" ]]; then
     fi
 
     if [[ -z "$DEFAULT_BRANCH" ]]; then
-      echo "[ERROR] Current branch '$BRANCH_NAME' has no valid upstream and no default branch could be determined. Set PLANTSWIPE_DEFAULT_BRANCH or supply a target branch." >&2
+      echo "[ERROR] Current branch '$BRANCH_NAME' has no valid upstream and no default branch could be determined. Set APHYLIA_DEFAULT_BRANCH or supply a target branch." >&2
       exit 1
     fi
 

@@ -47,20 +47,20 @@ function getPositionClass(pos: PositionKey): string {
 
 function loadPosition(): PositionKey {
   try {
-    const s = localStorage.getItem('plantswipe.broadcast.pos')
+    const s = localStorage.getItem('aphylia.broadcast.pos')
     if (s === 'tr' || s === 'tl' || s === 'br' || s === 'bl') return s
   } catch {}
   return 'tr'
 }
 
 function savePosition(pos: PositionKey) {
-  try { localStorage.setItem('plantswipe.broadcast.pos', pos) } catch {}
+  try { localStorage.setItem('aphylia.broadcast.pos', pos) } catch {}
 }
 
 // Persist the last active broadcast so it survives reloads while still valid
 function loadPersistedBroadcast(nowMs: number): Broadcast | null {
   try {
-    const raw = localStorage.getItem('plantswipe.broadcast.active')
+    const raw = localStorage.getItem('aphylia.broadcast.active')
     if (!raw) return null
     const data = JSON.parse(raw)
     if (!data || typeof data !== 'object') return null
@@ -80,8 +80,8 @@ function loadPersistedBroadcast(nowMs: number): Broadcast | null {
 
 function savePersistedBroadcast(b: Broadcast | null) {
   try {
-    if (!b) localStorage.removeItem('plantswipe.broadcast.active')
-    else localStorage.setItem('plantswipe.broadcast.active', JSON.stringify(b))
+    if (!b) localStorage.removeItem('aphylia.broadcast.active')
+    else localStorage.setItem('aphylia.broadcast.active', JSON.stringify(b))
   } catch {}
 }
 

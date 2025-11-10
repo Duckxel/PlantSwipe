@@ -36,8 +36,8 @@ def _parse_allowed_services(env_value: str) -> Set[str]:
 APP_SECRET = _get_env_var("ADMIN_BUTTON_SECRET", "change-me")
 ADMIN_STATIC_TOKEN = _get_env_var("ADMIN_STATIC_TOKEN", "")
 # Allow nginx, node app, and admin api by default; can be overridden via env
-ALLOWED_SERVICES_RAW = _get_env_var("ADMIN_ALLOWED_SERVICES", "nginx,plant-swipe-node,admin-api")
-DEFAULT_SERVICE = _get_env_var("ADMIN_DEFAULT_SERVICE", "plant-swipe-node")
+ALLOWED_SERVICES_RAW = _get_env_var("ADMIN_ALLOWED_SERVICES", "nginx,aphylia-node,admin-api")
+DEFAULT_SERVICE = _get_env_var("ADMIN_DEFAULT_SERVICE", "aphylia-node")
 
 ALLOWED_SERVICES = _parse_allowed_services(ALLOWED_SERVICES_RAW)
 
@@ -139,7 +139,7 @@ def _reboot_machine() -> None:
     subprocess.run(["sudo", "systemctl", "reboot"], check=True)
 def _get_repo_root() -> str:
     # Prefer explicit env override
-    env_dir = _get_env_var("PLANTSWIPE_REPO_DIR", "").strip()
+    env_dir = _get_env_var("APHYLIA_REPO_DIR", "").strip()
     if env_dir:
         return env_dir
     here = Path(__file__).resolve().parent
@@ -303,12 +303,12 @@ def _run_refresh(branch: Optional[str], stream: bool):
     _ensure_executable(script_path)
     env = os.environ.copy()
     env.setdefault("CI", os.environ.get("CI", "true"))
-    env["PLANTSWIPE_REPO_DIR"] = repo_root
+        env["APHYLIA_REPO_DIR"] = repo_root
     # Prevent the refresh script from restarting services on its own.
     # We will perform restarts explicitly after verifying build success.
     env["SKIP_SERVICE_RESTARTS"] = "true"
     if branch:
-        env["PLANTSWIPE_TARGET_BRANCH"] = branch
+        env["APHYLIA_TARGET_BRANCH"] = branch
     if stream:
         # Stream stdout/stderr as SSE
         def generate():

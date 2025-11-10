@@ -7,7 +7,7 @@ import i18n from './i18n'
  */
 export function getSavedLanguagePreference(): SupportedLanguage | null {
   try {
-    const saved = localStorage.getItem('plant-swipe-language')
+    const saved = localStorage.getItem('aphylia-language')
     if (saved && SUPPORTED_LANGUAGES.includes(saved as SupportedLanguage)) {
       return saved as SupportedLanguage
     }
@@ -20,7 +20,7 @@ export function getSavedLanguagePreference(): SupportedLanguage | null {
  */
 export function saveLanguagePreference(lang: SupportedLanguage): void {
   try {
-    localStorage.setItem('plant-swipe-language', lang)
+    localStorage.setItem('aphylia-language', lang)
   } catch {}
 }
 

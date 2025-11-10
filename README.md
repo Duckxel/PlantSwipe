@@ -1,8 +1,8 @@
-# 🌿 PlantSwipe — fall in love with plants, one swipe at a time
+# 🌿 APHYLIA — fall in love with plants, one swipe at a time
 
 <div align="center">
 
-**PlantSwipe turns plant discovery into a joyful, visual, swipe-first experience — while giving serious growers structured data, care guidance, and collaboration tools. It's where curiosity meets craftsmanship.** 🌱✨
+**APHYLIA turns plant discovery into a joyful, visual, swipe-first experience — while giving serious growers structured data, care guidance, and collaboration tools. It's where curiosity meets craftsmanship.** 🌱✨
 
 [![Features](#features)](#features) • [![Quick Start](#quick-start)](#quick-start) • [![Tech Stack](#tech-stack)](#tech-stack) • [![Roadmap](#roadmap)](#roadmap)
 
@@ -12,7 +12,7 @@ Made with care by **Neolite** & **Five**
 
 ---
 
-## ✨ What makes PlantSwipe special
+## ✨ What makes APHYLIA special
 
 | Feature | Description |
 |---------|-------------|
@@ -419,8 +419,8 @@ A: Not yet — the web app is mobile-responsive. A native app is on the roadmap.
 - ⭐ **Star the repo** to follow progress
 - 🐛 **Open issues** for bugs or ideas
 - 🔧 **Submit PRs** — the codebase is designed to be friendly
-- 🌱 **Share PlantSwipe** with a gardener you love
-- 📖 **Improve docs** — help others discover and use PlantSwipe
+- 🌱 **Share APHYLIA** with a gardener you love
+- 📖 **Improve docs** — help others discover and use APHYLIA
 
 ---
 
@@ -432,7 +432,7 @@ Made with love by **Neolite** and **Five** — a duo obsessed with playful UX, c
 
 <div align="center">
 
-**Happy digital gardening with PlantSwipe!** 🌼
+**Happy digital gardening with APHYLIA!** 🌼
 
 [Get Started](#quick-start) • [View Features](#feature-overview) • [Read Docs](./plant-swipe/README.md)
 

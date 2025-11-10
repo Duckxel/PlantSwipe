@@ -136,7 +136,7 @@ export const AdminPage: React.FC = () => {
     const checkActiveBroadcast = async () => {
       // Fast path: open if a persisted, still-valid broadcast exists
       try {
-        const raw = localStorage.getItem('plantswipe.broadcast.active')
+        const raw = localStorage.getItem('aphylia.broadcast.active')
         if (raw) {
           const data = JSON.parse(raw)
           const ex = data?.expiresAt ? Date.parse(String(data.expiresAt)) : null
@@ -515,7 +515,7 @@ export const AdminPage: React.FC = () => {
             await safeJson(reloadResp).catch(() => null)
           } catch {}
           // Then restart the Admin API and Node services via Admin API
-          const services = ['admin-api', 'plant-swipe-node']
+          const services = ['admin-api', 'aphylia-node']
           for (const svc of services) {
             const r = await fetch('/admin/restart-app', {
               method: 'POST',
@@ -3343,7 +3343,7 @@ const BroadcastControls: React.FC<{ inline?: boolean; onExpired?: () => void; on
   const [active, setActive] = React.useState<{ id: string; message: string; severity?: 'info' | 'warning' | 'danger'; expiresAt: string | null; adminName?: string | null } | null>(() => {
     // Seed from persisted broadcast for instant edit UI on reload
     try {
-      const raw = localStorage.getItem('plantswipe.broadcast.active')
+      const raw = localStorage.getItem('aphylia.broadcast.active')
       if (raw) {
         const data = JSON.parse(raw)
         const ex = data?.expiresAt ? Date.parse(String(data.expiresAt)) : null

@@ -24,7 +24,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = React.useState<AuthUser | null>(null)
   const [profile, setProfile] = React.useState<ProfileRow | null>(() => {
     try {
-      const cached = localStorage.getItem('plantswipe.profile')
+      const cached = localStorage.getItem('aphylia.profile')
       return cached ? (JSON.parse(cached) as ProfileRow) : null
     } catch {
       return null
@@ -42,7 +42,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const currentId = (await supabase.auth.getUser()).data.user?.id
     if (!currentId) {
       setProfile(null)
-      try { localStorage.removeItem('plantswipe.profile') } catch {}
+      try { localStorage.removeItem('aphylia.profile') } catch {}
       return
     }
     const { data, error } = await supabase
@@ -53,7 +53,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!error) {
       setProfile(data as any)
       // Persist profile alongside session so reloads can hydrate faster
-      try { localStorage.setItem('plantswipe.profile', JSON.stringify(data)) } catch {}
+      try { localStorage.setItem('aphylia.profile', JSON.stringify(data)) } catch {}
       // Apply accent if present
       if ((data as any)?.accent_key) {
         try { applyAccentByKey((data as any).accent_key) } catch {}
@@ -132,8 +132,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signOut: AuthContextValue['signOut'] = async () => {
     // Optimistically clear local state and storage to ensure UI updates immediately
     try {
-      localStorage.removeItem('plantswipe.auth')
-      localStorage.removeItem('plantswipe.profile')
+      localStorage.removeItem('aphylia.auth')
+      localStorage.removeItem('aphylia.profile')
     } catch {}
     setProfile(null)
     setUser(null)

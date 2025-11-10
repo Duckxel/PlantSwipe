@@ -42,7 +42,7 @@ const GardenDashboardPage = lazy(() => import("@/pages/GardenDashboardPage").the
 const GardenListPage = lazy(() => import("@/pages/GardenListPage").then(module => ({ default: module.GardenListPage })));
 
 // --- Main Component ---
-export default function PlantSwipe() {
+export default function Aphylia() {
   const { user, signIn, signUp, signOut, profile, refreshProfile } = useAuth()
   const currentLang = useLanguage()
   const { t } = useTranslation('common')
@@ -209,10 +209,10 @@ export default function PlantSwipe() {
     // Stable anonymous id for non-authenticated visitors
     let anonId: string | null = null
     try {
-      anonId = localStorage.getItem('plantswipe.anon_id')
+      anonId = localStorage.getItem('aphylia.anon_id')
       if (!anonId) {
         anonId = `anon_${Math.random().toString(36).slice(2, 10)}`
-        localStorage.setItem('plantswipe.anon_id', anonId)
+        localStorage.setItem('aphylia.anon_id', anonId)
       }
     } catch {}
 

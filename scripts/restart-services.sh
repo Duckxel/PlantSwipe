@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# Restart PlantSwipe services (admin-api, node API, nginx) out-of-band.
+# Restart APHYLIA services (admin-api, node API, nginx) out-of-band.
 # Usable even if APIs are down. Requires the sudoers entries set by setup.sh.
 
-SERVICE_NODE="plant-swipe-node"
+SERVICE_NODE="aphylia-node"
 SERVICE_ADMIN="admin-api"
 SERVICE_NGINX="nginx"
 
 usage() {
   cat <<EOF
-Usage: plantswipe-restart [all|node|admin|nginx]
+Usage: aphylia-restart [all|node|admin|nginx]
  - all: restart node and admin, then reload nginx (default)
  - node: restart only Node API service
  - admin: restart only Admin API service

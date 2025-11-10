@@ -4,7 +4,7 @@ import { useAuth } from '@/context/AuthContext'
 
 const getCachedIsAdmin = (): boolean | null => {
   try {
-    const s = localStorage.getItem('plantswipe.profile')
+    const s = localStorage.getItem('aphylia.profile')
     if (!s) return null
     const obj = JSON.parse(s)
     return obj && typeof obj.is_admin === 'boolean' ? obj.is_admin : null

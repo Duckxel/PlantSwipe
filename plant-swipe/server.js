@@ -47,11 +47,11 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 // Resolve the real Git repository root, even when running under a symlinked
-// deployment directory like /var/www/PlantSwipe/plant-swipe.
+// deployment directory like /var/www/APHYLIA/aphylia.
 async function getRepoRoot() {
   // 1) Allow explicit override via env when it actually points at a repo
   try {
-    const override = (process.env.PLANTSWIPE_REPO_DIR || '').trim()
+    const override = (process.env.APHYLIA_REPO_DIR || '').trim()
     if (override) {
       try {
         const st = await fs.stat(override)
@@ -125,7 +125,7 @@ const supabaseServer = (supabaseUrlEnv && supabaseAnonKey)
 
 const supportEmailTargetsRaw = process.env.SUPPORT_EMAIL_TO || process.env.SUPPORT_EMAIL || 'support@aphylia.app'
 const supportEmailTargets = supportEmailTargetsRaw.split(',').map(s => s.trim()).filter(Boolean)
-const supportEmailFrom = process.env.SUPPORT_EMAIL_FROM || process.env.RESEND_FROM || (supportEmailTargets[0] ? `Plant Swipe <${supportEmailTargets[0]}>` : 'Plant Swipe <support@aphylia.app>')
+const supportEmailFrom = process.env.SUPPORT_EMAIL_FROM || process.env.RESEND_FROM || (supportEmailTargets[0] ? `APHYLIA <${supportEmailTargets[0]}>` : 'APHYLIA <support@aphylia.app>')
 const resendApiKey = process.env.RESEND_API_KEY || process.env.RESEND_KEY || ''
 const supportEmailWebhook = process.env.SUPPORT_EMAIL_WEBHOOK_URL || process.env.CONTACT_WEBHOOK_URL || ''
 const contactRateLimitStore = new Map()
@@ -838,7 +838,7 @@ async function dispatchSupportEmail({ name, email, subject, message }) {
     `<p style="font-family:system-ui,sans-serif;margin:0 0 16px;"><strong>Email:</strong> ${escapeHtml(email || '') || 'N/A'}</p>`,
     `<p style="font-family:system-ui,sans-serif;margin:0;">${escapeHtml(sanitizedMessage || 'No additional message provided.').replace(/\n/g, '<br />')}</p>`,
   ].join('')
-  const finalSubject = safeSubject || `Contact form message from ${safeName || email || 'Plant Swipe user'}`
+  const finalSubject = safeSubject || `Contact form message from ${safeName || email || 'APHYLIA user'}`
 
   if (resendApiKey) {
     const payload = {
@@ -1328,7 +1328,7 @@ async function handleRestartServer(req, res) {
     setTimeout(() => {
       let restartedViaSystemd = false
       try {
-        const serviceName = process.env.NODE_SYSTEMD_SERVICE || process.env.SELF_SYSTEMD_SERVICE || 'plant-swipe-node'
+        const serviceName = process.env.NODE_SYSTEMD_SERVICE || process.env.SELF_SYSTEMD_SERVICE || 'aphylia-node'
         const child = spawnChild('sudo', ['-n', 'systemctl', 'restart', serviceName], { detached: true, stdio: 'ignore' })
         try { child.unref() } catch {}
         restartedViaSystemd = true
@@ -1393,7 +1393,7 @@ app.post('/api/admin/restart-all', async (req, res) => {
     res.json({ ok: true, message: 'Reloading nginx and restarting services' })
 
     setTimeout(async () => {
-      const serviceNode = process.env.NODE_SYSTEMD_SERVICE || process.env.SELF_SYSTEMD_SERVICE || 'plant-swipe-node'
+      const serviceNode = process.env.NODE_SYSTEMD_SERVICE || process.env.SELF_SYSTEMD_SERVICE || 'aphylia-node'
       const serviceAdmin = process.env.ADMIN_SYSTEMD_SERVICE || 'admin-api'
       const serviceNginx = process.env.NGINX_SYSTEMD_SERVICE || 'nginx'
       try { await exec('sudo -n nginx -t', { timeout: 15000 }) } catch {}
@@ -3263,7 +3263,7 @@ app.post('/api/admin/backup-db', async (req, res) => {
     const now = new Date()
     const pad = (n) => String(n).padStart(2, '0')
     const ts = `${now.getUTCFullYear()}-${pad(now.getUTCMonth() + 1)}-${pad(now.getUTCDate())}_${pad(now.getUTCHours())}-${pad(now.getUTCMinutes())}-${pad(now.getUTCSeconds())}Z`
-    const filename = `plantswipe_backup_${ts}.sql.gz`
+    const filename = `aphylia_backup_${ts}.sql.gz`
     const destPath = path.join(backupDir, filename)
 
     // Spawn pg_dump and gzip the output to a file
@@ -3414,14 +3414,14 @@ async function handlePullCode(req, res) {
 
     // Execute the script from repository root so it updates current branch and builds
     // Run detached so we can return a response before the service restarts
-    const execEnv = { ...process.env, CI: process.env.CI || 'true', SUDO_ASKPASS: process.env.SUDO_ASKPASS || '', PLANTSWIPE_REPO_DIR: repoRoot }
+    const execEnv = { ...process.env, CI: process.env.CI || 'true', SUDO_ASKPASS: process.env.SUDO_ASKPASS || '', APHYLIA_REPO_DIR: repoRoot }
     // Do not restart services inside the script when invoked from the API.
     // This allows us to finish the SSE cleanly and control restarts from the UI.
     execEnv.SKIP_SERVICE_RESTARTS = 'true'
     execEnv.SKIP_ENV_SYNC = 'true'
     if (branch) {
       // Pass target branch to refresh script
-      execEnv.PLANTSWIPE_TARGET_BRANCH = branch
+      execEnv.APHYLIA_TARGET_BRANCH = branch
     }
     const child = spawnChild(scriptPath, {
       cwd: repoRoot,
@@ -3554,7 +3554,7 @@ app.get('/api/admin/pull-code/stream', async (req, res) => {
     try { await fs.chmod(scriptPath, 0o755) } catch {}
 
     // Allow the script to perform restarts even if it drops the stream briefly
-    const childEnv = { ...process.env, CI: process.env.CI || 'true', PLANTSWIPE_REPO_DIR: repoRoot }
+    const childEnv = { ...process.env, CI: process.env.CI || 'true', APHYLIA_REPO_DIR: repoRoot }
     // Avoid restarting services from the script while streaming logs (keeps SSE alive)
     childEnv.SKIP_SERVICE_RESTARTS = 'true'
     if (branch) {
@@ -3581,7 +3581,7 @@ app.get('/api/admin/pull-code/stream', async (req, res) => {
           return
         }
       } catch {}
-      childEnv.PLANTSWIPE_TARGET_BRANCH = branch
+      childEnv.APHYLIA_TARGET_BRANCH = branch
       send('log', `[pull] Target branch requested: ${branch}`)
     }
     const child = spawnChild(scriptPath, [], {
