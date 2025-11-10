@@ -18,32 +18,25 @@ create or replace function public.array_set(
   _value integer
 )
 returns integer[]
-language plpgsql
+language sql
 immutable
 set search_path = public
 as $$
-declare
-  v_result integer[] := coalesce(_arr, '{}'::integer[]);
-  v_index integer;
-  v_missing integer;
-begin
-  if array_length(_indexes, 1) is distinct from 1 then
-    raise exception 'array_set() expects exactly one index';
-  end if;
-
-  v_index := _indexes[1];
-  if v_index is null or v_index < 1 then
-    raise exception 'array_set() index must be >= 1';
-  end if;
-
-  v_missing := v_index - coalesce(array_length(v_result, 1), 0);
-  if v_missing > 0 then
-    v_result := v_result || array_fill(0, ARRAY[v_missing]);
-  end if;
-
-  v_result[v_index] := _value;
-  return v_result;
-end;
+  select case
+    when _indexes is null or array_length(_indexes, 1) is distinct from 1 then coalesce(_arr, '{}'::integer[])
+    when _indexes[1] is null or _indexes[1] < 1 then coalesce(_arr, '{}'::integer[])
+    else coalesce((
+      select array_agg(val order by i)
+      from (
+        select g.i,
+               case when g.i = _indexes[1]
+                    then _value
+                    else coalesce((coalesce(_arr, '{}'::integer[]))[g.i], 0)
+               end as val
+        from generate_series(1, greatest(coalesce(array_length(_arr, 1), 0), _indexes[1])) as g(i)
+      ) as expanded
+    ), '{}'::integer[])
+  end;
 $$;
 
 -- ========== Profiles (user profiles) ==========
@@ -1925,6 +1918,7 @@ begin
   perform public.update_garden_streak(v_occ.garden_id, v_yesterday);
 end;
 $$;
+
 grant execute on function public.progress_task_occurrence(uuid, integer) to authenticated, service_role;
 
 -- Streak helpers (used by server jobs or manual runs)
