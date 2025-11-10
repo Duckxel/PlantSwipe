@@ -194,7 +194,7 @@ ensure_supabase_login_and_link() {
     return 1
   fi
 
-  local supabase_cmd=(sudo -u "$SERVICE_USER" env HOME="$SERVICE_USER_HOME")
+  local supabase_cmd=(sudo -u "$SERVICE_USER" env HOME="$SERVICE_USER_HOME" SUPABASE_CONFIG_HOME="$SERVICE_USER_HOME/.supabase")
 
   if [[ -n "${SUPABASE_ACCESS_TOKEN:-}" ]]; then
     log "Authenticating Supabase CLI using provided access token…"
@@ -226,12 +226,9 @@ ensure_supabase_login_and_link() {
 
   log "Linking Supabase project $SUPABASE_PROJECT_REF to repository…"
   local link_log="/tmp/supabase-link.log"
-  local link_args=(supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD")
-  if [[ -n "$SUPABASE_SERVICE_ROLE_KEY" ]]; then
-    link_args+=(--service-role-key "$SUPABASE_SERVICE_ROLE_KEY")
-  fi
+    local link_args=(supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD" --workdir "$NODE_DIR")
 
-  if "${supabase_cmd[@]}" "${link_args[@]}" >"$link_log" 2>&1; then
+    if "${supabase_cmd[@]}" "${link_args[@]}" >"$link_log" 2>&1; then
     log "Supabase project linked successfully."
   else
     log "[WARN] Supabase project link failed. See $link_log for details."
@@ -257,30 +254,28 @@ deploy_supabase_contact_function() {
     return
   fi
 
-  local supabase_cmd=(sudo -u "$SERVICE_USER" env HOME="$SERVICE_USER_HOME")
+  local supabase_cmd=(sudo -u "$SERVICE_USER" env HOME="$SERVICE_USER_HOME" SUPABASE_CONFIG_HOME="$SERVICE_USER_HOME/.supabase")
 
   if [[ -n "${RESEND_API_KEY:-}" || -n "${RESEND_FROM:-}" || -n "${RESEND_FROM_NAME:-}" ]]; then
-    local tmp_env
-    tmp_env="$(mktemp)"
-    [[ -n "${RESEND_API_KEY:-}" ]] && printf "RESEND_API_KEY=%s\n" "$RESEND_API_KEY" >>"$tmp_env"
-    [[ -n "${RESEND_FROM:-}" ]] && printf "RESEND_FROM=%s\n" "$RESEND_FROM" >>"$tmp_env"
-    [[ -n "${RESEND_FROM_NAME:-}" ]] && printf "RESEND_FROM_NAME=%s\n" "$RESEND_FROM_NAME" >>"$tmp_env"
-    log "Syncing Supabase function secrets from environment…"
-    local secrets_cmd=(supabase functions secrets set --env-file "$tmp_env")
-    if [[ ! -f "$NODE_DIR/supabase/config.toml" && -n "$SUPABASE_PROJECT_REF" ]]; then
-      secrets_cmd+=(--project-ref "$SUPABASE_PROJECT_REF")
+    local secrets_env=()
+    [[ -n "${RESEND_API_KEY:-}" ]] && secrets_env+=("RESEND_API_KEY=$RESEND_API_KEY")
+    [[ -n "${RESEND_FROM:-}" ]] && secrets_env+=("RESEND_FROM=$RESEND_FROM")
+    [[ -n "${RESEND_FROM_NAME:-}" ]] && secrets_env+=("RESEND_FROM_NAME=$RESEND_FROM_NAME")
+    if ((${#secrets_env[@]})); then
+      log "Syncing Supabase secrets from environment…"
+      for kv in "${secrets_env[@]}"; do
+        if ! "${supabase_cmd[@]}" supabase secrets set --project-ref "$SUPABASE_PROJECT_REF" --workdir "$NODE_DIR" "$kv" >/tmp/supabase-secrets.log 2>&1; then
+          log "[WARN] Failed to push Supabase secret $kv. See /tmp/supabase-secrets.log"
+          tail -n 20 /tmp/supabase-secrets.log 2>/dev/null || true
+        fi
+      done
     fi
-    if ! "${supabase_cmd[@]}" "${secrets_cmd[@]}" >/tmp/supabase-secrets.log 2>&1; then
-      log "[WARN] Failed to push Supabase function secrets. See /tmp/supabase-secrets.log"
-      tail -n 20 /tmp/supabase-secrets.log 2>/dev/null || true
-    fi
-    rm -f "$tmp_env"
   else
     log "[INFO] RESEND_* environment variables not set; skipping secrets sync."
   fi
 
   log "Deploying Supabase Edge Function contact-support…"
-  local deploy_args=(supabase functions deploy contact-support --no-verify-jwt --project-ref "$SUPABASE_PROJECT_REF")
+  local deploy_args=(supabase functions deploy contact-support --no-verify-jwt --project-ref "$SUPABASE_PROJECT_REF" --workdir "$NODE_DIR")
   if ! "${supabase_cmd[@]}" "${deploy_args[@]}" >/tmp/supabase-deploy.log 2>&1; then
     log "[WARN] Supabase Edge Function deployment failed. See /tmp/supabase-deploy.log"
     tail -n 25 /tmp/supabase-deploy.log 2>/dev/null || true
