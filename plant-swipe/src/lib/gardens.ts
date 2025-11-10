@@ -941,11 +941,9 @@ export async function listTaskOccurrences(taskId: string, windowDays = 60): Prom
 
 export async function progressTaskOccurrence(occurrenceId: string, increment = 1): Promise<void> {
   const rpcName = 'progress_task_occurrence'
-  let rpcAttempted = false
   let rpcSucceeded = false
   let rpcFailure: any = null
   if (!missingSupabaseRpcs.has(rpcName)) {
-    rpcAttempted = true
     try {
       const { error } = await supabase.rpc(rpcName, { _occurrence_id: occurrenceId, _increment: increment })
       if (error) {
