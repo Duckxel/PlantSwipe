@@ -3,7 +3,7 @@ import { Routes, Route, useLocation } from "react-router-dom";
 import { useLanguageNavigate, usePathWithoutLanguage } from "@/lib/i18nRouting";
 import { Navigate } from "@/components/i18n/Navigate";
 import { useMotionValue, animate } from "framer-motion";
-import { Search, ChevronDown, ChevronUp, ListFilter } from "lucide-react";
+import { Search, ChevronDown, ChevronUp, ListFilter, MessageSquarePlus } from "lucide-react";
 // Sheet is used for plant info overlay
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
@@ -15,9 +15,10 @@ import { TopBar } from "@/components/layout/TopBar";
 import { Footer } from "@/components/layout/Footer";
 import BroadcastToast from "@/components/layout/BroadcastToast";
 import MobileNavBar from "@/components/layout/MobileNavBar";
-import { SwipePage } from "@/pages/SwipePage";
+import { RequestPlantDialog } from "@/components/plant/RequestPlantDialog";
 // GardenListPage and GardenDashboardPage are lazy loaded below
 import { SearchPage } from "@/pages/SearchPage";
+import { SwipePage } from "@/pages/SwipePage";
 import { CreatePlantPage } from "@/pages/CreatePlantPage";
 import { EditPlantPage } from "@/pages/EditPlantPage";
 import type { Plant } from "@/types/plant";
@@ -52,6 +53,7 @@ export default function PlantSwipe() {
   const [onlyFavorites, setOnlyFavorites] = useState(false)
   const [favoritesFirst, setFavoritesFirst] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
+  const [requestPlantDialogOpen, setRequestPlantDialogOpen] = useState(false)
 
   const [index, setIndex] = useState(0)
   const [likedIds, setLikedIds] = useState<string[]>([])
@@ -510,6 +512,18 @@ export default function PlantSwipe() {
                   }}
                 />
               </div>
+              {user && (
+                <div className="mt-2">
+                  <Button
+                    variant="secondary"
+                    className="w-full rounded-2xl"
+                    onClick={() => setRequestPlantDialogOpen(true)}
+                  >
+                    <MessageSquarePlus className="h-4 w-4 mr-2" />
+                    {t('requestPlant.button') || 'Request Plant'}
+                  </Button>
+                </div>
+              )}
             </div>
 
             {/* Seasons */}
@@ -754,6 +768,7 @@ export default function PlantSwipe() {
 
       <Footer />
       <BroadcastToast />
+      <RequestPlantDialog open={requestPlantDialogOpen} onOpenChange={setRequestPlantDialogOpen} />
     </div>
     </AuthActionsProvider>
   )

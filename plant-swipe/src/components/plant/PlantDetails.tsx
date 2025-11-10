@@ -12,10 +12,10 @@ import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/context/AuthContext";
 import { useTranslation } from "react-i18next";
 
-export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?: boolean; onToggleLike?: () => void; isOverlayMode?: boolean }> = ({ plant, onClose, liked = false, onToggleLike, isOverlayMode = false }) => {
+export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?: boolean; onToggleLike?: () => void; isOverlayMode?: boolean; onRequestPlant?: () => void }> = ({ plant, onClose, liked = false, onToggleLike, isOverlayMode = false, onRequestPlant }) => {
   const navigate = useLanguageNavigate()
   const currentLang = useLanguage()
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
   const { t } = useTranslation('common')
   const [shareSuccess, setShareSuccess] = React.useState(false)
   const shareTimeoutRef = React.useRef<number | null>(null)
@@ -362,8 +362,8 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
         </CardContent>
       </Card>
 
-      <div className="flex justify-between gap-2">
-        {user && (
+        <div className="flex flex-wrap justify-between gap-2">
+        {user && profile?.is_admin && (
           <Button variant="destructive" className="rounded-2xl" onClick={async () => {
             const yes = window.confirm(t('plantInfo.deleteConfirm'))
             if (!yes) return
@@ -373,8 +373,17 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
             try { window.dispatchEvent(new CustomEvent('plants:refresh')) } catch {}
           }}>{t('common.delete')}</Button>
         )}
-        <div className="flex gap-2 ml-auto">
-          {user && (
+          <div className="flex flex-wrap gap-2 ml-auto">
+            {onRequestPlant && (
+              <Button
+                variant="outline"
+                className="rounded-2xl"
+                onClick={onRequestPlant}
+              >
+                {t('requestPlant.button')}
+              </Button>
+            )}
+          {user && profile?.is_admin && (
             <Button
               variant="secondary"
               className="rounded-2xl"

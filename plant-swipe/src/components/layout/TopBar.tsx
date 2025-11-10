@@ -192,7 +192,7 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
         <NavPill to="/search" isActive={pathWithoutLang.startsWith('/search')} icon={<Search className="h-4 w-4" />} label={t('common.encyclopedia')} />
       </nav>
   <div className="ml-auto flex items-center gap-2 flex-wrap sm:flex-nowrap min-w-0 justify-end">
-        {user && (
+        {user && profile?.is_admin && (
           <Button className="rounded-2xl" variant="default" onClick={() => navigate('/create')}>
             <Plus className="h-4 w-4 sm:mr-2" /> <span className="hidden sm:inline">{t('common.addPlant')}</span>
           </Button>
