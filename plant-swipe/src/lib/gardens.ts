@@ -1037,8 +1037,17 @@ async function attributeOccurrenceCompletion(occurrenceId: string, increment: nu
   const tableName = 'garden_task_user_completions'
   if (missingSupabaseTablesOrViews.has(tableName)) return
   try {
-    const { data: session } = await supabase.auth.getSession()
-    const userId = session?.session?.user?.id || session?.user?.id || null
+    let userId: string | null = null
+    try {
+      const { data } = await supabase.auth.getSession()
+      userId = data?.session?.user?.id ?? null
+    } catch {}
+    if (!userId) {
+      try {
+        const { data } = await supabase.auth.getUser()
+        userId = data?.user?.id ?? null
+      } catch {}
+    }
     if (!userId) return
     const payload = {
       occurrence_id: occurrenceId,
