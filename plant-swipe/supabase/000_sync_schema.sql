@@ -3276,13 +3276,17 @@ BEGIN
   _has_remaining_tasks := (_due_count > 0 AND _completed_count < _due_count);
   _all_tasks_done := (_due_count = 0 OR _completed_count >= _due_count);
   
-  -- Replace existing cache row
-  DELETE FROM garden_task_daily_cache
-  WHERE garden_id = _garden_id
-    AND cache_date = _cache_date;
-
   INSERT INTO garden_task_daily_cache (garden_id, cache_date, due_count, completed_count, task_count, occurrence_count, has_remaining_tasks, all_tasks_done, updated_at)
-  VALUES (_garden_id, _cache_date, _due_count, _completed_count, _task_count, _occurrence_count, _has_remaining_tasks, _all_tasks_done, now());
+  VALUES (_garden_id, _cache_date, _due_count, _completed_count, _task_count, _occurrence_count, _has_remaining_tasks, _all_tasks_done, now())
+  ON CONFLICT (garden_id, cache_date) DO UPDATE
+    SET due_count = EXCLUDED.due_count,
+        completed_count = EXCLUDED.completed_count,
+        task_count = EXCLUDED.task_count,
+        occurrence_count = EXCLUDED.occurrence_count,
+        has_remaining_tasks = EXCLUDED.has_remaining_tasks,
+        all_tasks_done = EXCLUDED.all_tasks_done,
+        updated_at = now();
+
 END;
 $$;
 
@@ -3346,11 +3350,6 @@ BEGIN
     _custom[_day_idx + 1] := COALESCE(_daily_custom, 0);
   END LOOP;
 
-  -- Replace existing cache row for this week
-  DELETE FROM garden_task_weekly_cache
-  WHERE garden_id = _garden_id
-    AND week_start_date = _week_start_date;
-  
   INSERT INTO garden_task_weekly_cache (
     garden_id, week_start_date, week_end_date,
     total_tasks_by_day, water_tasks_by_day, fertilize_tasks_by_day,
@@ -3361,7 +3360,17 @@ BEGIN
     _garden_id, _week_start_date, _week_end_date,
     _totals, _water, _fertilize, _harvest, _cut, _custom,
     now()
-  );
+  )
+  ON CONFLICT (garden_id, week_start_date) DO UPDATE
+    SET week_end_date = EXCLUDED.week_end_date,
+        total_tasks_by_day = EXCLUDED.total_tasks_by_day,
+        water_tasks_by_day = EXCLUDED.water_tasks_by_day,
+        fertilize_tasks_by_day = EXCLUDED.fertilize_tasks_by_day,
+        harvest_tasks_by_day = EXCLUDED.harvest_tasks_by_day,
+        cut_tasks_by_day = EXCLUDED.cut_tasks_by_day,
+        custom_tasks_by_day = EXCLUDED.custom_tasks_by_day,
+        updated_at = now();
+
 END;
 $$;
 
@@ -3383,22 +3392,27 @@ BEGIN
   
   -- Delete old cache for this garden
   DELETE FROM garden_plant_task_counts_cache WHERE garden_id = _garden_id;
-  
+
   -- Insert fresh cache
   INSERT INTO garden_plant_task_counts_cache (garden_id, garden_plant_id, task_count, due_today_count)
   SELECT
     t.garden_id,
     t.garden_plant_id,
     COUNT(DISTINCT t.id)::integer as task_count,
-    COUNT(DISTINCT CASE 
-      WHEN occ.due_at >= _start_iso AND occ.due_at <= _end_iso 
-        AND (occ.required_count - occ.completed_count) > 0 
-      THEN occ.id 
+    COUNT(DISTINCT CASE
+      WHEN occ.due_at >= _start_iso AND occ.due_at <= _end_iso
+        AND (occ.required_count - occ.completed_count) > 0
+      THEN occ.id
     END)::integer as due_today_count
   FROM garden_plant_tasks t
   LEFT JOIN garden_plant_task_occurrences occ ON occ.task_id = t.id
   WHERE t.garden_id = _garden_id
-  GROUP BY t.garden_id, t.garden_plant_id;
+  GROUP BY t.garden_id, t.garden_plant_id
+  ON CONFLICT (garden_id, garden_plant_id) DO UPDATE
+    SET task_count = EXCLUDED.task_count,
+        due_today_count = EXCLUDED.due_today_count,
+        updated_at = now();
+
 END;
 $$;
 
@@ -3419,9 +3433,9 @@ BEGIN
   _end_iso := (_cache_date::text || 'T23:59:59.999Z')::timestamptz;
   
   -- Delete old cache for this garden and date
-  DELETE FROM garden_task_occurrences_today_cache 
+  DELETE FROM garden_task_occurrences_today_cache
   WHERE garden_id = _garden_id AND cache_date = _cache_date;
-  
+
   -- Insert fresh cache
   INSERT INTO garden_task_occurrences_today_cache (
     garden_id, occurrence_id, task_id, garden_plant_id,
@@ -3443,7 +3457,18 @@ BEGIN
   INNER JOIN garden_plant_tasks t ON t.id = occ.task_id
   WHERE t.garden_id = _garden_id
     AND occ.due_at >= _start_iso
-    AND occ.due_at <= _end_iso;
+    AND occ.due_at <= _end_iso
+  ON CONFLICT (garden_id, occurrence_id, cache_date) DO UPDATE
+    SET task_id = EXCLUDED.task_id,
+        garden_plant_id = EXCLUDED.garden_plant_id,
+        task_type = EXCLUDED.task_type,
+        task_emoji = EXCLUDED.task_emoji,
+        due_at = EXCLUDED.due_at,
+        required_count = EXCLUDED.required_count,
+        completed_count = EXCLUDED.completed_count,
+        completed_at = EXCLUDED.completed_at,
+        updated_at = now();
+
 END;
 $$;
 
@@ -4050,11 +4075,6 @@ BEGIN
   WHERE gm.user_id = _user_id
     AND c.cache_date = _cache_date;
   
-  -- Replace existing cache entry
-  DELETE FROM user_task_daily_cache
-  WHERE user_id = _user_id
-    AND cache_date = _cache_date;
-
   INSERT INTO user_task_daily_cache (
     user_id,
     cache_date,
@@ -4072,7 +4092,14 @@ BEGIN
     _gardens_with_remaining,
     _total_gardens,
     now()
-  );
+  )
+  ON CONFLICT (user_id, cache_date) DO UPDATE
+    SET total_due_count = EXCLUDED.total_due_count,
+        total_completed_count = EXCLUDED.total_completed_count,
+        gardens_with_remaining_tasks = EXCLUDED.gardens_with_remaining_tasks,
+        total_gardens = EXCLUDED.total_gardens,
+        updated_at = now();
+
 END;
 $$;
 
