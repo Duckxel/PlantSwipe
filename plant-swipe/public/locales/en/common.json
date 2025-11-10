@@ -69,6 +69,7 @@
         "messageMax": "Message must be 4,000 characters or fewer"
       }
     },
+    "copySuccess": "Copied!",
     "responseTime": {
       "title": "Response Time",
       "description": "We typically respond within 24-48 hours during business days."
@@ -76,6 +77,25 @@
     "helpfulInfo": {
       "title": "Helpful Information",
       "description": "Please include details about your question or issue to help us assist you better."
+    },
+    "form": {
+      "title": "Send a message",
+      "description": "Fill out the form and we'll reach out soon.",
+      "nameLabel": "Your name",
+      "namePlaceholder": "Jane Doe",
+      "emailLabel": "Your email",
+      "emailPlaceholder": "you@example.com",
+      "subjectLabel": "Subject",
+      "subjectPlaceholder": "How can we help?",
+      "messageLabel": "Message",
+      "messagePlaceholder": "Tell us a bit more about what you need...",
+      "submitButton": "Send message",
+      "submitSending": "Sending...",
+      "cancelButton": "Cancel",
+      "successTitle": "Message sent",
+      "successDescription": "Thanks for reaching out! We'll get back to you soon.",
+      "errorMessage": "We couldn't send your message. Please try again in a moment.",
+      "rateLimitedMessage": "Please wait a little before sending another message."
     }
   },
   "auth": {
@@ -183,37 +203,49 @@
       "currentTheme": "Current theme"
     }
   },
-  "plant": {
-    "searchPlaceholder": "Search name, meaning, color?",
-    "seedsOnly": "Seeds only",
-    "favoritesOnly": "Favorites only",
-    "favoritesFirst": "Favorites first",
-    "season": "Season",
-    "color": "Color",
-    "active": "Active",
-    "none": "None",
-    "spring": "Spring",
-    "summer": "Summer",
-    "autumn": "Autumn",
-    "winter": "Winter",
-    "red": "Red",
-    "pink": "Pink",
-    "yellow": "Yellow",
-    "white": "White",
-    "purple": "Purple",
-    "blue": "Blue",
-    "orange": "Orange",
-    "green": "Green",
-    "refineFilters": "Refine with filters above. Click a card for full details.",
-    "noResults": "No results",
-    "liked": "Liked",
-    "back": "Back",
-    "info": "Info",
-    "next": "Next",
-    "tryAnotherSearch": "Try another search or adjust your filters.",
-    "reset": "Reset"
-  },
-  "garden": {
+    "plant": {
+      "searchPlaceholder": "Search name, meaning, color?",
+      "seedsOnly": "Seeds only",
+      "favoritesOnly": "Favorites only",
+      "favoritesFirst": "Favorites first",
+      "season": "Season",
+      "color": "Color",
+      "active": "Active",
+      "none": "None",
+      "spring": "Spring",
+      "summer": "Summer",
+      "autumn": "Autumn",
+      "winter": "Winter",
+      "red": "Red",
+      "pink": "Pink",
+      "yellow": "Yellow",
+      "white": "White",
+      "purple": "Purple",
+      "blue": "Blue",
+      "orange": "Orange",
+      "green": "Green",
+      "refineFilters": "Refine with filters above. Click a card for full details.",
+      "noResults": "No results",
+      "liked": "Liked",
+      "back": "Back",
+      "info": "Info",
+      "next": "Next",
+      "tryAnotherSearch": "Try another search or adjust your filters.",
+      "reset": "Reset"
+    },
+    "requestPlant": {
+      "button": "Request Plant",
+      "title": "Request a Plant",
+      "description": "Let us know which plant you would like to see added to the encyclopedia.",
+      "plantName": "Plant name",
+      "placeholder": "Enter plant name...",
+      "nameRequired": "Plant name is required",
+      "mustBeLoggedIn": "You must be logged in to request a plant",
+      "submit": "Submit request",
+      "success": "Thank you! Your request has been submitted.",
+      "error": "Failed to submit request"
+    },
+    "garden": {
     "title": "Gardens",
     "yourGardens": "Your Gardens",
     "create": "Create Garden",

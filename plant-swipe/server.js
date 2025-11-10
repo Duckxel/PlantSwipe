@@ -123,6 +123,13 @@ const supabaseServer = (supabaseUrlEnv && supabaseAnonKey)
   ? createSupabaseClient(supabaseUrlEnv, supabaseAnonKey, { auth: { persistSession: false, autoRefreshToken: false } })
   : null
 
+const supportEmailTargetsRaw = process.env.SUPPORT_EMAIL_TO || process.env.SUPPORT_EMAIL || 'support@aphylia.app'
+const supportEmailTargets = supportEmailTargetsRaw.split(',').map(s => s.trim()).filter(Boolean)
+const supportEmailFrom = process.env.SUPPORT_EMAIL_FROM || process.env.RESEND_FROM || (supportEmailTargets[0] ? `Plant Swipe <${supportEmailTargets[0]}>` : 'Plant Swipe <support@aphylia.app>')
+const resendApiKey = process.env.RESEND_API_KEY || process.env.RESEND_KEY || ''
+const supportEmailWebhook = process.env.SUPPORT_EMAIL_WEBHOOK_URL || process.env.CONTACT_WEBHOOK_URL || ''
+const contactRateLimitStore = new Map()
+
 // Admin bypass configuration
 // Support both server-only and Vite-style env variable names
 const adminStaticToken = process.env.ADMIN_STATIC_TOKEN || process.env.VITE_ADMIN_STATIC_TOKEN || ''
@@ -784,6 +791,101 @@ function getClientIp(req) {
   return normalizeIp(req.ip || req.connection?.remoteAddress || '')
 }
 
+const htmlEscapeMap = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+}
+
+function escapeHtml(value) {
+  if (value === null || value === undefined) return ''
+  return String(value).replace(/[&<>"']/g, (ch) => htmlEscapeMap[ch] || ch)
+}
+
+function isContactRateLimited(key) {
+  const now = Date.now()
+  const windowMs = Number(process.env.CONTACT_FORM_WINDOW_MS || 5 * 60 * 1000)
+  const limit = Number(process.env.CONTACT_FORM_MAX_ATTEMPTS || 5)
+  const history = contactRateLimitStore.get(key) || []
+  const recent = history.filter((ts) => now - ts < windowMs)
+  if (recent.length >= limit) {
+    contactRateLimitStore.set(key, recent)
+    return true
+  }
+  recent.push(now)
+  contactRateLimitStore.set(key, recent)
+  return false
+}
+
+async function dispatchSupportEmail({ name, email, subject, message }) {
+  const targets = supportEmailTargets.length ? supportEmailTargets : ['support@aphylia.app']
+  const safeName = name ? name.slice(0, 200) : ''
+  const safeSubject = subject && subject.trim() ? subject.trim().slice(0, 180) : null
+  const sanitizedMessage = (message || '').replace(/\r\n/g, '\n').slice(0, 5000)
+  const plainText = [
+    'New contact form submission',
+    '',
+    `Name: ${safeName || 'N/A'}`,
+    `Email: ${email || 'N/A'}`,
+    '',
+    sanitizedMessage || 'No additional message provided.',
+  ].join('\n')
+  const htmlBody = [
+    '<h2 style="font-family:system-ui,sans-serif;margin:0 0 12px;">New contact form submission</h2>',
+    `<p style="font-family:system-ui,sans-serif;margin:0 0 8px;"><strong>Name:</strong> ${escapeHtml(safeName) || 'N/A'}</p>`,
+    `<p style="font-family:system-ui,sans-serif;margin:0 0 16px;"><strong>Email:</strong> ${escapeHtml(email || '') || 'N/A'}</p>`,
+    `<p style="font-family:system-ui,sans-serif;margin:0;">${escapeHtml(sanitizedMessage || 'No additional message provided.').replace(/\n/g, '<br />')}</p>`,
+  ].join('')
+  const finalSubject = safeSubject || `Contact form message from ${safeName || email || 'Plant Swipe user'}`
+
+  if (resendApiKey) {
+    const payload = {
+      from: supportEmailFrom,
+      to: targets,
+      subject: finalSubject,
+      text: plainText,
+      html: htmlBody,
+    }
+    if (email) payload.reply_to = email
+    const resp = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${resendApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    })
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => '')
+      throw new Error(text || `Resend API error (${resp.status})`)
+    }
+    return
+  }
+
+  if (supportEmailWebhook) {
+    const resp = await fetch(supportEmailWebhook, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to: targets,
+        subject: finalSubject,
+        text: plainText,
+        html: htmlBody,
+        replyTo: email || null,
+      }),
+    })
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => '')
+      throw new Error(text || `Webhook delivery failed (${resp.status})`)
+    }
+    return
+  }
+
+  throw new Error('Email delivery not configured')
+}
+
 function getGeoFromHeaders(req) {
   const h = req.headers
   // Country detection from common providers (normalize to upper-case when likely a code)
@@ -1383,6 +1485,61 @@ async function ensureBroadcastTable() {
   } catch {}
 }
 
+async function ensureRequestedPlantsSchema() {
+  if (!sql) return
+  const ddl = `
+create table if not exists public.requested_plants (
+  id uuid primary key default gen_random_uuid(),
+  plant_name text not null,
+  plant_name_normalized text not null,
+  requested_by uuid not null references auth.users(id) on delete cascade,
+  request_count integer not null default 1 check (request_count > 0),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  completed_at timestamptz,
+  completed_by uuid references auth.users(id) on delete set null
+);
+
+alter table if exists public.requested_plants add column if not exists plant_name text;
+alter table if exists public.requested_plants add column if not exists plant_name_normalized text;
+alter table if exists public.requested_plants add column if not exists requested_by uuid references auth.users(id) on delete cascade;
+alter table if exists public.requested_plants add column if not exists request_count integer not null default 1;
+alter table if exists public.requested_plants add column if not exists created_at timestamptz not null default now();
+alter table if exists public.requested_plants add column if not exists updated_at timestamptz not null default now();
+alter table if exists public.requested_plants add column if not exists completed_at timestamptz;
+alter table if exists public.requested_plants add column if not exists completed_by uuid;
+
+do $do$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'requested_plants_request_count_check') then
+    alter table public.requested_plants add constraint requested_plants_request_count_check check (request_count > 0);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'requested_plants_requested_by_fkey') then
+    alter table public.requested_plants add constraint requested_plants_requested_by_fkey
+      foreign key (requested_by) references auth.users(id) on delete cascade;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'requested_plants_completed_by_fkey') then
+    alter table public.requested_plants add constraint requested_plants_completed_by_fkey
+      foreign key (completed_by) references auth.users(id) on delete set null;
+  end if;
+end
+$do$;
+
+create index if not exists requested_plants_plant_name_normalized_idx on public.requested_plants(plant_name_normalized);
+create unique index if not exists requested_plants_active_name_unique_idx on public.requested_plants(plant_name_normalized) where completed_at is null;
+create index if not exists requested_plants_completed_at_idx on public.requested_plants(completed_at);
+create index if not exists requested_plants_requested_by_idx on public.requested_plants(requested_by);
+create index if not exists requested_plants_created_at_idx on public.requested_plants(created_at desc);
+`
+  try {
+    await sql.unsafe(ddl, [], { simple: true })
+    await sql`update public.requested_plants set plant_name_normalized = lower(trim(plant_name)) where plant_name_normalized is null and plant_name is not null`
+    await sql`alter table public.requested_plants alter column plant_name_normalized set not null`
+  } catch (err) {
+    console.error('[sync] failed to ensure requested_plants schema', err)
+  }
+}
+
 // Helper: verify key schema objects exist after sync for operator assurance
 async function verifySchemaAfterSync() {
   if (!sql) return null
@@ -1396,6 +1553,7 @@ async function verifySchemaAfterSync() {
     'garden_task_user_completions',
     'garden_watering_schedule',
     'web_visits',
+    'requested_plants',
   ]
   const requiredFunctions = [
     'get_profile_public_by_display_name',
@@ -1449,6 +1607,9 @@ async function handleSyncSchema(req, res) {
 
     // Execute allowing multiple statements
     await sql.unsafe(sqlText, [], { simple: true })
+
+    // Ensure critical tables that power new features exist even if the SQL script was partially applied.
+    await ensureRequestedPlantsSchema()
 
     // Verify important objects exist after sync
     let summary = null
@@ -2953,6 +3114,37 @@ async function loadPlantsViaSupabase() {
     return null
   }
 }
+
+app.post('/api/contact', async (req, res) => {
+  try {
+    const body = req.body || {}
+    const name = typeof body.name === 'string' ? body.name.trim().slice(0, 200) : ''
+    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
+    const subject = typeof body.subject === 'string' ? body.subject.trim().slice(0, 180) : ''
+    const message = typeof body.message === 'string' ? body.message.trim().slice(0, 5000) : ''
+
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      res.status(400).json({ error: 'A valid email address is required.' })
+      return
+    }
+    if (!message) {
+      res.status(400).json({ error: 'Message is required.' })
+      return
+    }
+
+    const ip = getClientIp(req) || 'unknown'
+    if (isContactRateLimited(ip)) {
+      res.status(429).json({ error: 'Too many messages in a short period. Please try again later.' })
+      return
+    }
+
+    await dispatchSupportEmail({ name, email, subject, message })
+    res.json({ ok: true })
+  } catch (error) {
+    console.error('[contact] failed to send support email:', error)
+    res.status(500).json({ error: 'Failed to send message. Please try again later.' })
+  }
+})
 
 // DeepL Translation API endpoint
 app.post('/api/translate', async (req, res) => {
