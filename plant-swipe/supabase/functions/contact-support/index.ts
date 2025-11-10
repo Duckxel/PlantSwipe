@@ -108,62 +108,62 @@ serve(async (req) => {
   const sanitizedSubject = subject.replace(/[\r\n]+/g, " ").trim()
   const finalSubject = sanitizedSubject.length > 0 ? sanitizedSubject : `Contact form message from ${name}`
 
-    const plainBody = [
-      `New contact form submission:`,
-      ``,
-      `Name: ${name}`,
-      `Email: ${email}`,
-      `Subject: ${finalSubject}`,
-      submittedAt ? `Submitted at: ${submittedAt}` : undefined,
-      ``,
-      `Message:`,
-      message,
-    ].filter(Boolean).join("\n")
+  const plainBody = [
+    `New contact form submission:`,
+    ``,
+    `Name: ${name}`,
+    `Email: ${email}`,
+    `Subject: ${finalSubject}`,
+    submittedAt ? `Submitted at: ${submittedAt}` : undefined,
+    ``,
+    `Message:`,
+    message,
+  ].filter(Boolean).join("\n")
 
-    const htmlBody = `
-      <h2 style="margin-bottom:12px;">New contact form submission</h2>
-      <p><strong>Name:</strong> ${escapeHtml(name)}</p>
-      <p><strong>Email:</strong> <a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a></p>
-      <p><strong>Subject:</strong> ${escapeHtml(finalSubject)}</p>
-      ${submittedAt ? `<p><strong>Submitted at:</strong> ${escapeHtml(submittedAt)}</p>` : ""}
-      <hr style="margin:16px 0;" />
-      <p style="white-space:pre-wrap;">${escapeHtml(message)}</p>
-    `
+  const htmlBody = `
+    <h2 style="margin-bottom:12px;">New contact form submission</h2>
+    <p><strong>Name:</strong> ${escapeHtml(name)}</p>
+    <p><strong>Email:</strong> <a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a></p>
+    <p><strong>Subject:</strong> ${escapeHtml(finalSubject)}</p>
+    ${submittedAt ? `<p><strong>Submitted at:</strong> ${escapeHtml(submittedAt)}</p>` : ""}
+    <hr style="margin:16px 0;" />
+    <p style="white-space:pre-wrap;">${escapeHtml(message)}</p>
+  `
 
-    try {
-      const response = await fetch(RESEND_ENDPOINT, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${resendApiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: fromAddress,
-          to: [SUPPORT_EMAIL],
-          reply_to: email,
-          subject: finalSubject,
-          text: plainBody,
-          html: htmlBody,
-          tags: [{ name: "source", value: "contact-form" }],
-        }),
-      })
+  try {
+    const response = await fetch(RESEND_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${resendApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: fromAddress,
+        to: [SUPPORT_EMAIL],
+        reply_to: email,
+        subject: finalSubject,
+        text: plainBody,
+        html: htmlBody,
+        tags: [{ name: "source", value: "contact-form" }],
+      }),
+    })
 
-      if (!response.ok) {
-        let errorDetail: unknown = null
-        try {
-          errorDetail = await response.json()
-        } catch {
-          // Ignore parse errors, rely on status below.
-        }
-        console.error("contact-support: Resend API error", response.status, response.statusText, errorDetail)
-        return jsonResponse(502, {
-          error: "resend_error",
-          message: "Failed to send email via Resend.",
-          status: response.status,
-        })
+    if (!response.ok) {
+      let errorDetail: unknown = null
+      try {
+        errorDetail = await response.json()
+      } catch {
+        // Ignore parse errors, rely on status below.
       }
+      console.error("contact-support: Resend API error", response.status, response.statusText, errorDetail)
+      return jsonResponse(502, {
+        error: "resend_error",
+        message: "Failed to send email via Resend.",
+        status: response.status,
+      })
+    }
 
-      return jsonResponse(200, { success: true })
+    return jsonResponse(200, { success: true })
   } catch (error) {
     console.error("contact-support: failed to call Resend API", error)
     return jsonResponse(500, {
