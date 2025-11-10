@@ -8,6 +8,112 @@ import { mergePlantWithTranslation } from './plantTranslationLoader'
 
 const missingSupabaseRpcs = new Set<string>()
 const missingSupabaseTablesOrViews = new Set<string>()
+let taskCachesDisabled = false
+
+function disableTaskCachesOnce(reason: string, error?: any) {
+  if (taskCachesDisabled) return
+  taskCachesDisabled = true
+  const detail = reason ? ` (${reason})` : ''
+  console.warn(`[gardens] Task cache optimizations disabled${detail}; falling back to live aggregation only.`, error)
+}
+
+async function computeUserTaskTotalsFromLiveData(userId: string, date: string) {
+  try {
+    const { data: memberships } = await supabase
+      .from('garden_members')
+      .select('garden_id')
+      .eq('user_id', userId)
+
+    if (!memberships || memberships.length === 0) {
+      return { totalDueCount: 0, totalCompletedCount: 0, gardensWithRemainingTasks: 0, totalGardens: 0 }
+    }
+
+    const gardenIds = memberships.map((m: any) => m.garden_id)
+    const verifiedProg = await getGardensTodayProgressBatch(gardenIds, date)
+
+    let totalDue = 0
+    let totalCompleted = 0
+    let gardensWithRemaining = 0
+
+    for (const gid of gardenIds) {
+      const prog = verifiedProg[gid] || { due: 0, completed: 0 }
+      totalDue += prog.due
+      totalCompleted += prog.completed
+      if (prog.due > prog.completed) {
+        gardensWithRemaining++
+      }
+    }
+
+    return {
+      totalDueCount: totalDue,
+      totalCompletedCount: totalCompleted,
+      gardensWithRemainingTasks: gardensWithRemaining,
+      totalGardens: gardenIds.length,
+    }
+  } catch {
+    return { totalDueCount: 0, totalCompletedCount: 0, gardensWithRemainingTasks: 0, totalGardens: 0 }
+  }
+}
+
+async function computeUserGardenBreakdownFromLiveData(userId: string, date: string) {
+  try {
+    const { data: memberships } = await supabase
+      .from('garden_members')
+      .select('garden_id, gardens!inner(id, name)')
+      .eq('user_id', userId)
+
+    if (!memberships || memberships.length === 0) {
+      return {}
+    }
+
+    const gardenIds = memberships.map((m: any) => m.garden_id)
+    const verifiedProg = await getGardensTodayProgressBatch(gardenIds, date)
+
+    const result: Record<string, {
+      gardenName: string
+      due: number
+      completed: number
+      hasRemainingTasks: boolean
+      allTasksDone: boolean
+    }> = {}
+
+    for (const membership of memberships) {
+      const gid = String(membership.garden_id)
+      const prog = verifiedProg[gid] || { due: 0, completed: 0 }
+      const hasRemaining = prog.due > prog.completed
+      const garden = (membership as any).gardens
+      result[gid] = {
+        gardenName: garden ? garden.name : '',
+        due: prog.due,
+        completed: prog.completed,
+        hasRemainingTasks: hasRemaining,
+        allTasksDone: !hasRemaining && prog.due > 0,
+      }
+    }
+
+    return result
+  } catch {
+    return {}
+  }
+}
+
+function buildGardenProgressResult(
+  gardenIds: string[],
+  progress: Record<string, { due: number; completed: number }>
+) {
+  const result: Record<string, { due: number; completed: number; hasRemainingTasks?: boolean; allTasksDone?: boolean }> = {}
+  for (const gid of gardenIds) {
+    const prog = progress[gid] || { due: 0, completed: 0 }
+    const hasRemaining = prog.due > prog.completed
+    result[gid] = {
+      due: prog.due,
+      completed: prog.completed,
+      hasRemainingTasks: hasRemaining,
+      allTasksDone: !hasRemaining && prog.due > 0,
+    }
+  }
+  return result
+}
 
 const markMissingResourceOnce = (set: Set<string>, name: string, kind: 'rpc' | 'table') => {
   if (!set.has(name)) {
@@ -1629,9 +1735,11 @@ export async function getGardenTodayProgressCached(gardenId: string, dayIso: str
           if (verified.due > 0 || verified.completed > 0) {
             // Cache is wrong - use real data and trigger refresh
             const hasRemaining = verified.due > verified.completed
-            setTimeout(() => {
-              refreshGardenTaskCache(gardenId, dayIso).catch(() => {})
-            }, 0)
+            if (!taskCachesDisabled) {
+              setTimeout(() => {
+                refreshGardenTaskCache(gardenId, dayIso).catch(() => {})
+              }, 0)
+            }
             return {
               ...verified,
               hasRemainingTasks: hasRemaining,
@@ -1658,9 +1766,11 @@ export async function getGardenTodayProgressCached(gardenId: string, dayIso: str
   const prog = await getGardenTodayProgressUltraFast(gardenId, dayIso)
   const hasRemaining = prog.due > prog.completed
   // Trigger background cache refresh
-  setTimeout(() => {
-    refreshGardenTaskCache(gardenId, dayIso).catch(() => {})
-  }, 0)
+  if (!taskCachesDisabled) {
+    setTimeout(() => {
+      refreshGardenTaskCache(gardenId, dayIso).catch(() => {})
+    }, 0)
+  }
   return {
     ...prog,
     hasRemainingTasks: hasRemaining,
@@ -1675,7 +1785,11 @@ export async function getGardenTodayProgressCached(gardenId: string, dayIso: str
  */
 export async function getGardensTodayProgressBatchCached(gardenIds: string[], dayIso: string): Promise<Record<string, { due: number; completed: number; hasRemainingTasks?: boolean; allTasksDone?: boolean }>> {
   if (gardenIds.length === 0) return {}
-  
+  if (taskCachesDisabled) {
+    const verifiedProg = await getGardensTodayProgressBatch(gardenIds, dayIso)
+    return buildGardenProgressResult(gardenIds, verifiedProg)
+  }
+
   try {
     // OPTIMIZED: Direct query to cache table - FASTEST approach
     // If table doesn't exist, cacheErr will indicate that - handle gracefully
@@ -1745,9 +1859,11 @@ export async function getGardensTodayProgressBatchCached(gardenIds: string[], da
           allTasksDone: !hasRemaining && prog.due > 0,
         }
         // Trigger background cache refresh for missing/wrong cache
-        setTimeout(() => {
-          refreshGardenTaskCache(gid, dayIso).catch(() => {})
-        }, 0)
+        if (!taskCachesDisabled) {
+          setTimeout(() => {
+            refreshGardenTaskCache(gid, dayIso).catch(() => {})
+          }, 0)
+        }
       }
     }
     
@@ -1756,25 +1872,13 @@ export async function getGardensTodayProgressBatchCached(gardenIds: string[], da
     // On error, compute from real data as fallback
     try {
       const verifiedProg = await getGardensTodayProgressBatch(gardenIds, dayIso)
-      const result: Record<string, { due: number; completed: number; hasRemainingTasks?: boolean; allTasksDone?: boolean }> = {}
-      for (const gid of gardenIds) {
-        const prog = verifiedProg[gid] || { due: 0, completed: 0 }
-        const hasRemaining = prog.due > prog.completed
-        result[gid] = {
-          due: prog.due,
-          completed: prog.completed,
-          hasRemainingTasks: hasRemaining,
-          allTasksDone: !hasRemaining && prog.due > 0,
-        }
-      }
-      return result
+      return buildGardenProgressResult(gardenIds, verifiedProg)
     } catch {
-      // Final fallback: return zeros for all gardens
-      const result: Record<string, { due: number; completed: number; hasRemainingTasks?: boolean; allTasksDone?: boolean }> = {}
+      const fallback: Record<string, { due: number; completed: number; hasRemainingTasks?: boolean; allTasksDone?: boolean }> = {}
       for (const gid of gardenIds) {
-        result[gid] = { due: 0, completed: 0, hasRemainingTasks: false, allTasksDone: true }
+        fallback[gid] = { due: 0, completed: 0, hasRemainingTasks: false, allTasksDone: true }
       }
-      return result
+      return fallback
     }
   }
 }
@@ -1907,6 +2011,7 @@ export async function getGardenPlantTaskCountsCached(gardenId: string): Promise<
 export async function refreshGardenTaskCache(gardenId: string, cacheDate?: string): Promise<void> {
   const date = cacheDate || new Date().toISOString().slice(0, 10)
   const rpcName = 'refresh_garden_task_cache'
+  if (taskCachesDisabled) return
   if (missingSupabaseRpcs.has(rpcName)) return
   try {
     const { error } = await supabase.rpc(rpcName, {
@@ -1915,10 +2020,12 @@ export async function refreshGardenTaskCache(gardenId: string, cacheDate?: strin
     })
     if (error) {
       if (isMissingRpcFunction(error, rpcName) || isRpcDependencyUnavailable(error, rpcName)) return
+      disableTaskCachesOnce(`${rpcName} error`, error)
       throw error
     }
   } catch (e) {
     if (isMissingRpcFunction(e, rpcName) || isRpcDependencyUnavailable(e, rpcName)) return
+    disableTaskCachesOnce(`${rpcName} exception`, e)
     // Silently fail - cache refresh is best effort (but log once)
     console.warn('[gardens] Failed to refresh cache:', e)
   }
@@ -2062,6 +2169,9 @@ export async function getUserTasksTodayCached(userId: string, dayIso?: string): 
   totalGardens: number
 }> {
   const date = dayIso || new Date().toISOString().slice(0, 10)
+  if (taskCachesDisabled) {
+    return computeUserTaskTotalsFromLiveData(userId, date)
+  }
   const gardenDailyTable = 'garden_task_daily_cache'
   
   try {
@@ -2142,9 +2252,11 @@ export async function getUserTasksTodayCached(userId: string, dayIso?: string): 
             // If garden cache shows different values, use garden cache (more accurate)
             if (verifiedDue > 0 || verifiedCompleted > 0) {
               // Trigger background refresh of user cache
-              setTimeout(() => {
-                refreshUserTaskCache(userId, date).catch(() => {})
-              }, 0)
+              if (!taskCachesDisabled) {
+                setTimeout(() => {
+                  refreshUserTaskCache(userId, date).catch(() => {})
+                }, 0)
+              }
               
               return {
                 totalDueCount: verifiedDue,
@@ -2203,7 +2315,7 @@ export async function getUserTasksTodayCached(userId: string, dayIso?: string): 
       let totalDue = 0
       let totalCompleted = 0
       let gardensWithRemaining = 0
-      
+
       for (const row of gardenCache) {
         totalDue += Number(row.due_count ?? 0)
         totalCompleted += Number(row.completed_count ?? 0)
@@ -2211,11 +2323,13 @@ export async function getUserTasksTodayCached(userId: string, dayIso?: string): 
           gardensWithRemaining++
         }
       }
-      
+
       // Trigger background refresh of user cache (non-blocking)
-      setTimeout(() => {
-        refreshUserTaskCache(userId, date).catch(() => {})
-      }, 0)
+      if (!taskCachesDisabled) {
+        setTimeout(() => {
+          refreshUserTaskCache(userId, date).catch(() => {})
+        }, 0)
+      }
       
       return {
         totalDueCount: totalDue,
@@ -2227,68 +2341,22 @@ export async function getUserTasksTodayCached(userId: string, dayIso?: string): 
     
     // If no cache exists, COMPUTE FROM REAL DATA (fail-safe)
     // This ensures we never show wrong information
-    const verifiedProg = await getGardensTodayProgressBatch(gardenIds, date)
-    let totalDue = 0
-    let totalCompleted = 0
-    let gardensWithRemaining = 0
-    
-    for (const gid of gardenIds) {
-      const prog = verifiedProg[gid] || { due: 0, completed: 0 }
-      totalDue += prog.due
-      totalCompleted += prog.completed
-      if (prog.due > prog.completed) {
-        gardensWithRemaining++
-      }
-    }
-    
+    const liveTotals = await computeUserTaskTotalsFromLiveData(userId, date)
+
     // Trigger background cache refresh (non-blocking)
-    setTimeout(() => {
-      refreshUserTaskCache(userId, date).catch(() => {})
-      gardenIds.forEach(gid => {
-        refreshGardenTaskCache(gid, date).catch(() => {})
-      })
-    }, 0)
-    
-    return {
-      totalDueCount: totalDue,
-      totalCompletedCount: totalCompleted,
-      gardensWithRemainingTasks: gardensWithRemaining,
-      totalGardens: gardenIds.length,
+    if (!taskCachesDisabled) {
+      setTimeout(() => {
+        refreshUserTaskCache(userId, date).catch(() => {})
+        gardenIds.forEach(gid => {
+          refreshGardenTaskCache(gid, date).catch(() => {})
+        })
+      }, 0)
     }
+
+    return liveTotals
   } catch {
     // On error, try to compute from real data as fallback
-    try {
-      const { data: memberships } = await supabase
-        .from('garden_members')
-        .select('garden_id')
-        .eq('user_id', userId)
-      
-      if (memberships && memberships.length > 0) {
-        const gardenIds = memberships.map((m: any) => m.garden_id)
-        const verifiedProg = await getGardensTodayProgressBatch(gardenIds, date)
-        let totalDue = 0
-        let totalCompleted = 0
-        let gardensWithRemaining = 0
-        
-        for (const gid of gardenIds) {
-          const prog = verifiedProg[gid] || { due: 0, completed: 0 }
-          totalDue += prog.due
-          totalCompleted += prog.completed
-          if (prog.due > prog.completed) {
-            gardensWithRemaining++
-          }
-        }
-        
-        return {
-          totalDueCount: totalDue,
-          totalCompletedCount: totalCompleted,
-          gardensWithRemainingTasks: gardensWithRemaining,
-          totalGardens: gardenIds.length,
-        }
-      }
-    } catch {}
-    // Final fallback: return zeros
-    return { totalDueCount: 0, totalCompletedCount: 0, gardensWithRemainingTasks: 0, totalGardens: 0 }
+    return computeUserTaskTotalsFromLiveData(userId, date)
   }
 }
 
@@ -2305,7 +2373,10 @@ export async function getUserGardensTasksTodayCached(userId: string, dayIso?: st
   allTasksDone: boolean
 }>> {
   const date = dayIso || new Date().toISOString().slice(0, 10)
-  
+  if (taskCachesDisabled) {
+    return computeUserGardenBreakdownFromLiveData(userId, date)
+  }
+
   try {
     // OPTIMIZED: Get gardens and cache in parallel - FASTEST approach
     const [membershipsResult, cacheResult] = await Promise.all([
@@ -2392,54 +2463,18 @@ export async function getUserGardensTasksTodayCached(userId: string, dayIso?: st
           allTasksDone: !hasRemaining && prog.due > 0,
         }
         // Trigger background cache refresh for missing/wrong cache
-        setTimeout(() => {
-          refreshGardenTaskCache(gid, date).catch(() => {})
-        }, 0)
+        if (!taskCachesDisabled) {
+          setTimeout(() => {
+            refreshGardenTaskCache(gid, date).catch(() => {})
+          }, 0)
+        }
       }
     }
     
     return result
   } catch {
     // On error, try to compute from real data as fallback
-    try {
-      const memberships = await supabase
-        .from('garden_members')
-        .select('garden_id, gardens!inner(id, name)')
-        .eq('user_id', userId)
-      
-      if (memberships.data && memberships.data.length > 0) {
-        const gardenIds = memberships.data.map((m: any) => m.garden_id)
-        const gardenNameMap: Record<string, string> = {}
-        memberships.data.forEach((m: any) => {
-          const g = m.gardens
-          if (g) gardenNameMap[g.id] = g.name
-        })
-        
-        const verifiedProg = await getGardensTodayProgressBatch(gardenIds, date)
-        const result: Record<string, {
-          gardenName: string
-          due: number
-          completed: number
-          hasRemainingTasks: boolean
-          allTasksDone: boolean
-        }> = {}
-        
-        for (const gid of gardenIds) {
-          const prog = verifiedProg[gid] || { due: 0, completed: 0 }
-          const hasRemaining = prog.due > prog.completed
-          result[gid] = {
-            gardenName: gardenNameMap[gid] || '',
-            due: prog.due,
-            completed: prog.completed,
-            hasRemainingTasks: hasRemaining,
-            allTasksDone: !hasRemaining && prog.due > 0,
-          }
-        }
-        return result
-      }
-    } catch {}
-    // Final fallback: return empty object
-    return {}
+    return computeUserGardenBreakdownFromLiveData(userId, date)
   }
 }
 
@@ -2449,6 +2484,7 @@ export async function getUserGardensTasksTodayCached(userId: string, dayIso?: st
 export async function refreshUserTaskCache(userId: string, cacheDate?: string): Promise<void> {
   const date = cacheDate || new Date().toISOString().slice(0, 10)
   const rpcName = 'refresh_user_task_daily_cache'
+  if (taskCachesDisabled) return
   if (missingSupabaseRpcs.has(rpcName)) return
   try {
     const { error } = await supabase.rpc(rpcName, {
@@ -2457,10 +2493,12 @@ export async function refreshUserTaskCache(userId: string, cacheDate?: string): 
     })
     if (error) {
       if (isMissingRpcFunction(error, rpcName) || isRpcDependencyUnavailable(error, rpcName)) return
+      disableTaskCachesOnce(`${rpcName} error`, error)
       throw error
     }
   } catch (e) {
     if (isMissingRpcFunction(e, rpcName) || isRpcDependencyUnavailable(e, rpcName)) return
+    disableTaskCachesOnce(`${rpcName} exception`, e)
     // Silently fail - cache refresh is best effort
     console.warn('[gardens] Failed to refresh user cache:', e)
   }
