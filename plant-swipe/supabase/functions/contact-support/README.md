@@ -10,7 +10,7 @@ Configure the function with your Resend API credentials.
 | --- | --- |
 | `RESEND_API_KEY` | Resend API key (or `SUPABASE_RESEND_API_KEY`) |
 | `RESEND_FROM` | From email address (optional, defaults to `support@aphylia.app`) |
-| `RESEND_FROM_NAME` | Display name for the sender (optional, defaults to `Plant Swipe Contact`) |
+| `RESEND_FROM_NAME` | Display name for the sender (optional, defaults to `Aphylia Support Form`) |
 
 > For backwards compatibility, the function still honours `SMTP_FROM`, `SUPABASE_SMTP_SENDER`, and `SMTP_FROM_NAME` when computing the `from` header if `RESEND_FROM` isn’t set.
 

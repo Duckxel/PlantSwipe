@@ -7,6 +7,7 @@ const RESEND_ENDPOINT = "https://api.resend.com/emails"
 const contactSchema = z.object({
   name: z.string().trim().min(1).max(120),
   email: z.string().trim().email().max(254),
+  subject: z.string().trim().min(3).max(150),
   message: z.string().trim().min(10).max(4000),
   submittedAt: z.string().optional(),
 })
@@ -85,7 +86,7 @@ serve(async (req) => {
     })
   }
 
-  const { name, email, message, submittedAt } = parsed.data
+  const { name, email, subject, message, submittedAt } = parsed.data
 
   const resendApiKey = getFirstEnv("RESEND_API_KEY", "SUPABASE_RESEND_API_KEY")
 
@@ -97,18 +98,21 @@ serve(async (req) => {
     })
   }
 
-  const fromAddressRaw = getFirstEnv("RESEND_FROM", "SMTP_FROM", "SUPABASE_SMTP_SENDER") ?? SUPPORT_EMAIL
-  const fromName = getFirstEnv("RESEND_FROM_NAME", "SMTP_FROM_NAME") ?? "Plant Swipe Contact"
+  const fromAddressRaw =
+    getFirstEnv("RESEND_FROM", "SMTP_FROM", "SUPABASE_SMTP_SENDER") ?? "form@aphylia.app"
+  const fromName = getFirstEnv("RESEND_FROM_NAME", "SMTP_FROM_NAME") ?? "Aphylia Support Form"
 
   const fromAddress = fromAddressRaw.includes("<")
     ? fromAddressRaw
     : `${fromName} <${fromAddressRaw}>`
 
-  const subject = `Contact form message from ${name}`
+  // Fallback if caller somehow sends an empty/too short subject post-validation:
+  const finalSubject = subject || `Contact form message from ${name}`
 
   const plainBody = [
     `New contact form submission:`,
     ``,
+    `Subject: ${finalSubject}`,
     `Name: ${name}`,
     `Email: ${email}`,
     submittedAt ? `Submitted at: ${submittedAt}` : undefined,
@@ -119,6 +123,7 @@ serve(async (req) => {
 
   const htmlBody = `
     <h2 style="margin-bottom:12px;">New contact form submission</h2>
+    <p><strong>Subject:</strong> ${escapeHtml(finalSubject)}</p>
     <p><strong>Name:</strong> ${escapeHtml(name)}</p>
     <p><strong>Email:</strong> <a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a></p>
     ${submittedAt ? `<p><strong>Submitted at:</strong> ${escapeHtml(submittedAt)}</p>` : ""}
@@ -137,7 +142,7 @@ serve(async (req) => {
         from: fromAddress,
         to: [SUPPORT_EMAIL],
         reply_to: email,
-        subject,
+        subject: finalSubject,
         text: plainBody,
         html: htmlBody,
         tags: [{ name: "source", value: "contact-form" }],
