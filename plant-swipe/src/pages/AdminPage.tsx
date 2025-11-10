@@ -725,29 +725,33 @@ export const AdminPage: React.FC = () => {
       // Fetch all users who requested this plant from the junction table
       const { data: requestUsersData, error: usersError } = await supabase
         .from('plant_request_users')
-        .select(`
-          user_id,
-          profiles:user_id (
-            id,
-            display_name,
-            email
-          )
-        `)
+        .select('user_id')
         .eq('requested_plant_id', plantRequest.id)
         .order('created_at', { ascending: false })
 
       if (usersError) throw new Error(usersError.message)
 
-      const users = (requestUsersData ?? [])
-        .map((row: any) => {
-          const profile = row?.profiles
-          return {
-            id: String(row.user_id),
-            display_name: profile?.display_name ? String(profile.display_name) : null,
-            email: profile?.email ? String(profile.email) : null,
-          }
-        })
-        .filter((user): user is { id: string; display_name: string | null; email: string | null } => !!user.id)
+      if (!requestUsersData || requestUsersData.length === 0) {
+        setRequestUsers([])
+        return
+      }
+
+      // Get unique user IDs
+      const userIds = [...new Set(requestUsersData.map((row: any) => String(row.user_id)))]
+
+      // Fetch profiles for these user IDs
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, display_name, email')
+        .in('id', userIds)
+
+      if (profilesError) throw new Error(profilesError.message)
+
+      const users = (profilesData ?? []).map((profile: any) => ({
+        id: String(profile.id),
+        display_name: profile?.display_name ? String(profile.display_name) : null,
+        email: profile?.email ? String(profile.email) : null,
+      }))
 
       setRequestUsers(users)
     } catch (err) {
@@ -2827,7 +2831,7 @@ export const AdminPage: React.FC = () => {
                         {requestUsersLoading ? (
                           <div className="text-sm opacity-60">Loading users...</div>
                         ) : requestUsers.length === 0 ? (
-                          <div className="text-sm opacity-60">No user information available.</div>
+                          <div className="text-sm opacity-60">No users have requested this plant yet.</div>
                         ) : (
                           <div className="space-y-2 max-h-60 overflow-y-auto">
                             {requestUsers.map((user) => (
@@ -2836,9 +2840,9 @@ export const AdminPage: React.FC = () => {
                                 className="text-sm p-2 rounded-lg bg-neutral-100 dark:bg-[#2d2d30]"
                               >
                                 <div className="font-medium">
-                                  {user.display_name || 'Unknown User'}
+                                  {user.display_name || user.email || `User ${user.id.slice(0, 8)}`}
                                 </div>
-                                {user.email && (
+                                {user.email && user.display_name && (
                                   <div className="text-xs opacity-60">{user.email}</div>
                                 )}
                               </div>
