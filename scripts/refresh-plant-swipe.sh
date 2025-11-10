@@ -680,15 +680,111 @@ PY
     done
   fi
 
-  # Deploy the contact-support function
-  log "Deploying contact-support Edge Function…"
-  local deploy_args=(supabase functions deploy contact-support --no-verify-jwt --project-ref "$SUPABASE_PROJECT_REF" --workdir "$NODE_DIR")
-  if ! "${supabase_cmd[@]}" "${deploy_args[@]}" >/tmp/supabase-deploy.log 2>&1; then
-    log "[WARN] Supabase Edge Function deployment failed. See /tmp/supabase-deploy.log"
-    tail -n 25 /tmp/supabase-deploy.log 2>/dev/null || true
-  else
-    log "Supabase Edge Function contact-support deployed successfully."
+  # Verify function directory exists
+  local FUNCTION_DIR="$NODE_DIR/supabase/functions/contact-support"
+  if [[ ! -d "$FUNCTION_DIR" ]]; then
+    log "[ERROR] Function directory not found: $FUNCTION_DIR"
+    return 1
   fi
+  if [[ ! -f "$FUNCTION_DIR/index.ts" ]]; then
+    log "[ERROR] Function file not found: $FUNCTION_DIR/index.ts"
+    return 1
+  fi
+  log "Function directory verified: $FUNCTION_DIR"
+
+  # Check if project is linked (create config.toml if needed)
+  local SUPABASE_CONFIG="$NODE_DIR/supabase/config.toml"
+  if [[ ! -f "$SUPABASE_CONFIG" ]]; then
+    log "Linking Supabase project $SUPABASE_PROJECT_REF…"
+    # Ensure supabase directory exists
+    mkdir -p "$NODE_DIR/supabase" || true
+    local link_args=(supabase link --project-ref "$SUPABASE_PROJECT_REF" --workdir "$NODE_DIR")
+    if ! "${supabase_cmd[@]}" "${link_args[@]}" >/tmp/supabase-link.log 2>&1; then
+      log "[WARN] Failed to link Supabase project. See /tmp/supabase-link.log"
+      tail -n 20 /tmp/supabase-link.log 2>/dev/null || true
+      log "[INFO] Continuing with deployment anyway (project may already be linked)..."
+    else
+      log "Supabase project linked successfully."
+    fi
+  else
+    # Verify the linked project matches
+    local linked_ref=""
+    if grep -q "project_id" "$SUPABASE_CONFIG" 2>/dev/null; then
+      linked_ref="$(grep "project_id" "$SUPABASE_CONFIG" | head -n1 | sed -E 's/.*project_id[[:space:]]*=[[:space:]]*["'\'']?([^"'\'']+)["'\'']?.*/\1/' || echo "")"
+    fi
+    if [[ -n "$linked_ref" && "$linked_ref" != "$SUPABASE_PROJECT_REF" ]]; then
+      log "[WARN] Linked project ($linked_ref) differs from SUPABASE_PROJECT_REF ($SUPABASE_PROJECT_REF)"
+      log "[INFO] Re-linking to correct project…"
+      local link_args=(supabase link --project-ref "$SUPABASE_PROJECT_REF" --workdir "$NODE_DIR")
+      "${supabase_cmd[@]}" "${link_args[@]}" >/tmp/supabase-relink.log 2>&1 || true
+    else
+      log "Supabase project already linked: $SUPABASE_PROJECT_REF"
+    fi
+  fi
+
+  # Deploy the contact-support function with verbose output
+  log "Deploying contact-support Edge Function to project $SUPABASE_PROJECT_REF…"
+  log "Function path: $FUNCTION_DIR"
+  log "Working directory: $NODE_DIR"
+  
+  local deploy_log="/tmp/supabase-deploy-$(date +%s).log"
+  
+  # Change to the node directory for deployment (more reliable than --workdir)
+  local original_pwd="$(pwd)"
+  cd "$NODE_DIR" || {
+    log "[ERROR] Failed to change to directory: $NODE_DIR"
+    return 1
+  }
+  
+  # Build deployment command - try with and without --workdir for compatibility
+  local deploy_args=(supabase functions deploy contact-support --no-verify-jwt --project-ref "$SUPABASE_PROJECT_REF")
+  
+  # Show the command being run
+  log "Running from $NODE_DIR: ${supabase_cmd[*]} ${deploy_args[*]}"
+  
+  # Run deployment and capture both stdout and stderr
+  local deploy_exit_code=0
+  "${supabase_cmd[@]}" "${deploy_args[@]}" >"$deploy_log" 2>&1 || deploy_exit_code=$?
+  
+  # Return to original directory
+  cd "$original_pwd" || true
+  
+  # Always show the deployment output for debugging
+  log "Deployment output:"
+  cat "$deploy_log" | while IFS= read -r line; do
+    log "  $line"
+  done || true
+  
+  if [[ $deploy_exit_code -ne 0 ]]; then
+    log "[ERROR] Supabase Edge Function deployment failed with exit code $deploy_exit_code"
+    log "Full deployment log saved to: $deploy_log"
+    return 1
+  fi
+  
+  # Verify deployment by checking function status
+  log "Verifying deployment…"
+  local verify_log="/tmp/supabase-verify-$(date +%s).log"
+  cd "$NODE_DIR" || true
+  if "${supabase_cmd[@]}" supabase functions list --project-ref "$SUPABASE_PROJECT_REF" >"$verify_log" 2>&1; then
+    if grep -q "contact-support" "$verify_log" 2>/dev/null; then
+      log "✓ Function 'contact-support' verified in project $SUPABASE_PROJECT_REF"
+      log "Function list:"
+      grep -A 2 "contact-support" "$verify_log" | while IFS= read -r line; do
+        log "  $line"
+      done || true
+    else
+      log "[WARN] Function 'contact-support' not found in function list. Deployment may have failed."
+      log "Available functions:"
+      cat "$verify_log" | while IFS= read -r line; do
+        log "  $line"
+      done || true
+    fi
+  else
+    log "[WARN] Could not verify deployment (function list failed). Deployment may have succeeded."
+  fi
+  cd "$original_pwd" || true
+  
+  log "Supabase Edge Function contact-support deployment completed."
 }
 
 # Optionally skip Supabase deployment if requested
