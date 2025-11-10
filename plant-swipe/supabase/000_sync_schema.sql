@@ -438,6 +438,74 @@ do $$ begin
     );
 end $$;
 
+-- Junction table to track all users who requested each plant
+create table if not exists public.plant_request_users (
+  id uuid primary key default gen_random_uuid(),
+  requested_plant_id uuid not null references public.requested_plants(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  unique(requested_plant_id, user_id)
+);
+
+-- Indexes for plant_request_users
+create index if not exists plant_request_users_requested_plant_id_idx on public.plant_request_users(requested_plant_id);
+create index if not exists plant_request_users_user_id_idx on public.plant_request_users(user_id);
+create index if not exists plant_request_users_created_at_idx on public.plant_request_users(created_at desc);
+
+-- RLS policies for plant_request_users
+alter table public.plant_request_users enable row level security;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_request_users' and policyname='plant_request_users_select_all') then
+    drop policy plant_request_users_select_all on public.plant_request_users;
+  end if;
+  -- Allow authenticated users to read all request users (for admin purposes)
+  create policy plant_request_users_select_all on public.plant_request_users for select to authenticated
+    using (
+      true
+      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_request_users' and policyname='plant_request_users_insert') then
+    drop policy plant_request_users_insert on public.plant_request_users;
+  end if;
+  -- Allow authenticated users to insert their own requests
+  create policy plant_request_users_insert on public.plant_request_users for insert to authenticated
+    with check (
+      user_id = (select auth.uid())
+      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+    );
+end $$;
+
+-- Function to sync request_count from plant_request_users count
+create or replace function public.sync_request_count()
+returns trigger
+language plpgsql
+as $$
+begin
+  update public.requested_plants
+  set request_count = (
+    select count(*)::integer
+    from public.plant_request_users
+    where requested_plant_id = coalesce(new.requested_plant_id, old.requested_plant_id)
+  ),
+  updated_at = now()
+  where id = coalesce(new.requested_plant_id, old.requested_plant_id);
+  return coalesce(new, old);
+end;
+$$;
+
+-- Trigger to sync request_count when plant_request_users changes
+drop trigger if exists sync_request_count_trigger on public.plant_request_users;
+create trigger sync_request_count_trigger
+  after insert or delete on public.plant_request_users
+  for each row
+  execute function public.sync_request_count();
+
+comment on table public.plant_request_users is 'Junction table tracking all users who requested each plant. Used to maintain accurate request counts and list of requesters.';
+
 -- ========== Core tables ==========
 create table if not exists public.gardens (
   id uuid primary key default gen_random_uuid(),

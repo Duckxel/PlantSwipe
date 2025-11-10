@@ -709,41 +709,45 @@ export const AdminPage: React.FC = () => {
     setRequestUsersLoading(true)
     setRequestUsers([])
     try {
-      // Fetch all requests for this plant name (normalized) to get all users who requested it
-      const { data: requestsData, error: requestsError } = await supabase
+      // First get the requested_plant_id from the normalized name
+      const { data: plantRequest, error: plantError } = await supabase
         .from('requested_plants')
-        .select('id, requested_by')
+        .select('id')
         .eq('plant_name_normalized', plantNameNormalized)
         .is('completed_at', null)
+        .single()
 
-      if (requestsError) throw new Error(requestsError.message)
-
-      // Get unique user IDs
-      const userIds = new Set<string>()
-      ;(requestsData ?? []).forEach((row: any) => {
-        if (row?.requested_by) {
-          userIds.add(String(row.requested_by))
-        }
-      })
-
-      if (userIds.size === 0) {
+      if (plantError || !plantRequest?.id) {
         setRequestUsers([])
         return
       }
 
-      // Fetch profiles for these user IDs
-      const { data: profilesData, error: profilesError } = await supabase
-        .from('profiles')
-        .select('id, display_name, email')
-        .in('id', Array.from(userIds))
+      // Fetch all users who requested this plant from the junction table
+      const { data: requestUsersData, error: usersError } = await supabase
+        .from('plant_request_users')
+        .select(`
+          user_id,
+          profiles:user_id (
+            id,
+            display_name,
+            email
+          )
+        `)
+        .eq('requested_plant_id', plantRequest.id)
+        .order('created_at', { ascending: false })
 
-      if (profilesError) throw new Error(profilesError.message)
+      if (usersError) throw new Error(usersError.message)
 
-      const users = (profilesData ?? []).map((profile: any) => ({
-        id: String(profile.id),
-        display_name: profile?.display_name ? String(profile.display_name) : null,
-        email: profile?.email ? String(profile.email) : null,
-      }))
+      const users = (requestUsersData ?? [])
+        .map((row: any) => {
+          const profile = row?.profiles
+          return {
+            id: String(row.user_id),
+            display_name: profile?.display_name ? String(profile.display_name) : null,
+            email: profile?.email ? String(profile.email) : null,
+          }
+        })
+        .filter((user): user is { id: string; display_name: string | null; email: string | null } => !!user.id)
 
       setRequestUsers(users)
     } catch (err) {
@@ -2726,12 +2730,12 @@ export const AdminPage: React.FC = () => {
 
                   {/* Search */}
                   <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 opacity-50" />
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 opacity-50 pointer-events-none" />
                     <Input
                       placeholder="Search requests by plant name..."
                       value={requestSearchQuery}
                       onChange={(e) => setRequestSearchQuery(e.target.value)}
-                      className="rounded-xl pl-10"
+                      className="rounded-xl pl-10 pr-4"
                     />
                   </div>
 
@@ -2771,7 +2775,7 @@ export const AdminPage: React.FC = () => {
                                 <div className="flex-1">
                                   <div className="text-sm font-medium">{req.plant_name}</div>
                                   <div className="text-xs opacity-60" title={updatedTitle}>
-                                    {requestCountLabel} • {timeLabel}
+                                    {timeLabel}
                                   </div>
                                 </div>
                                 <Button
@@ -2786,7 +2790,7 @@ export const AdminPage: React.FC = () => {
                               </div>
                               <div className="flex items-center gap-3">
                                 <Badge variant="secondary" className="rounded-xl px-2 py-1 text-xs">
-                                  {req.request_count}
+                                  {req.request_count} {req.request_count === 1 ? 'request' : 'requests'}
                                 </Badge>
                                 <Button
                                   variant="outline"

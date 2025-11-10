@@ -37,7 +37,7 @@ export const RequestPlantDialog: React.FC<RequestPlantDialogProps> = ({ open, on
 
     try {
       const displayName = plantName.trim()
-      const normalizedName = displayName.toLowerCase()
+      const normalizedName = displayName.toLowerCase().trim()
 
       if (!displayName || !normalizedName) {
         setError(t('requestPlant.nameRequired') || 'Plant name is required')
@@ -63,19 +63,51 @@ export const RequestPlantDialog: React.FC<RequestPlantDialogProps> = ({ open, on
         return existingNormalized === normalizedName
       })
 
-      if (exactMatch) {
-        const { error: updateError } = await supabase
-          .from('requested_plants')
-          .update({
-            plant_name: displayName,
-            plant_name_normalized: normalizedName,
-            request_count: (exactMatch.request_count ?? 0) + 1,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', exactMatch.id)
+      let requestId: string | null = null
 
-        if (updateError) {
-          throw new Error(updateError.message)
+      if (exactMatch) {
+        requestId = exactMatch.id
+        
+        // Check if user already requested this plant
+        const { data: existingUserRequest, error: checkError } = await supabase
+          .from('plant_request_users')
+          .select('id')
+          .eq('requested_plant_id', requestId)
+          .eq('user_id', user.id)
+          .single()
+
+        if (checkError && checkError.code !== 'PGRST116') { // PGRST116 is "not found" which is expected
+          throw new Error(checkError.message)
+        }
+
+        // If user already requested, don't add again
+        if (existingUserRequest) {
+          setError(t('requestPlant.alreadyRequested') || 'You have already requested this plant.')
+          return
+        }
+
+        // Add user to junction table (trigger will update request_count)
+        const { error: insertUserError } = await supabase
+          .from('plant_request_users')
+          .insert({
+            requested_plant_id: requestId,
+            user_id: user.id
+          })
+
+        if (insertUserError) {
+          throw new Error(insertUserError.message)
+        }
+
+        // Update plant name if needed (to preserve better casing)
+        if (displayName !== exactMatch.plant_name) {
+          await supabase
+            .from('requested_plants')
+            .update({
+              plant_name: displayName,
+              plant_name_normalized: normalizedName,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', requestId)
         }
       } else {
         // Check for similar names (fuzzy match)
@@ -106,12 +138,43 @@ export const RequestPlantDialog: React.FC<RequestPlantDialogProps> = ({ open, on
         })
 
         if (similarMatch) {
+          requestId = similarMatch.id
+          
+          // Check if user already requested this plant
+          const { data: existingUserRequest, error: checkError } = await supabase
+            .from('plant_request_users')
+            .select('id')
+            .eq('requested_plant_id', requestId)
+            .eq('user_id', user.id)
+            .single()
+
+          if (checkError && checkError.code !== 'PGRST116') {
+            throw new Error(checkError.message)
+          }
+
+          // If user already requested, don't add again
+          if (existingUserRequest) {
+            setError(t('requestPlant.alreadyRequested') || 'You have already requested this plant.')
+            return
+          }
+
+          // Add user to junction table (trigger will update request_count)
+          const { error: insertUserError } = await supabase
+            .from('plant_request_users')
+            .insert({
+              requested_plant_id: requestId,
+              user_id: user.id
+            })
+
+          if (insertUserError) {
+            throw new Error(insertUserError.message)
+          }
+
           const stored = similarMatch.plant_name ?? ''
           const storedNormalized = normalize(similarMatch.plant_name_normalized ?? stored)
           const computedNormalized = similarMatch.plant_name_normalized ?? (storedNormalized || normalizedName)
 
           const updatePayload: Record<string, any> = {
-            request_count: (similarMatch.request_count ?? 0) + 1,
             updated_at: new Date().toISOString(),
             plant_name_normalized: computedNormalized || normalizedName
           }
@@ -120,17 +183,13 @@ export const RequestPlantDialog: React.FC<RequestPlantDialogProps> = ({ open, on
             updatePayload.plant_name = displayName
           }
 
-          const { error: updateError } = await supabase
+          await supabase
             .from('requested_plants')
             .update(updatePayload)
-            .eq('id', similarMatch.id)
-
-          if (updateError) {
-            throw new Error(updateError.message)
-          }
+            .eq('id', requestId)
         } else {
           // Create new request
-          const { error: insertError } = await supabase
+          const { data: newRequest, error: insertError } = await supabase
             .from('requested_plants')
             .insert({
               plant_name: displayName,
@@ -138,9 +197,27 @@ export const RequestPlantDialog: React.FC<RequestPlantDialogProps> = ({ open, on
               requested_by: user.id,
               request_count: 1
             })
+            .select('id')
+            .single()
 
           if (insertError) {
             throw new Error(insertError.message)
+          }
+
+          if (!newRequest?.id) {
+            throw new Error('Failed to create request')
+          }
+
+          // Add user to junction table
+          const { error: insertUserError } = await supabase
+            .from('plant_request_users')
+            .insert({
+              requested_plant_id: newRequest.id,
+              user_id: user.id
+            })
+
+          if (insertUserError) {
+            throw new Error(insertUserError.message)
           }
         }
       }
