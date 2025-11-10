@@ -705,7 +705,7 @@ export const AdminPage: React.FC = () => {
     }
   }, [supabase])
 
-  const loadRequestUsers = React.useCallback(async (requestId: string, plantNameNormalized: string) => {
+  const loadRequestUsers = React.useCallback(async (plantNameNormalized: string) => {
     setRequestUsersLoading(true)
     setRequestUsers([])
     try {
@@ -758,7 +758,7 @@ export const AdminPage: React.FC = () => {
     setSelectedRequestInfo(req)
     setInfoDialogOpen(true)
     if (req.plant_name_normalized) {
-      loadRequestUsers(req.id, req.plant_name_normalized)
+      loadRequestUsers(req.plant_name_normalized)
     }
   }, [loadRequestUsers])
 
