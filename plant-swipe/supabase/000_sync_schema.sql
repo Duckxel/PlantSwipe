@@ -7,6 +7,45 @@ create extension if not exists pgcrypto;
 -- Optional: scheduling support
 create extension if not exists pg_cron;
 
+-- Helper: set a value at the provided 1-based index for integer arrays.
+-- Supabase Postgres instances do not ship with array_set(), so we provide
+-- a small compatible implementation that mirrors the behaviour relied on by
+-- our dashboard caching routines.
+drop function if exists public.array_set(integer[], integer[], integer);
+create or replace function public.array_set(
+  _arr integer[],
+  _indexes integer[],
+  _value integer
+)
+returns integer[]
+language plpgsql
+immutable
+set search_path = public
+as $$
+declare
+  v_result integer[] := coalesce(_arr, '{}'::integer[]);
+  v_index integer;
+  v_missing integer;
+begin
+  if array_length(_indexes, 1) is distinct from 1 then
+    raise exception 'array_set() expects exactly one index';
+  end if;
+
+  v_index := _indexes[1];
+  if v_index is null or v_index < 1 then
+    raise exception 'array_set() index must be >= 1';
+  end if;
+
+  v_missing := v_index - coalesce(array_length(v_result, 1), 0);
+  if v_missing > 0 then
+    v_result := v_result || array_fill(0, ARRAY[v_missing]);
+  end if;
+
+  v_result[v_index] := _value;
+  return v_result;
+end;
+$$;
+
 -- ========== Profiles (user profiles) ==========
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
@@ -1886,6 +1925,7 @@ begin
   perform public.update_garden_streak(v_occ.garden_id, v_yesterday);
 end;
 $$;
+grant execute on function public.progress_task_occurrence(uuid, integer) to authenticated, service_role;
 
 -- Streak helpers (used by server jobs or manual runs)
 create or replace function public.compute_garden_streak(_garden_id uuid, _anchor_day date)
