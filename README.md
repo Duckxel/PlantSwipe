@@ -12,7 +12,7 @@ Made with care by **Neolite** & **Five**
 
 ---
 
-## ✨ What makes PlantSwipe special
+## ✨ What makes Aphylia special
 
 | Feature | Description |
 |---------|-------------|
@@ -432,7 +432,7 @@ Made with love by **Neolite** and **Five** — a duo obsessed with playful UX, c
 
 <div align="center">
 
-**Happy digital gardening with PlantSwipe!** 🌼
+**Happy digital gardening with Aphylia!** 🌼
 
 [Get Started](#quick-start) • [View Features](#feature-overview) • [Read Docs](./plant-swipe/README.md)
 
