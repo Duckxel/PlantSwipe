@@ -911,10 +911,109 @@ export async function listTaskOccurrences(taskId: string, windowDays = 60): Prom
   }))
 }
 
+async function fallbackProgressTaskOccurrence(
+  occurrenceId: string,
+  increment: number,
+): Promise<{ gardenId: string | null; dayIso: string | null }> {
+  const safeIncrement = Number.isFinite(increment) ? Math.max(1, Math.trunc(increment)) : 1
+
+  const { data: occurrence, error: occErr } = await supabase
+    .from('garden_plant_task_occurrences')
+    .select('id, task_id, garden_plant_id, due_at, required_count, completed_count, completed_at, garden_plant_tasks!inner(garden_id)')
+    .eq('id', occurrenceId)
+    .maybeSingle()
+
+  if (occErr) throw new Error(occErr.message)
+  if (!occurrence) throw new Error('Task occurrence not found')
+
+  const required = Math.max(1, Number((occurrence as any).required_count ?? 1))
+  const currentCompleted = Math.max(0, Number((occurrence as any).completed_count ?? 0))
+  const nextCompleted = Math.min(required, currentCompleted + safeIncrement)
+
+  const updates: Record<string, any> = {
+    completed_count: nextCompleted,
+  }
+  if (nextCompleted >= required) {
+    updates.completed_at = new Date().toISOString()
+  }
+
+  const { error: updateErr } = await supabase
+    .from('garden_plant_task_occurrences')
+    .update(updates)
+    .eq('id', occurrenceId)
+
+  if (updateErr) throw new Error(updateErr.message)
+
+  try {
+    const { data: authData } = await supabase.auth.getUser()
+    const userId = authData?.user?.id
+    if (userId) {
+      const { error: completionErr } = await supabase
+        .from('garden_task_user_completions')
+        .insert({
+          occurrence_id: occurrenceId,
+          user_id: userId,
+          increment: safeIncrement,
+        })
+      if (completionErr) throw completionErr
+    }
+  } catch (err) {
+    console.warn('[gardens] Failed to attribute task progress via fallback:', err)
+  }
+
+  const gardenId = (occurrence as any)?.garden_plant_tasks?.garden_id
+    ? String((occurrence as any).garden_plant_tasks.garden_id)
+    : null
+  const dayIso = (occurrence as any)?.due_at
+    ? new Date(String((occurrence as any).due_at)).toISOString().slice(0, 10)
+    : null
+
+  if (gardenId && dayIso) {
+    try {
+      await computeGardenTaskForDay({ gardenId, dayIso })
+    } catch (err) {
+      console.warn('[gardens] Fallback compute_garden_task_for_day failed:', err)
+    }
+    try {
+      await refreshGardenStreak(gardenId)
+    } catch (err) {
+      console.warn('[gardens] Fallback update_garden_streak failed:', err)
+    }
+  }
+
+  return { gardenId, dayIso }
+}
+
 export async function progressTaskOccurrence(occurrenceId: string, increment = 1): Promise<void> {
-  const { error } = await supabase.rpc('progress_task_occurrence', { _occurrence_id: occurrenceId, _increment: increment })
-  if (error) throw new Error(error.message)
-  
+  const rpcName = 'progress_task_occurrence'
+  let shouldFallback = missingSupabaseRpcs.has(rpcName)
+
+  if (!shouldFallback) {
+    try {
+      const { error } = await supabase.rpc(rpcName, {
+        _occurrence_id: occurrenceId,
+        _increment: increment,
+      })
+      if (error) {
+        if (isMissingRpcFunction(error, rpcName)) {
+          shouldFallback = true
+        } else {
+          throw new Error(error.message)
+        }
+      }
+    } catch (err) {
+      if (isMissingRpcFunction(err, rpcName)) {
+        shouldFallback = true
+      } else {
+        throw err instanceof Error ? err : new Error(String(err))
+      }
+    }
+  }
+
+  if (shouldFallback) {
+    await fallbackProgressTaskOccurrence(occurrenceId, increment)
+  }
+
   // Refresh cache in background (don't block)
   // Get garden_id from occurrence
   try {
@@ -923,20 +1022,20 @@ export async function progressTaskOccurrence(occurrenceId: string, increment = 1
       .select('task_id, garden_plant_tasks!inner(garden_id)')
       .eq('id', occurrenceId)
       .single()
-    
+
     if (data && (data as any).garden_plant_tasks) {
       const gardenId = String((data as any).garden_plant_tasks.garden_id)
       const today = new Date().toISOString().slice(0, 10)
-      
+
       // Refresh garden cache asynchronously
       refreshGardenTaskCache(gardenId, today).catch(() => {})
-      
+
       // Also refresh user-level cache for all members of this garden
       const { data: members } = await supabase
         .from('garden_members')
         .select('user_id')
         .eq('garden_id', gardenId)
-      
+
       if (members) {
         for (const member of members) {
           refreshUserTaskCache(String(member.user_id), today).catch(() => {})
