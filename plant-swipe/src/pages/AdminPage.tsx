@@ -24,7 +24,7 @@ const {
   Pie,
   Cell,
 } = LazyCharts
-import { RefreshCw, Server, Database, Github, ExternalLink, ShieldCheck, ShieldX, UserSearch, AlertTriangle, Gavel, Search, ChevronDown, GitBranch, Trash2, EyeOff, Copy, ArrowUpRight } from "lucide-react"
+import { RefreshCw, Server, Database, Github, ExternalLink, ShieldCheck, ShieldX, UserSearch, AlertTriangle, Gavel, Search, ChevronDown, GitBranch, Trash2, EyeOff, Copy, ArrowUpRight, Info } from "lucide-react"
 import { supabase } from '@/lib/supabaseClient'
 import {
   Dialog,
@@ -622,9 +622,13 @@ export const AdminPage: React.FC = () => {
   type PlantRequestRow = {
     id: string
     plant_name: string
+    plant_name_normalized: string
     request_count: number
     created_at: string | null
     updated_at: string | null
+    requested_by: string | null
+    requester_name: string | null
+    requester_email: string | null
   }
   const [plantRequests, setPlantRequests] = React.useState<PlantRequestRow[]>([])
   const [plantRequestsLoading, setPlantRequestsLoading] = React.useState<boolean>(false)
@@ -632,6 +636,11 @@ export const AdminPage: React.FC = () => {
   const [plantRequestsError, setPlantRequestsError] = React.useState<string | null>(null)
   const [plantRequestsInitialized, setPlantRequestsInitialized] = React.useState<boolean>(false)
   const [completingRequestId, setCompletingRequestId] = React.useState<string | null>(null)
+  const [requestSearchQuery, setRequestSearchQuery] = React.useState<string>('')
+  const [infoDialogOpen, setInfoDialogOpen] = React.useState<boolean>(false)
+  const [selectedRequestInfo, setSelectedRequestInfo] = React.useState<PlantRequestRow | null>(null)
+  const [requestUsersLoading, setRequestUsersLoading] = React.useState<boolean>(false)
+  const [requestUsers, setRequestUsers] = React.useState<Array<{ id: string; display_name: string | null; email: string | null }>>([])
 
   const loadPlantRequests = React.useCallback(async ({ initial = false }: { initial?: boolean } = {}) => {
     setPlantRequestsError(null)
@@ -643,7 +652,7 @@ export const AdminPage: React.FC = () => {
     try {
       const { data, error } = await supabase
         .from('requested_plants')
-        .select('id, plant_name, plant_name_normalized, request_count, created_at, updated_at')
+        .select('id, plant_name, plant_name_normalized, request_count, created_at, updated_at, requested_by')
         .is('completed_at', null)
         .order('request_count', { ascending: false })
         .order('updated_at', { ascending: false })
@@ -666,9 +675,15 @@ export const AdminPage: React.FC = () => {
               : row?.plant_name_normalized
               ? String(row.plant_name_normalized)
               : 'Unknown request',
+            plant_name_normalized: row?.plant_name_normalized
+              ? String(row.plant_name_normalized)
+              : (row?.plant_name ? String(row.plant_name).toLowerCase().trim() : ''),
             request_count: Number.isFinite(requestCount) ? requestCount : 0,
             created_at: row?.created_at ?? null,
             updated_at: row?.updated_at ?? null,
+            requested_by: row?.requested_by ? String(row.requested_by) : null,
+            requester_name: null as string | null,
+            requester_email: null as string | null,
           }
         })
         .filter((row): row is PlantRequestRow => row !== null)
@@ -690,6 +705,71 @@ export const AdminPage: React.FC = () => {
     }
   }, [supabase])
 
+  const loadRequestUsers = React.useCallback(async (plantNameNormalized: string) => {
+    setRequestUsersLoading(true)
+    setRequestUsers([])
+    try {
+      // First get the requested_plant_id from the normalized name
+      const { data: plantRequest, error: plantError } = await supabase
+        .from('requested_plants')
+        .select('id')
+        .eq('plant_name_normalized', plantNameNormalized)
+        .is('completed_at', null)
+        .single()
+
+      if (plantError || !plantRequest?.id) {
+        setRequestUsers([])
+        return
+      }
+
+      // Fetch all users who requested this plant from the junction table
+      const { data: requestUsersData, error: usersError } = await supabase
+        .from('plant_request_users')
+        .select('user_id')
+        .eq('requested_plant_id', plantRequest.id)
+        .order('created_at', { ascending: false })
+
+      if (usersError) throw new Error(usersError.message)
+
+      if (!requestUsersData || requestUsersData.length === 0) {
+        setRequestUsers([])
+        return
+      }
+
+      // Get unique user IDs
+      const userIds = [...new Set(requestUsersData.map((row: any) => String(row.user_id)))]
+
+      // Fetch profiles for these user IDs
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, display_name, email')
+        .in('id', userIds)
+
+      if (profilesError) throw new Error(profilesError.message)
+
+      const users = (profilesData ?? []).map((profile: any) => ({
+        id: String(profile.id),
+        display_name: profile?.display_name ? String(profile.display_name) : null,
+        email: profile?.email ? String(profile.email) : null,
+      }))
+
+      setRequestUsers(users)
+    } catch (err) {
+      console.error('Failed to load request users:', err)
+      setRequestUsers([])
+    } finally {
+      setRequestUsersLoading(false)
+    }
+  }, [supabase])
+
+  const handleOpenInfoDialog = React.useCallback((req: PlantRequestRow) => {
+    setSelectedRequestInfo(req)
+    setInfoDialogOpen(true)
+    if (req.plant_name_normalized) {
+      loadRequestUsers(req.plant_name_normalized)
+    }
+  }, [loadRequestUsers])
+
   const completePlantRequest = React.useCallback(async (id: string) => {
     if (!id || completingRequestId) return
     if (!user?.id) {
@@ -699,12 +779,10 @@ export const AdminPage: React.FC = () => {
     setCompletingRequestId(id)
     setPlantRequestsError(null)
     try {
+      // Delete the request (cascade will also delete related plant_request_users entries)
       const { error } = await supabase
         .from('requested_plants')
-        .update({
-          completed_at: new Date().toISOString(),
-          completed_by: user.id,
-        })
+        .delete()
         .eq('id', id)
 
       if (error) throw new Error(error.message)
@@ -2635,6 +2713,34 @@ export const AdminPage: React.FC = () => {
                       <span className="sm:hidden inline">Reload</span>
                     </Button>
                   </div>
+                  
+                  {/* Statistics */}
+                  {!plantRequestsLoading && plantRequests.length > 0 && (
+                    <div className="flex flex-wrap gap-4 text-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="opacity-60">Total Requests:</span>
+                        <span className="font-medium">
+                          {plantRequests.reduce((sum, req) => sum + req.request_count, 0)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="opacity-60">Unique Plants:</span>
+                        <span className="font-medium">{plantRequests.length}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Search */}
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 opacity-50 pointer-events-none" />
+                    <Input
+                      placeholder="Search requests by plant name..."
+                      value={requestSearchQuery}
+                      onChange={(e) => setRequestSearchQuery(e.target.value)}
+                      className="rounded-xl pl-10 pr-4"
+                    />
+                  </div>
+
                   {plantRequestsError && (
                     <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-900/30 dark:text-red-200">
                       {plantRequestsError}
@@ -2642,48 +2748,121 @@ export const AdminPage: React.FC = () => {
                   )}
                   {plantRequestsLoading ? (
                     <div className="text-sm opacity-60">Loading requests...</div>
-                  ) : plantRequests.length === 0 ? (
-                    <div className="text-sm opacity-60">No pending requests.</div>
-                  ) : (
-                    <div className="flex flex-col gap-3">
-                      {plantRequests.map((req) => {
-                        const updatedSource = req.updated_at ?? req.created_at
-                        const updatedMs = updatedSource ? Date.parse(updatedSource) : NaN
-                        const hasTimestamp = Number.isFinite(updatedMs)
-                        const requestCountLabel = req.request_count === 1 ? '1 request' : `${req.request_count} requests`
-                        const timeLabel = hasTimestamp ? `Last update ${formatTimeAgo(updatedMs)}` : 'Last update unknown'
-                        const updatedTitle = hasTimestamp ? new Date(updatedMs).toLocaleString() : undefined
-                        return (
-                          <div
-                            key={req.id}
-                            className="flex flex-col gap-3 rounded-xl border bg-white p-3 dark:bg-[#252526] dark:border-[#3e3e42] md:flex-row md:items-center md:justify-between"
-                          >
-                            <div>
-                              <div className="text-sm font-medium">{req.plant_name}</div>
-                              <div className="text-xs opacity-60" title={updatedTitle}>
-                                {requestCountLabel} • {timeLabel}
+                  ) : (() => {
+                    const filteredRequests = requestSearchQuery.trim()
+                      ? plantRequests.filter(req => 
+                          req.plant_name.toLowerCase().includes(requestSearchQuery.toLowerCase().trim())
+                        )
+                      : plantRequests
+                    
+                    return filteredRequests.length === 0 ? (
+                      <div className="text-sm opacity-60">
+                        {requestSearchQuery.trim() ? 'No requests match your search.' : 'No pending requests.'}
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-3">
+                        {filteredRequests.map((req) => {
+                          const updatedSource = req.updated_at ?? req.created_at
+                          const updatedMs = updatedSource ? Date.parse(updatedSource) : NaN
+                          const hasTimestamp = Number.isFinite(updatedMs)
+                          const timeLabel = hasTimestamp ? `Last update ${formatTimeAgo(updatedMs)}` : 'Last update unknown'
+                          const updatedTitle = hasTimestamp ? new Date(updatedMs).toLocaleString() : undefined
+                          return (
+                            <div
+                              key={req.id}
+                              className="flex flex-col gap-3 rounded-xl border bg-white p-3 dark:bg-[#252526] dark:border-[#3e3e42] md:flex-row md:items-center md:justify-between"
+                            >
+                              <div className="flex items-start gap-2 flex-1">
+                                <div className="flex-1">
+                                  <div className="text-sm font-medium">{req.plant_name}</div>
+                                  <div className="text-xs opacity-60" title={updatedTitle}>
+                                    {timeLabel}
+                                  </div>
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="rounded-full h-6 w-6 p-0 opacity-60 hover:opacity-100"
+                                  onClick={() => handleOpenInfoDialog(req)}
+                                  title="View request details"
+                                >
+                                  <Info className="h-4 w-4" />
+                                </Button>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <Badge variant="secondary" className="rounded-xl px-2 py-1 text-xs">
+                                  {req.request_count} {req.request_count === 1 ? 'request' : 'requests'}
+                                </Badge>
+                                <Button
+                                  variant="outline"
+                                  className="rounded-2xl"
+                                  onClick={() => completePlantRequest(req.id)}
+                                  disabled={completingRequestId === req.id}
+                                >
+                                  {completingRequestId === req.id ? 'Completing...' : 'Complete'}
+                                </Button>
                               </div>
                             </div>
-                            <div className="flex items-center gap-3">
-                              <Badge variant="secondary" className="rounded-xl px-2 py-1 text-xs">
-                                {req.request_count}
-                              </Badge>
-                              <Button
-                                variant="outline"
-                                className="rounded-2xl"
-                                onClick={() => completePlantRequest(req.id)}
-                                disabled={completingRequestId === req.id}
-                              >
-                                {completingRequestId === req.id ? 'Completing...' : 'Complete'}
-                              </Button>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
+                          )
+                        })}
+                      </div>
+                    )
+                  })()}
                 </CardContent>
               </Card>
+
+              {/* Info Dialog */}
+              <Dialog open={infoDialogOpen} onOpenChange={setInfoDialogOpen}>
+                <DialogContent className="rounded-2xl max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Request Details</DialogTitle>
+                    <DialogDescription>
+                      Information about this plant request
+                    </DialogDescription>
+                  </DialogHeader>
+                  {selectedRequestInfo && (
+                    <div className="space-y-4 py-4">
+                      <div>
+                        <div className="text-sm font-medium mb-1">Plant Name</div>
+                        <div className="text-base">{selectedRequestInfo.plant_name}</div>
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium mb-2">Users who requested this plant</div>
+                        {requestUsersLoading ? (
+                          <div className="text-sm opacity-60">Loading users...</div>
+                        ) : requestUsers.length === 0 ? (
+                          <div className="text-sm opacity-60">No users have requested this plant yet.</div>
+                        ) : (
+                          <div className="space-y-2 max-h-60 overflow-y-auto">
+                            {requestUsers.map((user) => (
+                              <div
+                                key={user.id}
+                                className="text-sm p-2 rounded-lg bg-neutral-100 dark:bg-[#2d2d30]"
+                              >
+                                <div className="font-medium">
+                                  {user.display_name || user.email || `User ${user.id.slice(0, 8)}`}
+                                </div>
+                                {user.email && user.display_name && (
+                                  <div className="text-xs opacity-60">{user.email}</div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  <DialogFooter>
+                    <Button
+                      variant="secondary"
+                      onClick={() => setInfoDialogOpen(false)}
+                      className="rounded-xl"
+                    >
+                      Close
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </div>
           )}
 
