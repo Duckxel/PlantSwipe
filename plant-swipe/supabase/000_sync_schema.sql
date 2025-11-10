@@ -3473,9 +3473,11 @@ SECURITY DEFINER
 AS $$
 DECLARE
   _week_start_date date;
+  _dow_offset integer;
 BEGIN
   -- Calculate week start (Monday)
-  _week_start_date := _cache_date - (EXTRACT(DOW FROM _cache_date)::integer + 6) % 7 || ' days'::interval;
+  _dow_offset := ((EXTRACT(DOW FROM _cache_date)::integer + 6) % 7);
+  _week_start_date := _cache_date - _dow_offset;
   
   -- Refresh all caches
   PERFORM refresh_garden_daily_cache(_garden_id, _cache_date);
