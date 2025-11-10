@@ -473,14 +473,26 @@ export async function getGardenTodayProgressUltraFast(gardenId: string, dayIso: 
   const taskIds = tasks.map(t => t.id)
   
   // Use aggregation query to minimize egress - only fetch counts, not all rows
-  const { data, error } = await supabase
-    .from('garden_plant_task_occurrences')
-    .select('required_count, completed_count', { count: 'exact', head: false })
-    .in('task_id', taskIds)
-    .gte('due_at', start)
-    .lte('due_at', end)
-  
-  if (error) throw new Error(error.message)
+  const tableName = 'garden_plant_task_occurrences'
+  if (missingSupabaseTablesOrViews.has(tableName)) return { due: 0, completed: 0 }
+  let data: any[] | null = null
+  try {
+    const res = await supabase
+      .from(tableName)
+      .select('required_count, completed_count', { count: 'exact', head: false })
+      .in('task_id', taskIds)
+      .gte('due_at', start)
+      .lte('due_at', end)
+    
+    if (res.error) {
+      if (isMissingTableOrView(res.error, tableName)) return { due: 0, completed: 0 }
+      throw res.error
+    }
+    data = res.data as any[]
+  } catch (err) {
+    if (isMissingTableOrView(err, tableName)) return { due: 0, completed: 0 }
+    throw err instanceof Error ? err : new Error(String(err))
+  }
   
   let due = 0
   let completed = 0
@@ -555,34 +567,42 @@ export async function getGardensTodayProgressBatch(gardenIds: string[], dayIso: 
  * Adds limit to prevent excessive data transfer.
  */
 export async function listGardenTasksMinimal(gardenId: string, limit: number = 500): Promise<Array<{ id: string; type: TaskType; emoji: string | null; gardenPlantId: string }>> {
-  const base = supabase.from('garden_plant_tasks')
+  const tableName = 'garden_plant_tasks'
+  if (missingSupabaseTablesOrViews.has(tableName)) return []
+  const base = supabase.from(tableName)
   const selectMinimal = 'id, type, emoji, garden_plant_id'
   const selectMinimalNoEmoji = 'id, type, garden_plant_id'
-  
-  let { data, error } = await base
-    .select(selectMinimal)
-    .eq('garden_id', gardenId)
-    .limit(limit) // Limit to prevent excessive egress
-    .order('created_at', { ascending: true })
-  if (error) {
-    const msg = String(error.message || '')
-    if (/column .*emoji.* does not exist/i.test(msg)) {
-      const res = await base
-        .select(selectMinimalNoEmoji)
-        .eq('garden_id', gardenId)
-        .limit(limit)
-        .order('created_at', { ascending: true })
-      data = res.data as any
-      error = res.error as any
+
+  try {
+    let { data, error } = await base
+      .select(selectMinimal)
+      .eq('garden_id', gardenId)
+      .limit(limit) // Limit to prevent excessive egress
+      .order('created_at', { ascending: true })
+    if (error) {
+      if (isMissingTableOrView(error, tableName)) return []
+      const msg = String(error.message || '')
+      if (/column .*emoji.* does not exist/i.test(msg)) {
+        const res = await base
+          .select(selectMinimalNoEmoji)
+          .eq('garden_id', gardenId)
+          .limit(limit)
+          .order('created_at', { ascending: true })
+        data = res.data as any
+        error = res.error as any
+      }
     }
+    if (error) throw error
+    return (data || []).map((r: any) => ({
+      id: String(r.id),
+      type: r.type,
+      emoji: (r as any).emoji || null,
+      gardenPlantId: String(r.garden_plant_id),
+    }))
+  } catch (err) {
+    if (isMissingTableOrView(err, tableName)) return []
+    throw err instanceof Error ? err : new Error(String(err))
   }
-  if (error) throw new Error(error.message)
-  return (data || []).map((r: any) => ({
-    id: String(r.id),
-    type: r.type,
-    emoji: (r as any).emoji || null,
-    gardenPlantId: String(r.garden_plant_id),
-  }))
 }
 
 /**
@@ -834,52 +854,60 @@ export async function upsertOneTimeTask(params: { gardenId: string; gardenPlantI
 }
 
 export async function listPlantTasks(gardenPlantId: string): Promise<GardenPlantTask[]> {
-  const base = supabase.from('garden_plant_tasks')
+  const tableName = 'garden_plant_tasks'
+  if (missingSupabaseTablesOrViews.has(tableName)) return []
+  const base = supabase.from(tableName)
   const selectAll = 'id, garden_id, garden_plant_id, type, custom_name, emoji, schedule_kind, due_at, interval_amount, interval_unit, required_count, period, amount, weekly_days, monthly_days, yearly_days, monthly_nth_weekdays, created_at'
   const selectNoEmoji = 'id, garden_id, garden_plant_id, type, custom_name, schedule_kind, due_at, interval_amount, interval_unit, required_count, period, amount, weekly_days, monthly_days, yearly_days, monthly_nth_weekdays, created_at'
   const selectNoNth = 'id, garden_id, garden_plant_id, type, custom_name, emoji, schedule_kind, due_at, interval_amount, interval_unit, required_count, period, amount, weekly_days, monthly_days, yearly_days, created_at'
   const selectNoEmojiNoNth = 'id, garden_id, garden_plant_id, type, custom_name, schedule_kind, due_at, interval_amount, interval_unit, required_count, period, amount, weekly_days, monthly_days, yearly_days, created_at'
-  // Try most complete select first, then gracefully fallback if optional columns are missing
-  let { data, error } = await base.select(selectAll).eq('garden_plant_id', gardenPlantId).order('created_at', { ascending: true })
-  if (error) {
-    const msg = String(error.message || '')
-    const noEmoji = /column .*emoji.* does not exist/i.test(msg)
-    const noNth = /column .*monthly_nth_weekdays.* does not exist/i.test(msg)
-    if (noEmoji && noNth) {
-      const res = await base.select(selectNoEmojiNoNth).eq('garden_plant_id', gardenPlantId).order('created_at', { ascending: true })
-      data = res.data as any
-      error = res.error as any
-    } else if (noEmoji) {
-      const res = await base.select(selectNoEmoji).eq('garden_plant_id', gardenPlantId).order('created_at', { ascending: true })
-      data = res.data as any
-      error = res.error as any
-    } else if (noNth) {
-      const res = await base.select(selectNoNth).eq('garden_plant_id', gardenPlantId).order('created_at', { ascending: true })
-      data = res.data as any
-      error = res.error as any
+  try {
+    // Try most complete select first, then gracefully fallback if optional columns are missing
+    let { data, error } = await base.select(selectAll).eq('garden_plant_id', gardenPlantId).order('created_at', { ascending: true })
+    if (error) {
+      if (isMissingTableOrView(error, tableName)) return []
+      const msg = String(error.message || '')
+      const noEmoji = /column .*emoji.* does not exist/i.test(msg)
+      const noNth = /column .*monthly_nth_weekdays.* does not exist/i.test(msg)
+      if (noEmoji && noNth) {
+        const res = await base.select(selectNoEmojiNoNth).eq('garden_plant_id', gardenPlantId).order('created_at', { ascending: true })
+        data = res.data as any
+        error = res.error as any
+      } else if (noEmoji) {
+        const res = await base.select(selectNoEmoji).eq('garden_plant_id', gardenPlantId).order('created_at', { ascending: true })
+        data = res.data as any
+        error = res.error as any
+      } else if (noNth) {
+        const res = await base.select(selectNoNth).eq('garden_plant_id', gardenPlantId).order('created_at', { ascending: true })
+        data = res.data as any
+        error = res.error as any
+      }
     }
+    if (error) throw error
+    return (data || []).map((r: any) => ({
+      id: String(r.id),
+      gardenId: String(r.garden_id),
+      gardenPlantId: String(r.garden_plant_id),
+      type: r.type,
+      customName: r.custom_name || null,
+      emoji: (r as any).emoji || null,
+      scheduleKind: r.schedule_kind,
+      dueAt: r.due_at || null,
+      intervalAmount: r.interval_amount ?? null,
+      intervalUnit: r.interval_unit || null,
+      requiredCount: Number(r.required_count ?? 1),
+      period: r.period || null,
+      amount: r.amount ?? null,
+      weeklyDays: r.weekly_days || null,
+      monthlyDays: r.monthly_days || null,
+      yearlyDays: r.yearly_days || null,
+      monthlyNthWeekdays: (r as any).monthly_nth_weekdays || null,
+      createdAt: String(r.created_at),
+    }))
+  } catch (err) {
+    if (isMissingTableOrView(err, tableName)) return []
+    throw err instanceof Error ? err : new Error(String(err))
   }
-  if (error) throw new Error(error.message)
-  return (data || []).map((r: any) => ({
-    id: String(r.id),
-    gardenId: String(r.garden_id),
-    gardenPlantId: String(r.garden_plant_id),
-    type: r.type,
-    customName: r.custom_name || null,
-    emoji: (r as any).emoji || null,
-    scheduleKind: r.schedule_kind,
-    dueAt: r.due_at || null,
-    intervalAmount: r.interval_amount ?? null,
-    intervalUnit: r.interval_unit || null,
-    requiredCount: Number(r.required_count ?? 1),
-    period: r.period || null,
-    amount: r.amount ?? null,
-    weeklyDays: r.weekly_days || null,
-    monthlyDays: r.monthly_days || null,
-    yearlyDays: r.yearly_days || null,
-    monthlyNthWeekdays: (r as any).monthly_nth_weekdays || null,
-    createdAt: String(r.created_at),
-  }))
 }
 
 export async function deletePlantTask(taskId: string): Promise<void> {
@@ -912,88 +940,177 @@ export async function listTaskOccurrences(taskId: string, windowDays = 60): Prom
 }
 
 export async function progressTaskOccurrence(occurrenceId: string, increment = 1): Promise<void> {
-  const { error } = await supabase.rpc('progress_task_occurrence', { _occurrence_id: occurrenceId, _increment: increment })
-  if (error) throw new Error(error.message)
+  const rpcName = 'progress_task_occurrence'
+  let rpcAttempted = false
+  if (!missingSupabaseRpcs.has(rpcName)) {
+    rpcAttempted = true
+    try {
+      const { error } = await supabase.rpc(rpcName, { _occurrence_id: occurrenceId, _increment: increment })
+      if (error) {
+        if (!isMissingRpcFunction(error, rpcName)) {
+          throw error
+        }
+      } else {
+        await refreshCachesForOccurrence(occurrenceId)
+        return
+      }
+    } catch (err) {
+      if (!isMissingRpcFunction(err, rpcName)) {
+        throw err instanceof Error ? err : new Error(String(err))
+      }
+    }
+  }
   
-  // Refresh cache in background (don't block)
-  // Get garden_id from occurrence
+  // Fallback: update occurrence row directly when RPC unavailable
+  const tableName = 'garden_plant_task_occurrences'
+  if (missingSupabaseTablesOrViews.has(tableName)) return
   try {
-    const { data } = await supabase
-      .from('garden_plant_task_occurrences')
-      .select('task_id, garden_plant_tasks!inner(garden_id)')
+    const { data: occ, error: fetchErr } = await supabase
+      .from(tableName)
+      .select('id, task_id, garden_plant_id, required_count, completed_count, completed_at')
       .eq('id', occurrenceId)
-      .single()
-    
+      .maybeSingle()
+    if (fetchErr) {
+      if (isMissingTableOrView(fetchErr, tableName)) return
+      throw fetchErr
+    }
+    if (!occ) return
+    const required = Math.max(1, Number((occ as any).required_count ?? 1))
+    const current = Math.max(0, Number((occ as any).completed_count ?? 0))
+    const next = Math.min(required, current + Math.max(1, increment))
+    const updatePayload: Record<string, any> = { completed_count: next }
+    if (next >= required) {
+      updatePayload.completed_at = new Date().toISOString()
+    }
+    const { error: updateErr } = await supabase
+      .from(tableName)
+      .update(updatePayload)
+      .eq('id', occurrenceId)
+    if (updateErr) {
+      if (!isMissingTableOrView(updateErr, tableName)) {
+        throw updateErr
+      }
+      return
+    }
+  } catch (err) {
+    if (isMissingTableOrView(err, tableName)) return
+    throw err instanceof Error ? err : new Error(String(err))
+  }
+  
+  if (!rpcAttempted) {
+    // If RPC was already identified as missing, still trigger cache refresh best-effort
+    await refreshCachesForOccurrence(occurrenceId)
+  } else {
+    // RPC missing during the attempt still needs cache refresh
+    await refreshCachesForOccurrence(occurrenceId)
+  }
+}
+
+async function refreshCachesForOccurrence(occurrenceId: string): Promise<void> {
+  const tableName = 'garden_plant_task_occurrences'
+  if (missingSupabaseTablesOrViews.has(tableName)) return
+  try {
+    const { data, error } = await supabase
+      .from(tableName)
+      .select('task_id, garden_plant_id, garden_plant_tasks!inner(garden_id)')
+      .eq('id', occurrenceId)
+      .maybeSingle()
+    if (error) {
+      const handled =
+        isMissingTableOrView(error, tableName) ||
+        isMissingTableOrView(error, 'garden_plant_tasks')
+      if (handled) return
+      throw error
+    }
     if (data && (data as any).garden_plant_tasks) {
       const gardenId = String((data as any).garden_plant_tasks.garden_id)
       const today = new Date().toISOString().slice(0, 10)
-      
       // Refresh garden cache asynchronously
       refreshGardenTaskCache(gardenId, today).catch(() => {})
-      
-      // Also refresh user-level cache for all members of this garden
-      const { data: members } = await supabase
-        .from('garden_members')
-        .select('user_id')
-        .eq('garden_id', gardenId)
-      
-      if (members) {
-        for (const member of members) {
-          refreshUserTaskCache(String(member.user_id), today).catch(() => {})
+      // Refresh user caches for members (best-effort)
+      try {
+        const { data: members, error: memberErr } = await supabase
+          .from('garden_members')
+          .select('user_id')
+          .eq('garden_id', gardenId)
+        if (!memberErr && members) {
+          for (const member of members) {
+            refreshUserTaskCache(String(member.user_id), today).catch(() => {})
+          }
+        } else if (memberErr) {
+          isMissingTableOrView(memberErr, 'garden_members')
+        }
+      } catch (err) {
+        if (!isMissingTableOrView(err, 'garden_members')) {
+          console.warn('[gardens] Failed to refresh user cache after task progress:', err)
         }
       }
     }
-  } catch {
-    // Silently fail - cache refresh is best effort
+  } catch (err) {
+    if (
+      isMissingTableOrView(err, tableName) ||
+      isMissingTableOrView(err, 'garden_plant_tasks')
+    ) {
+      return
+    }
+    console.warn('[gardens] Failed to refresh caches after task progress:', err)
   }
 }
 
 export async function listGardenTasks(gardenId: string): Promise<GardenPlantTask[]> {
-  const base = supabase.from('garden_plant_tasks')
+  const tableName = 'garden_plant_tasks'
+  if (missingSupabaseTablesOrViews.has(tableName)) return []
+  const base = supabase.from(tableName)
   const selectAll = 'id, garden_id, garden_plant_id, type, custom_name, emoji, schedule_kind, due_at, interval_amount, interval_unit, required_count, period, amount, weekly_days, monthly_days, yearly_days, monthly_nth_weekdays, created_at'
   const selectNoEmoji = 'id, garden_id, garden_plant_id, type, custom_name, schedule_kind, due_at, interval_amount, interval_unit, required_count, period, amount, weekly_days, monthly_days, yearly_days, monthly_nth_weekdays, created_at'
   const selectNoNth = 'id, garden_id, garden_plant_id, type, custom_name, emoji, schedule_kind, due_at, interval_amount, interval_unit, required_count, period, amount, weekly_days, monthly_days, yearly_days, created_at'
   const selectNoEmojiNoNth = 'id, garden_id, garden_plant_id, type, custom_name, schedule_kind, due_at, interval_amount, interval_unit, required_count, period, amount, weekly_days, monthly_days, yearly_days, created_at'
-  let { data, error } = await base.select(selectAll).eq('garden_id', gardenId).order('created_at', { ascending: true })
-  if (error) {
-    const msg = String(error.message || '')
-    const noEmoji = /column .*emoji.* does not exist/i.test(msg)
-    const noNth = /column .*monthly_nth_weekdays.* does not exist/i.test(msg)
-    if (noEmoji && noNth) {
-      const res = await base.select(selectNoEmojiNoNth).eq('garden_id', gardenId).order('created_at', { ascending: true })
-      data = res.data as any
-      error = res.error as any
-    } else if (noEmoji) {
-      const res = await base.select(selectNoEmoji).eq('garden_id', gardenId).order('created_at', { ascending: true })
-      data = res.data as any
-      error = res.error as any
-    } else if (noNth) {
-      const res = await base.select(selectNoNth).eq('garden_id', gardenId).order('created_at', { ascending: true })
-      data = res.data as any
-      error = res.error as any
+  try {
+    let { data, error } = await base.select(selectAll).eq('garden_id', gardenId).order('created_at', { ascending: true })
+    if (error) {
+      if (isMissingTableOrView(error, tableName)) return []
+      const msg = String(error.message || '')
+      const noEmoji = /column .*emoji.* does not exist/i.test(msg)
+      const noNth = /column .*monthly_nth_weekdays.* does not exist/i.test(msg)
+      if (noEmoji && noNth) {
+        const res = await base.select(selectNoEmojiNoNth).eq('garden_id', gardenId).order('created_at', { ascending: true })
+        data = res.data as any
+        error = res.error as any
+      } else if (noEmoji) {
+        const res = await base.select(selectNoEmoji).eq('garden_id', gardenId).order('created_at', { ascending: true })
+        data = res.data as any
+        error = res.error as any
+      } else if (noNth) {
+        const res = await base.select(selectNoNth).eq('garden_id', gardenId).order('created_at', { ascending: true })
+        data = res.data as any
+        error = res.error as any
+      }
     }
+    if (error) throw error
+    return (data || []).map((r: any) => ({
+      id: String(r.id),
+      gardenId: String(r.garden_id),
+      gardenPlantId: String(r.garden_plant_id),
+      type: r.type,
+      customName: r.custom_name || null,
+      emoji: (r as any).emoji || null,
+      scheduleKind: r.schedule_kind,
+      dueAt: r.due_at || null,
+      intervalAmount: r.interval_amount ?? null,
+      intervalUnit: r.interval_unit || null,
+      requiredCount: Number(r.required_count ?? 1),
+      period: r.period || null,
+      amount: r.amount ?? null,
+      weeklyDays: r.weekly_days || null,
+      monthlyDays: r.monthly_days || null,
+      yearlyDays: r.yearly_days || null,
+      monthlyNthWeekdays: (r as any).monthly_nth_weekdays || null,
+      createdAt: String(r.created_at),
+    }))
+  } catch (err) {
+    if (isMissingTableOrView(err, tableName)) return []
+    throw err instanceof Error ? err : new Error(String(err))
   }
-  if (error) throw new Error(error.message)
-  return (data || []).map((r: any) => ({
-    id: String(r.id),
-    gardenId: String(r.garden_id),
-    gardenPlantId: String(r.garden_plant_id),
-    type: r.type,
-    customName: r.custom_name || null,
-    emoji: (r as any).emoji || null,
-    scheduleKind: r.schedule_kind,
-    dueAt: r.due_at || null,
-    intervalAmount: r.interval_amount ?? null,
-    intervalUnit: r.interval_unit || null,
-    requiredCount: Number(r.required_count ?? 1),
-    period: r.period || null,
-    amount: r.amount ?? null,
-    weeklyDays: r.weekly_days || null,
-    monthlyDays: r.monthly_days || null,
-    yearlyDays: r.yearly_days || null,
-    monthlyNthWeekdays: (r as any).monthly_nth_weekdays || null,
-    createdAt: String(r.created_at),
-  }))
 }
 
 function addInterval(date: Date, amount: number, unit: TaskUnit): Date {
@@ -1414,23 +1531,33 @@ export async function updatePatternTask(params: {
 
 export async function listOccurrencesForTasks(taskIds: string[], startIso: string, endIso: string): Promise<GardenPlantTaskOccurrence[]> {
   if (taskIds.length === 0) return []
-  const { data, error } = await supabase
-    .from('garden_plant_task_occurrences')
-    .select('id, task_id, garden_plant_id, due_at, required_count, completed_count, completed_at')
-    .in('task_id', taskIds)
-    .gte('due_at', startIso)
-    .lte('due_at', endIso)
-    .order('due_at', { ascending: true })
-  if (error) throw new Error(error.message)
-  return (data || []).map((r: any) => ({
-    id: String(r.id),
-    taskId: String(r.task_id),
-    gardenPlantId: String(r.garden_plant_id),
-    dueAt: String(r.due_at),
-    requiredCount: Number(r.required_count ?? 1),
-    completedCount: Number(r.completed_count ?? 0),
-    completedAt: r.completed_at || null,
-  }))
+  const tableName = 'garden_plant_task_occurrences'
+  if (missingSupabaseTablesOrViews.has(tableName)) return []
+  try {
+    const { data, error } = await supabase
+      .from(tableName)
+      .select('id, task_id, garden_plant_id, due_at, required_count, completed_count, completed_at')
+      .in('task_id', taskIds)
+      .gte('due_at', startIso)
+      .lte('due_at', endIso)
+      .order('due_at', { ascending: true })
+    if (error) {
+      if (isMissingTableOrView(error, tableName)) return []
+      throw error
+    }
+    return (data || []).map((r: any) => ({
+      id: String(r.id),
+      taskId: String(r.task_id),
+      gardenPlantId: String(r.garden_plant_id),
+      dueAt: String(r.due_at),
+      requiredCount: Number(r.required_count ?? 1),
+      completedCount: Number(r.completed_count ?? 0),
+      completedAt: r.completed_at || null,
+    }))
+  } catch (err) {
+    if (isMissingTableOrView(err, tableName)) return []
+    throw err instanceof Error ? err : new Error(String(err))
+  }
 }
 
 /**
@@ -1446,6 +1573,8 @@ export async function listOccurrencesForMultipleGardens(
 ): Promise<Record<string, GardenPlantTaskOccurrence[]>> {
   const allTaskIds = Array.from(new Set(Object.values(gardenTaskIds).flat()))
   if (allTaskIds.length === 0) return {}
+  const tableName = 'garden_plant_task_occurrences'
+  if (missingSupabaseTablesOrViews.has(tableName)) return {}
   
   // Try RPC function first for server-side optimization
   try {
@@ -1488,55 +1617,76 @@ export async function listOccurrencesForMultipleGardens(
   }
   
   // Fallback: Single query with limit to prevent excessive egress
-  const { data, error } = await supabase
-    .from('garden_plant_task_occurrences')
-    .select('id, task_id, garden_plant_id, due_at, required_count, completed_count, completed_at')
-    .in('task_id', allTaskIds)
-    .gte('due_at', startIso)
-    .lte('due_at', endIso)
-    .order('due_at', { ascending: true })
-    .limit(limitPerGarden * Object.keys(gardenTaskIds).length) // Total limit
-  
-  if (error) throw new Error(error.message)
-  
-  // Group by garden using task_id -> garden_id mapping
-  const taskToGarden: Record<string, string> = {}
-  for (const [gardenId, taskIds] of Object.entries(gardenTaskIds)) {
-    for (const taskId of taskIds) {
-      taskToGarden[taskId] = gardenId
-    }
-  }
-  
-  const result: Record<string, GardenPlantTaskOccurrence[]> = {}
-  for (const r of (data || [])) {
-    const taskId = String(r.task_id)
-    const gardenId = taskToGarden[taskId]
-    if (!gardenId) continue
+  try {
+    const { data, error } = await supabase
+      .from(tableName)
+      .select('id, task_id, garden_plant_id, due_at, required_count, completed_count, completed_at')
+      .in('task_id', allTaskIds)
+      .gte('due_at', startIso)
+      .lte('due_at', endIso)
+      .order('due_at', { ascending: true })
+      .limit(limitPerGarden * Object.keys(gardenTaskIds).length) // Total limit
     
-    if (!result[gardenId]) result[gardenId] = []
-    result[gardenId].push({
-      id: String(r.id),
-      taskId,
-      gardenPlantId: String(r.garden_plant_id),
-      dueAt: String(r.due_at),
-      requiredCount: Number(r.required_count ?? 1),
-      completedCount: Number(r.completed_count ?? 0),
-      completedAt: r.completed_at || null,
-    })
-  }
+    if (error) {
+      if (isMissingTableOrView(error, tableName)) return {}
+      throw error
+    }
   
-  return result
+    // Group by garden using task_id -> garden_id mapping
+    const taskToGarden: Record<string, string> = {}
+    for (const [gardenId, taskIds] of Object.entries(gardenTaskIds)) {
+      for (const taskId of taskIds) {
+        taskToGarden[taskId] = gardenId
+      }
+    }
+    
+    const result: Record<string, GardenPlantTaskOccurrence[]> = {}
+    for (const r of (data || [])) {
+      const taskId = String(r.task_id)
+      const gardenId = taskToGarden[taskId]
+      if (!gardenId) continue
+      
+      if (!result[gardenId]) result[gardenId] = []
+      result[gardenId].push({
+        id: String(r.id),
+        taskId,
+        gardenPlantId: String(r.garden_plant_id),
+        dueAt: String(r.due_at),
+        requiredCount: Number(r.required_count ?? 1),
+        completedCount: Number(r.completed_count ?? 0),
+        completedAt: r.completed_at || null,
+      })
+    }
+    
+    return result
+  } catch (err) {
+    if (isMissingTableOrView(err, tableName)) return {}
+    throw err instanceof Error ? err : new Error(String(err))
+  }
 }
+  
 
 // Return a mapping from occurrenceId -> list of users who progressed/completed it
 export async function listCompletionsForOccurrences(occurrenceIds: string[]): Promise<Record<string, Array<{ userId: string; displayName: string | null }>>> {
   if (occurrenceIds.length === 0) return {}
+  const tableName = 'garden_task_user_completions'
+  if (missingSupabaseTablesOrViews.has(tableName)) return {}
   // Fetch raw completion rows
-  const { data: rows, error } = await supabase
-    .from('garden_task_user_completions')
-    .select('occurrence_id, user_id')
-    .in('occurrence_id', occurrenceIds)
-  if (error) throw new Error(error.message)
+  let rows: any[] | null = null
+  try {
+    const { data, error } = await supabase
+      .from(tableName)
+      .select('occurrence_id, user_id')
+      .in('occurrence_id', occurrenceIds)
+    if (error) {
+      if (isMissingTableOrView(error, tableName)) return {}
+      throw error
+    }
+    rows = data as any[]
+  } catch (err) {
+    if (isMissingTableOrView(err, tableName)) return {}
+    throw err instanceof Error ? err : new Error(String(err))
+  }
   const uniquePairs = new Map<string, { occurrenceId: string; userId: string }>()
   for (const r of (rows || []) as any[]) {
     const occId = String((r as any).occurrence_id)
