@@ -3520,6 +3520,113 @@ $$;
 
 GRANT EXECUTE ON FUNCTION get_task_occurrences_batch(uuid[], timestamptz, timestamptz, integer) TO authenticated;
 
+-- Function: Aggregated progress for a single garden using cache when available
+DROP FUNCTION IF EXISTS public.get_garden_today_progress(uuid, timestamptz, timestamptz);
+CREATE OR REPLACE FUNCTION public.get_garden_today_progress(
+  _garden_id uuid,
+  _start_iso timestamptz,
+  _end_iso timestamptz
+)
+RETURNS json
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  _cache_date date := date_trunc('day', _start_iso)::date;
+  _due integer;
+  _completed integer;
+BEGIN
+  SELECT c.due_count, c.completed_count
+  INTO _due, _completed
+  FROM garden_task_daily_cache c
+  WHERE c.garden_id = _garden_id
+    AND c.cache_date = _cache_date
+  LIMIT 1;
+
+  IF _due IS NULL THEN
+    SELECT
+      COALESCE(SUM(GREATEST(1, occ.required_count)), 0)::integer,
+      COALESCE(SUM(LEAST(GREATEST(1, occ.required_count), COALESCE(occ.completed_count, 0))), 0)::integer
+    INTO _due, _completed
+    FROM garden_plant_task_occurrences occ
+    INNER JOIN garden_plant_tasks t ON t.id = occ.task_id
+    WHERE t.garden_id = _garden_id
+      AND occ.due_at >= _start_iso
+      AND occ.due_at <= _end_iso;
+  END IF;
+
+  RETURN json_build_object(
+    'due', COALESCE(_due, 0),
+    'completed', COALESCE(_completed, 0)
+  );
+END;
+$$;
+
+-- Function: Aggregated progress for multiple gardens (cache-first fallback to live data)
+DROP FUNCTION IF EXISTS public.get_gardens_today_progress_batch(uuid[], timestamptz, timestamptz);
+CREATE OR REPLACE FUNCTION public.get_gardens_today_progress_batch(
+  _garden_ids uuid[],
+  _start_iso timestamptz,
+  _end_iso timestamptz
+)
+RETURNS TABLE (
+  garden_id uuid,
+  due integer,
+  completed integer
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  _cache_date date := date_trunc('day', _start_iso)::date;
+BEGIN
+  RETURN QUERY
+  WITH input_gardens AS (
+    SELECT DISTINCT gid
+    FROM unnest(_garden_ids) AS gid
+  ),
+  cache_available AS (
+    SELECT
+      ig.gid AS garden_id,
+      c.due_count,
+      c.completed_count
+    FROM input_gardens ig
+    LEFT JOIN garden_task_daily_cache c
+      ON c.garden_id = ig.gid
+     AND c.cache_date = _cache_date
+  ),
+  gardens_missing_cache AS (
+    SELECT garden_id
+    FROM cache_available
+    WHERE due_count IS NULL AND completed_count IS NULL
+  ),
+  live_totals AS (
+    SELECT
+      t.garden_id,
+      COALESCE(SUM(GREATEST(1, occ.required_count)), 0)::integer AS due_total,
+      COALESCE(SUM(LEAST(GREATEST(1, occ.required_count), COALESCE(occ.completed_count, 0))), 0)::integer AS completed_total
+    FROM garden_plant_task_occurrences occ
+    INNER JOIN garden_plant_tasks t ON t.id = occ.task_id
+    WHERE t.garden_id IN (SELECT garden_id FROM gardens_missing_cache)
+      AND occ.due_at >= _start_iso
+      AND occ.due_at <= _end_iso
+    GROUP BY t.garden_id
+  )
+  SELECT
+    ig.gid AS garden_id,
+    COALESCE(ca.due_count, lt.due_total, 0)::integer AS due,
+    COALESCE(ca.completed_count, lt.completed_total, 0)::integer AS completed
+  FROM input_gardens ig
+  LEFT JOIN cache_available ca ON ca.garden_id = ig.gid
+  LEFT JOIN live_totals lt ON lt.garden_id = ig.gid;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_garden_today_progress(uuid, timestamptz, timestamptz) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_gardens_today_progress_batch(uuid[], timestamptz, timestamptz) TO authenticated;
+
 -- Function: Cleanup old cache entries (delete entries older than 1 day to prevent accumulation)
 CREATE OR REPLACE FUNCTION cleanup_old_garden_task_cache()
 RETURNS void

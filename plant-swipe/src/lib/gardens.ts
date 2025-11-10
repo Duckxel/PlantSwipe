@@ -578,9 +578,20 @@ export async function getGardenTodayProgressUltraFast(gardenId: string, dayIso: 
         _end_iso: end,
       })
       if (!error && data) {
-        return {
-          due: Number(data.due ?? 0),
-          completed: Number(data.completed ?? 0),
+        let payload: any = data
+        if (typeof payload === 'string') {
+          try {
+            payload = JSON.parse(payload)
+          } catch {
+            payload = null
+          }
+        }
+        const row = Array.isArray(payload) ? payload[0] : payload
+        if (row && typeof row === 'object') {
+          return {
+            due: Number((row as any).due ?? 0),
+            completed: Number((row as any).completed ?? 0),
+          }
         }
       }
       if (error) {
@@ -638,15 +649,29 @@ export async function getGardensTodayProgressBatch(gardenIds: string[], dayIso: 
         _start_iso: start,
         _end_iso: end,
       })
-      if (!error && data && Array.isArray(data)) {
-        const result: Record<string, { due: number; completed: number }> = {}
-        for (const row of data) {
-          result[String(row.garden_id)] = {
-            due: Number(row.due ?? 0),
-            completed: Number(row.completed ?? 0),
+      if (!error && data) {
+        let rows: any = data
+        if (typeof rows === 'string') {
+          try {
+            rows = JSON.parse(rows)
+          } catch {
+            rows = null
           }
         }
-        return result
+        if (rows && !Array.isArray(rows) && typeof rows === 'object') {
+          rows = [rows]
+        }
+        if (Array.isArray(rows)) {
+          const result: Record<string, { due: number; completed: number }> = {}
+          for (const row of rows) {
+            if (!row) continue
+            result[String((row as any).garden_id)] = {
+              due: Number((row as any).due ?? 0),
+              completed: Number((row as any).completed ?? 0),
+            }
+          }
+          return result
+        }
       }
       if (error) {
         if (!(isMissingRpcFunction(error, rpcName) || isRpcDependencyUnavailable(error, rpcName))) {
