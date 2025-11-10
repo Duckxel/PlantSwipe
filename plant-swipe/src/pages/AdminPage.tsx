@@ -775,12 +775,10 @@ export const AdminPage: React.FC = () => {
     setCompletingRequestId(id)
     setPlantRequestsError(null)
     try {
+      // Delete the request (cascade will also delete related plant_request_users entries)
       const { error } = await supabase
         .from('requested_plants')
-        .update({
-          completed_at: new Date().toISOString(),
-          completed_by: user.id,
-        })
+        .delete()
         .eq('id', id)
 
       if (error) throw new Error(error.message)
