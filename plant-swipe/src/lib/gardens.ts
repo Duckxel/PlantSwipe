@@ -942,21 +942,30 @@ export async function listTaskOccurrences(taskId: string, windowDays = 60): Prom
 export async function progressTaskOccurrence(occurrenceId: string, increment = 1): Promise<void> {
   const rpcName = 'progress_task_occurrence'
   let rpcAttempted = false
+  let rpcSucceeded = false
+  let rpcFailure: any = null
   if (!missingSupabaseRpcs.has(rpcName)) {
     rpcAttempted = true
     try {
       const { error } = await supabase.rpc(rpcName, { _occurrence_id: occurrenceId, _increment: increment })
       if (error) {
-        if (!isMissingRpcFunction(error, rpcName)) {
-          throw error
+        rpcFailure = error
+        if (isMissingRpcFunction(error, rpcName)) {
+          // mark missing and allow fallback
+        } else {
+          console.warn('[gardens] progress_task_occurrence RPC failed, falling back to client implementation:', error)
         }
       } else {
+        rpcSucceeded = true
         await refreshCachesForOccurrence(occurrenceId)
         return
       }
     } catch (err) {
-      if (!isMissingRpcFunction(err, rpcName)) {
-        throw err instanceof Error ? err : new Error(String(err))
+      rpcFailure = err
+      if (isMissingRpcFunction(err, rpcName)) {
+        // mark missing, fall through
+      } else {
+        console.warn('[gardens] progress_task_occurrence RPC threw, falling back to client implementation:', err)
       }
     }
   }
@@ -1023,14 +1032,14 @@ export async function progressTaskOccurrence(occurrenceId: string, increment = 1
     await recomputeGardenAggregatesAfterProgress(context.gardenId ?? null, context.dayIso ?? null)
   } catch (err) {
     if (isMissingTableOrView(err, tableName)) return
+    if (rpcSucceeded) throw err instanceof Error ? err : new Error(String(err))
+    if (rpcFailure) {
+      console.error('[gardens] progressTaskOccurrence fallback failed after RPC error:', rpcFailure)
+    }
     throw err instanceof Error ? err : new Error(String(err))
   }
   
-  if (!rpcAttempted) {
-    await refreshCachesForOccurrence(occurrenceId, context)
-  } else {
-    await refreshCachesForOccurrence(occurrenceId, context)
-  }
+  await refreshCachesForOccurrence(occurrenceId, context)
 }
 
 async function attributeOccurrenceCompletion(occurrenceId: string, increment: number): Promise<void> {
