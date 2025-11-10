@@ -100,7 +100,7 @@ serve(async (req) => {
 
   const fromAddressRaw =
     getFirstEnv("RESEND_FROM", "SMTP_FROM", "SUPABASE_SMTP_SENDER") ?? "form@aphylia.app"
-  const fromName = getFirstEnv("RESEND_FROM_NAME", "SMTP_FROM_NAME") ?? "Plant Swipe"
+  const fromName = getFirstEnv("RESEND_FROM_NAME", "SMTP_FROM_NAME") ?? "Aphylia Support Form"
 
   const fromAddress = fromAddressRaw.includes("<")
     ? fromAddressRaw
