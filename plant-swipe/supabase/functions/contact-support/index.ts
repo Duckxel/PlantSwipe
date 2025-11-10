@@ -7,6 +7,7 @@ const RESEND_ENDPOINT = "https://api.resend.com/emails"
 const contactSchema = z.object({
   name: z.string().trim().min(1).max(120),
   email: z.string().trim().email().max(254),
+  subject: z.string().trim().min(1).max(180),
   message: z.string().trim().min(10).max(4000),
   submittedAt: z.string().optional(),
 })
@@ -85,7 +86,7 @@ serve(async (req) => {
     })
   }
 
-  const { name, email, message, submittedAt } = parsed.data
+  const { name, email, subject, message, submittedAt } = parsed.data
 
   const resendApiKey = getFirstEnv("RESEND_API_KEY", "SUPABASE_RESEND_API_KEY")
 
@@ -104,62 +105,65 @@ serve(async (req) => {
     ? fromAddressRaw
     : `${fromName} <${fromAddressRaw}>`
 
-  const subject = `Contact form message from ${name}`
+  const sanitizedSubject = subject.replace(/[\r\n]+/g, " ").trim()
+  const finalSubject = sanitizedSubject.length > 0 ? sanitizedSubject : `Contact form message from ${name}`
 
-  const plainBody = [
-    `New contact form submission:`,
-    ``,
-    `Name: ${name}`,
-    `Email: ${email}`,
-    submittedAt ? `Submitted at: ${submittedAt}` : undefined,
-    ``,
-    `Message:`,
-    message,
-  ].filter(Boolean).join("\n")
+    const plainBody = [
+      `New contact form submission:`,
+      ``,
+      `Name: ${name}`,
+      `Email: ${email}`,
+      `Subject: ${finalSubject}`,
+      submittedAt ? `Submitted at: ${submittedAt}` : undefined,
+      ``,
+      `Message:`,
+      message,
+    ].filter(Boolean).join("\n")
 
-  const htmlBody = `
-    <h2 style="margin-bottom:12px;">New contact form submission</h2>
-    <p><strong>Name:</strong> ${escapeHtml(name)}</p>
-    <p><strong>Email:</strong> <a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a></p>
-    ${submittedAt ? `<p><strong>Submitted at:</strong> ${escapeHtml(submittedAt)}</p>` : ""}
-    <hr style="margin:16px 0;" />
-    <p style="white-space:pre-wrap;">${escapeHtml(message)}</p>
-  `
+    const htmlBody = `
+      <h2 style="margin-bottom:12px;">New contact form submission</h2>
+      <p><strong>Name:</strong> ${escapeHtml(name)}</p>
+      <p><strong>Email:</strong> <a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a></p>
+      <p><strong>Subject:</strong> ${escapeHtml(finalSubject)}</p>
+      ${submittedAt ? `<p><strong>Submitted at:</strong> ${escapeHtml(submittedAt)}</p>` : ""}
+      <hr style="margin:16px 0;" />
+      <p style="white-space:pre-wrap;">${escapeHtml(message)}</p>
+    `
 
-  try {
-    const response = await fetch(RESEND_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${resendApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: fromAddress,
-        to: [SUPPORT_EMAIL],
-        reply_to: email,
-        subject,
-        text: plainBody,
-        html: htmlBody,
-        tags: [{ name: "source", value: "contact-form" }],
-      }),
-    })
-
-    if (!response.ok) {
-      let errorDetail: unknown = null
-      try {
-        errorDetail = await response.json()
-      } catch {
-        // Ignore parse errors, rely on status below.
-      }
-      console.error("contact-support: Resend API error", response.status, response.statusText, errorDetail)
-      return jsonResponse(502, {
-        error: "resend_error",
-        message: "Failed to send email via Resend.",
-        status: response.status,
+    try {
+      const response = await fetch(RESEND_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${resendApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: fromAddress,
+          to: [SUPPORT_EMAIL],
+          reply_to: email,
+          subject: finalSubject,
+          text: plainBody,
+          html: htmlBody,
+          tags: [{ name: "source", value: "contact-form" }],
+        }),
       })
-    }
 
-    return jsonResponse(200, { success: true })
+      if (!response.ok) {
+        let errorDetail: unknown = null
+        try {
+          errorDetail = await response.json()
+        } catch {
+          // Ignore parse errors, rely on status below.
+        }
+        console.error("contact-support: Resend API error", response.status, response.statusText, errorDetail)
+        return jsonResponse(502, {
+          error: "resend_error",
+          message: "Failed to send email via Resend.",
+          status: response.status,
+        })
+      }
+
+      return jsonResponse(200, { success: true })
   } catch (error) {
     console.error("contact-support: failed to call Resend API", error)
     return jsonResponse(500, {
