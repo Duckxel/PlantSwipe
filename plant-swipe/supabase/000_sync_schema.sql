@@ -3338,12 +3338,12 @@ BEGIN
       AND occ.due_at >= (_day_date::text || 'T00:00:00.000Z')::timestamptz
       AND occ.due_at <= (_day_date::text || 'T23:59:59.999Z')::timestamptz;
 
-    _totals := array_set(_totals, ARRAY[_day_idx + 1], COALESCE(_daily_total, 0));
-    _water := array_set(_water, ARRAY[_day_idx + 1], COALESCE(_daily_water, 0));
-    _fertilize := array_set(_fertilize, ARRAY[_day_idx + 1], COALESCE(_daily_fertilize, 0));
-    _harvest := array_set(_harvest, ARRAY[_day_idx + 1], COALESCE(_daily_harvest, 0));
-    _cut := array_set(_cut, ARRAY[_day_idx + 1], COALESCE(_daily_cut, 0));
-    _custom := array_set(_custom, ARRAY[_day_idx + 1], COALESCE(_daily_custom, 0));
+    _totals[_day_idx + 1] := COALESCE(_daily_total, 0);
+    _water[_day_idx + 1] := COALESCE(_daily_water, 0);
+    _fertilize[_day_idx + 1] := COALESCE(_daily_fertilize, 0);
+    _harvest[_day_idx + 1] := COALESCE(_daily_harvest, 0);
+    _cut[_day_idx + 1] := COALESCE(_daily_cut, 0);
+    _custom[_day_idx + 1] := COALESCE(_daily_custom, 0);
   END LOOP;
 
   -- Replace existing cache row for this week
@@ -3460,7 +3460,7 @@ DECLARE
   _week_start_date date;
 BEGIN
   -- Calculate week start (Monday)
-  _week_start_date := _cache_date - (EXTRACT(DOW FROM _cache_date)::integer + 6) % 7 || ' days'::interval;
+  _week_start_date := date_trunc('week', _cache_date::timestamp)::date;
   
   -- Refresh all caches
   PERFORM refresh_garden_daily_cache(_garden_id, _cache_date);
@@ -3469,6 +3469,56 @@ BEGIN
   PERFORM refresh_garden_today_occurrences_cache(_garden_id, _cache_date);
 END;
 $$;
+
+-- Function: Batched occurrence loader used by Garden List/Dashboard views
+CREATE OR REPLACE FUNCTION get_task_occurrences_batch(
+  _task_ids uuid[],
+  _start_iso timestamptz,
+  _end_iso timestamptz,
+  _limit_per_task integer DEFAULT 1000
+)
+RETURNS TABLE (
+  id uuid,
+  task_id uuid,
+  garden_plant_id uuid,
+  due_at timestamptz,
+  required_count integer,
+  completed_count integer,
+  completed_at timestamptz
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    occ.id,
+    occ.task_id,
+    occ.garden_plant_id,
+    occ.due_at,
+    occ.required_count,
+    occ.completed_count,
+    occ.completed_at
+  FROM (
+    SELECT
+      o.id,
+      o.task_id,
+      o.garden_plant_id,
+      o.due_at,
+      o.required_count,
+      o.completed_count,
+      o.completed_at,
+      ROW_NUMBER() OVER (PARTITION BY o.task_id ORDER BY o.due_at ASC, o.id ASC) AS rn
+    FROM garden_plant_task_occurrences o
+    WHERE o.task_id = ANY(_task_ids)
+      AND o.due_at >= _start_iso
+      AND o.due_at <= _end_iso
+  ) occ
+  WHERE occ.rn <= GREATEST(COALESCE(_limit_per_task, 1000), 1);
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION get_task_occurrences_batch(uuid[], timestamptz, timestamptz, integer) TO authenticated;
 
 -- Function: Cleanup old cache entries (delete entries older than 1 day to prevent accumulation)
 CREATE OR REPLACE FUNCTION cleanup_old_garden_task_cache()
