@@ -459,11 +459,12 @@ do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_request_users' and policyname='plant_request_users_select_all') then
     drop policy plant_request_users_select_all on public.plant_request_users;
   end if;
-  -- Allow authenticated users to read all request users (for admin purposes)
+  -- Allow admins to read all request users
+  -- Also allow users to see their own requests
   create policy plant_request_users_select_all on public.plant_request_users for select to authenticated
     using (
-      true
-      or exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+      exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true)
+      or user_id = (select auth.uid())
     );
 end $$;
 
