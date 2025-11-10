@@ -2761,7 +2761,6 @@ export const AdminPage: React.FC = () => {
                           const updatedSource = req.updated_at ?? req.created_at
                           const updatedMs = updatedSource ? Date.parse(updatedSource) : NaN
                           const hasTimestamp = Number.isFinite(updatedMs)
-                          const requestCountLabel = req.request_count === 1 ? '1 request' : `${req.request_count} requests`
                           const timeLabel = hasTimestamp ? `Last update ${formatTimeAgo(updatedMs)}` : 'Last update unknown'
                           const updatedTitle = hasTimestamp ? new Date(updatedMs).toLocaleString() : undefined
                           return (
