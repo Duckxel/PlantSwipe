@@ -12,6 +12,7 @@ const footerLinks = [
 
 export const Footer: React.FC = () => {
   const { t } = useTranslation('common')
+  const currentYear = new Date().getFullYear()
 
   return (
     <footer className="max-w-6xl mx-auto mt-10 pt-8 pb-6 px-2 border-t border-stone-300 dark:border-[#3e3e42]">
@@ -62,7 +63,7 @@ export const Footer: React.FC = () => {
 
         {/* Copyright */}
         <div className="text-xs text-stone-500 dark:text-stone-500 text-center md:text-right">
-          © {new Date().getFullYear()} {t('common.appName')}. {t('common.allRightsReserved')}.
+          © {currentYear} {t('common.appName')}. {t('common.allRightsReserved')}.
         </div>
       </div>
     </footer>
