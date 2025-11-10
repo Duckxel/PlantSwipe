@@ -741,100 +741,93 @@ export const AdminPage: React.FC = () => {
     return () => { isMountedRef.current = false }
   }, [])
 
-  const probeEndpoint = React.useCallback(async (url: string, okCheck?: (body: any) => boolean): Promise<ProbeResult> => {
-    const started = Date.now()
-    try {
-      const headers: Record<string, string> = { 'Accept': 'application/json' }
+    const probeEndpoint = React.useCallback(async (url: string, okCheck?: (body: any) => boolean): Promise<ProbeResult> => {
+      const started = Date.now()
       try {
-        const token = (await supabase.auth.getSession()).data.session?.access_token
-        if (token) headers['Authorization'] = `Bearer ? ${token}`
-        const staticToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
-        if (staticToken) headers['X-Admin-Token'] = staticToken
-      } catch {}
-      // Use fetchWithRetry with shorter timeout for health checks (10 seconds)
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 10000)
-      try {
-        const resp = await fetch(url, { headers, credentials: 'same-origin', signal: controller.signal })
-        clearTimeout(timeoutId)
-        const body = await safeJson(resp)
-        const isOk = (typeof okCheck === 'function') ? (resp.ok && okCheck(body)) : (resp.ok && body?.ok === true)
-        const latency = Date.now() - started
-        if (isOk) {
-          return { ok: true, latencyMs: latency, updatedAt: Date.now(), status: resp.status, errorCode: null, errorMessage: null }
+        const headers: Record<string, string> = { 'Accept': 'application/json' }
+        try {
+          const token = (await supabase.auth.getSession()).data.session?.access_token
+          if (token) headers['Authorization'] = `Bearer ? ${token}`
+          const staticToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+          if (staticToken) headers['X-Admin-Token'] = staticToken
+        } catch {}
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 10000)
+        try {
+          const resp = await fetch(url, { headers, credentials: 'same-origin', signal: controller.signal })
+          clearTimeout(timeoutId)
+          const body = await safeJson(resp)
+          const isOk = (typeof okCheck === 'function') ? (resp.ok && okCheck(body)) : (resp.ok && body?.ok === true)
+          const latency = Date.now() - started
+          if (isOk) {
+            return { ok: true, latencyMs: latency, updatedAt: Date.now(), status: resp.status, errorCode: null, errorMessage: null }
+          }
+          const errorCodeFromBody = typeof body?.errorCode === 'string' && body.errorCode ? body.errorCode : null
+          const errorMessageFromBody = typeof body?.error === 'string' && body.error ? body.error : null
+          const fallbackCode = !resp.ok
+            ? `HTTP_${resp.status}`
+            : (errorCodeFromBody || 'CHECK_FAILED')
+          return {
+            ok: false,
+            latencyMs: null,
+            updatedAt: Date.now(),
+            status: resp.status,
+            errorCode: errorCodeFromBody || fallbackCode,
+            errorMessage: errorMessageFromBody,
+          }
+        } catch (fetchError: any) {
+          clearTimeout(timeoutId)
+          if (fetchError.name === 'AbortError') {
+            return { ok: false, latencyMs: null, updatedAt: Date.now(), status: null, errorCode: 'TIMEOUT', errorMessage: 'Request timed out' }
+          }
+          throw fetchError
         }
-        // Derive error info when not ok
-        const errorCodeFromBody = typeof body?.errorCode === 'string' && body.errorCode ? body.errorCode : null
-        const errorMessageFromBody = typeof body?.error === 'string' && body.error ? body.error : null
-        const fallbackCode = !resp.ok
-          ? `HTTP_${resp.status}`
-          : (errorCodeFromBody || 'CHECK_FAILED')
-        return {
-          ok: false,
-          latencyMs: null,
-          updatedAt: Date.now(),
-          status: resp.status,
-          errorCode: errorCodeFromBody || fallbackCode,
-          errorMessage: errorMessageFromBody,
-        }
-      } catch (fetchError: any) {
-        clearTimeout(timeoutId)
-        if (fetchError.name === 'AbortError') {
-          return { ok: false, latencyMs: null, updatedAt: Date.now(), status: null, errorCode: 'TIMEOUT', errorMessage: 'Request timed out' }
-        }
-        throw fetchError
-      }
-    } catch {
-      // Network/other failure
-      return { ok: false, latencyMs: null, updatedAt: Date.now(), status: null, errorCode: 'NETWORK_ERROR', errorMessage: null }
-    }
-  }, [safeJson])
-
-  const probeDbWithFallback = React.useCallback(async (): Promise<ProbeResult> => {
-    const started = Date.now()
-    try {
-      // First try server DB health
-      const resp = await fetch('/api/health/db', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
-      const elapsedMs = Date.now() - started
-      const body = await safeJson(resp)
-      if (resp.ok && body?.ok === true) {
-        return { ok: true, latencyMs: Number.isFinite(body?.latencyMs) ? body.latencyMs : elapsedMs, updatedAt: Date.now(), status: resp.status, errorCode: null, errorMessage: null }
-      }
-      // Not OK: derive error info
-      const errorCodeFromBody = typeof body?.errorCode === 'string' && body.errorCode ? body.errorCode : null
-      const errorMessageFromBody = typeof body?.error === 'string' && body.error ? body.error : null
-      const fallbackCode = !resp.ok ? `HTTP_${resp.status}` : (errorCodeFromBody || 'CHECK_FAILED')
-      // Fallback to client Supabase reachability
-      const t2Start = Date.now()
-      const { error } = await supabase.from('plants').select('id', { head: true, count: 'exact' }).limit(1)
-      const t2 = Date.now() - t2Start
-      if (!error) {
-        return { ok: true, latencyMs: t2, updatedAt: Date.now(), status: null, errorCode: null, errorMessage: null }
-      }
-      return { ok: false, latencyMs: null, updatedAt: Date.now(), status: resp.status, errorCode: errorCodeFromBody || fallbackCode, errorMessage: errorMessageFromBody }
-    } catch {
-      try {
-        // As a last resort, try an auth no-op which hits Supabase API
-        await supabase.auth.getSession()
-        return { ok: true, latencyMs: Date.now() - started, updatedAt: Date.now(), status: null, errorCode: null, errorMessage: null }
       } catch {
         return { ok: false, latencyMs: null, updatedAt: Date.now(), status: null, errorCode: 'NETWORK_ERROR', errorMessage: null }
       }
-    }
-  }, [safeJson])
+    }, [safeJson])
 
-  const runHealthProbes = React.useCallback(async () => {
-    const [apiRes, adminRes, dbRes] = await Promise.all([
-      probeEndpoint('/api/health', (b) => b?.ok === true).catch(() => ({ ok: false, latencyMs: null, updatedAt: Date.now(), status: null, errorCode: 'NETWORK_ERROR', errorMessage: 'Failed to probe API' })),
-      probeEndpoint('/api/admin/stats', (b) => b?.ok === true && typeof b?.profilesCount === 'number').catch(() => ({ ok: false, latencyMs: null, updatedAt: Date.now(), status: null, errorCode: 'NETWORK_ERROR', errorMessage: 'Failed to probe Admin API' })),
-      probeDbWithFallback().catch(() => ({ ok: false, latencyMs: null, updatedAt: Date.now(), status: null, errorCode: 'NETWORK_ERROR', errorMessage: 'Failed to probe Database' })),
-    ])
-    if (isMountedRef.current) {
-      setApiProbe(apiRes)
-      setAdminProbe(adminRes)
-      setDbProbe(dbRes)
-    }
-  }, [probeEndpoint, probeDbWithFallback])
+    const probeDbWithFallback = React.useCallback(async (): Promise<ProbeResult> => {
+      const started = Date.now()
+      try {
+        const resp = await fetch('/api/health/db', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+        const elapsedMs = Date.now() - started
+        const body = await safeJson(resp)
+        if (resp.ok && body?.ok === true) {
+          return { ok: true, latencyMs: Number.isFinite(body?.latencyMs) ? body.latencyMs : elapsedMs, updatedAt: Date.now(), status: resp.status, errorCode: null, errorMessage: null }
+        }
+        const errorCodeFromBody = typeof body?.errorCode === 'string' && body.errorCode ? body.errorCode : null
+        const errorMessageFromBody = typeof body?.error === 'string' && body.error ? body.error : null
+        const fallbackCode = !resp.ok ? `HTTP_${resp.status}` : (errorCodeFromBody || 'CHECK_FAILED')
+        const t2Start = Date.now()
+        const { error } = await supabase.from('plants').select('id', { head: true, count: 'exact' }).limit(1)
+        const t2 = Date.now() - t2Start
+        if (!error) {
+          return { ok: true, latencyMs: t2, updatedAt: Date.now(), status: null, errorCode: null, errorMessage: null }
+        }
+        return { ok: false, latencyMs: null, updatedAt: Date.now(), status: resp.status, errorCode: errorCodeFromBody || fallbackCode, errorMessage: errorMessageFromBody }
+      } catch {
+        try {
+          await supabase.auth.getSession()
+          return { ok: true, latencyMs: Date.now() - started, updatedAt: Date.now(), status: null, errorCode: null, errorMessage: null }
+        } catch {
+          return { ok: false, latencyMs: null, updatedAt: Date.now(), status: null, errorCode: 'NETWORK_ERROR', errorMessage: null }
+        }
+      }
+    }, [safeJson])
+
+    const runHealthProbes = React.useCallback(async () => {
+      const [apiRes, adminRes, dbRes] = await Promise.all([
+        probeEndpoint('/api/health', (b) => b?.ok === true).catch(() => ({ ok: false, latencyMs: null, updatedAt: Date.now(), status: null, errorCode: 'NETWORK_ERROR', errorMessage: 'Failed to probe API' })),
+        probeEndpoint('/api/admin/stats', (b) => b?.ok === true && typeof b?.profilesCount === 'number').catch(() => ({ ok: false, latencyMs: null, updatedAt: Date.now(), status: null, errorCode: 'NETWORK_ERROR', errorMessage: 'Failed to probe Admin API' })),
+        probeDbWithFallback().catch(() => ({ ok: false, latencyMs: null, updatedAt: Date.now(), status: null, errorCode: 'NETWORK_ERROR', errorMessage: 'Failed to probe Database' })),
+      ])
+      if (isMountedRef.current) {
+        setApiProbe(apiRes)
+        setAdminProbe(adminRes)
+        setDbProbe(dbRes)
+      }
+    }, [probeEndpoint, probeDbWithFallback])
 
   const refreshHealth = React.useCallback(async () => {
     if (healthRefreshing) return
