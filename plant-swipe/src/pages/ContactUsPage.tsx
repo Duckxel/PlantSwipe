@@ -1,47 +1,54 @@
-import { useState } from "react"
-import type { ChangeEvent, FormEvent } from "react"
+import { useState, useRef } from "react"
+import type { FormEvent } from "react"
 import { useTranslation } from "react-i18next"
+import { motion } from "framer-motion"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { AlertTriangle, CheckCircle2, Clock, HelpCircle, Loader2, Mail, MessageCircle } from "lucide-react"
+import { Clock, HelpCircle, Mail, MessageCircle, Check, Copy } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { supabase } from "@/lib/supabaseClient"
 
 const SUPPORT_EMAIL = "support@aphylia.app"
 const SUPPORT_FUNCTION = "contact-support"
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-type FieldKey = "name" | "email" | "message"
-type FormStatus = "idle" | "success" | "error"
+type FormStatus = "idle" | "success" | "error" | "loading"
 
-type FormState = Record<FieldKey, string>
-type FormErrors = Partial<Record<FieldKey, string>>
+type DialogFormState = {
+  name: string
+  email: string
+  subject: string
+  message: string
+}
+
+type CopyState = "idle" | "copied"
 
 export default function ContactUsPage() {
   const { t } = useTranslation('common')
-  const [formData, setFormData] = useState<FormState>({
+  const [formOpen, setFormOpen] = useState(false)
+  const [copyState, setCopyState] = useState<CopyState>("idle")
+  const copyResetRef = useRef<number | null>(null)
+  const [formValues, setFormValues] = useState<DialogFormState>({
     name: "",
     email: "",
+    subject: "",
     message: "",
   })
-  const [formErrors, setFormErrors] = useState<FormErrors>({})
-  const [status, setStatus] = useState<FormStatus>("idle")
-  const [serverError, setServerError] = useState<string | null>(null)
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [formStatus, setFormStatus] = useState<FormStatus>("idle")
+  const [formErrorMessage, setFormErrorMessage] = useState<string | null>(null)
 
   const handleEmailClick = () => {
     setFormOpen(true);
   };
 
   const handleEmailCopy = async () => {
-    const email = SUPPORT_EMAIL;
-
     const fallbackCopy = () => {
       try {
         const textarea = document.createElement("textarea");
-        textarea.value = email;
+        textarea.value = SUPPORT_EMAIL;
         textarea.setAttribute("readonly", "");
         textarea.style.position = "fixed";
         textarea.style.left = "-9999px";
@@ -78,8 +85,10 @@ export default function ContactUsPage() {
     let copied = false;
     try {
       await navigator.clipboard.writeText(SUPPORT_EMAIL)
+      copied = true;
     } catch (err) {
       console.error('Failed to copy email:', err)
+      copied = fallbackCopy();
     }
 
     if (copied) {
@@ -94,92 +103,58 @@ export default function ContactUsPage() {
     }
   };
 
-  if (!ready) {
-    return (
-      <div className="max-w-4xl mx-auto mt-8 px-4 md:px-0 space-y-6 animate-pulse">
-        <div className="space-y-3">
-          <div className="h-9 w-2/3 rounded-xl bg-stone-200 dark:bg-[#252526]" />
-          <div className="h-4 w-3/4 rounded-xl bg-stone-200 dark:bg-[#252526]" />
-        </div>
-        <div className="h-48 rounded-3xl bg-stone-200 dark:bg-[#252526]" />
-        <div className="grid md:grid-cols-2 gap-4">
-          <div className="h-40 rounded-3xl bg-stone-200 dark:bg-[#252526]" />
-          <div className="h-40 rounded-3xl bg-stone-200 dark:bg-[#252526]" />
-        </div>
-      </div>
-    );
-  }
-
-  const handleFieldChange = (field: FieldKey) => (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const value = event.target.value
-    setFormData((prev) => ({
-      ...prev,
-      [field]: value,
-    }))
-
-    if (formErrors[field]) {
-      setFormErrors((prev) => {
-        const next = { ...prev }
-        delete next[field]
-        return next
+  const handleDialogOpenChange = (open: boolean) => {
+    setFormOpen(open)
+    if (!open) {
+      setFormStatus("idle")
+      setFormErrorMessage(null)
+      setFormValues({
+        name: "",
+        email: "",
+        subject: "",
+        message: "",
       })
     }
-
-    if (status !== "idle") {
-      setStatus("idle")
-    }
-    if (serverError) {
-      setServerError(null)
-    }
   }
 
-  const validate = (data: FormState): FormErrors => {
-    const errors: FormErrors = {}
-    const trimmedName = data.name.trim()
-    const trimmedEmail = data.email.trim()
-    const trimmedMessage = data.message.trim()
-
-    if (!trimmedName) {
-      errors.name = t('contactUs.form.validation.name')
-    } else if (trimmedName.length > 120) {
-      errors.name = t('contactUs.form.validation.nameMax')
-    }
-
-    if (!trimmedEmail) {
-      errors.email = t('contactUs.form.validation.email')
-    } else if (!EMAIL_PATTERN.test(trimmedEmail)) {
-      errors.email = t('contactUs.form.validation.emailInvalid')
-    }
-
-    if (!trimmedMessage) {
-      errors.message = t('contactUs.form.validation.message')
-    } else if (trimmedMessage.length < 10) {
-      errors.message = t('contactUs.form.validation.messageMin')
-    } else if (trimmedMessage.length > 4000) {
-      errors.message = t('contactUs.form.validation.messageMax')
-    }
-
-    return errors
-  }
-
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+  const handleFormSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    setStatus("idle")
-    setServerError(null)
+    setFormStatus("loading")
+    setFormErrorMessage(null)
 
-    const trimmedData: FormState = {
-      name: formData.name.trim(),
-      email: formData.email.trim(),
-      message: formData.message.trim(),
+    const trimmedData = {
+      name: formValues.name.trim(),
+      email: formValues.email.trim(),
+      subject: formValues.subject.trim(),
+      message: formValues.message.trim(),
     }
 
-    const errors = validate(trimmedData)
-    setFormErrors(errors)
-    if (Object.keys(errors).length > 0) {
+    // Validation
+    if (!trimmedData.name) {
+      setFormStatus("error")
+      setFormErrorMessage(t('contactUs.form.errorMessage'))
       return
     }
-
-    setIsSubmitting(true)
+    if (trimmedData.name.length > 120) {
+      setFormStatus("error")
+      setFormErrorMessage(t('contactUs.form.errorMessage'))
+      return
+    }
+    if (!trimmedData.email || !EMAIL_PATTERN.test(trimmedData.email)) {
+      setFormStatus("error")
+      setFormErrorMessage(t('contactUs.form.errorMessage'))
+      return
+    }
+    if (!trimmedData.subject) {
+      setFormStatus("error")
+      setFormErrorMessage(t('contactUs.form.errorMessage'))
+      return
+    }
+    if (!trimmedData.message || trimmedData.message.length < 10 || trimmedData.message.length > 4000) {
+      setFormStatus("error")
+      setFormErrorMessage(t('contactUs.form.errorMessage'))
+      return
+    }
 
     try {
       const { data, error } = await supabase.functions.invoke(SUPPORT_FUNCTION, {
@@ -191,45 +166,35 @@ export default function ContactUsPage() {
 
       if (error || data?.error) {
         console.error('Failed to submit contact form', error ?? data?.error)
-        setStatus("error")
-        setServerError(data?.message ?? error?.message ?? t('contactUs.form.errorDescription'))
+        setFormStatus("error")
+        setFormErrorMessage(data?.message ?? error?.message ?? t('contactUs.form.errorMessage'))
         return
       }
 
-      setStatus("success")
-      setFormData({
+      setFormStatus("success")
+      setFormValues({
         name: "",
         email: "",
+        subject: "",
         message: "",
       })
-      setFormErrors({})
     } catch (err) {
       console.error('Unexpected error submitting contact form', err)
-      setStatus("error")
-      setServerError(t('contactUs.form.errorDescription'))
-    } finally {
-      setIsSubmitting(false)
+      setFormStatus("error")
+      setFormErrorMessage(t('contactUs.form.errorMessage'))
     }
   }
 
-  const isFormValid =
-    formData.name.trim().length > 0 &&
-    EMAIL_PATTERN.test(formData.email.trim()) &&
-    formData.message.trim().length >= 10 &&
-    formData.message.trim().length <= 4000
-
-  const buttonLabel = isSubmitting
-    ? t('contactUs.form.submitting')
-    : t('contactUs.form.submit')
+  const inputsDisabled = formStatus === "loading" || formStatus === "success"
 
   return (
     <div className="max-w-4xl mx-auto mt-8 px-4 md:px-0">
       <div className="mb-6">
         <h1 className="text-3xl font-semibold flex items-center gap-3">
           <MessageCircle className="h-6 w-6" />
-          {title}
+          {t('contactUs.title')}
         </h1>
-        <p className="text-sm opacity-70 mt-2">{description}</p>
+        <p className="text-sm opacity-70 mt-2">{t('contactUs.description')}</p>
       </div>
 
       <Card className="rounded-3xl mb-6">
@@ -239,9 +204,9 @@ export default function ContactUsPage() {
               <Mail className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
             </div>
             <div className="flex-1">
-              <CardTitle>{supportEmailTitle}</CardTitle>
+              <CardTitle>{t('contactUs.supportEmail')}</CardTitle>
               <CardDescription className="mt-1">
-                {supportEmailDescription}
+                {t('contactUs.supportEmailDescription')}
               </CardDescription>
             </div>
           </div>
@@ -250,7 +215,7 @@ export default function ContactUsPage() {
           <div className="p-4 rounded-2xl bg-stone-50 dark:bg-[#252526] border border-stone-200 dark:border-[#3e3e42]">
             <div className="flex items-center justify-between gap-4 flex-wrap">
               <div className="flex-1 min-w-[200px]">
-                <p className="text-sm opacity-70 mb-1">{emailLabel}</p>
+                <p className="text-sm opacity-70 mb-1">{t('contactUs.emailLabel')}</p>
                 <p
                   className="text-lg font-medium text-emerald-600 dark:text-emerald-400 break-all select-all cursor-text"
                   aria-label={SUPPORT_EMAIL}
@@ -261,7 +226,7 @@ export default function ContactUsPage() {
               <div className="flex gap-2">
                 <Button onClick={handleEmailClick} className="rounded-2xl">
                   <Mail className="h-4 w-4 mr-2" />
-                  {sendEmailLabel}
+                  {t('contactUs.sendEmail')}
                 </Button>
                 <Button
                   onClick={handleEmailCopy}
@@ -292,12 +257,12 @@ export default function ContactUsPage() {
                     {copyState === "copied" ? (
                       <>
                         <Check className="h-4 w-4" />
-                        <span>{copySuccessLabel}</span>
+                        <span>{t('contactUs.copySuccess')}</span>
                       </>
                     ) : (
                       <>
-                        <CopyIcon className="h-4 w-4" />
-                        <span>{copyEmailLabel}</span>
+                        <Copy className="h-4 w-4" />
+                        <span>{t('contactUs.copyEmail')}</span>
                       </>
                     )}
                   </motion.span>
@@ -308,126 +273,17 @@ export default function ContactUsPage() {
         </CardContent>
       </Card>
 
-      <Card className="rounded-3xl mb-6">
-        <CardHeader>
-          <div className="space-y-2">
-            <CardTitle>{t('contactUs.form.title')}</CardTitle>
-            <CardDescription>
-              {t('contactUs.form.description')}
-            </CardDescription>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {status === "success" && (
-            <div className="mb-4 flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm dark:border-emerald-900/40 dark:bg-emerald-900/10">
-              <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-500" />
-              <div>
-                <p className="font-medium text-emerald-800 dark:text-emerald-200">
-                  {t('contactUs.form.successTitle')}
-                </p>
-                <p className="text-emerald-700 dark:text-emerald-300/80">
-                  {t('contactUs.form.successDescription')}
-                </p>
-              </div>
-            </div>
-          )}
-
-          {status === "error" && (
-            <div className="mb-4 flex items-start gap-3 rounded-2xl border border-destructive/40 bg-destructive/10 p-3 text-sm dark:bg-destructive/20">
-              <AlertTriangle className="mt-0.5 h-4 w-4 text-destructive" />
-              <div>
-                <p className="font-medium text-destructive">
-                  {t('contactUs.form.errorTitle')}
-                </p>
-                <p className="text-destructive/80">{serverError ?? t('contactUs.form.errorDescription')}</p>
-              </div>
-            </div>
-          )}
-
-          <form className="space-y-4" onSubmit={handleSubmit} noValidate>
-            <div className="space-y-1.5">
-              <Label htmlFor="contact-name">{t('contactUs.form.nameLabel')}</Label>
-              <Input
-                id="contact-name"
-                name="name"
-                autoComplete="name"
-                placeholder={t('contactUs.form.namePlaceholder')}
-                value={formData.name}
-                onChange={handleFieldChange("name")}
-                maxLength={120}
-                required
-                className="rounded-2xl"
-              />
-              {formErrors.name ? (
-                <p className="text-sm text-destructive">{formErrors.name}</p>
-              ) : null}
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="contact-email">{t('contactUs.form.emailLabel')}</Label>
-              <Input
-                id="contact-email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                placeholder={t('contactUs.form.emailPlaceholder')}
-                value={formData.email}
-                onChange={handleFieldChange("email")}
-                maxLength={254}
-                required
-                className="rounded-2xl"
-              />
-              {formErrors.email ? (
-                <p className="text-sm text-destructive">{formErrors.email}</p>
-              ) : null}
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="contact-message">{t('contactUs.form.messageLabel')}</Label>
-              <Textarea
-                id="contact-message"
-                name="message"
-                placeholder={t('contactUs.form.messagePlaceholder')}
-                value={formData.message}
-                onChange={handleFieldChange("message")}
-                rows={6}
-                maxLength={4000}
-                required
-                className="rounded-2xl"
-              />
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                {formErrors.message ? (
-                  <p className="text-destructive">{formErrors.message}</p>
-                ) : (
-                  <span>{t('contactUs.form.messageHelper')}</span>
-                )}
-                <span>{formData.message.length}/4000</span>
-              </div>
-            </div>
-
-            <Button
-              type="submit"
-              disabled={isSubmitting || !isFormValid}
-              className="rounded-2xl"
-            >
-              {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {buttonLabel}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-
       {/* Additional Information */}
       <div className="grid md:grid-cols-2 gap-4">
         <Card className="rounded-3xl">
           <CardHeader>
             <div className="flex items-center gap-2">
               <Clock className="h-5 w-5 opacity-60" />
-              <CardTitle className="text-lg">{responseTimeTitle}</CardTitle>
+              <CardTitle className="text-lg">{t('contactUs.responseTime.title')}</CardTitle>
             </div>
           </CardHeader>
           <CardContent>
-            <p className="text-sm opacity-70">{responseTimeDescription}</p>
+            <p className="text-sm opacity-70">{t('contactUs.responseTime.description')}</p>
           </CardContent>
         </Card>
 
@@ -435,11 +291,11 @@ export default function ContactUsPage() {
           <CardHeader>
             <div className="flex items-center gap-2">
               <HelpCircle className="h-5 w-5 opacity-60" />
-              <CardTitle className="text-lg">{helpfulInfoTitle}</CardTitle>
+              <CardTitle className="text-lg">{t('contactUs.helpfulInfo.title')}</CardTitle>
             </div>
           </CardHeader>
           <CardContent>
-            <p className="text-sm opacity-70">{helpfulInfoDescription}</p>
+            <p className="text-sm opacity-70">{t('contactUs.helpfulInfo.description')}</p>
           </CardContent>
         </Card>
       </div>
@@ -447,15 +303,15 @@ export default function ContactUsPage() {
       <Dialog open={formOpen} onOpenChange={handleDialogOpenChange}>
         <DialogContent className="rounded-2xl">
           <DialogHeader>
-            <DialogTitle>{formTitle}</DialogTitle>
-            <DialogDescription>{formDescription}</DialogDescription>
+            <DialogTitle>{t('contactUs.form.title')}</DialogTitle>
+            <DialogDescription>{t('contactUs.form.description')}</DialogDescription>
           </DialogHeader>
           <form className="space-y-4" onSubmit={handleFormSubmit}>
             {formStatus === "success" && (
               <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4 text-sm text-emerald-700">
-                <p className="font-medium">{formSuccessTitle}</p>
+                <p className="font-medium">{t('contactUs.form.successTitle')}</p>
                 <p className="mt-1 text-emerald-600">
-                  {formSuccessDescription}
+                  {t('contactUs.form.successDescription')}
                 </p>
               </div>
             )}
@@ -465,14 +321,14 @@ export default function ContactUsPage() {
               </div>
             )}
             <div className="grid gap-2">
-              <Label htmlFor="contact-name">{formNameLabel}</Label>
+              <Label htmlFor="contact-name">{t('contactUs.form.nameLabel')}</Label>
               <Input
                 id="contact-name"
                 name="name"
-                placeholder={formNamePlaceholder}
+                placeholder={t('contactUs.form.namePlaceholder')}
                 value={formValues.name}
                 onChange={(event) =>
-                  setFormValues((prev) => ({
+                  setFormValues((prev: DialogFormState) => ({
                     ...prev,
                     name: event.target.value,
                   }))
@@ -481,16 +337,16 @@ export default function ContactUsPage() {
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="contact-email">{formEmailLabel}</Label>
+              <Label htmlFor="contact-email">{t('contactUs.form.emailLabel')}</Label>
               <Input
                 id="contact-email"
                 name="email"
                 type="email"
                 required
-                placeholder={formEmailPlaceholder}
+                placeholder={t('contactUs.form.emailPlaceholder')}
                 value={formValues.email}
                 onChange={(event) =>
-                  setFormValues((prev) => ({
+                  setFormValues((prev: DialogFormState) => ({
                     ...prev,
                     email: event.target.value,
                   }))
@@ -499,15 +355,15 @@ export default function ContactUsPage() {
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="contact-subject">{formSubjectLabel}</Label>
+              <Label htmlFor="contact-subject">{t('contactUs.form.subjectLabel')}</Label>
               <Input
                 id="contact-subject"
                 name="subject"
                 required
-                placeholder={formSubjectPlaceholder}
+                placeholder={t('contactUs.form.subjectPlaceholder')}
                 value={formValues.subject}
                 onChange={(event) =>
-                  setFormValues((prev) => ({
+                  setFormValues((prev: DialogFormState) => ({
                     ...prev,
                     subject: event.target.value,
                   }))
@@ -516,16 +372,16 @@ export default function ContactUsPage() {
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="contact-message">{formMessageLabel}</Label>
+              <Label htmlFor="contact-message">{t('contactUs.form.messageLabel')}</Label>
               <Textarea
                 id="contact-message"
                 name="message"
                 required
                 rows={5}
-                placeholder={formMessagePlaceholder}
+                placeholder={t('contactUs.form.messagePlaceholder')}
                 value={formValues.message}
                 onChange={(event) =>
-                  setFormValues((prev) => ({
+                  setFormValues((prev: DialogFormState) => ({
                     ...prev,
                     message: event.target.value,
                   }))
@@ -541,7 +397,7 @@ export default function ContactUsPage() {
                 onClick={() => handleDialogOpenChange(false)}
                 disabled={formStatus === "loading"}
               >
-                {formCancelLabel}
+                {t('contactUs.form.cancelButton')}
               </Button>
               <Button
                 type="submit"
@@ -549,8 +405,8 @@ export default function ContactUsPage() {
                 disabled={formStatus === "loading" || formStatus === "success"}
               >
                 {formStatus === "loading"
-                  ? formSubmitSendingLabel
-                  : formSubmitLabel}
+                  ? t('contactUs.form.submitSending')
+                  : t('contactUs.form.submitButton')}
               </Button>
             </DialogFooter>
           </form>
