@@ -1,5 +1,5 @@
 import { useState, useRef } from "react"
-import type { ChangeEvent, FormEvent } from "react"
+import type { FormEvent } from "react"
 import { useTranslation } from "react-i18next"
 import { motion } from "framer-motion"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -15,11 +15,7 @@ const SUPPORT_EMAIL = "support@aphylia.app"
 const SUPPORT_FUNCTION = "contact-support"
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-type FieldKey = "name" | "email" | "message"
 type FormStatus = "idle" | "success" | "error" | "loading"
-
-type FormState = Record<FieldKey, string>
-type FormErrors = Partial<Record<FieldKey, string>>
 
 type DialogFormState = {
   name: string
@@ -32,15 +28,6 @@ type CopyState = "idle" | "copied"
 
 export default function ContactUsPage() {
   const { t } = useTranslation('common')
-  const [formData, setFormData] = useState<FormState>({
-    name: "",
-    email: "",
-    message: "",
-  })
-  const [formErrors, setFormErrors] = useState<FormErrors>({})
-  const [status, setStatus] = useState<FormStatus>("idle")
-  const [serverError, setServerError] = useState<string | null>(null)
-  const [isSubmitting, setIsSubmitting] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
   const [copyState, setCopyState] = useState<CopyState>("idle")
   const copyResetRef = useRef<number | null>(null)
@@ -142,7 +129,28 @@ export default function ContactUsPage() {
       message: formValues.message.trim(),
     }
 
-    if (!trimmedData.name || !trimmedData.email || !trimmedData.subject || !trimmedData.message) {
+    // Validation
+    if (!trimmedData.name) {
+      setFormStatus("error")
+      setFormErrorMessage(t('contactUs.form.errorMessage'))
+      return
+    }
+    if (trimmedData.name.length > 120) {
+      setFormStatus("error")
+      setFormErrorMessage(t('contactUs.form.errorMessage'))
+      return
+    }
+    if (!trimmedData.email || !EMAIL_PATTERN.test(trimmedData.email)) {
+      setFormStatus("error")
+      setFormErrorMessage(t('contactUs.form.errorMessage'))
+      return
+    }
+    if (!trimmedData.subject) {
+      setFormStatus("error")
+      setFormErrorMessage(t('contactUs.form.errorMessage'))
+      return
+    }
+    if (!trimmedData.message || trimmedData.message.length < 10 || trimmedData.message.length > 4000) {
       setFormStatus("error")
       setFormErrorMessage(t('contactUs.form.errorMessage'))
       return
@@ -178,118 +186,6 @@ export default function ContactUsPage() {
   }
 
   const inputsDisabled = formStatus === "loading" || formStatus === "success"
-
-  const handleFieldChange = (field: FieldKey) => (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const value = event.target.value
-    setFormData((prev) => ({
-      ...prev,
-      [field]: value,
-    }))
-
-    if (formErrors[field]) {
-      setFormErrors((prev) => {
-        const next = { ...prev }
-        delete next[field]
-        return next
-      })
-    }
-
-    if (status !== "idle") {
-      setStatus("idle")
-    }
-    if (serverError) {
-      setServerError(null)
-    }
-  }
-
-  const validate = (data: FormState): FormErrors => {
-    const errors: FormErrors = {}
-    const trimmedName = data.name.trim()
-    const trimmedEmail = data.email.trim()
-    const trimmedMessage = data.message.trim()
-
-    if (!trimmedName) {
-      errors.name = t('contactUs.form.validation.name')
-    } else if (trimmedName.length > 120) {
-      errors.name = t('contactUs.form.validation.nameMax')
-    }
-
-    if (!trimmedEmail) {
-      errors.email = t('contactUs.form.validation.email')
-    } else if (!EMAIL_PATTERN.test(trimmedEmail)) {
-      errors.email = t('contactUs.form.validation.emailInvalid')
-    }
-
-    if (!trimmedMessage) {
-      errors.message = t('contactUs.form.validation.message')
-    } else if (trimmedMessage.length < 10) {
-      errors.message = t('contactUs.form.validation.messageMin')
-    } else if (trimmedMessage.length > 4000) {
-      errors.message = t('contactUs.form.validation.messageMax')
-    }
-
-    return errors
-  }
-
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    setStatus("idle")
-    setServerError(null)
-
-    const trimmedData: FormState = {
-      name: formData.name.trim(),
-      email: formData.email.trim(),
-      message: formData.message.trim(),
-    }
-
-    const errors = validate(trimmedData)
-    setFormErrors(errors)
-    if (Object.keys(errors).length > 0) {
-      return
-    }
-
-    setIsSubmitting(true)
-
-    try {
-      const { data, error } = await supabase.functions.invoke(SUPPORT_FUNCTION, {
-        body: {
-          ...trimmedData,
-          submittedAt: new Date().toISOString(),
-        },
-      })
-
-      if (error || data?.error) {
-        console.error('Failed to submit contact form', error ?? data?.error)
-        setStatus("error")
-        setServerError(data?.message ?? error?.message ?? t('contactUs.form.errorDescription'))
-        return
-      }
-
-      setStatus("success")
-      setFormData({
-        name: "",
-        email: "",
-        message: "",
-      })
-      setFormErrors({})
-    } catch (err) {
-      console.error('Unexpected error submitting contact form', err)
-      setStatus("error")
-      setServerError(t('contactUs.form.errorDescription'))
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
-
-  const isFormValid =
-    formData.name.trim().length > 0 &&
-    EMAIL_PATTERN.test(formData.email.trim()) &&
-    formData.message.trim().length >= 10 &&
-    formData.message.trim().length <= 4000
-
-  const buttonLabel = isSubmitting
-    ? t('contactUs.form.submitting')
-    : t('contactUs.form.submit')
 
   return (
     <div className="max-w-4xl mx-auto mt-8 px-4 md:px-0">
@@ -374,115 +270,6 @@ export default function ContactUsPage() {
               </div>
             </div>
           </div>
-        </CardContent>
-      </Card>
-
-      <Card className="rounded-3xl mb-6">
-        <CardHeader>
-          <div className="space-y-2">
-            <CardTitle>{t('contactUs.form.title')}</CardTitle>
-            <CardDescription>
-              {t('contactUs.form.description')}
-            </CardDescription>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {status === "success" && (
-            <div className="mb-4 flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm dark:border-emerald-900/40 dark:bg-emerald-900/10">
-              <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-500" />
-              <div>
-                <p className="font-medium text-emerald-800 dark:text-emerald-200">
-                  {t('contactUs.form.successTitle')}
-                </p>
-                <p className="text-emerald-700 dark:text-emerald-300/80">
-                  {t('contactUs.form.successDescription')}
-                </p>
-              </div>
-            </div>
-          )}
-
-          {status === "error" && (
-            <div className="mb-4 flex items-start gap-3 rounded-2xl border border-destructive/40 bg-destructive/10 p-3 text-sm dark:bg-destructive/20">
-              <AlertTriangle className="mt-0.5 h-4 w-4 text-destructive" />
-              <div>
-                <p className="font-medium text-destructive">
-                  {t('contactUs.form.errorTitle')}
-                </p>
-                <p className="text-destructive/80">{serverError ?? t('contactUs.form.errorDescription')}</p>
-              </div>
-            </div>
-          )}
-
-          <form className="space-y-4" onSubmit={handleSubmit} noValidate>
-            <div className="space-y-1.5">
-              <Label htmlFor="contact-name">{t('contactUs.form.nameLabel')}</Label>
-              <Input
-                id="contact-name"
-                name="name"
-                autoComplete="name"
-                placeholder={t('contactUs.form.namePlaceholder')}
-                value={formData.name}
-                onChange={handleFieldChange("name")}
-                maxLength={120}
-                required
-                className="rounded-2xl"
-              />
-              {formErrors.name ? (
-                <p className="text-sm text-destructive">{formErrors.name}</p>
-              ) : null}
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="contact-email">{t('contactUs.form.emailLabel')}</Label>
-              <Input
-                id="contact-email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                placeholder={t('contactUs.form.emailPlaceholder')}
-                value={formData.email}
-                onChange={handleFieldChange("email")}
-                maxLength={254}
-                required
-                className="rounded-2xl"
-              />
-              {formErrors.email ? (
-                <p className="text-sm text-destructive">{formErrors.email}</p>
-              ) : null}
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="contact-message">{t('contactUs.form.messageLabel')}</Label>
-              <Textarea
-                id="contact-message"
-                name="message"
-                placeholder={t('contactUs.form.messagePlaceholder')}
-                value={formData.message}
-                onChange={handleFieldChange("message")}
-                rows={6}
-                maxLength={4000}
-                required
-                className="rounded-2xl"
-              />
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                {formErrors.message ? (
-                  <p className="text-destructive">{formErrors.message}</p>
-                ) : (
-                  <span>{t('contactUs.form.messageHelper')}</span>
-                )}
-                <span>{formData.message.length}/4000</span>
-              </div>
-            </div>
-
-            <Button
-              type="submit"
-              disabled={isSubmitting || !isFormValid}
-              className="rounded-2xl"
-            >
-              {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {buttonLabel}
-            </Button>
-          </form>
         </CardContent>
       </Card>
 
