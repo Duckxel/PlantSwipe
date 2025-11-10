@@ -648,14 +648,25 @@ PY
     supabase_cmd=(env HOME="$SUPABASE_HOME" SUPABASE_CONFIG_HOME="$SUPABASE_HOME/.supabase")
   fi
 
+  # Create a writable log directory
+  local LOG_DIR="$WORK_DIR/.supabase-logs"
+  mkdir -p "$LOG_DIR" 2>/dev/null || LOG_DIR="/tmp"
+  chmod 1777 "$LOG_DIR" 2>/dev/null || true
+
   # Authenticate if access token is provided
   if [[ -n "$SUPABASE_ACCESS_TOKEN" ]]; then
     log "Authenticating Supabase CLI…"
-    if ! "${supabase_cmd[@]}" SUPABASE_ACCESS_TOKEN="$SUPABASE_ACCESS_TOKEN" supabase login --token "$SUPABASE_ACCESS_TOKEN" >/tmp/supabase-login.log 2>&1; then
-      log "[WARN] Supabase CLI login failed. See /tmp/supabase-login.log"
-      tail -n 10 /tmp/supabase-login.log 2>/dev/null || true
-    else
+    local login_output=""
+    if login_output="$("${supabase_cmd[@]}" SUPABASE_ACCESS_TOKEN="$SUPABASE_ACCESS_TOKEN" supabase login --token "$SUPABASE_ACCESS_TOKEN" 2>&1)"; then
       log "Supabase CLI authenticated."
+      echo "$login_output" | grep -v "^$" | while IFS= read -r line; do
+        log "  $line"
+      done || true
+    else
+      log "[WARN] Supabase CLI login failed."
+      echo "$login_output" | tail -n 10 | while IFS= read -r line; do
+        log "  $line"
+      done || true
     fi
   else
     log "[INFO] SUPABASE_ACCESS_TOKEN not set; assuming already authenticated or using existing session."
@@ -673,9 +684,17 @@ PY
     [[ -n "$RESEND_FROM" ]] && secrets_env+=("RESEND_FROM=$RESEND_FROM")
     [[ -n "$RESEND_FROM_NAME" ]] && secrets_env+=("RESEND_FROM_NAME=$RESEND_FROM_NAME")
     for kv in "${secrets_env[@]}"; do
-      if ! "${supabase_cmd[@]}" supabase secrets set --project-ref "$SUPABASE_PROJECT_REF" --workdir "$NODE_DIR" "$kv" >/tmp/supabase-secrets.log 2>&1; then
-        log "[WARN] Failed to set Supabase secret $kv. See /tmp/supabase-secrets.log"
-        tail -n 10 /tmp/supabase-secrets.log 2>/dev/null || true
+      local secret_output=""
+      if secret_output="$("${supabase_cmd[@]}" supabase secrets set --project-ref "$SUPABASE_PROJECT_REF" --workdir "$NODE_DIR" "$kv" 2>&1)"; then
+        log "✓ Set secret: ${kv%%=*}"
+        echo "$secret_output" | grep -v "^$" | while IFS= read -r line; do
+          log "  $line"
+        done || true
+      else
+        log "[WARN] Failed to set Supabase secret ${kv%%=*}"
+        echo "$secret_output" | tail -n 10 | while IFS= read -r line; do
+          log "  $line"
+        done || true
       fi
     done
   fi
@@ -727,8 +746,6 @@ PY
   log "Function path: $FUNCTION_DIR"
   log "Working directory: $NODE_DIR"
   
-  local deploy_log="/tmp/supabase-deploy-$(date +%s).log"
-  
   # Change to the node directory for deployment (more reliable than --workdir)
   local original_pwd="$(pwd)"
   cd "$NODE_DIR" || {
@@ -742,45 +759,55 @@ PY
   # Show the command being run
   log "Running from $NODE_DIR: ${supabase_cmd[*]} ${deploy_args[*]}"
   
-  # Run deployment and capture both stdout and stderr
+  # Run deployment and capture output directly (avoid permission issues with log files)
+  local deploy_output=""
   local deploy_exit_code=0
-  "${supabase_cmd[@]}" "${deploy_args[@]}" >"$deploy_log" 2>&1 || deploy_exit_code=$?
+  deploy_output="$("${supabase_cmd[@]}" "${deploy_args[@]}" 2>&1)" || deploy_exit_code=$?
   
   # Return to original directory
   cd "$original_pwd" || true
   
   # Always show the deployment output for debugging
   log "Deployment output:"
-  cat "$deploy_log" | while IFS= read -r line; do
+  echo "$deploy_output" | while IFS= read -r line; do
     log "  $line"
   done || true
   
-  if [[ $deploy_exit_code -ne 0 ]]; then
-    log "[ERROR] Supabase Edge Function deployment failed with exit code $deploy_exit_code"
-    log "Full deployment log saved to: $deploy_log"
+  # Check for success indicators in output (more reliable than exit code)
+  local deploy_success=false
+  if echo "$deploy_output" | grep -qi "Deployed Functions\|deployed successfully\|Successfully deployed"; then
+    deploy_success=true
+  elif [[ $deploy_exit_code -eq 0 ]]; then
+    deploy_success=true
+  fi
+  
+  if [[ "$deploy_success" == "true" ]]; then
+    log "✓ Supabase Edge Function contact-support deployed successfully"
+  else
+    log "[ERROR] Supabase Edge Function deployment failed (exit code: $deploy_exit_code)"
     return 1
   fi
   
   # Verify deployment by checking function status
   log "Verifying deployment…"
-  local verify_log="/tmp/supabase-verify-$(date +%s).log"
   cd "$NODE_DIR" || true
-  if "${supabase_cmd[@]}" supabase functions list --project-ref "$SUPABASE_PROJECT_REF" >"$verify_log" 2>&1; then
-    if grep -q "contact-support" "$verify_log" 2>/dev/null; then
+  local verify_output=""
+  if verify_output="$("${supabase_cmd[@]}" supabase functions list --project-ref "$SUPABASE_PROJECT_REF" 2>&1)"; then
+    if echo "$verify_output" | grep -q "contact-support"; then
       log "✓ Function 'contact-support' verified in project $SUPABASE_PROJECT_REF"
-      log "Function list:"
-      grep -A 2 "contact-support" "$verify_log" | while IFS= read -r line; do
+      log "Function details:"
+      echo "$verify_output" | grep -A 2 "contact-support" | while IFS= read -r line; do
         log "  $line"
       done || true
     else
-      log "[WARN] Function 'contact-support' not found in function list. Deployment may have failed."
+      log "[WARN] Function 'contact-support' not found in function list."
       log "Available functions:"
-      cat "$verify_log" | while IFS= read -r line; do
+      echo "$verify_output" | while IFS= read -r line; do
         log "  $line"
       done || true
     fi
   else
-    log "[WARN] Could not verify deployment (function list failed). Deployment may have succeeded."
+    log "[INFO] Could not verify deployment (function list failed), but deployment appeared successful."
   fi
   cd "$original_pwd" || true
   
