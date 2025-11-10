@@ -209,7 +209,8 @@ ensure_supabase_login_and_link() {
   if [[ -n "$SUPABASE_PROJECT_REF" && -n "$SUPABASE_SERVICE_ROLE_KEY" ]]; then
     if [[ ! -f "$NODE_DIR/supabase/config.toml" ]]; then
       log "Linking Supabase project $SUPABASE_PROJECT_REF to repository (non-interactive)…"
-      if ! sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && supabase link --project-ref '$SUPABASE_PROJECT_REF' --password '$SUPABASE_SERVICE_ROLE_KEY' >/dev/null"; then
+      local link_password="${SUPABASE_DB_PASSWORD:-$SUPABASE_SERVICE_ROLE_KEY}"
+      if ! sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && supabase link --project-ref '$SUPABASE_PROJECT_REF' --password '$link_password' >/dev/null"; then
         log "[WARN] Supabase project link failed."
       fi
     else
@@ -337,16 +338,17 @@ PY
   fi
 fi
 
-DB_HOST=""; DB_PORT="5432"
+DB_HOST=""; DB_PORT="5432"; DB_PASS=""
 if [[ -n "$DB_URL" ]]; then
   # Use python3 to robustly parse the URL
-  read DB_HOST DB_PORT < <(DB_URL="$DB_URL" python3 - "$DB_URL" <<'PY'
+  read DB_HOST DB_PORT DB_PASS < <(DB_URL="$DB_URL" python3 - "$DB_URL" <<'PY'
 import os, sys
 from urllib.parse import urlparse
 u = urlparse(os.environ.get('DB_URL',''))
 host = u.hostname or ''
 port = str(u.port or 5432)
-print(f"{host} {port}")
+password = u.password or ''
+print(f"{host} {port} {password}")
 PY
   )
 elif [[ -n "$SUPA_URL" ]]; then
@@ -364,6 +366,10 @@ except Exception:
 print(f"{host} 5432")
 PY
   )
+fi
+
+if [[ -z "${SUPABASE_DB_PASSWORD:-}" && -n "$DB_PASS" ]]; then
+  SUPABASE_DB_PASSWORD="$DB_PASS"
 fi
 
 if [[ -n "$DB_HOST" ]]; then
