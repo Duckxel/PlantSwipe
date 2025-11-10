@@ -1,8 +1,8 @@
-# 🔬 PlantSwipe — Technical Overview
+# 🔬 Aphylia — Technical Overview
 
 <div align="center">
 
-**Comprehensive technical documentation for developers and engineers working with PlantSwipe**
+**Comprehensive technical documentation for developers and engineers working with Aphylia**
 
 [![Architecture](#architecture)](#architecture) • [![Setup](#setup)](#setup) • [![API](#api-reference)](#api-reference) • [![Database](#database-schema)](#database-schema)
 
@@ -31,7 +31,7 @@
 
 ## Overview
 
-PlantSwipe is a modern web application built with **React 19**, **TypeScript**, **Vite 7**, and **Express.js**, connecting to a **PostgreSQL** database via **Supabase**. It features a swipe-first UI for plant discovery, comprehensive garden management, social features, and multi-language support.
+Aphylia is a modern web application built with **React 19**, **TypeScript**, **Vite 7**, and **Express.js**, connecting to a **PostgreSQL** database via **Supabase**. It features a swipe-first UI for plant discovery, comprehensive garden management, social features, and multi-language support.
 
 ### Key Technologies
 

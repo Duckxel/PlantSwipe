@@ -1,6 +1,6 @@
 # contact-support Supabase Function
 
-This Edge Function receives contact form submissions from the Plant Swipe application and relays them to `support@aphylia.app` using [Resend](https://resend.com/).
+This Edge Function receives contact form submissions from the Aphylia application and relays them to `support@aphylia.app` using [Resend](https://resend.com/).
 
 ## Environment variables
 
