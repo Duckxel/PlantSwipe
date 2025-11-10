@@ -682,8 +682,8 @@ export const AdminPage: React.FC = () => {
             created_at: row?.created_at ?? null,
             updated_at: row?.updated_at ?? null,
             requested_by: row?.requested_by ? String(row.requested_by) : null,
-            requester_name: null,
-            requester_email: null,
+            requester_name: null as string | null,
+            requester_email: null as string | null,
           }
         })
         .filter((row): row is PlantRequestRow => row !== null)
