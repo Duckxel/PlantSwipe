@@ -338,6 +338,15 @@ PY
   fi
 fi
 
+# Supabase DB password (allow override from env file keys)
+if [[ -z "${SUPABASE_DB_PASSWORD:-}" ]]; then
+  for f in "$NODE_DIR/.env.server" "$NODE_DIR/.env"; do
+    if [[ -z "${SUPABASE_DB_PASSWORD:-}" ]]; then SUPABASE_DB_PASSWORD="$(read_env_kv "$f" SUPABASE_DB_PASSWORD)"; fi
+    if [[ -z "${SUPABASE_DB_PASSWORD:-}" ]]; then SUPABASE_DB_PASSWORD="$(read_env_kv "$f" PSSWORD_KEY)"; fi
+    if [[ -z "${SUPABASE_DB_PASSWORD:-}" ]]; then SUPABASE_DB_PASSWORD="$(read_env_kv "$f" DATABASE_PASSWORD)"; fi
+  done
+fi
+
 DB_HOST=""; DB_PORT="5432"; DB_PASS=""
 if [[ -n "$DB_URL" ]]; then
   # Use python3 to robustly parse the URL
