@@ -2222,7 +2222,7 @@ export const AdminPage: React.FC = () => {
                     </div>
                     {ipsOpen && (
                       <div className="mt-2" id="connected-ips">
-                        <div className="rounded-xl border bg-white p-3 max-h-48 overflow-auto">
+                        <div className="rounded-xl border bg-white dark:bg-[#2d2d30] dark:border-[#3e3e42] p-3 max-h-48 overflow-auto">
                           {ipsLoading ? (
                             <div className="text-sm opacity-60">Loading...</div>
                           ) : ips.length === 0 ? (
@@ -2239,7 +2239,7 @@ export const AdminPage: React.FC = () => {
                                   title={`Lookup members for ? ${ip}`}
                                   aria-label={`Lookup members for ? ${ip}`}
                                   variant="outline"
-                                  className="rounded-full px-2 py-1 text-xs cursor-pointer hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-ring"
+                                  className="rounded-full px-2 py-1 text-xs cursor-pointer hover:bg-stone-50 dark:hover:bg-[#3e3e42] focus:outline-none focus:ring-2 focus:ring-ring"
                                 >
                                   {ip}
                                 </Badge>
