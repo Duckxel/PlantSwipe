@@ -2548,6 +2548,32 @@ export async function listGardenActivityToday(gardenId: string, todayIso?: strin
   const today = todayIso || new Date().toISOString().slice(0,10)
   const start = `${today}T00:00:00.000Z`
   const end = `${today}T23:59:59.999Z`
+  // Attempt server-assisted fetch first to support environments without direct Supabase access
+  try {
+    const params = new URLSearchParams({ day: today })
+    const resp = await fetch(`/api/garden/${encodeURIComponent(gardenId)}/activity?${params.toString()}`, {
+      credentials: 'same-origin',
+      headers: { Accept: 'application/json' },
+    })
+    if (resp.ok) {
+      const body = await resp.json().catch(() => null)
+      if (body && body.ok !== false && Array.isArray(body?.activity)) {
+        return body.activity.map((r: any) => ({
+          id: String(r.id),
+          gardenId: String(r.gardenId ?? r.garden_id ?? gardenId),
+          actorId: r.actorId ? String(r.actorId) : r.actor_id ? String(r.actor_id) : null,
+          actorName: r.actorName ?? r.actor_name ?? null,
+          actorColor: r.actorColor ?? r.actor_color ?? null,
+          kind: r.kind,
+          message: r.message,
+          plantName: r.plantName ?? r.plant_name ?? null,
+          taskName: r.taskName ?? r.task_name ?? null,
+          occurredAt: String(r.occurredAt ?? r.occurred_at ?? ''),
+        }))
+      }
+    }
+  } catch {}
+
   const { data, error } = await supabase
     .from('garden_activity_logs')
     .select('id, garden_id, actor_id, actor_name, actor_color, kind, message, plant_name, task_name, occurred_at')
@@ -2572,6 +2598,18 @@ export async function listGardenActivityToday(gardenId: string, todayIso?: strin
 
 export async function logGardenActivity(params: { gardenId: string; kind: GardenActivityKind; message: string; plantName?: string | null; taskName?: string | null; actorColor?: string | null }): Promise<void> {
   const { gardenId, kind, message, plantName = null, taskName = null, actorColor = null } = params
+  try {
+    const resp = await fetch(`/api/garden/${encodeURIComponent(gardenId)}/activity`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ kind, message, plantName, taskName, actorColor }),
+    })
+    if (resp.ok) {
+      const body = await resp.json().catch(() => null)
+      if (!body || body.ok !== false) return
+    }
+  } catch {}
   const { error } = await supabase.rpc('log_garden_activity', {
     _garden_id: gardenId,
     _kind: kind,

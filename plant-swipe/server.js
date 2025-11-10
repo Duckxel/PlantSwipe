@@ -4418,6 +4418,151 @@ async function isGardenMember(req, gardenId, userIdOverride = null) {
   }
 }
 
+app.get('/api/garden/:id/activity', async (req, res) => {
+  try {
+    const gardenId = String(req.params.id || '').trim()
+    if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
+    const user = await getUserFromRequest(req)
+    if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
+    const member = await isGardenMember(req, gardenId, user.id)
+    if (!member) { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
+
+    const dayParam = typeof req.query.day === 'string' ? req.query.day : ''
+    const dayIso = /^\d{4}-\d{2}-\d{2}$/.test(dayParam) ? dayParam : new Date().toISOString().slice(0,10)
+    const start = new Date(`${dayIso}T00:00:00.000Z`).toISOString()
+    const endExclusive = new Date(new Date(`${dayIso}T00:00:00.000Z`).getTime() + 24 * 3600 * 1000).toISOString()
+
+    let rows = []
+    if (sql) {
+      rows = await sql`
+        select
+          id::text as id,
+          garden_id::text as garden_id,
+          actor_id::text as actor_id,
+          actor_name,
+          actor_color,
+          kind,
+          message,
+          plant_name,
+          task_name,
+          occurred_at
+        from public.garden_activity_logs
+        where garden_id = ${gardenId}
+          and occurred_at >= ${start}
+          and occurred_at < ${endExclusive}
+        order by occurred_at desc
+      `
+    } else if (supabaseUrlEnv && supabaseAnonKey) {
+      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+      const bearer = getBearerTokenFromRequest(req)
+      if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
+      const url = `${supabaseUrlEnv}/rest/v1/garden_activity_logs?garden_id=eq.${encodeURIComponent(gardenId)}&occurred_at=gte.${encodeURIComponent(start)}&select=id,garden_id,actor_id,actor_name,actor_color,kind,message,plant_name,task_name,occurred_at&order=occurred_at.desc&limit=200`
+      const resp = await fetch(url, { headers })
+      if (resp.ok) {
+        const arr = await resp.json().catch(() => [])
+        rows = Array.isArray(arr) ? arr.filter((r) => {
+          try {
+            const ts = new Date(r.occurred_at).toISOString()
+            return ts >= start && ts < endExclusive
+          } catch {
+            return false
+          }
+        }) : []
+      }
+    }
+
+    const activity = []
+    if (Array.isArray(rows)) {
+      for (const row of rows) {
+        const occurredAtRaw = row?.occurred_at instanceof Date
+          ? row.occurred_at.toISOString()
+          : (row?.occurred_at ? String(row.occurred_at) : null)
+        if (occurredAtRaw == null || occurredAtRaw === '') continue
+        activity.push({
+          id: String(row.id),
+          gardenId: String(row.garden_id ?? row.gardenId ?? gardenId),
+          actorId: row.actor_id ? String(row.actor_id) : row.actorId ? String(row.actorId) : null,
+          actorName: row.actor_name ?? row.actorName ?? null,
+          actorColor: row.actor_color ?? row.actorColor ?? null,
+          kind: row.kind,
+          message: row.message,
+          plantName: row.plant_name ?? row.plantName ?? null,
+          taskName: row.task_name ?? row.taskName ?? null,
+          occurredAt: occurredAtRaw,
+        })
+      }
+    }
+
+    res.json({ ok: true, activity })
+  } catch (e) {
+    try { res.status(500).json({ ok: false, error: e?.message || 'failed to load activity' }) } catch {}
+  }
+})
+
+app.post('/api/garden/:id/activity', async (req, res) => {
+  try {
+    const gardenId = String(req.params.id || '').trim()
+    if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
+    const user = await getUserFromRequest(req)
+    if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
+    const member = await isGardenMember(req, gardenId, user.id)
+    if (!member) { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
+
+    const body = req.body || {}
+    const kindRaw = typeof body.kind === 'string' ? body.kind.trim() : ''
+    const messageRaw = typeof body.message === 'string' ? body.message.trim() : ''
+    if (!kindRaw || !messageRaw) { res.status(400).json({ ok: false, error: 'kind and message required' }); return }
+    const plantName = typeof body.plantName === 'string' ? body.plantName : null
+    const taskName = typeof body.taskName === 'string' ? body.taskName : null
+    const actorColor = typeof body.actorColor === 'string' ? body.actorColor : null
+
+    if (sql) {
+      let actorName = null
+      try {
+        const nameRows = await sql`select coalesce(display_name, email, '') as name from public.profiles where id = ${user.id} limit 1`
+        if (Array.isArray(nameRows) && nameRows[0]) actorName = nameRows[0].name || null
+      } catch {}
+      const nowIso = new Date().toISOString()
+      await sql`
+        insert into public.garden_activity_logs (garden_id, actor_id, actor_name, actor_color, kind, message, plant_name, task_name, occurred_at)
+        values (${gardenId}, ${user.id}, ${actorName}, ${actorColor || null}, ${kindRaw}, ${messageRaw}, ${plantName || null}, ${taskName || null}, ${nowIso})
+      `
+      res.json({ ok: true })
+      return
+    }
+
+    if (supabaseUrlEnv && supabaseAnonKey) {
+      const headers = { apikey: supabaseAnonKey, Accept: 'application/json', 'Content-Type': 'application/json' }
+      const bearer = getBearerTokenFromRequest(req)
+      if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
+      const payload = {
+        _garden_id: gardenId,
+        _kind: kindRaw,
+        _message: messageRaw,
+        _plant_name: plantName,
+        _task_name: taskName,
+        _actor_color: actorColor,
+      }
+      const resp = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/log_garden_activity`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      })
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => '')
+        res.status(resp.status).json({ ok: false, error: text || 'failed to log activity' })
+        return
+      }
+      res.json({ ok: true })
+      return
+    }
+
+    res.status(503).json({ ok: false, error: 'activity logging unavailable' })
+  } catch (e) {
+    try { res.status(500).json({ ok: false, error: e?.message || 'failed to log activity' }) } catch {}
+  }
+})
+
 // Batched initial load for a garden
 app.get('/api/garden/:id/overview', async (req, res) => {
   try {
