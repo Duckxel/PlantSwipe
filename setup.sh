@@ -194,58 +194,85 @@ ensure_supabase_login_and_link() {
     return 1
   fi
 
+  local supabase_cmd=(sudo -u "$SERVICE_USER" env HOME="$SERVICE_USER_HOME")
+
   if [[ -n "${SUPABASE_ACCESS_TOKEN:-}" ]]; then
     log "Authenticating Supabase CLI using provided access token…"
-    if sudo -u "$SERVICE_USER" -H bash -lc "SUPABASE_ACCESS_TOKEN='$SUPABASE_ACCESS_TOKEN' supabase login --token '$SUPABASE_ACCESS_TOKEN' >/dev/null"; then
+    if "${supabase_cmd[@]}" SUPABASE_ACCESS_TOKEN="$SUPABASE_ACCESS_TOKEN" supabase login --token "$SUPABASE_ACCESS_TOKEN" >/tmp/supabase-login.log 2>&1; then
       supabase_logged_in=true
     else
-      log "[WARN] Supabase CLI login failed. Continuing without deployment."
       supabase_logged_in=false
+      log "[WARN] Supabase CLI login failed. See /tmp/supabase-login.log for details."
+      tail -n 20 /tmp/supabase-login.log 2>/dev/null || true
     fi
   else
     log "[WARN] SUPABASE_ACCESS_TOKEN not set; skipping Supabase CLI login."
   fi
 
-  if [[ -n "$SUPABASE_PROJECT_REF" && -n "$SUPABASE_SERVICE_ROLE_KEY" ]]; then
-    if [[ ! -f "$NODE_DIR/supabase/config.toml" ]]; then
-      log "Linking Supabase project $SUPABASE_PROJECT_REF to repository (non-interactive)…"
-      local link_password="${SUPABASE_DB_PASSWORD:-$SUPABASE_SERVICE_ROLE_KEY}"
-      if ! sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && supabase link --project-ref '$SUPABASE_PROJECT_REF' --password '$link_password' >/dev/null"; then
-        log "[WARN] Supabase project link failed."
-      fi
-    else
-      log "Supabase project already linked at $NODE_DIR/supabase/config.toml"
-    fi
+  if [[ -z "$SUPABASE_PROJECT_REF" ]]; then
+    log "[WARN] SUPABASE_PROJECT_REF not set; skipping Supabase project link."
+    return 0
+  fi
+
+  if [[ -z "$SUPABASE_DB_PASSWORD" ]]; then
+    log "[WARN] Database password not available (SUPABASE_DB_PASSWORD or PSSWORD_KEY); cannot link Supabase project."
+    return 0
+  fi
+
+  if [[ -f "$NODE_DIR/supabase/config.toml" ]]; then
+    log "Supabase project already linked at $NODE_DIR/supabase/config.toml"
+    return 0
+  fi
+
+  log "Linking Supabase project $SUPABASE_PROJECT_REF to repository…"
+  local link_log="/tmp/supabase-link.log"
+  local link_args=(supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD")
+  if [[ -n "$SUPABASE_SERVICE_ROLE_KEY" ]]; then
+    link_args+=(--service-role-key "$SUPABASE_SERVICE_ROLE_KEY")
+  fi
+
+  if "${supabase_cmd[@]}" "${link_args[@]}" >"$link_log" 2>&1; then
+    log "Supabase project linked successfully."
   else
-    log "[WARN] SUPABASE_PROJECT_REF and/or SUPABASE_SERVICE_ROLE_KEY not set; skipping supabase link."
+    log "[WARN] Supabase project link failed. See $link_log for details."
+    tail -n 25 "$link_log" 2>/dev/null || true
   fi
 }
 
 deploy_supabase_contact_function() {
   ensure_supabase_login_and_link
+
   if ! command -v supabase >/dev/null 2>&1; then
     log "[WARN] Supabase CLI missing; skipping Edge Function deployment."
     return
   fi
+
   if [[ "$supabase_logged_in" != "true" ]]; then
     log "[WARN] Supabase CLI not authenticated; skipping Edge Function deployment."
     return
   fi
-  if [[ ! -f "$NODE_DIR/supabase/config.toml" ]]; then
-    log "[WARN] Supabase project not linked for $NODE_DIR; skipping Edge Function deployment."
+
+  if [[ -z "$SUPABASE_PROJECT_REF" ]]; then
+    log "[WARN] SUPABASE_PROJECT_REF not set; skipping Edge Function deployment."
     return
   fi
 
-  local tmp_env
-  tmp_env=""
+  local supabase_cmd=(sudo -u "$SERVICE_USER" env HOME="$SERVICE_USER_HOME")
+
   if [[ -n "${RESEND_API_KEY:-}" || -n "${RESEND_FROM:-}" || -n "${RESEND_FROM_NAME:-}" ]]; then
+    local tmp_env
     tmp_env="$(mktemp)"
     [[ -n "${RESEND_API_KEY:-}" ]] && printf "RESEND_API_KEY=%s\n" "$RESEND_API_KEY" >>"$tmp_env"
     [[ -n "${RESEND_FROM:-}" ]] && printf "RESEND_FROM=%s\n" "$RESEND_FROM" >>"$tmp_env"
     [[ -n "${RESEND_FROM_NAME:-}" ]] && printf "RESEND_FROM_NAME=%s\n" "$RESEND_FROM_NAME" >>"$tmp_env"
     log "Syncing Supabase function secrets from environment…"
-    if ! sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && supabase functions secrets set --env-file '$tmp_env' >/dev/null"; then
-      log "[WARN] Failed to push Supabase function secrets."
+    local secrets_cmd=(supabase functions secrets set --env-file "$tmp_env")
+    if [[ ! -f "$NODE_DIR/supabase/config.toml" && -n "$SUPABASE_PROJECT_REF" ]]; then
+      secrets_cmd+=(--project-ref "$SUPABASE_PROJECT_REF")
+    fi
+    if ! "${supabase_cmd[@]}" "${secrets_cmd[@]}" >/tmp/supabase-secrets.log 2>&1; then
+      log "[WARN] Failed to push Supabase function secrets. See /tmp/supabase-secrets.log"
+      tail -n 20 /tmp/supabase-secrets.log 2>/dev/null || true
     fi
     rm -f "$tmp_env"
   else
@@ -253,8 +280,10 @@ deploy_supabase_contact_function() {
   fi
 
   log "Deploying Supabase Edge Function contact-support…"
-  if ! sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && supabase functions deploy contact-support --no-verify-jwt >/dev/null"; then
-    log "[WARN] Supabase Edge Function deployment failed."
+  local deploy_args=(supabase functions deploy contact-support --no-verify-jwt --project-ref "$SUPABASE_PROJECT_REF")
+  if ! "${supabase_cmd[@]}" "${deploy_args[@]}" >/tmp/supabase-deploy.log 2>&1; then
+    log "[WARN] Supabase Edge Function deployment failed. See /tmp/supabase-deploy.log"
+    tail -n 25 /tmp/supabase-deploy.log 2>/dev/null || true
   else
     log "Supabase Edge Function contact-support deployed."
   fi
@@ -312,6 +341,14 @@ for f in "$NODE_DIR/.env.server" "$NODE_DIR/.env" "$ADMIN_ENV_FILE"; do
   if [[ -z "$SUPA_URL" ]]; then SUPA_URL="$(read_env_kv "$f" SUPABASE_URL)"; fi
   if [[ -z "$SUPA_URL" ]]; then SUPA_URL="$(read_env_kv "$f" VITE_SUPABASE_URL)"; fi
 done
+
+if [[ -z "${SUPABASE_DB_PASSWORD:-}" ]]; then
+  for f in "$NODE_DIR/.env.server" "$NODE_DIR/.env"; do
+    if [[ -z "${SUPABASE_DB_PASSWORD:-}" ]]; then SUPABASE_DB_PASSWORD="$(read_env_kv "$f" SUPABASE_DB_PASSWORD)"; fi
+    if [[ -z "${SUPABASE_DB_PASSWORD:-}" ]]; then SUPABASE_DB_PASSWORD="$(read_env_kv "$f" PSSWORD_KEY)"; fi
+    if [[ -z "${SUPABASE_DB_PASSWORD:-}" ]]; then SUPABASE_DB_PASSWORD="$(read_env_kv "$f" DATABASE_PASSWORD)"; fi
+  done
+fi
 
 # Seed Supabase/Resend configuration from .env files when not provided explicitly
 if [[ -z "${RESEND_API_KEY:-}" ]]; then RESEND_API_KEY="$(read_env_kv "$NODE_DIR/.env" RESEND_API_KEY)"; fi
@@ -692,8 +729,8 @@ fi
 # Mark repo as safe for both root and service user to avoid 'dubious ownership'
 log "Marking repo as a safe.directory in git config (root and $SERVICE_USER)…"
 if command -v git >/dev/null 2>&1; then
-  sudo -u "$SERVICE_USER" -H git config --global --add safe.directory "$REPO_DIR" || true
-  git config --global --add safe.directory "$REPO_DIR" || true
+  sudo -u "$SERVICE_USER" env HOME="$SERVICE_USER_HOME" git config --global --add safe.directory "$REPO_DIR" || true
+  HOME="/root" git config --global --add safe.directory "$REPO_DIR" || true
 fi
 
 log "Attempting Supabase Edge Function deployment (if credentials provided)…"
