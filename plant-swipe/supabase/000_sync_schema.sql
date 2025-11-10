@@ -3276,13 +3276,17 @@ BEGIN
   _has_remaining_tasks := (_due_count > 0 AND _completed_count < _due_count);
   _all_tasks_done := (_due_count = 0 OR _completed_count >= _due_count);
   
-  -- Replace existing cache row
-  DELETE FROM garden_task_daily_cache
-  WHERE garden_id = _garden_id
-    AND cache_date = _cache_date;
-
   INSERT INTO garden_task_daily_cache (garden_id, cache_date, due_count, completed_count, task_count, occurrence_count, has_remaining_tasks, all_tasks_done, updated_at)
-  VALUES (_garden_id, _cache_date, _due_count, _completed_count, _task_count, _occurrence_count, _has_remaining_tasks, _all_tasks_done, now());
+  VALUES (_garden_id, _cache_date, _due_count, _completed_count, _task_count, _occurrence_count, _has_remaining_tasks, _all_tasks_done, now())
+  ON CONFLICT (garden_id, cache_date) DO UPDATE
+    SET due_count = EXCLUDED.due_count,
+        completed_count = EXCLUDED.completed_count,
+        task_count = EXCLUDED.task_count,
+        occurrence_count = EXCLUDED.occurrence_count,
+        has_remaining_tasks = EXCLUDED.has_remaining_tasks,
+        all_tasks_done = EXCLUDED.all_tasks_done,
+        updated_at = now();
+
 END;
 $$;
 
@@ -3338,19 +3342,14 @@ BEGIN
       AND occ.due_at >= (_day_date::text || 'T00:00:00.000Z')::timestamptz
       AND occ.due_at <= (_day_date::text || 'T23:59:59.999Z')::timestamptz;
 
-    _totals := array_set(_totals, ARRAY[_day_idx + 1], COALESCE(_daily_total, 0));
-    _water := array_set(_water, ARRAY[_day_idx + 1], COALESCE(_daily_water, 0));
-    _fertilize := array_set(_fertilize, ARRAY[_day_idx + 1], COALESCE(_daily_fertilize, 0));
-    _harvest := array_set(_harvest, ARRAY[_day_idx + 1], COALESCE(_daily_harvest, 0));
-    _cut := array_set(_cut, ARRAY[_day_idx + 1], COALESCE(_daily_cut, 0));
-    _custom := array_set(_custom, ARRAY[_day_idx + 1], COALESCE(_daily_custom, 0));
+    _totals[_day_idx + 1] := COALESCE(_daily_total, 0);
+    _water[_day_idx + 1] := COALESCE(_daily_water, 0);
+    _fertilize[_day_idx + 1] := COALESCE(_daily_fertilize, 0);
+    _harvest[_day_idx + 1] := COALESCE(_daily_harvest, 0);
+    _cut[_day_idx + 1] := COALESCE(_daily_cut, 0);
+    _custom[_day_idx + 1] := COALESCE(_daily_custom, 0);
   END LOOP;
 
-  -- Replace existing cache row for this week
-  DELETE FROM garden_task_weekly_cache
-  WHERE garden_id = _garden_id
-    AND week_start_date = _week_start_date;
-  
   INSERT INTO garden_task_weekly_cache (
     garden_id, week_start_date, week_end_date,
     total_tasks_by_day, water_tasks_by_day, fertilize_tasks_by_day,
@@ -3361,7 +3360,17 @@ BEGIN
     _garden_id, _week_start_date, _week_end_date,
     _totals, _water, _fertilize, _harvest, _cut, _custom,
     now()
-  );
+  )
+  ON CONFLICT (garden_id, week_start_date) DO UPDATE
+    SET week_end_date = EXCLUDED.week_end_date,
+        total_tasks_by_day = EXCLUDED.total_tasks_by_day,
+        water_tasks_by_day = EXCLUDED.water_tasks_by_day,
+        fertilize_tasks_by_day = EXCLUDED.fertilize_tasks_by_day,
+        harvest_tasks_by_day = EXCLUDED.harvest_tasks_by_day,
+        cut_tasks_by_day = EXCLUDED.cut_tasks_by_day,
+        custom_tasks_by_day = EXCLUDED.custom_tasks_by_day,
+        updated_at = now();
+
 END;
 $$;
 
@@ -3383,22 +3392,27 @@ BEGIN
   
   -- Delete old cache for this garden
   DELETE FROM garden_plant_task_counts_cache WHERE garden_id = _garden_id;
-  
+
   -- Insert fresh cache
   INSERT INTO garden_plant_task_counts_cache (garden_id, garden_plant_id, task_count, due_today_count)
   SELECT
     t.garden_id,
     t.garden_plant_id,
     COUNT(DISTINCT t.id)::integer as task_count,
-    COUNT(DISTINCT CASE 
-      WHEN occ.due_at >= _start_iso AND occ.due_at <= _end_iso 
-        AND (occ.required_count - occ.completed_count) > 0 
-      THEN occ.id 
+    COUNT(DISTINCT CASE
+      WHEN occ.due_at >= _start_iso AND occ.due_at <= _end_iso
+        AND (occ.required_count - occ.completed_count) > 0
+      THEN occ.id
     END)::integer as due_today_count
   FROM garden_plant_tasks t
   LEFT JOIN garden_plant_task_occurrences occ ON occ.task_id = t.id
   WHERE t.garden_id = _garden_id
-  GROUP BY t.garden_id, t.garden_plant_id;
+  GROUP BY t.garden_id, t.garden_plant_id
+  ON CONFLICT (garden_id, garden_plant_id) DO UPDATE
+    SET task_count = EXCLUDED.task_count,
+        due_today_count = EXCLUDED.due_today_count,
+        updated_at = now();
+
 END;
 $$;
 
@@ -3419,9 +3433,9 @@ BEGIN
   _end_iso := (_cache_date::text || 'T23:59:59.999Z')::timestamptz;
   
   -- Delete old cache for this garden and date
-  DELETE FROM garden_task_occurrences_today_cache 
+  DELETE FROM garden_task_occurrences_today_cache
   WHERE garden_id = _garden_id AND cache_date = _cache_date;
-  
+
   -- Insert fresh cache
   INSERT INTO garden_task_occurrences_today_cache (
     garden_id, occurrence_id, task_id, garden_plant_id,
@@ -3443,7 +3457,18 @@ BEGIN
   INNER JOIN garden_plant_tasks t ON t.id = occ.task_id
   WHERE t.garden_id = _garden_id
     AND occ.due_at >= _start_iso
-    AND occ.due_at <= _end_iso;
+    AND occ.due_at <= _end_iso
+  ON CONFLICT (garden_id, occurrence_id, cache_date) DO UPDATE
+    SET task_id = EXCLUDED.task_id,
+        garden_plant_id = EXCLUDED.garden_plant_id,
+        task_type = EXCLUDED.task_type,
+        task_emoji = EXCLUDED.task_emoji,
+        due_at = EXCLUDED.due_at,
+        required_count = EXCLUDED.required_count,
+        completed_count = EXCLUDED.completed_count,
+        completed_at = EXCLUDED.completed_at,
+        updated_at = now();
+
 END;
 $$;
 
@@ -3460,7 +3485,7 @@ DECLARE
   _week_start_date date;
 BEGIN
   -- Calculate week start (Monday)
-  _week_start_date := _cache_date - (EXTRACT(DOW FROM _cache_date)::integer + 6) % 7 || ' days'::interval;
+  _week_start_date := date_trunc('week', _cache_date::timestamp)::date;
   
   -- Refresh all caches
   PERFORM refresh_garden_daily_cache(_garden_id, _cache_date);
@@ -3469,6 +3494,163 @@ BEGIN
   PERFORM refresh_garden_today_occurrences_cache(_garden_id, _cache_date);
 END;
 $$;
+
+-- Function: Batched occurrence loader used by Garden List/Dashboard views
+CREATE OR REPLACE FUNCTION get_task_occurrences_batch(
+  _task_ids uuid[],
+  _start_iso timestamptz,
+  _end_iso timestamptz,
+  _limit_per_task integer DEFAULT 1000
+)
+RETURNS TABLE (
+  id uuid,
+  task_id uuid,
+  garden_plant_id uuid,
+  due_at timestamptz,
+  required_count integer,
+  completed_count integer,
+  completed_at timestamptz
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    occ.id,
+    occ.task_id,
+    occ.garden_plant_id,
+    occ.due_at,
+    occ.required_count,
+    occ.completed_count,
+    occ.completed_at
+  FROM (
+    SELECT
+      o.id,
+      o.task_id,
+      o.garden_plant_id,
+      o.due_at,
+      o.required_count,
+      o.completed_count,
+      o.completed_at,
+      ROW_NUMBER() OVER (PARTITION BY o.task_id ORDER BY o.due_at ASC, o.id ASC) AS rn
+    FROM garden_plant_task_occurrences o
+    WHERE o.task_id = ANY(_task_ids)
+      AND o.due_at >= _start_iso
+      AND o.due_at <= _end_iso
+  ) occ
+  WHERE occ.rn <= GREATEST(COALESCE(_limit_per_task, 1000), 1);
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION get_task_occurrences_batch(uuid[], timestamptz, timestamptz, integer) TO authenticated;
+
+-- Function: Aggregated progress for a single garden using cache when available
+DROP FUNCTION IF EXISTS public.get_garden_today_progress(uuid, timestamptz, timestamptz);
+CREATE OR REPLACE FUNCTION public.get_garden_today_progress(
+  _garden_id uuid,
+  _start_iso timestamptz,
+  _end_iso timestamptz
+)
+RETURNS json
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  _cache_date date := date_trunc('day', _start_iso)::date;
+  _due integer;
+  _completed integer;
+BEGIN
+  SELECT c.due_count, c.completed_count
+  INTO _due, _completed
+  FROM garden_task_daily_cache c
+  WHERE c.garden_id = _garden_id
+    AND c.cache_date = _cache_date
+  LIMIT 1;
+
+  IF _due IS NULL THEN
+    SELECT
+      COALESCE(SUM(GREATEST(1, occ.required_count)), 0)::integer,
+      COALESCE(SUM(LEAST(GREATEST(1, occ.required_count), COALESCE(occ.completed_count, 0))), 0)::integer
+    INTO _due, _completed
+    FROM garden_plant_task_occurrences occ
+    INNER JOIN garden_plant_tasks t ON t.id = occ.task_id
+    WHERE t.garden_id = _garden_id
+      AND occ.due_at >= _start_iso
+      AND occ.due_at <= _end_iso;
+  END IF;
+
+  RETURN json_build_object(
+    'due', COALESCE(_due, 0),
+    'completed', COALESCE(_completed, 0)
+  );
+END;
+$$;
+
+-- Function: Aggregated progress for multiple gardens (cache-first fallback to live data)
+DROP FUNCTION IF EXISTS public.get_gardens_today_progress_batch(uuid[], timestamptz, timestamptz);
+CREATE OR REPLACE FUNCTION public.get_gardens_today_progress_batch(
+  _garden_ids uuid[],
+  _start_iso timestamptz,
+  _end_iso timestamptz
+)
+RETURNS TABLE (
+  garden_id uuid,
+  due integer,
+  completed integer
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  _cache_date date := date_trunc('day', _start_iso)::date;
+BEGIN
+  RETURN QUERY
+  WITH input_gardens AS (
+    SELECT DISTINCT gid
+    FROM unnest(_garden_ids) AS gid
+  ),
+  cache_available AS (
+    SELECT
+      ig.gid AS garden_id,
+      c.due_count,
+      c.completed_count
+    FROM input_gardens ig
+    LEFT JOIN garden_task_daily_cache c
+      ON c.garden_id = ig.gid
+     AND c.cache_date = _cache_date
+  ),
+  gardens_missing_cache AS (
+    SELECT garden_id
+    FROM cache_available
+    WHERE due_count IS NULL AND completed_count IS NULL
+  ),
+  live_totals AS (
+    SELECT
+      t.garden_id,
+      COALESCE(SUM(GREATEST(1, occ.required_count)), 0)::integer AS due_total,
+      COALESCE(SUM(LEAST(GREATEST(1, occ.required_count), COALESCE(occ.completed_count, 0))), 0)::integer AS completed_total
+    FROM garden_plant_task_occurrences occ
+    INNER JOIN garden_plant_tasks t ON t.id = occ.task_id
+    WHERE t.garden_id IN (SELECT garden_id FROM gardens_missing_cache)
+      AND occ.due_at >= _start_iso
+      AND occ.due_at <= _end_iso
+    GROUP BY t.garden_id
+  )
+  SELECT
+    ig.gid AS garden_id,
+    COALESCE(ca.due_count, lt.due_total, 0)::integer AS due,
+    COALESCE(ca.completed_count, lt.completed_total, 0)::integer AS completed
+  FROM input_gardens ig
+  LEFT JOIN cache_available ca ON ca.garden_id = ig.gid
+  LEFT JOIN live_totals lt ON lt.garden_id = ig.gid;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_garden_today_progress(uuid, timestamptz, timestamptz) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_gardens_today_progress_batch(uuid[], timestamptz, timestamptz) TO authenticated;
 
 -- Function: Cleanup old cache entries (delete entries older than 1 day to prevent accumulation)
 CREATE OR REPLACE FUNCTION cleanup_old_garden_task_cache()
@@ -3893,11 +4075,6 @@ BEGIN
   WHERE gm.user_id = _user_id
     AND c.cache_date = _cache_date;
   
-  -- Replace existing cache entry
-  DELETE FROM user_task_daily_cache
-  WHERE user_id = _user_id
-    AND cache_date = _cache_date;
-
   INSERT INTO user_task_daily_cache (
     user_id,
     cache_date,
@@ -3915,7 +4092,14 @@ BEGIN
     _gardens_with_remaining,
     _total_gardens,
     now()
-  );
+  )
+  ON CONFLICT (user_id, cache_date) DO UPDATE
+    SET total_due_count = EXCLUDED.total_due_count,
+        total_completed_count = EXCLUDED.total_completed_count,
+        gardens_with_remaining_tasks = EXCLUDED.gardens_with_remaining_tasks,
+        total_gardens = EXCLUDED.total_gardens,
+        updated_at = now();
+
 END;
 $$;
 
