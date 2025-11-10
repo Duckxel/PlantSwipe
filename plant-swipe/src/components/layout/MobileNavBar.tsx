@@ -4,9 +4,7 @@ import { usePathWithoutLanguage } from "@/lib/i18nRouting"
 import { Sparkles, Sprout, Search, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/context/AuthContext"
-import { getUserTasksTodayCached } from "@/lib/gardens"
-import { addGardenBroadcastListener } from "@/lib/realtime"
-import { supabase } from "@/lib/supabaseClient"
+import { useTaskNotification } from "@/hooks/useTaskNotification"
 
 interface MobileNavBarProps {
   canCreate?: boolean
@@ -15,115 +13,7 @@ interface MobileNavBarProps {
 export const MobileNavBar: React.FC<MobileNavBarProps> = ({ canCreate }) => {
   const pathWithoutLang = usePathWithoutLanguage()
   const { user } = useAuth()
-  const [hasUnfinished, setHasUnfinished] = React.useState(false)
-
-  // Refresh notification state - use cache for instant check
-  const refreshNotification = React.useCallback(async () => {
-    try {
-      if (!user?.id) { setHasUnfinished(false); return }
-      // Use cache for instant check - FASTEST
-      const today = new Date().toISOString().slice(0, 10)
-      const tasks = await getUserTasksTodayCached(user.id, today)
-      // Has unfinished tasks if there are gardens with remaining tasks OR if due > completed
-      const has = tasks.gardensWithRemainingTasks > 0 || tasks.totalDueCount > tasks.totalCompletedCount
-      setHasUnfinished(has)
-    } catch {
-      setHasUnfinished(false)
-    }
-  }, [user?.id])
-
-  // Initial load
-  React.useEffect(() => {
-    refreshNotification()
-  }, [refreshNotification])
-
-  // Listen to local events (for when user is on garden page)
-  React.useEffect(() => {
-    const handler = () => { refreshNotification() }
-    try { window.addEventListener('garden:tasks_changed', handler as EventListener) } catch {}
-    return () => { try { window.removeEventListener('garden:tasks_changed', handler as EventListener) } catch {} }
-  }, [refreshNotification])
-
-  // Listen to realtime broadcasts (works from any page)
-  React.useEffect(() => {
-    if (!user?.id) return
-    let active = true
-    let teardown: (() => Promise<void>) | null = null
-
-    addGardenBroadcastListener((message) => {
-      if (!active) return
-      // Refresh notification when tasks change in any garden
-      if (message.kind === 'tasks' || message.kind === 'general') {
-        refreshNotification()
-      }
-    })
-      .then((unsubscribe) => {
-        if (!active) {
-          unsubscribe().catch(() => {})
-        } else {
-          teardown = unsubscribe
-        }
-      })
-      .catch(() => {})
-
-    return () => {
-      active = false
-      if (teardown) teardown().catch(() => {})
-    }
-  }, [user?.id, refreshNotification])
-
-  // Also listen to postgres changes for task occurrences (direct fallback)
-  // Database triggers update cache automatically, so we just read from cache
-  React.useEffect(() => {
-    if (!user?.id) return
-    let active = true
-    const today = new Date().toISOString().slice(0, 10)
-    
-    // Helper to read from cache and update notification (instant)
-    const updateFromCache = () => {
-      if (!active || !user?.id) return
-      getUserTasksTodayCached(user.id, today).then((tasks) => {
-        if (!active) return
-        const has = tasks.gardensWithRemainingTasks > 0 || tasks.totalDueCount > tasks.totalCompletedCount
-        setHasUnfinished(has)
-      }).catch(() => {
-        if (active) setHasUnfinished(false)
-      })
-    }
-    
-    const channel = supabase.channel('rt-navbar-tasks-mobile')
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'garden_plant_task_occurrences' 
-      }, () => {
-        // Database triggers have already updated cache synchronously
-        // Just read from cache and update notification (instant)
-        setTimeout(updateFromCache, 50) // Small delay to ensure trigger completed
-      })
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'garden_plant_tasks' 
-      }, () => {
-        setTimeout(updateFromCache, 50)
-      })
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'garden_plants' 
-      }, () => {
-        setTimeout(updateFromCache, 50)
-      })
-    
-    const subscription = channel.subscribe()
-    if (subscription instanceof Promise) subscription.catch(() => {})
-
-    return () => {
-      active = false
-      try { supabase.removeChannel(channel) } catch {}
-    }
-  }, [user?.id])
+  const { hasUnfinished } = useTaskNotification(user?.id ?? null, { channelKey: "mobile" })
   const currentView: "discovery" | "gardens" | "search" | "create" =
     pathWithoutLang === "/" ? "discovery" :
     pathWithoutLang.startsWith("/gardens") || pathWithoutLang.startsWith('/garden/') ? "gardens" :
