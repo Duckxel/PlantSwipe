@@ -42,7 +42,7 @@ const GardenDashboardPage = lazy(() => import("@/pages/GardenDashboardPage").the
 const GardenListPage = lazy(() => import("@/pages/GardenListPage").then(module => ({ default: module.GardenListPage })));
 
 // --- Main Component ---
-export default function Aphylia() {
+export default function PlantSwipe() {
   const { user, signIn, signUp, signOut, profile, refreshProfile } = useAuth()
   const currentLang = useLanguage()
   const { t } = useTranslation('common')
