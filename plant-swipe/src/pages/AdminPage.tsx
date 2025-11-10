@@ -23,7 +23,7 @@ const {
   Pie,
   Cell,
 } = LazyCharts
-import { RefreshCw, Server, Database, Github, ExternalLink, ShieldCheck, ShieldX, UserSearch, AlertTriangle, Gavel, Search, ChevronDown, GitBranch, Trash2, EyeOff, Copy, ArrowUpRight } from "lucide-react"
+import { RefreshCw, Server, Database, Github, ExternalLink, ShieldCheck, ShieldX, UserSearch, AlertTriangle, Gavel, Search, ChevronDown, GitBranch, Trash2, EyeOff, Copy, ArrowUpRight, CheckCircle2, XCircle } from "lucide-react"
 import { supabase } from '@/lib/supabaseClient'
 import {
   Dialog,
@@ -582,6 +582,14 @@ export const AdminPage: React.FC = () => {
   // Presence fallback removed by request: rely on DB-backed API only
 
   // --- Health monitor: ping API, Admin, DB every minute ---
+  type ConnectionDetail = {
+    id: string
+    label: string
+    ok: boolean
+    latencyMs: number | null
+    errorCode: string | null
+    errorMessage: string | null
+  }
   type ProbeResult = {
     ok: boolean | null
     latencyMs: number | null
@@ -589,8 +597,9 @@ export const AdminPage: React.FC = () => {
     status: number | null
     errorCode: string | null
     errorMessage: string | null
+    details?: ConnectionDetail[]
   }
-  const emptyProbe: ProbeResult = { ok: null, latencyMs: null, updatedAt: null, status: null, errorCode: null, errorMessage: null }
+  const emptyProbe: ProbeResult = { ok: null, latencyMs: null, updatedAt: null, status: null, errorCode: null, errorMessage: null, details: [] }
   const [apiProbe, setApiProbe] = React.useState<ProbeResult>(emptyProbe)
   const [adminProbe, setAdminProbe] = React.useState<ProbeResult>(emptyProbe)
   const [dbProbe, setDbProbe] = React.useState<ProbeResult>(emptyProbe)
@@ -602,100 +611,209 @@ export const AdminPage: React.FC = () => {
     return () => { isMountedRef.current = false }
   }, [])
 
-  const probeEndpoint = React.useCallback(async (url: string, okCheck?: (body: any) => boolean): Promise<ProbeResult> => {
-    const started = Date.now()
-    try {
-      const headers: Record<string, string> = { 'Accept': 'application/json' }
+    const probeEndpoint = React.useCallback(async (url: string, okCheck?: (body: any) => boolean): Promise<ProbeResult> => {
+      const started = Date.now()
       try {
-        const token = (await supabase.auth.getSession()).data.session?.access_token
-        if (token) headers['Authorization'] = `Bearer ? ${token}`
-        const staticToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
-        if (staticToken) headers['X-Admin-Token'] = staticToken
-      } catch {}
-      // Use fetchWithRetry with shorter timeout for health checks (10 seconds)
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 10000)
-      try {
-        const resp = await fetch(url, { headers, credentials: 'same-origin', signal: controller.signal })
-        clearTimeout(timeoutId)
-        const body = await safeJson(resp)
-        const isOk = (typeof okCheck === 'function') ? (resp.ok && okCheck(body)) : (resp.ok && body?.ok === true)
-        const latency = Date.now() - started
-        if (isOk) {
-          return { ok: true, latencyMs: latency, updatedAt: Date.now(), status: resp.status, errorCode: null, errorMessage: null }
+        const headers: Record<string, string> = { 'Accept': 'application/json' }
+        try {
+          const token = (await supabase.auth.getSession()).data.session?.access_token
+          if (token) headers['Authorization'] = `Bearer ? ${token}`
+          const staticToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+          if (staticToken) headers['X-Admin-Token'] = staticToken
+        } catch {}
+
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 10000)
+        try {
+          const resp = await fetch(url, { headers, credentials: 'same-origin', signal: controller.signal })
+          clearTimeout(timeoutId)
+          const body = await safeJson(resp)
+          const isOk = (typeof okCheck === 'function') ? (resp.ok && okCheck(body)) : (resp.ok && body?.ok === true)
+          const latency = Date.now() - started
+          if (isOk) {
+            return { ok: true, latencyMs: latency, updatedAt: Date.now(), status: resp.status, errorCode: null, errorMessage: null, details: [] }
+          }
+          const errorCodeFromBody = typeof body?.errorCode === 'string' && body.errorCode ? body.errorCode : null
+          const errorMessageFromBody = typeof body?.error === 'string' && body.error ? body.error : null
+          const fallbackCode = !resp.ok
+            ? `HTTP_${resp.status}`
+            : (errorCodeFromBody || 'CHECK_FAILED')
+          return {
+            ok: false,
+            latencyMs: null,
+            updatedAt: Date.now(),
+            status: resp.status,
+            errorCode: errorCodeFromBody || fallbackCode,
+            errorMessage: errorMessageFromBody,
+            details: [],
+          }
+        } catch (fetchError: any) {
+          clearTimeout(timeoutId)
+          if (fetchError.name === 'AbortError') {
+            return { ok: false, latencyMs: null, updatedAt: Date.now(), status: null, errorCode: 'TIMEOUT', errorMessage: 'Request timed out', details: [] }
+          }
+          throw fetchError
         }
-        // Derive error info when not ok
+      } catch {
+        return { ok: false, latencyMs: null, updatedAt: Date.now(), status: null, errorCode: 'NETWORK_ERROR', errorMessage: null, details: [] }
+      }
+    }, [safeJson])
+
+    const probeDbWithFallback = React.useCallback(async (): Promise<ProbeResult> => {
+      const started = Date.now()
+      const details: ConnectionDetail[] = []
+      const serverLabel = 'Server API health (/api/health/db)'
+      const supabaseSqlLabel = 'Supabase SQL (client)'
+      const supabaseAuthLabel = 'Supabase Auth session'
+      let aggregateStatus: number | null = null
+      let aggregateErrorCode: string | null = null
+      let aggregateErrorMessage: string | null = null
+
+      const recordDetail = (detail: ConnectionDetail) => {
+        details.push(detail)
+        if (!detail.ok) {
+          if (!aggregateErrorCode && detail.errorCode) aggregateErrorCode = detail.errorCode
+          if (!aggregateErrorMessage && detail.errorMessage) aggregateErrorMessage = detail.errorMessage
+        }
+      }
+
+      const successResult = (latency: number, status: number | null) => ({
+        ok: true,
+        latencyMs: latency,
+        updatedAt: Date.now(),
+        status,
+        errorCode: null,
+        errorMessage: null,
+        details,
+      } satisfies ProbeResult)
+
+      try {
+        const resp = await fetch('/api/health/db', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+        const elapsedMs = Date.now() - started
+        const body = await safeJson(resp)
+        aggregateStatus = resp.status
+        const latency = Number.isFinite(body?.latencyMs) ? body.latencyMs : elapsedMs
+        if (resp.ok && body?.ok === true) {
+          recordDetail({ id: 'server-api', label: serverLabel, ok: true, latencyMs: latency, errorCode: null, errorMessage: null })
+          return successResult(latency, resp.status)
+        }
         const errorCodeFromBody = typeof body?.errorCode === 'string' && body.errorCode ? body.errorCode : null
         const errorMessageFromBody = typeof body?.error === 'string' && body.error ? body.error : null
-        const fallbackCode = !resp.ok
-          ? `HTTP_${resp.status}`
-          : (errorCodeFromBody || 'CHECK_FAILED')
-        return {
+        const fallbackCode = !resp.ok ? `HTTP_${resp.status}` : (errorCodeFromBody || 'CHECK_FAILED')
+        recordDetail({
+          id: 'server-api',
+          label: serverLabel,
           ok: false,
-          latencyMs: null,
-          updatedAt: Date.now(),
-          status: resp.status,
+          latencyMs: latency,
           errorCode: errorCodeFromBody || fallbackCode,
           errorMessage: errorMessageFromBody,
-        }
-      } catch (fetchError: any) {
-        clearTimeout(timeoutId)
-        if (fetchError.name === 'AbortError') {
-          return { ok: false, latencyMs: null, updatedAt: Date.now(), status: null, errorCode: 'TIMEOUT', errorMessage: 'Request timed out' }
-        }
-        throw fetchError
+        })
+      } catch (serverError: any) {
+        recordDetail({
+          id: 'server-api',
+          label: serverLabel,
+          ok: false,
+          latencyMs: null,
+          errorCode: 'NETWORK_ERROR',
+          errorMessage: typeof serverError?.message === 'string' ? serverError.message : null,
+        })
       }
-    } catch {
-      // Network/other failure
-      return { ok: false, latencyMs: null, updatedAt: Date.now(), status: null, errorCode: 'NETWORK_ERROR', errorMessage: null }
-    }
-  }, [safeJson])
 
-  const probeDbWithFallback = React.useCallback(async (): Promise<ProbeResult> => {
-    const started = Date.now()
-    try {
-      // First try server DB health
-      const resp = await fetch('/api/health/db', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
-      const elapsedMs = Date.now() - started
-      const body = await safeJson(resp)
-      if (resp.ok && body?.ok === true) {
-        return { ok: true, latencyMs: Number.isFinite(body?.latencyMs) ? body.latencyMs : elapsedMs, updatedAt: Date.now(), status: resp.status, errorCode: null, errorMessage: null }
-      }
-      // Not OK: derive error info
-      const errorCodeFromBody = typeof body?.errorCode === 'string' && body.errorCode ? body.errorCode : null
-      const errorMessageFromBody = typeof body?.error === 'string' && body.error ? body.error : null
-      const fallbackCode = !resp.ok ? `HTTP_${resp.status}` : (errorCodeFromBody || 'CHECK_FAILED')
-      // Fallback to client Supabase reachability
-      const t2Start = Date.now()
-      const { error } = await supabase.from('plants').select('id', { head: true, count: 'exact' }).limit(1)
-      const t2 = Date.now() - t2Start
-      if (!error) {
-        return { ok: true, latencyMs: t2, updatedAt: Date.now(), status: null, errorCode: null, errorMessage: null }
-      }
-      return { ok: false, latencyMs: null, updatedAt: Date.now(), status: resp.status, errorCode: errorCodeFromBody || fallbackCode, errorMessage: errorMessageFromBody }
-    } catch {
       try {
-        // As a last resort, try an auth no-op which hits Supabase API
-        await supabase.auth.getSession()
-        return { ok: true, latencyMs: Date.now() - started, updatedAt: Date.now(), status: null, errorCode: null, errorMessage: null }
-      } catch {
-        return { ok: false, latencyMs: null, updatedAt: Date.now(), status: null, errorCode: 'NETWORK_ERROR', errorMessage: null }
+        const sqlStart = Date.now()
+        const { error } = await supabase.from('plants').select('id', { head: true, count: 'exact' }).limit(1)
+        const sqlLatency = Date.now() - sqlStart
+        if (!error) {
+          recordDetail({
+            id: 'supabase-sql',
+            label: supabaseSqlLabel,
+            ok: true,
+            latencyMs: sqlLatency,
+            errorCode: null,
+            errorMessage: null,
+          })
+          return successResult(sqlLatency, aggregateStatus)
+        }
+        const sqlErrorCode = typeof error?.code === 'string' && error.code ? error.code : 'SUPABASE_SQL_ERROR'
+        const sqlErrorMessage = typeof error?.message === 'string' ? error.message : null
+        recordDetail({
+          id: 'supabase-sql',
+          label: supabaseSqlLabel,
+          ok: false,
+          latencyMs: null,
+          errorCode: sqlErrorCode,
+          errorMessage: sqlErrorMessage,
+        })
+      } catch (sqlException: any) {
+        recordDetail({
+          id: 'supabase-sql',
+          label: supabaseSqlLabel,
+          ok: false,
+          latencyMs: null,
+          errorCode: 'SUPABASE_SQL_ERROR',
+          errorMessage: typeof sqlException?.message === 'string' ? sqlException.message : null,
+        })
       }
-    }
-  }, [safeJson])
 
-  const runHealthProbes = React.useCallback(async () => {
-    const [apiRes, adminRes, dbRes] = await Promise.all([
-      probeEndpoint('/api/health', (b) => b?.ok === true).catch(() => ({ ok: false, latencyMs: null, updatedAt: Date.now(), status: null, errorCode: 'NETWORK_ERROR', errorMessage: 'Failed to probe API' })),
-      probeEndpoint('/api/admin/stats', (b) => b?.ok === true && typeof b?.profilesCount === 'number').catch(() => ({ ok: false, latencyMs: null, updatedAt: Date.now(), status: null, errorCode: 'NETWORK_ERROR', errorMessage: 'Failed to probe Admin API' })),
-      probeDbWithFallback().catch(() => ({ ok: false, latencyMs: null, updatedAt: Date.now(), status: null, errorCode: 'NETWORK_ERROR', errorMessage: 'Failed to probe Database' })),
-    ])
-    if (isMountedRef.current) {
-      setApiProbe(apiRes)
-      setAdminProbe(adminRes)
-      setDbProbe(dbRes)
-    }
-  }, [probeEndpoint, probeDbWithFallback])
+      try {
+        const authStart = Date.now()
+        const { error } = await supabase.auth.getSession()
+        const authLatency = Date.now() - authStart
+        if (!error) {
+          recordDetail({
+            id: 'supabase-auth',
+            label: supabaseAuthLabel,
+            ok: true,
+            latencyMs: authLatency,
+            errorCode: null,
+            errorMessage: null,
+          })
+          return successResult(authLatency, aggregateStatus)
+        }
+        const authErrorCode = typeof error?.code === 'string' && error.code ? error.code : 'SUPABASE_AUTH_ERROR'
+        const authErrorMessage = typeof error?.message === 'string' ? error.message : null
+        recordDetail({
+          id: 'supabase-auth',
+          label: supabaseAuthLabel,
+          ok: false,
+          latencyMs: null,
+          errorCode: authErrorCode,
+          errorMessage: authErrorMessage,
+        })
+      } catch (authException: any) {
+        recordDetail({
+          id: 'supabase-auth',
+          label: supabaseAuthLabel,
+          ok: false,
+          latencyMs: null,
+          errorCode: 'NETWORK_ERROR',
+          errorMessage: typeof authException?.message === 'string' ? authException.message : null,
+        })
+      }
+
+      return {
+        ok: false,
+        latencyMs: null,
+        updatedAt: Date.now(),
+        status: aggregateStatus,
+        errorCode: aggregateErrorCode,
+        errorMessage: aggregateErrorMessage,
+        details,
+      }
+    }, [safeJson])
+
+    const runHealthProbes = React.useCallback(async () => {
+      const [apiRes, adminRes, dbRes] = await Promise.all([
+        probeEndpoint('/api/health', (b) => b?.ok === true).catch(() => ({ ok: false, latencyMs: null, updatedAt: Date.now(), status: null, errorCode: 'NETWORK_ERROR', errorMessage: 'Failed to probe API', details: [] })),
+        probeEndpoint('/api/admin/stats', (b) => b?.ok === true && typeof b?.profilesCount === 'number').catch(() => ({ ok: false, latencyMs: null, updatedAt: Date.now(), status: null, errorCode: 'NETWORK_ERROR', errorMessage: 'Failed to probe Admin API', details: [] })),
+        probeDbWithFallback().catch(() => ({ ok: false, latencyMs: null, updatedAt: Date.now(), status: null, errorCode: 'NETWORK_ERROR', errorMessage: 'Failed to probe Database', details: [] })),
+      ])
+      if (isMountedRef.current) {
+        setApiProbe(apiRes)
+        setAdminProbe(adminRes)
+        setDbProbe(dbRes)
+      }
+    }, [probeEndpoint, probeDbWithFallback])
 
   const refreshHealth = React.useCallback(async () => {
     if (healthRefreshing) return
@@ -1820,19 +1938,44 @@ export const AdminPage: React.FC = () => {
                     {!adminProbe?.ok && <ErrorBadge code={adminProbe.errorCode} />}
                   </div>
                 </div>
-                <div className="flex items-center justify-between rounded-xl border p-3">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <Database className="h-4 w-4 opacity-70" />
-                    <div className="text-sm truncate">Database</div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="text-xs tabular-nums opacity-60">
-                      {dbProbe.latencyMs !== null ? `${dbProbe.latencyMs} ms` : '-'}
+                  <div className="flex flex-col gap-2 rounded-xl border p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Database className="h-4 w-4 opacity-70" />
+                        <div className="text-sm truncate">Database</div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="text-xs tabular-nums opacity-60">
+                          {dbProbe.latencyMs !== null ? `${dbProbe.latencyMs} ms` : '-'}
+                        </div>
+                        <StatusDot ok={dbProbe.ok} title={!dbProbe.ok ? (dbProbe.errorCode || undefined) : undefined} />
+                        {!dbProbe?.ok && <ErrorBadge code={dbProbe.errorCode} />}
+                      </div>
                     </div>
-                    <StatusDot ok={dbProbe.ok} title={!dbProbe.ok ? (dbProbe.errorCode || undefined) : undefined} />
-                    {!dbProbe?.ok && <ErrorBadge code={dbProbe.errorCode} />}
+                    {!!dbProbe.details?.length && (
+                      <div className="mt-1 space-y-1">
+                        {dbProbe.details.map((detail) => (
+                          <div key={detail.id} className="flex items-center justify-between gap-3 text-xs">
+                            <div className="flex items-center gap-2 min-w-0">
+                              {detail.ok ? (
+                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" aria-hidden="true" />
+                              ) : (
+                                <XCircle className="h-3.5 w-3.5 text-rose-500" aria-hidden="true" />
+                              )}
+                              <span className="truncate">{detail.label}</span>
+                            </div>
+                            <div className="text-right text-[11px] opacity-60 min-w-[80px]">
+                              {detail.ok
+                                ? detail.latencyMs !== null
+                                  ? `${detail.latencyMs} ms`
+                                  : 'OK'
+                                : (detail.errorCode || 'Failed')}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                </div>
               </div>
             </CardContent>
           </Card>
