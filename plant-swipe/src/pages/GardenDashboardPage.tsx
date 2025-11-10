@@ -159,12 +159,13 @@ export const GardenDashboardPage: React.FC = () => {
     }
   }, [id, serverToday])
 
-  const load = React.useCallback(async (opts?: { silent?: boolean; preserveHeavy?: boolean }) => {
+  const load = React.useCallback(async (opts?: { silent?: boolean; preserveHeavy?: boolean; suppressError?: boolean }) => {
     if (!id) return
     // Keep UI visible on subsequent reloads to avoid blink
     const silent = opts?.silent ?? (garden !== null)
+    const suppressError = opts?.suppressError ?? false
     if (!silent) setLoading(true)
-    setError(null)
+    if (!suppressError) setError(null)
     try {
       // Fast-path: hydrate via batched API, then continue with detailed computations
       let hydratedPlants: any[] | null = null
@@ -382,14 +383,18 @@ export const GardenDashboardPage: React.FC = () => {
       } catch {}
       serverTodayRef.current = today
     } catch (e: any) {
-      setError(e?.message || 'Failed to load garden')
+      if (suppressError) {
+        console.warn('[GardenDashboard] Silent load failed:', e)
+      } else {
+        setError(e?.message || 'Failed to load garden')
+      }
     } finally {
       if (!silent) setLoading(false)
     }
   }, [id, garden, currentLang])
 
   // Lazy heavy loader for tabs that need it - only load when tab is actually viewed
-  const loadHeavyForCurrentTab = React.useCallback(async (todayOverride?: string | null) => {
+  const loadHeavyForCurrentTab = React.useCallback(async (todayOverride?: string | null, opts?: { suppressError?: boolean }) => {
     const todayValue = todayOverride ?? serverTodayRef.current ?? serverToday
     if (!id || !todayValue) return
     
@@ -432,50 +437,51 @@ export const GardenDashboardPage: React.FC = () => {
           } else {
             setTimeout(resyncFn, 500)
           }
-        })()
+        })(),
       ])
       
-        const skipCache = skipTodayCacheRef.current
-        if (skipCache) skipTodayCacheRef.current = false
+      const skipCache = skipTodayCacheRef.current
+      if (skipCache) skipTodayCacheRef.current = false
 
-        let occsDetailed: Array<any> = []
-        let usedCache = false
+      let occsDetailed: Array<any> = []
+      let usedCache = false
+      let cachedOccs: Array<any> | null = null
 
-        if (!skipCache) {
-          const cachedOccs = await getGardenTodayOccurrencesCached(id, today).catch(() => null)
-          if (cachedOccs && cachedOccs.length > 0) {
-            occsDetailed = cachedOccs as any
-            usedCache = true
-          }
+      if (!skipCache) {
+        cachedOccs = await getGardenTodayOccurrencesCached(id, today).catch(() => null)
+        if (cachedOccs && cachedOccs.length > 0) {
+          occsDetailed = cachedOccs as any
+          usedCache = true
         }
+      }
 
-        if (!usedCache) {
-          const occs = await listOccurrencesForTasks(allTasks.map(t => t.id), `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`)
-          const taskTypeById: Record<string, 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'> = {}
-          const taskEmojiById: Record<string, string | null> = {}
-          for (const t of allTasks) { taskTypeById[t.id] = t.type as any; taskEmojiById[t.id] = (t as any).emoji || null }
-          occsDetailed = occs.map(o => ({ ...o, taskType: taskTypeById[o.taskId] || 'custom', taskEmoji: taskEmojiById[o.taskId] || null }))
-          refreshGardenTaskCache(id, today).catch(() => {})
-        }
+      if (!usedCache) {
+        const occs = await listOccurrencesForTasks(allTasks.map(t => t.id), `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`)
+        const taskTypeById: Record<string, 'water' | 'fertilize' | 'harvest' | 'cut' | 'custom'> = {}
+        const taskEmojiById: Record<string, string | null> = {}
+        for (const t of allTasks) { taskTypeById[t.id] = t.type as any; taskEmojiById[t.id] = (t as any).emoji || null }
+        occsDetailed = occs.map(o => ({ ...o, taskType: taskTypeById[o.taskId] || 'custom', taskEmoji: taskEmojiById[o.taskId] || null }))
+        refreshGardenTaskCache(id, today).catch(() => {})
+      }
 
-        setTodayTaskOccurrences(occsDetailed as any)
+      setTodayTaskOccurrences(occsDetailed as any)
 
-        const taskCountMap: Record<string, number> = {}
-        for (const t of allTasks) taskCountMap[t.gardenPlantId] = (taskCountMap[t.gardenPlantId] || 0) + 1
-        setTaskCountsByPlant(taskCountMap)
+      const taskCountMap: Record<string, number> = {}
+      for (const t of allTasks) taskCountMap[t.gardenPlantId] = (taskCountMap[t.gardenPlantId] || 0) + 1
+      setTaskCountsByPlant(taskCountMap)
 
-        const dueMap: Record<string, number> = {}
-        for (const o of occsDetailed) {
-          const remaining = Math.max(0, (o.requiredCount || 1) - (o.completedCount || 0))
-          if (remaining > 0) dueMap[o.gardenPlantId] = (dueMap[o.gardenPlantId] || 0) + remaining
-        }
-        setTaskOccDueToday(dueMap)
+      const dueMap: Record<string, number> = {}
+      for (const o of occsDetailed) {
+        const remaining = Math.max(0, (o.requiredCount || 1) - (o.completedCount || 0))
+        if (remaining > 0) dueMap[o.gardenPlantId] = (dueMap[o.gardenPlantId] || 0) + remaining
+      }
+      setTaskOccDueToday(dueMap)
 
-        setDailyStats(prev => {
-          const reqDone = occsDetailed.reduce((acc: number, o: any) => acc + Math.max(1, Number(o.requiredCount || 1)), 0)
-          const compDone = occsDetailed.reduce((acc: number, o: any) => acc + Math.min(Math.max(1, Number(o.requiredCount || 1)), Number(o.completedCount || 0)), 0)
-          return prev.map(d => d.date === today ? { ...d, due: reqDone, completed: compDone } : d)
-        })
+      setDailyStats(prev => {
+        const reqDone = occsDetailed.reduce((acc: number, o: any) => acc + Math.max(1, Number(o.requiredCount || 1)), 0)
+        const compDone = occsDetailed.reduce((acc: number, o: any) => acc + Math.min(Math.max(1, Number(o.requiredCount || 1)), Number(o.completedCount || 0)), 0)
+        return prev.map(d => d.date === today ? { ...d, due: reqDone, completed: compDone } : d)
+      })
       
       // Only load week data if on routine tab
       if (tab === 'routine') {
@@ -566,7 +572,13 @@ export const GardenDashboardPage: React.FC = () => {
         }
       }
       
-      const occsForDueToday = cachedOccs && cachedOccs.length > 0 ? cachedOccs : (await listOccurrencesForTasks(allTasks.map(t => t.id), `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`).catch(() => []))
+      const occsForDueToday = cachedOccs && cachedOccs.length > 0
+        ? cachedOccs
+        : (await listOccurrencesForTasks(
+            allTasks.map(t => t.id),
+            `${today}T00:00:00.000Z`,
+            `${today}T23:59:59.999Z`,
+          ).catch(() => []))
       const dueTodaySet = new Set<string>()
       for (const o of (occsForDueToday || [])) {
         const remaining = Math.max(0, (o.requiredCount || 1) - (o.completedCount || 0))
@@ -574,7 +586,11 @@ export const GardenDashboardPage: React.FC = () => {
       }
       setDueToday(dueTodaySet)
     } catch (e: any) {
-      setError(e?.message || 'Failed to load tasks')
+      if (opts?.suppressError) {
+        console.warn('[GardenDashboard] Silent heavy load failed:', e)
+      } else {
+        setError(e?.message || 'Failed to load tasks')
+      }
     } finally {
       setHeavyLoading(false)
     }
@@ -806,8 +822,8 @@ export const GardenDashboardPage: React.FC = () => {
     } catch (e) {
       // Fallback to full reload on error
       console.warn('[GardenDashboard] Targeted update failed, falling back to full reload:', e)
-      await load({ silent: true, preserveHeavy: true })
-      await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday)
+      await load({ silent: true, preserveHeavy: true, suppressError: true })
+      await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday, { suppressError: true })
     }
   }, [id, anyModalOpen, serverToday, tab, weekDays, load, loadHeavyForCurrentTab, currentLang])
 
@@ -815,8 +831,8 @@ export const GardenDashboardPage: React.FC = () => {
     const executeReload = async () => {
       pendingReloadRef.current = false
       lastReloadRef.current = Date.now()
-      await load({ silent: true, preserveHeavy: true })
-      await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday)
+      await load({ silent: true, preserveHeavy: true, suppressError: true })
+      await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday, { suppressError: true })
       setActivityRev((r) => r + 1)
     }
 
