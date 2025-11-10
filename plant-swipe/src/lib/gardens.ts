@@ -964,10 +964,12 @@ export async function progressTaskOccurrence(occurrenceId: string, increment = 1
   // Fallback: update occurrence row directly when RPC unavailable
   const tableName = 'garden_plant_task_occurrences'
   if (missingSupabaseTablesOrViews.has(tableName)) return
+  const safeIncrement = Math.max(1, increment)
+  const context: { gardenId?: string | null; dayIso?: string | null } = {}
   try {
     const { data: occ, error: fetchErr } = await supabase
       .from(tableName)
-      .select('id, task_id, garden_plant_id, required_count, completed_count, completed_at')
+      .select('id, due_at, task_id, garden_plant_id, required_count, completed_count, completed_at, garden_plant_tasks!inner(garden_id)')
       .eq('id', occurrenceId)
       .maybeSingle()
     if (fetchErr) {
@@ -977,10 +979,12 @@ export async function progressTaskOccurrence(occurrenceId: string, increment = 1
     if (!occ) return
     const required = Math.max(1, Number((occ as any).required_count ?? 1))
     const current = Math.max(0, Number((occ as any).completed_count ?? 0))
-    const next = Math.min(required, current + Math.max(1, increment))
+    const next = Math.min(required, current + safeIncrement)
     const updatePayload: Record<string, any> = { completed_count: next }
     if (next >= required) {
       updatePayload.completed_at = new Date().toISOString()
+    } else if ((occ as any).completed_at) {
+      updatePayload.completed_at = (occ as any).completed_at
     }
     const { error: updateErr } = await supabase
       .from(tableName)
@@ -992,58 +996,134 @@ export async function progressTaskOccurrence(occurrenceId: string, increment = 1
       }
       return
     }
+    const occDue = (occ as any)?.due_at ? new Date(String((occ as any).due_at)) : null
+    context.dayIso = occDue ? occDue.toISOString().slice(0, 10) : null
+    context.gardenId = (occ as any)?.garden_plant_tasks?.garden_id
+      ? String((occ as any).garden_plant_tasks.garden_id)
+      : null
+    if ((!context.gardenId || !context.dayIso) && occ?.task_id) {
+      try {
+        const { data: taskRow, error: taskErr } = await supabase
+          .from('garden_plant_tasks')
+          .select('garden_id')
+          .eq('id', String(occ.task_id))
+          .maybeSingle()
+        if (!taskErr && taskRow?.garden_id && !context.gardenId) {
+          context.gardenId = String(taskRow.garden_id)
+        } else if (taskErr) {
+          isMissingTableOrView(taskErr, 'garden_plant_tasks')
+        }
+      } catch (err) {
+        if (!isMissingTableOrView(err, 'garden_plant_tasks')) {
+          console.warn('[gardens] Failed to resolve garden id for occurrence fallback:', err)
+        }
+      }
+    }
+    await attributeOccurrenceCompletion(occurrenceId, safeIncrement)
+    await recomputeGardenAggregatesAfterProgress(context.gardenId ?? null, context.dayIso ?? null)
   } catch (err) {
     if (isMissingTableOrView(err, tableName)) return
     throw err instanceof Error ? err : new Error(String(err))
   }
   
   if (!rpcAttempted) {
-    // If RPC was already identified as missing, still trigger cache refresh best-effort
-    await refreshCachesForOccurrence(occurrenceId)
+    await refreshCachesForOccurrence(occurrenceId, context)
   } else {
-    // RPC missing during the attempt still needs cache refresh
-    await refreshCachesForOccurrence(occurrenceId)
+    await refreshCachesForOccurrence(occurrenceId, context)
   }
 }
 
-async function refreshCachesForOccurrence(occurrenceId: string): Promise<void> {
+async function attributeOccurrenceCompletion(occurrenceId: string, increment: number): Promise<void> {
+  const tableName = 'garden_task_user_completions'
+  if (missingSupabaseTablesOrViews.has(tableName)) return
+  try {
+    const { data: session } = await supabase.auth.getSession()
+    const userId = session?.session?.user?.id || session?.user?.id || null
+    if (!userId) return
+    const payload = {
+      occurrence_id: occurrenceId,
+      user_id: userId,
+      increment: Math.max(1, increment),
+    }
+    const { error } = await supabase.from(tableName).insert(payload)
+    if (error && !isMissingTableOrView(error, tableName)) {
+      console.warn('[gardens] Failed to attribute task completion:', error)
+    }
+  } catch (err) {
+    if (!isMissingTableOrView(err, tableName)) {
+      console.warn('[gardens] Failed to attribute task completion:', err)
+    }
+  }
+}
+
+async function recomputeGardenAggregatesAfterProgress(gardenId: string | null, dayIso: string | null): Promise<void> {
+  if (!gardenId) return
+  const day = dayIso ?? new Date().toISOString().slice(0, 10)
+  try {
+    await computeGardenTaskForDay({ gardenId, dayIso: day })
+  } catch (err) {
+    if (!isMissingRpcFunction(err, 'compute_garden_task_for_day')) {
+      console.warn('[gardens] compute_garden_task_for_day fallback failed:', err)
+    }
+  }
+  try {
+    await refreshGardenStreak(gardenId)
+  } catch (err) {
+    if (!isMissingRpcFunction(err, 'update_garden_streak')) {
+      console.warn('[gardens] update_garden_streak fallback failed:', err)
+    }
+  }
+}
+
+async function refreshCachesForOccurrence(
+  occurrenceId: string,
+  context?: { gardenId?: string | null; dayIso?: string | null }
+): Promise<void> {
   const tableName = 'garden_plant_task_occurrences'
   if (missingSupabaseTablesOrViews.has(tableName)) return
   try {
-    const { data, error } = await supabase
-      .from(tableName)
-      .select('task_id, garden_plant_id, garden_plant_tasks!inner(garden_id)')
-      .eq('id', occurrenceId)
-      .maybeSingle()
-    if (error) {
-      const handled =
-        isMissingTableOrView(error, tableName) ||
-        isMissingTableOrView(error, 'garden_plant_tasks')
-      if (handled) return
-      throw error
+    let gardenId = context?.gardenId ?? null
+    let dayIso = context?.dayIso ?? null
+    if (!gardenId || !dayIso) {
+      const { data, error } = await supabase
+        .from(tableName)
+        .select('due_at, garden_plant_tasks!inner(garden_id)')
+        .eq('id', occurrenceId)
+        .maybeSingle()
+      if (error) {
+        const handled =
+          isMissingTableOrView(error, tableName) ||
+          isMissingTableOrView(error, 'garden_plant_tasks')
+        if (handled) return
+        throw error
+      }
+      if (!gardenId && (data as any)?.garden_plant_tasks?.garden_id) {
+        gardenId = String((data as any).garden_plant_tasks.garden_id)
+      }
+      if (!dayIso && (data as any)?.due_at) {
+        dayIso = new Date(String((data as any).due_at)).toISOString().slice(0, 10)
+      }
     }
-    if (data && (data as any).garden_plant_tasks) {
-      const gardenId = String((data as any).garden_plant_tasks.garden_id)
-      const today = new Date().toISOString().slice(0, 10)
-      // Refresh garden cache asynchronously
-      refreshGardenTaskCache(gardenId, today).catch(() => {})
-      // Refresh user caches for members (best-effort)
-      try {
-        const { data: members, error: memberErr } = await supabase
-          .from('garden_members')
-          .select('user_id')
-          .eq('garden_id', gardenId)
-        if (!memberErr && members) {
-          for (const member of members) {
-            refreshUserTaskCache(String(member.user_id), today).catch(() => {})
-          }
-        } else if (memberErr) {
-          isMissingTableOrView(memberErr, 'garden_members')
+    if (!gardenId) return
+    const cacheDay = dayIso ?? new Date().toISOString().slice(0, 10)
+    // Refresh garden cache asynchronously
+    refreshGardenTaskCache(gardenId, cacheDay).catch(() => {})
+    // Refresh user caches for members (best-effort)
+    try {
+      const { data: members, error: memberErr } = await supabase
+        .from('garden_members')
+        .select('user_id')
+        .eq('garden_id', gardenId)
+      if (!memberErr && members) {
+        for (const member of members) {
+          refreshUserTaskCache(String(member.user_id), cacheDay).catch(() => {})
         }
-      } catch (err) {
-        if (!isMissingTableOrView(err, 'garden_members')) {
-          console.warn('[gardens] Failed to refresh user cache after task progress:', err)
-        }
+      } else if (memberErr) {
+        isMissingTableOrView(memberErr, 'garden_members')
+      }
+    } catch (err) {
+      if (!isMissingTableOrView(err, 'garden_members')) {
+        console.warn('[gardens] Failed to refresh user cache after task progress:', err)
       }
     }
   } catch (err) {
