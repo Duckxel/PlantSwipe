@@ -473,8 +473,8 @@ export default function PlantSwipe() {
     onLogout={async () => { await signOut(); navigate('/') }}
   />
 
-      {/* Mobile Logo and App Name - Only on Discovery page */}
-      {currentView === 'discovery' && (
+      {/* Mobile Logo and App Name - Only on Discovery page (exact path match, no other routes) */}
+      {pathWithoutLang === "/" && location.pathname.replace(/^\/[a-z]{2}(-[A-Z]{2})?/, '') === "/" && (
         <div className="md:hidden flex flex-col items-center justify-center mb-6 mt-4">
           <div className="h-12 w-12 rounded-2xl bg-green-200 dark:bg-green-800 flex items-center justify-center shadow mb-2">
             <Leaf className="h-6 w-6 text-green-800 dark:text-green-200" />
