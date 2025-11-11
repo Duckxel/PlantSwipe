@@ -1529,6 +1529,14 @@ export const AdminPage: React.FC = () => {
 
   // ---- Members tab state ----
   const [activeTab, setActiveTab] = React.useState<'overview' | 'members' | 'requests' | 'admin_logs'>('overview')
+  
+  // Load plant requests on mount to show count in menu
+  React.useEffect(() => {
+    if (!plantRequestsInitialized) {
+      loadPlantRequests({ initial: true })
+    }
+  }, [plantRequestsInitialized, loadPlantRequests])
+  
   React.useEffect(() => {
     if (activeTab !== 'requests' || plantRequestsInitialized) return
     loadPlantRequests({ initial: true })
