@@ -517,7 +517,7 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
             {!loading && !error && (
               <>
               {/* Language Selection */}
-              <div className="grid gap-2 p-4 rounded-xl border bg-stone-50">
+              <div className="grid gap-2 p-4 rounded-xl border bg-stone-50 dark:bg-stone-900 dark:border-stone-700">
                 <Label htmlFor="edit-language" className="flex items-center gap-2">
                   <Languages className="h-4 w-4" />
                   Edit Language
@@ -545,7 +545,7 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
                       {translating ? 'Translating...' : 'Translate to All'}
                     </Button>
                   </div>
-                <div className="text-xs opacity-60">
+                <div className="text-xs opacity-60 dark:opacity-70">
                   Select the language you want to edit. Click "Translate to All" to translate current fields to all languages using DeepL.
                 </div>
               </div>
@@ -554,6 +554,41 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
                 <Label htmlFor="plant-name">Name <span className="text-red-500">*</span></Label>
                 <Input id="plant-name" autoComplete="off" value={name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} required />
               </div>
+              <div className="grid gap-2">
+                <Label htmlFor="plant-image">Image URL</Label>
+                <Input id="plant-image" autoComplete="off" value={imageUrl} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setImageUrl(e.target.value)} placeholder="https://example.com/image.jpg" />
+              </div>
+              {editLanguage === 'en' && (
+                <div className="flex items-center justify-between mb-4 p-4 rounded-xl border bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-950/20 dark:to-blue-950/20 dark:border-purple-800/30">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 font-semibold text-purple-900 dark:text-purple-200 mb-1">
+                      <Sparkles className="h-5 w-5" />
+                      AI Assistant
+                    </div>
+                    <p className="text-sm text-purple-700 dark:text-purple-300">
+                      Let AI fill in all the advanced fields based on the plant name.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={handleAiFill}
+                    disabled={aiFilling || !name.trim() || saving || translating}
+                    className="rounded-2xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white border-0 shadow-lg"
+                  >
+                    {aiFilling ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Filling...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-4 w-4 mr-2" />
+                        Fill with AI
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
               <div className="grid gap-2">
                 <Label htmlFor="plant-scientific">Scientific name</Label>
                 <Input id="plant-scientific" autoComplete="off" value={scientificName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setScientificName(e.target.value)} />
@@ -588,41 +623,6 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
                 <Label htmlFor="plant-description">Description</Label>
                 <Input id="plant-description" autoComplete="off" value={description} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDescription(e.target.value)} />
               </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="plant-image">Image URL</Label>
-                  <Input id="plant-image" autoComplete="off" value={imageUrl} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setImageUrl(e.target.value)} placeholder="https://example.com/image.jpg" />
-                </div>
-                {editLanguage === 'en' && (
-                  <div className="flex items-center justify-between mb-4 p-4 rounded-xl border bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-950/20 dark:to-blue-950/20 dark:border-purple-800/30">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 font-semibold text-purple-900 dark:text-purple-200 mb-1">
-                        <Sparkles className="h-5 w-5" />
-                        AI Assistant
-                      </div>
-                      <p className="text-sm text-purple-700 dark:text-purple-300">
-                        Let AI fill in all the advanced fields based on the plant name.
-                      </p>
-                    </div>
-                    <Button
-                      type="button"
-                      onClick={handleAiFill}
-                      disabled={aiFilling || !name.trim() || saving || translating}
-                      className="rounded-2xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white border-0 shadow-lg"
-                    >
-                      {aiFilling ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Filling...
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles className="h-4 w-4 mr-2" />
-                          Fill with AI
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                )}
                 <CompleteAdvancedForm
                   identifiers={identifiers}
                   setIdentifiers={setIdentifiers}
