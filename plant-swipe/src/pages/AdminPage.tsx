@@ -1999,7 +1999,7 @@ export const AdminPage: React.FC = () => {
   }, [activeTab])
 
   return (
-    <div className="flex flex-col md:flex-row min-h-screen bg-stone-50 dark:bg-[#1e1e1e]">
+    <div className="flex flex-col md:flex-row min-h-screen bg-stone-50 dark:bg-[#1e1e1e] rounded-t-3xl mt-4 md:mt-0">
       {/* Mobile Navigation */}
       <div className="md:hidden w-full border-b border-stone-200/50 dark:border-[#3e3e42]/50 bg-stone-50/80 dark:bg-[#1e1e1e]/80 backdrop-blur-sm sticky top-0 z-10 rounded-b-3xl">
         <div className="p-4">
