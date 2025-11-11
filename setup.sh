@@ -1168,6 +1168,10 @@ if command -v ufw >/dev/null 2>&1; then
   # Always permit SSH to avoid lockout
   $SUDO ufw allow OpenSSH >/dev/null 2>&1 || $SUDO ufw allow ssh || true
   # Allow HTTP/HTTPS (prefer nginx application profile if available)
+  # Note: Port 3000 (Node.js API) does NOT need to be opened because:
+  # - The server binds to 127.0.0.1:3000 (localhost only) - see server.js
+  # - External access is through Nginx on ports 80/443
+  # - Nginx proxies requests to localhost:3000 internally
   if $SUDO ufw app list >/dev/null 2>&1 && $SUDO ufw app list | grep -q "Nginx Full"; then
     $SUDO ufw allow "Nginx Full" || true
   else
