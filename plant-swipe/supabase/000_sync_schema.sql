@@ -237,6 +237,16 @@ create table if not exists public.plant_translations (
   meaning text,
   description text,
   care_soil text,
+  -- New translatable fields
+  meaning_and_significations text,
+  ecology text,
+  pharmaceutical text,
+  alimentaire text,
+  caring_tips text,
+  author_notes text,
+  propagation text,
+  division text,
+  common_diseases text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique(plant_id, language)
@@ -245,6 +255,16 @@ create table if not exists public.plant_translations (
 -- Index for faster lookups
 create index if not exists plant_translations_plant_id_idx on public.plant_translations(plant_id);
 create index if not exists plant_translations_language_idx on public.plant_translations(language);
+-- Ensure new translatable columns exist
+alter table if exists public.plant_translations add column if not exists meaning_and_significations text;
+alter table if exists public.plant_translations add column if not exists ecology text;
+alter table if exists public.plant_translations add column if not exists pharmaceutical text;
+alter table if exists public.plant_translations add column if not exists alimentaire text;
+alter table if exists public.plant_translations add column if not exists caring_tips text;
+alter table if exists public.plant_translations add column if not exists author_notes text;
+alter table if exists public.plant_translations add column if not exists propagation text;
+alter table if exists public.plant_translations add column if not exists division text;
+alter table if exists public.plant_translations add column if not exists common_diseases text;
 
 -- RLS policies for plant_translations
 alter table public.plant_translations enable row level security;

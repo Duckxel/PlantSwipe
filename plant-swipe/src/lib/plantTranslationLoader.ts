@@ -33,7 +33,31 @@ export function mergePlantWithTranslation(
     waterFreqUnit: basePlant.water_freq_unit || basePlant.waterFreqUnit || undefined,
     waterFreqValue: basePlant.water_freq_value ?? basePlant.waterFreqValue ?? null,
     waterFreqPeriod: basePlant.water_freq_period || basePlant.waterFreqPeriod || undefined,
-    waterFreqAmount: basePlant.water_freq_amount ?? basePlant.waterFreqAmount ?? null
+    waterFreqAmount: basePlant.water_freq_amount ?? basePlant.waterFreqAmount ?? null,
+    // New comprehensive plant fields
+    wikipediaLink: basePlant.wikipedia_link || undefined,
+    plantFamily: basePlant.plant_family || undefined,
+    plantType: Array.isArray(basePlant.plant_type) ? basePlant.plant_type.map((t: unknown) => String(t)) : undefined,
+    plantationType: Array.isArray(basePlant.plantation_type) ? basePlant.plantation_type.map((t: unknown) => String(t)) : undefined,
+    origins: basePlant.origins || undefined,
+    whereFound: basePlant.where_found || undefined,
+    size: basePlant.size || undefined,
+    floweringPeriod: basePlant.flowering_period || undefined,
+    plantMonth: Array.isArray(basePlant.plant_month) ? basePlant.plant_month.map((m: unknown) => Number(m)) : undefined,
+    lightAmount: basePlant.light_amount || undefined,
+    climate: basePlant.climate || undefined,
+    idealTemperature: basePlant.ideal_temperature || undefined,
+    regionOfWorld: basePlant.region_of_world || undefined,
+    soilType: basePlant.soil_type || undefined,
+    meaningAndSignifications: translation?.meaning_and_significations || basePlant.meaning_and_significations || undefined,
+    ecology: translation?.ecology || basePlant.ecology || undefined,
+    pharmaceutical: translation?.pharmaceutical || basePlant.pharmaceutical || undefined,
+    alimentaire: translation?.alimentaire || basePlant.alimentaire || undefined,
+    caringTips: translation?.caring_tips || basePlant.caring_tips || undefined,
+    authorNotes: translation?.author_notes || basePlant.author_notes || undefined,
+    propagation: translation?.propagation || basePlant.propagation || undefined,
+    division: translation?.division || basePlant.division || undefined,
+    commonDiseases: translation?.common_diseases || basePlant.common_diseases || undefined,
   }
 }
 
@@ -47,7 +71,7 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
     // Load base plants
     const { data: plants, error } = await supabase
       .from('plants')
-      .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount')
+      .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount, wikipedia_link, plant_family, plant_type, plantation_type, origins, where_found, size, flowering_period, plant_month, light_amount, climate, ideal_temperature, region_of_world, soil_type, meaning_and_significations, ecology, pharmaceutical, alimentaire, caring_tips, author_notes, propagation, division, common_diseases')
       .order('name', { ascending: true })
     
     if (error) throw error

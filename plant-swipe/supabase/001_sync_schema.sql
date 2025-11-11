@@ -154,7 +154,31 @@ create table if not exists public.plants (
   water_freq_unit text check (water_freq_unit in ('day','week','month','year')),
   water_freq_value integer,
   water_freq_period text,
-  water_freq_amount integer
+  water_freq_amount integer,
+  -- New comprehensive plant fields
+  wikipedia_link text,
+  plant_family text,
+  plant_type text[] not null default '{}',
+  plantation_type text[] not null default '{}',
+  origins text,
+  where_found text,
+  size text,
+  flowering_period text,
+  plant_month integer[] not null default '{}',
+  light_amount text,
+  climate text,
+  ideal_temperature text,
+  region_of_world text,
+  soil_type text,
+  meaning_and_significations text,
+  ecology text,
+  pharmaceutical text,
+  alimentaire text,
+  caring_tips text,
+  author_notes text,
+  propagation text,
+  division text,
+  common_diseases text
 );
 -- Ensure columns present for legacy/compat fields
 alter table if exists public.plants add column if not exists colors text[] not null default '{}';
@@ -165,6 +189,30 @@ alter table if exists public.plants add column if not exists water_freq_amount i
 alter table if exists public.plants add column if not exists water_freq_unit text;
 alter table if exists public.plants add column if not exists water_freq_value integer;
 alter table if exists public.plants add column if not exists updated_at timestamptz not null default now();
+-- Add new comprehensive plant fields
+alter table if exists public.plants add column if not exists wikipedia_link text;
+alter table if exists public.plants add column if not exists plant_family text;
+alter table if exists public.plants add column if not exists plant_type text[] not null default '{}';
+alter table if exists public.plants add column if not exists plantation_type text[] not null default '{}';
+alter table if exists public.plants add column if not exists origins text;
+alter table if exists public.plants add column if not exists where_found text;
+alter table if exists public.plants add column if not exists size text;
+alter table if exists public.plants add column if not exists flowering_period text;
+alter table if exists public.plants add column if not exists plant_month integer[] not null default '{}';
+alter table if exists public.plants add column if not exists light_amount text;
+alter table if exists public.plants add column if not exists climate text;
+alter table if exists public.plants add column if not exists ideal_temperature text;
+alter table if exists public.plants add column if not exists region_of_world text;
+alter table if exists public.plants add column if not exists soil_type text;
+alter table if exists public.plants add column if not exists meaning_and_significations text;
+alter table if exists public.plants add column if not exists ecology text;
+alter table if exists public.plants add column if not exists pharmaceutical text;
+alter table if exists public.plants add column if not exists alimentaire text;
+alter table if exists public.plants add column if not exists caring_tips text;
+alter table if exists public.plants add column if not exists author_notes text;
+alter table if exists public.plants add column if not exists propagation text;
+alter table if exists public.plants add column if not exists division text;
+alter table if exists public.plants add column if not exists common_diseases text;
 -- Relax NOT NULL constraints to support Simplified Add Plant flow
 alter table if exists public.plants alter column scientific_name drop not null;
 alter table if exists public.plants alter column care_soil drop not null;

@@ -65,6 +65,30 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
   const [inputLanguage, setInputLanguage] = React.useState<SupportedLanguage>(DEFAULT_LANGUAGE)
   const [translateToAll, setTranslateToAll] = React.useState(true) // Default to true in Advanced mode
   const [translating, setTranslating] = React.useState(false)
+  // New comprehensive plant fields
+  const [wikipediaLink, setWikipediaLink] = React.useState("")
+  const [plantFamily, setPlantFamily] = React.useState("")
+  const [plantType, setPlantType] = React.useState<string[]>([])
+  const [plantationType, setPlantationType] = React.useState<string[]>([])
+  const [origins, setOrigins] = React.useState("")
+  const [whereFound, setWhereFound] = React.useState("")
+  const [size, setSize] = React.useState("")
+  const [floweringPeriod, setFloweringPeriod] = React.useState("")
+  const [plantMonth, setPlantMonth] = React.useState<number[]>([])
+  const [lightAmount, setLightAmount] = React.useState("")
+  const [climate, setClimate] = React.useState("")
+  const [idealTemperature, setIdealTemperature] = React.useState("")
+  const [regionOfWorld, setRegionOfWorld] = React.useState("")
+  const [soilType, setSoilType] = React.useState("")
+  const [meaningAndSignifications, setMeaningAndSignifications] = React.useState("")
+  const [ecology, setEcology] = React.useState("")
+  const [pharmaceutical, setPharmaceutical] = React.useState("")
+  const [alimentaire, setAlimentaire] = React.useState("")
+  const [caringTips, setCaringTips] = React.useState("")
+  const [authorNotes, setAuthorNotes] = React.useState("")
+  const [propagation, setPropagation] = React.useState("")
+  const [division, setDivision] = React.useState("")
+  const [commonDiseases, setCommonDiseases] = React.useState("")
 
   // Update name when initialName changes
   React.useEffect(() => {
@@ -75,6 +99,18 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
 
   const toggleSeason = (s: Plant["seasons"][number]) => {
     setSeasons((cur: string[]) => (cur.includes(s) ? cur.filter((x: string) => x !== s) : [...cur, s]))
+  }
+
+  const togglePlantType = (type: string) => {
+    setPlantType((cur: string[]) => (cur.includes(type) ? cur.filter((x: string) => x !== type) : [...cur, type]))
+  }
+
+  const togglePlantationType = (type: string) => {
+    setPlantationType((cur: string[]) => (cur.includes(type) ? cur.filter((x: string) => x !== type) : [...cur, type]))
+  }
+
+  const togglePlantMonth = (month: number) => {
+    setPlantMonth((cur: number[]) => (cur.includes(month) ? cur.filter((x: number) => x !== month) : [...cur, month]))
   }
 
   const save = async () => {
@@ -130,6 +166,30 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
         // Legacy/alternative field names for compatibility
         water_freq_unit: includeAdvanced ? waterFreqPeriod : defaultPeriod,
         water_freq_value: includeAdvanced ? normalizedAmount : defaultAmount,
+        // New comprehensive plant fields
+        wikipedia_link: includeAdvanced ? (wikipediaLink.trim() || null) : null,
+        plant_family: includeAdvanced ? (plantFamily.trim() || null) : null,
+        plant_type: includeAdvanced ? plantType : [],
+        plantation_type: includeAdvanced ? plantationType : [],
+        origins: includeAdvanced ? (origins.trim() || null) : null,
+        where_found: includeAdvanced ? (whereFound.trim() || null) : null,
+        size: includeAdvanced ? (size.trim() || null) : null,
+        flowering_period: includeAdvanced ? (floweringPeriod.trim() || null) : null,
+        plant_month: includeAdvanced ? plantMonth : [],
+        light_amount: includeAdvanced ? (lightAmount.trim() || null) : null,
+        climate: includeAdvanced ? (climate.trim() || null) : null,
+        ideal_temperature: includeAdvanced ? (idealTemperature.trim() || null) : null,
+        region_of_world: includeAdvanced ? (regionOfWorld.trim() || null) : null,
+        soil_type: includeAdvanced ? (soilType.trim() || null) : null,
+        meaning_and_significations: includeAdvanced ? (meaningAndSignifications.trim() || null) : null,
+        ecology: includeAdvanced ? (ecology.trim() || null) : null,
+        pharmaceutical: includeAdvanced ? (pharmaceutical.trim() || null) : null,
+        alimentaire: includeAdvanced ? (alimentaire.trim() || null) : null,
+        caring_tips: includeAdvanced ? (caringTips.trim() || null) : null,
+        author_notes: includeAdvanced ? (authorNotes.trim() || null) : null,
+        propagation: includeAdvanced ? (propagation.trim() || null) : null,
+        division: includeAdvanced ? (division.trim() || null) : null,
+        common_diseases: includeAdvanced ? (commonDiseases.trim() || null) : null,
       })
       if (insErr) { setError(insErr.message); return }
       
@@ -142,6 +202,15 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
         meaning: meaning || null,
         description: description || null,
         care_soil: includeAdvanced ? (careSoil || null) : null,
+        meaning_and_significations: includeAdvanced ? (meaningAndSignifications.trim() || null) : null,
+        ecology: includeAdvanced ? (ecology.trim() || null) : null,
+        pharmaceutical: includeAdvanced ? (pharmaceutical.trim() || null) : null,
+        alimentaire: includeAdvanced ? (alimentaire.trim() || null) : null,
+        caring_tips: includeAdvanced ? (caringTips.trim() || null) : null,
+        author_notes: includeAdvanced ? (authorNotes.trim() || null) : null,
+        propagation: includeAdvanced ? (propagation.trim() || null) : null,
+        division: includeAdvanced ? (division.trim() || null) : null,
+        common_diseases: includeAdvanced ? (commonDiseases.trim() || null) : null,
       }
       
       const translationsToSave = [translation]
@@ -159,6 +228,15 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
             meaning: meaning || undefined,
             description: description || undefined,
             careSoil: includeAdvanced ? (careSoil || undefined) : undefined,
+            meaningAndSignifications: includeAdvanced ? (meaningAndSignifications.trim() || undefined) : undefined,
+            ecology: includeAdvanced ? (ecology.trim() || undefined) : undefined,
+            pharmaceutical: includeAdvanced ? (pharmaceutical.trim() || undefined) : undefined,
+            alimentaire: includeAdvanced ? (alimentaire.trim() || undefined) : undefined,
+            caringTips: includeAdvanced ? (caringTips.trim() || undefined) : undefined,
+            authorNotes: includeAdvanced ? (authorNotes.trim() || undefined) : undefined,
+            propagation: includeAdvanced ? (propagation.trim() || undefined) : undefined,
+            division: includeAdvanced ? (division.trim() || undefined) : undefined,
+            commonDiseases: includeAdvanced ? (commonDiseases.trim() || undefined) : undefined,
           }, inputLanguage)
           
           // Convert translations to the format needed for saving
@@ -172,6 +250,15 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
                 meaning: translated.meaning || null,
                 description: translated.description || null,
                 care_soil: translated.careSoil || null,
+                meaning_and_significations: translated.meaningAndSignifications || null,
+                ecology: translated.ecology || null,
+                pharmaceutical: translated.pharmaceutical || null,
+                alimentaire: translated.alimentaire || null,
+                caring_tips: translated.caringTips || null,
+                author_notes: translated.authorNotes || null,
+                propagation: translated.propagation || null,
+                division: translated.division || null,
+                common_diseases: translated.commonDiseases || null,
               })
             }
           }
@@ -327,6 +414,134 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
                     {waterFreqPeriod === 'week' && t('createPlant.maxPerWeek')}
                     {waterFreqPeriod === 'month' && t('createPlant.maxPerMonth')}
                     {waterFreqPeriod === 'year' && t('createPlant.maxPerYear')}
+                  </div>
+                </div>
+                {/* New comprehensive plant fields */}
+                <div className="border-t pt-4 mt-4 space-y-4">
+                  <h3 className="text-base font-semibold">Plant Information</h3>
+                  <div className="grid gap-2">
+                    <Label htmlFor="plant-wikipedia">Wikipedia Link</Label>
+                    <Input id="plant-wikipedia" autoComplete="off" placeholder="https://en.wikipedia.org/wiki/..." value={wikipediaLink} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setWikipediaLink(e.target.value)} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="plant-family">Plant Family</Label>
+                    <Input id="plant-family" autoComplete="off" placeholder="e.g., Rosaceae" value={plantFamily} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPlantFamily(e.target.value)} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Plant Type</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {(["Flower", "Fruit", "Comestible", "Ornemental", "Vegetable", "Herb", "Tree", "Shrub", "Grass", "Fern", "Moss", "Succulent"] as const).map((type) => (
+                        <button type="button" key={type} onClick={() => togglePlantType(type)} className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${plantType.includes(type) ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"}`} aria-pressed={plantType.includes(type)}>
+                          {type}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Plantation Type</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {(["Massif", "Pots", "Exterior", "Interior", "Greenhouse", "Balcony", "Terrace", "Garden"] as const).map((type) => (
+                        <button type="button" key={type} onClick={() => togglePlantationType(type)} className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${plantationType.includes(type) ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"}`} aria-pressed={plantationType.includes(type)}>
+                          {type}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="plant-origins">Origins</Label>
+                    <Input id="plant-origins" autoComplete="off" placeholder="e.g., Mediterranean region" value={origins} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOrigins(e.target.value)} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="plant-where-found">Where the plant can be found</Label>
+                    <Input id="plant-where-found" autoComplete="off" placeholder="e.g., Forests, gardens, parks" value={whereFound} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setWhereFound(e.target.value)} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="plant-size">Size</Label>
+                    <Input id="plant-size" autoComplete="off" placeholder="e.g., 30-50 cm height" value={size} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSize(e.target.value)} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="plant-flowering-period">Flowering Period</Label>
+                    <Input id="plant-flowering-period" autoComplete="off" placeholder="e.g., Spring to Summer" value={floweringPeriod} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFloweringPeriod(e.target.value)} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Plant Month (when to promote)</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { num: 1, name: "Jan" }, { num: 2, name: "Feb" }, { num: 3, name: "Mar" },
+                        { num: 4, name: "Apr" }, { num: 5, name: "May" }, { num: 6, name: "Jun" },
+                        { num: 7, name: "Jul" }, { num: 8, name: "Aug" }, { num: 9, name: "Sep" },
+                        { num: 10, name: "Oct" }, { num: 11, name: "Nov" }, { num: 12, name: "Dec" }
+                      ].map((m) => (
+                        <button type="button" key={m.num} onClick={() => togglePlantMonth(m.num)} className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${plantMonth.includes(m.num) ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"}`} aria-pressed={plantMonth.includes(m.num)}>
+                          {m.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="plant-light">Amount of Light Necessary</Label>
+                    <select id="plant-light" className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm" value={lightAmount} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setLightAmount(e.target.value)}>
+                      <option value="">Select...</option>
+                      {(["Low", "Dim", "Medium", "Bright", "Very Sunny", "Full Sun"] as const).map((v) => (
+                        <option key={v} value={v}>{v}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="plant-climate">Climate</Label>
+                    <Input id="plant-climate" autoComplete="off" placeholder="e.g., Temperate, Tropical" value={climate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setClimate(e.target.value)} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="plant-temperature">Ideal Temperature</Label>
+                    <Input id="plant-temperature" autoComplete="off" placeholder="e.g., 15-25°C" value={idealTemperature} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setIdealTemperature(e.target.value)} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="plant-region">Region of the World</Label>
+                    <Input id="plant-region" autoComplete="off" placeholder="e.g., Europe, Asia, Americas" value={regionOfWorld} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRegionOfWorld(e.target.value)} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="plant-soil-type">Soil Type</Label>
+                    <Input id="plant-soil-type" autoComplete="off" placeholder="e.g., Well-drained, sandy, loamy" value={soilType} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSoilType(e.target.value)} />
+                  </div>
+                </div>
+                {/* Longer text fields */}
+                <div className="border-t pt-4 mt-4 space-y-4">
+                  <h3 className="text-base font-semibold">Detailed Information</h3>
+                  <div className="grid gap-2">
+                    <Label htmlFor="plant-meaning-significations">Meaning and Significations</Label>
+                    <Textarea id="plant-meaning-significations" autoComplete="off" placeholder="Cultural and symbolic meanings" value={meaningAndSignifications} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setMeaningAndSignifications(e.target.value)} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="plant-ecology">Ecology</Label>
+                    <Textarea id="plant-ecology" autoComplete="off" placeholder="Ecological role and relationships" value={ecology} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setEcology(e.target.value)} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="plant-pharmaceutical">Pharmaceutical Uses</Label>
+                    <Textarea id="plant-pharmaceutical" autoComplete="off" placeholder="Medicinal properties and uses" value={pharmaceutical} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setPharmaceutical(e.target.value)} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="plant-alimentaire">Alimentaire (Food Uses)</Label>
+                    <Textarea id="plant-alimentaire" autoComplete="off" placeholder="Culinary uses and nutritional value" value={alimentaire} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setAlimentaire(e.target.value)} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="plant-caring-tips">Good Caring Tips</Label>
+                    <Textarea id="plant-caring-tips" autoComplete="off" placeholder="Best practices for plant care" value={caringTips} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setCaringTips(e.target.value)} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="plant-author-notes">Notes from Author</Label>
+                    <Textarea id="plant-author-notes" autoComplete="off" placeholder="Personal notes and observations" value={authorNotes} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setAuthorNotes(e.target.value)} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="plant-propagation">Propagation</Label>
+                    <Textarea id="plant-propagation" autoComplete="off" placeholder="How to propagate this plant" value={propagation} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setPropagation(e.target.value)} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="plant-division">Division</Label>
+                    <Textarea id="plant-division" autoComplete="off" placeholder="Division techniques" value={division} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDivision(e.target.value)} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="plant-diseases">Common Diseases/Parasites</Label>
+                    <Textarea id="plant-diseases" autoComplete="off" placeholder="Common issues and how to prevent/treat them" value={commonDiseases} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setCommonDiseases(e.target.value)} />
                   </div>
                 </div>
               </>

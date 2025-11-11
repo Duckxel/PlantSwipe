@@ -20,4 +20,28 @@ export interface Plant {
   waterFreqValue?: number | null
   waterFreqPeriod?: 'week' | 'month' | 'year'
   waterFreqAmount?: number | null
+  // New comprehensive plant fields
+  wikipediaLink?: string
+  plantFamily?: string
+  plantType?: string[]
+  plantationType?: string[]
+  origins?: string
+  whereFound?: string
+  size?: string
+  floweringPeriod?: string
+  plantMonth?: number[]
+  lightAmount?: string
+  climate?: string
+  idealTemperature?: string
+  regionOfWorld?: string
+  soilType?: string
+  meaningAndSignifications?: string
+  ecology?: string
+  pharmaceutical?: string
+  alimentaire?: string
+  caringTips?: string
+  authorNotes?: string
+  propagation?: string
+  division?: string
+  commonDiseases?: string
 }

@@ -13,6 +13,15 @@ export interface TranslationFields {
   meaning?: string
   description?: string
   careSoil?: string
+  meaningAndSignifications?: string
+  ecology?: string
+  pharmaceutical?: string
+  alimentaire?: string
+  caringTips?: string
+  authorNotes?: string
+  propagation?: string
+  division?: string
+  commonDiseases?: string
 }
 
 export interface TranslatedFields extends TranslationFields {}
@@ -84,6 +93,33 @@ export async function translatePlantFields(
   }
   if (fields.careSoil) {
     translations.careSoil = await translateText(fields.careSoil, targetLang, sourceLang)
+  }
+  if (fields.meaningAndSignifications) {
+    translations.meaningAndSignifications = await translateText(fields.meaningAndSignifications, targetLang, sourceLang)
+  }
+  if (fields.ecology) {
+    translations.ecology = await translateText(fields.ecology, targetLang, sourceLang)
+  }
+  if (fields.pharmaceutical) {
+    translations.pharmaceutical = await translateText(fields.pharmaceutical, targetLang, sourceLang)
+  }
+  if (fields.alimentaire) {
+    translations.alimentaire = await translateText(fields.alimentaire, targetLang, sourceLang)
+  }
+  if (fields.caringTips) {
+    translations.caringTips = await translateText(fields.caringTips, targetLang, sourceLang)
+  }
+  if (fields.authorNotes) {
+    translations.authorNotes = await translateText(fields.authorNotes, targetLang, sourceLang)
+  }
+  if (fields.propagation) {
+    translations.propagation = await translateText(fields.propagation, targetLang, sourceLang)
+  }
+  if (fields.division) {
+    translations.division = await translateText(fields.division, targetLang, sourceLang)
+  }
+  if (fields.commonDiseases) {
+    translations.commonDiseases = await translateText(fields.commonDiseases, targetLang, sourceLang)
   }
 
   return translations

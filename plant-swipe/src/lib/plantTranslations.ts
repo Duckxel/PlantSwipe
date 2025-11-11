@@ -15,6 +15,15 @@ export interface PlantTranslation {
   meaning?: string | null
   description?: string | null
   care_soil?: string | null
+  meaning_and_significations?: string | null
+  ecology?: string | null
+  pharmaceutical?: string | null
+  alimentaire?: string | null
+  caring_tips?: string | null
+  author_notes?: string | null
+  propagation?: string | null
+  division?: string | null
+  common_diseases?: string | null
 }
 
 /**
@@ -32,6 +41,15 @@ export async function savePlantTranslation(translation: PlantTranslation): Promi
         meaning: translation.meaning || null,
         description: translation.description || null,
         care_soil: translation.care_soil || null,
+        meaning_and_significations: translation.meaning_and_significations || null,
+        ecology: translation.ecology || null,
+        pharmaceutical: translation.pharmaceutical || null,
+        alimentaire: translation.alimentaire || null,
+        caring_tips: translation.caring_tips || null,
+        author_notes: translation.author_notes || null,
+        propagation: translation.propagation || null,
+        division: translation.division || null,
+        common_diseases: translation.common_diseases || null,
         updated_at: new Date().toISOString(),
       }, {
         onConflict: 'plant_id,language',
@@ -60,6 +78,15 @@ export async function savePlantTranslations(translations: PlantTranslation[]): P
       meaning: t.meaning || null,
       description: t.description || null,
       care_soil: t.care_soil || null,
+      meaning_and_significations: t.meaning_and_significations || null,
+      ecology: t.ecology || null,
+      pharmaceutical: t.pharmaceutical || null,
+      alimentaire: t.alimentaire || null,
+      caring_tips: t.caring_tips || null,
+      author_notes: t.author_notes || null,
+      propagation: t.propagation || null,
+      division: t.division || null,
+      common_diseases: t.common_diseases || null,
       updated_at: new Date().toISOString(),
     }))
 
