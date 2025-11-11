@@ -708,7 +708,7 @@ PY
     log "domain.json created successfully at $domain_json"
   fi
   
-  # Parse domain.json using python3 - support both old format (domain/subdomains) and new format (domains array)
+  # Parse domain.json - only supports new format with "domains" array
   local domain_info
   domain_info="$($SUDO python3 - <<'PY'
 import json
@@ -717,21 +717,16 @@ try:
     with open(sys.argv[1], 'r') as f:
         data = json.load(f)
     
-    # New format: "domains" array with full domains
+    # Only support "domains" array format
     if 'domains' in data and isinstance(data['domains'], list):
         domains = data['domains']
+        if not domains:
+            print("ERROR: 'domains' array is empty", file=sys.stderr)
+            sys.exit(1)
         print('|'.join(domains))
-    # Old format: "domain" + "subdomains" (for backward compatibility)
-    elif 'domain' in data:
-        domain = data.get('domain', '')
-        subdomains = data.get('subdomains', [])
-        all_domains = [domain]
-        for sub in subdomains:
-            if sub:
-                all_domains.append(f"{sub}.{domain}")
-        print('|'.join(all_domains))
     else:
-        print("ERROR: No 'domains' or 'domain' field found in domain.json", file=sys.stderr)
+        print("ERROR: domain.json must contain a 'domains' array with full domain names", file=sys.stderr)
+        print("ERROR: Format: {\"domains\": [\"dev01.aphylia.app\", \"dev02.aphylia.app\"]}", file=sys.stderr)
         sys.exit(1)
 except Exception as e:
     print(f"ERROR: {e}", file=sys.stderr)
