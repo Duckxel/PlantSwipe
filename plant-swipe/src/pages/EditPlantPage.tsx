@@ -525,7 +525,7 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
                   <div className="flex items-center gap-2">
                     <select
                       id="edit-language"
-                      className="flex h-9 flex-1 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+                      className="flex h-9 flex-1 rounded-md border border-input bg-white dark:bg-[#2d2d30] dark:text-white px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
                       value={editLanguage}
                       onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEditLanguage(e.target.value as SupportedLanguage)}
                     >
