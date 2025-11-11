@@ -160,9 +160,6 @@ plant-swipe/
 # Supabase Configuration
 VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key
-
-# OpenAI API Key (for AI plant data filling feature)
-VITE_OPENAI_KEY=your-openai-api-key-here
 ```
 
 ### Server-Side (`plant-swipe/.env.server`)
