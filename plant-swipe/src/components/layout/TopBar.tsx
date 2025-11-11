@@ -66,7 +66,7 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
 
   const label = displayName && displayName.trim().length > 0 ? displayName : t('common.profile')
   return (
-    <header className="max-w-6xl mx-auto w-full flex items-center gap-3 px-2 overflow-x-hidden">
+    <header className="hidden md:flex max-w-6xl mx-auto w-full items-center gap-3 px-2 overflow-x-hidden">
       <div className="h-10 w-10 rounded-2xl bg-green-200 dark:bg-green-800 flex items-center justify-center shadow">
         <Leaf className="h-5 w-5 text-green-800 dark:text-green-200" />
       </div>
