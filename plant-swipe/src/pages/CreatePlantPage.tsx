@@ -9,7 +9,7 @@ import type { Plant } from "@/types/plant"
 import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE, type SupportedLanguage } from "@/lib/i18n"
 import { translatePlantToAllLanguages } from "@/lib/deepl"
 import { savePlantTranslations } from "@/lib/plantTranslations"
-import { Languages } from "lucide-react"
+import { Languages, Sparkles, Loader2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { CompleteAdvancedForm } from "@/components/plant/CompleteAdvancedForm"
 
@@ -53,6 +53,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
   const [inputLanguage, setInputLanguage] = React.useState<SupportedLanguage>(DEFAULT_LANGUAGE)
   const [translateToAll, setTranslateToAll] = React.useState(true) // Default to true in Advanced mode
   const [translating, setTranslating] = React.useState(false)
+  const [aiFilling, setAiFilling] = React.useState(false)
   
   // New JSONB structure state
   const [identifiers, setIdentifiers] = React.useState<Partial<Plant['identifiers']>>({})
@@ -94,6 +95,138 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
       setName(initialName)
     }
   }, [initialName])
+
+  // Load schema for AI fill
+  const loadSchema = async () => {
+    try {
+      // Try to load from public folder first
+      const response = await fetch('/PLANT-INFO-SCHEMA.json')
+      if (response.ok) {
+        return await response.json()
+      }
+      // Fallback: import directly if fetch fails
+      const schemaModule = await import('../../PLANT-INFO-SCHEMA.json')
+      return schemaModule.default || schemaModule
+    } catch (error) {
+      console.error('Failed to load schema:', error)
+      // Return a minimal schema structure as fallback
+      return {
+        identifiers: {},
+        traits: {},
+        dimensions: {},
+        phenology: {},
+        environment: {},
+        care: {},
+        propagation: {},
+        usage: {},
+        ecology: {},
+        commerce: {},
+        problems: {},
+        planting: {},
+        meta: {}
+      }
+    }
+  }
+
+  // AI Fill function
+  const handleAiFill = async () => {
+    if (!name.trim()) {
+      setError("Please enter a plant name first")
+      return
+    }
+
+    setAiFilling(true)
+    setError(null)
+    setOk(null)
+
+    try {
+      // Load the schema
+      const schema = await loadSchema()
+      if (!schema) {
+        setError("Failed to load schema")
+        return
+      }
+
+      // Call Supabase Edge Function
+      const { data, error: funcError } = await supabase.functions.invoke('fill-plant-data', {
+        body: {
+          plantName: name.trim(),
+          schema: schema
+        }
+      })
+
+      if (funcError) {
+        throw new Error(funcError.message || 'Failed to get AI response')
+      }
+
+      if (!data || !data.success) {
+        throw new Error(data?.error || 'Failed to get AI response')
+      }
+
+      const aiData = data.data
+
+      // Populate form fields with AI data
+      if (aiData.identifiers) {
+        setIdentifiers(aiData.identifiers)
+        if (aiData.identifiers.scientificName && !scientificName) {
+          setScientificName(aiData.identifiers.scientificName)
+        }
+      }
+      if (aiData.traits) setTraits(aiData.traits)
+      if (aiData.dimensions) setDimensions(aiData.dimensions)
+      if (aiData.phenology) {
+        setPhenology(aiData.phenology)
+        // Also update legacy colors and seasons if available
+        if (aiData.phenology.flowerColors?.length > 0 && !colors) {
+          setColors(aiData.phenology.flowerColors.map((c: any) => c.name).join(', '))
+        }
+        if (aiData.phenology.floweringMonths?.length > 0 && seasons.length === 0) {
+          // Convert months to seasons (rough approximation)
+          const monthSeasons: Record<number, string> = {
+            12: 'Winter', 1: 'Winter', 2: 'Winter',
+            3: 'Spring', 4: 'Spring', 5: 'Spring',
+            6: 'Summer', 7: 'Summer', 8: 'Summer',
+            9: 'Autumn', 10: 'Autumn', 11: 'Autumn'
+          }
+          const newSeasons = [...new Set(aiData.phenology.floweringMonths.map((m: number) => monthSeasons[m]))].filter(Boolean) as string[]
+          if (newSeasons.length > 0) setSeasons(newSeasons)
+        }
+      }
+      if (aiData.environment) setEnvironment(aiData.environment)
+      if (aiData.care) setCare(aiData.care)
+      if (aiData.propagation) setPropagation(aiData.propagation)
+      if (aiData.usage) setUsage(aiData.usage)
+      if (aiData.ecology) setEcology(aiData.ecology)
+      if (aiData.commerce) setCommerce(aiData.commerce)
+      if (aiData.problems) setProblems(aiData.problems)
+      if (aiData.planting) setPlanting(aiData.planting)
+      if (aiData.meta) {
+        setMeta(aiData.meta)
+        if (aiData.meta.funFact && !meaning) {
+          setMeaning(aiData.meta.funFact)
+        }
+        if (aiData.meta.rarity) {
+          const rarityMap: Record<string, Plant['rarity']> = {
+            'common': 'Common',
+            'uncommon': 'Uncommon',
+            'rare': 'Rare',
+            'very rare': 'Legendary'
+          }
+          setRarity(rarityMap[aiData.meta.rarity] || 'Common')
+        }
+      }
+      if (aiData.image && !imageUrl) {
+        setImageUrl(aiData.image)
+      }
+
+      setOk("AI data loaded successfully! Please review and edit before saving.")
+    } catch (err: any) {
+      console.error('AI fill error:', err)
+      setError(err?.message || 'Failed to fill data with AI. Please try again.')
+    } finally {
+      setAiFilling(false)
+    }
+  }
 
   const save = async () => {
     setError(null)
@@ -314,6 +447,35 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
             </div>
             {advanced && (
               <>
+                <div className="flex items-center justify-between mb-4 p-4 rounded-xl border bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-950/20 dark:to-blue-950/20 dark:border-purple-800/30">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 font-semibold text-purple-900 dark:text-purple-200 mb-1">
+                      <Sparkles className="h-5 w-5" />
+                      AI Assistant
+                    </div>
+                    <p className="text-sm text-purple-700 dark:text-purple-300">
+                      Let AI fill in all the advanced fields based on the plant name
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={handleAiFill}
+                    disabled={aiFilling || !name.trim() || saving || translating}
+                    className="rounded-2xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white border-0 shadow-lg"
+                  >
+                    {aiFilling ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Filling...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-4 w-4 mr-2" />
+                        Fill with AI
+                      </>
+                    )}
+                  </Button>
+                </div>
                 <div className="grid gap-2">
                   <Label htmlFor="plant-scientific">{t('createPlant.scientificName')}</Label>
                   <Input id="plant-scientific" autoComplete="off" value={scientificName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setScientificName(e.target.value)} />
@@ -370,6 +532,10 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
             {error && <div className="text-sm text-red-600 dark:text-red-400">{error}</div>}
             {ok && <div className="text-sm text-green-600 dark:text-green-400">{ok}</div>}
             {translating && <div className="text-sm text-blue-600 dark:text-blue-400">{t('createPlant.translatingToAll')}</div>}
+            {aiFilling && <div className="text-sm text-purple-600 dark:text-purple-400 flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              AI is filling in the plant data...
+            </div>}
             
             {/* Translation Option - Only shown in Advanced mode, at the bottom before save */}
             {advanced && (
@@ -379,7 +545,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
                   type="checkbox" 
                   checked={translateToAll} 
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTranslateToAll(e.target.checked)}
-                  disabled={translating}
+                  disabled={translating || aiFilling}
                   className="mt-1"
                 />
                 <div className="flex-1">
@@ -394,9 +560,9 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
             )}
             
             <div className="flex gap-2 pt-2">
-              <Button type="button" variant="secondary" className="rounded-2xl" onClick={onCancel} disabled={saving || translating}>{t('common.cancel')}</Button>
-              <Button type="button" className="rounded-2xl" onClick={save} disabled={saving || translating}>
-                {saving ? t('editPlant.saving') : translating ? t('createPlant.translating') : t('common.save')}
+              <Button type="button" variant="secondary" className="rounded-2xl" onClick={onCancel} disabled={saving || translating || aiFilling}>{t('common.cancel')}</Button>
+              <Button type="button" className="rounded-2xl" onClick={save} disabled={saving || translating || aiFilling}>
+                {saving ? t('editPlant.saving') : translating ? t('createPlant.translating') : aiFilling ? 'Please wait...' : t('common.save')}
               </Button>
             </div>
           </form>
