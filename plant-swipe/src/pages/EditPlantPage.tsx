@@ -24,7 +24,7 @@ import type {
 import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE, type SupportedLanguage } from "@/lib/i18n"
 import { translatePlantToAllLanguages } from "@/lib/deepl"
 import { savePlantTranslations, getPlantTranslation } from "@/lib/plantTranslations"
-import { Languages } from "lucide-react"
+import { Languages, Sparkles, Loader2 } from "lucide-react"
 import { CompleteAdvancedForm } from "@/components/plant/CompleteAdvancedForm"
 
 interface EditPlantPageProps {
@@ -58,6 +58,7 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
   // Language selection for editing
   const [editLanguage, setEditLanguage] = React.useState<SupportedLanguage>(DEFAULT_LANGUAGE)
   const [translating, setTranslating] = React.useState(false)
+  const [aiFilling, setAiFilling] = React.useState(false)
   
   // New JSONB structure state
   const [identifiers, setIdentifiers] = React.useState<Partial<PlantIdentifiers>>({})
@@ -76,6 +77,174 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
 
   const toggleSeason = (s: Plant["seasons"][number]) => {
     setSeasons((cur: string[]) => (cur.includes(s) ? cur.filter((x: string) => x !== s) : [...cur, s]))
+  }
+
+  const loadSchema = async () => {
+    try {
+      const response = await fetch('/PLANT-INFO-SCHEMA.json')
+      if (response.ok) {
+        return await response.json()
+      }
+      const schemaModule = await import('../../PLANT-INFO-SCHEMA.json')
+      return schemaModule.default || schemaModule
+    } catch (error) {
+      console.error('Failed to load schema:', error)
+      return {
+        identifiers: {},
+        traits: {},
+        dimensions: {},
+        phenology: {},
+        environment: {},
+        care: {},
+        propagation: {},
+        usage: {},
+        ecology: {},
+        commerce: {},
+        problems: {},
+        planting: {},
+        meta: {}
+      }
+    }
+  }
+
+  const handleAiFill = async () => {
+    if (editLanguage !== 'en') {
+      setOk(null)
+      setError('AI fill is only available when editing the English content.')
+      return
+    }
+
+    if (!name.trim()) {
+      setOk(null)
+      setError('Please enter a plant name first')
+      return
+    }
+
+    setAiFilling(true)
+    setError(null)
+    setOk(null)
+
+    try {
+      const schema = await loadSchema()
+      if (!schema) {
+        setError('Failed to load schema')
+        return
+      }
+
+      const { data, error: funcError } = await supabase.functions.invoke('fill-plant-data', {
+        body: {
+          plantName: name.trim(),
+          schema
+        }
+      })
+
+      if (funcError) {
+        throw new Error(funcError.message || 'Failed to get AI response')
+      }
+
+      if (!data || !data.success) {
+        throw new Error(data?.error || 'Failed to get AI response')
+      }
+
+      const aiData = data.data
+
+      if (aiData.identifiers) {
+        setIdentifiers(aiData.identifiers)
+        if (aiData.identifiers.scientificName && !scientificName.trim()) {
+          setScientificName(aiData.identifiers.scientificName)
+        }
+      }
+      if (aiData.traits) setTraits(aiData.traits)
+      if (aiData.dimensions) setDimensions(aiData.dimensions)
+      if (aiData.phenology) {
+        setPhenology(aiData.phenology)
+        if (aiData.phenology.flowerColors?.length > 0 && !colors.trim()) {
+          setColors(aiData.phenology.flowerColors.map((c: any) => c.name).join(', '))
+        }
+        if (aiData.phenology.floweringMonths?.length > 0 && seasons.length === 0) {
+          const monthSeasons: Record<number, string> = {
+            12: 'Winter', 1: 'Winter', 2: 'Winter',
+            3: 'Spring', 4: 'Spring', 5: 'Spring',
+            6: 'Summer', 7: 'Summer', 8: 'Summer',
+            9: 'Autumn', 10: 'Autumn', 11: 'Autumn'
+          }
+          const newSeasons = [...new Set(aiData.phenology.floweringMonths.map((m: number) => monthSeasons[m]))].filter(Boolean) as string[]
+          if (newSeasons.length > 0) setSeasons(newSeasons)
+        }
+      }
+      if (aiData.environment) {
+        setEnvironment(aiData.environment)
+        if (aiData.environment.soil?.texture?.length && !careSoil.trim()) {
+          setCareSoil(aiData.environment.soil.texture.join(', '))
+        }
+        if (aiData.environment.sunExposure) {
+          const sunExposure = String(aiData.environment.sunExposure).toLowerCase()
+          if (sunExposure.includes('full')) {
+            setCareSunlight('High')
+          } else if (sunExposure.includes('partial sun')) {
+            setCareSunlight('Medium')
+          } else if (sunExposure.includes('partial shade') || sunExposure.includes('shade')) {
+            setCareSunlight('Low')
+          }
+        }
+      }
+      if (aiData.care) {
+        setCare(aiData.care)
+        if (aiData.care.difficulty) {
+          const difficulty = String(aiData.care.difficulty).toLowerCase()
+          if (difficulty === 'easy') setCareDifficulty('Easy')
+          else if (difficulty === 'moderate') setCareDifficulty('Moderate')
+          else if (difficulty === 'advanced') setCareDifficulty('Hard')
+        }
+        if (aiData.care.watering?.interval?.value && aiData.care.watering?.interval?.unit) {
+          const unit = String(aiData.care.watering.interval.unit).toLowerCase()
+          if (unit === 'week' || unit === 'month' || unit === 'year') {
+            setWaterFreqPeriod(unit as 'week' | 'month' | 'year')
+            setWaterFreqAmount(Math.max(1, Number(aiData.care.watering.interval.value) || 1))
+          }
+        }
+      }
+      if (aiData.propagation) setPropagation(aiData.propagation)
+      if (aiData.usage) setUsage(aiData.usage)
+      if (aiData.ecology) setEcology(aiData.ecology)
+      if (aiData.commerce) {
+        setCommerce(aiData.commerce)
+        if (typeof aiData.commerce.seedsAvailable === 'boolean') {
+          setSeedsAvailable(Boolean(aiData.commerce.seedsAvailable))
+        }
+      }
+      if (aiData.problems) setProblems(aiData.problems)
+      if (aiData.planting) setPlanting(aiData.planting)
+      if (aiData.meta) {
+        setMeta(aiData.meta)
+        if (aiData.meta.funFact && !meaning.trim()) {
+          setMeaning(aiData.meta.funFact)
+        }
+        if (aiData.meta.rarity) {
+          const rarityMap: Record<string, Plant['rarity']> = {
+            'common': 'Common',
+            'uncommon': 'Uncommon',
+            'rare': 'Rare',
+            'very rare': 'Legendary',
+            'legendary': 'Legendary'
+          }
+          const mappedRarity = rarityMap[String(aiData.meta.rarity).toLowerCase()]
+          if (mappedRarity) {
+            setRarity(mappedRarity)
+          }
+        }
+      }
+      if (aiData.image && !imageUrl.trim()) {
+        setImageUrl(aiData.image)
+      }
+
+      setOk('AI data loaded successfully! Please review and edit before saving.')
+    } catch (err: any) {
+      console.error('AI fill error:', err)
+      setError(err?.message || 'Failed to fill data with AI. Please try again.')
+    } finally {
+      setAiFilling(false)
+    }
   }
 
   React.useEffect(() => {
@@ -353,29 +522,29 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
                   <Languages className="h-4 w-4" />
                   Edit Language
                 </Label>
-                <div className="flex items-center gap-2">
-                  <select 
-                    id="edit-language" 
-                    className="flex h-9 flex-1 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm" 
-                    value={editLanguage} 
-                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEditLanguage(e.target.value as SupportedLanguage)}
-                  >
-                    {SUPPORTED_LANGUAGES.map((lang) => (
-                      <option key={lang} value={lang}>
-                        {lang === 'en' ? 'English' : 'Français'}
-                      </option>
-                    ))}
-                  </select>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={handleTranslate}
-                    disabled={translating || saving}
-                    className="rounded-2xl"
-                  >
-                    {translating ? 'Translating...' : 'Translate to All'}
-                  </Button>
-                </div>
+                  <div className="flex items-center gap-2">
+                    <select
+                      id="edit-language"
+                      className="flex h-9 flex-1 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+                      value={editLanguage}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEditLanguage(e.target.value as SupportedLanguage)}
+                    >
+                      {SUPPORTED_LANGUAGES.map((lang) => (
+                        <option key={lang} value={lang}>
+                          {lang === 'en' ? 'English' : 'Français'}
+                        </option>
+                      ))}
+                    </select>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={handleTranslate}
+                      disabled={translating || saving || aiFilling}
+                      className="rounded-2xl"
+                    >
+                      {translating ? 'Translating...' : 'Translate to All'}
+                    </Button>
+                  </div>
                 <div className="text-xs opacity-60">
                   Select the language you want to edit. Click "Translate to All" to translate current fields to all languages using DeepL.
                 </div>
@@ -419,46 +588,94 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
                 <Label htmlFor="plant-description">Description</Label>
                 <Input id="plant-description" autoComplete="off" value={description} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDescription(e.target.value)} />
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="plant-image">Image URL</Label>
-                <Input id="plant-image" autoComplete="off" value={imageUrl} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setImageUrl(e.target.value)} placeholder="https://example.com/image.jpg" />
-              </div>
-              <CompleteAdvancedForm
-                identifiers={identifiers}
-                setIdentifiers={setIdentifiers}
-                traits={traits}
-                setTraits={setTraits}
-                dimensions={dimensions}
-                setDimensions={setDimensions}
-                phenology={phenology}
-                setPhenology={setPhenology}
-                environment={environment}
-                setEnvironment={setEnvironment}
-                care={care}
-                setCare={setCare}
-                propagation={propagation}
-                setPropagation={setPropagation}
-                usage={usage}
-                setUsage={setUsage}
-                ecology={ecology}
-                setEcology={setEcology}
-                commerce={commerce}
-                setCommerce={setCommerce}
-                problems={problems}
-                setProblems={setProblems}
-                planting={planting}
-                setPlanting={setPlanting}
-                meta={meta}
-                setMeta={setMeta}
-              />
-              {ok && <div className="text-sm text-green-600">{ok}</div>}
-              {translating && <div className="text-sm text-blue-600">Translating all fields to all languages...</div>}
-              <div className="flex gap-2 pt-2">
-                <Button variant="secondary" className="rounded-2xl" onClick={onCancel} disabled={saving || translating}>Cancel</Button>
-                <Button className="rounded-2xl" onClick={save} disabled={saving || translating}>
-                  {saving ? 'Saving...' : 'Save changes'}
-                </Button>
-              </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="plant-image">Image URL</Label>
+                  <Input id="plant-image" autoComplete="off" value={imageUrl} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setImageUrl(e.target.value)} placeholder="https://example.com/image.jpg" />
+                </div>
+                {editLanguage === 'en' && (
+                  <div className="flex items-center justify-between mb-4 p-4 rounded-xl border bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-950/20 dark:to-blue-950/20 dark:border-purple-800/30">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 font-semibold text-purple-900 dark:text-purple-200 mb-1">
+                        <Sparkles className="h-5 w-5" />
+                        AI Assistant
+                      </div>
+                      <p className="text-sm text-purple-700 dark:text-purple-300">
+                        Let AI fill in all the advanced fields based on the plant name.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      onClick={handleAiFill}
+                      disabled={aiFilling || !name.trim() || saving || translating}
+                      className="rounded-2xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white border-0 shadow-lg"
+                    >
+                      {aiFilling ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Filling...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="h-4 w-4 mr-2" />
+                          Fill with AI
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )}
+                <CompleteAdvancedForm
+                  identifiers={identifiers}
+                  setIdentifiers={setIdentifiers}
+                  traits={traits}
+                  setTraits={setTraits}
+                  dimensions={dimensions}
+                  setDimensions={setDimensions}
+                  phenology={phenology}
+                  setPhenology={setPhenology}
+                  environment={environment}
+                  setEnvironment={setEnvironment}
+                  care={care}
+                  setCare={setCare}
+                  propagation={propagation}
+                  setPropagation={setPropagation}
+                  usage={usage}
+                  setUsage={setUsage}
+                  ecology={ecology}
+                  setEcology={setEcology}
+                  commerce={commerce}
+                  setCommerce={setCommerce}
+                  problems={problems}
+                  setProblems={setProblems}
+                  planting={planting}
+                  setPlanting={setPlanting}
+                  meta={meta}
+                  setMeta={setMeta}
+                />
+                {ok && <div className="text-sm text-green-600">{ok}</div>}
+                {translating && <div className="text-sm text-blue-600">Translating all fields to all languages...</div>}
+                {aiFilling && (
+                  <div className="text-sm text-purple-600 dark:text-purple-400 flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    AI is filling in the plant data...
+                  </div>
+                )}
+                <div className="flex gap-2 pt-2">
+                  <Button
+                    variant="secondary"
+                    className="rounded-2xl"
+                    onClick={onCancel}
+                    disabled={saving || translating || aiFilling}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    className="rounded-2xl"
+                    onClick={save}
+                    disabled={saving || translating || aiFilling}
+                  >
+                    {saving ? 'Saving...' : 'Save changes'}
+                  </Button>
+                </div>
               </>
             )}
           </form>
