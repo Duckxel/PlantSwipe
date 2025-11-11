@@ -5,21 +5,66 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY')
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions'
 
+const defaultAllowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:5174',
+  'https://dev01.aphylia.app',
+]
+
+const envAllowedOrigins = (Deno.env.get('ALLOWED_ORIGINS') || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean)
+
+const allowList = new Set([...defaultAllowedOrigins, ...envAllowedOrigins])
+
+const baseCorsHeaders: Record<string, string> = {
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Max-Age': '86400',
+}
+
+function getCorsHeaders(req: Request) {
+  const origin = req.headers.get('origin') ?? ''
+  const allowOrigin = allowList.has('*')
+    ? '*'
+    : allowList.has(origin)
+      ? origin
+      : ''
+
+  if (!allowOrigin) {
+    return { ...baseCorsHeaders }
+  }
+
+  return {
+    ...baseCorsHeaders,
+    'Access-Control-Allow-Origin': allowOrigin,
+  }
+}
+
 serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req)
+
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
+  }
+
   try {
     const { plantName, schema } = await req.json()
 
     if (!plantName) {
       return new Response(
         JSON.stringify({ error: 'Plant name is required' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
     if (!OPENAI_API_KEY) {
       return new Response(
         JSON.stringify({ error: 'OpenAI API key not configured' }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
@@ -82,7 +127,7 @@ Fill in as much accurate information as possible for "${plantName}". Return ONLY
     if (!content) {
       return new Response(
         JSON.stringify({ error: 'No content in AI response' }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
@@ -106,14 +151,14 @@ Fill in as much accurate information as possible for "${plantName}". Return ONLY
 
     return new Response(
       JSON.stringify({ success: true, data: plantData }),
-      { headers: { 'Content-Type': 'application/json' } }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
   } catch (error) {
     console.error('Error:', error)
     return new Response(
       JSON.stringify({ error: error.message }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
 })
