@@ -2012,10 +2012,10 @@ export const AdminPage: React.FC = () => {
               onClick={() => setActiveTab('overview')}
               className={`flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-sm transition-all duration-200 ${
                 activeTab === 'overview'
-                  ? 'text-white shadow-md'
+                  ? 'bg-white dark:bg-white text-black dark:text-black shadow-md'
                   : 'text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]'
               }`}
-              style={activeTab === 'overview' ? { backgroundColor: accentColor, boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
+              style={activeTab === 'overview' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
             >
               <LayoutDashboard className="h-4 w-4" />
               <span>Overview</span>
@@ -2024,10 +2024,10 @@ export const AdminPage: React.FC = () => {
               onClick={() => setActiveTab('members')}
               className={`flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-sm transition-all duration-200 ${
                 activeTab === 'members'
-                  ? 'text-white shadow-md'
+                  ? 'bg-white dark:bg-white text-black dark:text-black shadow-md'
                   : 'text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]'
               }`}
-              style={activeTab === 'members' ? { backgroundColor: accentColor, boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
+              style={activeTab === 'members' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
             >
               <Users className="h-4 w-4" />
               <span>Members</span>
@@ -2036,10 +2036,10 @@ export const AdminPage: React.FC = () => {
               onClick={() => setActiveTab('requests')}
               className={`flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-sm transition-all duration-200 ${
                 activeTab === 'requests'
-                  ? 'text-white shadow-md'
+                  ? 'bg-white dark:bg-white text-black dark:text-black shadow-md'
                   : 'text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]'
               }`}
-              style={activeTab === 'requests' ? { backgroundColor: accentColor, boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
+              style={activeTab === 'requests' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
             >
               <FileText className="h-4 w-4" />
               <span>Requests</span>
@@ -2048,10 +2048,10 @@ export const AdminPage: React.FC = () => {
               onClick={() => setActiveTab('admin_logs')}
               className={`flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-sm transition-all duration-200 ${
                 activeTab === 'admin_logs'
-                  ? 'text-white shadow-md'
+                  ? 'bg-white dark:bg-white text-black dark:text-black shadow-md'
                   : 'text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]'
               }`}
-              style={activeTab === 'admin_logs' ? { backgroundColor: accentColor, boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
+              style={activeTab === 'admin_logs' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
             >
               <ScrollText className="h-4 w-4" />
               <span>Logs</span>
@@ -2076,10 +2076,10 @@ export const AdminPage: React.FC = () => {
             onClick={() => setActiveTab('overview')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 ${
               activeTab === 'overview'
-                ? 'text-white shadow-md'
+                ? 'bg-white dark:bg-white text-black dark:text-black shadow-md'
                 : 'text-stone-700 dark:text-stone-300 hover:bg-stone-100/50 dark:hover:bg-[#2d2d30]/50'
             }`}
-            style={activeTab === 'overview' ? { backgroundColor: accentColor, boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
+            style={activeTab === 'overview' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
           >
             <LayoutDashboard className={`h-5 w-5 ${activeTab === 'overview' ? '' : 'opacity-70'}`} />
             <span className="font-medium">Overview</span>
@@ -2088,10 +2088,10 @@ export const AdminPage: React.FC = () => {
             onClick={() => setActiveTab('members')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 ${
               activeTab === 'members'
-                ? 'text-white shadow-md'
+                ? 'bg-white dark:bg-white text-black dark:text-black shadow-md'
                 : 'text-stone-700 dark:text-stone-300 hover:bg-stone-100/50 dark:hover:bg-[#2d2d30]/50'
             }`}
-            style={activeTab === 'members' ? { backgroundColor: accentColor, boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
+            style={activeTab === 'members' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
           >
             <Users className={`h-5 w-5 ${activeTab === 'members' ? '' : 'opacity-70'}`} />
             <span className="font-medium">Members</span>
@@ -2100,10 +2100,10 @@ export const AdminPage: React.FC = () => {
             onClick={() => setActiveTab('requests')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 ${
               activeTab === 'requests'
-                ? 'text-white shadow-md'
+                ? 'bg-white dark:bg-white text-black dark:text-black shadow-md'
                 : 'text-stone-700 dark:text-stone-300 hover:bg-stone-100/50 dark:hover:bg-[#2d2d30]/50'
             }`}
-            style={activeTab === 'requests' ? { backgroundColor: accentColor, boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
+            style={activeTab === 'requests' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
           >
             <FileText className={`h-5 w-5 ${activeTab === 'requests' ? '' : 'opacity-70'}`} />
             <span className="font-medium">Requests</span>
@@ -2112,10 +2112,10 @@ export const AdminPage: React.FC = () => {
             onClick={() => setActiveTab('admin_logs')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 ${
               activeTab === 'admin_logs'
-                ? 'text-white shadow-md'
+                ? 'bg-white dark:bg-white text-black dark:text-black shadow-md'
                 : 'text-stone-700 dark:text-stone-300 hover:bg-stone-100/50 dark:hover:bg-[#2d2d30]/50'
             }`}
-            style={activeTab === 'admin_logs' ? { backgroundColor: accentColor, boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
+            style={activeTab === 'admin_logs' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
           >
             <ScrollText className={`h-5 w-5 ${activeTab === 'admin_logs' ? '' : 'opacity-70'}`} />
             <span className="font-medium">Admin Logs</span>
