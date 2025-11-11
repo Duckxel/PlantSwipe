@@ -669,6 +669,12 @@ export const AdminPage: React.FC = () => {
   const [plantRequestsRefreshing, setPlantRequestsRefreshing] = React.useState<boolean>(false)
   const [plantRequestsError, setPlantRequestsError] = React.useState<string | null>(null)
   const [plantRequestsInitialized, setPlantRequestsInitialized] = React.useState<boolean>(false)
+
+  // Count unique requested plants
+  const uniqueRequestedPlantsCount = React.useMemo(() => {
+    const uniqueNames = new Set(plantRequests.map(req => req.plant_name_normalized).filter(Boolean))
+    return uniqueNames.size
+  }, [plantRequests])
   const [completingRequestId, setCompletingRequestId] = React.useState<string | null>(null)
   const [requestSearchQuery, setRequestSearchQuery] = React.useState<string>('')
   const [infoDialogOpen, setInfoDialogOpen] = React.useState<boolean>(false)
@@ -2043,6 +2049,11 @@ export const AdminPage: React.FC = () => {
             >
               <FileText className="h-4 w-4" />
               <span>Requests</span>
+              {uniqueRequestedPlantsCount > 0 && (
+                <span className="ml-1 px-1.5 py-0.5 text-xs font-semibold rounded-full bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-300">
+                  {uniqueRequestedPlantsCount}
+                </span>
+              )}
             </button>
             <button
               onClick={() => setActiveTab('admin_logs')}
@@ -2107,6 +2118,11 @@ export const AdminPage: React.FC = () => {
           >
             <FileText className={`h-5 w-5 ${activeTab === 'requests' ? '' : 'opacity-70'}`} />
             <span className="font-medium">Requests</span>
+            {uniqueRequestedPlantsCount > 0 && (
+              <span className="ml-auto px-2 py-0.5 text-xs font-semibold rounded-full bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-300">
+                {uniqueRequestedPlantsCount}
+              </span>
+            )}
           </button>
           <button
             onClick={() => setActiveTab('admin_logs')}
