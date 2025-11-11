@@ -2,8 +2,9 @@ import React, { useMemo, useState, lazy, Suspense } from "react";
 import { Routes, Route, useLocation } from "react-router-dom";
 import { useLanguageNavigate, usePathWithoutLanguage } from "@/lib/i18nRouting";
 import { Navigate } from "@/components/i18n/Navigate";
+import { Link } from "@/components/i18n/Link";
 import { useMotionValue, animate } from "framer-motion";
-import { Search, ChevronDown, ChevronUp, ListFilter, MessageSquarePlus } from "lucide-react";
+import { Search, ChevronDown, ChevronUp, ListFilter, MessageSquarePlus, Plus, Leaf } from "lucide-react";
 // Sheet is used for plant info overlay
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
@@ -472,8 +473,28 @@ export default function PlantSwipe() {
     onLogout={async () => { await signOut(); navigate('/') }}
   />
 
+      {/* Mobile Logo and App Name - Only on Discovery page (exact path match, no other routes) */}
+      {pathWithoutLang === "/" && location.pathname.replace(/^\/[a-z]{2}(-[A-Z]{2})?/, '') === "/" && (
+        <div className="md:hidden flex flex-col items-center justify-center mb-6 mt-4">
+          <div className="h-12 w-12 rounded-2xl bg-green-200 dark:bg-green-800 flex items-center justify-center shadow mb-2">
+            <Leaf className="h-6 w-6 text-green-800 dark:text-green-200" />
+          </div>
+          <Link
+            to="/"
+            className="text-2xl font-semibold tracking-tight no-underline text-black dark:text-white hover:text-black dark:hover:text-white visited:text-black dark:visited:text-white active:text-black dark:active:text-white focus:text-black dark:focus:text-white focus-visible:outline-none outline-none hover:opacity-90"
+            style={{ WebkitTapHighlightColor: 'transparent' }}
+          >
+            {t('common.appName')}
+          </Link>
+        </div>
+      )}
+
       {/* Mobile bottom nav (hide Create on phones) */}
-      <MobileNavBar canCreate={false} />
+      <MobileNavBar 
+        canCreate={false} 
+        onProfile={() => navigate('/profile')}
+        onLogout={async () => { await signOut(); navigate('/') }}
+      />
 
       {/* Layout: grid only when search view (to avoid narrow column in other views) */}
       <div className={`max-w-6xl mx-auto mt-6 ${currentView === 'search' ? 'lg:grid lg:grid-cols-[260px_1fr] lg:gap-10' : ''}`}>
@@ -513,7 +534,7 @@ export default function PlantSwipe() {
                 />
               </div>
               {user && (
-                <div className="mt-2">
+                <div className="mt-2 space-y-2">
                   <Button
                     variant="secondary"
                     className="w-full rounded-2xl"
@@ -522,6 +543,16 @@ export default function PlantSwipe() {
                     <MessageSquarePlus className="h-4 w-4 mr-2" />
                     {t('requestPlant.button') || 'Request Plant'}
                   </Button>
+                  {profile?.is_admin && (
+                    <Button
+                      variant="default"
+                      className="w-full rounded-2xl"
+                      onClick={() => navigate('/create')}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      {t('common.addPlant')}
+                    </Button>
+                  )}
                 </div>
               )}
             </div>

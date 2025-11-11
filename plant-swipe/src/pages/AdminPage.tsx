@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { LazyCharts, ChartSuspense } from '@/components/admin/LazyChart'
 import { useTheme } from '@/context/ThemeContext'
 import { useAuth } from '@/context/AuthContext'
+import { getAccentOption } from '@/lib/accent'
 // Re-export for convenience
 const {
   ResponsiveContainer,
@@ -24,8 +25,9 @@ const {
   Pie,
   Cell,
 } = LazyCharts
-import { RefreshCw, Server, Database, Github, ExternalLink, ShieldCheck, ShieldX, UserSearch, AlertTriangle, Gavel, Search, ChevronDown, GitBranch, Trash2, EyeOff, Copy, ArrowUpRight, Info } from "lucide-react"
+import { RefreshCw, Server, Database, Github, ExternalLink, ShieldCheck, ShieldX, UserSearch, AlertTriangle, Gavel, Search, ChevronDown, GitBranch, Trash2, EyeOff, Copy, ArrowUpRight, Info, Plus, LayoutDashboard, Users, FileText, ScrollText } from "lucide-react"
 import { supabase } from '@/lib/supabaseClient'
+import { CreatePlantPage } from '@/pages/CreatePlantPage'
 import {
   Dialog,
   DialogTrigger,
@@ -40,8 +42,40 @@ import {
 export const AdminPage: React.FC = () => {
   const navigate = useNavigate()
   const { effectiveTheme } = useTheme()
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
   const isDark = effectiveTheme === 'dark'
+  
+  // Get user's accent color (more subtle version)
+  const accentColor = React.useMemo(() => {
+    const accentKey = (profile as any)?.accent_key || 'emerald'
+    const accentOption = getAccentOption(accentKey as any)
+    if (!accentOption) return 'hsl(142 72% 40%)'
+    // Parse HSL and make it lighter/more subtle
+    const hslMatch = accentOption.hsl.match(/(\d+)\s+(\d+)%\s+(\d+)%/)
+    if (hslMatch) {
+      const [, h, s, l] = hslMatch
+      // Reduce saturation by 20% and increase lightness by 15% for subtlety
+      const newS = Math.max(30, parseInt(s) - 20)
+      const newL = Math.min(60, parseInt(l) + 15)
+      return `hsl(${h} ${newS}% ${newL}%)`
+    }
+    return `hsl(${accentOption.hsl})`
+  }, [profile])
+  
+  // Get accent color with opacity for shadows
+  const accentColorWithOpacity = React.useMemo(() => {
+    const accentKey = (profile as any)?.accent_key || 'emerald'
+    const accentOption = getAccentOption(accentKey as any)
+    if (!accentOption) return 'hsl(142 72% 40% / 0.2)'
+    const hslMatch = accentOption.hsl.match(/(\d+)\s+(\d+)%\s+(\d+)%/)
+    if (hslMatch) {
+      const [, h, s, l] = hslMatch
+      const newS = Math.max(30, parseInt(s) - 20)
+      const newL = Math.min(60, parseInt(l) + 15)
+      return `hsl(${h} ${newS}% ${newL}% / 0.15)`
+    }
+    return `hsl(${accentOption.hsl} / 0.2)`
+  }, [profile])
   const shortenMiddle = React.useCallback((value: string, maxChars: number = 28): string => {
     try {
       const s = String(value || '')
@@ -635,12 +669,21 @@ export const AdminPage: React.FC = () => {
   const [plantRequestsRefreshing, setPlantRequestsRefreshing] = React.useState<boolean>(false)
   const [plantRequestsError, setPlantRequestsError] = React.useState<string | null>(null)
   const [plantRequestsInitialized, setPlantRequestsInitialized] = React.useState<boolean>(false)
+
+  // Count unique requested plants
+  const uniqueRequestedPlantsCount = React.useMemo(() => {
+    const uniqueNames = new Set(plantRequests.map(req => req.plant_name_normalized).filter(Boolean))
+    return uniqueNames.size
+  }, [plantRequests])
   const [completingRequestId, setCompletingRequestId] = React.useState<string | null>(null)
   const [requestSearchQuery, setRequestSearchQuery] = React.useState<string>('')
   const [infoDialogOpen, setInfoDialogOpen] = React.useState<boolean>(false)
   const [selectedRequestInfo, setSelectedRequestInfo] = React.useState<PlantRequestRow | null>(null)
   const [requestUsersLoading, setRequestUsersLoading] = React.useState<boolean>(false)
   const [requestUsers, setRequestUsers] = React.useState<Array<{ id: string; display_name: string | null; email: string | null }>>([])
+  const [createPlantDialogOpen, setCreatePlantDialogOpen] = React.useState<boolean>(false)
+  const [createPlantRequestId, setCreatePlantRequestId] = React.useState<string | null>(null)
+  const [createPlantName, setCreatePlantName] = React.useState<string>('')
 
   const loadPlantRequests = React.useCallback(async ({ initial = false }: { initial?: boolean } = {}) => {
     setPlantRequestsError(null)
@@ -742,18 +785,30 @@ export const AdminPage: React.FC = () => {
       // Fetch profiles for these user IDs
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, display_name, email')
+        .select('id, display_name')
         .in('id', userIds)
 
       if (profilesError) throw new Error(profilesError.message)
 
-      const users = (profilesData ?? []).map((profile: any) => ({
-        id: String(profile.id),
-        display_name: profile?.display_name ? String(profile.display_name) : null,
-        email: profile?.email ? String(profile.email) : null,
-      }))
+      // Fetch emails for each user using RPC function
+      const usersWithEmails = await Promise.all(
+        (profilesData ?? []).map(async (profile: any) => {
+          let email: string | null = null
+          try {
+            const { data: emailData } = await supabase.rpc('get_friend_email', { _friend_id: profile.id })
+            email = emailData || null
+          } catch (err) {
+            console.warn('Failed to fetch email for user:', profile.id, err)
+          }
+          return {
+            id: String(profile.id),
+            display_name: profile?.display_name ? String(profile.display_name) : null,
+            email: email,
+          }
+        })
+      )
 
-      setRequestUsers(users)
+      setRequestUsers(usersWithEmails)
     } catch (err) {
       console.error('Failed to load request users:', err)
       setRequestUsers([])
@@ -795,6 +850,28 @@ export const AdminPage: React.FC = () => {
       setCompletingRequestId(null)
     }
   }, [completingRequestId, loadPlantRequests, supabase, user?.id])
+
+  const handleOpenCreatePlantDialog = React.useCallback((req: PlantRequestRow) => {
+    setCreatePlantRequestId(req.id)
+    setCreatePlantName(req.plant_name)
+    setCreatePlantDialogOpen(true)
+  }, [])
+
+  const handlePlantCreated = React.useCallback(async () => {
+    // Optionally complete the request after plant is created
+    if (createPlantRequestId) {
+      try {
+        await completePlantRequest(createPlantRequestId)
+      } catch (err) {
+        console.error('Failed to complete request after creating plant:', err)
+      }
+    }
+    setCreatePlantDialogOpen(false)
+    setCreatePlantRequestId(null)
+    setCreatePlantName('')
+    // Refresh the requests list
+    await loadPlantRequests({ initial: false })
+  }, [createPlantRequestId, completePlantRequest, loadPlantRequests])
 
   // Presence fallback removed by request: rely on DB-backed API only
 
@@ -1452,6 +1529,14 @@ export const AdminPage: React.FC = () => {
 
   // ---- Members tab state ----
   const [activeTab, setActiveTab] = React.useState<'overview' | 'members' | 'requests' | 'admin_logs'>('overview')
+  
+  // Load plant requests on mount to show count in menu
+  React.useEffect(() => {
+    if (!plantRequestsInitialized) {
+      loadPlantRequests({ initial: true })
+    }
+  }, [plantRequestsInitialized, loadPlantRequests])
+  
   React.useEffect(() => {
     if (activeTab !== 'requests' || plantRequestsInitialized) return
     loadPlantRequests({ initial: true })
@@ -1928,67 +2013,182 @@ export const AdminPage: React.FC = () => {
   }, [activeTab])
 
   return (
-    <div className="max-w-3xl mx-auto mt-8 px-4 md:px-0">
-      {/* Connection Status Banner - Show when APIs are down */}
-      {(apiProbe.ok === false || adminProbe.ok === false || dbProbe.ok === false) && (
-        <Card className="rounded-2xl mb-4 border-red-500 dark:border-red-500 bg-red-50 dark:bg-red-950/20">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0" />
-              <div className="flex-1">
-                <div className="text-sm font-medium text-red-900 dark:text-red-100">Connection Issues Detected</div>
-                <div className="text-xs text-red-700 dark:text-red-300 mt-1">
-                  {!apiProbe.ok && 'API '}
-                  {!adminProbe.ok && 'Admin API '}
-                  {!dbProbe.ok && 'Database '}
-                  {(!apiProbe.ok || !adminProbe.ok || !dbProbe.ok) && 'may be unavailable. Some features may not work correctly.'}
-                </div>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="rounded-xl border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30"
-                onClick={refreshHealth}
-                disabled={healthRefreshing}
-              >
-                <RefreshCw className={`h-4 w-4 mr-1 ${healthRefreshing ? 'animate-spin' : ''}`} />
-                Retry
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-      
-      <Card className="rounded-3xl">
-        <CardContent className="p-6 md:p-8 space-y-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div className="flex flex-col md:flex-row min-h-screen bg-stone-50 dark:bg-[#1e1e1e] rounded-t-3xl mt-4 md:mt-0">
+      {/* Mobile Navigation */}
+      <div className="md:hidden w-full border-b border-stone-200/50 dark:border-[#3e3e42]/50 bg-stone-50/80 dark:bg-[#1e1e1e]/80 backdrop-blur-sm sticky top-0 z-10 rounded-b-3xl">
+        <div className="p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <ShieldCheck className="h-5 w-5" style={{ color: accentColor }} />
+            <div className="text-sm font-semibold">Admin Panel</div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => setActiveTab('overview')}
+              className={`flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-sm transition-all duration-200 ${
+                activeTab === 'overview'
+                  ? 'bg-white dark:bg-white text-black dark:text-black shadow-md'
+                  : 'text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]'
+              }`}
+              style={activeTab === 'overview' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
+            >
+              <LayoutDashboard className="h-4 w-4" />
+              <span>Overview</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('members')}
+              className={`flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-sm transition-all duration-200 ${
+                activeTab === 'members'
+                  ? 'bg-white dark:bg-white text-black dark:text-black shadow-md'
+                  : 'text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]'
+              }`}
+              style={activeTab === 'members' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
+            >
+              <Users className="h-4 w-4" />
+              <span>Members</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('requests')}
+              className={`flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-sm transition-all duration-200 ${
+                activeTab === 'requests'
+                  ? 'bg-white dark:bg-white text-black dark:text-black shadow-md'
+                  : 'text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]'
+              }`}
+              style={activeTab === 'requests' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
+            >
+              <FileText className="h-4 w-4" />
+              <span>Requests</span>
+              {uniqueRequestedPlantsCount > 0 && (
+                <span className="ml-1 px-1.5 py-0.5 text-xs font-semibold rounded-full bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-300">
+                  {uniqueRequestedPlantsCount}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => setActiveTab('admin_logs')}
+              className={`flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-sm transition-all duration-200 ${
+                activeTab === 'admin_logs'
+                  ? 'bg-white dark:bg-white text-black dark:text-black shadow-md'
+                  : 'text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]'
+              }`}
+              style={activeTab === 'admin_logs' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
+            >
+              <ScrollText className="h-4 w-4" />
+              <span>Logs</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Sidebar Navigation - Desktop Only */}
+      <aside className="hidden md:flex w-64 border-r border-stone-200/50 dark:border-[#3e3e42]/50 bg-stone-50/80 dark:bg-[#1e1e1e]/80 backdrop-blur-sm flex-shrink-0 flex-col m-4 rounded-3xl">
+        <div className="p-6 border-b border-stone-200/50 dark:border-[#3e3e42]/50">
+          <div className="flex items-center gap-3">
+            <ShieldCheck className="h-6 w-6" style={{ color: accentColor }} />
             <div>
-              <div className="text-2xl font-semibold tracking-tight">Admin Controls</div>
-              <div className="text-sm opacity-60 mt-1">Admin actions: monitor and manage infrastructure.</div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-                <Button
-                  variant={activeTab === 'overview' ? 'default' : 'secondary'}
-                  className="rounded-2xl text-sm md:text-base px-3 md:px-4 py-2"
-                  onClick={() => setActiveTab('overview')}
-                >Overview</Button>
-                <Button
-                  variant={activeTab === 'members' ? 'default' : 'secondary'}
-                  className="rounded-2xl text-sm md:text-base px-3 md:px-4 py-2"
-                  onClick={() => setActiveTab('members')}
-                >Members</Button>
-                <Button
-                  variant={activeTab === 'requests' ? 'default' : 'secondary'}
-                  className="rounded-2xl text-sm md:text-base px-3 md:px-4 py-2"
-                  onClick={() => setActiveTab('requests')}
-                >Requests</Button>
-                <Button
-                  variant={activeTab === 'admin_logs' ? 'default' : 'secondary'}
-                  className="rounded-2xl text-sm md:text-base px-3 md:px-4 py-2"
-                  onClick={() => setActiveTab('admin_logs')}
-                >Admin Logs</Button>
+              <div className="text-lg font-semibold">Admin Panel</div>
+              <div className="text-xs opacity-60">Control Center</div>
             </div>
           </div>
+        </div>
+        <nav className="p-4 space-y-2 flex-1 overflow-y-auto">
+          <button
+            onClick={() => setActiveTab('overview')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 ${
+              activeTab === 'overview'
+                ? 'bg-white dark:bg-white text-black dark:text-black shadow-md'
+                : 'text-stone-700 dark:text-stone-300 hover:bg-stone-100/50 dark:hover:bg-[#2d2d30]/50'
+            }`}
+            style={activeTab === 'overview' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
+          >
+            <LayoutDashboard className={`h-5 w-5 ${activeTab === 'overview' ? '' : 'opacity-70'}`} />
+            <span className="font-medium">Overview</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('members')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 ${
+              activeTab === 'members'
+                ? 'bg-white dark:bg-white text-black dark:text-black shadow-md'
+                : 'text-stone-700 dark:text-stone-300 hover:bg-stone-100/50 dark:hover:bg-[#2d2d30]/50'
+            }`}
+            style={activeTab === 'members' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
+          >
+            <Users className={`h-5 w-5 ${activeTab === 'members' ? '' : 'opacity-70'}`} />
+            <span className="font-medium">Members</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('requests')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 ${
+              activeTab === 'requests'
+                ? 'bg-white dark:bg-white text-black dark:text-black shadow-md'
+                : 'text-stone-700 dark:text-stone-300 hover:bg-stone-100/50 dark:hover:bg-[#2d2d30]/50'
+            }`}
+            style={activeTab === 'requests' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
+          >
+            <FileText className={`h-5 w-5 ${activeTab === 'requests' ? '' : 'opacity-70'}`} />
+            <span className="font-medium">Requests</span>
+            {uniqueRequestedPlantsCount > 0 && (
+              <span className="ml-auto px-2 py-0.5 text-xs font-semibold rounded-full bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-300">
+                {uniqueRequestedPlantsCount}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab('admin_logs')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 ${
+              activeTab === 'admin_logs'
+                ? 'bg-white dark:bg-white text-black dark:text-black shadow-md'
+                : 'text-stone-700 dark:text-stone-300 hover:bg-stone-100/50 dark:hover:bg-[#2d2d30]/50'
+            }`}
+            style={activeTab === 'admin_logs' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
+          >
+            <ScrollText className={`h-5 w-5 ${activeTab === 'admin_logs' ? '' : 'opacity-70'}`} />
+            <span className="font-medium">Admin Logs</span>
+          </button>
+        </nav>
+      </aside>
+
+      {/* Main Content Area */}
+      <main className="flex-1 overflow-y-auto w-full">
+        <div className="flex justify-center w-full">
+          <div className="w-full max-w-5xl mt-4 md:mt-8 px-4 md:px-6 lg:px-8 pb-8">
+          {/* Connection Status Banner - Show when APIs are down */}
+          {(apiProbe.ok === false || adminProbe.ok === false || dbProbe.ok === false) && (
+            <Card className="rounded-2xl mb-4 border-red-500 dark:border-red-500 bg-red-50 dark:bg-red-950/20">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0" />
+                  <div className="flex-1">
+                    <div className="text-sm font-medium text-red-900 dark:text-red-100">Connection Issues Detected</div>
+                    <div className="text-xs text-red-700 dark:text-red-300 mt-1">
+                      {!apiProbe.ok && 'API '}
+                      {!adminProbe.ok && 'Admin API '}
+                      {!dbProbe.ok && 'Database '}
+                      {(!apiProbe.ok || !adminProbe.ok || !dbProbe.ok) && 'may be unavailable. Some features may not work correctly.'}
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-xl border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30"
+                    onClick={refreshHealth}
+                    disabled={healthRefreshing}
+                  >
+                    <RefreshCw className={`h-4 w-4 mr-1 ${healthRefreshing ? 'animate-spin' : ''}`} />
+                    Retry
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          
+          <Card className="rounded-3xl">
+            <CardContent className="p-6 md:p-8 space-y-6">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                  <div className="text-2xl font-semibold tracking-tight">Admin Controls</div>
+                  <div className="text-sm opacity-60 mt-1">Admin actions: monitor and manage infrastructure.</div>
+                </div>
+              </div>
 
           {/* Overview Tab */}
           {activeTab === 'overview' && (
@@ -2794,6 +2994,14 @@ export const AdminPage: React.FC = () => {
                                   {req.request_count} {req.request_count === 1 ? 'request' : 'requests'}
                                 </Badge>
                                 <Button
+                                  variant="default"
+                                  className="rounded-2xl"
+                                  onClick={() => handleOpenCreatePlantDialog(req)}
+                                >
+                                  <Plus className="h-4 w-4 mr-2" />
+                                  Add Plant
+                                </Button>
+                                <Button
                                   variant="outline"
                                   className="rounded-2xl"
                                   onClick={() => completePlantRequest(req.id)}
@@ -2861,6 +3069,29 @@ export const AdminPage: React.FC = () => {
                       Close
                     </Button>
                   </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
+              {/* Create Plant Dialog */}
+              <Dialog open={createPlantDialogOpen} onOpenChange={setCreatePlantDialogOpen}>
+                <DialogContent className="rounded-2xl max-w-4xl max-h-[90vh] overflow-y-auto p-0">
+                  <DialogHeader className="px-6 pt-6 pb-4">
+                    <DialogTitle>Add Plant from Request</DialogTitle>
+                    <DialogDescription>
+                      Create a new plant entry for "{createPlantName}". The plant name will be pre-filled.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="px-6 pb-6 overflow-y-auto">
+                    <CreatePlantPage
+                      onCancel={() => {
+                        setCreatePlantDialogOpen(false)
+                        setCreatePlantRequestId(null)
+                        setCreatePlantName('')
+                      }}
+                      onSaved={handlePlantCreated}
+                      initialName={createPlantName}
+                    />
+                  </div>
                 </DialogContent>
               </Dialog>
             </div>
@@ -3513,6 +3744,9 @@ export const AdminPage: React.FC = () => {
         </CardContent>
       </Card>
 
+          </div>
+        </div>
+      </main>
     </div>
   )
 }

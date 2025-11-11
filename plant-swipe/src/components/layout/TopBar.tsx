@@ -1,7 +1,7 @@
 import React from "react"
 import { createPortal } from "react-dom"
 import { Link } from "@/components/i18n/Link"
-import { Leaf, Sprout, Sparkles, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Plus, Shield, HeartHandshake, Settings } from "lucide-react"
+import { Leaf, Sprout, Sparkles, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Shield, HeartHandshake, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useTranslation } from "react-i18next"
 
@@ -66,7 +66,7 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
 
   const label = displayName && displayName.trim().length > 0 ? displayName : t('common.profile')
   return (
-    <header className="max-w-6xl mx-auto w-full flex items-center gap-3 px-2 overflow-x-hidden">
+    <header className="hidden md:flex max-w-6xl mx-auto w-full items-center gap-3 px-2 overflow-x-hidden">
       <div className="h-10 w-10 rounded-2xl bg-green-200 dark:bg-green-800 flex items-center justify-center shadow">
         <Leaf className="h-5 w-5 text-green-800 dark:text-green-200" />
       </div>
@@ -83,11 +83,6 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
         <NavPill to="/search" isActive={pathWithoutLang.startsWith('/search')} icon={<Search className="h-4 w-4" />} label={t('common.encyclopedia')} />
       </nav>
   <div className="ml-auto flex items-center gap-2 flex-wrap sm:flex-nowrap min-w-0 justify-end">
-        {user && profile?.is_admin && (
-          <Button className="rounded-2xl" variant="default" onClick={() => navigate('/create')}>
-            <Plus className="h-4 w-4 sm:mr-2" /> <span className="hidden sm:inline">{t('common.addPlant')}</span>
-          </Button>
-        )}
         {!user ? (
           <>
             <Button className="rounded-2xl" variant="secondary" onClick={openSignup}>
