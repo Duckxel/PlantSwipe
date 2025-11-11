@@ -607,56 +607,7 @@ fi
 $SUDO rm -f /etc/nginx/sites-available/plant-swipe || true
 $SUDO rm -f /etc/nginx/sites-enabled/plant-swipe || true
 
-log "Testing nginx configuration…"
-# Test nginx config, but allow SSL errors if certificates don't exist yet (we'll set them up next)
-if ! $SUDO nginx -t 2>&1 | tee /tmp/nginx-test.log; then
-  # Check if error is about missing SSL certificates
-  if grep -q "ssl_certificate.*is defined" /tmp/nginx-test.log; then
-    if [[ "$WANT_SSL" =~ ^[Yy]$ ]]; then
-      ssl_repaired=false
-      primary_domain="$(get_primary_domain_from_domain_json "$REPO_DIR/domain.json")"
-      if [[ -z "$primary_domain" ]]; then
-        for d in /etc/letsencrypt/live/*; do
-          [[ -d "$d" ]] || continue
-          primary_domain="$(basename "$d")"
-          break
-        done
-      fi
-      if [[ -n "$primary_domain" ]]; then
-        if ensure_nginx_ssl_directives "$primary_domain"; then
-          if $SUDO nginx -t >/tmp/nginx-test.log 2>&1; then
-            log "Nginx config is valid with existing SSL certificate for $primary_domain"
-            ssl_repaired=true
-          fi
-        fi
-      fi
-
-      if [[ "$ssl_repaired" != "true" ]]; then
-        log "[WARN] Nginx config has SSL listeners but no certificates yet."
-        log "[INFO] Temporarily removing SSL listeners so nginx can start for certificate validation…"
-        # Temporarily remove SSL listeners so nginx can start
-        $SUDO sed -i.bak -e '/listen 443 ssl;/d' -e '/listen \[::\]:443 ssl;/d' "$NGINX_SITE_AVAIL"
-        # Test again
-        if $SUDO nginx -t; then
-          log "Nginx config is valid without SSL listeners (temporary)"
-        else
-          log "[ERROR] Nginx configuration still invalid after removing SSL listeners"
-          $SUDO mv "$NGINX_SITE_AVAIL.bak" "$NGINX_SITE_AVAIL" || true
-          exit 1
-        fi
-      fi
-    else
-      log "[ERROR] Nginx config has SSL listeners but SSL was declined. This shouldn't happen."
-      exit 1
-    fi
-  else
-    log "[ERROR] Nginx configuration test failed. Fix errors before continuing."
-    exit 1
-  fi
-fi
-
-# SSL Certificate setup using Let's Encrypt/Certbot
-
+# Helper utilities for SSL/Let's Encrypt reconciliation
 get_primary_domain_from_domain_json() {
   local domain_json="$1"
   [[ -f "$domain_json" ]] || { echo ""; return 0; }
@@ -720,6 +671,65 @@ ensure_nginx_ssl_directives() {
   return 0
 }
 
+log "Testing nginx configuration…"
+# Test nginx config, but allow SSL errors if certificates don't exist yet (we'll set them up next)
+if ! $SUDO nginx -t 2>&1 | tee /tmp/nginx-test.log; then
+  ensure_helper_functions_loaded=true
+  if ! declare -F get_primary_domain_from_domain_json >/dev/null 2>&1; then
+    ensure_helper_functions_loaded=false
+  fi
+  if ! declare -F ensure_nginx_ssl_directives >/dev/null 2>&1; then
+    ensure_helper_functions_loaded=false
+  fi
+
+  # Check if error is about missing SSL certificates
+  if grep -q "ssl_certificate.*is defined" /tmp/nginx-test.log; then
+    if [[ "$WANT_SSL" =~ ^[Yy]$ ]]; then
+      ssl_repaired=false
+      if [[ "$ensure_helper_functions_loaded" == "true" ]]; then
+        primary_domain="$(get_primary_domain_from_domain_json "$REPO_DIR/domain.json")"
+        if [[ -z "$primary_domain" ]]; then
+          for d in /etc/letsencrypt/live/*; do
+            [[ -d "$d" ]] || continue
+            primary_domain="$(basename "$d")"
+            break
+          done
+        fi
+        if [[ -n "$primary_domain" ]]; then
+          if ensure_nginx_ssl_directives "$primary_domain"; then
+            if $SUDO nginx -t >/tmp/nginx-test.log 2>&1; then
+              log "Nginx config is valid with existing SSL certificate for $primary_domain"
+              ssl_repaired=true
+            fi
+          fi
+        fi
+      fi
+
+      if [[ "$ssl_repaired" != "true" ]]; then
+        log "[WARN] Nginx config has SSL listeners but no certificates yet."
+        log "[INFO] Temporarily removing SSL listeners so nginx can start for certificate validation…"
+        # Temporarily remove SSL listeners so nginx can start
+        $SUDO sed -i.bak -e '/listen 443 ssl;/d' -e '/listen \[::\]:443 ssl;/d' "$NGINX_SITE_AVAIL"
+        # Test again
+        if $SUDO nginx -t; then
+          log "Nginx config is valid without SSL listeners (temporary)"
+        else
+          log "[ERROR] Nginx configuration still invalid after removing SSL listeners"
+          $SUDO mv "$NGINX_SITE_AVAIL.bak" "$NGINX_SITE_AVAIL" || true
+          exit 1
+        fi
+      fi
+    else
+      log "[ERROR] Nginx config has SSL listeners but SSL was declined. This shouldn't happen."
+      exit 1
+    fi
+  else
+    log "[ERROR] Nginx configuration test failed. Fix errors before continuing."
+    exit 1
+  fi
+fi
+
+# SSL Certificate setup using Let's Encrypt/Certbot
 setup_ssl_certificates() {
   local domain_json="$REPO_DIR/domain.json"
   local cert_info_json="$REPO_DIR/cert-info.json"
