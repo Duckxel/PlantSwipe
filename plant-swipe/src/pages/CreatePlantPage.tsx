@@ -256,6 +256,15 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
     }
     setSaving(true)
     try {
+      const careSunlightValue = environment?.sunExposure
+        ? (() => {
+            const exposure = String(environment.sunExposure).toLowerCase()
+            if (exposure.includes('full')) return 'High'
+            if (exposure.includes('partial sun')) return 'Medium'
+            return 'Low'
+          })()
+        : 'Low'
+
       const id = generateUUIDv4()
       const nameNorm = name.trim()
       const sciNorm = scientificName.trim()
@@ -293,6 +302,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
         rarity: meta?.rarity === 'common' ? 'Common' : meta?.rarity === 'uncommon' ? 'Uncommon' : meta?.rarity === 'rare' ? 'Rare' : meta?.rarity === 'very rare' ? 'Legendary' : rarity,
         meaning: meta?.funFact || meaning || null,
         image_url: imageUrl || null,
+        care_sunlight: careSunlightValue,
         care_water: 'Low',
         care_soil: environment?.soil?.texture?.join(', ') || careSoil || null,
         care_difficulty: care?.difficulty === 'easy' ? 'Easy' : care?.difficulty === 'moderate' ? 'Moderate' : care?.difficulty === 'advanced' ? 'Hard' : careDifficulty,
