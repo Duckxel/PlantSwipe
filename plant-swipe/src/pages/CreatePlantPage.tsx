@@ -140,6 +140,14 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
     setOk(null)
 
     try {
+      // Get OpenAI API key from environment
+      // Note: Vite only exposes env vars prefixed with VITE_ to client code
+      // Add VITE_OPENAI_KEY=your-key-here to your plant-swipe/.env file
+      const openaiKey = import.meta.env.VITE_OPENAI_KEY
+      if (!openaiKey) {
+        throw new Error('OpenAI API key not configured. Please add VITE_OPENAI_KEY=your-key-here to your plant-swipe/.env file.')
+      }
+
       // Load the schema
       const schema = await loadSchema()
       if (!schema) {
@@ -147,23 +155,77 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
         return
       }
 
-      // Call Supabase Edge Function
-      const { data, error: funcError } = await supabase.functions.invoke('fill-plant-data', {
-        body: {
-          plantName: name.trim(),
-          schema: schema
-        }
+      // Build the prompt
+      const prompt = `You are a botanical expert. Fill in the plant information JSON for the plant named "${name.trim()}".
+
+IMPORTANT INSTRUCTIONS:
+1. Return ONLY valid JSON text matching the provided schema structure
+2. Do NOT include any markdown formatting, code blocks, or explanations
+3. Do NOT include the "id" field
+4. Do NOT include the "name" field
+5. Leave fields blank/null if information is unavailable, uncertain, or not applicable
+6. Use exact values from the schema options where specified
+7. For arrays, use empty arrays [] if no data is available
+8. For nested objects, omit them entirely if all fields would be empty
+9. Be accurate and scientific - if you're not certain about a fact, omit it rather than guessing
+10. Return ONLY the JSON object, nothing else
+
+SCHEMA STRUCTURE:
+${JSON.stringify(schema, null, 2)}
+
+Fill in as much accurate information as possible for "${name.trim()}". Return ONLY the JSON object.`
+
+      // Call OpenAI API directly
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${openaiKey}`
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o', // Latest model
+          messages: [
+            {
+              role: 'system',
+              content: 'You are a botanical expert assistant. You provide accurate plant information in JSON format only, with no additional text or formatting.'
+            },
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          temperature: 0.3, // Lower temperature for more consistent, factual responses
+          response_format: { type: 'json_object' }
+        })
       })
 
-      if (funcError) {
-        throw new Error(funcError.message || 'Failed to get AI response')
+      if (!response.ok) {
+        const errorData = await response.text()
+        console.error('OpenAI API error:', errorData)
+        throw new Error(`OpenAI API error: ${response.status} ${response.statusText}`)
       }
 
-      if (!data || !data.success) {
-        throw new Error(data?.error || 'Failed to get AI response')
+      const data = await response.json()
+      const content = data.choices[0]?.message?.content
+
+      if (!content) {
+        throw new Error('No content in AI response')
       }
 
-      const aiData = data.data
+      // Parse the JSON response
+      let aiData
+      try {
+        // Remove any markdown code blocks if present
+        const cleanedContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+        aiData = JSON.parse(cleanedContent)
+      } catch (parseError) {
+        console.error('JSON parse error:', parseError, 'Content:', content)
+        throw new Error('Failed to parse AI response as JSON')
+      }
+
+      // Remove id and name fields if present
+      delete aiData.id
+      delete aiData.name
 
       // Populate form fields with AI data
       if (aiData.identifiers) {
