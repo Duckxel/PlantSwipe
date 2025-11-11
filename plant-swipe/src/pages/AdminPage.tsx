@@ -24,8 +24,9 @@ const {
   Pie,
   Cell,
 } = LazyCharts
-import { RefreshCw, Server, Database, Github, ExternalLink, ShieldCheck, ShieldX, UserSearch, AlertTriangle, Gavel, Search, ChevronDown, GitBranch, Trash2, EyeOff, Copy, ArrowUpRight, Info } from "lucide-react"
+import { RefreshCw, Server, Database, Github, ExternalLink, ShieldCheck, ShieldX, UserSearch, AlertTriangle, Gavel, Search, ChevronDown, GitBranch, Trash2, EyeOff, Copy, ArrowUpRight, Info, Plus } from "lucide-react"
 import { supabase } from '@/lib/supabaseClient'
+import { CreatePlantPage } from '@/pages/CreatePlantPage'
 import {
   Dialog,
   DialogTrigger,
@@ -641,6 +642,9 @@ export const AdminPage: React.FC = () => {
   const [selectedRequestInfo, setSelectedRequestInfo] = React.useState<PlantRequestRow | null>(null)
   const [requestUsersLoading, setRequestUsersLoading] = React.useState<boolean>(false)
   const [requestUsers, setRequestUsers] = React.useState<Array<{ id: string; display_name: string | null; email: string | null }>>([])
+  const [createPlantDialogOpen, setCreatePlantDialogOpen] = React.useState<boolean>(false)
+  const [createPlantRequestId, setCreatePlantRequestId] = React.useState<string | null>(null)
+  const [createPlantName, setCreatePlantName] = React.useState<string>('')
 
   const loadPlantRequests = React.useCallback(async ({ initial = false }: { initial?: boolean } = {}) => {
     setPlantRequestsError(null)
@@ -769,6 +773,28 @@ export const AdminPage: React.FC = () => {
       loadRequestUsers(req.plant_name_normalized)
     }
   }, [loadRequestUsers])
+
+  const handleOpenCreatePlantDialog = React.useCallback((req: PlantRequestRow) => {
+    setCreatePlantRequestId(req.id)
+    setCreatePlantName(req.plant_name)
+    setCreatePlantDialogOpen(true)
+  }, [])
+
+  const handlePlantCreated = React.useCallback(async (plantId: string) => {
+    // Optionally complete the request after plant is created
+    if (createPlantRequestId) {
+      try {
+        await completePlantRequest(createPlantRequestId)
+      } catch (err) {
+        console.error('Failed to complete request after creating plant:', err)
+      }
+    }
+    setCreatePlantDialogOpen(false)
+    setCreatePlantRequestId(null)
+    setCreatePlantName('')
+    // Refresh the requests list
+    await loadPlantRequests({ initial: false })
+  }, [createPlantRequestId, completePlantRequest, loadPlantRequests])
 
   const completePlantRequest = React.useCallback(async (id: string) => {
     if (!id || completingRequestId) return
@@ -2794,6 +2820,14 @@ export const AdminPage: React.FC = () => {
                                   {req.request_count} {req.request_count === 1 ? 'request' : 'requests'}
                                 </Badge>
                                 <Button
+                                  variant="default"
+                                  className="rounded-2xl"
+                                  onClick={() => handleOpenCreatePlantDialog(req)}
+                                >
+                                  <Plus className="h-4 w-4 mr-2" />
+                                  Add Plant
+                                </Button>
+                                <Button
                                   variant="outline"
                                   className="rounded-2xl"
                                   onClick={() => completePlantRequest(req.id)}
@@ -2861,6 +2895,29 @@ export const AdminPage: React.FC = () => {
                       Close
                     </Button>
                   </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
+              {/* Create Plant Dialog */}
+              <Dialog open={createPlantDialogOpen} onOpenChange={setCreatePlantDialogOpen}>
+                <DialogContent className="rounded-2xl max-w-4xl max-h-[90vh] overflow-y-auto p-0">
+                  <DialogHeader className="px-6 pt-6 pb-4">
+                    <DialogTitle>Add Plant from Request</DialogTitle>
+                    <DialogDescription>
+                      Create a new plant entry for "{createPlantName}". The plant name will be pre-filled.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="px-6 pb-6 overflow-y-auto">
+                    <CreatePlantPage
+                      onCancel={() => {
+                        setCreatePlantDialogOpen(false)
+                        setCreatePlantRequestId(null)
+                        setCreatePlantName('')
+                      }}
+                      onSaved={handlePlantCreated}
+                      initialName={createPlantName}
+                    />
+                  </div>
                 </DialogContent>
               </Dialog>
             </div>

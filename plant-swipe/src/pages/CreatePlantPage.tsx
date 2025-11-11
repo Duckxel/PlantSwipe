@@ -37,11 +37,12 @@ function generateUUIDv4(): string {
 interface CreatePlantPageProps {
   onCancel: () => void
   onSaved?: (plantId: string) => void
+  initialName?: string
 }
 
-export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSaved }) => {
+export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSaved, initialName }) => {
   const { t } = useTranslation('common')
-  const [name, setName] = React.useState("")
+  const [name, setName] = React.useState(initialName || "")
   const [scientificName, setScientificName] = React.useState("")
   const [colors, setColors] = React.useState<string>("")
   const [seasons, setSeasons] = React.useState<string[]>([])
@@ -64,6 +65,13 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
   const [inputLanguage, setInputLanguage] = React.useState<SupportedLanguage>(DEFAULT_LANGUAGE)
   const [translateToAll, setTranslateToAll] = React.useState(true) // Default to true in Advanced mode
   const [translating, setTranslating] = React.useState(false)
+
+  // Update name when initialName changes
+  React.useEffect(() => {
+    if (initialName) {
+      setName(initialName)
+    }
+  }, [initialName])
 
   const toggleSeason = (s: Plant["seasons"][number]) => {
     setSeasons((cur: string[]) => (cur.includes(s) ? cur.filter((x: string) => x !== s) : [...cur, s]))
