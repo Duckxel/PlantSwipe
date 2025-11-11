@@ -726,20 +726,34 @@ PY
     return 1
   fi
   
+  # Fix file permissions if needed (ensure readable by root)
+  $SUDO chmod 644 "$cert_info_json" 2>/dev/null || true
+  $SUDO chown root:root "$cert_info_json" 2>/dev/null || true
+  
   log "Reading certificate configuration from cert-info.json…"
   # Check if file exists and is readable
   if [[ ! -r "$cert_info_json" ]]; then
     log "[ERROR] cert-info.json exists but is not readable: $cert_info_json"
-    log "[INFO] Check file permissions. Should be readable by root."
-    return 1
+    log "[INFO] Attempting to fix permissions…"
+    $SUDO chmod 644 "$cert_info_json" || true
+    if [[ ! -r "$cert_info_json" ]]; then
+      log "[ERROR] Still cannot read cert-info.json after fixing permissions"
+      return 1
+    fi
   fi
   
   local cert_info
-  cert_info="$($SUDO python3 - <<'PY'
+  cert_info="$(python3 - <<'PY'
 import json
 import sys
+import os
 try:
-    with open(sys.argv[1], 'r') as f:
+    filepath = sys.argv[1]
+    # Ensure file is readable
+    if not os.access(filepath, os.R_OK):
+        print(f"ERROR: File not readable: {filepath}", file=sys.stderr)
+        sys.exit(1)
+    with open(filepath, 'r') as f:
         data = json.load(f)
     email = data.get('email', '')
     dns_plugin = data.get('dns_plugin', '')
@@ -769,13 +783,25 @@ PY
   [[ "$cert_use_wildcard" == "True" ]] && log "Wildcard certificate requested"
   [[ "$cert_staging" == "True" ]] && log "Using Let's Encrypt staging environment"
   
+  # Fix domain.json permissions if needed
+  if [[ -f "$domain_json" ]]; then
+    $SUDO chmod 644 "$domain_json" 2>/dev/null || true
+    $SUDO chown root:root "$domain_json" 2>/dev/null || true
+  fi
+  
   # Parse domain.json - only supports new format with "domains" array
   local domain_info
-  domain_info="$($SUDO python3 - <<'PY'
+  domain_info="$(python3 - <<'PY'
 import json
 import sys
+import os
 try:
-    with open(sys.argv[1], 'r') as f:
+    filepath = sys.argv[1]
+    # Ensure file is readable
+    if not os.access(filepath, os.R_OK):
+        print(f"ERROR: File not readable: {filepath}", file=sys.stderr)
+        sys.exit(1)
+    with open(filepath, 'r') as f:
         data = json.load(f)
     
     # Only support "domains" array format
@@ -789,11 +815,14 @@ try:
         print("ERROR: domain.json must contain a 'domains' array with full domain names", file=sys.stderr)
         print("ERROR: Format: {\"domains\": [\"dev01.aphylia.app\", \"dev02.aphylia.app\"]}", file=sys.stderr)
         sys.exit(1)
+except json.JSONDecodeError as e:
+    print(f"ERROR: Invalid JSON in domain.json: {e}", file=sys.stderr)
+    sys.exit(1)
 except Exception as e:
     print(f"ERROR: {e}", file=sys.stderr)
     sys.exit(1)
 PY
-"$domain_json")"
+"$domain_json" 2>&1)"
   
   if [[ "$domain_info" == ERROR:* ]]; then
     log "[ERROR] Failed to parse domain.json: $domain_info"
