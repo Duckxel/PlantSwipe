@@ -243,18 +243,21 @@ export default function PlantSwipe() {
     }
   }, [user?.id, profile?.display_name])
 
-  const filtered = useMemo(() => {
-    const likedSet = new Set(likedIds)
-    const base = plants.filter((p: Plant) => {
-      const matchesQ = `${p.name} ${p.scientificName} ${p.meaning} ${p.colors.join(" ")}`
-        .toLowerCase()
-        .includes(query.toLowerCase())
-      const matchesSeason = seasonFilter ? p.seasons.includes(seasonFilter as Plant['seasons'][number]) : true
-      const matchesColor = colorFilter ? p.colors.map((c: string) => c.toLowerCase()).includes(colorFilter.toLowerCase()) : true
-      const matchesSeeds = onlySeeds ? p.seedsAvailable : true
-      const matchesFav = onlyFavorites ? likedSet.has(p.id) : true
-      return matchesQ && matchesSeason && matchesColor && matchesSeeds && matchesFav
-    })
+    const filtered = useMemo(() => {
+      const likedSet = new Set(likedIds)
+      const lowerQuery = query.toLowerCase()
+      const base = plants.filter((p: Plant) => {
+        const colors = Array.isArray(p.colors) ? p.colors : []
+        const seasons = Array.isArray(p.seasons) ? p.seasons : []
+        const matchesQ = `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")}`
+          .toLowerCase()
+          .includes(lowerQuery)
+        const matchesSeason = seasonFilter ? seasons.includes(seasonFilter as Plant['seasons'][number]) : true
+        const matchesColor = colorFilter ? colors.map((c: string) => c.toLowerCase()).includes(colorFilter.toLowerCase()) : true
+        const matchesSeeds = onlySeeds ? Boolean(p.seedsAvailable) : true
+        const matchesFav = onlyFavorites ? likedSet.has(p.id) : true
+        return matchesQ && matchesSeason && matchesColor && matchesSeeds && matchesFav
+      })
     if (favoritesFirst) {
       return base.slice().sort((a, b) => {
         const la = likedSet.has(a.id) ? 1 : 0

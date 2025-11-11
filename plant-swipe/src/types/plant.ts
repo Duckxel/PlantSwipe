@@ -2,6 +2,8 @@
  * Plant data structure matching PLANT-INFO-SCHEMA.json
  */
 
+export type PlantSeason = "Spring" | "Summer" | "Autumn" | "Winter"
+
 export interface PlantIdentifiers {
   scientificName?: string
   canonicalName?: string
@@ -95,8 +97,23 @@ export interface PlantEnvironment {
   }
 }
 
+export type PlantCareDifficulty =
+  | "easy"
+  | "moderate"
+  | "advanced"
+  | "Easy"
+  | "Moderate"
+  | "Hard"
+  | "Difficult"
+  | "Beginner"
+  | "Intermediate"
+  | "Expert"
+
 export interface PlantCare {
-  difficulty?: "easy" | "moderate" | "advanced"
+  sunlight?: "Low" | "Medium" | "High" | "Full Sun" | "Partial Sun" | string
+  water?: "Low" | "Medium" | "High" | string
+  soil?: string
+  difficulty?: PlantCareDifficulty
   maintenanceLevel?: "low" | "medium" | "high"
   watering?: {
     frequency?: {
@@ -205,12 +222,11 @@ export interface Plant {
   meta?: PlantMeta
   // Legacy fields for backward compatibility
   scientificName?: string
-  colors?: string[]
-  seasons?: ("Spring" | "Summer" | "Autumn" | "Winter")[]
+  colors: string[]
+  seasons: PlantSeason[]
   rarity?: "Common" | "Uncommon" | "Rare" | "Legendary"
   meaning?: string
   description?: string
-  image?: string
   seedsAvailable?: boolean
   waterFreqUnit?: 'day' | 'week' | 'month' | 'year'
   waterFreqValue?: number | null
