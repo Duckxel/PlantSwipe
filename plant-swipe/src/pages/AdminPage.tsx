@@ -786,28 +786,6 @@ export const AdminPage: React.FC = () => {
     }
   }, [loadRequestUsers])
 
-  const handleOpenCreatePlantDialog = React.useCallback((req: PlantRequestRow) => {
-    setCreatePlantRequestId(req.id)
-    setCreatePlantName(req.plant_name)
-    setCreatePlantDialogOpen(true)
-  }, [])
-
-  const handlePlantCreated = React.useCallback(async (plantId: string) => {
-    // Optionally complete the request after plant is created
-    if (createPlantRequestId) {
-      try {
-        await completePlantRequest(createPlantRequestId)
-      } catch (err) {
-        console.error('Failed to complete request after creating plant:', err)
-      }
-    }
-    setCreatePlantDialogOpen(false)
-    setCreatePlantRequestId(null)
-    setCreatePlantName('')
-    // Refresh the requests list
-    await loadPlantRequests({ initial: false })
-  }, [createPlantRequestId, completePlantRequest, loadPlantRequests])
-
   const completePlantRequest = React.useCallback(async (id: string) => {
     if (!id || completingRequestId) return
     if (!user?.id) {
@@ -833,6 +811,28 @@ export const AdminPage: React.FC = () => {
       setCompletingRequestId(null)
     }
   }, [completingRequestId, loadPlantRequests, supabase, user?.id])
+
+  const handleOpenCreatePlantDialog = React.useCallback((req: PlantRequestRow) => {
+    setCreatePlantRequestId(req.id)
+    setCreatePlantName(req.plant_name)
+    setCreatePlantDialogOpen(true)
+  }, [])
+
+  const handlePlantCreated = React.useCallback(async () => {
+    // Optionally complete the request after plant is created
+    if (createPlantRequestId) {
+      try {
+        await completePlantRequest(createPlantRequestId)
+      } catch (err) {
+        console.error('Failed to complete request after creating plant:', err)
+      }
+    }
+    setCreatePlantDialogOpen(false)
+    setCreatePlantRequestId(null)
+    setCreatePlantName('')
+    // Refresh the requests list
+    await loadPlantRequests({ initial: false })
+  }, [createPlantRequestId, completePlantRequest, loadPlantRequests])
 
   // Presence fallback removed by request: rely on DB-backed API only
 
