@@ -588,7 +588,55 @@ $SUDO nginx -t
 
 # SSL Certificate setup using Let's Encrypt/Certbot
 setup_ssl_certificates() {
-  local domain="aphylia.app"
+  local domain_json="$REPO_DIR/domain.json"
+  
+  # Read domain and subdomains from domain.json
+  if [[ ! -f "$domain_json" ]]; then
+    log "[WARN] domain.json not found at $domain_json. Skipping SSL certificate setup."
+    log "[INFO] Create domain.json with format: {\"domain\": \"example.com\", \"subdomains\": [\"dev01\", \"dev02\"]}"
+    return 1
+  fi
+  
+  # Parse domain.json using python3
+  local domain_info
+  domain_info="$($SUDO python3 - <<'PY'
+import json
+import sys
+try:
+    with open(sys.argv[1], 'r') as f:
+        data = json.load(f)
+    domain = data.get('domain', '')
+    subdomains = data.get('subdomains', [])
+    print(f"{domain}|{'|'.join(subdomains)}")
+except Exception as e:
+    print(f"ERROR: {e}", file=sys.stderr)
+    sys.exit(1)
+PY
+"$domain_json")"
+  
+  if [[ "$domain_info" == ERROR:* ]]; then
+    log "[ERROR] Failed to parse domain.json: $domain_info"
+    return 1
+  fi
+  
+  # Extract domain and subdomains
+  IFS='|' read -r domain subdomains_str <<< "$domain_info"
+  if [[ -z "$domain" ]]; then
+    log "[ERROR] No domain found in domain.json"
+    return 1
+  fi
+  
+  # Build array of all domains to certificate (base domain + subdomains)
+  local all_domains=("$domain")
+  if [[ -n "$subdomains_str" ]]; then
+    IFS='|' read -ra subdomain_array <<< "$subdomains_str"
+    for sub in "${subdomain_array[@]}"; do
+      [[ -n "$sub" ]] && all_domains+=("${sub}.${domain}")
+    done
+  fi
+  
+  log "Reading domains from domain.json: ${all_domains[*]}"
+  
   local cert_dir="/etc/letsencrypt/live/$domain"
   local cert_file="$cert_dir/fullchain.pem"
   local key_file="$cert_dir/privkey.pem"
@@ -599,7 +647,7 @@ setup_ssl_certificates() {
     return 0
   fi
   
-  log "Setting up SSL certificates for $domain and *.${domain}…"
+  log "Setting up SSL certificates for: ${all_domains[*]}"
   
   # Ensure nginx is running for certbot validation
   if ! $SUDO systemctl is-active --quiet nginx; then
@@ -629,46 +677,18 @@ setup_ssl_certificates() {
       -d "*.${domain}"
     )
   else
-    # Try HTTP-01 challenge - can get certificates for specific subdomains if provided
-    # Check if SSL_SUBDOMAINS is set (comma-separated list like "dev01,staging,api")
-    local subdomains=()
-    if [[ -n "${SSL_SUBDOMAINS:-}" ]]; then
-      IFS=',' read -ra subdomain_array <<< "$SSL_SUBDOMAINS"
-      for sub in "${subdomain_array[@]}"; do
-        sub="${sub// /}"  # trim whitespace
-        [[ -n "$sub" ]] && subdomains+=("${sub}.${domain}")
-      done
-    fi
-    
-    if ((${#subdomains[@]} > 0)); then
-      log "Using HTTP-01 challenge for base domain and specified subdomains: ${subdomains[*]}"
-      log "[WARN] Wildcard subdomains (*.${domain}) are NOT covered. Only specified subdomains will have SSL."
-      certbot_args=(
-        --nginx
-        --non-interactive
-        --agree-tos
-        --redirect
-        --email "${SSL_EMAIL:-admin@${domain}}"
-        -d "$domain"
-      )
-      for subdomain in "${subdomains[@]}"; do
-        certbot_args+=(-d "$subdomain")
-      done
-    else
-      log "Using HTTP-01 challenge for base domain only"
-      log "[WARN] Subdomains (e.g., dev01.${domain}) will NOT have SSL certificates."
-      log "[INFO] To enable SSL for subdomains, either:"
-      log "       1. Set SSL_SUBDOMAINS='dev01,staging' (comma-separated list)"
-      log "       2. Use DNS-01 challenge with CERTBOT_DNS_PLUGIN for wildcard certificate"
-      certbot_args=(
-        --nginx
-        --non-interactive
-        --agree-tos
-        --redirect
-        --email "${SSL_EMAIL:-admin@${domain}}"
-        -d "$domain"
-      )
-    fi
+    # Use HTTP-01 challenge for all domains/subdomains from domain.json
+    log "Using HTTP-01 challenge for domains from domain.json: ${all_domains[*]}"
+    certbot_args=(
+      --nginx
+      --non-interactive
+      --agree-tos
+      --redirect
+      --email "${SSL_EMAIL:-admin@${domain}}"
+    )
+    for dom in "${all_domains[@]}"; do
+      certbot_args+=(-d "$dom")
+    done
   fi
   
   # Attempt certificate acquisition
@@ -681,7 +701,7 @@ setup_ssl_certificates() {
       if ! grep -q "ssl_certificate" "$NGINX_SITE_AVAIL"; then
         log "Updating nginx configuration with SSL certificate paths…"
         # Insert SSL configuration after server_name line
-        $SUDO sed -i "/server_name aphylia.app/a\\
+        $SUDO sed -i "/server_name.*${domain}/a\\
     ssl_certificate $cert_file;\\
     ssl_certificate_key $key_file;\\
     ssl_protocols TLSv1.2 TLSv1.3;\\
@@ -730,8 +750,13 @@ EOF
     return 0
   else
     log "[WARN] SSL certificate acquisition failed. See /tmp/certbot.log for details."
+    log "[INFO] Domains were read from domain.json: ${all_domains[*]}"
     log "[INFO] You can manually obtain certificates later with:"
-    log "       sudo certbot --nginx -d $domain -d *.$domain"
+    local cert_cmd="sudo certbot --nginx"
+    for dom in "${all_domains[@]}"; do
+      cert_cmd+=" -d $dom"
+    done
+    log "       $cert_cmd"
     log "[INFO] For wildcard certificates, use DNS-01 challenge:"
     log "       sudo certbot certonly --dns-<plugin> -d $domain -d *.$domain"
     return 1
@@ -908,16 +933,10 @@ Next steps:
    - plant-swipe/.env and optionally plant-swipe/.env.server
    - Edit /etc/admin-api/env (replace change-me and set tokens as desired)
 2) SSL Certificates:
-   - SSL certificates for subdomains:
-     * DNS-01 (RECOMMENDED for wildcard): Set CERTBOT_DNS_PLUGIN and CERTBOT_DNS_CREDENTIALS
-       This covers ALL subdomains (*.aphylia.app) automatically
-     * HTTP-01 with specific subdomains: Set SSL_SUBDOMAINS='dev01,staging,api' in .env
-       This only covers the listed subdomains, not all subdomains
-   - If SSL certificates were not obtained automatically, you can set them up manually:
-     * Base domain only: sudo certbot --nginx -d aphylia.app
-     * Specific subdomains: sudo certbot --nginx -d aphylia.app -d dev01.aphylia.app -d staging.aphylia.app
-     * Wildcard (all subdomains): Requires DNS-01 challenge
-       Example: sudo CERTBOT_DNS_PLUGIN=route53 CERTBOT_DNS_CREDENTIALS=/path/to/creds.ini certbot certonly --dns-route53 -d aphylia.app -d *.aphylia.app
+   - SSL certificates are automatically configured from domain.json
+   - Edit domain.json to add/remove subdomains as needed
+   - Format: {"domain": "example.com", "subdomains": ["dev01", "dev02"]}
+   - For wildcard certificates (*.domain), set CERTBOT_DNS_PLUGIN and CERTBOT_DNS_CREDENTIALS in .env
    - Certificates auto-renew via certbot.timer (enabled by default)
 3) Then run:
    sudo bash scripts/refresh-plant-swipe.sh
