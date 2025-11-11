@@ -650,15 +650,18 @@ setup_ssl_certificates() {
     done
     domains_json+="]"
     
-    # Create domain.json using python3
+    # Create domain.json using python3 (with proper permissions)
     $SUDO python3 - <<PY
 import json
+import os
 domains = $domains_json
 data = {
     "domains": domains
 }
 with open("$domain_json", 'w') as f:
     json.dump(data, f, indent=2)
+# Make file readable by all
+os.chmod("$domain_json", 0o644)
 PY
     
     if [[ ! -f "$domain_json" ]]; then
@@ -666,7 +669,6 @@ PY
       return 1
     fi
     
-    $SUDO chmod 0644 "$domain_json"
     log "domain.json created successfully at $domain_json"
   fi
   
@@ -687,6 +689,13 @@ PY
   fi
   
   log "Reading certificate configuration from cert-info.json…"
+  # Check if file exists and is readable
+  if [[ ! -r "$cert_info_json" ]]; then
+    log "[ERROR] cert-info.json exists but is not readable: $cert_info_json"
+    log "[INFO] Check file permissions. Should be readable by root."
+    return 1
+  fi
+  
   local cert_info
   cert_info="$($SUDO python3 - <<'PY'
 import json
@@ -700,14 +709,19 @@ try:
     use_wildcard = data.get('use_wildcard', False)
     staging = data.get('staging', False)
     print(f"{email}|{dns_plugin}|{dns_credentials}|{use_wildcard}|{staging}")
+except json.JSONDecodeError as e:
+    print(f"ERROR: Invalid JSON in cert-info.json: {e}", file=sys.stderr)
+    sys.exit(1)
 except Exception as e:
     print(f"ERROR: {e}", file=sys.stderr)
     sys.exit(1)
 PY
-"$cert_info_json")"
+"$cert_info_json" 2>&1)"
   
-  if [[ "$cert_info" == ERROR:* ]]; then
-    log "[ERROR] Failed to parse cert-info.json: $cert_info"
+  # Check for errors (Python errors go to stderr, but we capture both)
+  if [[ "$cert_info" == ERROR:* ]] || [[ -z "$cert_info" ]]; then
+    log "[ERROR] Failed to parse cert-info.json"
+    [[ -n "$cert_info" ]] && log "[ERROR] Details: $cert_info"
     return 1
   fi
   
@@ -1087,9 +1101,14 @@ $SUDO systemctl daemon-reload
 $SUDO systemctl enable "$SERVICE_ADMIN" "$SERVICE_NODE" "$SERVICE_NGINX"
 $SUDO systemctl restart "$SERVICE_ADMIN" "$SERVICE_NODE"
 
-# Final nginx reload to apply site links
+# Final nginx reload to apply site links (only if nginx config is valid)
 log "Reloading nginx…"
-$SUDO systemctl reload "$SERVICE_NGINX"
+if $SUDO nginx -t >/dev/null 2>&1; then
+  $SUDO systemctl reload "$SERVICE_NGINX" || log "[WARN] Nginx reload failed, but continuing"
+else
+  log "[WARN] Nginx configuration has errors. Skipping reload."
+  log "[INFO] Fix nginx configuration or complete SSL setup, then run: sudo systemctl reload nginx"
+fi
 
 # Install out-of-band restart helper
 RESTART_HELPER_DST="/usr/local/bin/plantswipe-restart"
