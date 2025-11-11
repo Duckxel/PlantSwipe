@@ -709,6 +709,28 @@ PY
   
   log "Setting up SSL certificates for: ${all_domains[*]}"
   
+  # Validate DNS resolution for all domains before attempting certificate acquisition
+  log "Validating DNS resolution for domains…"
+  local dns_issues=()
+  for dom in "${all_domains[@]}"; do
+    local resolved_ip
+    resolved_ip="$(getent ahostsv4 "$dom" 2>/dev/null | awk '{print $1}' | head -n1)"
+    if [[ -z "$resolved_ip" ]]; then
+      dns_issues+=("$dom")
+      log "[WARN] Domain $dom does not resolve to any IP address"
+    else
+      log "[OK] Domain $dom resolves to $resolved_ip"
+    fi
+  done
+  
+  if ((${#dns_issues[@]} > 0)); then
+    log "[WARN] Some domains do not resolve: ${dns_issues[*]}"
+    log "[WARN] Certificate acquisition may fail if domains don't point to this server"
+    log "[INFO] Ensure only domains pointing to THIS server are in domain.json"
+    log "[INFO] Each server should have its own domain.json with only its subdomains"
+    # Don't fail here, but warn - certbot will fail during validation anyway
+  fi
+  
   # Ensure nginx is running for certbot validation
   if ! $SUDO systemctl is-active --quiet nginx; then
     log "Starting nginx for certbot validation…"
