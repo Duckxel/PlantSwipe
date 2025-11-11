@@ -1999,8 +1999,68 @@ export const AdminPage: React.FC = () => {
   }, [activeTab])
 
   return (
-    <div className="flex min-h-screen bg-stone-50 dark:bg-[#1e1e1e]">
-      {/* Sidebar Navigation */}
+    <div className="flex flex-col md:flex-row min-h-screen bg-stone-50 dark:bg-[#1e1e1e]">
+      {/* Mobile Navigation */}
+      <div className="md:hidden w-full border-b border-stone-200/50 dark:border-[#3e3e42]/50 bg-stone-50/80 dark:bg-[#1e1e1e]/80 backdrop-blur-sm sticky top-0 z-10 rounded-b-3xl">
+        <div className="p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <ShieldCheck className="h-5 w-5" style={{ color: accentColor }} />
+            <div className="text-sm font-semibold">Admin Panel</div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => setActiveTab('overview')}
+              className={`flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-sm transition-all duration-200 ${
+                activeTab === 'overview'
+                  ? 'text-white shadow-md'
+                  : 'text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]'
+              }`}
+              style={activeTab === 'overview' ? { backgroundColor: accentColor, boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
+            >
+              <LayoutDashboard className="h-4 w-4" />
+              <span>Overview</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('members')}
+              className={`flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-sm transition-all duration-200 ${
+                activeTab === 'members'
+                  ? 'text-white shadow-md'
+                  : 'text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]'
+              }`}
+              style={activeTab === 'members' ? { backgroundColor: accentColor, boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
+            >
+              <Users className="h-4 w-4" />
+              <span>Members</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('requests')}
+              className={`flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-sm transition-all duration-200 ${
+                activeTab === 'requests'
+                  ? 'text-white shadow-md'
+                  : 'text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]'
+              }`}
+              style={activeTab === 'requests' ? { backgroundColor: accentColor, boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
+            >
+              <FileText className="h-4 w-4" />
+              <span>Requests</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('admin_logs')}
+              className={`flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-sm transition-all duration-200 ${
+                activeTab === 'admin_logs'
+                  ? 'text-white shadow-md'
+                  : 'text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]'
+              }`}
+              style={activeTab === 'admin_logs' ? { backgroundColor: accentColor, boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
+            >
+              <ScrollText className="h-4 w-4" />
+              <span>Logs</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Sidebar Navigation - Desktop Only */}
       <aside className="hidden md:flex w-64 border-r border-stone-200/50 dark:border-[#3e3e42]/50 bg-stone-50/80 dark:bg-[#1e1e1e]/80 backdrop-blur-sm flex-shrink-0 flex-col m-4 rounded-3xl">
         <div className="p-6 border-b border-stone-200/50 dark:border-[#3e3e42]/50">
           <div className="flex items-center gap-3">
@@ -2063,70 +2123,10 @@ export const AdminPage: React.FC = () => {
         </nav>
       </aside>
 
-      {/* Mobile Navigation */}
-      <div className="md:hidden w-full border-b border-stone-200/50 dark:border-[#3e3e42]/50 bg-stone-50/80 dark:bg-[#1e1e1e]/80 backdrop-blur-sm sticky top-0 z-10 rounded-b-3xl">
-        <div className="p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <ShieldCheck className="h-5 w-5" style={{ color: accentColor }} />
-            <div className="text-sm font-semibold">Admin Panel</div>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => setActiveTab('overview')}
-              className={`flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-sm transition-all duration-200 ${
-                activeTab === 'overview'
-                  ? 'text-white shadow-md'
-                  : 'text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]'
-              }`}
-              style={activeTab === 'overview' ? { backgroundColor: accentColor, boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
-            >
-              <LayoutDashboard className="h-4 w-4" />
-              <span>Overview</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('members')}
-              className={`flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-sm transition-all duration-200 ${
-                activeTab === 'members'
-                  ? 'text-white shadow-md'
-                  : 'text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]'
-              }`}
-              style={activeTab === 'members' ? { backgroundColor: accentColor, boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
-            >
-              <Users className="h-4 w-4" />
-              <span>Members</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('requests')}
-              className={`flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-sm transition-all duration-200 ${
-                activeTab === 'requests'
-                  ? 'text-white shadow-md'
-                  : 'text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]'
-              }`}
-              style={activeTab === 'requests' ? { backgroundColor: accentColor, boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
-            >
-              <FileText className="h-4 w-4" />
-              <span>Requests</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('admin_logs')}
-              className={`flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-sm transition-all duration-200 ${
-                activeTab === 'admin_logs'
-                  ? 'text-white shadow-md'
-                  : 'text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]'
-              }`}
-              style={activeTab === 'admin_logs' ? { backgroundColor: accentColor, boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
-            >
-              <ScrollText className="h-4 w-4" />
-              <span>Logs</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
       {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto">
-        <div className="flex justify-center">
-          <div className="w-full max-w-5xl mt-8 px-4 md:px-6 lg:px-8 pb-8">
+      <main className="flex-1 overflow-y-auto w-full">
+        <div className="flex justify-center w-full">
+          <div className="w-full max-w-5xl mt-4 md:mt-8 px-4 md:px-6 lg:px-8 pb-8">
           {/* Connection Status Banner - Show when APIs are down */}
           {(apiProbe.ok === false || adminProbe.ok === false || dbProbe.ok === false) && (
             <Card className="rounded-2xl mb-4 border-red-500 dark:border-red-500 bg-red-50 dark:bg-red-950/20">
