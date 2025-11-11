@@ -683,10 +683,11 @@ setup_ssl_certificates() {
     return 1
   fi
   
-  local cert_info
-  local cert_info_err
-  local cert_info_exit
-  cert_info_err="$(python3 - <<'PY'
+    local cert_info
+    local cert_info_err
+    local cert_info_exit
+    cert_info_err="$(
+      python3 - "$cert_info_json" 2>&1 <<'PY'
 import json
 import sys
 import os
@@ -713,7 +714,7 @@ except Exception as e:
     print(f"ERROR: {e}", file=sys.stderr)
     sys.exit(1)
 PY
-"$cert_info_json" 2>&1)"
+    )"
   cert_info_exit=$?
   cert_info="$cert_info_err"
   
@@ -821,10 +822,11 @@ PY
   fi
   
   # Parse domain.json - only supports new format with "domains" array
-  local domain_info
-  local domain_info_err
-  local domain_info_exit
-  domain_info_err="$(python3 - <<'PY'
+    local domain_info
+    local domain_info_err
+    local domain_info_exit
+    domain_info_err="$(
+      python3 - "$domain_json" 2>&1 <<'PY'
 import json
 import sys
 import os
@@ -857,7 +859,7 @@ except Exception as e:
     print(f"ERROR: {e}", file=sys.stderr)
     sys.exit(1)
 PY
-"$domain_json" 2>&1)"
+    )"
   domain_info_exit=$?
   domain_info="$domain_info_err"
   
