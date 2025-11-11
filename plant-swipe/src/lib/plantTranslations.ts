@@ -7,7 +7,16 @@
 
 import { supabase } from './supabaseClient'
 import type { SupportedLanguage } from './i18n'
-import type { PlantIdentifiers, PlantEcology, PlantUsage, PlantMeta } from '@/types/plant'
+import type {
+  PlantIdentifiers,
+  PlantEcology,
+  PlantUsage,
+  PlantMeta,
+  PlantPhenology,
+  PlantCare,
+  PlantPlanting,
+  PlantProblems,
+} from '@/types/plant'
 
 export interface PlantTranslation {
   plant_id: string
@@ -18,6 +27,10 @@ export interface PlantTranslation {
   ecology?: PlantEcology
   usage?: PlantUsage
   meta?: PlantMeta
+  phenology?: PlantPhenology
+  care?: PlantCare
+  planting?: PlantPlanting
+  problems?: PlantProblems
   // Legacy fields for backward compatibility
   scientific_name?: string | null
   meaning?: string | null
@@ -32,23 +45,27 @@ export async function savePlantTranslation(translation: PlantTranslation): Promi
   try {
     const { error } = await supabase
       .from('plant_translations')
-      .upsert({
-        plant_id: translation.plant_id,
-        language: translation.language,
-        name: translation.name,
-        identifiers: translation.identifiers || null,
-        ecology: translation.ecology || null,
-        usage: translation.usage || null,
-        meta: translation.meta || null,
-        // Legacy fields
-        scientific_name: translation.scientific_name || null,
-        meaning: translation.meaning || null,
-        description: translation.description || null,
-        care_soil: translation.care_soil || null,
-        updated_at: new Date().toISOString(),
-      }, {
-        onConflict: 'plant_id,language',
-      })
+        .upsert({
+          plant_id: translation.plant_id,
+          language: translation.language,
+          name: translation.name,
+          identifiers: translation.identifiers || null,
+          ecology: translation.ecology || null,
+          usage: translation.usage || null,
+          meta: translation.meta || null,
+          phenology: translation.phenology || null,
+          care: translation.care || null,
+          planting: translation.planting || null,
+          problems: translation.problems || null,
+          // Legacy fields
+          scientific_name: translation.scientific_name || null,
+          meaning: translation.meaning || null,
+          description: translation.description || null,
+          care_soil: translation.care_soil || null,
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'plant_id,language',
+        })
 
     if (error) {
       return { error: new Error(error.message) }
@@ -65,21 +82,25 @@ export async function savePlantTranslation(translation: PlantTranslation): Promi
  */
 export async function savePlantTranslations(translations: PlantTranslation[]): Promise<{ error?: Error }> {
   try {
-    const data = translations.map(t => ({
-      plant_id: t.plant_id,
-      language: t.language,
-      name: t.name,
-      identifiers: t.identifiers || null,
-      ecology: t.ecology || null,
-      usage: t.usage || null,
-      meta: t.meta || null,
-      // Legacy fields
-      scientific_name: t.scientific_name || null,
-      meaning: t.meaning || null,
-      description: t.description || null,
-      care_soil: t.care_soil || null,
-      updated_at: new Date().toISOString(),
-    }))
+      const data = translations.map(t => ({
+        plant_id: t.plant_id,
+        language: t.language,
+        name: t.name,
+        identifiers: t.identifiers || null,
+        ecology: t.ecology || null,
+        usage: t.usage || null,
+        meta: t.meta || null,
+        phenology: t.phenology || null,
+        care: t.care || null,
+        planting: t.planting || null,
+        problems: t.problems || null,
+        // Legacy fields
+        scientific_name: t.scientific_name || null,
+        meaning: t.meaning || null,
+        description: t.description || null,
+        care_soil: t.care_soil || null,
+        updated_at: new Date().toISOString(),
+      }))
 
     const { error } = await supabase
       .from('plant_translations')

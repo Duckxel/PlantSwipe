@@ -351,13 +351,42 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
     return () => { ignore = true }
   }, [id, editLanguage])
 
-  const handleTranslate = async () => {
+    const handleTranslate = async () => {
     if (!id) return
     setTranslating(true)
     setError(null)
     setOk(null)
     
     try {
+        const translationPhenology = phenology?.scentNotes && phenology.scentNotes.length > 0
+          ? { scentNotes: phenology.scentNotes }
+          : undefined
+        const translationCarePayload = (() => {
+          const hasFrequency = !!care?.watering?.frequency && Object.values(care.watering.frequency!).some(Boolean)
+          const hasSchedule = !!care?.fertilizing?.schedule
+          const hasMulch = !!care?.mulching?.material
+          if (!hasFrequency && !hasSchedule && !hasMulch) return undefined
+          return {
+            watering: hasFrequency ? { frequency: care?.watering?.frequency } : undefined,
+            fertilizing: hasSchedule ? { schedule: care?.fertilizing?.schedule } : undefined,
+            mulching: hasMulch ? { material: care?.mulching?.material } : undefined,
+          }
+        })()
+        const translationPlanting = (() => {
+          const sitePrep = planting?.sitePrep?.length ? planting.sitePrep : undefined
+          const companionPlants = planting?.companionPlants?.length ? planting.companionPlants : undefined
+          const avoidNear = planting?.avoidNear?.length ? planting.avoidNear : undefined
+          if (!sitePrep && !companionPlants && !avoidNear) return undefined
+          return { sitePrep, companionPlants, avoidNear }
+        })()
+        const translationProblems = (() => {
+          const pests = problems?.pests?.length ? problems.pests : undefined
+          const diseases = problems?.diseases?.length ? problems.diseases : undefined
+          const hazards = problems?.hazards?.length ? problems.hazards : undefined
+          if (!pests && !diseases && !hazards) return undefined
+          return { pests, diseases, hazards }
+        })()
+        
       // Get current fields
       const fields = {
         name: name.trim() || undefined,
@@ -380,7 +409,11 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
           funFact: meta.funFact,
           authorNotes: meta.authorNotes,
           sourceReferences: meta.sourceReferences,
-        } : undefined,
+          } : undefined,
+          phenology: translationPhenology,
+          care: translationCarePayload,
+          planting: translationPlanting,
+          problems: translationProblems,
       }
       
       // Translate to all languages
@@ -394,7 +427,11 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
         identifiers: translated.identifiers || undefined,
         ecology: translated.ecology || undefined,
         usage: translated.usage || undefined,
-        meta: translated.meta || undefined,
+          meta: translated.meta || undefined,
+          phenology: translated.phenology || undefined,
+          care: translated.care || undefined,
+          planting: translated.planting || undefined,
+          problems: translated.problems || undefined,
         scientific_name: translated.scientificName || scientificName.trim() || identifiers?.scientificName || null,
         meaning: translated.meta?.funFact || translated.meaning || null,
         description: translated.description || null,
@@ -464,8 +501,37 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
         .eq('id', id)
       if (uerr) { setError(uerr.message); return }
       
-      // Save translation for the current edit language
-      const translation = {
+        const translationPhenology = phenology?.scentNotes && phenology.scentNotes.length > 0
+          ? { scentNotes: phenology.scentNotes }
+          : undefined
+        const translationCarePayload = (() => {
+          const hasFrequency = !!care?.watering?.frequency && Object.values(care.watering.frequency!).some(Boolean)
+          const hasSchedule = !!care?.fertilizing?.schedule
+          const hasMulch = !!care?.mulching?.material
+          if (!hasFrequency && !hasSchedule && !hasMulch) return undefined
+          return {
+            watering: hasFrequency ? { frequency: care?.watering?.frequency } : undefined,
+            fertilizing: hasSchedule ? { schedule: care?.fertilizing?.schedule } : undefined,
+            mulching: hasMulch ? { material: care?.mulching?.material } : undefined,
+          }
+        })()
+        const translationPlanting = (() => {
+          const sitePrep = planting?.sitePrep?.length ? planting.sitePrep : undefined
+          const companionPlants = planting?.companionPlants?.length ? planting.companionPlants : undefined
+          const avoidNear = planting?.avoidNear?.length ? planting.avoidNear : undefined
+          if (!sitePrep && !companionPlants && !avoidNear) return undefined
+          return { sitePrep, companionPlants, avoidNear }
+        })()
+        const translationProblems = (() => {
+          const pests = problems?.pests?.length ? problems.pests : undefined
+          const diseases = problems?.diseases?.length ? problems.diseases : undefined
+          const hazards = problems?.hazards?.length ? problems.hazards : undefined
+          if (!pests && !diseases && !hazards) return undefined
+          return { pests, diseases, hazards }
+        })()
+        
+        // Save translation for the current edit language
+        const translation = {
         plant_id: id,
         language: editLanguage,
         name: name.trim(),
@@ -487,6 +553,10 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
           authorNotes: meta.authorNotes,
           sourceReferences: meta.sourceReferences,
         } : undefined,
+          phenology: translationPhenology,
+          care: translationCarePayload,
+          planting: translationPlanting,
+          problems: translationProblems,
         // Legacy fields for backward compatibility
         scientific_name: scientificName.trim() || identifiers?.scientificName || null,
         meaning: meta?.funFact || meaning || null,

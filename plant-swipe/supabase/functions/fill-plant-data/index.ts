@@ -4,6 +4,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY')
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions'
+const OPENAI_MODEL = 'gpt-5'
 
 const defaultAllowedOrigins = [
   'http://localhost:5173',
@@ -68,8 +69,8 @@ serve(async (req) => {
       )
     }
 
-    // Build the prompt
-    const prompt = `You are a botanical expert. Fill in the plant information JSON for the plant named "${plantName}".
+      // Build the prompt
+      const prompt = `You are a botanical expert. Fill in the plant information JSON for the plant named "${plantName}".
 
 IMPORTANT INSTRUCTIONS:
 1. Return ONLY valid JSON text matching the provided schema structure
@@ -79,9 +80,11 @@ IMPORTANT INSTRUCTIONS:
 5. Leave fields blank/null if information is unavailable, uncertain, or not applicable
 6. Use exact values from the schema options where specified
 7. For arrays, use empty arrays [] if no data is available
-8. For nested objects, omit them entirely if all fields would be empty
-9. Be accurate and scientific - if you're not certain about a fact, omit it rather than guessing
-10. Return ONLY the JSON object, nothing else
+8. For nested objects, omit them entirely if all fields would be empty, otherwise include every known sub-field
+9. Ensure every top-level section in the schema (identifiers, traits, dimensions, phenology, environment, care, propagation, usage, ecology, commerce, problems, planting, meta) is evaluated and filled with best-available information
+10. In the meta.funFact field, provide a short description of the plant's cultural symbolism, traditional meaning, or notable lore; if no symbolism exists, state that explicitly instead of leaving it empty
+11. Be accurate and scientific - if you're not certain about a fact, omit it rather than guessing
+12. Return ONLY the JSON object, nothing else
 
 SCHEMA STRUCTURE:
 ${JSON.stringify(schema, null, 2)}
@@ -89,28 +92,28 @@ ${JSON.stringify(schema, null, 2)}
 Fill in as much accurate information as possible for "${plantName}". Return ONLY the JSON object.`
 
     // Call OpenAI API
-    const response = await fetch(OPENAI_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${OPENAI_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o', // Latest model
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a botanical expert assistant. You provide accurate plant information in JSON format only, with no additional text or formatting.'
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        temperature: 0.3, // Lower temperature for more consistent, factual responses
-        response_format: { type: 'json_object' }
+      const response = await fetch(OPENAI_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${OPENAI_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: OPENAI_MODEL,
+          messages: [
+            {
+              role: 'system',
+              content: 'You are a botanical expert assistant. You provide accurate plant information in JSON format only, with no additional text or formatting.'
+            },
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          temperature: 0.3, // Lower temperature for more consistent, factual responses
+          response_format: { type: 'json_object' }
+        })
       })
-    })
 
     if (!response.ok) {
       const errorData = await response.text()
@@ -145,9 +148,17 @@ Fill in as much accurate information as possible for "${plantName}". Return ONLY
       )
     }
 
-    // Remove id and name fields if present
-    delete plantData.id
-    delete plantData.name
+      // Remove id and name fields if present
+      delete plantData.id
+      delete plantData.name
+
+      // Ensure meta.funFact is populated to avoid blank meaning fields downstream
+      if (!plantData.meta) {
+        plantData.meta = {}
+      }
+      if (typeof plantData.meta === 'object' && !plantData.meta.funFact) {
+        plantData.meta.funFact = `Symbolic meaning information for ${plantName} is currently not well documented; please supplement this entry with future research.`
+      }
 
     return new Response(
       JSON.stringify({ success: true, data: plantData }),

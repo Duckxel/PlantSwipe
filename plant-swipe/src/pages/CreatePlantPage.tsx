@@ -314,7 +314,37 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
       })
       if (insErr) { setError(insErr.message); return }
       
-      // Always save translation for the input language (defaults to English in simplified mode)
+        // Prepare partial sections for translation persistence
+        const translationPhenology = phenology?.scentNotes && phenology.scentNotes.length > 0
+          ? { scentNotes: phenology.scentNotes }
+          : undefined
+        const translationCarePayload = (() => {
+          const hasFrequency = !!care?.watering?.frequency && Object.values(care.watering.frequency!).some(Boolean)
+          const hasSchedule = !!care?.fertilizing?.schedule
+          const hasMulch = !!care?.mulching?.material
+          if (!hasFrequency && !hasSchedule && !hasMulch) return undefined
+          return {
+            watering: hasFrequency ? { frequency: care?.watering?.frequency } : undefined,
+            fertilizing: hasSchedule ? { schedule: care?.fertilizing?.schedule } : undefined,
+            mulching: hasMulch ? { material: care?.mulching?.material } : undefined,
+          }
+        })()
+        const translationPlanting = (() => {
+          const sitePrep = planting?.sitePrep?.length ? planting.sitePrep : undefined
+          const companionPlants = planting?.companionPlants?.length ? planting.companionPlants : undefined
+          const avoidNear = planting?.avoidNear?.length ? planting.avoidNear : undefined
+          if (!sitePrep && !companionPlants && !avoidNear) return undefined
+          return { sitePrep, companionPlants, avoidNear }
+        })()
+        const translationProblems = (() => {
+          const pests = problems?.pests?.length ? problems.pests : undefined
+          const diseases = problems?.diseases?.length ? problems.diseases : undefined
+          const hazards = problems?.hazards?.length ? problems.hazards : undefined
+          if (!pests && !diseases && !hazards) return undefined
+          return { pests, diseases, hazards }
+        })()
+
+        // Always save translation for the input language (defaults to English in simplified mode)
         const translation: PlantTranslation = {
         plant_id: id,
         language: inputLanguage,
@@ -335,6 +365,10 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
           authorNotes: meta.authorNotes,
           sourceReferences: meta.sourceReferences,
         } : undefined,
+          phenology: includeAdvanced ? translationPhenology : undefined,
+          care: includeAdvanced ? translationCarePayload : undefined,
+          planting: includeAdvanced ? translationPlanting : undefined,
+          problems: includeAdvanced ? translationProblems : undefined,
         // Legacy fields for backward compatibility
         scientific_name: sciNorm || identifiers?.scientificName || null,
         meaning: meta?.funFact || meaning || null,
@@ -373,19 +407,27 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
               authorNotes: meta.authorNotes,
               sourceReferences: meta.sourceReferences,
             } : undefined,
-          }, inputLanguage)
+              phenology: includeAdvanced ? translationPhenology : undefined,
+              care: includeAdvanced ? translationCarePayload : undefined,
+              planting: includeAdvanced ? translationPlanting : undefined,
+              problems: includeAdvanced ? translationProblems : undefined,
+            }, inputLanguage)
           
           // Convert translations to the format needed for saving
           for (const [lang, translated] of Object.entries(allTranslations)) {
             if (lang !== inputLanguage) {
-              translationsToSave.push({
+                translationsToSave.push({
                 plant_id: id,
                 language: lang as SupportedLanguage,
                 name: translated.name || nameNorm,
                 identifiers: translated.identifiers || undefined,
                 ecology: translated.ecology || undefined,
                 usage: translated.usage || undefined,
-                meta: translated.meta || undefined,
+                  meta: translated.meta || undefined,
+                  phenology: translated.phenology || undefined,
+                  care: translated.care || undefined,
+                  planting: translated.planting || undefined,
+                  problems: translated.problems || undefined,
                 scientific_name: translated.scientificName || sciNorm || identifiers?.scientificName || null,
                 meaning: translated.meta?.funFact || translated.meaning || null,
                 description: translated.description || null,

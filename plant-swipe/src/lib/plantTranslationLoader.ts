@@ -63,12 +63,24 @@ export function mergePlantWithTranslation(
   const translationEcology = translation?.ecology 
     ? (typeof translation.ecology === 'string' ? JSON.parse(translation.ecology) : translation.ecology)
     : null
-  const translationUsage = translation?.usage 
+    const translationUsage = translation?.usage 
     ? (typeof translation.usage === 'string' ? JSON.parse(translation.usage) : translation.usage)
     : null
   const translationMeta = translation?.meta 
     ? (typeof translation.meta === 'string' ? JSON.parse(translation.meta) : translation.meta)
     : null
+    const translationPhenology = translation?.phenology
+      ? (typeof translation.phenology === 'string' ? JSON.parse(translation.phenology) : translation.phenology)
+      : null
+    const translationCare = translation?.care
+      ? (typeof translation.care === 'string' ? JSON.parse(translation.care) : translation.care)
+      : null
+    const translationPlanting = translation?.planting
+      ? (typeof translation.planting === 'string' ? JSON.parse(translation.planting) : translation.planting)
+      : null
+    const translationProblems = translation?.problems
+      ? (typeof translation.problems === 'string' ? JSON.parse(translation.problems) : translation.problems)
+      : null
 
   return {
     id: String(basePlant.id),
@@ -82,23 +94,25 @@ export function mergePlantWithTranslation(
     },
     traits: traits || undefined,
     dimensions: dimensions || undefined,
-    phenology: {
-      ...phenology,
-      flowerColors: phenology?.flowerColors || (Array.isArray(basePlant.colors) 
-        ? basePlant.colors.map((c: string) => ({ name: c }))
-        : undefined),
-      floweringMonths: phenology?.floweringMonths || (Array.isArray(basePlant.seasons) 
-        ? basePlant.seasons.map((s: string) => {
-            const monthMap: Record<string, number[]> = {
-              'Spring': [3, 4, 5],
-              'Summer': [6, 7, 8],
-              'Autumn': [9, 10, 11],
-              'Winter': [12, 1, 2]
-            }
-            return monthMap[s] || []
-          }).flat()
-        : undefined),
-    },
+      phenology: {
+        ...phenology,
+        ...translationPhenology,
+        flowerColors: phenology?.flowerColors || (Array.isArray(basePlant.colors) 
+          ? basePlant.colors.map((c: string) => ({ name: c }))
+          : undefined),
+        floweringMonths: phenology?.floweringMonths || (Array.isArray(basePlant.seasons) 
+          ? basePlant.seasons.map((s: string) => {
+              const monthMap: Record<string, number[]> = {
+                'Spring': [3, 4, 5],
+                'Summer': [6, 7, 8],
+                'Autumn': [9, 10, 11],
+                'Winter': [12, 1, 2]
+              }
+              return monthMap[s] || []
+            }).flat()
+          : undefined),
+        scentNotes: translationPhenology?.scentNotes || phenology?.scentNotes || undefined,
+      },
     environment: {
       ...environment,
       sunExposure: environment?.sunExposure || (basePlant.care_sunlight === 'High' ? 'full sun' 
@@ -110,21 +124,47 @@ export function mergePlantWithTranslation(
         texture: environment?.soil?.texture || (basePlant.care_soil ? [basePlant.care_soil] : undefined),
       },
     },
-    care: {
-      ...care,
-      difficulty: care?.difficulty || (basePlant.care_difficulty === 'Easy' ? 'easy'
-        : basePlant.care_difficulty === 'Moderate' ? 'moderate'
-        : basePlant.care_difficulty === 'Hard' ? 'advanced'
-        : undefined),
-      watering: {
-        ...care?.watering,
-        frequency: care?.watering?.frequency || {
-          spring: basePlant.water_freq_period && basePlant.water_freq_amount 
+      care: (() => {
+        const fallbackFrequency = care?.watering?.frequency || {
+          spring: basePlant.water_freq_period && basePlant.water_freq_amount
             ? `${basePlant.water_freq_amount} times per ${basePlant.water_freq_period}`
             : undefined,
-        },
-      },
-    },
+        }
+
+        const mergedWatering = {
+          ...care?.watering,
+          ...translationCare?.watering,
+          frequency: {
+            ...fallbackFrequency,
+            ...(translationCare?.watering?.frequency || {}),
+          },
+        }
+
+        const mergedCare = {
+          ...care,
+          ...translationCare,
+          difficulty: care?.difficulty || (basePlant.care_difficulty === 'Easy' ? 'easy'
+            : basePlant.care_difficulty === 'Moderate' ? 'moderate'
+            : basePlant.care_difficulty === 'Hard' ? 'advanced'
+            : undefined),
+          watering: mergedWatering,
+        }
+
+        if (translationCare?.fertilizing?.schedule) {
+          mergedCare.fertilizing = {
+            ...care?.fertilizing,
+            ...translationCare.fertilizing,
+          }
+        }
+        if (translationCare?.mulching?.material) {
+          mergedCare.mulching = {
+            ...care?.mulching,
+            ...translationCare.mulching,
+          }
+        }
+
+        return mergedCare
+      })(),
     propagation: propagation || undefined,
     usage: {
       ...usage,
@@ -143,16 +183,26 @@ export function mergePlantWithTranslation(
       ...commerce,
       seedsAvailable: commerce?.seedsAvailable ?? basePlant.seeds_available ?? false,
     },
-    problems: problems || undefined,
-    planting: {
-      ...planting,
-      calendar: {
-        ...planting?.calendar,
-        promotionMonth: planting?.calendar?.promotionMonth || (Array.isArray(basePlant.plant_month) && basePlant.plant_month.length > 0 
-          ? basePlant.plant_month[0] 
-          : undefined),
+      problems: {
+        ...problems,
+        ...translationProblems,
+        pests: translationProblems?.pests || problems?.pests || undefined,
+        diseases: translationProblems?.diseases || problems?.diseases || undefined,
+        hazards: translationProblems?.hazards || problems?.hazards || undefined,
       },
-    },
+      planting: {
+        ...planting,
+        ...translationPlanting,
+        calendar: {
+          ...planting?.calendar,
+          promotionMonth: planting?.calendar?.promotionMonth || (Array.isArray(basePlant.plant_month) && basePlant.plant_month.length > 0 
+            ? basePlant.plant_month[0] 
+            : undefined),
+        },
+        sitePrep: translationPlanting?.sitePrep || planting?.sitePrep || undefined,
+        companionPlants: translationPlanting?.companionPlants || planting?.companionPlants || undefined,
+        avoidNear: translationPlanting?.avoidNear || planting?.avoidNear || undefined,
+      },
     meta: {
       ...meta,
       ...translationMeta,
