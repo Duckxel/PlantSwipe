@@ -607,23 +607,117 @@ fi
 $SUDO rm -f /etc/nginx/sites-available/plant-swipe || true
 $SUDO rm -f /etc/nginx/sites-enabled/plant-swipe || true
 
+# Helper utilities for SSL/Let's Encrypt reconciliation
+get_primary_domain_from_domain_json() {
+  local domain_json="$1"
+  [[ -f "$domain_json" ]] || { echo ""; return 0; }
+  python3 - "$domain_json" <<'PY' 2>/dev/null
+import json
+import os
+import sys
+path = sys.argv[1]
+try:
+    with open(path, "r") as f:
+        data = json.load(f)
+    domains = []
+    if isinstance(data, dict) and isinstance(data.get("domains"), list):
+        domains = data["domains"]
+    elif isinstance(data, list):
+        domains = data
+    if domains:
+        print(domains[0])
+except Exception:
+    pass
+PY
+}
+
+ensure_nginx_ssl_directives() {
+  local cert_domain="$1"
+  [[ -n "$cert_domain" ]] || return 1
+  local cert_dir="/etc/letsencrypt/live/$cert_domain"
+  local cert_file="$cert_dir/fullchain.pem"
+  local key_file="$cert_dir/privkey.pem"
+
+  if [[ ! -f "$cert_file" || ! -f "$key_file" ]]; then
+    return 1
+  fi
+
+  # Ensure SSL listeners exist
+  if ! grep -q "listen 443 ssl" "$NGINX_SITE_AVAIL"; then
+    $SUDO sed -i "/listen \[::\]:80/a\\
+    listen 443 ssl;\\
+    listen [::]:443 ssl;
+" "$NGINX_SITE_AVAIL"
+  fi
+
+  # Ensure ssl_certificate directive points to current certificate
+  if grep -q "ssl_certificate " "$NGINX_SITE_AVAIL"; then
+    $SUDO sed -i "0,/ssl_certificate /s#^\\([[:space:]]*ssl_certificate[[:space:]]\\+\\).*#\\1$cert_file;#" "$NGINX_SITE_AVAIL"
+  else
+    $SUDO sed -i "/server_name/a\\
+    ssl_certificate $cert_file;\\
+    ssl_certificate_key $key_file;\\
+    ssl_protocols TLSv1.2 TLSv1.3;\\
+    ssl_ciphers HIGH:!aNULL:!MD5;\\
+    ssl_prefer_server_ciphers on;
+" "$NGINX_SITE_AVAIL"
+  fi
+
+  if grep -q "ssl_certificate_key " "$NGINX_SITE_AVAIL"; then
+    $SUDO sed -i "0,/ssl_certificate_key /s#^\\([[:space:]]*ssl_certificate_key[[:space:]]\\+\\).*#\\1$key_file;#" "$NGINX_SITE_AVAIL"
+  fi
+
+  $SUDO rm -f "$NGINX_SITE_AVAIL.bak"
+  return 0
+}
+
 log "Testing nginx configuration…"
 # Test nginx config, but allow SSL errors if certificates don't exist yet (we'll set them up next)
 if ! $SUDO nginx -t 2>&1 | tee /tmp/nginx-test.log; then
+  ensure_helper_functions_loaded=true
+  if ! declare -F get_primary_domain_from_domain_json >/dev/null 2>&1; then
+    ensure_helper_functions_loaded=false
+  fi
+  if ! declare -F ensure_nginx_ssl_directives >/dev/null 2>&1; then
+    ensure_helper_functions_loaded=false
+  fi
+
   # Check if error is about missing SSL certificates
   if grep -q "ssl_certificate.*is defined" /tmp/nginx-test.log; then
     if [[ "$WANT_SSL" =~ ^[Yy]$ ]]; then
-      log "[WARN] Nginx config has SSL listeners but no certificates yet."
-      log "[INFO] Temporarily removing SSL listeners so nginx can start for certificate validation…"
-      # Temporarily remove SSL listeners so nginx can start
-      $SUDO sed -i.bak -e '/listen 443 ssl;/d' -e '/listen \[::\]:443 ssl;/d' "$NGINX_SITE_AVAIL"
-      # Test again
-      if $SUDO nginx -t; then
-        log "Nginx config is valid without SSL listeners (temporary)"
-      else
-        log "[ERROR] Nginx configuration still invalid after removing SSL listeners"
-        $SUDO mv "$NGINX_SITE_AVAIL.bak" "$NGINX_SITE_AVAIL" || true
-        exit 1
+      ssl_repaired=false
+      if [[ "$ensure_helper_functions_loaded" == "true" ]]; then
+        primary_domain="$(get_primary_domain_from_domain_json "$REPO_DIR/domain.json")"
+        if [[ -z "$primary_domain" ]]; then
+          for d in /etc/letsencrypt/live/*; do
+            [[ -d "$d" ]] || continue
+            primary_domain="$(basename "$d")"
+            break
+          done
+        fi
+        if [[ -n "$primary_domain" ]]; then
+          if ensure_nginx_ssl_directives "$primary_domain"; then
+            if $SUDO nginx -t >/tmp/nginx-test.log 2>&1; then
+              log "Nginx config is valid with existing SSL certificate for $primary_domain"
+              ssl_repaired=true
+            fi
+          fi
+        fi
+      fi
+
+      if [[ "$ssl_repaired" != "true" ]]; then
+        log "[WARN] Nginx config has SSL listeners but no certificates yet."
+        log "[INFO] Temporarily removing SSL listeners so nginx can start for certificate validation…"
+        # Temporarily remove SSL listeners so nginx can start
+        $SUDO sed -i.bak -e '/listen 443 ssl;/d' -e '/listen \[::\]:443 ssl;/d' "$NGINX_SITE_AVAIL"
+        # Test again
+        if $SUDO nginx -t; then
+          log "Nginx config is valid without SSL listeners (temporary)"
+        else
+          log "[ERROR] Nginx configuration still invalid after removing SSL listeners"
+          $SUDO mv "$NGINX_SITE_AVAIL.bak" "$NGINX_SITE_AVAIL" || true
+          exit 1
+        fi
       fi
     else
       log "[ERROR] Nginx config has SSL listeners but SSL was declined. This shouldn't happen."
@@ -683,10 +777,11 @@ setup_ssl_certificates() {
     return 1
   fi
   
-  local cert_info
-  local cert_info_err
-  local cert_info_exit
-  cert_info_err="$(python3 - <<'PY'
+    local cert_info
+    local cert_info_err
+    local cert_info_exit
+    cert_info_err="$(
+      python3 - "$cert_info_json" 2>&1 <<'PY'
 import json
 import sys
 import os
@@ -713,7 +808,7 @@ except Exception as e:
     print(f"ERROR: {e}", file=sys.stderr)
     sys.exit(1)
 PY
-"$cert_info_json" 2>&1)"
+    )"
   cert_info_exit=$?
   cert_info="$cert_info_err"
   
@@ -821,10 +916,11 @@ PY
   fi
   
   # Parse domain.json - only supports new format with "domains" array
-  local domain_info
-  local domain_info_err
-  local domain_info_exit
-  domain_info_err="$(python3 - <<'PY'
+    local domain_info
+    local domain_info_err
+    local domain_info_exit
+    domain_info_err="$(
+      python3 - "$domain_json" 2>&1 <<'PY'
 import json
 import sys
 import os
@@ -857,7 +953,7 @@ except Exception as e:
     print(f"ERROR: {e}", file=sys.stderr)
     sys.exit(1)
 PY
-"$domain_json" 2>&1)"
+    )"
   domain_info_exit=$?
   domain_info="$domain_info_err"
   
@@ -893,6 +989,11 @@ PY
   # Check if certificates already exist
   if [[ -f "$cert_file" && -f "$key_file" ]]; then
     log "SSL certificates already exist at $cert_dir"
+    if ensure_nginx_ssl_directives "$first_domain"; then
+      log "Ensured nginx configuration references existing certificates for $first_domain"
+    else
+      log "[WARN] Could not reconcile nginx configuration with existing certificates for $first_domain"
+    fi
     return 0
   fi
   
@@ -1138,6 +1239,8 @@ EOF
 "
     $SUDO chmod +x "$renewal_hook"
     
+    ensure_nginx_ssl_directives "$first_domain" || log "[WARN] Unable to reinforce nginx SSL directives for $first_domain after issuance"
+    
     return 0
   else
     log "[WARN] SSL certificate acquisition failed. See /tmp/certbot.log for details."
@@ -1314,8 +1417,29 @@ fi
 # Mark repo as safe for both root and service user to avoid 'dubious ownership'
 log "Marking repo as a safe.directory in git config (root and $SERVICE_USER)…"
 if command -v git >/dev/null 2>&1; then
-  sudo -u "$SERVICE_USER" env HOME="$SERVICE_USER_HOME" git config --global --add safe.directory "$REPO_DIR" || true
-  HOME="/root" git config --global --add safe.directory "$REPO_DIR" || true
+  # Root global gitconfig entry
+  root_safe_dirs="$(HOME=/root git config --global --get-all safe.directory 2>/dev/null || true)"
+  if ! grep -Fxq -- "$REPO_DIR" <<<"$root_safe_dirs"; then
+    HOME=/root git config --global --add safe.directory "$REPO_DIR" || log "[WARN] Failed to add $REPO_DIR to root global gitconfig safe.directory"
+  fi
+
+  # System-wide fallback entry
+  system_safe_dirs="$(git config --system --get-all safe.directory 2>/dev/null || true)"
+  if ! grep -Fxq -- "$REPO_DIR" <<<"$system_safe_dirs"; then
+    git config --system --add safe.directory "$REPO_DIR" || log "[WARN] Failed to add $REPO_DIR to system gitconfig safe.directory"
+  fi
+
+  # Service user gitconfig (only if home directory is writable to avoid lockfile errors)
+  if [[ -n "$SERVICE_USER" && "$SERVICE_USER" != "root" ]]; then
+    if sudo -u "$SERVICE_USER" test -w "$SERVICE_USER_HOME"; then
+      service_safe_dirs="$(sudo -u "$SERVICE_USER" env HOME="$SERVICE_USER_HOME" git config --global --get-all safe.directory 2>/dev/null || true)"
+      if ! grep -Fxq -- "$REPO_DIR" <<<"$service_safe_dirs"; then
+        sudo -u "$SERVICE_USER" env HOME="$SERVICE_USER_HOME" git config --global --add safe.directory "$REPO_DIR" || log "[WARN] Failed to add $REPO_DIR to $SERVICE_USER gitconfig safe.directory"
+      fi
+    else
+      log "[INFO] Skipping $SERVICE_USER global gitconfig update (home $SERVICE_USER_HOME not writable); relying on system gitconfig safe.directory entry."
+    fi
+  fi
 fi
 
 log "Attempting Supabase Edge Function deployment (if credentials provided)…"
