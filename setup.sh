@@ -646,6 +646,84 @@ setup_ssl_certificates() {
     return 0
   fi
   
+  # Ensure cert-info.json exists (create with defaults if missing)
+  if [[ ! -f "$cert_info_json" ]]; then
+    log "cert-info.json not found. Creating with default email from cert-info.json in repo…"
+    # Check if cert-info.json exists in repo
+    if [[ -f "$REPO_DIR/cert-info.json" ]]; then
+      log "Copying cert-info.json from repo…"
+      $SUDO cp "$REPO_DIR/cert-info.json" "$cert_info_json"
+      $SUDO chmod 644 "$cert_info_json"
+      $SUDO chown root:root "$cert_info_json"
+    else
+      log "[ERROR] cert-info.json not found in repo at $REPO_DIR/cert-info.json"
+      log "[ERROR] SSL certificate setup requires cert-info.json with email field."
+      return 1
+    fi
+  fi
+  
+  # Fix cert-info.json permissions
+  $SUDO chmod 644 "$cert_info_json" 2>/dev/null || true
+  $SUDO chown root:root "$cert_info_json" 2>/dev/null || true
+  
+  # Read certificate configuration from cert-info.json
+  local cert_email=""
+  local cert_dns_plugin=""
+  local cert_dns_credentials=""
+  local cert_use_wildcard=false
+  local cert_staging=false
+  
+  log "Reading certificate configuration from cert-info.json…"
+  if [[ ! -r "$cert_info_json" ]]; then
+    log "[ERROR] cert-info.json exists but is not readable: $cert_info_json"
+    return 1
+  fi
+  
+  local cert_info
+  cert_info="$(python3 - <<'PY'
+import json
+import sys
+import os
+try:
+    filepath = sys.argv[1]
+    if not os.access(filepath, os.R_OK):
+        print(f"ERROR: File not readable: {filepath}", file=sys.stderr)
+        sys.exit(1)
+    with open(filepath, 'r') as f:
+        data = json.load(f)
+    email = data.get('email', '')
+    dns_plugin = data.get('dns_plugin', '')
+    dns_credentials = data.get('dns_credentials', '')
+    use_wildcard = data.get('use_wildcard', False)
+    staging = data.get('staging', False)
+    print(f"{email}|{dns_plugin}|{dns_credentials}|{use_wildcard}|{staging}")
+except json.JSONDecodeError as e:
+    print(f"ERROR: Invalid JSON in cert-info.json: {e}", file=sys.stderr)
+    sys.exit(1)
+except Exception as e:
+    print(f"ERROR: {e}", file=sys.stderr)
+    sys.exit(1)
+PY
+"$cert_info_json" 2>&1)"
+  
+  if [[ "$cert_info" == ERROR:* ]] || [[ -z "$cert_info" ]]; then
+    log "[ERROR] Failed to parse cert-info.json"
+    [[ -n "$cert_info" ]] && log "[ERROR] Details: $cert_info"
+    return 1
+  fi
+  
+  IFS='|' read -r cert_email cert_dns_plugin cert_dns_credentials cert_use_wildcard cert_staging <<< "$cert_info"
+  log "Certificate email: ${cert_email:-not set}"
+  [[ -n "$cert_dns_plugin" ]] && log "DNS plugin: $cert_dns_plugin"
+  [[ "$cert_use_wildcard" == "True" ]] && log "Wildcard certificate requested"
+  [[ "$cert_staging" == "True" ]] && log "Using Let's Encrypt staging environment"
+  
+  # Require email from cert-info.json (no fallback)
+  if [[ -z "$cert_email" ]]; then
+    log "[ERROR] Email is required in cert-info.json. Please add 'email' field."
+    return 1
+  fi
+  
   # Interactive domain.json creation if it doesn't exist
   if [[ ! -f "$domain_json" ]]; then
     log "domain.json not found. Setting up SSL certificate configuration interactively…"
@@ -689,7 +767,7 @@ setup_ssl_certificates() {
     domains_json+="]"
     
     # Create domain.json using python3 (with proper permissions)
-    $SUDO python3 - <<PY
+    python3 - <<PY
 import json
 import os
 domains = $domains_json
@@ -707,23 +785,9 @@ PY
       return 1
     fi
     
+    $SUDO chmod 644 "$domain_json"
+    $SUDO chown root:root "$domain_json"
     log "domain.json created successfully at $domain_json"
-  fi
-  
-  # Read certificate configuration from cert-info.json
-  local cert_email=""
-  local cert_dns_plugin=""
-  local cert_dns_credentials=""
-  local cert_use_wildcard=false
-  local cert_staging=false
-  
-  # Require cert-info.json
-  if [[ ! -f "$cert_info_json" ]]; then
-    log "[ERROR] cert-info.json not found at $cert_info_json"
-    log "[ERROR] SSL certificate setup requires cert-info.json with email field."
-    log "[INFO] Create cert-info.json with format:"
-    log "       {\"email\": \"your@email.com\", \"dns_plugin\": \"\", \"dns_credentials\": \"\", \"use_wildcard\": false, \"staging\": false}"
-    return 1
   fi
   
   # Fix file permissions if needed (ensure readable by root)
@@ -782,6 +846,12 @@ PY
   [[ -n "$cert_dns_plugin" ]] && log "DNS plugin: $cert_dns_plugin"
   [[ "$cert_use_wildcard" == "True" ]] && log "Wildcard certificate requested"
   [[ "$cert_staging" == "True" ]] && log "Using Let's Encrypt staging environment"
+  
+  # Require email from cert-info.json (no fallback)
+  if [[ -z "$cert_email" ]]; then
+    log "[ERROR] Email is required in cert-info.json. Please add 'email' field."
+    return 1
+  fi
   
   # Fix domain.json permissions if needed
   if [[ -f "$domain_json" ]]; then
