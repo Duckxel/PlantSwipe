@@ -371,8 +371,8 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
               </div>
               
               <div className="grid gap-2">
-                <Label htmlFor="plant-name">Name</Label>
-                <Input id="plant-name" autoComplete="off" value={name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} />
+                <Label htmlFor="plant-name">Name <span className="text-red-500">*</span></Label>
+                <Input id="plant-name" autoComplete="off" value={name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} required />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="plant-scientific">Scientific name</Label>

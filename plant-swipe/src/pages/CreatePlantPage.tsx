@@ -304,8 +304,8 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
               </div>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="plant-name">{t('createPlant.name')}</Label>
-              <Input id="plant-name" autoComplete="off" placeholder={t('createPlant.namePlaceholder')} value={name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} />
+              <Label htmlFor="plant-name">{t('createPlant.name')} <span className="text-red-500">*</span></Label>
+              <Input id="plant-name" autoComplete="off" placeholder={t('createPlant.namePlaceholder')} value={name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} required />
               <div className="text-xs opacity-60">{t('createPlant.nameRequired')}</div>
             </div>
             {advanced && (
