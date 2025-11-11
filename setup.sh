@@ -650,54 +650,50 @@ PY
       return 0
     fi
     
-    # Ask for domain name
+    # Ask for full domains (domain and subdomains included)
     echo ""
-    read -p "Enter your domain name (e.g., example.com): " domain_input
-    domain_input="${domain_input// /}"  # trim whitespace
-    if [[ -z "$domain_input" ]]; then
-      log "[ERROR] Domain name is required. Skipping SSL certificate setup."
+    echo "Enter the full domain(s) you want SSL certificates for."
+    echo "Examples:"
+    echo "  - Single domain: aphylia.app"
+    echo "  - Multiple domains: dev01.aphylia.app,dev02.aphylia.app,aphylia.app"
+    echo ""
+    read -p "Enter domain(s) (comma-separated): " domains_input
+    domains_input="${domains_input// /}"  # trim whitespace
+    if [[ -z "$domains_input" ]]; then
+      log "[ERROR] At least one domain is required. Skipping SSL certificate setup."
       return 1
     fi
     
-    # Ask for subdomains
-    echo ""
-    read -p "Enter subdomains (comma-separated, e.g., dev01,staging,api or press Enter for none): " subdomains_line
-    local subdomains_input=()
-    if [[ -n "$subdomains_line" ]]; then
-      IFS=',' read -ra subdomain_array <<< "$subdomains_line"
-      for sub in "${subdomain_array[@]}"; do
-        sub="${sub// /}"  # trim whitespace
-        [[ -n "$sub" ]] && subdomains_input+=("$sub")
-      done
+    # Parse comma-separated domains
+    local domains_array=()
+    IFS=',' read -ra domain_list <<< "$domains_input"
+    for dom in "${domain_list[@]}"; do
+      dom="${dom// /}"  # trim whitespace
+      [[ -n "$dom" ]] && domains_array+=("$dom")
+    done
+    
+    if ((${#domains_array[@]} == 0)); then
+      log "[ERROR] No valid domains provided. Skipping SSL certificate setup."
+      return 1
     fi
     
-    # Create domain.json
-    log "Creating domain.json with domain: $domain_input"
-    if ((${#subdomains_input[@]} > 0)); then
-      log "Subdomains: ${subdomains_input[*]}"
-    else
-      log "No subdomains specified (base domain only)"
-    fi
+    # Create domain.json with full domains
+    log "Creating domain.json with domains: ${domains_array[*]}"
     
-    # Build JSON array of subdomains
-    local subdomains_json="[]"
-    if ((${#subdomains_input[@]} > 0)); then
-      subdomains_json="["
-      for i in "${!subdomains_input[@]}"; do
-        [[ $i -gt 0 ]] && subdomains_json+=", "
-        subdomains_json+="\"${subdomains_input[$i]}\""
-      done
-      subdomains_json+="]"
-    fi
+    # Build JSON array of domains
+    local domains_json="["
+    for i in "${!domains_array[@]}"; do
+      [[ $i -gt 0 ]] && domains_json+=", "
+      domains_json+="\"${domains_array[$i]}\""
+    done
+    domains_json+="]"
     
     # Create domain.json using python3
     $SUDO python3 - <<PY
 import json
-domain = "$domain_input"
-subdomains = $subdomains_json
+domains = $domains_json
 data = {
-    "domain": domain,
-    "subdomains": subdomains
+    "domains": domains
 }
 with open("$domain_json", 'w') as f:
     json.dump(data, f, indent=2)
@@ -712,7 +708,7 @@ PY
     log "domain.json created successfully at $domain_json"
   fi
   
-  # Parse domain.json using python3
+  # Parse domain.json using python3 - support both old format (domain/subdomains) and new format (domains array)
   local domain_info
   domain_info="$($SUDO python3 - <<'PY'
 import json
@@ -720,9 +716,23 @@ import sys
 try:
     with open(sys.argv[1], 'r') as f:
         data = json.load(f)
-    domain = data.get('domain', '')
-    subdomains = data.get('subdomains', [])
-    print(f"{domain}|{'|'.join(subdomains)}")
+    
+    # New format: "domains" array with full domains
+    if 'domains' in data and isinstance(data['domains'], list):
+        domains = data['domains']
+        print('|'.join(domains))
+    # Old format: "domain" + "subdomains" (for backward compatibility)
+    elif 'domain' in data:
+        domain = data.get('domain', '')
+        subdomains = data.get('subdomains', [])
+        all_domains = [domain]
+        for sub in subdomains:
+            if sub:
+                all_domains.append(f"{sub}.{domain}")
+        print('|'.join(all_domains))
+    else:
+        print("ERROR: No 'domains' or 'domain' field found in domain.json", file=sys.stderr)
+        sys.exit(1)
 except Exception as e:
     print(f"ERROR: {e}", file=sys.stderr)
     sys.exit(1)
@@ -734,20 +744,39 @@ PY
     return 1
   fi
   
-  # Extract domain and subdomains
-  IFS='|' read -r domain subdomains_str <<< "$domain_info"
-  if [[ -z "$domain" ]]; then
-    log "[ERROR] No domain found in domain.json"
+  # Extract all domains
+  local all_domains=()
+  if [[ -n "$domain_info" ]]; then
+    IFS='|' read -ra domain_array <<< "$domain_info"
+    for dom in "${domain_array[@]}"; do
+      [[ -n "$dom" ]] && all_domains+=("$dom")
+    done
+  fi
+  
+  if ((${#all_domains[@]} == 0)); then
+    log "[ERROR] No domains found in domain.json"
     return 1
   fi
   
-  # Build array of all domains to certificate (base domain + subdomains)
-  local all_domains=("$domain")
-  if [[ -n "$subdomains_str" ]]; then
-    IFS='|' read -ra subdomain_array <<< "$subdomains_str"
-    for sub in "${subdomain_array[@]}"; do
-      [[ -n "$sub" ]] && all_domains+=("${sub}.${domain}")
-    done
+  log "Domains to certificate: ${all_domains[*]}"
+  
+  # Determine certificate directory (Let's Encrypt uses first domain as certificate name)
+  local first_domain="${all_domains[0]}"
+  local cert_dir="/etc/letsencrypt/live/$first_domain"
+  local cert_file="$cert_dir/fullchain.pem"
+  local key_file="$cert_dir/privkey.pem"
+  
+  # Check if certificates already exist
+  if [[ -f "$cert_file" && -f "$key_file" ]]; then
+    log "SSL certificates already exist at $cert_dir"
+    return 0
+  fi
+  
+  # Extract base domain for wildcard certificate logic (e.g., "aphylia.app" from "dev01.aphylia.app")
+  local base_domain="$first_domain"
+  if [[ "$first_domain" == *.*.* ]]; then
+    # Has subdomain, extract base domain (everything after first dot)
+    base_domain="${first_domain#*.}"
   fi
   
   # Require email from cert-info.json (no fallback)
@@ -814,7 +843,7 @@ PY
   if [[ -n "$dns_plugin" && -n "$dns_credentials" ]]; then
     log "Using DNS-01 challenge with plugin: $dns_plugin"
     if [[ "$use_wildcard" == "true" ]]; then
-      log "This will obtain certificates for $domain AND *.${domain} (all subdomains)"
+      log "This will obtain certificates for $base_domain AND *.${base_domain} (all subdomains)"
     else
       log "This will obtain certificates for: ${all_domains[*]}"
     fi
@@ -829,7 +858,7 @@ PY
     )
     [[ "$use_staging" == "true" ]] && certbot_args+=(--staging)
     if [[ "$use_wildcard" == "true" ]]; then
-      certbot_args+=(-d "$domain" -d "*.${domain}")
+      certbot_args+=(-d "$base_domain" -d "*.${base_domain}")
     else
       for dom in "${all_domains[@]}"; do
         certbot_args+=(-d "$dom")
@@ -861,7 +890,7 @@ PY
       if ! grep -q "ssl_certificate" "$NGINX_SITE_AVAIL"; then
         log "Updating nginx configuration with SSL certificate paths…"
         # Insert SSL configuration after server_name line
-        $SUDO sed -i "/server_name.*${domain}/a\\
+        $SUDO sed -i "/server_name/a\\
     ssl_certificate $cert_file;\\
     ssl_certificate_key $key_file;\\
     ssl_protocols TLSv1.2 TLSv1.3;\\
@@ -918,7 +947,7 @@ EOF
     done
     log "       $cert_cmd"
     log "[INFO] For wildcard certificates, use DNS-01 challenge:"
-    log "       sudo certbot certonly --dns-<plugin> -d $domain -d *.$domain"
+    log "       sudo certbot certonly --dns-<plugin> -d $base_domain -d *.$base_domain"
     return 1
   fi
 }
