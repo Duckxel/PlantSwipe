@@ -201,6 +201,9 @@ alter table if exists public.plants add column if not exists water_freq_amount i
 alter table if exists public.plants add column if not exists water_freq_unit text;
 alter table if exists public.plants add column if not exists water_freq_value integer;
 alter table if exists public.plants add column if not exists updated_at timestamptz not null default now();
+alter table if exists public.plants alter column care_sunlight set default 'Low';
+update public.plants set care_sunlight = 'Low' where care_sunlight is null;
+alter table if exists public.plants alter column care_sunlight set not null;
 -- Relax NOT NULL constraints to support Simplified Add Plant flow
 alter table if exists public.plants alter column scientific_name drop not null;
 alter table if exists public.plants alter column care_soil drop not null;
