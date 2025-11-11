@@ -598,10 +598,18 @@ setup_ssl_certificates() {
   local cert_use_wildcard=false
   local cert_staging=false
   
-  if [[ -f "$cert_info_json" ]]; then
-    log "Reading certificate configuration from cert-info.json…"
-    local cert_info
-    cert_info="$($SUDO python3 - <<'PY'
+  # Require cert-info.json
+  if [[ ! -f "$cert_info_json" ]]; then
+    log "[ERROR] cert-info.json not found at $cert_info_json"
+    log "[ERROR] SSL certificate setup requires cert-info.json with email field."
+    log "[INFO] Create cert-info.json with format:"
+    log "       {\"email\": \"your@email.com\", \"dns_plugin\": \"\", \"dns_credentials\": \"\", \"use_wildcard\": false, \"staging\": false}"
+    return 1
+  fi
+  
+  log "Reading certificate configuration from cert-info.json…"
+  local cert_info
+  cert_info="$($SUDO python3 - <<'PY'
 import json
 import sys
 try:
@@ -618,19 +626,17 @@ except Exception as e:
     sys.exit(1)
 PY
 "$cert_info_json")"
-    
-    if [[ "$cert_info" != ERROR:* ]]; then
-      IFS='|' read -r cert_email cert_dns_plugin cert_dns_credentials cert_use_wildcard cert_staging <<< "$cert_info"
-      log "Certificate email: ${cert_email:-not set}"
-      [[ -n "$cert_dns_plugin" ]] && log "DNS plugin: $cert_dns_plugin"
-      [[ "$cert_use_wildcard" == "True" ]] && log "Wildcard certificate requested"
-      [[ "$cert_staging" == "True" ]] && log "Using Let's Encrypt staging environment"
-    else
-      log "[WARN] Failed to parse cert-info.json: $cert_info"
-    fi
-  else
-    log "[INFO] cert-info.json not found. Using environment variables or defaults."
+  
+  if [[ "$cert_info" == ERROR:* ]]; then
+    log "[ERROR] Failed to parse cert-info.json: $cert_info"
+    return 1
   fi
+  
+  IFS='|' read -r cert_email cert_dns_plugin cert_dns_credentials cert_use_wildcard cert_staging <<< "$cert_info"
+  log "Certificate email: ${cert_email:-not set}"
+  [[ -n "$cert_dns_plugin" ]] && log "DNS plugin: $cert_dns_plugin"
+  [[ "$cert_use_wildcard" == "True" ]] && log "Wildcard certificate requested"
+  [[ "$cert_staging" == "True" ]] && log "Using Let's Encrypt staging environment"
   
   # Read domain and subdomains from domain.json
   if [[ ! -f "$domain_json" ]]; then
@@ -677,8 +683,12 @@ PY
     done
   fi
   
-  # Determine email to use (priority: cert-info.json > SSL_EMAIL env > default)
-  local email="${cert_email:-${SSL_EMAIL:-admin@${domain}}}"
+  # Require email from cert-info.json (no fallback)
+  if [[ -z "$cert_email" ]]; then
+    log "[ERROR] Email is required in cert-info.json. Please add 'email' field."
+    return 1
+  fi
+  local email="$cert_email"
   
   # Determine DNS plugin and credentials (priority: cert-info.json > env vars)
   local dns_plugin="${cert_dns_plugin:-${CERTBOT_DNS_PLUGIN:-}}"
