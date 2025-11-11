@@ -1,47 +1,218 @@
+/**
+ * Plant data structure matching PLANT-INFO-SCHEMA.json
+ */
+
+export interface PlantIdentifiers {
+  scientificName?: string
+  canonicalName?: string
+  synonyms?: string[]
+  commonNames?: string[]
+  taxonRank?: "species" | "subspecies" | "variety" | "form" | "cultivar" | "hybrid"
+  cultivarGroup?: string
+  cultivar?: string
+  family?: string
+  genus?: string
+  externalIds?: {
+    gbif?: string
+    powo?: string
+    ipni?: string
+    itis?: string
+    wiki?: string
+    kindwise?: string
+    other?: Record<string, string>
+  }
+}
+
+export interface PlantTraits {
+  lifeCycle?: "annual" | "biennial" | "perennial"
+  habit?: ("tree" | "shrub" | "vine" | "climber" | "herbaceous" | "succulent" | "grass" | "fern" | "aquatic")[]
+  deciduousEvergreen?: "deciduous" | "evergreen" | "semi-evergreen"
+  growthRate?: "slow" | "moderate" | "fast"
+  thornsSpines?: boolean
+  fragrance?: "none" | "light" | "moderate" | "strong"
+  toxicity?: {
+    toHumans?: "non-toxic" | "mild" | "moderate" | "severe"
+    toPets?: "non-toxic" | "mild" | "moderate" | "severe"
+  }
+  allergenicity?: "low" | "medium" | "high"
+  invasiveness?: {
+    status?: "not invasive" | "regional risk" | "invasive"
+    regions?: string[]
+  }
+}
+
+export interface PlantDimensions {
+  height?: {
+    minCm?: number
+    maxCm?: number
+  }
+  spread?: {
+    minCm?: number
+    maxCm?: number
+  }
+  spacing?: {
+    rowCm?: number
+    plantCm?: number
+  }
+  containerFriendly?: boolean
+}
+
+export interface ColorInfo {
+  name: string
+  hex?: string
+}
+
+export interface PlantPhenology {
+  flowerColors?: ColorInfo[]
+  leafColors?: ColorInfo[]
+  floweringMonths?: number[]
+  fruitingMonths?: number[]
+  scentNotes?: string[]
+}
+
+export interface PlantEnvironment {
+  sunExposure?: "full sun" | "partial sun" | "partial shade" | "full shade"
+  lightIntensity?: "very high" | "high" | "medium" | "low"
+  hardiness?: {
+    usdaZones?: number[]
+    rhsH?: string
+  }
+  climatePref?: ("tropical" | "subtropical" | "temperate" | "Mediterranean" | "arid" | "continental" | "oceanic")[]
+  temperature?: {
+    minC?: number
+    maxC?: number
+  }
+  humidityPref?: "low" | "moderate" | "high"
+  windTolerance?: "low" | "moderate" | "high"
+  soil?: {
+    texture?: ("sandy" | "loamy" | "silty" | "clayey")[]
+    drainage?: "free-draining" | "moderate" | "poor"
+    fertility?: "low" | "medium" | "high"
+    pH?: {
+      min?: number
+      max?: number
+    }
+  }
+}
+
+export interface PlantCare {
+  difficulty?: "easy" | "moderate" | "advanced"
+  maintenanceLevel?: "low" | "medium" | "high"
+  watering?: {
+    frequency?: {
+      winter?: string
+      spring?: string
+      summer?: string
+      autumn?: string
+    }
+    method?: "at soil" | "bottom water" | "soak and dry" | "drip" | "none (aquatic)"
+    depthCm?: number
+  }
+  fertilizing?: {
+    type?: "balanced NPK" | "high K" | "organic compost" | "slow-release" | "foliar"
+    schedule?: string
+  }
+  pruning?: {
+    bestMonths?: number[]
+    method?: "light trim" | "hard prune" | "deadheading" | "thinning" | "renewal"
+  }
+  mulching?: {
+    recommended?: boolean
+    material?: string
+  }
+  stakingSupport?: boolean
+  repottingIntervalYears?: number
+}
+
+export interface PlantPropagation {
+  methods?: ("seed" | "cuttings" | "division" | "layering" | "grafting" | "tissue culture")[]
+  seed?: {
+    stratification?: "none" | "cold-moist" | "warm" | "scarification"
+    germinationDays?: {
+      min?: number
+      max?: number
+    }
+  }
+}
+
+export interface PlantUsage {
+  gardenUses?: ("border" | "mass planting" | "hedge" | "groundcover" | "specimen" | "container" | "climber" | "wildlife garden" | "cut flower" | "fragrance")[]
+  indoorOutdoor?: "outdoor" | "indoor" | "both"
+  edibleParts?: ("none" | "leaf" | "flower" | "fruit" | "seed" | "root" | "stem")[]
+  culinaryUses?: string[]
+  medicinalUses?: string[]
+}
+
+export interface PlantEcology {
+  nativeRange?: string[]
+  pollinators?: string[]
+  wildlifeValue?: string[]
+  conservationStatus?: "NE" | "DD" | "LC" | "NT" | "VU" | "EN" | "CR" | "EW" | "EX"
+}
+
+export interface PlantCommerce {
+  seedsAvailable?: boolean
+}
+
+export interface PlantProblems {
+  pests?: string[]
+  diseases?: string[]
+  hazards?: string[]
+}
+
+export interface PlantPlanting {
+  calendar?: {
+    hemisphere?: "north" | "south" | "equatorial"
+    sowingMonths?: number[]
+    plantingOutMonths?: number[]
+    promotionMonth?: number
+  }
+  sitePrep?: string[]
+  companionPlants?: string[]
+  avoidNear?: string[]
+}
+
+export interface PlantMeta {
+  rarity?: "common" | "uncommon" | "rare" | "very rare"
+  tags?: string[]
+  funFact?: string
+  sourceReferences?: string[]
+  authorNotes?: string
+  createdAt?: string
+  updatedAt?: string
+  createdBy?: string
+  updatedBy?: string
+}
+
 export interface Plant {
   id: string
+  // Legacy name field for backward compatibility
   name: string
-  scientificName: string
-  colors: string[]
-  seasons: ("Spring" | "Summer" | "Autumn" | "Winter")[]
-  rarity: "Common" | "Uncommon" | "Rare" | "Legendary"
-  meaning: string
-  description: string
+  // New structured format
+  identifiers?: PlantIdentifiers
+  traits?: PlantTraits
+  dimensions?: PlantDimensions
+  phenology?: PlantPhenology
+  environment?: PlantEnvironment
+  care?: PlantCare
+  propagation?: PlantPropagation
+  usage?: PlantUsage
+  ecology?: PlantEcology
+  commerce?: PlantCommerce
+  problems?: PlantProblems
+  planting?: PlantPlanting
+  meta?: PlantMeta
+  // Legacy fields for backward compatibility
+  scientificName?: string
+  colors?: string[]
+  seasons?: ("Spring" | "Summer" | "Autumn" | "Winter")[]
+  rarity?: "Common" | "Uncommon" | "Rare" | "Legendary"
+  meaning?: string
+  description?: string
   image?: string
-  care: {
-    sunlight: "Low" | "Medium" | "High"
-    water: "Low" | "Medium" | "High"
-    soil: string
-    difficulty: "Easy" | "Moderate" | "Hard"
-  }
-  seedsAvailable: boolean
-  // Optional frequency hints from plants table
+  seedsAvailable?: boolean
   waterFreqUnit?: 'day' | 'week' | 'month' | 'year'
   waterFreqValue?: number | null
   waterFreqPeriod?: 'week' | 'month' | 'year'
   waterFreqAmount?: number | null
-  // New comprehensive plant fields
-  wikipediaLink?: string
-  plantFamily?: string
-  plantType?: string[]
-  plantationType?: string[]
-  origins?: string
-  whereFound?: string
-  size?: string
-  floweringPeriod?: string
-  plantMonth?: number[]
-  lightAmount?: string
-  climate?: string
-  idealTemperature?: string
-  regionOfWorld?: string
-  soilType?: string
-  meaningAndSignifications?: string
-  ecology?: string
-  pharmaceutical?: string
-  alimentaire?: string
-  caringTips?: string
-  authorNotes?: string
-  propagation?: string
-  division?: string
-  commonDiseases?: string
 }

@@ -2,28 +2,27 @@
  * Plant Translation Utilities
  * 
  * Functions to save and load plant translations from Supabase
+ * Updated for new JSONB structure
  */
 
 import { supabase } from './supabaseClient'
 import type { SupportedLanguage } from './i18n'
+import type { PlantIdentifiers, PlantEcology, PlantUsage, PlantMeta } from '@/types/plant'
 
 export interface PlantTranslation {
   plant_id: string
   language: SupportedLanguage
   name: string
+  // Translatable JSONB fields
+  identifiers?: PlantIdentifiers
+  ecology?: PlantEcology
+  usage?: PlantUsage
+  meta?: PlantMeta
+  // Legacy fields for backward compatibility
   scientific_name?: string | null
   meaning?: string | null
   description?: string | null
   care_soil?: string | null
-  meaning_and_significations?: string | null
-  ecology?: string | null
-  pharmaceutical?: string | null
-  alimentaire?: string | null
-  caring_tips?: string | null
-  author_notes?: string | null
-  propagation?: string | null
-  division?: string | null
-  common_diseases?: string | null
 }
 
 /**
@@ -37,19 +36,15 @@ export async function savePlantTranslation(translation: PlantTranslation): Promi
         plant_id: translation.plant_id,
         language: translation.language,
         name: translation.name,
+        identifiers: translation.identifiers || null,
+        ecology: translation.ecology || null,
+        usage: translation.usage || null,
+        meta: translation.meta || null,
+        // Legacy fields
         scientific_name: translation.scientific_name || null,
         meaning: translation.meaning || null,
         description: translation.description || null,
         care_soil: translation.care_soil || null,
-        meaning_and_significations: translation.meaning_and_significations || null,
-        ecology: translation.ecology || null,
-        pharmaceutical: translation.pharmaceutical || null,
-        alimentaire: translation.alimentaire || null,
-        caring_tips: translation.caring_tips || null,
-        author_notes: translation.author_notes || null,
-        propagation: translation.propagation || null,
-        division: translation.division || null,
-        common_diseases: translation.common_diseases || null,
         updated_at: new Date().toISOString(),
       }, {
         onConflict: 'plant_id,language',
@@ -74,19 +69,15 @@ export async function savePlantTranslations(translations: PlantTranslation[]): P
       plant_id: t.plant_id,
       language: t.language,
       name: t.name,
+      identifiers: t.identifiers || null,
+      ecology: t.ecology || null,
+      usage: t.usage || null,
+      meta: t.meta || null,
+      // Legacy fields
       scientific_name: t.scientific_name || null,
       meaning: t.meaning || null,
       description: t.description || null,
       care_soil: t.care_soil || null,
-      meaning_and_significations: t.meaning_and_significations || null,
-      ecology: t.ecology || null,
-      pharmaceutical: t.pharmaceutical || null,
-      alimentaire: t.alimentaire || null,
-      caring_tips: t.caring_tips || null,
-      author_notes: t.author_notes || null,
-      propagation: t.propagation || null,
-      division: t.division || null,
-      common_diseases: t.common_diseases || null,
       updated_at: new Date().toISOString(),
     }))
 

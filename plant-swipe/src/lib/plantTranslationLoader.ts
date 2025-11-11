@@ -1,5 +1,6 @@
 /**
  * Plant Translation Utilities - Merge translations with base plant data
+ * Updated for new JSONB structure
  */
 
 import { supabase } from './supabaseClient'
@@ -8,56 +9,174 @@ import type { Plant } from '@/types/plant'
 
 /**
  * Merge translation data with base plant data
+ * Handles both new JSONB structure and legacy flat fields
  */
 export function mergePlantWithTranslation(
   basePlant: any,
   translation: any | null
 ): Plant {
+  // Parse JSONB fields if they're strings
+  const identifiers = typeof basePlant.identifiers === 'string' 
+    ? JSON.parse(basePlant.identifiers) 
+    : basePlant.identifiers
+  const traits = typeof basePlant.traits === 'string' 
+    ? JSON.parse(basePlant.traits) 
+    : basePlant.traits
+  const dimensions = typeof basePlant.dimensions === 'string' 
+    ? JSON.parse(basePlant.dimensions) 
+    : basePlant.dimensions
+  const phenology = typeof basePlant.phenology === 'string' 
+    ? JSON.parse(basePlant.phenology) 
+    : basePlant.phenology
+  const environment = typeof basePlant.environment === 'string' 
+    ? JSON.parse(basePlant.environment) 
+    : basePlant.environment
+  const care = typeof basePlant.care === 'string' 
+    ? JSON.parse(basePlant.care) 
+    : basePlant.care
+  const propagation = typeof basePlant.propagation === 'string' 
+    ? JSON.parse(basePlant.propagation) 
+    : basePlant.propagation
+  const usage = typeof basePlant.usage === 'string' 
+    ? JSON.parse(basePlant.usage) 
+    : basePlant.usage
+  const ecology = typeof basePlant.ecology === 'string' 
+    ? JSON.parse(basePlant.ecology) 
+    : basePlant.ecology
+  const commerce = typeof basePlant.commerce === 'string' 
+    ? JSON.parse(basePlant.commerce) 
+    : basePlant.commerce
+  const problems = typeof basePlant.problems === 'string' 
+    ? JSON.parse(basePlant.problems) 
+    : basePlant.problems
+  const planting = typeof basePlant.planting === 'string' 
+    ? JSON.parse(basePlant.planting) 
+    : basePlant.planting
+  const meta = typeof basePlant.meta === 'string' 
+    ? JSON.parse(basePlant.meta) 
+    : basePlant.meta
+
+  // Parse translation JSONB if present
+  const translationIdentifiers = translation?.identifiers 
+    ? (typeof translation.identifiers === 'string' ? JSON.parse(translation.identifiers) : translation.identifiers)
+    : null
+  const translationEcology = translation?.ecology 
+    ? (typeof translation.ecology === 'string' ? JSON.parse(translation.ecology) : translation.ecology)
+    : null
+  const translationUsage = translation?.usage 
+    ? (typeof translation.usage === 'string' ? JSON.parse(translation.usage) : translation.usage)
+    : null
+  const translationMeta = translation?.meta 
+    ? (typeof translation.meta === 'string' ? JSON.parse(translation.meta) : translation.meta)
+    : null
+
   return {
     id: String(basePlant.id),
     name: translation?.name || basePlant.name || '',
-    scientificName: translation?.scientific_name || basePlant.scientific_name || '',
+    // New structured format - merge with translations where applicable
+    identifiers: {
+      ...identifiers,
+      ...translationIdentifiers,
+      scientificName: translationIdentifiers?.scientificName || identifiers?.scientificName || basePlant.scientific_name || '',
+      commonNames: translationIdentifiers?.commonNames || identifiers?.commonNames || undefined,
+    },
+    traits: traits || undefined,
+    dimensions: dimensions || undefined,
+    phenology: {
+      ...phenology,
+      flowerColors: phenology?.flowerColors || (Array.isArray(basePlant.colors) 
+        ? basePlant.colors.map((c: string) => ({ name: c }))
+        : undefined),
+      floweringMonths: phenology?.floweringMonths || (Array.isArray(basePlant.seasons) 
+        ? basePlant.seasons.map((s: string) => {
+            const monthMap: Record<string, number[]> = {
+              'Spring': [3, 4, 5],
+              'Summer': [6, 7, 8],
+              'Autumn': [9, 10, 11],
+              'Winter': [12, 1, 2]
+            }
+            return monthMap[s] || []
+          }).flat()
+        : undefined),
+    },
+    environment: {
+      ...environment,
+      sunExposure: environment?.sunExposure || (basePlant.care_sunlight === 'High' ? 'full sun' 
+        : basePlant.care_sunlight === 'Medium' ? 'partial sun' 
+        : basePlant.care_sunlight === 'Low' ? 'partial shade' 
+        : undefined),
+      soil: {
+        ...environment?.soil,
+        texture: environment?.soil?.texture || (basePlant.care_soil ? [basePlant.care_soil] : undefined),
+      },
+    },
+    care: {
+      ...care,
+      difficulty: care?.difficulty || (basePlant.care_difficulty === 'Easy' ? 'easy'
+        : basePlant.care_difficulty === 'Moderate' ? 'moderate'
+        : basePlant.care_difficulty === 'Hard' ? 'advanced'
+        : undefined),
+      watering: {
+        ...care?.watering,
+        frequency: care?.watering?.frequency || {
+          spring: basePlant.water_freq_period && basePlant.water_freq_amount 
+            ? `${basePlant.water_freq_amount} times per ${basePlant.water_freq_period}`
+            : undefined,
+        },
+      },
+    },
+    propagation: propagation || undefined,
+    usage: {
+      ...usage,
+      ...translationUsage,
+      gardenUses: usage?.gardenUses || undefined,
+      culinaryUses: translationUsage?.culinaryUses || usage?.culinaryUses || undefined,
+      medicinalUses: translationUsage?.medicinalUses || usage?.medicinalUses || undefined,
+    },
+    ecology: {
+      ...ecology,
+      ...translationEcology,
+      nativeRange: translationEcology?.nativeRange || ecology?.nativeRange || undefined,
+      wildlifeValue: translationEcology?.wildlifeValue || ecology?.wildlifeValue || undefined,
+    },
+    commerce: {
+      ...commerce,
+      seedsAvailable: commerce?.seedsAvailable ?? basePlant.seeds_available ?? false,
+    },
+    problems: problems || undefined,
+    planting: {
+      ...planting,
+      calendar: {
+        ...planting?.calendar,
+        promotionMonth: planting?.calendar?.promotionMonth || (Array.isArray(basePlant.plant_month) && basePlant.plant_month.length > 0 
+          ? basePlant.plant_month[0] 
+          : undefined),
+      },
+    },
+    meta: {
+      ...meta,
+      ...translationMeta,
+      rarity: meta?.rarity || (basePlant.rarity === 'Common' ? 'common'
+        : basePlant.rarity === 'Uncommon' ? 'uncommon'
+        : basePlant.rarity === 'Rare' ? 'rare'
+        : basePlant.rarity === 'Legendary' ? 'very rare'
+        : undefined),
+      authorNotes: translationMeta?.authorNotes || meta?.authorNotes || basePlant.author_notes || undefined,
+      funFact: translationMeta?.funFact || meta?.funFact || basePlant.meaning || undefined,
+    },
+    // Legacy fields for backward compatibility
+    scientificName: translation?.scientific_name || basePlant.scientific_name || identifiers?.scientificName || '',
     colors: Array.isArray(basePlant.colors) ? basePlant.colors.map((c: unknown) => String(c)) : [],
     seasons: Array.isArray(basePlant.seasons) ? (basePlant.seasons as unknown[]).map((s) => String(s)) as Plant['seasons'] : [],
     rarity: (basePlant.rarity || 'Common') as Plant['rarity'],
     meaning: translation?.meaning || basePlant.meaning || '',
     description: translation?.description || basePlant.description || '',
     image: basePlant.image_url || basePlant.image || '',
-    care: {
-      sunlight: (basePlant.care_sunlight || basePlant.care?.sunlight || 'Low') as Plant['care']['sunlight'],
-      water: (basePlant.care_water || basePlant.care?.water || 'Low') as Plant['care']['water'],
-      soil: String(translation?.care_soil || basePlant.care_soil || basePlant.care?.soil || ''),
-      difficulty: (basePlant.care_difficulty || basePlant.care?.difficulty || 'Easy') as Plant['care']['difficulty']
-    },
-    seedsAvailable: Boolean(basePlant.seeds_available ?? basePlant.seedsAvailable ?? false),
+    seedsAvailable: Boolean(basePlant.seeds_available ?? commerce?.seedsAvailable ?? false),
     waterFreqUnit: basePlant.water_freq_unit || basePlant.waterFreqUnit || undefined,
     waterFreqValue: basePlant.water_freq_value ?? basePlant.waterFreqValue ?? null,
     waterFreqPeriod: basePlant.water_freq_period || basePlant.waterFreqPeriod || undefined,
     waterFreqAmount: basePlant.water_freq_amount ?? basePlant.waterFreqAmount ?? null,
-    // New comprehensive plant fields
-    wikipediaLink: basePlant.wikipedia_link || undefined,
-    plantFamily: basePlant.plant_family || undefined,
-    plantType: Array.isArray(basePlant.plant_type) ? basePlant.plant_type.map((t: unknown) => String(t)) : undefined,
-    plantationType: Array.isArray(basePlant.plantation_type) ? basePlant.plantation_type.map((t: unknown) => String(t)) : undefined,
-    origins: basePlant.origins || undefined,
-    whereFound: basePlant.where_found || undefined,
-    size: basePlant.size || undefined,
-    floweringPeriod: basePlant.flowering_period || undefined,
-    plantMonth: Array.isArray(basePlant.plant_month) ? basePlant.plant_month.map((m: unknown) => Number(m)) : undefined,
-    lightAmount: basePlant.light_amount || undefined,
-    climate: basePlant.climate || undefined,
-    idealTemperature: basePlant.ideal_temperature || undefined,
-    regionOfWorld: basePlant.region_of_world || undefined,
-    soilType: basePlant.soil_type || undefined,
-    meaningAndSignifications: translation?.meaning_and_significations || basePlant.meaning_and_significations || undefined,
-    ecology: translation?.ecology || basePlant.ecology || undefined,
-    pharmaceutical: translation?.pharmaceutical || basePlant.pharmaceutical || undefined,
-    alimentaire: translation?.alimentaire || basePlant.alimentaire || undefined,
-    caringTips: translation?.caring_tips || basePlant.caring_tips || undefined,
-    authorNotes: translation?.author_notes || basePlant.author_notes || undefined,
-    propagation: translation?.propagation || basePlant.propagation || undefined,
-    division: translation?.division || basePlant.division || undefined,
-    commonDiseases: translation?.common_diseases || basePlant.common_diseases || undefined,
   }
 }
 
@@ -68,10 +187,10 @@ export function mergePlantWithTranslation(
  */
 export async function loadPlantsWithTranslations(language: SupportedLanguage): Promise<Plant[]> {
   try {
-    // Load base plants
+    // Load base plants with all JSONB fields
     const { data: plants, error } = await supabase
       .from('plants')
-      .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount, wikipedia_link, plant_family, plant_type, plantation_type, origins, where_found, size, flowering_period, plant_month, light_amount, climate, ideal_temperature, region_of_world, soil_type, meaning_and_significations, ecology, pharmaceutical, alimentaire, caring_tips, author_notes, propagation, division, common_diseases')
+      .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount, identifiers, traits, dimensions, phenology, environment, care, propagation, usage, ecology, commerce, problems, planting, meta')
       .order('name', { ascending: true })
     
     if (error) throw error
