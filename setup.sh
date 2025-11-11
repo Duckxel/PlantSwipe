@@ -674,18 +674,27 @@ setup_ssl_certificates() {
   local cert_staging=false
   
   log "Reading certificate configuration from cert-info.json…"
+  if [[ ! -f "$cert_info_json" ]]; then
+    log "[ERROR] cert-info.json does not exist: $cert_info_json"
+    return 1
+  fi
   if [[ ! -r "$cert_info_json" ]]; then
     log "[ERROR] cert-info.json exists but is not readable: $cert_info_json"
     return 1
   fi
   
   local cert_info
-  cert_info="$(python3 - <<'PY'
+  local cert_info_err
+  local cert_info_exit
+  cert_info_err="$(python3 - <<'PY'
 import json
 import sys
 import os
 try:
     filepath = sys.argv[1]
+    if not os.path.exists(filepath):
+        print(f"ERROR: File does not exist: {filepath}", file=sys.stderr)
+        sys.exit(1)
     if not os.access(filepath, os.R_OK):
         print(f"ERROR: File not readable: {filepath}", file=sys.stderr)
         sys.exit(1)
@@ -705,10 +714,22 @@ except Exception as e:
     sys.exit(1)
 PY
 "$cert_info_json" 2>&1)"
+  cert_info_exit=$?
+  cert_info="$cert_info_err"
   
-  if [[ "$cert_info" == ERROR:* ]] || [[ -z "$cert_info" ]]; then
+  # Check if Python failed
+  if [[ $cert_info_exit -ne 0 ]] || [[ "$cert_info_err" == ERROR:* ]] || [[ -z "$cert_info" ]]; then
     log "[ERROR] Failed to parse cert-info.json"
-    [[ -n "$cert_info" ]] && log "[ERROR] Details: $cert_info"
+    [[ -n "$cert_info_err" ]] && log "[ERROR] Details: $cert_info_err"
+    return 1
+  fi
+  
+  # Validate that we got 5 fields separated by |
+  local field_count
+  field_count=$(echo "$cert_info" | tr '|' '\n' | wc -l)
+  if [[ "$field_count" -ne 5 ]]; then
+    log "[ERROR] Invalid cert-info.json format. Expected 5 fields, got $field_count"
+    log "[ERROR] Output: $cert_info"
     return 1
   fi
   
@@ -790,84 +811,28 @@ PY
     log "domain.json created successfully at $domain_json"
   fi
   
-  # Fix file permissions if needed (ensure readable by root)
-  $SUDO chmod 644 "$cert_info_json" 2>/dev/null || true
-  $SUDO chown root:root "$cert_info_json" 2>/dev/null || true
-  
-  log "Reading certificate configuration from cert-info.json…"
-  # Check if file exists and is readable
-  if [[ ! -r "$cert_info_json" ]]; then
-    log "[ERROR] cert-info.json exists but is not readable: $cert_info_json"
-    log "[INFO] Attempting to fix permissions…"
-    $SUDO chmod 644 "$cert_info_json" || true
-    if [[ ! -r "$cert_info_json" ]]; then
-      log "[ERROR] Still cannot read cert-info.json after fixing permissions"
-      return 1
-    fi
-  fi
-  
-  local cert_info
-  cert_info="$(python3 - <<'PY'
-import json
-import sys
-import os
-try:
-    filepath = sys.argv[1]
-    # Ensure file is readable
-    if not os.access(filepath, os.R_OK):
-        print(f"ERROR: File not readable: {filepath}", file=sys.stderr)
-        sys.exit(1)
-    with open(filepath, 'r') as f:
-        data = json.load(f)
-    email = data.get('email', '')
-    dns_plugin = data.get('dns_plugin', '')
-    dns_credentials = data.get('dns_credentials', '')
-    use_wildcard = data.get('use_wildcard', False)
-    staging = data.get('staging', False)
-    print(f"{email}|{dns_plugin}|{dns_credentials}|{use_wildcard}|{staging}")
-except json.JSONDecodeError as e:
-    print(f"ERROR: Invalid JSON in cert-info.json: {e}", file=sys.stderr)
-    sys.exit(1)
-except Exception as e:
-    print(f"ERROR: {e}", file=sys.stderr)
-    sys.exit(1)
-PY
-"$cert_info_json" 2>&1)"
-  
-  # Check for errors (Python errors go to stderr, but we capture both)
-  if [[ "$cert_info" == ERROR:* ]] || [[ -z "$cert_info" ]]; then
-    log "[ERROR] Failed to parse cert-info.json"
-    [[ -n "$cert_info" ]] && log "[ERROR] Details: $cert_info"
-    return 1
-  fi
-  
-  IFS='|' read -r cert_email cert_dns_plugin cert_dns_credentials cert_use_wildcard cert_staging <<< "$cert_info"
-  log "Certificate email: ${cert_email:-not set}"
-  [[ -n "$cert_dns_plugin" ]] && log "DNS plugin: $cert_dns_plugin"
-  [[ "$cert_use_wildcard" == "True" ]] && log "Wildcard certificate requested"
-  [[ "$cert_staging" == "True" ]] && log "Using Let's Encrypt staging environment"
-  
-  # Require email from cert-info.json (no fallback)
-  if [[ -z "$cert_email" ]]; then
-    log "[ERROR] Email is required in cert-info.json. Please add 'email' field."
-    return 1
-  fi
-  
   # Fix domain.json permissions if needed
-  if [[ -f "$domain_json" ]]; then
-    $SUDO chmod 644 "$domain_json" 2>/dev/null || true
-    $SUDO chown root:root "$domain_json" 2>/dev/null || true
+  $SUDO chmod 644 "$domain_json" 2>/dev/null || true
+  $SUDO chown root:root "$domain_json" 2>/dev/null || true
+  
+  if [[ ! -r "$domain_json" ]]; then
+    log "[ERROR] domain.json exists but is not readable: $domain_json"
+    return 1
   fi
   
   # Parse domain.json - only supports new format with "domains" array
   local domain_info
-  domain_info="$(python3 - <<'PY'
+  local domain_info_err
+  local domain_info_exit
+  domain_info_err="$(python3 - <<'PY'
 import json
 import sys
 import os
 try:
     filepath = sys.argv[1]
-    # Ensure file is readable
+    if not os.path.exists(filepath):
+        print(f"ERROR: File does not exist: {filepath}", file=sys.stderr)
+        sys.exit(1)
     if not os.access(filepath, os.R_OK):
         print(f"ERROR: File not readable: {filepath}", file=sys.stderr)
         sys.exit(1)
@@ -893,9 +858,13 @@ except Exception as e:
     sys.exit(1)
 PY
 "$domain_json" 2>&1)"
+  domain_info_exit=$?
+  domain_info="$domain_info_err"
   
-  if [[ "$domain_info" == ERROR:* ]]; then
-    log "[ERROR] Failed to parse domain.json: $domain_info"
+  # Check if Python failed
+  if [[ $domain_info_exit -ne 0 ]] || [[ "$domain_info_err" == ERROR:* ]] || [[ -z "$domain_info" ]]; then
+    log "[ERROR] Failed to parse domain.json"
+    [[ -n "$domain_info_err" ]] && log "[ERROR] Details: $domain_info_err"
     return 1
   fi
   
