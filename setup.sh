@@ -608,9 +608,31 @@ $SUDO rm -f /etc/nginx/sites-available/plant-swipe || true
 $SUDO rm -f /etc/nginx/sites-enabled/plant-swipe || true
 
 log "Testing nginx configuration…"
-if ! $SUDO nginx -t; then
-  log "[ERROR] Nginx configuration test failed. Fix errors before continuing."
-  exit 1
+# Test nginx config, but allow SSL errors if certificates don't exist yet (we'll set them up next)
+if ! $SUDO nginx -t 2>&1 | tee /tmp/nginx-test.log; then
+  # Check if error is about missing SSL certificates
+  if grep -q "ssl_certificate.*is defined" /tmp/nginx-test.log; then
+    if [[ "$WANT_SSL" =~ ^[Yy]$ ]]; then
+      log "[WARN] Nginx config has SSL listeners but no certificates yet."
+      log "[INFO] Temporarily removing SSL listeners so nginx can start for certificate validation…"
+      # Temporarily remove SSL listeners so nginx can start
+      $SUDO sed -i.bak -e '/listen 443 ssl;/d' -e '/listen \[::\]:443 ssl;/d' "$NGINX_SITE_AVAIL"
+      # Test again
+      if $SUDO nginx -t; then
+        log "Nginx config is valid without SSL listeners (temporary)"
+      else
+        log "[ERROR] Nginx configuration still invalid after removing SSL listeners"
+        $SUDO mv "$NGINX_SITE_AVAIL.bak" "$NGINX_SITE_AVAIL" || true
+        exit 1
+      fi
+    else
+      log "[ERROR] Nginx config has SSL listeners but SSL was declined. This shouldn't happen."
+      exit 1
+    fi
+  else
+    log "[ERROR] Nginx configuration test failed. Fix errors before continuing."
+    exit 1
+  fi
 fi
 
 # SSL Certificate setup using Let's Encrypt/Certbot
@@ -861,11 +883,26 @@ PY
     # Don't fail here, but warn - certbot will fail during validation anyway
   fi
   
-  # Ensure nginx is running for certbot validation
+  # Ensure nginx is running for certbot validation (required for HTTP-01 challenge)
+  log "Ensuring nginx is running for certificate validation…"
   if ! $SUDO systemctl is-active --quiet nginx; then
-    log "Starting nginx for certbot validation…"
-    $SUDO systemctl start nginx || true
+    log "Starting nginx…"
+    if ! $SUDO systemctl start nginx; then
+      log "[ERROR] Failed to start nginx. Certbot requires nginx to be running for HTTP-01 validation."
+      return 1
+    fi
   fi
+  
+  # Wait a moment for nginx to fully start
+  sleep 2
+  
+  # Verify nginx is responding
+  if ! $SUDO systemctl is-active --quiet nginx; then
+    log "[ERROR] Nginx is not running. Cannot proceed with certificate acquisition."
+    return 1
+  fi
+  
+  log "Nginx is running and ready for certificate validation"
   
   # Try to obtain certificates
   # For wildcard certificates (*.domain), certbot requires DNS-01 challenge
@@ -915,14 +952,42 @@ PY
   fi
   
   # Attempt certificate acquisition
+  log "Requesting SSL certificates from Let's Encrypt…"
   if $SUDO certbot "${certbot_args[@]}" 2>&1 | tee /tmp/certbot.log; then
     log "SSL certificates obtained successfully"
     
-    # Update nginx config with certificate paths (only needed for DNS-01, HTTP-01 does it automatically)
+    # Verify certificates exist
+    if [[ ! -f "$cert_file" ]] || [[ ! -f "$key_file" ]]; then
+      log "[ERROR] Certificates were not created at expected location: $cert_dir"
+      log "[ERROR] Certificate file exists: $([[ -f "$cert_file" ]] && echo 'yes' || echo 'no')"
+      log "[ERROR] Key file exists: $([[ -f "$key_file" ]] && echo 'yes' || echo 'no')"
+      return 1
+    fi
+    
+    log "Verified SSL certificates exist: $cert_file"
+    
+    # Update nginx config with certificate paths
+    # For HTTP-01 (--nginx), certbot should have updated config automatically
+    # For DNS-01 (certonly), we need to manually add SSL directives
     if [[ "$use_dns" == "true" && -f "$cert_file" && -f "$key_file" ]]; then
+      # DNS-01 challenge: certbot doesn't modify nginx config, so we need to do it manually
+      # Check if SSL listeners were temporarily removed (backup exists)
+      if [[ -f "$NGINX_SITE_AVAIL.bak" ]]; then
+        log "Restoring SSL listeners from backup…"
+        $SUDO mv "$NGINX_SITE_AVAIL.bak" "$NGINX_SITE_AVAIL"
+      fi
+      
       # Check if SSL directives are already present
       if ! grep -q "ssl_certificate" "$NGINX_SITE_AVAIL"; then
         log "Updating nginx configuration with SSL certificate paths…"
+        # Ensure SSL listeners exist
+        if ! grep -q "listen 443 ssl" "$NGINX_SITE_AVAIL"; then
+          # Add SSL listeners after IPv4/IPv6 port 80 listeners
+          $SUDO sed -i "/listen \[::\]:80/a\\
+    listen 443 ssl;\\
+    listen [::]:443 ssl;
+" "$NGINX_SITE_AVAIL"
+        fi
         # Insert SSL configuration after server_name line
         $SUDO sed -i "/server_name/a\\
     ssl_certificate $cert_file;\\
@@ -931,24 +996,59 @@ PY
     ssl_ciphers HIGH:!aNULL:!MD5;\\
     ssl_prefer_server_ciphers on;
 " "$NGINX_SITE_AVAIL"
-        
-        # Test nginx config
-        if $SUDO nginx -t; then
-          log "Nginx configuration updated with SSL certificates"
-        else
-          log "[WARN] Nginx configuration test failed after SSL update"
-        fi
       else
         log "SSL certificate directives already present in nginx config"
       fi
     elif [[ "$use_dns" != "true" ]]; then
-      log "Certbot with --nginx flag should have updated nginx config automatically"
+      # HTTP-01 challenge: certbot with --nginx should have updated config automatically
+      # But if SSL listeners were temporarily removed, certbot might not have added them back
+      if [[ -f "$NGINX_SITE_AVAIL.bak" ]]; then
+        # Certbot should have added SSL listeners, but verify
+        if ! grep -q "listen 443 ssl" "$NGINX_SITE_AVAIL"; then
+          log "[WARN] SSL listeners missing after certbot --nginx. Restoring from backup…"
+          $SUDO mv "$NGINX_SITE_AVAIL.bak" "$NGINX_SITE_AVAIL"
+          # Certbot should have added SSL directives, but if backup was restored, they might be missing
+          if ! grep -q "ssl_certificate" "$NGINX_SITE_AVAIL"; then
+            log "Adding SSL certificate directives…"
+            $SUDO sed -i "/server_name/a\\
+    ssl_certificate $cert_file;\\
+    ssl_certificate_key $key_file;\\
+    ssl_protocols TLSv1.2 TLSv1.3;\\
+    ssl_ciphers HIGH:!aNULL:!MD5;\\
+    ssl_prefer_server_ciphers on;
+" "$NGINX_SITE_AVAIL"
+          fi
+        else
+          # SSL listeners are present, certbot should have added directives
+          log "Certbot with --nginx flag should have updated nginx config automatically"
+          # Remove backup since we don't need it
+          $SUDO rm -f "$NGINX_SITE_AVAIL.bak"
+        fi
+      else
+        log "Certbot with --nginx flag should have updated nginx config automatically"
+      fi
     fi
     
-    # Reload nginx if we manually updated config (DNS-01) or if certbot didn't reload
-    if [[ "$use_dns" == "true" ]]; then
-      log "Reloading nginx to apply SSL configuration…"
-      $SUDO systemctl reload nginx || true
+    # Clean up backup file if it still exists
+    $SUDO rm -f "$NGINX_SITE_AVAIL.bak" || true
+    
+    # Verify nginx configuration is valid
+    log "Verifying nginx configuration with SSL certificates…"
+    if ! $SUDO nginx -t; then
+      log "[ERROR] Nginx configuration test failed after SSL certificate setup"
+      log "[ERROR] Check /etc/nginx/sites-available/plant-swipe.conf for errors"
+      return 1
+    fi
+    
+    log "Nginx configuration is valid with SSL certificates"
+    
+    # Reload nginx to apply SSL configuration
+    log "Reloading nginx to apply SSL configuration…"
+    if $SUDO systemctl reload nginx; then
+      log "Nginx reloaded successfully with SSL certificates"
+    else
+      log "[ERROR] Failed to reload nginx. Check status with: systemctl status nginx"
+      return 1
     fi
     
     # Set up auto-renewal
