@@ -967,6 +967,10 @@ export const GardenListPage: React.FC = () => {
           broadcastGardenUpdate({ gardenId: broadcastGardenId, kind: 'tasks', actorId: user?.id ?? null }).catch((err) => {
             console.warn('[GardenList] Failed to broadcast task update:', err)
           })
+          // Also broadcast activity update to refresh activity list in Garden Dashboard
+          broadcastGardenUpdate({ gardenId: broadcastGardenId, kind: 'activity', actorId: user?.id ?? null }).catch((err) => {
+            console.warn('[GardenList] Failed to broadcast activity update:', err)
+          })
         }
       } catch {}
     } catch (error) {
@@ -1055,6 +1059,10 @@ export const GardenListPage: React.FC = () => {
         broadcastGardenUpdate({ gardenId, kind: 'tasks', actorId: user?.id ?? null }).catch((err) => {
           console.warn('[GardenList] Failed to broadcast task update:', err)
         })
+        // Also broadcast activity update to refresh activity list in Garden Dashboard
+        broadcastGardenUpdate({ gardenId, kind: 'activity', actorId: user?.id ?? null }).catch((err) => {
+          console.warn('[GardenList] Failed to broadcast activity update:', err)
+        })
       }
     } catch (error) {
       // Revert optimistic update on error
@@ -1133,12 +1141,21 @@ export const GardenListPage: React.FC = () => {
       }
       if (ops.length > 0) await Promise.all(ops)
       
-      // Broadcast updates for all affected gardens (fire and forget)
-      Promise.all(Array.from(affectedGardenIds).map((gid) => 
+      // Log activity and broadcast updates for all affected gardens (fire and forget)
+      Promise.all(Array.from(affectedGardenIds).map(async (gid) => {
+        // Log activity for completing all tasks
+        try {
+          await logGardenActivity({ gardenId: gid, kind: 'task_completed' as any, message: t('garden.activity.completedAllTasks', { plantName: t('garden.allGardens') }), actorColor: null })
+        } catch {}
+        // Broadcast task update
         broadcastGardenUpdate({ gardenId: gid, kind: 'tasks', actorId: user?.id ?? null }).catch((err) => {
           console.warn('[GardenList] Failed to broadcast task update for garden:', gid, err)
         })
-      )).catch(() => {})
+        // Broadcast activity update to refresh activity list in Garden Dashboard
+        broadcastGardenUpdate({ gardenId: gid, kind: 'activity', actorId: user?.id ?? null }).catch((err) => {
+          console.warn('[GardenList] Failed to broadcast activity update for garden:', gid, err)
+        })
+      })).catch(() => {})
     } catch (error) {
       // Revert optimistic update on error
       setTodayTaskOccurrences(todayTaskOccurrences as any)
