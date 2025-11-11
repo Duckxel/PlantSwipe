@@ -589,6 +589,48 @@ $SUDO nginx -t
 # SSL Certificate setup using Let's Encrypt/Certbot
 setup_ssl_certificates() {
   local domain_json="$REPO_DIR/domain.json"
+  local cert_info_json="$REPO_DIR/cert-info.json"
+  
+  # Read certificate configuration from cert-info.json
+  local cert_email=""
+  local cert_dns_plugin=""
+  local cert_dns_credentials=""
+  local cert_use_wildcard=false
+  local cert_staging=false
+  
+  if [[ -f "$cert_info_json" ]]; then
+    log "Reading certificate configuration from cert-info.json…"
+    local cert_info
+    cert_info="$($SUDO python3 - <<'PY'
+import json
+import sys
+try:
+    with open(sys.argv[1], 'r') as f:
+        data = json.load(f)
+    email = data.get('email', '')
+    dns_plugin = data.get('dns_plugin', '')
+    dns_credentials = data.get('dns_credentials', '')
+    use_wildcard = data.get('use_wildcard', False)
+    staging = data.get('staging', False)
+    print(f"{email}|{dns_plugin}|{dns_credentials}|{use_wildcard}|{staging}")
+except Exception as e:
+    print(f"ERROR: {e}", file=sys.stderr)
+    sys.exit(1)
+PY
+"$cert_info_json")"
+    
+    if [[ "$cert_info" != ERROR:* ]]; then
+      IFS='|' read -r cert_email cert_dns_plugin cert_dns_credentials cert_use_wildcard cert_staging <<< "$cert_info"
+      log "Certificate email: ${cert_email:-not set}"
+      [[ -n "$cert_dns_plugin" ]] && log "DNS plugin: $cert_dns_plugin"
+      [[ "$cert_use_wildcard" == "True" ]] && log "Wildcard certificate requested"
+      [[ "$cert_staging" == "True" ]] && log "Using Let's Encrypt staging environment"
+    else
+      log "[WARN] Failed to parse cert-info.json: $cert_info"
+    fi
+  else
+    log "[INFO] cert-info.json not found. Using environment variables or defaults."
+  fi
   
   # Read domain and subdomains from domain.json
   if [[ ! -f "$domain_json" ]]; then
@@ -635,16 +677,24 @@ PY
     done
   fi
   
-  log "Reading domains from domain.json: ${all_domains[*]}"
+  # Determine email to use (priority: cert-info.json > SSL_EMAIL env > default)
+  local email="${cert_email:-${SSL_EMAIL:-admin@${domain}}}"
   
-  local cert_dir="/etc/letsencrypt/live/$domain"
-  local cert_file="$cert_dir/fullchain.pem"
-  local key_file="$cert_dir/privkey.pem"
+  # Determine DNS plugin and credentials (priority: cert-info.json > env vars)
+  local dns_plugin="${cert_dns_plugin:-${CERTBOT_DNS_PLUGIN:-}}"
+  local dns_credentials="${cert_dns_credentials:-${CERTBOT_DNS_CREDENTIALS:-}}"
   
-  # Check if certificates already exist
-  if [[ -f "$cert_file" && -f "$key_file" ]]; then
-    log "SSL certificates already exist at $cert_dir"
-    return 0
+  # Determine if we should use wildcard (from cert-info.json or if DNS credentials provided)
+  local use_wildcard=false
+  if [[ "$cert_use_wildcard" == "True" ]] || [[ -n "$dns_plugin" && -n "$dns_credentials" ]]; then
+    use_wildcard=true
+  fi
+  
+  # Determine if we should use staging environment
+  local use_staging=false
+  if [[ "$cert_staging" == "True" ]]; then
+    use_staging=true
+    log "[INFO] Using Let's Encrypt staging environment (for testing)"
   fi
   
   log "Setting up SSL certificates for: ${all_domains[*]}"
@@ -661,21 +711,31 @@ PY
   local certbot_args=()
   local use_dns=false
   
-  # If DNS credentials are provided, use DNS-01 challenge for wildcard
-  if [[ -n "${CERTBOT_DNS_PLUGIN:-}" && -n "${CERTBOT_DNS_CREDENTIALS:-}" ]]; then
-    log "Using DNS-01 challenge with plugin: $CERTBOT_DNS_PLUGIN"
-    log "This will obtain certificates for $domain AND *.${domain} (all subdomains)"
+  # If DNS credentials are provided (from cert-info.json or env), use DNS-01 challenge for wildcard
+  if [[ -n "$dns_plugin" && -n "$dns_credentials" ]]; then
+    log "Using DNS-01 challenge with plugin: $dns_plugin"
+    if [[ "$use_wildcard" == "true" ]]; then
+      log "This will obtain certificates for $domain AND *.${domain} (all subdomains)"
+    else
+      log "This will obtain certificates for: ${all_domains[*]}"
+    fi
     use_dns=true
     certbot_args=(
       certonly
       --non-interactive
       --agree-tos
-      --email "${SSL_EMAIL:-admin@${domain}}"
-      --dns-"$CERTBOT_DNS_PLUGIN"
-      --dns-"$CERTBOT_DNS_PLUGIN"-credentials "$CERTBOT_DNS_CREDENTIALS"
-      -d "$domain"
-      -d "*.${domain}"
+      --email "$email"
+      --dns-"$dns_plugin"
+      --dns-"$dns_plugin"-credentials "$dns_credentials"
     )
+    [[ "$use_staging" == "true" ]] && certbot_args+=(--staging)
+    if [[ "$use_wildcard" == "true" ]]; then
+      certbot_args+=(-d "$domain" -d "*.${domain}")
+    else
+      for dom in "${all_domains[@]}"; do
+        certbot_args+=(-d "$dom")
+      done
+    fi
   else
     # Use HTTP-01 challenge for all domains/subdomains from domain.json
     log "Using HTTP-01 challenge for domains from domain.json: ${all_domains[*]}"
@@ -684,8 +744,9 @@ PY
       --non-interactive
       --agree-tos
       --redirect
-      --email "${SSL_EMAIL:-admin@${domain}}"
+      --email "$email"
     )
+    [[ "$use_staging" == "true" ]] && certbot_args+=(--staging)
     for dom in "${all_domains[@]}"; do
       certbot_args+=(-d "$dom")
     done
@@ -933,10 +994,17 @@ Next steps:
    - plant-swipe/.env and optionally plant-swipe/.env.server
    - Edit /etc/admin-api/env (replace change-me and set tokens as desired)
 2) SSL Certificates:
-   - SSL certificates are automatically configured from domain.json
+   - SSL certificates are automatically configured from domain.json and cert-info.json
+   - domain.json: Contains domain and subdomains list
+   - cert-info.json: Contains email and certificate settings (email, DNS plugin, etc.)
    - Edit domain.json to add/remove subdomains as needed
-   - Format: {"domain": "example.com", "subdomains": ["dev01", "dev02"]}
-   - For wildcard certificates (*.domain), set CERTBOT_DNS_PLUGIN and CERTBOT_DNS_CREDENTIALS in .env
+   - Edit cert-info.json to configure certificate options:
+     * email: Email for Let's Encrypt notifications (required)
+     * dns_plugin: DNS plugin name for wildcard certs (e.g., "route53", "cloudflare")
+     * dns_credentials: Path to DNS API credentials file
+     * use_wildcard: Set to true for wildcard certificate (*.domain)
+     * staging: Set to true to use Let's Encrypt staging (for testing)
+   - For wildcard certificates (*.domain), set dns_plugin and dns_credentials in cert-info.json
    - Certificates auto-renew via certbot.timer (enabled by default)
 3) Then run:
    sudo bash scripts/refresh-plant-swipe.sh
