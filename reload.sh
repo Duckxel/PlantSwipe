@@ -23,6 +23,13 @@ if [[ ! -d "$functions_dir" ]]; then
   exit 1
 fi
 
+env_candidates=(
+  "$repo_root/.env"
+  "$app_dir/.env"
+  "$app_dir/.env.server"
+  "$app_dir/.env.production"
+)
+
 # Resolve Supabase CLI
 supabase_bin="${SUPABASE_BIN:-}"
 if [[ -z "$supabase_bin" ]]; then
@@ -63,12 +70,6 @@ read_env_var() {
 project_ref="${SUPABASE_PROJECT_REF:-}"
 
 if [[ -z "$project_ref" ]]; then
-  env_candidates=(
-    "$repo_root/.env"
-    "$app_dir/.env"
-    "$app_dir/.env.server"
-    "$app_dir/.env.production"
-  )
   for env_file in "${env_candidates[@]}"; do
     value="$(read_env_var "$env_file" SUPABASE_PROJECT_REF || true)"
     if [[ -n "$value" ]]; then
@@ -122,6 +123,44 @@ log "Supabase project: $project_ref"
 
 supabase_cmd=("$supabase_bin")
 
+resolve_value() {
+  local key value file
+  for key in "$@"; do
+    if [[ -n "${!key:-}" ]]; then
+      printf '%s' "${!key}"
+      return 0
+    fi
+  done
+  for key in "$@"; do
+    for file in "${env_candidates[@]}"; do
+      value="$(read_env_var "$file" "$key" || true)"
+      if [[ -n "$value" ]]; then
+        printf '%s' "$value"
+        return 0
+      fi
+    done
+  done
+  return 1
+}
+
+set_supabase_secret() {
+  local key="$1"
+  local value="$2"
+  if [[ -z "$value" ]]; then
+    return 0
+  fi
+  local tmp
+  tmp="$(mktemp)"
+  chmod 600 "$tmp"
+  printf '%s=%s\n' "$key" "$value" >"$tmp"
+  if (cd "$app_dir" && "${supabase_cmd[@]}" secrets set --project-ref "$project_ref" --env-file "$tmp" >/dev/null 2>&1); then
+    log "✓ Synced Supabase secret $key"
+  else
+    log "[WARN] Failed to sync Supabase secret $key"
+  fi
+  rm -f "$tmp"
+}
+
 # Ensure project is linked for the CLI
 config_file="$supabase_dir/config.toml"
 if [[ ! -f "$config_file" ]]; then
@@ -139,6 +178,18 @@ else
       exit 1
     }
   fi
+fi
+
+openai_key="$(resolve_value OPENAI_API_KEY OPENAI_KEY || true)"
+if [[ -n "$openai_key" ]]; then
+  set_supabase_secret "OPENAI_API_KEY" "$openai_key"
+else
+  log "[INFO] OPENAI_API_KEY not provided; skipping secret sync."
+fi
+
+allowed_origins="$(resolve_value ALLOWED_ORIGINS FILL_PLANT_ALLOWED_ORIGINS AI_FILL_ALLOWED_ORIGINS || true)"
+if [[ -n "$allowed_origins" ]]; then
+  set_supabase_secret "ALLOWED_ORIGINS" "$allowed_origins"
 fi
 
 # Gather function directories

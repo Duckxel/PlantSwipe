@@ -18,7 +18,13 @@ This Edge Function uses OpenAI's GPT-4o model to automatically fill plant inform
    supabase secrets set OPENAI_API_KEY=$(grep OPENAI_API_KEY .env | cut -d '=' -f2)
    ```
 
-2. **Deploy the function:**
+2. **(Optional) Restrict which origins can call the function:**
+   ```bash
+   supabase secrets set ALLOWED_ORIGINS="https://dev01.aphylia.app,https://your-admin-domain.com"
+   ```
+   If omitted, the function falls back to its built-in allow list.
+
+3. **Deploy the function:**
    ```bash
    supabase functions deploy fill-plant-data
    ```
