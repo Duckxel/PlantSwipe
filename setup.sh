@@ -295,7 +295,7 @@ fi
 
 log "Installing base packages…"
 $PM_UPDATE
-$PM_INSTALL nginx python3 python3-venv python3-pip git curl ca-certificates gnupg postgresql-client ufw netcat-openbsd
+$PM_INSTALL nginx python3 python3-venv python3-pip git curl ca-certificates gnupg postgresql-client ufw netcat-openbsd certbot python3-certbot-nginx
 
 # Ensure global AWS RDS CA bundle for TLS to Supabase Postgres
 log "Installing AWS RDS global CA bundle for TLS…"
@@ -351,6 +351,10 @@ if [[ -z "${RESEND_FROM:-}" ]]; then RESEND_FROM="$(read_env_kv "$NODE_DIR/.env"
 if [[ -z "${RESEND_FROM_NAME:-}" ]]; then RESEND_FROM_NAME="$(read_env_kv "$NODE_DIR/.env" RESEND_FROM_NAME)"; fi
 if [[ -z "${SUPABASE_ACCESS_TOKEN:-}" ]]; then SUPABASE_ACCESS_TOKEN="$(read_env_kv "$NODE_DIR/.env" SUPABASE_ACCESS_TOKEN)"; fi
 if [[ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]]; then SUPABASE_SERVICE_ROLE_KEY="$(read_env_kv "$NODE_DIR/.env" SUPABASE_SERVICE_ROLE_KEY)"; fi
+# SSL certificate configuration from env files
+if [[ -z "${SSL_EMAIL:-}" ]]; then SSL_EMAIL="$(read_env_kv "$NODE_DIR/.env" SSL_EMAIL)"; fi
+if [[ -z "${CERTBOT_DNS_PLUGIN:-}" ]]; then CERTBOT_DNS_PLUGIN="$(read_env_kv "$NODE_DIR/.env" CERTBOT_DNS_PLUGIN)"; fi
+if [[ -z "${CERTBOT_DNS_CREDENTIALS:-}" ]]; then CERTBOT_DNS_CREDENTIALS="$(read_env_kv "$NODE_DIR/.env" CERTBOT_DNS_CREDENTIALS)"; fi
 if [[ -z "${SUPABASE_PROJECT_REF:-}" ]]; then
   SUPA_URL_FALLBACK="$(read_env_kv "$NODE_DIR/.env" SUPABASE_URL)"
   [[ -z "$SUPA_URL_FALLBACK" ]] && SUPA_URL_FALLBACK="$(read_env_kv "$NODE_DIR/.env" VITE_SUPABASE_URL)"
@@ -581,6 +585,131 @@ $SUDO rm -f /etc/nginx/sites-enabled/plant-swipe || true
 log "Testing nginx configuration…"
 $SUDO nginx -t
 
+# SSL Certificate setup using Let's Encrypt/Certbot
+setup_ssl_certificates() {
+  local domain="aphylia.app"
+  local cert_dir="/etc/letsencrypt/live/$domain"
+  local cert_file="$cert_dir/fullchain.pem"
+  local key_file="$cert_dir/privkey.pem"
+  
+  # Check if certificates already exist
+  if [[ -f "$cert_file" && -f "$key_file" ]]; then
+    log "SSL certificates already exist at $cert_dir"
+    return 0
+  fi
+  
+  log "Setting up SSL certificates for $domain and *.${domain}…"
+  
+  # Ensure nginx is running for certbot validation
+  if ! $SUDO systemctl is-active --quiet nginx; then
+    log "Starting nginx for certbot validation…"
+    $SUDO systemctl start nginx || true
+  fi
+  
+  # Try to obtain certificates
+  # For wildcard certificates (*.domain), certbot requires DNS-01 challenge
+  # HTTP-01 challenge only works for specific domains, not wildcards
+  local certbot_args=()
+  local use_dns=false
+  
+  # If DNS credentials are provided, use DNS-01 challenge for wildcard
+  if [[ -n "${CERTBOT_DNS_PLUGIN:-}" && -n "${CERTBOT_DNS_CREDENTIALS:-}" ]]; then
+    log "Using DNS-01 challenge with plugin: $CERTBOT_DNS_PLUGIN"
+    use_dns=true
+    certbot_args=(
+      certonly
+      --non-interactive
+      --agree-tos
+      --email "${SSL_EMAIL:-admin@${domain}}"
+      --dns-"$CERTBOT_DNS_PLUGIN"
+      --dns-"$CERTBOT_DNS_PLUGIN"-credentials "$CERTBOT_DNS_CREDENTIALS"
+      -d "$domain"
+      -d "*.${domain}"
+    )
+  else
+    # Try HTTP-01 challenge for base domain only (wildcard not supported)
+    log "Using HTTP-01 challenge for base domain (wildcard requires DNS-01)"
+    certbot_args=(
+      --nginx
+      --non-interactive
+      --agree-tos
+      --redirect
+      --email "${SSL_EMAIL:-admin@${domain}}"
+      -d "$domain"
+    )
+  fi
+  
+  # Attempt certificate acquisition
+  if $SUDO certbot "${certbot_args[@]}" 2>&1 | tee /tmp/certbot.log; then
+    log "SSL certificates obtained successfully"
+    
+    # Update nginx config with certificate paths (only needed for DNS-01, HTTP-01 does it automatically)
+    if [[ "$use_dns" == "true" && -f "$cert_file" && -f "$key_file" ]]; then
+      # Check if SSL directives are already present
+      if ! grep -q "ssl_certificate" "$NGINX_SITE_AVAIL"; then
+        log "Updating nginx configuration with SSL certificate paths…"
+        # Insert SSL configuration after server_name line
+        $SUDO sed -i "/server_name aphylia.app/a\\
+    ssl_certificate $cert_file;\\
+    ssl_certificate_key $key_file;\\
+    ssl_protocols TLSv1.2 TLSv1.3;\\
+    ssl_ciphers HIGH:!aNULL:!MD5;\\
+    ssl_prefer_server_ciphers on;
+" "$NGINX_SITE_AVAIL"
+        
+        # Test nginx config
+        if $SUDO nginx -t; then
+          log "Nginx configuration updated with SSL certificates"
+        else
+          log "[WARN] Nginx configuration test failed after SSL update"
+        fi
+      else
+        log "SSL certificate directives already present in nginx config"
+      fi
+    elif [[ "$use_dns" != "true" ]]; then
+      log "Certbot with --nginx flag should have updated nginx config automatically"
+    fi
+    
+    # Reload nginx if we manually updated config (DNS-01) or if certbot didn't reload
+    if [[ "$use_dns" == "true" ]]; then
+      log "Reloading nginx to apply SSL configuration…"
+      $SUDO systemctl reload nginx || true
+    fi
+    
+    # Set up auto-renewal
+    log "Setting up SSL certificate auto-renewal…"
+    if ! $SUDO systemctl is-enabled --quiet certbot.timer; then
+      $SUDO systemctl enable certbot.timer
+    fi
+    if ! $SUDO systemctl is-active --quiet certbot.timer; then
+      $SUDO systemctl start certbot.timer
+    fi
+    
+    # Add renewal hook to reload nginx
+    local renewal_hook="/etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh"
+    $SUDO mkdir -p "$(dirname "$renewal_hook")"
+    $SUDO bash -c "cat > '$renewal_hook' <<'EOF'
+#!/bin/bash
+systemctl reload nginx
+EOF
+"
+    $SUDO chmod +x "$renewal_hook"
+    
+    return 0
+  else
+    log "[WARN] SSL certificate acquisition failed. See /tmp/certbot.log for details."
+    log "[INFO] You can manually obtain certificates later with:"
+    log "       sudo certbot --nginx -d $domain -d *.$domain"
+    log "[INFO] For wildcard certificates, use DNS-01 challenge:"
+    log "       sudo certbot certonly --dns-<plugin> -d $domain -d *.$domain"
+    return 1
+  fi
+}
+
+# Attempt SSL certificate setup (non-fatal if it fails)
+log "Attempting SSL certificate setup…"
+setup_ssl_certificates || log "[INFO] SSL certificate setup skipped or failed; continuing without SSL."
+
 # Configure firewall (UFW) to allow SSH and web traffic
 log "Configuring firewall (ufw)…"
 if command -v ufw >/dev/null 2>&1; then
@@ -746,7 +875,14 @@ Next steps:
 1) Add your environment files:
    - plant-swipe/.env and optionally plant-swipe/.env.server
    - Edit /etc/admin-api/env (replace change-me and set tokens as desired)
-2) Then run:
+2) SSL Certificates:
+   - If SSL certificates were not obtained automatically, you can set them up manually:
+     * For base domain only: sudo certbot --nginx -d aphylia.app
+     * For wildcard (*.aphylia.app): Requires DNS-01 challenge with DNS API credentials
+       Set CERTBOT_DNS_PLUGIN and CERTBOT_DNS_CREDENTIALS environment variables
+       Example: sudo CERTBOT_DNS_PLUGIN=route53 CERTBOT_DNS_CREDENTIALS=/path/to/creds.ini certbot certonly --dns-route53 -d aphylia.app -d *.aphylia.app
+   - Certificates auto-renew via certbot.timer (enabled by default)
+3) Then run:
    sudo bash scripts/refresh-plant-swipe.sh
 
 Admin API endpoints are proxied at /admin/* per nginx snippet.
