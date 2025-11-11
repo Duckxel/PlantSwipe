@@ -584,61 +584,23 @@ $SUDO rm -f /etc/nginx/sites-available/plant-swipe || true
 $SUDO rm -f /etc/nginx/sites-enabled/plant-swipe || true
 
 log "Testing nginx configuration…"
-$SUDO nginx -t
+# Test nginx config, but allow SSL errors if certificates don't exist yet (we'll set them up next)
+if ! $SUDO nginx -t 2>&1 | tee /tmp/nginx-test.log; then
+  # Check if error is about missing SSL certificates
+  if grep -q "ssl_certificate.*is defined" /tmp/nginx-test.log; then
+    log "[WARN] Nginx config has SSL listeners but no certificates yet. SSL setup will configure them."
+  else
+    log "[ERROR] Nginx configuration test failed. Fix errors before continuing."
+    exit 1
+  fi
+fi
 
 # SSL Certificate setup using Let's Encrypt/Certbot
 setup_ssl_certificates() {
   local domain_json="$REPO_DIR/domain.json"
   local cert_info_json="$REPO_DIR/cert-info.json"
   
-  # Read certificate configuration from cert-info.json
-  local cert_email=""
-  local cert_dns_plugin=""
-  local cert_dns_credentials=""
-  local cert_use_wildcard=false
-  local cert_staging=false
-  
-  # Require cert-info.json
-  if [[ ! -f "$cert_info_json" ]]; then
-    log "[ERROR] cert-info.json not found at $cert_info_json"
-    log "[ERROR] SSL certificate setup requires cert-info.json with email field."
-    log "[INFO] Create cert-info.json with format:"
-    log "       {\"email\": \"your@email.com\", \"dns_plugin\": \"\", \"dns_credentials\": \"\", \"use_wildcard\": false, \"staging\": false}"
-    return 1
-  fi
-  
-  log "Reading certificate configuration from cert-info.json…"
-  local cert_info
-  cert_info="$($SUDO python3 - <<'PY'
-import json
-import sys
-try:
-    with open(sys.argv[1], 'r') as f:
-        data = json.load(f)
-    email = data.get('email', '')
-    dns_plugin = data.get('dns_plugin', '')
-    dns_credentials = data.get('dns_credentials', '')
-    use_wildcard = data.get('use_wildcard', False)
-    staging = data.get('staging', False)
-    print(f"{email}|{dns_plugin}|{dns_credentials}|{use_wildcard}|{staging}")
-except Exception as e:
-    print(f"ERROR: {e}", file=sys.stderr)
-    sys.exit(1)
-PY
-"$cert_info_json")"
-  
-  if [[ "$cert_info" == ERROR:* ]]; then
-    log "[ERROR] Failed to parse cert-info.json: $cert_info"
-    return 1
-  fi
-  
-  IFS='|' read -r cert_email cert_dns_plugin cert_dns_credentials cert_use_wildcard cert_staging <<< "$cert_info"
-  log "Certificate email: ${cert_email:-not set}"
-  [[ -n "$cert_dns_plugin" ]] && log "DNS plugin: $cert_dns_plugin"
-  [[ "$cert_use_wildcard" == "True" ]] && log "Wildcard certificate requested"
-  [[ "$cert_staging" == "True" ]] && log "Using Let's Encrypt staging environment"
-  
-  # Interactive domain.json creation if it doesn't exist
+  # Interactive domain.json creation if it doesn't exist (do this FIRST before checking cert-info.json)
   if [[ ! -f "$domain_json" ]]; then
     log "domain.json not found. Setting up SSL certificate configuration interactively…"
     
@@ -707,6 +669,53 @@ PY
     $SUDO chmod 0644 "$domain_json"
     log "domain.json created successfully at $domain_json"
   fi
+  
+  # Read certificate configuration from cert-info.json
+  local cert_email=""
+  local cert_dns_plugin=""
+  local cert_dns_credentials=""
+  local cert_use_wildcard=false
+  local cert_staging=false
+  
+  # Require cert-info.json
+  if [[ ! -f "$cert_info_json" ]]; then
+    log "[ERROR] cert-info.json not found at $cert_info_json"
+    log "[ERROR] SSL certificate setup requires cert-info.json with email field."
+    log "[INFO] Create cert-info.json with format:"
+    log "       {\"email\": \"your@email.com\", \"dns_plugin\": \"\", \"dns_credentials\": \"\", \"use_wildcard\": false, \"staging\": false}"
+    return 1
+  fi
+  
+  log "Reading certificate configuration from cert-info.json…"
+  local cert_info
+  cert_info="$($SUDO python3 - <<'PY'
+import json
+import sys
+try:
+    with open(sys.argv[1], 'r') as f:
+        data = json.load(f)
+    email = data.get('email', '')
+    dns_plugin = data.get('dns_plugin', '')
+    dns_credentials = data.get('dns_credentials', '')
+    use_wildcard = data.get('use_wildcard', False)
+    staging = data.get('staging', False)
+    print(f"{email}|{dns_plugin}|{dns_credentials}|{use_wildcard}|{staging}")
+except Exception as e:
+    print(f"ERROR: {e}", file=sys.stderr)
+    sys.exit(1)
+PY
+"$cert_info_json")"
+  
+  if [[ "$cert_info" == ERROR:* ]]; then
+    log "[ERROR] Failed to parse cert-info.json: $cert_info"
+    return 1
+  fi
+  
+  IFS='|' read -r cert_email cert_dns_plugin cert_dns_credentials cert_use_wildcard cert_staging <<< "$cert_info"
+  log "Certificate email: ${cert_email:-not set}"
+  [[ -n "$cert_dns_plugin" ]] && log "DNS plugin: $cert_dns_plugin"
+  [[ "$cert_use_wildcard" == "True" ]] && log "Wildcard certificate requested"
+  [[ "$cert_staging" == "True" ]] && log "Using Let's Encrypt staging environment"
   
   # Parse domain.json - only supports new format with "domains" array
   local domain_info
