@@ -353,6 +353,7 @@ if [[ -z "${SUPABASE_ACCESS_TOKEN:-}" ]]; then SUPABASE_ACCESS_TOKEN="$(read_env
 if [[ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]]; then SUPABASE_SERVICE_ROLE_KEY="$(read_env_kv "$NODE_DIR/.env" SUPABASE_SERVICE_ROLE_KEY)"; fi
 # SSL certificate configuration from env files
 if [[ -z "${SSL_EMAIL:-}" ]]; then SSL_EMAIL="$(read_env_kv "$NODE_DIR/.env" SSL_EMAIL)"; fi
+if [[ -z "${SSL_SUBDOMAINS:-}" ]]; then SSL_SUBDOMAINS="$(read_env_kv "$NODE_DIR/.env" SSL_SUBDOMAINS)"; fi
 if [[ -z "${CERTBOT_DNS_PLUGIN:-}" ]]; then CERTBOT_DNS_PLUGIN="$(read_env_kv "$NODE_DIR/.env" CERTBOT_DNS_PLUGIN)"; fi
 if [[ -z "${CERTBOT_DNS_CREDENTIALS:-}" ]]; then CERTBOT_DNS_CREDENTIALS="$(read_env_kv "$NODE_DIR/.env" CERTBOT_DNS_CREDENTIALS)"; fi
 if [[ -z "${SUPABASE_PROJECT_REF:-}" ]]; then
@@ -615,6 +616,7 @@ setup_ssl_certificates() {
   # If DNS credentials are provided, use DNS-01 challenge for wildcard
   if [[ -n "${CERTBOT_DNS_PLUGIN:-}" && -n "${CERTBOT_DNS_CREDENTIALS:-}" ]]; then
     log "Using DNS-01 challenge with plugin: $CERTBOT_DNS_PLUGIN"
+    log "This will obtain certificates for $domain AND *.${domain} (all subdomains)"
     use_dns=true
     certbot_args=(
       certonly
@@ -627,16 +629,46 @@ setup_ssl_certificates() {
       -d "*.${domain}"
     )
   else
-    # Try HTTP-01 challenge for base domain only (wildcard not supported)
-    log "Using HTTP-01 challenge for base domain (wildcard requires DNS-01)"
-    certbot_args=(
-      --nginx
-      --non-interactive
-      --agree-tos
-      --redirect
-      --email "${SSL_EMAIL:-admin@${domain}}"
-      -d "$domain"
-    )
+    # Try HTTP-01 challenge - can get certificates for specific subdomains if provided
+    # Check if SSL_SUBDOMAINS is set (comma-separated list like "dev01,staging,api")
+    local subdomains=()
+    if [[ -n "${SSL_SUBDOMAINS:-}" ]]; then
+      IFS=',' read -ra subdomain_array <<< "$SSL_SUBDOMAINS"
+      for sub in "${subdomain_array[@]}"; do
+        sub="${sub// /}"  # trim whitespace
+        [[ -n "$sub" ]] && subdomains+=("${sub}.${domain}")
+      done
+    fi
+    
+    if ((${#subdomains[@]} > 0)); then
+      log "Using HTTP-01 challenge for base domain and specified subdomains: ${subdomains[*]}"
+      log "[WARN] Wildcard subdomains (*.${domain}) are NOT covered. Only specified subdomains will have SSL."
+      certbot_args=(
+        --nginx
+        --non-interactive
+        --agree-tos
+        --redirect
+        --email "${SSL_EMAIL:-admin@${domain}}"
+        -d "$domain"
+      )
+      for subdomain in "${subdomains[@]}"; do
+        certbot_args+=(-d "$subdomain")
+      done
+    else
+      log "Using HTTP-01 challenge for base domain only"
+      log "[WARN] Subdomains (e.g., dev01.${domain}) will NOT have SSL certificates."
+      log "[INFO] To enable SSL for subdomains, either:"
+      log "       1. Set SSL_SUBDOMAINS='dev01,staging' (comma-separated list)"
+      log "       2. Use DNS-01 challenge with CERTBOT_DNS_PLUGIN for wildcard certificate"
+      certbot_args=(
+        --nginx
+        --non-interactive
+        --agree-tos
+        --redirect
+        --email "${SSL_EMAIL:-admin@${domain}}"
+        -d "$domain"
+      )
+    fi
   fi
   
   # Attempt certificate acquisition
@@ -876,10 +908,15 @@ Next steps:
    - plant-swipe/.env and optionally plant-swipe/.env.server
    - Edit /etc/admin-api/env (replace change-me and set tokens as desired)
 2) SSL Certificates:
+   - SSL certificates for subdomains:
+     * DNS-01 (RECOMMENDED for wildcard): Set CERTBOT_DNS_PLUGIN and CERTBOT_DNS_CREDENTIALS
+       This covers ALL subdomains (*.aphylia.app) automatically
+     * HTTP-01 with specific subdomains: Set SSL_SUBDOMAINS='dev01,staging,api' in .env
+       This only covers the listed subdomains, not all subdomains
    - If SSL certificates were not obtained automatically, you can set them up manually:
-     * For base domain only: sudo certbot --nginx -d aphylia.app
-     * For wildcard (*.aphylia.app): Requires DNS-01 challenge with DNS API credentials
-       Set CERTBOT_DNS_PLUGIN and CERTBOT_DNS_CREDENTIALS environment variables
+     * Base domain only: sudo certbot --nginx -d aphylia.app
+     * Specific subdomains: sudo certbot --nginx -d aphylia.app -d dev01.aphylia.app -d staging.aphylia.app
+     * Wildcard (all subdomains): Requires DNS-01 challenge
        Example: sudo CERTBOT_DNS_PLUGIN=route53 CERTBOT_DNS_CREDENTIALS=/path/to/creds.ini certbot certonly --dns-route53 -d aphylia.app -d *.aphylia.app
    - Certificates auto-renew via certbot.timer (enabled by default)
 3) Then run:
