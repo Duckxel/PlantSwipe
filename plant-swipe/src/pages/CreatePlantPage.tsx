@@ -308,37 +308,33 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
               <Input id="plant-name" autoComplete="off" placeholder={t('createPlant.namePlaceholder')} value={name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} required />
               <div className="text-xs opacity-60">{t('createPlant.nameRequired')}</div>
             </div>
+            <div className="grid gap-2">
+              <Label htmlFor="plant-image">{t('createPlant.imageUrl')}</Label>
+              <Input id="plant-image" autoComplete="off" value={imageUrl} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setImageUrl(e.target.value)} placeholder="https://example.com/image.jpg" />
+            </div>
             {advanced && (
               <>
                 <div className="grid gap-2">
                   <Label htmlFor="plant-scientific">{t('createPlant.scientificName')}</Label>
                   <Input id="plant-scientific" autoComplete="off" value={scientificName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setScientificName(e.target.value)} />
                 </div>
-              </>
-            )}
-            <div className="grid gap-2">
-              <Label htmlFor="plant-colors">{t('createPlant.colors')}</Label>
-              <Input id="plant-colors" autoComplete="off" placeholder={t('createPlant.colorsPlaceholder')} value={colors} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setColors(e.target.value)} />
-            </div>
-            <div className="grid gap-2">
-              <Label>{t('createPlant.seasons')}</Label>
-              <div className="flex flex-wrap gap-2">
-                {(["Spring", "Summer", "Autumn", "Winter"] as const).map((s) => (
-                  <button type="button" key={s} onClick={() => toggleSeason(s)} className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${seasons.includes(s) ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"}`} aria-pressed={seasons.includes(s)}>
-                    {t(`plant.${s.toLowerCase()}`)}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="plant-description">{t('createPlant.description')}</Label>
-              <Textarea id="plant-description" autoComplete="off" placeholder={t('createPlant.descriptionPlaceholder')} value={description} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDescription(e.target.value)} />
-            </div>
-            {advanced && (
-              <>
                 <div className="grid gap-2">
-                  <Label htmlFor="plant-image-advanced">Image URL</Label>
-                  <Input id="plant-image-advanced" autoComplete="off" value={imageUrl} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setImageUrl(e.target.value)} placeholder="https://example.com/image.jpg" />
+                  <Label htmlFor="plant-colors">{t('createPlant.colors')}</Label>
+                  <Input id="plant-colors" autoComplete="off" placeholder={t('createPlant.colorsPlaceholder')} value={colors} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setColors(e.target.value)} />
+                </div>
+                <div className="grid gap-2">
+                  <Label>{t('createPlant.seasons')}</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {(["Spring", "Summer", "Autumn", "Winter"] as const).map((s) => (
+                      <button type="button" key={s} onClick={() => toggleSeason(s)} className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${seasons.includes(s) ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"}`} aria-pressed={seasons.includes(s)}>
+                        {t(`plant.${s.toLowerCase()}`)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="plant-description">{t('createPlant.description')}</Label>
+                  <Textarea id="plant-description" autoComplete="off" placeholder={t('createPlant.descriptionPlaceholder')} value={description} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDescription(e.target.value)} />
                 </div>
                 <CompleteAdvancedForm
                   identifiers={identifiers}
