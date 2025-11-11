@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { LazyCharts, ChartSuspense } from '@/components/admin/LazyChart'
 import { useTheme } from '@/context/ThemeContext'
 import { useAuth } from '@/context/AuthContext'
+import { getAccentOption } from '@/lib/accent'
 // Re-export for convenience
 const {
   ResponsiveContainer,
@@ -41,8 +42,15 @@ import {
 export const AdminPage: React.FC = () => {
   const navigate = useNavigate()
   const { effectiveTheme } = useTheme()
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
   const isDark = effectiveTheme === 'dark'
+  
+  // Get user's accent color
+  const accentColor = React.useMemo(() => {
+    const accentKey = (profile as any)?.accent_key || 'emerald'
+    const accentOption = getAccentOption(accentKey as any)
+    return accentOption ? `hsl(${accentOption.hsl})` : 'hsl(142 72% 40%)' // fallback to emerald
+  }, [profile])
   const shortenMiddle = React.useCallback((value: string, maxChars: number = 28): string => {
     try {
       const s = String(value || '')
@@ -1968,10 +1976,10 @@ export const AdminPage: React.FC = () => {
   return (
     <div className="flex min-h-screen bg-stone-50 dark:bg-[#1e1e1e]">
       {/* Sidebar Navigation */}
-      <aside className="hidden md:flex w-64 border-r border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#252526] flex-shrink-0 flex-col">
-        <div className="p-6 border-b border-stone-200 dark:border-[#3e3e42]">
+      <aside className="hidden md:flex w-64 border-r border-stone-200/50 dark:border-[#3e3e42]/50 bg-stone-50/80 dark:bg-[#1e1e1e]/80 backdrop-blur-sm flex-shrink-0 flex-col">
+        <div className="p-6 border-b border-stone-200/50 dark:border-[#3e3e42]/50">
           <div className="flex items-center gap-3">
-            <ShieldCheck className="h-6 w-6 text-emerald-600 dark:text-emerald-500" />
+            <ShieldCheck className="h-6 w-6" style={{ color: accentColor }} />
             <div>
               <div className="text-lg font-semibold">Admin Panel</div>
               <div className="text-xs opacity-60">Control Center</div>
@@ -1983,9 +1991,10 @@ export const AdminPage: React.FC = () => {
             onClick={() => setActiveTab('overview')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
               activeTab === 'overview'
-                ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
-                : 'text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-[#2d2d30]'
+                ? 'text-white shadow-lg'
+                : 'text-stone-700 dark:text-stone-300 hover:bg-stone-100/50 dark:hover:bg-[#2d2d30]/50'
             }`}
+            style={activeTab === 'overview' ? { backgroundColor: accentColor, boxShadow: `0 4px 14px 0 ${accentColor}40` } : {}}
           >
             <LayoutDashboard className={`h-5 w-5 ${activeTab === 'overview' ? '' : 'opacity-70'}`} />
             <span className="font-medium">Overview</span>
@@ -1994,9 +2003,10 @@ export const AdminPage: React.FC = () => {
             onClick={() => setActiveTab('members')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
               activeTab === 'members'
-                ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
-                : 'text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-[#2d2d30]'
+                ? 'text-white shadow-lg'
+                : 'text-stone-700 dark:text-stone-300 hover:bg-stone-100/50 dark:hover:bg-[#2d2d30]/50'
             }`}
+            style={activeTab === 'members' ? { backgroundColor: accentColor, boxShadow: `0 4px 14px 0 ${accentColor}40` } : {}}
           >
             <Users className={`h-5 w-5 ${activeTab === 'members' ? '' : 'opacity-70'}`} />
             <span className="font-medium">Members</span>
@@ -2005,9 +2015,10 @@ export const AdminPage: React.FC = () => {
             onClick={() => setActiveTab('requests')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
               activeTab === 'requests'
-                ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
-                : 'text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-[#2d2d30]'
+                ? 'text-white shadow-lg'
+                : 'text-stone-700 dark:text-stone-300 hover:bg-stone-100/50 dark:hover:bg-[#2d2d30]/50'
             }`}
+            style={activeTab === 'requests' ? { backgroundColor: accentColor, boxShadow: `0 4px 14px 0 ${accentColor}40` } : {}}
           >
             <FileText className={`h-5 w-5 ${activeTab === 'requests' ? '' : 'opacity-70'}`} />
             <span className="font-medium">Requests</span>
@@ -2016,9 +2027,10 @@ export const AdminPage: React.FC = () => {
             onClick={() => setActiveTab('admin_logs')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
               activeTab === 'admin_logs'
-                ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
-                : 'text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-[#2d2d30]'
+                ? 'text-white shadow-lg'
+                : 'text-stone-700 dark:text-stone-300 hover:bg-stone-100/50 dark:hover:bg-[#2d2d30]/50'
             }`}
+            style={activeTab === 'admin_logs' ? { backgroundColor: accentColor, boxShadow: `0 4px 14px 0 ${accentColor}40` } : {}}
           >
             <ScrollText className={`h-5 w-5 ${activeTab === 'admin_logs' ? '' : 'opacity-70'}`} />
             <span className="font-medium">Admin Logs</span>
@@ -2027,10 +2039,10 @@ export const AdminPage: React.FC = () => {
       </aside>
 
       {/* Mobile Navigation */}
-      <div className="md:hidden w-full border-b border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#252526] sticky top-0 z-10">
+      <div className="md:hidden w-full border-b border-stone-200/50 dark:border-[#3e3e42]/50 bg-stone-50/80 dark:bg-[#1e1e1e]/80 backdrop-blur-sm sticky top-0 z-10">
         <div className="p-4">
           <div className="flex items-center gap-2 mb-3">
-            <ShieldCheck className="h-5 w-5 text-emerald-600 dark:text-emerald-500" />
+            <ShieldCheck className="h-5 w-5" style={{ color: accentColor }} />
             <div className="text-sm font-semibold">Admin Panel</div>
           </div>
           <div className="grid grid-cols-2 gap-2">
@@ -2038,9 +2050,10 @@ export const AdminPage: React.FC = () => {
               onClick={() => setActiveTab('overview')}
               className={`flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-sm transition-all duration-200 ${
                 activeTab === 'overview'
-                  ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
+                  ? 'text-white shadow-lg'
                   : 'text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]'
               }`}
+              style={activeTab === 'overview' ? { backgroundColor: accentColor, boxShadow: `0 4px 14px 0 ${accentColor}40` } : {}}
             >
               <LayoutDashboard className="h-4 w-4" />
               <span>Overview</span>
@@ -2049,9 +2062,10 @@ export const AdminPage: React.FC = () => {
               onClick={() => setActiveTab('members')}
               className={`flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-sm transition-all duration-200 ${
                 activeTab === 'members'
-                  ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
+                  ? 'text-white shadow-lg'
                   : 'text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]'
               }`}
+              style={activeTab === 'members' ? { backgroundColor: accentColor, boxShadow: `0 4px 14px 0 ${accentColor}40` } : {}}
             >
               <Users className="h-4 w-4" />
               <span>Members</span>
@@ -2060,9 +2074,10 @@ export const AdminPage: React.FC = () => {
               onClick={() => setActiveTab('requests')}
               className={`flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-sm transition-all duration-200 ${
                 activeTab === 'requests'
-                  ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
+                  ? 'text-white shadow-lg'
                   : 'text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]'
               }`}
+              style={activeTab === 'requests' ? { backgroundColor: accentColor, boxShadow: `0 4px 14px 0 ${accentColor}40` } : {}}
             >
               <FileText className="h-4 w-4" />
               <span>Requests</span>
@@ -2071,9 +2086,10 @@ export const AdminPage: React.FC = () => {
               onClick={() => setActiveTab('admin_logs')}
               className={`flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-sm transition-all duration-200 ${
                 activeTab === 'admin_logs'
-                  ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
+                  ? 'text-white shadow-lg'
                   : 'text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]'
               }`}
+              style={activeTab === 'admin_logs' ? { backgroundColor: accentColor, boxShadow: `0 4px 14px 0 ${accentColor}40` } : {}}
             >
               <ScrollText className="h-4 w-4" />
               <span>Logs</span>
@@ -2084,7 +2100,8 @@ export const AdminPage: React.FC = () => {
 
       {/* Main Content Area */}
       <main className="flex-1 overflow-y-auto">
-        <div className="max-w-7xl mx-auto mt-8 px-4 md:px-6 lg:px-8 pb-8">
+        <div className="flex justify-center">
+          <div className="w-full max-w-5xl mt-8 px-4 md:px-6 lg:px-8 pb-8">
           {/* Connection Status Banner - Show when APIs are down */}
           {(apiProbe.ok === false || adminProbe.ok === false || dbProbe.ok === false) && (
             <Card className="rounded-2xl mb-4 border-red-500 dark:border-red-500 bg-red-50 dark:bg-red-950/20">
@@ -3678,6 +3695,7 @@ export const AdminPage: React.FC = () => {
         </CardContent>
       </Card>
 
+          </div>
         </div>
       </main>
     </div>
