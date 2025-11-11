@@ -1,7 +1,7 @@
 import React from "react"
 import { Link } from "@/components/i18n/Link"
 import { usePathWithoutLanguage, useLanguageNavigate } from "@/lib/i18nRouting"
-import { Sparkles, Sprout, Search, Plus, User, ChevronDown, Shield, HeartHandshake, Settings, LogOut } from "lucide-react"
+import { Sparkles, Sprout, Search, Plus, User, Shield, HeartHandshake, Settings, LogOut } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/context/AuthContext"
 import { useTaskNotification } from "@/hooks/useTaskNotification"
@@ -114,7 +114,7 @@ export const MobileNavBar: React.FC<MobileNavBarProps> = ({ canCreate, onProfile
               </button>
             )}
             <button 
-              onClick={() => { setProfileMenuOpen(false); (onProfile ? onProfile() : navigate('/profile'))() }} 
+              onClick={() => { setProfileMenuOpen(false); if (onProfile) { onProfile(); } else { navigate('/profile'); } }} 
               className="w-full text-left px-4 py-3 rounded-2xl hover:bg-stone-100 dark:hover:bg-[#2d2d30] flex items-center gap-3"
             >
               <User className="h-5 w-5" /> 
