@@ -746,18 +746,30 @@ export const AdminPage: React.FC = () => {
       // Fetch profiles for these user IDs
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, display_name, email')
+        .select('id, display_name')
         .in('id', userIds)
 
       if (profilesError) throw new Error(profilesError.message)
 
-      const users = (profilesData ?? []).map((profile: any) => ({
-        id: String(profile.id),
-        display_name: profile?.display_name ? String(profile.display_name) : null,
-        email: profile?.email ? String(profile.email) : null,
-      }))
+      // Fetch emails for each user using RPC function
+      const usersWithEmails = await Promise.all(
+        (profilesData ?? []).map(async (profile: any) => {
+          let email: string | null = null
+          try {
+            const { data: emailData } = await supabase.rpc('get_friend_email', { _friend_id: profile.id })
+            email = emailData || null
+          } catch (err) {
+            console.warn('Failed to fetch email for user:', profile.id, err)
+          }
+          return {
+            id: String(profile.id),
+            display_name: profile?.display_name ? String(profile.display_name) : null,
+            email: email,
+          }
+        })
+      )
 
-      setRequestUsers(users)
+      setRequestUsers(usersWithEmails)
     } catch (err) {
       console.error('Failed to load request users:', err)
       setRequestUsers([])
