@@ -5,10 +5,25 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { supabase } from "@/lib/supabaseClient"
-import type { Plant } from "@/types/plant"
+import type {
+  Plant,
+  PlantIdentifiers,
+  PlantTraits,
+  PlantDimensions,
+  PlantPhenology,
+  PlantEnvironment,
+  PlantCare,
+  PlantPropagation,
+  PlantUsage,
+  PlantEcology,
+  PlantCommerce,
+  PlantProblems,
+  PlantPlanting,
+  PlantMeta,
+} from "@/types/plant"
 import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE, type SupportedLanguage } from "@/lib/i18n"
 import { translatePlantToAllLanguages } from "@/lib/deepl"
-import { savePlantTranslations } from "@/lib/plantTranslations"
+import { savePlantTranslations, type PlantTranslation } from "@/lib/plantTranslations"
 import { Languages, Sparkles, Loader2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { CompleteAdvancedForm } from "@/components/plant/CompleteAdvancedForm"
@@ -56,19 +71,19 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
   const [aiFilling, setAiFilling] = React.useState(false)
   
   // New JSONB structure state
-  const [identifiers, setIdentifiers] = React.useState<Partial<Plant['identifiers']>>({})
-  const [traits, setTraits] = React.useState<Partial<Plant['traits']>>({})
-  const [dimensions, setDimensions] = React.useState<Partial<Plant['dimensions']>>({})
-  const [phenology, setPhenology] = React.useState<Partial<Plant['phenology']>>({})
-  const [environment, setEnvironment] = React.useState<Partial<Plant['environment']>>({})
-  const [care, setCare] = React.useState<Partial<Plant['care']>>({})
-  const [propagation, setPropagation] = React.useState<Partial<Plant['propagation']>>({})
-  const [usage, setUsage] = React.useState<Partial<Plant['usage']>>({})
-  const [ecology, setEcology] = React.useState<Partial<Plant['ecology']>>({})
-  const [commerce, setCommerce] = React.useState<Partial<Plant['commerce']>>({})
-  const [problems, setProblems] = React.useState<Partial<Plant['problems']>>({})
-  const [planting, setPlanting] = React.useState<Partial<Plant['planting']>>({})
-  const [meta, setMeta] = React.useState<Partial<Plant['meta']>>({})
+  const [identifiers, setIdentifiers] = React.useState<Partial<PlantIdentifiers>>({})
+  const [traits, setTraits] = React.useState<Partial<PlantTraits>>({})
+  const [dimensions, setDimensions] = React.useState<Partial<PlantDimensions>>({})
+  const [phenology, setPhenology] = React.useState<Partial<PlantPhenology>>({})
+  const [environment, setEnvironment] = React.useState<Partial<PlantEnvironment>>({})
+  const [care, setCare] = React.useState<Partial<PlantCare>>({})
+  const [propagation, setPropagation] = React.useState<Partial<PlantPropagation>>({})
+  const [usage, setUsage] = React.useState<Partial<PlantUsage>>({})
+  const [ecology, setEcology] = React.useState<Partial<PlantEcology>>({})
+  const [commerce, setCommerce] = React.useState<Partial<PlantCommerce>>({})
+  const [problems, setProblems] = React.useState<Partial<PlantProblems>>({})
+  const [planting, setPlanting] = React.useState<Partial<PlantPlanting>>({})
+  const [meta, setMeta] = React.useState<Partial<PlantMeta>>({})
   
   // Legacy fields for backward compatibility (simplified mode)
   const [scientificName, setScientificName] = React.useState("")
@@ -78,12 +93,11 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
   const [meaning, setMeaning] = React.useState("")
   const [description, setDescription] = React.useState("")
   const [imageUrl, setImageUrl] = React.useState("")
-  const [careSunlight, setCareSunlight] = React.useState<Plant["care"]["sunlight"]>("Low")
-  const [careSoil, setCareSoil] = React.useState("")
-  const [careDifficulty, setCareDifficulty] = React.useState<Plant["care"]["difficulty"]>("Easy")
-  const [seedsAvailable, setSeedsAvailable] = React.useState(false)
-  const [waterFreqPeriod, setWaterFreqPeriod] = React.useState<'week' | 'month' | 'year'>('week')
-  const [waterFreqAmount, setWaterFreqAmount] = React.useState<number>(1)
+  const [careSoil] = React.useState("")
+  const [careDifficulty] = React.useState<NonNullable<Plant["care"]>["difficulty"]>("Easy")
+  const [seedsAvailable] = React.useState(false)
+  const [waterFreqPeriod] = React.useState<'week' | 'month' | 'year'>('week')
+  const [waterFreqAmount] = React.useState<number>(1)
 
   const toggleSeason = (s: Plant["seasons"][number]) => {
     setSeasons((cur: string[]) => (cur.includes(s) ? cur.filter((x: string) => x !== s) : [...cur, s]))
@@ -255,10 +269,6 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
       if (byName.error) { setError(byName.error.message); return }
       if (byName.data?.id) { setError('A plant with the same name already exists'); return }
 
-      // Provide safe defaults so simplified flow never violates NOT NULL constraints
-      const defaultPeriod: 'week' | 'month' | 'year' = 'week'
-      const defaultAmount: number = 1
-
       const { error: insErr } = await supabase.from('plants').insert({
         id,
         name: nameNorm,
@@ -295,7 +305,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
       if (insErr) { setError(insErr.message); return }
       
       // Always save translation for the input language (defaults to English in simplified mode)
-      const translation = {
+        const translation: PlantTranslation = {
         plant_id: id,
         language: inputLanguage,
         name: nameNorm,
@@ -322,7 +332,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
         care_soil: environment?.soil?.texture?.join(', ') || careSoil || null,
       }
       
-      const translationsToSave = [translation]
+        const translationsToSave: PlantTranslation[] = [translation]
       
       // In simplified mode, automatically translate to all languages
       // In advanced mode, only translate if checkbox is enabled

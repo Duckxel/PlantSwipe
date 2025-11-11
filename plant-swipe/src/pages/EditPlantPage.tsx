@@ -4,9 +4,23 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
 import { supabase } from "@/lib/supabaseClient"
-import type { Plant } from "@/types/plant"
+import type {
+  Plant,
+  PlantIdentifiers,
+  PlantTraits,
+  PlantDimensions,
+  PlantPhenology,
+  PlantEnvironment,
+  PlantCare,
+  PlantPropagation,
+  PlantUsage,
+  PlantEcology,
+  PlantCommerce,
+  PlantProblems,
+  PlantPlanting,
+  PlantMeta,
+} from "@/types/plant"
 import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE, type SupportedLanguage } from "@/lib/i18n"
 import { translatePlantToAllLanguages } from "@/lib/deepl"
 import { savePlantTranslations, getPlantTranslation } from "@/lib/plantTranslations"
@@ -33,9 +47,9 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
   const [meaning, setMeaning] = React.useState("")
   const [description, setDescription] = React.useState("")
   const [imageUrl, setImageUrl] = React.useState("")
-  const [careSunlight, setCareSunlight] = React.useState<Plant["care"]["sunlight"]>("Low")
+  const [careSunlight, setCareSunlight] = React.useState<NonNullable<Plant["care"]>["sunlight"]>("Low")
   const [careSoil, setCareSoil] = React.useState("")
-  const [careDifficulty, setCareDifficulty] = React.useState<Plant["care"]["difficulty"]>("Easy")
+  const [careDifficulty, setCareDifficulty] = React.useState<NonNullable<Plant["care"]>["difficulty"]>("Easy")
   const [seedsAvailable, setSeedsAvailable] = React.useState(false)
   const [waterFreqPeriod, setWaterFreqPeriod] = React.useState<'week' | 'month' | 'year'>('week')
   const [waterFreqAmount, setWaterFreqAmount] = React.useState<number>(1)
@@ -46,22 +60,19 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
   const [translating, setTranslating] = React.useState(false)
   
   // New JSONB structure state
-  const [identifiers, setIdentifiers] = React.useState<Partial<Plant['identifiers']>>({})
-  const [traits, setTraits] = React.useState<Partial<Plant['traits']>>({})
-  const [dimensions, setDimensions] = React.useState<Partial<Plant['dimensions']>>({})
-  const [phenology, setPhenology] = React.useState<Partial<Plant['phenology']>>({})
-  const [environment, setEnvironment] = React.useState<Partial<Plant['environment']>>({})
-  const [care, setCare] = React.useState<Partial<Plant['care']>>({})
-  const [propagation, setPropagation] = React.useState<Partial<Plant['propagation']>>({})
-  const [usage, setUsage] = React.useState<Partial<Plant['usage']>>({})
-  const [ecology, setEcology] = React.useState<Partial<Plant['ecology']>>({})
-  const [commerce, setCommerce] = React.useState<Partial<Plant['commerce']>>({})
-  const [problems, setProblems] = React.useState<Partial<Plant['problems']>>({})
-  const [planting, setPlanting] = React.useState<Partial<Plant['planting']>>({})
-  const [meta, setMeta] = React.useState<Partial<Plant['meta']>>({})
-  
-  // Legacy fields for backward compatibility
-  const [scientificName, setScientificName] = React.useState("")
+  const [identifiers, setIdentifiers] = React.useState<Partial<PlantIdentifiers>>({})
+  const [traits, setTraits] = React.useState<Partial<PlantTraits>>({})
+  const [dimensions, setDimensions] = React.useState<Partial<PlantDimensions>>({})
+  const [phenology, setPhenology] = React.useState<Partial<PlantPhenology>>({})
+  const [environment, setEnvironment] = React.useState<Partial<PlantEnvironment>>({})
+  const [care, setCare] = React.useState<Partial<PlantCare>>({})
+  const [propagation, setPropagation] = React.useState<Partial<PlantPropagation>>({})
+  const [usage, setUsage] = React.useState<Partial<PlantUsage>>({})
+  const [ecology, setEcology] = React.useState<Partial<PlantEcology>>({})
+  const [commerce, setCommerce] = React.useState<Partial<PlantCommerce>>({})
+  const [problems, setProblems] = React.useState<Partial<PlantProblems>>({})
+  const [planting, setPlanting] = React.useState<Partial<PlantPlanting>>({})
+  const [meta, setMeta] = React.useState<Partial<PlantMeta>>({})
 
   const toggleSeason = (s: Plant["seasons"][number]) => {
     setSeasons((cur: string[]) => (cur.includes(s) ? cur.filter((x: string) => x !== s) : [...cur, s]))
@@ -155,8 +166,8 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
         setSeasons(Array.isArray(data.seasons) ? (data.seasons as string[]) : [])
         setRarity((data.rarity || 'Common') as Plant['rarity'])
         setImageUrl(String(data.image_url || ''))
-        setCareSunlight((data.care_sunlight || 'Low') as Plant['care']['sunlight'])
-        setCareDifficulty((data.care_difficulty || 'Easy') as Plant['care']['difficulty'])
+        setCareSunlight((data.care_sunlight || 'Low') as NonNullable<Plant['care']>['sunlight'])
+        setCareDifficulty((data.care_difficulty || 'Easy') as NonNullable<Plant['care']>['difficulty'])
         setSeedsAvailable(Boolean(data.seeds_available ?? parsedCommerce?.seedsAvailable ?? false))
         const period = (data.water_freq_period || data.water_freq_unit || 'week') as 'week' | 'month' | 'year'
         const amount = Number(data.water_freq_amount ?? data.water_freq_value ?? 1) || 1

@@ -7,8 +7,8 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { 
   SunMedium, Droplets, Leaf, Heart, Share2, Maximize2, ChevronLeft, X,
   Info, Flower2, Ruler, Calendar, MapPin, Thermometer, Wind, Sprout,
-  Scissors, Droplet, Package, Bug, AlertTriangle, Seedling, Tag, BookOpen,
-  Globe, Bee, Shield, ShoppingCart, AlertCircle, Users, Sparkles, FileText
+  Scissors, Droplet, Package, Bug, AlertTriangle, Tag, BookOpen,
+  Globe, Shield, AlertCircle, Users, Sparkles, FileText
 } from "lucide-react";
 import type { Plant } from "@/types/plant";
 import { rarityTone, seasonBadge } from "@/constants/badges";
@@ -52,10 +52,24 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
   const freqAmountRaw = plant.waterFreqAmount ?? plant.waterFreqValue
   const freqAmount = typeof freqAmountRaw === 'number' ? freqAmountRaw : Number(freqAmountRaw || 0)
   const freqPeriod = (plant.waterFreqPeriod || plant.waterFreqUnit) as 'day' | 'week' | 'month' | 'year' | undefined
-  const derivedWater = deriveWaterLevelFromFrequency(freqPeriod, freqAmount) || (plant.care.water as any) || 'Low'
+  const care = plant.care ?? ({} as NonNullable<Plant['care']>)
+  const derivedWater = deriveWaterLevelFromFrequency(freqPeriod, freqAmount) || care.water || 'Low'
   const freqLabel = freqPeriod
     ? `${freqAmount > 0 ? `${freqAmount} ${freqAmount === 1 ? t('plantInfo.time') : t('plantInfo.times')} ` : ''}${t('plantInfo.per')} ${t(`plantInfo.${freqPeriod}`)}`
     : null
+  const phenology = plant.phenology ?? ({} as NonNullable<Plant['phenology']>)
+  const environment = plant.environment ?? ({} as NonNullable<Plant['environment']>)
+  const propagation = plant.propagation ?? ({} as NonNullable<Plant['propagation']>)
+  const usage = plant.usage ?? ({} as NonNullable<Plant['usage']>)
+  const ecology = plant.ecology ?? ({} as NonNullable<Plant['ecology']>)
+  const problems = plant.problems ?? ({} as NonNullable<Plant['problems']>)
+  const planting = plant.planting ?? ({} as NonNullable<Plant['planting']>)
+  const meta = plant.meta ?? ({} as NonNullable<Plant['meta']>)
+  const identifiers = plant.identifiers ?? ({} as NonNullable<Plant['identifiers']>)
+  const traits = plant.traits ?? ({} as NonNullable<Plant['traits']>)
+  const dimensions = plant.dimensions ?? ({} as NonNullable<Plant['dimensions']>)
+  const seasons = Array.isArray(plant.seasons) ? plant.seasons : []
+  const colors = Array.isArray(plant.colors) ? plant.colors : []
 
   const handleShare = async (e: React.MouseEvent) => {
     e.preventDefault()
@@ -317,10 +331,24 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
         </div>
       </div>
 
-      <div className="grid md:grid-cols-3 gap-3">
-        <Fact icon={<SunMedium className="h-4 w-4" />} label={t('plantInfo.sunlight')} value={plant.care.sunlight} sub={plant.care.soil ? String(plant.care.soil) : undefined} />
-        <Fact icon={<Droplets className="h-4 w-4" />} label={t('plantInfo.water')} value={derivedWater} sub={freqLabel || undefined} />
-        <Fact icon={<Leaf className="h-4 w-4" />} label={t('plantInfo.difficulty')} value={plant.care.difficulty} />
+        <div className="grid md:grid-cols-3 gap-3">
+          <Fact
+            icon={<SunMedium className="h-4 w-4" />}
+            label={t('plantInfo.sunlight')}
+            value={care?.sunlight || t('common.unknown')}
+            sub={care?.soil ? String(care.soil) : undefined}
+          />
+          <Fact
+            icon={<Droplets className="h-4 w-4" />}
+            label={t('plantInfo.water')}
+            value={derivedWater}
+            sub={freqLabel || undefined}
+          />
+          <Fact
+            icon={<Leaf className="h-4 w-4" />}
+            label={t('plantInfo.difficulty')}
+            value={care?.difficulty || t('common.unknown')}
+          />
       </div>
 
       <Card className="rounded-2xl">
@@ -330,11 +358,11 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
         <CardContent className="space-y-3 text-[15px] md:text-base leading-relaxed">
           <p>{plant.description}</p>
           <div className="flex flex-wrap gap-2">
-            <Badge className={`${rarityTone[plant.rarity]} rounded-xl`}>{plant.rarity}</Badge>
-            {plant.seasons.map((s: string) => (
-              <span key={s} className={`text-[10px] px-2 py-0.5 rounded-full ${seasonBadge[s]}`}>{s}</span>
+              <Badge className={`${rarityTone[plant.rarity || 'Common'] ?? ''} rounded-xl`}>{plant.rarity || t('common.unknown')}</Badge>
+              {seasons.map((s) => (
+                <span key={s} className={`text-[10px] px-2 py-0.5 rounded-full ${seasonBadge[s] ?? 'bg-stone-200 dark:bg-stone-700 text-stone-900 dark:text-stone-100'}`}>{s}</span>
             ))}
-            {plant.colors.map((c: string) => (
+              {colors.map((c) => (
               <Badge key={c} variant="secondary" className="rounded-xl">{c}</Badge>
             ))}
           </div>
@@ -357,42 +385,42 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
         </CardHeader>
         <CardContent className="space-y-6">
           {/* Identifiers Section */}
-          {(plant.identifiers?.scientificName || plant.identifiers?.family || plant.identifiers?.genus || plant.identifiers?.commonNames?.length || plant.identifiers?.synonyms?.length || plant.identifiers?.externalIds) && (
+            {(identifiers?.scientificName || identifiers?.family || identifiers?.genus || identifiers?.commonNames?.length || identifiers?.synonyms?.length || identifiers?.externalIds) && (
             <InfoSection title="Identifiers" icon={<Flower2 className="h-5 w-5" />}>
-              {plant.identifiers?.scientificName && (
-                <InfoItem icon={<Info className="h-4 w-4" />} label="Scientific Name" value={plant.identifiers.scientificName} />
+                {identifiers?.scientificName && (
+                  <InfoItem icon={<Info className="h-4 w-4" />} label="Scientific Name" value={identifiers.scientificName} />
               )}
-              {plant.identifiers?.canonicalName && (
-                <InfoItem icon={<FileText className="h-4 w-4" />} label="Canonical Name" value={plant.identifiers.canonicalName} />
+                {identifiers?.canonicalName && (
+                  <InfoItem icon={<FileText className="h-4 w-4" />} label="Canonical Name" value={identifiers.canonicalName} />
               )}
-              {plant.identifiers?.family && (
-                <InfoItem icon={<Users className="h-4 w-4" />} label="Family" value={plant.identifiers.family} />
+                {identifiers?.family && (
+                  <InfoItem icon={<Users className="h-4 w-4" />} label="Family" value={identifiers.family} />
               )}
-              {plant.identifiers?.genus && (
-                <InfoItem icon={<Tag className="h-4 w-4" />} label="Genus" value={plant.identifiers.genus} />
+                {identifiers?.genus && (
+                  <InfoItem icon={<Tag className="h-4 w-4" />} label="Genus" value={identifiers.genus} />
               )}
-              {plant.identifiers?.taxonRank && (
-                <InfoItem icon={<Tag className="h-4 w-4" />} label="Taxon Rank" value={plant.identifiers.taxonRank} />
+                {identifiers?.taxonRank && (
+                  <InfoItem icon={<Tag className="h-4 w-4" />} label="Taxon Rank" value={identifiers.taxonRank} />
               )}
-              {plant.identifiers?.cultivar && (
-                <InfoItem icon={<Seedling className="h-4 w-4" />} label="Cultivar" value={plant.identifiers.cultivar} />
+                {identifiers?.cultivar && (
+                  <InfoItem icon={<Sprout className="h-4 w-4" />} label="Cultivar" value={identifiers.cultivar} />
               )}
-              {plant.identifiers?.commonNames?.length > 0 && (
-                <InfoItem icon={<Globe className="h-4 w-4" />} label="Common Names" value={plant.identifiers.commonNames.join(', ')} />
-              )}
-              {plant.identifiers?.synonyms?.length > 0 && (
-                <InfoItem icon={<FileText className="h-4 w-4" />} label="Synonyms" value={plant.identifiers.synonyms.join(', ')} />
-              )}
-              {plant.identifiers?.externalIds && (
+                {(identifiers.commonNames?.length ?? 0) > 0 && (
+                  <InfoItem icon={<Globe className="h-4 w-4" />} label="Common Names" value={(identifiers.commonNames ?? []).join(', ')} />
+                )}
+                {(identifiers.synonyms?.length ?? 0) > 0 && (
+                  <InfoItem icon={<FileText className="h-4 w-4" />} label="Synonyms" value={(identifiers.synonyms ?? []).join(', ')} />
+                )}
+                {identifiers?.externalIds && (
                 <div className="space-y-2">
-                  {plant.identifiers.externalIds.wiki && (
-                    <InfoItem icon={<Globe className="h-4 w-4" />} label="Wikipedia" value={<a href={plant.identifiers.externalIds.wiki} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">View</a>} />
+                    {identifiers.externalIds.wiki && (
+                      <InfoItem icon={<Globe className="h-4 w-4" />} label="Wikipedia" value={<a href={identifiers.externalIds.wiki} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">View</a>} />
                   )}
-                  {plant.identifiers.externalIds.gbif && (
-                    <InfoItem icon={<Info className="h-4 w-4" />} label="GBIF ID" value={plant.identifiers.externalIds.gbif} />
+                    {identifiers.externalIds.gbif && (
+                      <InfoItem icon={<Info className="h-4 w-4" />} label="GBIF ID" value={identifiers.externalIds.gbif} />
                   )}
-                  {plant.identifiers.externalIds.powo && (
-                    <InfoItem icon={<Info className="h-4 w-4" />} label="POWO ID" value={plant.identifiers.externalIds.powo} />
+                    {identifiers.externalIds.powo && (
+                      <InfoItem icon={<Info className="h-4 w-4" />} label="POWO ID" value={identifiers.externalIds.powo} />
                   )}
                 </div>
               )}
@@ -400,70 +428,70 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
           )}
 
           {/* Traits Section */}
-          {(plant.traits?.lifeCycle || plant.traits?.habit?.length || plant.traits?.growthRate || plant.traits?.toxicity || plant.traits?.fragrance || plant.traits?.allergenicity) && (
+          {(traits?.lifeCycle || traits?.habit?.length || traits?.growthRate || traits?.toxicity || traits?.fragrance || traits?.allergenicity) && (
             <InfoSection title="Traits" icon={<Leaf className="h-5 w-5" />}>
-              {plant.traits?.lifeCycle && (
-                <InfoItem icon={<Calendar className="h-4 w-4" />} label="Life Cycle" value={plant.traits.lifeCycle} />
+              {traits?.lifeCycle && (
+                <InfoItem icon={<Calendar className="h-4 w-4" />} label="Life Cycle" value={traits.lifeCycle} />
               )}
-              {plant.traits?.habit?.length > 0 && (
-                <InfoItem icon={<Sprout className="h-4 w-4" />} label="Habit" value={plant.traits.habit.join(', ')} />
+              {traits?.habit?.length && (
+                <InfoItem icon={<Sprout className="h-4 w-4" />} label="Habit" value={traits.habit?.join(', ') || ''} />
               )}
-              {plant.traits?.deciduousEvergreen && (
-                <InfoItem icon={<Leaf className="h-4 w-4" />} label="Foliage" value={plant.traits.deciduousEvergreen} />
+              {traits?.deciduousEvergreen && (
+                <InfoItem icon={<Leaf className="h-4 w-4" />} label="Foliage" value={traits.deciduousEvergreen} />
               )}
-              {plant.traits?.growthRate && (
-                <InfoItem icon={<Sparkles className="h-4 w-4" />} label="Growth Rate" value={plant.traits.growthRate} />
+              {traits?.growthRate && (
+                <InfoItem icon={<Sparkles className="h-4 w-4" />} label="Growth Rate" value={traits.growthRate} />
               )}
-              {plant.traits?.thornsSpines && (
+              {traits?.thornsSpines && (
                 <InfoItem icon={<AlertTriangle className="h-4 w-4" />} label="Thorns/Spines" value="Yes" />
               )}
-              {plant.traits?.fragrance && plant.traits.fragrance !== 'none' && (
-                <InfoItem icon={<Flower2 className="h-4 w-4" />} label="Fragrance" value={plant.traits.fragrance} />
+              {traits?.fragrance && traits.fragrance !== 'none' && (
+                <InfoItem icon={<Flower2 className="h-4 w-4" />} label="Fragrance" value={traits.fragrance} />
               )}
-              {plant.traits?.toxicity && (
+              {traits?.toxicity && (
                 <div className="space-y-2">
-                  {plant.traits.toxicity.toHumans && plant.traits.toxicity.toHumans !== 'non-toxic' && (
-                    <InfoItem icon={<AlertCircle className="h-4 w-4" />} label="Toxicity to Humans" value={plant.traits.toxicity.toHumans} />
+                  {traits.toxicity.toHumans && traits.toxicity.toHumans !== 'non-toxic' && (
+                    <InfoItem icon={<AlertCircle className="h-4 w-4" />} label="Toxicity to Humans" value={traits.toxicity.toHumans} />
                   )}
-                  {plant.traits.toxicity.toPets && plant.traits.toxicity.toPets !== 'non-toxic' && (
-                    <InfoItem icon={<AlertCircle className="h-4 w-4" />} label="Toxicity to Pets" value={plant.traits.toxicity.toPets} />
+                  {traits.toxicity.toPets && traits.toxicity.toPets !== 'non-toxic' && (
+                    <InfoItem icon={<AlertCircle className="h-4 w-4" />} label="Toxicity to Pets" value={traits.toxicity.toPets} />
                   )}
                 </div>
               )}
-              {plant.traits?.allergenicity && (
-                <InfoItem icon={<AlertCircle className="h-4 w-4" />} label="Allergenicity" value={plant.traits.allergenicity} />
+              {traits?.allergenicity && (
+                <InfoItem icon={<AlertCircle className="h-4 w-4" />} label="Allergenicity" value={traits.allergenicity} />
               )}
-              {plant.traits?.invasiveness?.status && plant.traits.invasiveness.status !== 'not invasive' && (
-                <InfoItem icon={<AlertTriangle className="h-4 w-4" />} label="Invasiveness" value={`${plant.traits.invasiveness.status}${plant.traits.invasiveness.regions?.length ? ` (${plant.traits.invasiveness.regions.join(', ')})` : ''}`} />
+              {traits?.invasiveness?.status && traits.invasiveness.status !== 'not invasive' && (
+                <InfoItem icon={<AlertTriangle className="h-4 w-4" />} label="Invasiveness" value={`${traits.invasiveness.status}${traits.invasiveness.regions?.length ? ` (${traits.invasiveness.regions.join(', ')})` : ''}`} />
               )}
             </InfoSection>
           )}
 
           {/* Dimensions Section */}
-          {(plant.dimensions?.height || plant.dimensions?.spread || plant.dimensions?.spacing || plant.dimensions?.containerFriendly !== undefined) && (
+          {(dimensions?.height || dimensions?.spread || dimensions?.spacing || dimensions?.containerFriendly !== undefined) && (
             <InfoSection title="Dimensions" icon={<Ruler className="h-5 w-5" />}>
-              {plant.dimensions?.height && (
-                <InfoItem icon={<Ruler className="h-4 w-4" />} label="Height" value={`${plant.dimensions.height.minCm || ''}${plant.dimensions.height.minCm && plant.dimensions.height.maxCm ? '-' : ''}${plant.dimensions.height.maxCm || ''} cm`} />
+              {dimensions?.height && (
+                <InfoItem icon={<Ruler className="h-4 w-4" />} label="Height" value={`${dimensions.height.minCm || ''}${dimensions.height.minCm && dimensions.height.maxCm ? '-' : ''}${dimensions.height.maxCm || ''} cm`} />
               )}
-              {plant.dimensions?.spread && (
-                <InfoItem icon={<Ruler className="h-4 w-4" />} label="Spread" value={`${plant.dimensions.spread.minCm || ''}${plant.dimensions.spread.minCm && plant.dimensions.spread.maxCm ? '-' : ''}${plant.dimensions.spread.maxCm || ''} cm`} />
+              {dimensions?.spread && (
+                <InfoItem icon={<Ruler className="h-4 w-4" />} label="Spread" value={`${dimensions.spread.minCm || ''}${dimensions.spread.minCm && dimensions.spread.maxCm ? '-' : ''}${dimensions.spread.maxCm || ''} cm`} />
               )}
-              {plant.dimensions?.spacing && (
-                <InfoItem icon={<Ruler className="h-4 w-4" />} label="Spacing" value={`Row: ${plant.dimensions.spacing.rowCm || 'N/A'} cm, Plant: ${plant.dimensions.spacing.plantCm || 'N/A'} cm`} />
+              {dimensions?.spacing && (
+                <InfoItem icon={<Ruler className="h-4 w-4" />} label="Spacing" value={`Row: ${dimensions.spacing.rowCm || 'N/A'} cm, Plant: ${dimensions.spacing.plantCm || 'N/A'} cm`} />
               )}
-              {plant.dimensions?.containerFriendly !== undefined && (
-                <InfoItem icon={<Package className="h-4 w-4" />} label="Container Friendly" value={plant.dimensions.containerFriendly ? 'Yes' : 'No'} />
+              {dimensions?.containerFriendly !== undefined && (
+                <InfoItem icon={<Package className="h-4 w-4" />} label="Container Friendly" value={dimensions.containerFriendly ? 'Yes' : 'No'} />
               )}
             </InfoSection>
           )}
 
           {/* Phenology Section */}
-          {(plant.phenology?.flowerColors?.length || plant.phenology?.leafColors?.length || plant.phenology?.floweringMonths?.length || plant.phenology?.fruitingMonths?.length || plant.phenology?.scentNotes?.length) && (
+          {(phenology.flowerColors?.length || phenology.leafColors?.length || phenology.floweringMonths?.length || phenology.fruitingMonths?.length || phenology.scentNotes?.length) && (
             <InfoSection title="Phenology" icon={<Calendar className="h-5 w-5" />}>
-              {plant.phenology?.flowerColors?.length > 0 && (
+              {phenology.flowerColors?.length && (
                 <InfoItem icon={<Flower2 className="h-4 w-4" />} label="Flower Colors" value={
                   <div className="flex flex-wrap gap-2">
-                    {plant.phenology.flowerColors.map((color, idx) => (
+                    {(phenology.flowerColors ?? []).map((color, idx) => (
                       <span key={idx} className="px-2 py-1 rounded-lg bg-stone-100 dark:bg-[#2d2d30] text-sm flex items-center gap-1">
                         {color.hex && <span className="w-3 h-3 rounded-full border border-stone-300" style={{ backgroundColor: color.hex }} />}
                         {color.name}
@@ -472,10 +500,10 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
                   </div>
                 } />
               )}
-              {plant.phenology?.leafColors?.length > 0 && (
+              {phenology.leafColors?.length && (
                 <InfoItem icon={<Leaf className="h-4 w-4" />} label="Leaf Colors" value={
                   <div className="flex flex-wrap gap-2">
-                    {plant.phenology.leafColors.map((color, idx) => (
+                    {(phenology.leafColors ?? []).map((color, idx) => (
                       <span key={idx} className="px-2 py-1 rounded-lg bg-stone-100 dark:bg-[#2d2d30] text-sm flex items-center gap-1">
                         {color.hex && <span className="w-3 h-3 rounded-full border border-stone-300" style={{ backgroundColor: color.hex }} />}
                         {color.name}
@@ -484,62 +512,62 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
                   </div>
                 } />
               )}
-              {plant.phenology?.floweringMonths?.length > 0 && (
-                <InfoItem icon={<Flower2 className="h-4 w-4" />} label="Flowering Months" value={formatMonths(plant.phenology.floweringMonths)} />
+              {phenology.floweringMonths?.length && (
+                <InfoItem icon={<Flower2 className="h-4 w-4" />} label="Flowering Months" value={formatMonths(phenology.floweringMonths ?? [])} />
               )}
-              {plant.phenology?.fruitingMonths?.length > 0 && (
-                <InfoItem icon={<Package className="h-4 w-4" />} label="Fruiting Months" value={formatMonths(plant.phenology.fruitingMonths)} />
+              {phenology.fruitingMonths?.length && (
+                <InfoItem icon={<Package className="h-4 w-4" />} label="Fruiting Months" value={formatMonths(phenology.fruitingMonths ?? [])} />
               )}
-              {plant.phenology?.scentNotes?.length > 0 && (
-                <InfoItem icon={<Flower2 className="h-4 w-4" />} label="Scent Notes" value={plant.phenology.scentNotes.join(', ')} />
+              {phenology.scentNotes?.length && (
+                <InfoItem icon={<Flower2 className="h-4 w-4" />} label="Scent Notes" value={(phenology.scentNotes ?? []).join(', ')} />
               )}
             </InfoSection>
           )}
 
           {/* Environment Section */}
-          {(plant.environment?.sunExposure || plant.environment?.hardiness || plant.environment?.climatePref?.length || plant.environment?.temperature || plant.environment?.soil) && (
+          {(environment.sunExposure || environment.hardiness || environment.climatePref?.length || environment.temperature || environment.soil) && (
             <InfoSection title="Environment" icon={<MapPin className="h-5 w-5" />}>
-              {plant.environment?.sunExposure && (
-                <InfoItem icon={<SunMedium className="h-4 w-4" />} label="Sun Exposure" value={plant.environment.sunExposure} />
+              {environment.sunExposure && (
+                <InfoItem icon={<SunMedium className="h-4 w-4" />} label="Sun Exposure" value={environment.sunExposure} />
               )}
-              {plant.environment?.lightIntensity && (
-                <InfoItem icon={<SunMedium className="h-4 w-4" />} label="Light Intensity" value={plant.environment.lightIntensity} />
+              {environment.lightIntensity && (
+                <InfoItem icon={<SunMedium className="h-4 w-4" />} label="Light Intensity" value={environment.lightIntensity} />
               )}
-              {plant.environment?.hardiness && (
+              {environment.hardiness && (
                 <div className="space-y-2">
-                  {plant.environment.hardiness.usdaZones?.length > 0 && (
-                    <InfoItem icon={<Shield className="h-4 w-4" />} label="USDA Zones" value={plant.environment.hardiness.usdaZones.join(', ')} />
+                  {environment.hardiness.usdaZones?.length && (
+                    <InfoItem icon={<Shield className="h-4 w-4" />} label="USDA Zones" value={(environment.hardiness.usdaZones ?? []).join(', ')} />
                   )}
-                  {plant.environment.hardiness.rhsH && (
-                    <InfoItem icon={<Shield className="h-4 w-4" />} label="RHS Hardiness" value={plant.environment.hardiness.rhsH} />
+                  {environment.hardiness.rhsH && (
+                    <InfoItem icon={<Shield className="h-4 w-4" />} label="RHS Hardiness" value={environment.hardiness.rhsH} />
                   )}
                 </div>
               )}
-              {plant.environment?.climatePref?.length > 0 && (
-                <InfoItem icon={<Globe className="h-4 w-4" />} label="Climate Preference" value={plant.environment.climatePref.join(', ')} />
+              {environment.climatePref?.length && (
+                <InfoItem icon={<Globe className="h-4 w-4" />} label="Climate Preference" value={environment.climatePref.join(', ')} />
               )}
-              {plant.environment?.temperature && (
-                <InfoItem icon={<Thermometer className="h-4 w-4" />} label="Temperature Range" value={`${plant.environment.temperature.minC || ''}${plant.environment.temperature.minC && plant.environment.temperature.maxC ? '-' : ''}${plant.environment.temperature.maxC || ''}°C`} />
+              {environment.temperature && (
+                <InfoItem icon={<Thermometer className="h-4 w-4" />} label="Temperature Range" value={`${environment.temperature.minC || ''}${environment.temperature.minC && environment.temperature.maxC ? '-' : ''}${environment.temperature.maxC || ''}°C`} />
               )}
-              {plant.environment?.humidityPref && (
-                <InfoItem icon={<Droplets className="h-4 w-4" />} label="Humidity Preference" value={plant.environment.humidityPref} />
+              {environment.humidityPref && (
+                <InfoItem icon={<Droplets className="h-4 w-4" />} label="Humidity Preference" value={environment.humidityPref} />
               )}
-              {plant.environment?.windTolerance && (
-                <InfoItem icon={<Wind className="h-4 w-4" />} label="Wind Tolerance" value={plant.environment.windTolerance} />
+              {environment.windTolerance && (
+                <InfoItem icon={<Wind className="h-4 w-4" />} label="Wind Tolerance" value={environment.windTolerance} />
               )}
-              {plant.environment?.soil && (
+              {environment.soil && (
                 <div className="space-y-2">
-                  {plant.environment.soil.texture?.length > 0 && (
-                    <InfoItem icon={<Leaf className="h-4 w-4" />} label="Soil Texture" value={plant.environment.soil.texture.join(', ')} />
+                  {environment.soil.texture?.length && (
+                    <InfoItem icon={<Leaf className="h-4 w-4" />} label="Soil Texture" value={environment.soil.texture.join(', ')} />
                   )}
-                  {plant.environment.soil.drainage && (
-                    <InfoItem icon={<Droplets className="h-4 w-4" />} label="Soil Drainage" value={plant.environment.soil.drainage} />
+                  {environment.soil.drainage && (
+                    <InfoItem icon={<Droplets className="h-4 w-4" />} label="Soil Drainage" value={environment.soil.drainage} />
                   )}
-                  {plant.environment.soil.fertility && (
-                    <InfoItem icon={<Sprout className="h-4 w-4" />} label="Soil Fertility" value={plant.environment.soil.fertility} />
+                  {environment.soil.fertility && (
+                    <InfoItem icon={<Sprout className="h-4 w-4" />} label="Soil Fertility" value={environment.soil.fertility} />
                   )}
-                  {plant.environment.soil.pH && (
-                    <InfoItem icon={<Info className="h-4 w-4" />} label="Soil pH" value={`${plant.environment.soil.pH.min || ''}${plant.environment.soil.pH.min && plant.environment.soil.pH.max ? '-' : ''}${plant.environment.soil.pH.max || ''}`} />
+                  {environment.soil.pH && (
+                    <InfoItem icon={<Info className="h-4 w-4" />} label="Soil pH" value={`${environment.soil.pH.min || ''}${environment.soil.pH.min && environment.soil.pH.max ? '-' : ''}${environment.soil.pH.max || ''}`} />
                   )}
                 </div>
               )}
@@ -547,85 +575,85 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
           )}
 
           {/* Care Section - Extended */}
-          {(plant.care?.maintenanceLevel || plant.care?.watering?.method || plant.care?.fertilizing || plant.care?.pruning || plant.care?.mulching || plant.care?.stakingSupport !== undefined || plant.care?.repottingIntervalYears) && (
+          {(care.maintenanceLevel || care.watering?.method || care.fertilizing || care.pruning || care.mulching || care.stakingSupport !== undefined || care.repottingIntervalYears) && (
             <InfoSection title="Care Details" icon={<Sprout className="h-5 w-5" />}>
-              {plant.care?.maintenanceLevel && (
-                <InfoItem icon={<Info className="h-4 w-4" />} label="Maintenance Level" value={plant.care.maintenanceLevel} />
+              {care.maintenanceLevel && (
+                <InfoItem icon={<Info className="h-4 w-4" />} label="Maintenance Level" value={care.maintenanceLevel} />
               )}
-              {plant.care?.watering?.method && (
-                <InfoItem icon={<Droplet className="h-4 w-4" />} label="Watering Method" value={plant.care.watering.method} />
+              {care.watering?.method && (
+                <InfoItem icon={<Droplet className="h-4 w-4" />} label="Watering Method" value={care.watering.method} />
               )}
-              {plant.care?.watering?.depthCm && (
-                <InfoItem icon={<Droplet className="h-4 w-4" />} label="Watering Depth" value={`${plant.care.watering.depthCm} cm`} />
+              {care.watering?.depthCm && (
+                <InfoItem icon={<Droplet className="h-4 w-4" />} label="Watering Depth" value={`${care.watering.depthCm} cm`} />
               )}
-              {plant.care?.watering?.frequency && (
+              {care.watering?.frequency && (
                 <div className="space-y-2">
-                  {plant.care.watering.frequency.winter && (
-                    <InfoItem icon={<Droplet className="h-4 w-4" />} label="Winter Watering" value={plant.care.watering.frequency.winter} />
+                  {care.watering.frequency.winter && (
+                    <InfoItem icon={<Droplet className="h-4 w-4" />} label="Winter Watering" value={care.watering.frequency.winter} />
                   )}
-                  {plant.care.watering.frequency.spring && (
-                    <InfoItem icon={<Droplet className="h-4 w-4" />} label="Spring Watering" value={plant.care.watering.frequency.spring} />
+                  {care.watering.frequency.spring && (
+                    <InfoItem icon={<Droplet className="h-4 w-4" />} label="Spring Watering" value={care.watering.frequency.spring} />
                   )}
-                  {plant.care.watering.frequency.summer && (
-                    <InfoItem icon={<Droplet className="h-4 w-4" />} label="Summer Watering" value={plant.care.watering.frequency.summer} />
+                  {care.watering.frequency.summer && (
+                    <InfoItem icon={<Droplet className="h-4 w-4" />} label="Summer Watering" value={care.watering.frequency.summer} />
                   )}
-                  {plant.care.watering.frequency.autumn && (
-                    <InfoItem icon={<Droplet className="h-4 w-4" />} label="Autumn Watering" value={plant.care.watering.frequency.autumn} />
+                  {care.watering.frequency.autumn && (
+                    <InfoItem icon={<Droplet className="h-4 w-4" />} label="Autumn Watering" value={care.watering.frequency.autumn} />
                   )}
                 </div>
               )}
-              {plant.care?.fertilizing && (
+              {care.fertilizing && (
                 <div className="space-y-2">
-                  {plant.care.fertilizing.type && (
-                    <InfoItem icon={<Sprout className="h-4 w-4" />} label="Fertilizer Type" value={plant.care.fertilizing.type} />
+                  {care.fertilizing.type && (
+                    <InfoItem icon={<Sprout className="h-4 w-4" />} label="Fertilizer Type" value={care.fertilizing.type} />
                   )}
-                  {plant.care.fertilizing.schedule && (
-                    <InfoItem icon={<Calendar className="h-4 w-4" />} label="Fertilizing Schedule" value={plant.care.fertilizing.schedule} />
+                  {care.fertilizing.schedule && (
+                    <InfoItem icon={<Calendar className="h-4 w-4" />} label="Fertilizing Schedule" value={care.fertilizing.schedule} />
                   )}
                 </div>
               )}
-              {plant.care?.pruning && (
+              {care.pruning && (
                 <div className="space-y-2">
-                  {plant.care.pruning.bestMonths?.length > 0 && (
-                    <InfoItem icon={<Scissors className="h-4 w-4" />} label="Best Pruning Months" value={formatMonths(plant.care.pruning.bestMonths)} />
+                  {care.pruning.bestMonths?.length && (
+                    <InfoItem icon={<Scissors className="h-4 w-4" />} label="Best Pruning Months" value={formatMonths(care.pruning.bestMonths ?? [])} />
                   )}
-                  {plant.care.pruning.method && (
-                    <InfoItem icon={<Scissors className="h-4 w-4" />} label="Pruning Method" value={plant.care.pruning.method} />
+                  {care.pruning.method && (
+                    <InfoItem icon={<Scissors className="h-4 w-4" />} label="Pruning Method" value={care.pruning.method} />
                   )}
                 </div>
               )}
-              {plant.care?.mulching && (
+              {care.mulching && (
                 <div className="space-y-2">
-                  {plant.care.mulching.recommended !== undefined && (
-                    <InfoItem icon={<Leaf className="h-4 w-4" />} label="Mulching Recommended" value={plant.care.mulching.recommended ? 'Yes' : 'No'} />
+                  {care.mulching.recommended !== undefined && (
+                    <InfoItem icon={<Leaf className="h-4 w-4" />} label="Mulching Recommended" value={care.mulching.recommended ? 'Yes' : 'No'} />
                   )}
-                  {plant.care.mulching.material && (
-                    <InfoItem icon={<Leaf className="h-4 w-4" />} label="Mulching Material" value={plant.care.mulching.material} />
+                  {care.mulching.material && (
+                    <InfoItem icon={<Leaf className="h-4 w-4" />} label="Mulching Material" value={care.mulching.material} />
                   )}
                 </div>
               )}
-              {plant.care?.stakingSupport !== undefined && (
-                <InfoItem icon={<Sprout className="h-4 w-4" />} label="Staking Support" value={plant.care.stakingSupport ? 'Required' : 'Not Required'} />
+              {care.stakingSupport !== undefined && (
+                <InfoItem icon={<Sprout className="h-4 w-4" />} label="Staking Support" value={care.stakingSupport ? 'Required' : 'Not Required'} />
               )}
-              {plant.care?.repottingIntervalYears && (
-                <InfoItem icon={<Package className="h-4 w-4" />} label="Repotting Interval" value={`Every ${plant.care.repottingIntervalYears} year${plant.care.repottingIntervalYears > 1 ? 's' : ''}`} />
+              {care.repottingIntervalYears && (
+                <InfoItem icon={<Package className="h-4 w-4" />} label="Repotting Interval" value={`Every ${care.repottingIntervalYears} year${(care.repottingIntervalYears ?? 0) > 1 ? 's' : ''}`} />
               )}
             </InfoSection>
           )}
 
           {/* Propagation Section */}
-          {(plant.propagation?.methods?.length || plant.propagation?.seed) && (
-            <InfoSection title="Propagation" icon={<Seedling className="h-5 w-5" />}>
-              {plant.propagation?.methods?.length > 0 && (
-                <InfoItem icon={<Sprout className="h-4 w-4" />} label="Methods" value={plant.propagation.methods.join(', ')} />
+          {(propagation.methods?.length || propagation.seed) && (
+            <InfoSection title="Propagation" icon={<Sprout className="h-5 w-5" />}>
+              {propagation.methods?.length && (
+                <InfoItem icon={<Sprout className="h-4 w-4" />} label="Methods" value={propagation.methods.join(', ')} />
               )}
-              {plant.propagation?.seed && (
+              {propagation.seed && (
                 <div className="space-y-2">
-                  {plant.propagation.seed.stratification && (
-                    <InfoItem icon={<Seedling className="h-4 w-4" />} label="Seed Stratification" value={plant.propagation.seed.stratification} />
+                  {propagation.seed.stratification && (
+                    <InfoItem icon={<Sprout className="h-4 w-4" />} label="Seed Stratification" value={propagation.seed.stratification} />
                   )}
-                  {plant.propagation.seed.germinationDays && (
-                    <InfoItem icon={<Calendar className="h-4 w-4" />} label="Germination Days" value={`${plant.propagation.seed.germinationDays.min || ''}${plant.propagation.seed.germinationDays.min && plant.propagation.seed.germinationDays.max ? '-' : ''}${plant.propagation.seed.germinationDays.max || ''}`} />
+                  {propagation.seed.germinationDays && (
+                    <InfoItem icon={<Calendar className="h-4 w-4" />} label="Germination Days" value={`${propagation.seed.germinationDays.min || ''}${propagation.seed.germinationDays.min && propagation.seed.germinationDays.max ? '-' : ''}${propagation.seed.germinationDays.max || ''}`} />
                   )}
                 </div>
               )}
@@ -633,116 +661,116 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
           )}
 
           {/* Usage Section */}
-          {(plant.usage?.gardenUses?.length || plant.usage?.indoorOutdoor || plant.usage?.edibleParts?.length || plant.usage?.culinaryUses?.length || plant.usage?.medicinalUses?.length) && (
+          {(usage.gardenUses?.length || usage.indoorOutdoor || usage.edibleParts?.length || usage.culinaryUses?.length || usage.medicinalUses?.length) && (
             <InfoSection title="Usage" icon={<Flower2 className="h-5 w-5" />}>
-              {plant.usage?.gardenUses?.length > 0 && (
-                <InfoItem icon={<Sprout className="h-4 w-4" />} label="Garden Uses" value={plant.usage.gardenUses.join(', ')} />
+              {usage.gardenUses?.length && (
+                <InfoItem icon={<Sprout className="h-4 w-4" />} label="Garden Uses" value={usage.gardenUses.join(', ')} />
               )}
-              {plant.usage?.indoorOutdoor && (
-                <InfoItem icon={<MapPin className="h-4 w-4" />} label="Location" value={plant.usage.indoorOutdoor} />
+              {usage.indoorOutdoor && (
+                <InfoItem icon={<MapPin className="h-4 w-4" />} label="Location" value={usage.indoorOutdoor} />
               )}
-              {plant.usage?.edibleParts?.length > 0 && (
-                <InfoItem icon={<Package className="h-4 w-4" />} label="Edible Parts" value={plant.usage.edibleParts.join(', ')} />
+              {usage.edibleParts?.length && (
+                <InfoItem icon={<Package className="h-4 w-4" />} label="Edible Parts" value={usage.edibleParts.join(', ')} />
               )}
-              {plant.usage?.culinaryUses?.length > 0 && (
-                <InfoItem icon={<Package className="h-4 w-4" />} label="Culinary Uses" value={plant.usage.culinaryUses.join(', ')} />
+              {usage.culinaryUses?.length && (
+                <InfoItem icon={<Package className="h-4 w-4" />} label="Culinary Uses" value={usage.culinaryUses.join(', ')} />
               )}
-              {plant.usage?.medicinalUses?.length > 0 && (
-                <InfoItem icon={<Heart className="h-4 w-4" />} label="Medicinal Uses" value={plant.usage.medicinalUses.join(', ')} />
+              {usage.medicinalUses?.length && (
+                <InfoItem icon={<Heart className="h-4 w-4" />} label="Medicinal Uses" value={usage.medicinalUses.join(', ')} />
               )}
             </InfoSection>
           )}
 
           {/* Ecology Section */}
-          {(plant.ecology?.nativeRange?.length || plant.ecology?.pollinators?.length || plant.ecology?.wildlifeValue?.length || plant.ecology?.conservationStatus) && (
+          {(ecology.nativeRange?.length || ecology.pollinators?.length || ecology.wildlifeValue?.length || ecology.conservationStatus) && (
             <InfoSection title="Ecology" icon={<Globe className="h-5 w-5" />}>
-              {plant.ecology?.nativeRange?.length > 0 && (
-                <InfoItem icon={<MapPin className="h-4 w-4" />} label="Native Range" value={plant.ecology.nativeRange.join(', ')} />
+              {ecology.nativeRange?.length && (
+                <InfoItem icon={<MapPin className="h-4 w-4" />} label="Native Range" value={ecology.nativeRange.join(', ')} />
               )}
-              {plant.ecology?.pollinators?.length > 0 && (
-                <InfoItem icon={<Bee className="h-4 w-4" />} label="Pollinators" value={plant.ecology.pollinators.join(', ')} />
+              {ecology.pollinators?.length && (
+                <InfoItem icon={<Sparkles className="h-4 w-4" />} label="Pollinators" value={ecology.pollinators.join(', ')} />
               )}
-              {plant.ecology?.wildlifeValue?.length > 0 && (
-                <InfoItem icon={<Heart className="h-4 w-4" />} label="Wildlife Value" value={plant.ecology.wildlifeValue.join(', ')} />
+              {ecology.wildlifeValue?.length && (
+                <InfoItem icon={<Heart className="h-4 w-4" />} label="Wildlife Value" value={ecology.wildlifeValue.join(', ')} />
               )}
-              {plant.ecology?.conservationStatus && (
-                <InfoItem icon={<Shield className="h-4 w-4" />} label="Conservation Status" value={plant.ecology.conservationStatus} />
+              {ecology.conservationStatus && (
+                <InfoItem icon={<Shield className="h-4 w-4" />} label="Conservation Status" value={ecology.conservationStatus} />
               )}
             </InfoSection>
           )}
 
           {/* Problems Section */}
-          {(plant.problems?.pests?.length || plant.problems?.diseases?.length || plant.problems?.hazards?.length) && (
+          {(problems.pests?.length || problems.diseases?.length || problems.hazards?.length) && (
             <InfoSection title="Problems" icon={<AlertTriangle className="h-5 w-5" />}>
-              {plant.problems?.pests?.length > 0 && (
-                <InfoItem icon={<Bug className="h-4 w-4" />} label="Pests" value={plant.problems.pests.join(', ')} />
+              {problems.pests?.length && (
+                <InfoItem icon={<Bug className="h-4 w-4" />} label="Pests" value={problems.pests.join(', ')} />
               )}
-              {plant.problems?.diseases?.length > 0 && (
-                <InfoItem icon={<AlertCircle className="h-4 w-4" />} label="Diseases" value={plant.problems.diseases.join(', ')} />
+              {problems.diseases?.length && (
+                <InfoItem icon={<AlertCircle className="h-4 w-4" />} label="Diseases" value={problems.diseases.join(', ')} />
               )}
-              {plant.problems?.hazards?.length > 0 && (
-                <InfoItem icon={<AlertTriangle className="h-4 w-4" />} label="Hazards" value={plant.problems.hazards.join(', ')} />
+              {problems.hazards?.length && (
+                <InfoItem icon={<AlertTriangle className="h-4 w-4" />} label="Hazards" value={problems.hazards.join(', ')} />
               )}
             </InfoSection>
           )}
 
           {/* Planting Section */}
-          {(plant.planting?.calendar || plant.planting?.sitePrep?.length || plant.planting?.companionPlants?.length || plant.planting?.avoidNear?.length) && (
-            <InfoSection title="Planting" icon={<Seedling className="h-5 w-5" />}>
-              {plant.planting?.calendar && (
+          {(planting.calendar || planting.sitePrep?.length || planting.companionPlants?.length || planting.avoidNear?.length) && (
+            <InfoSection title="Planting" icon={<Sprout className="h-5 w-5" />}>
+              {planting.calendar && (
                 <div className="space-y-2">
-                  {plant.planting.calendar.hemisphere && (
-                    <InfoItem icon={<Globe className="h-4 w-4" />} label="Hemisphere" value={plant.planting.calendar.hemisphere} />
+                  {planting.calendar.hemisphere && (
+                    <InfoItem icon={<Globe className="h-4 w-4" />} label="Hemisphere" value={planting.calendar.hemisphere} />
                   )}
-                  {plant.planting.calendar.sowingMonths?.length > 0 && (
-                    <InfoItem icon={<Calendar className="h-4 w-4" />} label="Sowing Months" value={formatMonths(plant.planting.calendar.sowingMonths)} />
+                  {planting.calendar.sowingMonths?.length && (
+                    <InfoItem icon={<Calendar className="h-4 w-4" />} label="Sowing Months" value={formatMonths(planting.calendar.sowingMonths ?? [])} />
                   )}
-                  {plant.planting.calendar.plantingOutMonths?.length > 0 && (
-                    <InfoItem icon={<Calendar className="h-4 w-4" />} label="Planting Out Months" value={formatMonths(plant.planting.calendar.plantingOutMonths)} />
+                  {planting.calendar.plantingOutMonths?.length && (
+                    <InfoItem icon={<Calendar className="h-4 w-4" />} label="Planting Out Months" value={formatMonths(planting.calendar.plantingOutMonths ?? [])} />
                   )}
-                  {plant.planting.calendar.promotionMonth && (
-                    <InfoItem icon={<Sparkles className="h-4 w-4" />} label="Promotion Month" value={formatMonths([plant.planting.calendar.promotionMonth])} />
+                  {planting.calendar.promotionMonth && (
+                    <InfoItem icon={<Sparkles className="h-4 w-4" />} label="Promotion Month" value={formatMonths([planting.calendar.promotionMonth])} />
                   )}
                 </div>
               )}
-              {plant.planting?.sitePrep?.length > 0 && (
-                <InfoItem icon={<Sprout className="h-4 w-4" />} label="Site Preparation" value={plant.planting.sitePrep.join(', ')} />
+              {planting.sitePrep?.length && (
+                <InfoItem icon={<Sprout className="h-4 w-4" />} label="Site Preparation" value={planting.sitePrep.join(', ')} />
               )}
-              {plant.planting?.companionPlants?.length > 0 && (
-                <InfoItem icon={<Users className="h-4 w-4" />} label="Companion Plants" value={plant.planting.companionPlants.join(', ')} />
+              {planting.companionPlants?.length && (
+                <InfoItem icon={<Users className="h-4 w-4" />} label="Companion Plants" value={planting.companionPlants.join(', ')} />
               )}
-              {plant.planting?.avoidNear?.length > 0 && (
-                <InfoItem icon={<AlertTriangle className="h-4 w-4" />} label="Avoid Planting Near" value={plant.planting.avoidNear.join(', ')} />
+              {planting.avoidNear?.length && (
+                <InfoItem icon={<AlertTriangle className="h-4 w-4" />} label="Avoid Planting Near" value={planting.avoidNear.join(', ')} />
               )}
             </InfoSection>
           )}
 
           {/* Meta Section */}
-          {(plant.meta?.tags?.length || plant.meta?.funFact || plant.meta?.sourceReferences?.length || plant.meta?.authorNotes) && (
+          {(meta.tags?.length || meta.funFact || meta.sourceReferences?.length || meta.authorNotes) && (
             <InfoSection title="Additional Information" icon={<BookOpen className="h-5 w-5" />}>
-              {plant.meta?.tags?.length > 0 && (
+              {meta.tags?.length && (
                 <InfoItem icon={<Tag className="h-4 w-4" />} label="Tags" value={
                   <div className="flex flex-wrap gap-2">
-                    {plant.meta.tags.map((tag, idx) => (
+                    {meta.tags.map((tag, idx) => (
                       <Badge key={idx} variant="secondary" className="rounded-xl">{tag}</Badge>
                     ))}
                   </div>
                 } />
               )}
-              {plant.meta?.funFact && (
-                <InfoItem icon={<Sparkles className="h-4 w-4" />} label="Fun Fact" value={plant.meta.funFact} />
+              {meta.funFact && (
+                <InfoItem icon={<Sparkles className="h-4 w-4" />} label="Fun Fact" value={meta.funFact} />
               )}
-              {plant.meta?.sourceReferences?.length > 0 && (
+              {meta.sourceReferences?.length && (
                 <InfoItem icon={<BookOpen className="h-4 w-4" />} label="Source References" value={
                   <ul className="list-disc list-inside space-y-1">
-                    {plant.meta.sourceReferences.map((ref, idx) => (
+                    {meta.sourceReferences.map((ref, idx) => (
                       <li key={idx} className="text-sm">{ref}</li>
                     ))}
                   </ul>
                 } />
               )}
-              {plant.meta?.authorNotes && (
-                <InfoItem icon={<FileText className="h-4 w-4" />} label="Author Notes" value={plant.meta.authorNotes} />
+              {meta.authorNotes && (
+                <InfoItem icon={<FileText className="h-4 w-4" />} label="Author Notes" value={meta.authorNotes} />
               )}
             </InfoSection>
           )}

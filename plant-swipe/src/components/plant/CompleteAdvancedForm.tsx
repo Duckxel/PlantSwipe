@@ -11,7 +11,22 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
-import type { Plant } from "@/types/plant"
+import type {
+  PlantIdentifiers,
+  PlantTraits,
+  PlantDimensions,
+  PlantPhenology,
+  PlantEnvironment,
+  PlantCare,
+  PlantPropagation,
+  PlantUsage,
+  PlantEcology,
+  PlantCommerce,
+  PlantProblems,
+  PlantPlanting,
+  PlantMeta,
+  ColorInfo,
+} from "@/types/plant"
 
 // Helper component for array inputs
 const ArrayInputField: React.FC<{
@@ -174,32 +189,32 @@ const CollapsibleSection: React.FC<{
 
 interface CompleteAdvancedFormProps {
   // All form state
-  identifiers: Partial<Plant['identifiers']>
-  setIdentifiers: React.Dispatch<React.SetStateAction<Partial<Plant['identifiers']>>>
-  traits: Partial<Plant['traits']>
-  setTraits: React.Dispatch<React.SetStateAction<Partial<Plant['traits']>>>
-  dimensions: Partial<Plant['dimensions']>
-  setDimensions: React.Dispatch<React.SetStateAction<Partial<Plant['dimensions']>>>
-  phenology: Partial<Plant['phenology']>
-  setPhenology: React.Dispatch<React.SetStateAction<Partial<Plant['phenology']>>>
-  environment: Partial<Plant['environment']>
-  setEnvironment: React.Dispatch<React.SetStateAction<Partial<Plant['environment']>>>
-  care: Partial<Plant['care']>
-  setCare: React.Dispatch<React.SetStateAction<Partial<Plant['care']>>>
-  propagation: Partial<Plant['propagation']>
-  setPropagation: React.Dispatch<React.SetStateAction<Partial<Plant['propagation']>>>
-  usage: Partial<Plant['usage']>
-  setUsage: React.Dispatch<React.SetStateAction<Partial<Plant['usage']>>>
-  ecology: Partial<Plant['ecology']>
-  setEcology: React.Dispatch<React.SetStateAction<Partial<Plant['ecology']>>>
-  commerce: Partial<Plant['commerce']>
-  setCommerce: React.Dispatch<React.SetStateAction<Partial<Plant['commerce']>>>
-  problems: Partial<Plant['problems']>
-  setProblems: React.Dispatch<React.SetStateAction<Partial<Plant['problems']>>>
-  planting: Partial<Plant['planting']>
-  setPlanting: React.Dispatch<React.SetStateAction<Partial<Plant['planting']>>>
-  meta: Partial<Plant['meta']>
-  setMeta: React.Dispatch<React.SetStateAction<Partial<Plant['meta']>>>
+  identifiers: Partial<PlantIdentifiers>
+  setIdentifiers: React.Dispatch<React.SetStateAction<Partial<PlantIdentifiers>>>
+  traits: Partial<PlantTraits>
+  setTraits: React.Dispatch<React.SetStateAction<Partial<PlantTraits>>>
+  dimensions: Partial<PlantDimensions>
+  setDimensions: React.Dispatch<React.SetStateAction<Partial<PlantDimensions>>>
+  phenology: Partial<PlantPhenology>
+  setPhenology: React.Dispatch<React.SetStateAction<Partial<PlantPhenology>>>
+  environment: Partial<PlantEnvironment>
+  setEnvironment: React.Dispatch<React.SetStateAction<Partial<PlantEnvironment>>>
+  care: Partial<PlantCare>
+  setCare: React.Dispatch<React.SetStateAction<Partial<PlantCare>>>
+  propagation: Partial<PlantPropagation>
+  setPropagation: React.Dispatch<React.SetStateAction<Partial<PlantPropagation>>>
+  usage: Partial<PlantUsage>
+  setUsage: React.Dispatch<React.SetStateAction<Partial<PlantUsage>>>
+  ecology: Partial<PlantEcology>
+  setEcology: React.Dispatch<React.SetStateAction<Partial<PlantEcology>>>
+  commerce: Partial<PlantCommerce>
+  setCommerce: React.Dispatch<React.SetStateAction<Partial<PlantCommerce>>>
+  problems: Partial<PlantProblems>
+  setProblems: React.Dispatch<React.SetStateAction<Partial<PlantProblems>>>
+  planting: Partial<PlantPlanting>
+  setPlanting: React.Dispatch<React.SetStateAction<Partial<PlantPlanting>>>
+  meta: Partial<PlantMeta>
+  setMeta: React.Dispatch<React.SetStateAction<Partial<PlantMeta>>>
 }
 
 export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
@@ -453,43 +468,43 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
           <div className="grid gap-2">
             <Label>Flower Colors</Label>
             <div className="space-y-2">
-              {(phenology?.flowerColors || []).map((color, idx) => (
+              {((phenology?.flowerColors ?? []) as ColorInfo[]).map((color, idx) => (
                 <div key={idx} className="flex gap-2">
                   <Input value={color.name} onChange={(e) => {
-                    const newColors = [...(phenology?.flowerColors || [])]
+                    const newColors = [...((phenology?.flowerColors ?? []) as ColorInfo[])]
                     newColors[idx] = { ...color, name: e.target.value }
                     setPhenology({ ...phenology, flowerColors: newColors })
                   }} placeholder="Color name" />
                   <Input value={color.hex || ''} onChange={(e) => {
-                    const newColors = [...(phenology?.flowerColors || [])]
+                    const newColors = [...((phenology?.flowerColors ?? []) as ColorInfo[])]
                     newColors[idx] = { ...color, hex: e.target.value || undefined }
                     setPhenology({ ...phenology, flowerColors: newColors })
                   }} placeholder="#FFFFFF" className="w-24" />
-                  <Button type="button" onClick={() => setPhenology({ ...phenology, flowerColors: (phenology?.flowerColors || []).filter((_, i) => i !== idx) })}>Remove</Button>
+                  <Button type="button" onClick={() => setPhenology({ ...phenology, flowerColors: ((phenology?.flowerColors ?? []) as ColorInfo[]).filter((_color, i) => i !== idx) })}>Remove</Button>
                 </div>
               ))}
-              <Button type="button" onClick={() => setPhenology({ ...phenology, flowerColors: [...(phenology?.flowerColors || []), { name: '' }] })}>Add Color</Button>
+              <Button type="button" onClick={() => setPhenology({ ...phenology, flowerColors: [...((phenology?.flowerColors ?? []) as ColorInfo[]), { name: '' }] })}>Add Color</Button>
             </div>
           </div>
           <div className="grid gap-2">
             <Label>Leaf Colors</Label>
             <div className="space-y-2">
-              {(phenology?.leafColors || []).map((color, idx) => (
+              {((phenology?.leafColors ?? []) as ColorInfo[]).map((color, idx) => (
                 <div key={idx} className="flex gap-2">
                   <Input value={color.name} onChange={(e) => {
-                    const newColors = [...(phenology?.leafColors || [])]
+                    const newColors = [...((phenology?.leafColors ?? []) as ColorInfo[])]
                     newColors[idx] = { ...color, name: e.target.value }
                     setPhenology({ ...phenology, leafColors: newColors })
                   }} placeholder="Color name" />
                   <Input value={color.hex || ''} onChange={(e) => {
-                    const newColors = [...(phenology?.leafColors || [])]
+                    const newColors = [...((phenology?.leafColors ?? []) as ColorInfo[])]
                     newColors[idx] = { ...color, hex: e.target.value || undefined }
                     setPhenology({ ...phenology, leafColors: newColors })
                   }} placeholder="#FFFFFF" className="w-24" />
-                  <Button type="button" onClick={() => setPhenology({ ...phenology, leafColors: (phenology?.leafColors || []).filter((_, i) => i !== idx) })}>Remove</Button>
+                  <Button type="button" onClick={() => setPhenology({ ...phenology, leafColors: ((phenology?.leafColors ?? []) as ColorInfo[]).filter((_color, i) => i !== idx) })}>Remove</Button>
                 </div>
               ))}
-              <Button type="button" onClick={() => setPhenology({ ...phenology, leafColors: [...(phenology?.leafColors || []), { name: '' }] })}>Add Color</Button>
+              <Button type="button" onClick={() => setPhenology({ ...phenology, leafColors: [...((phenology?.leafColors ?? []) as ColorInfo[]), { name: '' }] })}>Add Color</Button>
             </div>
           </div>
           <MonthSelectorField
@@ -530,10 +545,19 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
               {['very high', 'high', 'medium', 'low'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
             </select>
           </div>
-          <div className="grid gap-2">
-            <Label>USDA Zones</Label>
-            <ArrayInputField values={(environment?.hardiness?.usdaZones || []).map(String)} onChange={(zones) => setEnvironment({ ...environment, hardiness: { ...environment?.hardiness, usdaZones: zones.map(z => Number(z)).filter(z => !isNaN(z)) } })} />
-          </div>
+          <ArrayInputField
+            label="USDA Zones"
+            values={(environment?.hardiness?.usdaZones || []).map(String)}
+            onChange={(zones) =>
+              setEnvironment({
+                ...environment,
+                hardiness: {
+                  ...environment?.hardiness,
+                  usdaZones: zones.map((z) => Number(z)).filter((z) => !Number.isNaN(z)),
+                },
+              })
+            }
+          />
           <div className="grid gap-2">
             <Label>RHS Hardiness</Label>
             <Input value={environment?.hardiness?.rhsH || ''} onChange={(e) => setEnvironment({ ...environment, hardiness: { ...environment?.hardiness, rhsH: e.target.value || undefined } })} />
