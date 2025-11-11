@@ -1,0 +1,8 @@
+{
+  "email": "support@aphylia.app",
+  "dns_plugin": "",
+  "dns_credentials": "",
+  "use_wildcard": false,
+  "staging": false,
+  "agree_tos": true
+}

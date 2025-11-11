@@ -5152,8 +5152,9 @@ app.get('*', (req, res) => {
 const shouldListen = String(process.env.DISABLE_LISTEN || 'false').toLowerCase() !== 'true'
 if (shouldListen) {
   const port = process.env.PORT || 3000
-  app.listen(port, () => {
-    console.log(`[server] listening on http://localhost:${port}`)
+  const host = process.env.HOST || '127.0.0.1' // Bind to localhost only for security
+  app.listen(port, host, () => {
+    console.log(`[server] listening on http://${host}:${port}`)
     // Best-effort ensure ban tables are present at startup
     ensureBanTables().catch(() => {})
     ensureBroadcastTable().catch(() => {})

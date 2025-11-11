@@ -49,3 +49,6 @@ TIME
 /supabase/
 plant-swipe/supabase/.temp/
 plant-swipe/supabase/config.toml
+
+# Domain configuration (server-specific)
+domain.json
