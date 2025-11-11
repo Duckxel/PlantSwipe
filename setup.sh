@@ -1316,8 +1316,29 @@ fi
 # Mark repo as safe for both root and service user to avoid 'dubious ownership'
 log "Marking repo as a safe.directory in git config (root and $SERVICE_USER)…"
 if command -v git >/dev/null 2>&1; then
-  sudo -u "$SERVICE_USER" env HOME="$SERVICE_USER_HOME" git config --global --add safe.directory "$REPO_DIR" || true
-  HOME="/root" git config --global --add safe.directory "$REPO_DIR" || true
+  # Root global gitconfig entry
+  root_safe_dirs="$(HOME=/root git config --global --get-all safe.directory 2>/dev/null || true)"
+  if ! grep -Fxq -- "$REPO_DIR" <<<"$root_safe_dirs"; then
+    HOME=/root git config --global --add safe.directory "$REPO_DIR" || log "[WARN] Failed to add $REPO_DIR to root global gitconfig safe.directory"
+  fi
+
+  # System-wide fallback entry
+  system_safe_dirs="$(git config --system --get-all safe.directory 2>/dev/null || true)"
+  if ! grep -Fxq -- "$REPO_DIR" <<<"$system_safe_dirs"; then
+    git config --system --add safe.directory "$REPO_DIR" || log "[WARN] Failed to add $REPO_DIR to system gitconfig safe.directory"
+  fi
+
+  # Service user gitconfig (only if home directory is writable to avoid lockfile errors)
+  if [[ -n "$SERVICE_USER" && "$SERVICE_USER" != "root" ]]; then
+    if $SUDO -u "$SERVICE_USER" test -w "$SERVICE_USER_HOME"; then
+      service_safe_dirs="$(sudo -u "$SERVICE_USER" env HOME="$SERVICE_USER_HOME" git config --global --get-all safe.directory 2>/dev/null || true)"
+      if ! grep -Fxq -- "$REPO_DIR" <<<"$service_safe_dirs"; then
+        sudo -u "$SERVICE_USER" env HOME="$SERVICE_USER_HOME" git config --global --add safe.directory "$REPO_DIR" || log "[WARN] Failed to add $REPO_DIR to $SERVICE_USER gitconfig safe.directory"
+      fi
+    else
+      log "[INFO] Skipping $SERVICE_USER global gitconfig update (home $SERVICE_USER_HOME not writable); relying on system gitconfig safe.directory entry."
+    fi
+  fi
 fi
 
 log "Attempting Supabase Edge Function deployment (if credentials provided)…"
