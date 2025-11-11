@@ -638,11 +638,78 @@ PY
   [[ "$cert_use_wildcard" == "True" ]] && log "Wildcard certificate requested"
   [[ "$cert_staging" == "True" ]] && log "Using Let's Encrypt staging environment"
   
-  # Read domain and subdomains from domain.json
+  # Interactive domain.json creation if it doesn't exist
   if [[ ! -f "$domain_json" ]]; then
-    log "[WARN] domain.json not found at $domain_json. Skipping SSL certificate setup."
-    log "[INFO] Create domain.json with format: {\"domain\": \"example.com\", \"subdomains\": [\"dev01\", \"dev02\"]}"
-    return 1
+    log "domain.json not found. Setting up SSL certificate configuration interactively…"
+    
+    # Ask if user wants to set up SSL
+    echo ""
+    read -p "Do you want to set up SSL certificates? (y/n): " setup_ssl
+    if [[ ! "$setup_ssl" =~ ^[Yy]$ ]]; then
+      log "SSL certificate setup skipped by user."
+      return 0
+    fi
+    
+    # Ask for domain name
+    echo ""
+    read -p "Enter your domain name (e.g., example.com): " domain_input
+    domain_input="${domain_input// /}"  # trim whitespace
+    if [[ -z "$domain_input" ]]; then
+      log "[ERROR] Domain name is required. Skipping SSL certificate setup."
+      return 1
+    fi
+    
+    # Ask for subdomains
+    echo ""
+    read -p "Enter subdomains (comma-separated, e.g., dev01,staging,api or press Enter for none): " subdomains_line
+    local subdomains_input=()
+    if [[ -n "$subdomains_line" ]]; then
+      IFS=',' read -ra subdomain_array <<< "$subdomains_line"
+      for sub in "${subdomain_array[@]}"; do
+        sub="${sub// /}"  # trim whitespace
+        [[ -n "$sub" ]] && subdomains_input+=("$sub")
+      done
+    fi
+    
+    # Create domain.json
+    log "Creating domain.json with domain: $domain_input"
+    if ((${#subdomains_input[@]} > 0)); then
+      log "Subdomains: ${subdomains_input[*]}"
+    else
+      log "No subdomains specified (base domain only)"
+    fi
+    
+    # Build JSON array of subdomains
+    local subdomains_json="[]"
+    if ((${#subdomains_input[@]} > 0)); then
+      subdomains_json="["
+      for i in "${!subdomains_input[@]}"; do
+        [[ $i -gt 0 ]] && subdomains_json+=", "
+        subdomains_json+="\"${subdomains_input[$i]}\""
+      done
+      subdomains_json+="]"
+    fi
+    
+    # Create domain.json using python3
+    $SUDO python3 - <<PY
+import json
+domain = "$domain_input"
+subdomains = $subdomains_json
+data = {
+    "domain": domain,
+    "subdomains": subdomains
+}
+with open("$domain_json", 'w') as f:
+    json.dump(data, f, indent=2)
+PY
+    
+    if [[ ! -f "$domain_json" ]]; then
+      log "[ERROR] Failed to create domain.json"
+      return 1
+    fi
+    
+    $SUDO chmod 0644 "$domain_json"
+    log "domain.json created successfully at $domain_json"
   fi
   
   # Parse domain.json using python3
