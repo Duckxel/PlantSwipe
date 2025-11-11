@@ -1330,7 +1330,7 @@ if command -v git >/dev/null 2>&1; then
 
   # Service user gitconfig (only if home directory is writable to avoid lockfile errors)
   if [[ -n "$SERVICE_USER" && "$SERVICE_USER" != "root" ]]; then
-    if $SUDO -u "$SERVICE_USER" test -w "$SERVICE_USER_HOME"; then
+    if sudo -u "$SERVICE_USER" test -w "$SERVICE_USER_HOME"; then
       service_safe_dirs="$(sudo -u "$SERVICE_USER" env HOME="$SERVICE_USER_HOME" git config --global --get-all safe.directory 2>/dev/null || true)"
       if ! grep -Fxq -- "$REPO_DIR" <<<"$service_safe_dirs"; then
         sudo -u "$SERVICE_USER" env HOME="$SERVICE_USER_HOME" git config --global --add safe.directory "$REPO_DIR" || log "[WARN] Failed to add $REPO_DIR to $SERVICE_USER gitconfig safe.directory"
