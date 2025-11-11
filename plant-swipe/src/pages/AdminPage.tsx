@@ -24,7 +24,7 @@ const {
   Pie,
   Cell,
 } = LazyCharts
-import { RefreshCw, Server, Database, Github, ExternalLink, ShieldCheck, ShieldX, UserSearch, AlertTriangle, Gavel, Search, ChevronDown, GitBranch, Trash2, EyeOff, Copy, ArrowUpRight, Info, Plus } from "lucide-react"
+import { RefreshCw, Server, Database, Github, ExternalLink, ShieldCheck, ShieldX, UserSearch, AlertTriangle, Gavel, Search, ChevronDown, GitBranch, Trash2, EyeOff, Copy, ArrowUpRight, Info, Plus, LayoutDashboard, Users, FileText, ScrollText } from "lucide-react"
 import { supabase } from '@/lib/supabaseClient'
 import { CreatePlantPage } from '@/pages/CreatePlantPage'
 import {
@@ -1966,67 +1966,163 @@ export const AdminPage: React.FC = () => {
   }, [activeTab])
 
   return (
-    <div className="max-w-3xl mx-auto mt-8 px-4 md:px-0">
-      {/* Connection Status Banner - Show when APIs are down */}
-      {(apiProbe.ok === false || adminProbe.ok === false || dbProbe.ok === false) && (
-        <Card className="rounded-2xl mb-4 border-red-500 dark:border-red-500 bg-red-50 dark:bg-red-950/20">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0" />
-              <div className="flex-1">
-                <div className="text-sm font-medium text-red-900 dark:text-red-100">Connection Issues Detected</div>
-                <div className="text-xs text-red-700 dark:text-red-300 mt-1">
-                  {!apiProbe.ok && 'API '}
-                  {!adminProbe.ok && 'Admin API '}
-                  {!dbProbe.ok && 'Database '}
-                  {(!apiProbe.ok || !adminProbe.ok || !dbProbe.ok) && 'may be unavailable. Some features may not work correctly.'}
-                </div>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="rounded-xl border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30"
-                onClick={refreshHealth}
-                disabled={healthRefreshing}
-              >
-                <RefreshCw className={`h-4 w-4 mr-1 ${healthRefreshing ? 'animate-spin' : ''}`} />
-                Retry
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-      
-      <Card className="rounded-3xl">
-        <CardContent className="p-6 md:p-8 space-y-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div className="flex min-h-screen bg-stone-50 dark:bg-[#1e1e1e]">
+      {/* Sidebar Navigation */}
+      <aside className="hidden md:flex w-64 border-r border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#252526] flex-shrink-0 flex-col">
+        <div className="p-6 border-b border-stone-200 dark:border-[#3e3e42]">
+          <div className="flex items-center gap-3">
+            <ShieldCheck className="h-6 w-6 text-emerald-600 dark:text-emerald-500" />
             <div>
-              <div className="text-2xl font-semibold tracking-tight">Admin Controls</div>
-              <div className="text-sm opacity-60 mt-1">Admin actions: monitor and manage infrastructure.</div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-                <Button
-                  variant={activeTab === 'overview' ? 'default' : 'secondary'}
-                  className="rounded-2xl text-sm md:text-base px-3 md:px-4 py-2"
-                  onClick={() => setActiveTab('overview')}
-                >Overview</Button>
-                <Button
-                  variant={activeTab === 'members' ? 'default' : 'secondary'}
-                  className="rounded-2xl text-sm md:text-base px-3 md:px-4 py-2"
-                  onClick={() => setActiveTab('members')}
-                >Members</Button>
-                <Button
-                  variant={activeTab === 'requests' ? 'default' : 'secondary'}
-                  className="rounded-2xl text-sm md:text-base px-3 md:px-4 py-2"
-                  onClick={() => setActiveTab('requests')}
-                >Requests</Button>
-                <Button
-                  variant={activeTab === 'admin_logs' ? 'default' : 'secondary'}
-                  className="rounded-2xl text-sm md:text-base px-3 md:px-4 py-2"
-                  onClick={() => setActiveTab('admin_logs')}
-                >Admin Logs</Button>
+              <div className="text-lg font-semibold">Admin Panel</div>
+              <div className="text-xs opacity-60">Control Center</div>
             </div>
           </div>
+        </div>
+        <nav className="p-4 space-y-2 flex-1 overflow-y-auto">
+          <button
+            onClick={() => setActiveTab('overview')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+              activeTab === 'overview'
+                ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
+                : 'text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-[#2d2d30]'
+            }`}
+          >
+            <LayoutDashboard className={`h-5 w-5 ${activeTab === 'overview' ? '' : 'opacity-70'}`} />
+            <span className="font-medium">Overview</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('members')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+              activeTab === 'members'
+                ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
+                : 'text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-[#2d2d30]'
+            }`}
+          >
+            <Users className={`h-5 w-5 ${activeTab === 'members' ? '' : 'opacity-70'}`} />
+            <span className="font-medium">Members</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('requests')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+              activeTab === 'requests'
+                ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
+                : 'text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-[#2d2d30]'
+            }`}
+          >
+            <FileText className={`h-5 w-5 ${activeTab === 'requests' ? '' : 'opacity-70'}`} />
+            <span className="font-medium">Requests</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('admin_logs')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+              activeTab === 'admin_logs'
+                ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
+                : 'text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-[#2d2d30]'
+            }`}
+          >
+            <ScrollText className={`h-5 w-5 ${activeTab === 'admin_logs' ? '' : 'opacity-70'}`} />
+            <span className="font-medium">Admin Logs</span>
+          </button>
+        </nav>
+      </aside>
+
+      {/* Mobile Navigation */}
+      <div className="md:hidden w-full border-b border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#252526] sticky top-0 z-10">
+        <div className="p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <ShieldCheck className="h-5 w-5 text-emerald-600 dark:text-emerald-500" />
+            <div className="text-sm font-semibold">Admin Panel</div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => setActiveTab('overview')}
+              className={`flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-sm transition-all duration-200 ${
+                activeTab === 'overview'
+                  ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
+                  : 'text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]'
+              }`}
+            >
+              <LayoutDashboard className="h-4 w-4" />
+              <span>Overview</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('members')}
+              className={`flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-sm transition-all duration-200 ${
+                activeTab === 'members'
+                  ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
+                  : 'text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]'
+              }`}
+            >
+              <Users className="h-4 w-4" />
+              <span>Members</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('requests')}
+              className={`flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-sm transition-all duration-200 ${
+                activeTab === 'requests'
+                  ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
+                  : 'text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]'
+              }`}
+            >
+              <FileText className="h-4 w-4" />
+              <span>Requests</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('admin_logs')}
+              className={`flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-sm transition-all duration-200 ${
+                activeTab === 'admin_logs'
+                  ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
+                  : 'text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]'
+              }`}
+            >
+              <ScrollText className="h-4 w-4" />
+              <span>Logs</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content Area */}
+      <main className="flex-1 overflow-y-auto">
+        <div className="max-w-7xl mx-auto mt-8 px-4 md:px-6 lg:px-8 pb-8">
+          {/* Connection Status Banner - Show when APIs are down */}
+          {(apiProbe.ok === false || adminProbe.ok === false || dbProbe.ok === false) && (
+            <Card className="rounded-2xl mb-4 border-red-500 dark:border-red-500 bg-red-50 dark:bg-red-950/20">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0" />
+                  <div className="flex-1">
+                    <div className="text-sm font-medium text-red-900 dark:text-red-100">Connection Issues Detected</div>
+                    <div className="text-xs text-red-700 dark:text-red-300 mt-1">
+                      {!apiProbe.ok && 'API '}
+                      {!adminProbe.ok && 'Admin API '}
+                      {!dbProbe.ok && 'Database '}
+                      {(!apiProbe.ok || !adminProbe.ok || !dbProbe.ok) && 'may be unavailable. Some features may not work correctly.'}
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-xl border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30"
+                    onClick={refreshHealth}
+                    disabled={healthRefreshing}
+                  >
+                    <RefreshCw className={`h-4 w-4 mr-1 ${healthRefreshing ? 'animate-spin' : ''}`} />
+                    Retry
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          
+          <Card className="rounded-3xl">
+            <CardContent className="p-6 md:p-8 space-y-6">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                  <div className="text-2xl font-semibold tracking-tight">Admin Controls</div>
+                  <div className="text-sm opacity-60 mt-1">Admin actions: monitor and manage infrastructure.</div>
+                </div>
+              </div>
 
           {/* Overview Tab */}
           {activeTab === 'overview' && (
@@ -3582,6 +3678,8 @@ export const AdminPage: React.FC = () => {
         </CardContent>
       </Card>
 
+        </div>
+      </main>
     </div>
   )
 }
