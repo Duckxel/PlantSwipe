@@ -569,9 +569,33 @@ else
   log "Linked $WEB_ROOT_LINK -> $NODE_DIR"
 fi
 
+# Ask about SSL setup BEFORE installing nginx config
+WANT_SSL=""
+if [[ ! -f "$REPO_DIR/domain.json" ]]; then
+  echo ""
+  read -p "Do you want to set up SSL certificates? (y/n): " WANT_SSL
+  WANT_SSL="${WANT_SSL// /}"  # trim whitespace
+else
+  # If domain.json exists, assume user wants SSL
+  WANT_SSL="y"
+fi
+
 # Install nginx site and admin snippet
 log "Installing nginx config…"
-$SUDO install -D -m 0644 "$REPO_DIR/plant-swipe.conf" "$NGINX_SITE_AVAIL"
+# Create nginx config - remove SSL listeners if user doesn't want SSL
+if [[ "$WANT_SSL" =~ ^[Yy]$ ]]; then
+  # User wants SSL - copy config as-is
+  log "Installing nginx config with SSL support…"
+  $SUDO install -D -m 0644 "$REPO_DIR/plant-swipe.conf" "$NGINX_SITE_AVAIL"
+else
+  # User doesn't want SSL - remove SSL listeners
+  log "Installing nginx config without SSL (removing SSL listeners)…"
+  $SUDO sed -e '/listen 443 ssl;/d' -e '/listen \[::\]:443 ssl;/d' \
+    "$REPO_DIR/plant-swipe.conf" > /tmp/plant-swipe-no-ssl.conf
+  $SUDO install -D -m 0644 /tmp/plant-swipe-no-ssl.conf "$NGINX_SITE_AVAIL"
+  $SUDO rm -f /tmp/plant-swipe-no-ssl.conf
+fi
+
 $SUDO mkdir -p "/etc/nginx/snippets"
 $SUDO install -D -m 0644 "$REPO_DIR/admin_api/nginx-snippet.conf" "$NGINX_SNIPPET_DST"
 $SUDO ln -sfn "$NGINX_SITE_AVAIL" "$NGINX_SITE_ENABL"
@@ -584,15 +608,9 @@ $SUDO rm -f /etc/nginx/sites-available/plant-swipe || true
 $SUDO rm -f /etc/nginx/sites-enabled/plant-swipe || true
 
 log "Testing nginx configuration…"
-# Test nginx config, but allow SSL errors if certificates don't exist yet (we'll set them up next)
-if ! $SUDO nginx -t 2>&1 | tee /tmp/nginx-test.log; then
-  # Check if error is about missing SSL certificates
-  if grep -q "ssl_certificate.*is defined" /tmp/nginx-test.log; then
-    log "[WARN] Nginx config has SSL listeners but no certificates yet. SSL setup will configure them."
-  else
-    log "[ERROR] Nginx configuration test failed. Fix errors before continuing."
-    exit 1
-  fi
+if ! $SUDO nginx -t; then
+  log "[ERROR] Nginx configuration test failed. Fix errors before continuing."
+  exit 1
 fi
 
 # SSL Certificate setup using Let's Encrypt/Certbot
@@ -600,17 +618,15 @@ setup_ssl_certificates() {
   local domain_json="$REPO_DIR/domain.json"
   local cert_info_json="$REPO_DIR/cert-info.json"
   
-  # Interactive domain.json creation if it doesn't exist (do this FIRST before checking cert-info.json)
+  # Check if user wants SSL (from earlier prompt)
+  if [[ ! "$WANT_SSL" =~ ^[Yy]$ ]]; then
+    log "SSL certificate setup skipped (user declined SSL setup)."
+    return 0
+  fi
+  
+  # Interactive domain.json creation if it doesn't exist
   if [[ ! -f "$domain_json" ]]; then
     log "domain.json not found. Setting up SSL certificate configuration interactively…"
-    
-    # Ask if user wants to set up SSL
-    echo ""
-    read -p "Do you want to set up SSL certificates? (y/n): " setup_ssl
-    if [[ ! "$setup_ssl" =~ ^[Yy]$ ]]; then
-      log "SSL certificate setup skipped by user."
-      return 0
-    fi
     
     # Ask for full domains (domain and subdomains included)
     echo ""
@@ -970,9 +986,13 @@ EOF
   fi
 }
 
-# Attempt SSL certificate setup (non-fatal if it fails)
-log "Attempting SSL certificate setup…"
-setup_ssl_certificates || log "[INFO] SSL certificate setup skipped or failed; continuing without SSL."
+# Attempt SSL certificate setup (only if user wants SSL)
+if [[ "$WANT_SSL" =~ ^[Yy]$ ]]; then
+  log "Attempting SSL certificate setup…"
+  setup_ssl_certificates || log "[INFO] SSL certificate setup skipped or failed; continuing without SSL."
+else
+  log "Skipping SSL certificate setup (user declined SSL)."
+fi
 
 # Configure firewall (UFW) to allow SSH and web traffic
 log "Configuring firewall (ufw)…"
