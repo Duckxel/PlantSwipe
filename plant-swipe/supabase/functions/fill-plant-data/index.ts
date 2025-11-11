@@ -117,7 +117,7 @@ Fill in as much accurate information as possible for "${plantName}". Return ONLY
       console.error('OpenAI API error:', errorData)
       return new Response(
         JSON.stringify({ error: 'Failed to get AI response', details: errorData }),
-        { status: response.status, headers: { 'Content-Type': 'application/json' } }
+        { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
@@ -141,7 +141,7 @@ Fill in as much accurate information as possible for "${plantName}". Return ONLY
       console.error('JSON parse error:', parseError, 'Content:', content)
       return new Response(
         JSON.stringify({ error: 'Failed to parse AI response as JSON', content }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
