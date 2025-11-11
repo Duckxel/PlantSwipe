@@ -1,5 +1,6 @@
 {
   "id": { "type": "string", "description": "Stable UUID v4 for this plant record" },
+  "image": { "type": "string", "description": "URL to plant image" },
 
   "identifiers": {
     "scientificName": { "type": "string", "description": "Botanical binomial (Genus species, optionally author)" },

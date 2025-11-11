@@ -188,6 +188,7 @@ export interface Plant {
   id: string
   // Legacy name field for backward compatibility
   name: string
+  image?: string
   // New structured format
   identifiers?: PlantIdentifiers
   traits?: PlantTraits
