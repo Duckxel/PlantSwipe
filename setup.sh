@@ -284,6 +284,28 @@ deploy_supabase_contact_function() {
   fi
 }
 
+ensure_pwa_builder_cli() {
+  if command -v pwa >/dev/null 2>&1; then
+    log "PWA Builder CLI already installed ($(pwa --version 2>/dev/null || echo unknown))."
+    return 0
+  fi
+
+  if [[ ! -x "$(command -v npm || true)" ]]; then
+    log "[WARN] npm not available; skipping PWA Builder CLI installation."
+    return 1
+  fi
+
+  local install_log="/tmp/pwa-builder-install.log"
+  log "Installing PWA Builder CLI…"
+  if npm install -g @pwabuilder/cli >"$install_log" 2>&1; then
+    log "PWA Builder CLI installed."
+  else
+    log "[WARN] Failed to install PWA Builder CLI. See $install_log for details."
+    tail -n 20 "$install_log" 2>/dev/null || true
+    return 1
+  fi
+}
+
 # Detect package manager (Debian/Ubuntu assumed). Fallback with message.
 if command -v apt-get >/dev/null 2>&1; then
   PM_UPDATE="$SUDO apt-get update -y"
@@ -538,6 +560,8 @@ else
   log "Node.js is sufficiently new ($(node -v))."
 fi
 
+ensure_pwa_builder_cli || log "[WARN] Proceeding without PWA Builder CLI (installation failed)."
+
 # Build frontend and API bundle
 log "Installing Node dependencies…"
 # Ensure a clean install owned by the service user and use a per-repo npm cache
@@ -545,8 +569,11 @@ sudo -u "$SERVICE_USER" -H bash -lc "mkdir -p '$NODE_DIR/.npm-cache'"
 sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && rm -rf node_modules"
 sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && npm_config_cache='$NODE_DIR/.npm-cache' npm ci --no-audit --no-fund"
 
-log "Building Node application…"
-sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && CI=${CI:-true} npm_config_cache='$NODE_DIR/.npm-cache' npm run build"
+log "Building Node application (PWA)…"
+if ! sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && CI=${CI:-true} npm_config_cache='$NODE_DIR/.npm-cache' npm run build:pwa"; then
+  log "[WARN] npm run build:pwa failed; falling back to npm run build."
+  sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && CI=${CI:-true} npm_config_cache='$NODE_DIR/.npm-cache' npm run build"
+fi
 
 # Link web root expected by nginx config to the repo copy, unless that would create
 # a self-referential link (e.g., when the repo itself lives at /var/www/PlantSwipe).

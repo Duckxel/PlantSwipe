@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:pwa": "pwa build",
     "lint": "eslint .",
     "preview": "vite preview",
     "serve": "node server.js",
@@ -35,6 +36,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.33.0",
+    "@pwabuilder/cli": "^0.0.17",
     "@types/node": "^22.7.5",
     "@types/react": "^19.1.10",
     "@types/react-dom": "^19.1.7",
@@ -49,6 +51,7 @@
     "tailwindcss-animate": "^1.0.7",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.39.1",
-    "vite": "^7.1.2"
+    "vite": "^7.1.2",
+    "vite-plugin-pwa": "^1.1.0"
   }
 }
