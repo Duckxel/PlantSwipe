@@ -581,6 +581,94 @@ function mergePreferExisting(aiValue, existingValue) {
   return existingValue
 }
 
+function removeNullValues(node: JsonValue): JsonValue | undefined {
+  if (node === null || node === undefined) {
+    return undefined
+  }
+  if (Array.isArray(node)) {
+    const cleaned = node
+      .map((item) => removeNullValues(item))
+      .filter((item) => item !== undefined)
+    return cleaned
+  }
+  if (node && typeof node === 'object') {
+    const result = {}
+    for (const [key, value] of Object.entries(node)) {
+      const cleanedValue = removeNullValues(value)
+      if (cleanedValue !== undefined) {
+        result[key] = cleanedValue
+      }
+    }
+    return result
+  }
+  return node
+}
+
+async function generateFieldData({
+  plantName,
+  fieldKey,
+  fieldSchema,
+  existingField,
+}: {
+  plantName: string
+  fieldKey: string
+  fieldSchema: JsonValue
+  existingField?: unknown
+}) {
+  if (!openaiClient) {
+    throw new Error('OpenAI client not configured')
+  }
+
+  const fieldJsonSchema = buildJsonSchema({ [fieldKey]: fieldSchema })
+
+  const fieldInstructions = [
+    `You are enriching the "${fieldKey}" section for the plant "${plantName}".`,
+    `Return a JSON object with a single "${fieldKey}" property that strictly matches the provided schema.`,
+    `If you lack reliable information for a nested property, set it to an empty string, an empty array/object, or omit the property entirely.`,
+    `Never output literal null values for any property.`,
+    `Schema for "${fieldKey}": ${JSON.stringify(fieldSchema, null, 2)}`,
+    `Existing data (treat as authoritative when present): ${existingField !== undefined ? JSON.stringify(existingField, null, 2) : 'null'}`,
+  ].join('\n\n')
+
+  const response = await openaiClient.responses.create({
+    model: openaiModel,
+    reasoning: { effort: 'low' },
+    instructions: `PLANT NAME : ${plantName}`,
+    input: fieldInstructions,
+    text: {
+      format: {
+        type: 'json_schema',
+        json_schema: {
+          name: `plant_${fieldKey}`,
+          strict: true,
+          schema: fieldJsonSchema,
+        },
+      },
+    },
+  }, { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 180000) })
+
+  const outputText = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
+  if (!outputText) {
+    throw new Error(`AI returned empty output for "${fieldKey}"`)
+  }
+
+  let parsedField
+  try {
+    parsedField = JSON.parse(outputText)
+  } catch (parseError) {
+    console.error('[server] Failed to parse AI field response:', parseError, outputText)
+    throw new Error(`Failed to parse AI output for "${fieldKey}"`)
+  }
+
+  const rawValue =
+    parsedField && typeof parsedField === 'object' && fieldKey in parsedField
+      ? parsedField[fieldKey]
+      : parsedField
+
+  const cleanedValue = removeNullValues(rawValue)
+  return cleanedValue
+}
+
 
 function buildConnectionString() {
   let cs = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.POSTGRES_PRISMA_URL || process.env.SUPABASE_DB_URL
@@ -860,7 +948,7 @@ app.post('/api/admin/ai/plant-fill', async (req, res) => {
     const canUseExisting = body.existingData && typeof body.existingData === 'object' && !Array.isArray(body.existingData)
     const existingDataRaw = canUseExisting ? stripDisallowedKeys(body.existingData) : {}
 
-    const aggregated: Record<string, unknown> = {}
+    const aggregated: Record<string, JsonValue> = {}
 
     for (const fieldKey of Object.keys(schemaBlueprint)) {
       const fieldSchema = sanitizedSchema[fieldKey]
@@ -868,62 +956,24 @@ app.post('/api/admin/ai/plant-fill', async (req, res) => {
         continue
       }
 
-      const fieldJsonSchema = buildJsonSchema({ [fieldKey]: fieldSchema })
-      const existingField = existingDataRaw && typeof existingDataRaw === 'object' ? (existingDataRaw as Record<string, unknown>)[fieldKey] : undefined
+      const existingFieldRaw =
+        existingDataRaw && typeof existingDataRaw === 'object'
+          ? (existingDataRaw as Record<string, unknown>)[fieldKey]
+          : undefined
+      const existingFieldClean =
+        existingFieldRaw !== undefined ? removeNullValues(existingFieldRaw as JsonValue) : undefined
 
-      const fieldInstructions = [
-        `You are enriching the "${fieldKey}" section for the plant "${plantName}".`,
-        `Return a JSON object with a single "${fieldKey}" property that strictly matches the provided schema.`,
-        `If you lack reliable information for a nested property, set it to null or an empty collection rather than inventing data.`,
-        `Schema for "${fieldKey}": ${JSON.stringify(fieldSchema, null, 2)}`,
-        `Existing data (treat as authoritative when present): ${existingField !== undefined ? JSON.stringify(existingField, null, 2) : 'null'}`,
-      ].join('\n\n')
+      const fieldValue = await generateFieldData({
+        plantName,
+        fieldKey,
+        fieldSchema,
+        existingField: existingFieldClean,
+      })
 
-      let response
-      try {
-        response = await openaiClient.responses.create({
-          model: openaiModel,
-          reasoning: { effort: 'low' },
-          instructions: `PLANT NAME : ${plantName}`,
-          input: fieldInstructions,
-          text: {
-            format: {
-              type: 'json_schema',
-              json_schema: {
-                name: `plant_${fieldKey}`,
-                strict: true,
-                schema: fieldJsonSchema,
-              },
-            },
-          },
-        }, { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 180000) })
-      } catch (error) {
-        const errMessage =
-          error instanceof Error
-            ? error.message
-            : typeof error === 'string'
-              ? error
-              : JSON.stringify(error)
-        throw new Error(`Failed to fetch AI data for "${fieldKey}": ${errMessage}`)
-      }
-
-      const outputText = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
-      if (!outputText) {
-        throw new Error(`AI returned empty output for "${fieldKey}"`)
-      }
-
-      let parsedField: Record<string, unknown>
-      try {
-        parsedField = JSON.parse(outputText)
-      } catch (parseError) {
-        console.error('[server] Failed to parse AI field response:', parseError, outputText)
-        throw new Error(`Failed to parse AI output for "${fieldKey}"`)
-      }
-
-      if (parsedField && typeof parsedField === 'object' && fieldKey in parsedField) {
-        aggregated[fieldKey] = parsedField[fieldKey]
-      } else {
-        aggregated[fieldKey] = parsedField
+      const cleanedField =
+        fieldValue !== undefined ? removeNullValues(fieldValue) : undefined
+      if (cleanedField !== undefined) {
+        aggregated[fieldKey] = cleanedField as JsonValue
       }
     }
 
@@ -932,6 +982,10 @@ app.post('/api/admin/ai/plant-fill', async (req, res) => {
     plantData = mergePreferExisting(plantData, existingDataRaw)
     plantData = ensureStructure(schemaBlueprint, plantData)
     plantData = stripDisallowedKeys(plantData)
+    const cleanedPlantData = removeNullValues(plantData as JsonValue)
+    if (cleanedPlantData && typeof cleanedPlantData === 'object' && !Array.isArray(cleanedPlantData)) {
+      plantData = cleanedPlantData
+    }
 
     if (!plantData || typeof plantData !== 'object' || Array.isArray(plantData)) {
       throw new Error('AI output could not be transformed into a plant record')
@@ -958,6 +1012,77 @@ app.options('/api/admin/ai/plant-fill', (_req, res) => {
   res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
   res.status(204).end()
+})
+app.options('/api/admin/ai/plant-fill/field', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+app.post('/api/admin/ai/plant-fill/field', async (req, res) => {
+  try {
+    const caller = await ensureAdmin(req, res)
+    if (!caller) return
+    if (!openaiClient) {
+      res.status(503).json({ error: 'AI plant fill is not configured' })
+      return
+    }
+
+    const body = req.body || {}
+    const plantName = typeof body.plantName === 'string' ? body.plantName.trim() : ''
+    const fieldKey = typeof body.fieldKey === 'string' ? body.fieldKey.trim() : ''
+    if (!plantName || !fieldKey) {
+      res.status(400).json({ error: 'Plant name and field key are required' })
+      return
+    }
+
+    const schema = body.schema
+    if (!schema || typeof schema !== 'object' || Array.isArray(schema)) {
+      res.status(400).json({ error: 'Valid schema object is required' })
+      return
+    }
+
+    const sanitizedSchemaRaw = sanitizeTemplate(schema)
+    if (!sanitizedSchemaRaw || Array.isArray(sanitizedSchemaRaw) || typeof sanitizedSchemaRaw !== 'object') {
+      res.status(400).json({ error: 'Invalid schema provided' })
+      return
+    }
+
+    const sanitizedSchema = sanitizedSchemaRaw
+    const fieldSchema = sanitizedSchema[fieldKey]
+    if (!fieldSchema) {
+      res.status(400).json({ error: `Schema for field "${fieldKey}" not found` })
+      return
+    }
+
+    const existingFieldRaw = body.existingField
+    let existingField = existingFieldRaw
+    if (existingFieldRaw && typeof existingFieldRaw === 'object') {
+      existingField = stripDisallowedKeys({ [fieldKey]: existingFieldRaw })?.[fieldKey]
+    }
+    const existingFieldClean =
+      existingField !== undefined ? removeNullValues(existingField as JsonValue) : undefined
+
+    const fieldValue = await generateFieldData({
+      plantName,
+      fieldKey,
+      fieldSchema,
+      existingField: existingFieldClean,
+    })
+
+    const cleanedValue = fieldValue !== undefined ? removeNullValues(fieldValue) : undefined
+
+    res.json({
+      success: true,
+      field: fieldKey,
+      data: cleanedValue ?? null,
+    })
+  } catch (err) {
+    console.error('[server] AI plant field fill failed:', err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: err?.message || 'Failed to fill field' })
+    }
+  }
 })
 
 // Admin: generic log endpoint to record an action from admin_api or UI

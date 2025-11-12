@@ -4,9 +4,11 @@ interface PlantFillRequest {
   plantName: string
   schema: unknown
   existingData?: Record<string, unknown>
+  onProgress?: (info: { field: string; completed: number; total: number }) => void
+  signal?: AbortSignal
 }
 
-export async function fetchAiPlantFill({ plantName, schema, existingData }: PlantFillRequest) {
+export async function fetchAiPlantFill({ plantName, schema, existingData, onProgress, signal }: PlantFillRequest) {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
@@ -29,35 +31,89 @@ export async function fetchAiPlantFill({ plantName, schema, existingData }: Plan
     }
   } catch {}
 
-  let response: Response
-  try {
-    response = await fetch('/api/admin/ai/plant-fill', {
+  const schemaObject = schema && typeof schema === 'object' && !Array.isArray(schema)
+    ? schema as Record<string, unknown>
+    : null
+
+  const aggregated: Record<string, unknown> =
+    existingData && typeof existingData === 'object'
+      ? { ...(existingData as Record<string, unknown>) }
+      : {}
+
+  if (!schemaObject) {
+    onProgress?.({ field: 'init', completed: 0, total: 1 })
+    const response = await fetch('/api/admin/ai/plant-fill', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ plantName, schema, existingData }),
+      signal,
+    })
+
+    let payload: any = null
+    try { payload = await response.json() } catch {}
+
+    if (!response.ok) {
+      const message = payload?.error || `AI fill failed with status ${response.status}`
+      throw new Error(message)
+    }
+
+    if (!payload?.success || !payload?.data) {
+      const message = payload?.error || 'Failed to fill plant data'
+      throw new Error(message)
+    }
+
+    onProgress?.({ field: 'complete', completed: 1, total: 1 })
+    return payload.data
+  }
+
+  const fieldEntries = Object.keys(schemaObject)
+  const totalFields = fieldEntries.length
+  let completedFields = 0
+  onProgress?.({ field: 'init', completed: completedFields, total: totalFields })
+
+  for (const fieldKey of fieldEntries) {
+    if (signal?.aborted) {
+      throw new Error('AI fill was cancelled')
+    }
+
+    onProgress?.({ field: fieldKey, completed: completedFields, total: totalFields })
+
+    const response = await fetch('/api/admin/ai/plant-fill/field', {
       method: 'POST',
       headers,
       body: JSON.stringify({
         plantName,
         schema,
-        existingData,
+        fieldKey,
+        existingField: existingData && typeof existingData === 'object' ? (existingData as Record<string, unknown>)[fieldKey] : undefined,
       }),
+      signal,
     })
-  } catch (err: any) {
-    throw new Error(err?.message || 'Failed to reach AI fill service')
+
+    let payload: any = null
+    try { payload = await response.json() } catch {}
+
+    if (!response.ok) {
+      const message = payload?.error || `AI fill failed for "${fieldKey}" with status ${response.status}`
+      throw new Error(message)
+    }
+
+    if (!payload?.success) {
+      const message = payload?.error || `AI fill failed for "${fieldKey}"`
+      throw new Error(message)
+    }
+
+    if (payload?.data !== undefined && payload?.data !== null) {
+      aggregated[fieldKey] = payload.data
+    } else {
+      delete aggregated[fieldKey]
+    }
+
+    completedFields += 1
+    onProgress?.({ field: fieldKey, completed: completedFields, total: totalFields })
   }
 
-  let payload: any = null
-  try {
-    payload = await response.json()
-  } catch {}
+  onProgress?.({ field: 'complete', completed: completedFields, total: totalFields })
 
-  if (!response.ok) {
-    const message = payload?.error || `AI fill failed with status ${response.status}`
-    throw new Error(message)
-  }
-
-  if (!payload?.success || !payload?.data) {
-    const message = payload?.error || 'Failed to fill plant data'
-    throw new Error(message)
-  }
-
-  return payload.data
+  return aggregated
 }
