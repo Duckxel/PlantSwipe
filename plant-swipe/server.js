@@ -16,7 +16,7 @@ import { pipeline as streamPipeline } from 'stream'
 import net from 'net'
 import OpenAI from 'openai'
 import { z } from 'zod'
-import { zodResponseFormat } from 'openai/helpers/zod'
+import { zodTextFormat } from 'openai/helpers/zod'
 
 
 dotenv.config()
@@ -886,41 +886,37 @@ ${JSON.stringify(structuredSchema, null, 2)}
 
 ${existingPromptSection}`
 
-    let completion
+    const responseFormat = zodTextFormat(PlantFillSchema, 'plant_fill')
+    let aiPayload = null
     try {
-      completion = await openaiClient.chat.completions.parse({
+      const completion = await openaiClient.responses.create({
         model: openaiModel,
         tools: [{ type: 'web_search' }],
         reasoning: { effort: 'high' },
-        messages: [
+        input: [
           { role: 'system', content: 'You are a helpful botanical research assistant that provides accurate, richly detailed plant data.' },
           { role: 'user', content: prompt }
         ],
-        response_format: zodResponseFormat(PlantFillSchema, 'plant_fill')
+        text: {
+          format: responseFormat,
+        },
       })
+
+      const outputText = typeof completion.output_text === 'string' ? completion.output_text : ''
+      if (!outputText || outputText.trim().length === 0) {
+        throw new Error('No output_text returned by model')
+      }
+      try {
+        aiPayload = PlantFillSchema.parse(JSON.parse(outputText))
+      } catch (parseError) {
+        console.error('[server] Failed to parse AI JSON payload:', parseError, outputText)
+        throw new Error('AI response was not valid plant JSON')
+      }
     } catch (err) {
       console.error('[server] OpenAI plant fill request failed:', err)
-      res.status(502).json({ error: 'Failed to fetch AI response' })
+      const message = err?.message || 'Failed to fetch AI response'
+      res.status(502).json({ error: message })
       return
-    }
-
-    let aiPayload = completion?.choices?.[0]?.message?.parsed
-    if (!aiPayload) {
-      const fallbackContent = completion?.choices?.[0]?.message?.content
-      let fallbackText = ''
-      if (Array.isArray(fallbackContent)) {
-        const first = fallbackContent.find((entry) => entry && typeof entry.text === 'string')
-        if (first && typeof first.text === 'string') fallbackText = first.text
-      } else if (typeof fallbackContent === 'string') {
-        fallbackText = fallbackContent
-      }
-      if (fallbackText) {
-        try {
-          aiPayload = JSON.parse(fallbackText)
-        } catch (parseErr) {
-          console.error('[server] Failed to parse AI fallback response:', parseErr, fallbackText)
-        }
-      }
     }
 
     if (!aiPayload || typeof aiPayload !== 'object' || Array.isArray(aiPayload)) {
