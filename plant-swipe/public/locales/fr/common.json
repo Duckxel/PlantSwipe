@@ -602,6 +602,14 @@
       "title": "Ce profil est privé",
       "description": "Seuls les amis peuvent voir ce profil et cette activité."
     },
+      "searchUsers": {
+        "label": "Rechercher des utilisateurs",
+        "placeholder": "Recherchez par nom d'affichage ou pseudo...",
+        "noResults": "Aucun utilisateur ne correspond à votre recherche.",
+        "error": "Impossible de charger les suggestions. Réessayez bientôt.",
+        "privateTooltip": "Profil privé — seuls les amis peuvent voir",
+        "privateHint": "Profil privé • seuls les amis peuvent voir"
+      },
     "highlights": "Aperçu",
     "plantsOwned": "Plantes possédées",
     "gardens": "Jardins",
