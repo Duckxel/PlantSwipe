@@ -892,7 +892,7 @@ ${existingPromptSection}`
       const completion = await openaiClient.responses.create({
         model: openaiModel,
         tools: [{ type: 'web_search' }],
-        reasoning: { effort: 'high' },
+        reasoning: { effort: 'low' },
         input: [
           { role: 'system', content: 'You are a helpful botanical research assistant that provides accurate, richly detailed plant data.' },
           { role: 'user', content: prompt }
@@ -900,7 +900,7 @@ ${existingPromptSection}`
         text: {
           format: responseFormat,
         },
-      })
+      }, { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 120000) })
 
       const outputText = typeof completion.output_text === 'string' ? completion.output_text : ''
       if (!outputText || outputText.trim().length === 0) {
