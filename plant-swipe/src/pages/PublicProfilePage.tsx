@@ -724,13 +724,15 @@ export default function PublicProfilePage() {
                               <span className="truncate">
                                 {suggestion.displayName || suggestion.username || t('profile.member')}
                               </span>
-                              {!suggestion.isFriend && !suggestion.isSelf && suggestion.isPrivate && (
-                                <EyeOff
-                                  className="h-4 w-4 text-stone-400"
-                                  title={t('profile.searchUsers.privateTooltip')}
-                                  aria-label={t('profile.searchUsers.privateTooltip')}
-                                />
-                              )}
+                                {!suggestion.isFriend && !suggestion.isSelf && suggestion.isPrivate && (
+                                  <span
+                                    className="inline-flex items-center text-stone-400"
+                                    title={t('profile.searchUsers.privateTooltip')}
+                                    aria-label={t('profile.searchUsers.privateTooltip')}
+                                  >
+                                    <EyeOff className="h-4 w-4" aria-hidden />
+                                  </span>
+                                )}
                             </div>
                             {secondaryText && (
                               <div className="truncate text-xs text-stone-500 dark:text-stone-400">
