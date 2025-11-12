@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { supabase } from "@/lib/supabaseClient"
+import { fetchAiPlantFill } from "@/lib/aiPlantFill"
 import type {
   Plant,
   PlantIdentifiers,
@@ -58,7 +59,9 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
   // Language selection for editing
   const [editLanguage, setEditLanguage] = React.useState<SupportedLanguage>(DEFAULT_LANGUAGE)
   const [translating, setTranslating] = React.useState(false)
-  const [aiFilling, setAiFilling] = React.useState(false)
+    const [aiFilling, setAiFilling] = React.useState(false)
+    const [aiFillProgress, setAiFillProgress] = React.useState<{ completed: number; total: number; field?: string }>({ completed: 0, total: 0, field: undefined })
+    const abortControllerRef = React.useRef<AbortController | null>(null)
   
   // New JSONB structure state
   const [identifiers, setIdentifiers] = React.useState<Partial<PlantIdentifiers>>({})
@@ -78,6 +81,13 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
   const toggleSeason = (s: Plant["seasons"][number]) => {
     setSeasons((cur: string[]) => (cur.includes(s) ? cur.filter((x: string) => x !== s) : [...cur, s]))
   }
+
+    React.useEffect(() => {
+      return () => {
+        abortControllerRef.current?.abort()
+        abortControllerRef.current = null
+      }
+    }, [])
 
   const loadSchema = async () => {
     try {
@@ -120,7 +130,11 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
       return
     }
 
-    setAiFilling(true)
+      setAiFilling(true)
+      setAiFillProgress({ completed: 0, total: 0, field: undefined })
+      abortControllerRef.current?.abort()
+      const controller = new AbortController()
+      abortControllerRef.current = controller
     setError(null)
     setOk(null)
 
@@ -131,22 +145,54 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
         return
       }
 
-      const { data, error: funcError } = await supabase.functions.invoke('fill-plant-data', {
-        body: {
-          plantName: name.trim(),
-          schema
+        const existingData = {
+          identifiers: {
+            ...(identifiers ?? {}),
+            ...(scientificName.trim() ? { scientificName: scientificName.trim() } : {})
+          },
+          traits: { ...(traits ?? {}) },
+          dimensions: { ...(dimensions ?? {}) },
+          phenology: { ...(phenology ?? {}) },
+          environment: { ...(environment ?? {}) },
+          care: {
+            ...(care ?? {}),
+            ...(careSunlight ? { sunlight: careSunlight } : {}),
+            ...(careDifficulty ? { difficulty: careDifficulty } : {}),
+            ...(waterFreqAmount ? {
+              watering: {
+                ...(care?.watering ?? {}),
+                interval: {
+                  ...((care?.watering as any)?.interval ?? {}),
+                  value: waterFreqAmount,
+                  unit: waterFreqPeriod
+                }
+              }
+            } : {})
+          },
+          propagation: { ...(propagation ?? {}) },
+          usage: { ...(usage ?? {}) },
+          ecology: { ...(ecology ?? {}) },
+          commerce: {
+            ...(commerce ?? {}),
+            ...(typeof seedsAvailable === 'boolean' ? { seedsAvailable } : {})
+          },
+          problems: { ...(problems ?? {}) },
+          planting: { ...(planting ?? {}) },
+          meta: {
+            ...(meta ?? {}),
+            ...(meaning.trim() ? { funFact: meaning.trim() } : {})
+          }
         }
-      })
 
-      if (funcError) {
-        throw new Error(funcError.message || 'Failed to get AI response')
-      }
-
-      if (!data || !data.success) {
-        throw new Error(data?.error || 'Failed to get AI response')
-      }
-
-      const aiData = data.data
+        const aiData = await fetchAiPlantFill({
+          plantName: name.trim(),
+          schema,
+          existingData,
+          signal: controller.signal,
+          onProgress: ({ completed, total, field }) => {
+            setAiFillProgress({ completed, total, field })
+          }
+        })
 
       if (aiData.identifiers) {
         setIdentifiers(aiData.identifiers)
@@ -239,11 +285,17 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
       }
 
       setOk('AI data loaded successfully! Please review and edit before saving.')
-    } catch (err: any) {
-      console.error('AI fill error:', err)
-      setError(err?.message || 'Failed to fill data with AI. Please try again.')
-    } finally {
-      setAiFilling(false)
+      } catch (err: any) {
+        console.error('AI fill error:', err)
+        if (err?.message === 'AI fill was cancelled' || err?.message === 'AI fill cancelled.') {
+          setError('AI fill cancelled.')
+        } else {
+          setError(err?.message || 'Failed to fill data with AI. Please try again.')
+        }
+      } finally {
+        setAiFilling(false)
+        setAiFillProgress({ completed: 0, total: 0, field: undefined })
+        abortControllerRef.current = null
     }
   }
 
@@ -351,13 +403,42 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
     return () => { ignore = true }
   }, [id, editLanguage])
 
-  const handleTranslate = async () => {
+    const handleTranslate = async () => {
     if (!id) return
     setTranslating(true)
     setError(null)
     setOk(null)
     
     try {
+        const translationPhenology = phenology?.scentNotes && phenology.scentNotes.length > 0
+          ? { scentNotes: phenology.scentNotes }
+          : undefined
+        const translationCarePayload = (() => {
+          const hasFrequency = !!care?.watering?.frequency && Object.values(care.watering.frequency!).some(Boolean)
+          const hasSchedule = !!care?.fertilizing?.schedule
+          const hasMulch = !!care?.mulching?.material
+          if (!hasFrequency && !hasSchedule && !hasMulch) return undefined
+          return {
+            watering: hasFrequency ? { frequency: care?.watering?.frequency } : undefined,
+            fertilizing: hasSchedule ? { schedule: care?.fertilizing?.schedule } : undefined,
+            mulching: hasMulch ? { material: care?.mulching?.material } : undefined,
+          }
+        })()
+        const translationPlanting = (() => {
+          const sitePrep = planting?.sitePrep?.length ? planting.sitePrep : undefined
+          const companionPlants = planting?.companionPlants?.length ? planting.companionPlants : undefined
+          const avoidNear = planting?.avoidNear?.length ? planting.avoidNear : undefined
+          if (!sitePrep && !companionPlants && !avoidNear) return undefined
+          return { sitePrep, companionPlants, avoidNear }
+        })()
+        const translationProblems = (() => {
+          const pests = problems?.pests?.length ? problems.pests : undefined
+          const diseases = problems?.diseases?.length ? problems.diseases : undefined
+          const hazards = problems?.hazards?.length ? problems.hazards : undefined
+          if (!pests && !diseases && !hazards) return undefined
+          return { pests, diseases, hazards }
+        })()
+        
       // Get current fields
       const fields = {
         name: name.trim() || undefined,
@@ -380,7 +461,11 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
           funFact: meta.funFact,
           authorNotes: meta.authorNotes,
           sourceReferences: meta.sourceReferences,
-        } : undefined,
+          } : undefined,
+          phenology: translationPhenology,
+          care: translationCarePayload,
+          planting: translationPlanting,
+          problems: translationProblems,
       }
       
       // Translate to all languages
@@ -394,7 +479,11 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
         identifiers: translated.identifiers || undefined,
         ecology: translated.ecology || undefined,
         usage: translated.usage || undefined,
-        meta: translated.meta || undefined,
+          meta: translated.meta || undefined,
+          phenology: translated.phenology || undefined,
+          care: translated.care || undefined,
+          planting: translated.planting || undefined,
+          problems: translated.problems || undefined,
         scientific_name: translated.scientificName || scientificName.trim() || identifiers?.scientificName || null,
         meaning: translated.meta?.funFact || translated.meaning || null,
         description: translated.description || null,
@@ -464,8 +553,37 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
         .eq('id', id)
       if (uerr) { setError(uerr.message); return }
       
-      // Save translation for the current edit language
-      const translation = {
+        const translationPhenology = phenology?.scentNotes && phenology.scentNotes.length > 0
+          ? { scentNotes: phenology.scentNotes }
+          : undefined
+        const translationCarePayload = (() => {
+          const hasFrequency = !!care?.watering?.frequency && Object.values(care.watering.frequency!).some(Boolean)
+          const hasSchedule = !!care?.fertilizing?.schedule
+          const hasMulch = !!care?.mulching?.material
+          if (!hasFrequency && !hasSchedule && !hasMulch) return undefined
+          return {
+            watering: hasFrequency ? { frequency: care?.watering?.frequency } : undefined,
+            fertilizing: hasSchedule ? { schedule: care?.fertilizing?.schedule } : undefined,
+            mulching: hasMulch ? { material: care?.mulching?.material } : undefined,
+          }
+        })()
+        const translationPlanting = (() => {
+          const sitePrep = planting?.sitePrep?.length ? planting.sitePrep : undefined
+          const companionPlants = planting?.companionPlants?.length ? planting.companionPlants : undefined
+          const avoidNear = planting?.avoidNear?.length ? planting.avoidNear : undefined
+          if (!sitePrep && !companionPlants && !avoidNear) return undefined
+          return { sitePrep, companionPlants, avoidNear }
+        })()
+        const translationProblems = (() => {
+          const pests = problems?.pests?.length ? problems.pests : undefined
+          const diseases = problems?.diseases?.length ? problems.diseases : undefined
+          const hazards = problems?.hazards?.length ? problems.hazards : undefined
+          if (!pests && !diseases && !hazards) return undefined
+          return { pests, diseases, hazards }
+        })()
+        
+        // Save translation for the current edit language
+        const translation = {
         plant_id: id,
         language: editLanguage,
         name: name.trim(),
@@ -487,6 +605,10 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
           authorNotes: meta.authorNotes,
           sourceReferences: meta.sourceReferences,
         } : undefined,
+          phenology: translationPhenology,
+          care: translationCarePayload,
+          planting: translationPlanting,
+          problems: translationProblems,
         // Legacy fields for backward compatibility
         scientific_name: scientificName.trim() || identifiers?.scientificName || null,
         meaning: meta?.funFact || meaning || null,
@@ -575,12 +697,12 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
                     disabled={aiFilling || !name.trim() || saving || translating}
                     className="rounded-2xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white border-0 shadow-lg"
                   >
-                    {aiFilling ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Filling...
-                      </>
-                    ) : (
+                      {aiFilling ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Filling{aiFillProgress.total > 0 ? ` ${Math.round((Math.min(aiFillProgress.completed, aiFillProgress.total) / aiFillProgress.total) * 100)}%` : '...'}
+                        </>
+                      ) : (
                       <>
                         <Sparkles className="h-4 w-4 mr-2" />
                         Fill with AI
@@ -653,12 +775,50 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
                 />
                 {ok && <div className="text-sm text-green-600">{ok}</div>}
                 {translating && <div className="text-sm text-blue-600">Translating all fields to all languages...</div>}
-                {aiFilling && (
-                  <div className="text-sm text-purple-600 dark:text-purple-400 flex items-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    AI is filling in the plant data...
-                  </div>
-                )}
+                  {aiFilling && (
+                    <div className="flex flex-col gap-2 text-sm text-purple-600 dark:text-purple-400">
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        AI is filling in the plant data...
+                      </div>
+                      {aiFillProgress.field && !['init', 'complete'].includes(aiFillProgress.field) && (
+                        <div className="text-xs font-medium">
+                          Working on: <span className="font-semibold">{aiFillProgress.field}</span>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2">
+                        <div className="h-2 flex-1 rounded-full bg-purple-200 dark:bg-purple-950">
+                          <div
+                            className="h-full rounded-full bg-purple-500 transition-all"
+                            style={{
+                              width: `${aiFillProgress.total > 0 ? Math.round((aiFillProgress.completed / aiFillProgress.total) * 100) : 0}%`,
+                            }}
+                          />
+                        </div>
+                        <span className="text-xs font-medium min-w-[4rem] text-right">
+                          {aiFillProgress.total > 0
+                            ? `${Math.min(aiFillProgress.completed, aiFillProgress.total)} / ${aiFillProgress.total}`
+                            : '...'}
+                        </span>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="self-start rounded-2xl"
+                        onClick={() => {
+                          abortControllerRef.current?.abort()
+                          abortControllerRef.current = null
+                          setAiFilling(false)
+                          setAiFillProgress({ completed: 0, total: 0, field: undefined })
+                          setOk(null)
+                          setError('AI fill cancelled.')
+                        }}
+                      >
+                        Stop AI fill
+                      </Button>
+                    </div>
+                  )}
                 <div className="flex gap-2 pt-2">
                   <Button
                     variant="secondary"

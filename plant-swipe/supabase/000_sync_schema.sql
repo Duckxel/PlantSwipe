@@ -269,8 +269,12 @@ create table if not exists public.plant_translations (
   -- Translatable JSONB fields
   identifiers jsonb,
   ecology jsonb,
-  usage jsonb,
-  meta jsonb,
+    usage jsonb,
+    meta jsonb,
+    phenology jsonb,
+    care jsonb,
+    planting jsonb,
+    problems jsonb,
   -- Legacy fields for backward compatibility
   scientific_name text,
   meaning text,
@@ -287,8 +291,12 @@ create index if not exists plant_translations_language_idx on public.plant_trans
 -- Ensure new JSONB translatable columns exist
 alter table if exists public.plant_translations add column if not exists identifiers jsonb;
 alter table if exists public.plant_translations add column if not exists ecology jsonb;
-alter table if exists public.plant_translations add column if not exists usage jsonb;
-alter table if exists public.plant_translations add column if not exists meta jsonb;
+  alter table if exists public.plant_translations add column if not exists usage jsonb;
+  alter table if exists public.plant_translations add column if not exists meta jsonb;
+  alter table if exists public.plant_translations add column if not exists phenology jsonb;
+  alter table if exists public.plant_translations add column if not exists care jsonb;
+  alter table if exists public.plant_translations add column if not exists planting jsonb;
+  alter table if exists public.plant_translations add column if not exists problems jsonb;
 
 -- RLS policies for plant_translations
 alter table public.plant_translations enable row level security;
