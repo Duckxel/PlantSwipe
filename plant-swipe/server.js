@@ -127,7 +127,7 @@ const supabaseServer = (supabaseUrlEnv && supabaseAnonKey)
   : null
 
 const openaiApiKey = process.env.OPENAI_KEY || process.env.OPENAI_API_KEY || ''
-const openaiModel = process.env.OPENAI_MODEL || 'gpt-5'
+const openaiModel = process.env.OPENAI_MODEL || 'gpt-5-nano'
 let openaiClient = null
 if (openaiApiKey) {
   try {
