@@ -26,6 +26,7 @@ const baseCorsHeaders: Record<string, string> = {
 }
 
 const disallowedImageKeys = new Set(['image', 'imageurl', 'image_url', 'imageURL', 'thumbnail', 'photo', 'picture'])
+const metadataKeys = new Set(['type', 'description', 'options', 'items', 'additionalProperties', 'examples', 'format'])
 
 type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue }
 
@@ -97,6 +98,122 @@ const stripDisallowedKeys = (node: JsonValue, path: string[] = []): JsonValue =>
   return node
 }
 
+const schemaToBlueprint = (node: JsonValue): JsonValue => {
+  if (Array.isArray(node)) {
+    if (node.length === 0) return []
+    return node.map((item) => schemaToBlueprint(item))
+  }
+  if (!node || typeof node !== 'object') {
+    return null
+  }
+  const obj = node as Record<string, JsonValue>
+  if (typeof obj.type === 'string') {
+    const typeValue = obj.type.toLowerCase()
+    if (typeValue === 'array') {
+      const items = obj.items
+      if (!items) return []
+      const blueprintItem = schemaToBlueprint(items)
+      return Array.isArray(blueprintItem) ? blueprintItem : [blueprintItem]
+    }
+    if (typeValue === 'object') {
+      const result: Record<string, JsonValue> = {}
+      const source =
+        typeof obj.properties === 'object' && obj.properties !== null && !Array.isArray(obj.properties)
+          ? (obj.properties as Record<string, JsonValue>)
+          : Object.fromEntries(
+              Object.entries(obj).filter(([key]) => !metadataKeys.has(key))
+            )
+      for (const [key, value] of Object.entries(source)) {
+        result[key] = schemaToBlueprint(value)
+      }
+      return result
+    }
+    return null
+  }
+
+  const result: Record<string, JsonValue> = {}
+  for (const [key, value] of Object.entries(obj)) {
+    if (metadataKeys.has(key)) continue
+    result[key] = schemaToBlueprint(value)
+  }
+  return result
+}
+
+const buildJsonSchema = (node: JsonValue): Record<string, JsonValue> => {
+  if (Array.isArray(node)) {
+    const itemSchema = node.length > 0 ? buildJsonSchema(node[0]) : {}
+    return { type: 'array', items: itemSchema }
+  }
+  if (!node || typeof node !== 'object') {
+    return { type: 'string' }
+  }
+
+  const obj = node as Record<string, JsonValue>
+  if (typeof obj.type === 'string') {
+    const typeValue = obj.type.toLowerCase()
+    const schema: Record<string, JsonValue> = {
+      type: ['string', 'number', 'integer', 'boolean', 'array', 'object', 'null'].includes(typeValue)
+        ? typeValue
+        : 'string'
+    }
+    if (typeof obj.description === 'string') {
+      schema.description = obj.description
+    }
+    if (Array.isArray(obj.options) && obj.options.length > 0) {
+      schema.enum = obj.options
+    }
+    if (typeValue === 'array') {
+      const items = obj.items
+      if (typeof items === 'string') {
+        schema.items = { type: items }
+      } else if (items && typeof items === 'object') {
+        schema.items = buildJsonSchema(items)
+      } else {
+        schema.items = {}
+      }
+    } else if (typeValue === 'object') {
+      const source =
+        typeof obj.properties === 'object' && obj.properties !== null && !Array.isArray(obj.properties)
+          ? (obj.properties as Record<string, JsonValue>)
+          : Object.fromEntries(
+              Object.entries(obj).filter(([key]) => !metadataKeys.has(key))
+            )
+      const properties: Record<string, JsonValue> = {}
+      for (const [key, value] of Object.entries(source)) {
+        properties[key] = buildJsonSchema(value)
+      }
+      schema.properties = properties
+      if (!('additionalProperties' in schema)) {
+        schema.additionalProperties = false
+      }
+    }
+
+    if ('additionalProperties' in obj) {
+      const ap = obj.additionalProperties
+      if (typeof ap === 'string') {
+        schema.additionalProperties = { type: ap }
+      } else if (ap && typeof ap === 'object') {
+        schema.additionalProperties = buildJsonSchema(ap)
+      } else if (typeof ap === 'boolean') {
+        schema.additionalProperties = ap
+      }
+    }
+
+    return schema
+  }
+
+  const properties: Record<string, JsonValue> = {}
+  for (const [key, value] of Object.entries(obj)) {
+    if (metadataKeys.has(key)) continue
+    properties[key] = buildJsonSchema(value)
+  }
+  return {
+    type: 'object',
+    properties,
+    additionalProperties: false
+  }
+}
+
 function getCorsHeaders(req: Request) {
   const origin = req.headers.get('origin') ?? ''
   const allowOrigin = allowList.has('*')
@@ -147,6 +264,8 @@ serve(async (req) => {
         )
       }
       const sanitizedSchema = sanitizedSchemaRaw as Record<string, JsonValue>
+      const schemaBlueprint = schemaToBlueprint(sanitizedSchema)
+      const structuredSchema = buildJsonSchema(sanitizedSchema)
 
       // Build the prompt
       const prompt = `You are an encyclopedic botanical expert. Fill in the plant information JSON for "${plantName}" using the schema provided.
@@ -190,7 +309,14 @@ Fill in as much accurate information as possible for "${plantName}". Return ONLY
                 content: `Provide the complete JSON record for the plant "${plantName}" strictly following the schema above.`
               }
             ],
-            text: { format: 'json' }
+          response_format: {
+            type: 'json_schema',
+            json_schema: {
+              name: 'plant_data',
+              strict: true,
+              schema: structuredSchema
+            }
+          }
           })
       })
 
@@ -236,7 +362,7 @@ Fill in as much accurate information as possible for "${plantName}". Return ONLY
         )
       }
 
-      plantData = ensureStructure(sanitizedSchema, plantData)
+      plantData = ensureStructure(schemaBlueprint, plantData)
       plantData = stripDisallowedKeys(plantData)
 
       let plantRecord: JsonValue = plantData
