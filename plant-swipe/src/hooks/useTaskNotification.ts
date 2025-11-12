@@ -12,17 +12,22 @@ const ERROR_LOGGED = new Set<string>()
 export function useTaskNotification(userId: string | null | undefined, options?: UseTaskNotificationOptions) {
   const channelKey = options?.channelKey ?? "default"
   const [hasUnfinished, setHasUnfinished] = React.useState(false)
+  const [outstandingCount, setOutstandingCount] = React.useState(0)
   const mountedRef = React.useRef(false)
   const stateRef = React.useRef(false)
   const requestRef = React.useRef(0)
   const refreshTimerRef = React.useRef<number | null>(null)
 
-  const setState = React.useCallback((value: boolean) => {
-    stateRef.current = value
-    if (mountedRef.current) {
-      setHasUnfinished(value)
-    }
-  }, [])
+  const setState = React.useCallback(
+    (value: boolean, count: number) => {
+      stateRef.current = value
+      if (mountedRef.current) {
+        setHasUnfinished(value)
+        setOutstandingCount(count)
+      }
+    },
+    []
+  )
 
   const clearRefreshTimer = React.useCallback(() => {
     if (typeof window === "undefined") return
@@ -45,7 +50,7 @@ export function useTaskNotification(userId: string | null | undefined, options?:
     requestRef.current = nextRequest
 
     if (!userId) {
-      setState(false)
+      setState(false, 0)
       return false
     }
 
@@ -53,9 +58,10 @@ export function useTaskNotification(userId: string | null | undefined, options?:
 
     try {
       const tasks = await getUserTasksTodayCached(userId, today)
-      const has = tasks.gardensWithRemainingTasks > 0 || tasks.totalDueCount > tasks.totalCompletedCount
+      const outstanding = Math.max((tasks.totalDueCount ?? 0) - (tasks.totalCompletedCount ?? 0), 0)
+      const has = tasks.gardensWithRemainingTasks > 0 || outstanding > 0
       if (mountedRef.current && requestRef.current === nextRequest) {
-        setState(has)
+        setState(has, outstanding)
       }
       return has
     } catch (error) {
@@ -69,7 +75,7 @@ export function useTaskNotification(userId: string | null | undefined, options?:
 
   const scheduleRefresh = React.useCallback(() => {
     if (!userId) {
-      setState(false)
+      setState(false, 0)
       return
     }
     if (typeof window === "undefined") {
@@ -87,7 +93,7 @@ export function useTaskNotification(userId: string | null | undefined, options?:
 
   React.useEffect(() => {
     if (!userId) {
-      setState(false)
+      setState(false, 0)
       return
     }
     void refreshNotification()
@@ -164,7 +170,36 @@ export function useTaskNotification(userId: string | null | undefined, options?:
     }
   }, [userId, channelKey, scheduleRefresh, clearRefreshTimer])
 
-  return { hasUnfinished, refresh: refreshNotification }
+  React.useEffect(() => {
+    if (typeof window === "undefined" || typeof navigator === "undefined") return
+    const navAny = navigator as Navigator & {
+      setAppBadge?: (count?: number) => Promise<void> | void
+      clearAppBadge?: () => Promise<void> | void
+    }
+    const callMaybe = (fn: ((...args: any[]) => Promise<void> | void) | undefined, ...args: any[]) => {
+      if (!fn) return
+      try {
+        const result = fn(...args)
+        if (result && typeof (result as Promise<void>).then === "function") {
+          ;(result as Promise<void>).catch(() => {})
+        }
+      } catch {
+        // Ignore failures; badge support is best-effort.
+      }
+    }
+
+    if (hasUnfinished && outstandingCount > 0) {
+      callMaybe(navAny.setAppBadge, Math.min(outstandingCount, 99))
+    } else {
+      if (navAny.clearAppBadge) {
+        callMaybe(navAny.clearAppBadge)
+      } else {
+        callMaybe(navAny.setAppBadge, 0)
+      }
+    }
+  }, [hasUnfinished, outstandingCount])
+
+  return { hasUnfinished, outstandingCount, refresh: refreshNotification }
 }
 
 export default useTaskNotification
