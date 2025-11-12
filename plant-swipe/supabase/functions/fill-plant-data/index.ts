@@ -177,21 +177,21 @@ Fill in as much accurate information as possible for "${plantName}". Return ONLY
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${OPENAI_API_KEY}`
         },
-        body: JSON.stringify({
-          model: OPENAI_MODEL,
-          reasoning: { effort: 'high' },
-          input: [
-            {
-              role: 'developer',
-              content: prompt
-            },
-            {
-              role: 'user',
-              content: `Provide the complete JSON record for the plant "${plantName}" strictly following the schema above.`
-            }
-          ],
-          response_format: { type: 'json_object' }
-        })
+          body: JSON.stringify({
+            model: OPENAI_MODEL,
+            reasoning: { effort: 'high' },
+            input: [
+              {
+                role: 'developer',
+                content: prompt
+              },
+              {
+                role: 'user',
+                content: `Provide the complete JSON record for the plant "${plantName}" strictly following the schema above.`
+              }
+            ],
+            text: { format: 'json' }
+          })
       })
 
     if (!response.ok) {
