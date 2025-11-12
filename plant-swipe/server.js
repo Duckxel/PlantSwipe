@@ -16,7 +16,7 @@ import { pipeline as streamPipeline } from 'stream'
 import net from 'net'
 import OpenAI from 'openai'
 import { z } from 'zod'
-import { zodTextFormat } from 'openai/helpers/zod'
+import { zodResponseFormat } from 'openai/helpers/zod'
 
 
 dotenv.config()
@@ -886,31 +886,34 @@ ${JSON.stringify(structuredSchema, null, 2)}
 
 ${existingPromptSection}`
 
-    const responseFormat = zodTextFormat(PlantFillSchema, 'plant_fill')
     let aiPayload = null
     try {
-      const completion = await openaiClient.responses.create({
+      const completion = await openaiClient.chat.completions.parse({
         model: openaiModel,
-        tools: [{ type: 'web_search' }],
-        reasoning: { effort: 'low' },
-        input: [
+        messages: [
           { role: 'system', content: 'You are a helpful botanical research assistant that provides accurate, richly detailed plant data.' },
           { role: 'user', content: prompt }
         ],
-        text: {
-          format: responseFormat,
-        },
-      }, { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 120000) })
+        response_format: zodResponseFormat(PlantFillSchema, 'plant_fill'),
+        max_output_tokens: Number(process.env.OPENAI_MAX_OUTPUT_TOKENS || 6000),
+        temperature: Number(process.env.OPENAI_TEMPERATURE ?? 0.2),
+      }, { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 180000) })
 
-      const outputText = typeof completion.output_text === 'string' ? completion.output_text : ''
-      if (!outputText || outputText.trim().length === 0) {
-        throw new Error('No output_text returned by model')
-      }
-      try {
-        aiPayload = PlantFillSchema.parse(JSON.parse(outputText))
-      } catch (parseError) {
-        console.error('[server] Failed to parse AI JSON payload:', parseError, outputText)
-        throw new Error('AI response was not valid plant JSON')
+      aiPayload = completion?.choices?.[0]?.message?.parsed ?? null
+      if (!aiPayload) {
+        const content = completion?.choices?.[0]?.message?.content
+        const text = Array.isArray(content)
+          ? content.map((entry) => (typeof entry === 'string' ? entry : entry?.text || '')).join('\n')
+          : (typeof content === 'string' ? content : '')
+        if (!text || text.trim().length === 0) {
+          throw new Error('AI response was empty')
+        }
+        try {
+          aiPayload = PlantFillSchema.parse(JSON.parse(text))
+        } catch (parseError) {
+          console.error('[server] Failed to parse AI JSON payload:', parseError, text)
+          throw new Error('AI response was not valid plant JSON')
+        }
       }
     } catch (err) {
       console.error('[server] OpenAI plant fill request failed:', err)
