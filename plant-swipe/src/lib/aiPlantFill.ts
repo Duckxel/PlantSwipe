@@ -25,11 +25,11 @@ export async function fetchAiPlantFill({ plantName, schema, existingData, onProg
   }
 
   try {
-    const env = typeof globalThis !== 'undefined' && globalThis && typeof globalThis === 'object'
-      ? globalThis.__ENV__
-      : undefined
-    if (env && env.VITE_ADMIN_STATIC_TOKEN) {
-      headers['X-Admin-Token'] = String(env.VITE_ADMIN_STATIC_TOKEN)
+    const token = (globalThis as typeof globalThis & {
+      __ENV__?: { VITE_ADMIN_STATIC_TOKEN?: unknown }
+    }).__ENV__?.VITE_ADMIN_STATIC_TOKEN
+    if (token) {
+      headers['X-Admin-Token'] = String(token)
     }
   } catch {}
 
