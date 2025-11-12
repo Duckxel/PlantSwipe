@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { supabase } from "@/lib/supabaseClient"
+import { fetchAiPlantFill } from "@/lib/aiPlantFill"
 import type {
   Plant,
   PlantIdentifiers,
@@ -131,22 +132,50 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
         return
       }
 
-      const { data, error: funcError } = await supabase.functions.invoke('fill-plant-data', {
-        body: {
-          plantName: name.trim(),
-          schema
+        const existingData = {
+          identifiers: {
+            ...(identifiers ?? {}),
+            ...(scientificName.trim() ? { scientificName: scientificName.trim() } : {})
+          },
+          traits: { ...(traits ?? {}) },
+          dimensions: { ...(dimensions ?? {}) },
+          phenology: { ...(phenology ?? {}) },
+          environment: { ...(environment ?? {}) },
+          care: {
+            ...(care ?? {}),
+            ...(careSunlight ? { sunlight: careSunlight } : {}),
+            ...(careDifficulty ? { difficulty: careDifficulty } : {}),
+            ...(waterFreqAmount ? {
+              watering: {
+                ...(care?.watering ?? {}),
+                interval: {
+                  ...((care?.watering as any)?.interval ?? {}),
+                  value: waterFreqAmount,
+                  unit: waterFreqPeriod
+                }
+              }
+            } : {})
+          },
+          propagation: { ...(propagation ?? {}) },
+          usage: { ...(usage ?? {}) },
+          ecology: { ...(ecology ?? {}) },
+          commerce: {
+            ...(commerce ?? {}),
+            ...(typeof seedsAvailable === 'boolean' ? { seedsAvailable } : {})
+          },
+          problems: { ...(problems ?? {}) },
+          planting: { ...(planting ?? {}) },
+          meta: {
+            ...(meta ?? {}),
+            ...(meaning.trim() ? { funFact: meaning.trim() } : {})
+          }
         }
-      })
 
-      if (funcError) {
-        throw new Error(funcError.message || 'Failed to get AI response')
-      }
-
-      if (!data || !data.success) {
-        throw new Error(data?.error || 'Failed to get AI response')
-      }
-
-      const aiData = data.data
+        const aiData = await fetchAiPlantFill({
+          plantName: name.trim(),
+          schema,
+          existingData
+        })
 
       if (aiData.identifiers) {
         setIdentifiers(aiData.identifiers)

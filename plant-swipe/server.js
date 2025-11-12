@@ -14,6 +14,9 @@ import zlib from 'zlib'
 import crypto from 'crypto'
 import { pipeline as streamPipeline } from 'stream'
 import net from 'net'
+import OpenAI from 'openai'
+import { z } from 'zod'
+import { zodResponseFormat } from 'openai/helpers/zod'
 
 
 dotenv.config()
@@ -122,6 +125,20 @@ const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABA
 const supabaseServer = (supabaseUrlEnv && supabaseAnonKey)
   ? createSupabaseClient(supabaseUrlEnv, supabaseAnonKey, { auth: { persistSession: false, autoRefreshToken: false } })
   : null
+
+const openaiApiKey = process.env.OPENAI_KEY || process.env.OPENAI_API_KEY || ''
+const openaiModel = process.env.OPENAI_MODEL || 'gpt-5'
+let openaiClient = null
+if (openaiApiKey) {
+  try {
+    openaiClient = new OpenAI({ apiKey: openaiApiKey })
+  } catch (err) {
+    console.error('[server] Failed to initialize OpenAI client:', err)
+    openaiClient = null
+  }
+} else {
+  console.warn('[server] OPENAI_KEY not configured — AI plant fill endpoint disabled')
+}
 
 const supportEmailTargetsRaw = process.env.SUPPORT_EMAIL_TO || process.env.SUPPORT_EMAIL || 'support@aphylia.app'
 const supportEmailTargets = supportEmailTargetsRaw.split(',').map(s => s.trim()).filter(Boolean)
@@ -322,6 +339,246 @@ async function ensureAdmin(req, res) {
     res.status(500).json({ error: 'Failed to authorize request' })
     return null
   }
+}
+
+const disallowedImageKeys = new Set(['image', 'imageurl', 'image_url', 'imageURL', 'thumbnail', 'photo', 'picture'])
+const metadataKeys = new Set(['type', 'description', 'options', 'items', 'additionalProperties', 'examples', 'format'])
+
+const JsonValueSchema = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.array(JsonValueSchema),
+    z.object({}).catchall(JsonValueSchema)
+  ])
+)
+const PlantFillSchema = z.object({}).catchall(JsonValueSchema)
+
+function sanitizeTemplate(node, path = []) {
+  if (Array.isArray(node)) {
+    return node.map((item) => sanitizeTemplate(item, path))
+  }
+  if (node && typeof node === 'object') {
+    const result = {}
+    for (const [key, value] of Object.entries(node)) {
+      const lowerKey = key.toLowerCase()
+      if (disallowedImageKeys.has(lowerKey)) continue
+      if (lowerKey === 'name' && path.length === 0) continue
+      result[key] = sanitizeTemplate(value, [...path, key])
+    }
+    return result
+  }
+  return node
+}
+
+function ensureStructure(template, target) {
+  if (Array.isArray(template)) {
+    return Array.isArray(target) ? target : []
+  }
+  if (template && typeof template === 'object' && !Array.isArray(template)) {
+    const result =
+      target && typeof target === 'object' && !Array.isArray(target)
+        ? { ...target }
+        : {}
+    for (const [key, templateValue] of Object.entries(template)) {
+      if (!(key in result)) {
+        if (Array.isArray(templateValue)) {
+          result[key] = []
+        } else if (templateValue && typeof templateValue === 'object') {
+          result[key] = ensureStructure(templateValue, {})
+        } else {
+          result[key] = null
+        }
+      } else if (templateValue && typeof templateValue === 'object') {
+        result[key] = ensureStructure(templateValue, result[key])
+      }
+    }
+    return result
+  }
+  return target !== undefined ? target : null
+}
+
+function stripDisallowedKeys(node, path = []) {
+  if (Array.isArray(node)) {
+    return node.map((item) => stripDisallowedKeys(item, path))
+  }
+  if (node && typeof node === 'object') {
+    const result = {}
+    for (const [key, value] of Object.entries(node)) {
+      const lowerKey = key.toLowerCase()
+      if (disallowedImageKeys.has(lowerKey)) continue
+      if (lowerKey === 'name' && path.length === 0) continue
+      result[key] = stripDisallowedKeys(value, [...path, key])
+    }
+    return result
+  }
+  return node
+}
+
+function schemaToBlueprint(node) {
+  if (Array.isArray(node)) {
+    if (node.length === 0) return []
+    return node.map((item) => schemaToBlueprint(item))
+  }
+  if (!node || typeof node !== 'object') {
+    return null
+  }
+  const obj = node
+  if (typeof obj.type === 'string') {
+    const typeValue = obj.type.toLowerCase()
+    if (typeValue === 'array') {
+      const items = obj.items
+      if (!items) return []
+      const blueprintItem = schemaToBlueprint(items)
+      return Array.isArray(blueprintItem) ? blueprintItem : [blueprintItem]
+    }
+    if (typeValue === 'object') {
+      const result = {}
+      const source =
+        typeof obj.properties === 'object' && obj.properties !== null && !Array.isArray(obj.properties)
+          ? obj.properties
+          : Object.fromEntries(
+              Object.entries(obj).filter(([key]) => !metadataKeys.has(key))
+            )
+      for (const [key, value] of Object.entries(source)) {
+        result[key] = schemaToBlueprint(value)
+      }
+      return result
+    }
+    return null
+  }
+
+  const result = {}
+  for (const [key, value] of Object.entries(obj)) {
+    if (metadataKeys.has(key)) continue
+    result[key] = schemaToBlueprint(value)
+  }
+  return result
+}
+
+function buildJsonSchema(node) {
+  if (Array.isArray(node)) {
+    const itemSchema = node.length > 0 ? buildJsonSchema(node[0]) : {}
+    return { type: 'array', items: itemSchema }
+  }
+  if (!node || typeof node !== 'object') {
+    return { type: 'string' }
+  }
+
+  const obj = node
+  if (typeof obj.type === 'string') {
+    const typeValue = obj.type.toLowerCase()
+    const schema = {
+      type: ['string', 'number', 'integer', 'boolean', 'array', 'object', 'null'].includes(typeValue)
+        ? typeValue
+        : 'string'
+    }
+    if (typeof obj.description === 'string') {
+      schema.description = obj.description
+    }
+    if (Array.isArray(obj.options) && obj.options.length > 0) {
+      schema.enum = obj.options
+    }
+    if (typeValue === 'array') {
+      const items = obj.items
+      if (typeof items === 'string') {
+        schema.items = { type: items }
+      } else if (items && typeof items === 'object') {
+        schema.items = buildJsonSchema(items)
+      } else {
+        schema.items = {}
+      }
+    } else if (typeValue === 'object') {
+      const source =
+        typeof obj.properties === 'object' && obj.properties !== null && !Array.isArray(obj.properties)
+          ? obj.properties
+          : Object.fromEntries(
+              Object.entries(obj).filter(([key]) => !metadataKeys.has(key))
+            )
+      const properties = {}
+      for (const [key, value] of Object.entries(source)) {
+        properties[key] = buildJsonSchema(value)
+      }
+      schema.properties = properties
+      if (!('additionalProperties' in schema)) {
+        schema.additionalProperties = false
+      }
+    }
+
+    if ('additionalProperties' in obj) {
+      const ap = obj.additionalProperties
+      if (typeof ap === 'string') {
+        schema.additionalProperties = { type: ap }
+      } else if (ap && typeof ap === 'object') {
+        schema.additionalProperties = buildJsonSchema(ap)
+      } else if (typeof ap === 'boolean') {
+        schema.additionalProperties = ap
+      }
+    }
+
+    return schema
+  }
+
+  const properties = {}
+  for (const [key, value] of Object.entries(obj)) {
+    if (metadataKeys.has(key)) continue
+    properties[key] = buildJsonSchema(value)
+  }
+  return {
+    type: 'object',
+    properties,
+    additionalProperties: false
+  }
+}
+
+function pruneEmpty(node) {
+  if (Array.isArray(node)) {
+    const pruned = node
+      .map((item) => pruneEmpty(item))
+      .filter((item) => item !== undefined)
+    return pruned.length > 0 ? pruned : undefined
+  }
+  if (node && typeof node === 'object') {
+    const result = {}
+    for (const [key, value] of Object.entries(node)) {
+      const prunedValue = pruneEmpty(value)
+      if (prunedValue !== undefined) result[key] = prunedValue
+    }
+    return Object.keys(result).length > 0 ? result : undefined
+  }
+  if (node === null || node === undefined) return undefined
+  if (typeof node === 'string') {
+    return node.trim().length > 0 ? node : undefined
+  }
+  return node
+}
+
+function mergePreferExisting(aiValue, existingValue) {
+  if (existingValue === undefined) return aiValue
+  if (existingValue === null) return aiValue
+  if (Array.isArray(existingValue)) {
+    if (existingValue.length === 0) {
+      return Array.isArray(aiValue) ? aiValue : []
+    }
+    return existingValue
+  }
+  if (existingValue && typeof existingValue === 'object') {
+    const aiObj = aiValue && typeof aiValue === 'object' && !Array.isArray(aiValue) ? aiValue : {}
+    const result = { ...aiObj }
+    for (const [key, existingChild] of Object.entries(existingValue)) {
+      result[key] = mergePreferExisting(aiObj[key], existingChild)
+    }
+    return result
+  }
+  if (typeof existingValue === 'string') {
+    const trimmed = existingValue.trim()
+    if (trimmed.length > 0) return existingValue
+    if (typeof aiValue === 'string') return aiValue
+    return trimmed
+  }
+  return existingValue
 }
 
 function buildConnectionString() {
@@ -566,6 +823,141 @@ app.get('/api/admin/admin-logs', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to load admin logs' })
   }
+})
+
+// Admin: AI-assisted plant data fill
+app.post('/api/admin/ai/plant-fill', async (req, res) => {
+  try {
+    const caller = await ensureAdmin(req, res)
+    if (!caller) return
+    if (!openaiClient) {
+      res.status(503).json({ error: 'AI plant fill is not configured' })
+      return
+    }
+
+    const body = req.body || {}
+    const plantName = typeof body.plantName === 'string' ? body.plantName.trim() : ''
+    if (!plantName) {
+      res.status(400).json({ error: 'Plant name is required' })
+      return
+    }
+
+    const schema = body.schema
+    if (!schema || typeof schema !== 'object' || Array.isArray(schema)) {
+      res.status(400).json({ error: 'Valid schema object is required' })
+      return
+    }
+
+    const sanitizedSchemaRaw = sanitizeTemplate(schema)
+    if (!sanitizedSchemaRaw || Array.isArray(sanitizedSchemaRaw) || typeof sanitizedSchemaRaw !== 'object') {
+      res.status(400).json({ error: 'Invalid schema provided' })
+      return
+    }
+    const sanitizedSchema = sanitizedSchemaRaw
+    const schemaBlueprint = schemaToBlueprint(sanitizedSchema)
+    const structuredSchema = buildJsonSchema(sanitizedSchema)
+
+    const canUseExisting = body.existingData && typeof body.existingData === 'object' && !Array.isArray(body.existingData)
+    const existingDataRaw = canUseExisting ? stripDisallowedKeys(body.existingData) : {}
+    const existingDataForPrompt = pruneEmpty(existingDataRaw) || {}
+    const existingPromptSection = Object.keys(existingDataForPrompt).length > 0
+      ? `Existing data supplied by the user (treat these as authoritative; extend but never contradict them unless they are null/empty placeholders):
+${JSON.stringify(existingDataForPrompt, null, 2)}`
+      : 'No existing data was provided.'
+
+    const prompt = `You are an encyclopedic botanical expert tasked with completing a comprehensive plant knowledge base entry for "${plantName}".
+
+Follow these requirements precisely:
+1. Return ONLY valid JSON that conforms to the provided schema structure. Do not include code fences, markdown, or commentary.
+2. Populate every property defined by the schema except for the top-level "name" and any image or thumbnail fields.
+3. When you lack reputable information for a field, set it to null instead of inventing content.
+4. For arrays, supply at least three high-quality, well-researched items when possible.
+5. Respect enumerations and field descriptions. Use professional, detailed language grounded in authoritative botanical sources.
+6. Incorporate any supplied existing data without deleting or contradicting substantive values; enhance them with richer detail when appropriate.
+7. Ensure that every top-level section (identifiers, traits, dimensions, phenology, environment, care, propagation, usage, ecology, commerce, problems, planting, meta) is populated.
+8. In meta.funFact, describe cultural symbolism, lore, or explicitly note when it is not documented.
+9. Respond with the fully populated JSON object and nothing else.
+
+Schema blueprint (preserve this structure exactly):
+${JSON.stringify(sanitizedSchema, null, 2)}
+
+Strict JSON schema reference:
+${JSON.stringify(structuredSchema, null, 2)}
+
+${existingPromptSection}`
+
+    let completion
+    try {
+      completion = await openaiClient.chat.completions.parse({
+        model: openaiModel,
+        tools: [{ type: 'web_search' }],
+        reasoning: { effort: 'high' },
+        messages: [
+          { role: 'system', content: 'You are a helpful botanical research assistant that provides accurate, richly detailed plant data.' },
+          { role: 'user', content: prompt }
+        ],
+        response_format: zodResponseFormat(PlantFillSchema, 'plant_fill')
+      })
+    } catch (err) {
+      console.error('[server] OpenAI plant fill request failed:', err)
+      res.status(502).json({ error: 'Failed to fetch AI response' })
+      return
+    }
+
+    let aiPayload = completion?.choices?.[0]?.message?.parsed
+    if (!aiPayload) {
+      const fallbackContent = completion?.choices?.[0]?.message?.content
+      let fallbackText = ''
+      if (Array.isArray(fallbackContent)) {
+        const first = fallbackContent.find((entry) => entry && typeof entry.text === 'string')
+        if (first && typeof first.text === 'string') fallbackText = first.text
+      } else if (typeof fallbackContent === 'string') {
+        fallbackText = fallbackContent
+      }
+      if (fallbackText) {
+        try {
+          aiPayload = JSON.parse(fallbackText)
+        } catch (parseErr) {
+          console.error('[server] Failed to parse AI fallback response:', parseErr, fallbackText)
+        }
+      }
+    }
+
+    if (!aiPayload || typeof aiPayload !== 'object' || Array.isArray(aiPayload)) {
+      res.status(500).json({ error: 'AI response did not include valid structured data' })
+      return
+    }
+
+    let plantData = ensureStructure(schemaBlueprint, aiPayload)
+    plantData = stripDisallowedKeys(plantData)
+    const merged = mergePreferExisting(plantData, existingDataRaw)
+    const structured = ensureStructure(schemaBlueprint, merged)
+    const finalData = stripDisallowedKeys(structured)
+
+    if (!finalData || typeof finalData !== 'object' || Array.isArray(finalData)) {
+      res.status(500).json({ error: 'Failed to build plant data object' })
+      return
+    }
+
+    if (!('meta' in finalData) || typeof finalData.meta !== 'object' || finalData.meta === null || Array.isArray(finalData.meta)) {
+      finalData.meta = {}
+    }
+    if (!finalData.meta.funFact || (typeof finalData.meta.funFact === 'string' && finalData.meta.funFact.trim().length === 0)) {
+      finalData.meta.funFact = `Symbolic meaning information for ${plantName} is currently not well documented; please supplement this entry with future research.`
+    }
+
+    res.json({ success: true, data: finalData, model: openaiModel })
+  } catch (err) {
+    console.error('[server] AI plant fill failed:', err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: err?.message || 'Failed to fill plant data' })
+    }
+  }
+})
+app.options('/api/admin/ai/plant-fill', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
 })
 
 // Admin: generic log endpoint to record an action from admin_api or UI

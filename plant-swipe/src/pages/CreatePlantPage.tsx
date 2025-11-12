@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { supabase } from "@/lib/supabaseClient"
+import { fetchAiPlantFill } from "@/lib/aiPlantFill"
 import type {
   Plant,
   PlantIdentifiers,
@@ -154,30 +155,40 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
     setOk(null)
 
     try {
-      // Load the schema
-      const schema = await loadSchema()
-      if (!schema) {
-        setError("Failed to load schema")
-        return
-      }
-
-      // Call Supabase Edge Function
-      const { data, error: funcError } = await supabase.functions.invoke('fill-plant-data', {
-        body: {
-          plantName: name.trim(),
-          schema: schema
+        // Load the schema
+        const schema = await loadSchema()
+        if (!schema) {
+          setError("Failed to load schema")
+          return
         }
-      })
 
-      if (funcError) {
-        throw new Error(funcError.message || 'Failed to get AI response')
-      }
+        const existingData = {
+          identifiers: {
+            ...(identifiers ?? {}),
+            ...(scientificName.trim() ? { scientificName: scientificName.trim() } : {})
+          },
+          traits: { ...(traits ?? {}) },
+          dimensions: { ...(dimensions ?? {}) },
+          phenology: { ...(phenology ?? {}) },
+          environment: { ...(environment ?? {}) },
+          care: { ...(care ?? {}) },
+          propagation: { ...(propagation ?? {}) },
+          usage: { ...(usage ?? {}) },
+          ecology: { ...(ecology ?? {}) },
+          commerce: { ...(commerce ?? {}) },
+          problems: { ...(problems ?? {}) },
+          planting: { ...(planting ?? {}) },
+          meta: {
+            ...(meta ?? {}),
+            ...(meaning.trim() ? { funFact: meaning.trim() } : {})
+          }
+        }
 
-      if (!data || !data.success) {
-        throw new Error(data?.error || 'Failed to get AI response')
-      }
-
-      const aiData = data.data
+        const aiData = await fetchAiPlantFill({
+          plantName: name.trim(),
+          schema,
+          existingData
+        })
 
       // Populate form fields with AI data
       if (aiData.identifiers) {
