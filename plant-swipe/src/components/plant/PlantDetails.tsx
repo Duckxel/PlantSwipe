@@ -8,7 +8,7 @@ import {
   SunMedium, Droplets, Leaf, Heart, Share2, Maximize2, ChevronLeft, X,
   Info, Flower2, Ruler, Calendar, MapPin, Thermometer, Wind, Sprout,
   Scissors, Droplet, Package, Bug, AlertTriangle, Tag, BookOpen,
-  Globe, Shield, AlertCircle, Users, Sparkles, FileText
+  Globe, Shield, AlertCircle, Users, Sparkles, FileText, Home
 } from "lucide-react";
 import type { Plant } from "@/types/plant";
 import { rarityTone, seasonBadge } from "@/constants/badges";
@@ -170,6 +170,48 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
   const dimensions = plant.dimensions ?? ({} as NonNullable<Plant['dimensions']>)
   const seasons = Array.isArray(plant.seasons) ? plant.seasons : []
   const colors = Array.isArray(plant.colors) ? plant.colors : []
+  const indoorOutdoorLabel = usage.indoorOutdoor
+    ? t(`plantInfo.values.${usage.indoorOutdoor}`, { defaultValue: usage.indoorOutdoor })
+    : null
+
+  const quickStats = [
+    {
+      key: 'sun',
+      icon: <SunMedium className="h-4 w-4" />,
+      label: t('plantInfo.sunlight'),
+      value: care?.sunlight || t('plantInfo.values.notAvailable', { defaultValue: '—' }),
+      sub: care?.soil ? String(care.soil) : undefined,
+    },
+    {
+      key: 'water',
+      icon: <Droplets className="h-4 w-4" />,
+      label: t('plantInfo.water'),
+      value: derivedWater,
+      sub: freqLabel || undefined,
+    },
+    {
+      key: 'difficulty',
+      icon: <Leaf className="h-4 w-4" />,
+      label: t('plantInfo.difficulty'),
+      value: care?.difficulty || t('plantInfo.values.notAvailable', { defaultValue: '—' }),
+    },
+  ]
+
+  if (indoorOutdoorLabel) {
+    quickStats.push({
+      key: 'indoorOutdoor',
+      icon: <Home className="h-4 w-4" />,
+      label: t('plantInfo.labels.location'),
+      value: indoorOutdoorLabel,
+    })
+  }
+
+  quickStats.push({
+    key: 'seeds',
+    icon: <Package className="h-4 w-4" />,
+    label: t('plantInfo.seedsAvailable'),
+    value: plant.seedsAvailable ? t('plantInfo.yes') : t('plantInfo.no'),
+  })
 
   const handleShare = async (e: React.MouseEvent) => {
     e.preventDefault()
@@ -348,25 +390,80 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
     }
   }, [isImageFullScreen])
 
-  return (
-    <div className="space-y-4 select-none">
-      {/* Expand button for overlay mode - at the top */}
-      {isOverlayMode && (
-        <div className="flex justify-end mb-2">
+  const renderQuickStats = (stats: typeof quickStats, columns = 'sm:grid-cols-2 xl:grid-cols-4') => (
+    <div className={`grid gap-3 ${columns}`}>
+      {stats.map(({ key, icon, label, value, sub }) => (
+        <Fact key={key} icon={icon} label={label} value={value} sub={sub} />
+      ))}
+    </div>
+  )
+
+  if (isOverlayMode) {
+    const compactStats = quickStats.slice(0, 3)
+    return (
+      <div className="space-y-5 select-none">
+        <div className="flex justify-end">
           <button
             onClick={handleExpand}
             type="button"
             aria-label="Expand to full page"
-            className="h-8 w-8 rounded-full flex items-center justify-center border bg-white/90 dark:bg-[#2d2d30] dark:border-[#3e3e42] text-black dark:text-white hover:bg-white dark:hover:bg-[#3e3e42] transition shadow-sm"
+            className="h-9 w-9 rounded-full flex items-center justify-center border bg-white/90 dark:bg-[#2d2d30] dark:border-[#3e3e42] text-black dark:text-white hover:bg-white dark:hover:bg-[#3e3e42] transition shadow-sm"
             title="Expand to full page"
           >
             <Maximize2 className="h-4 w-4" />
           </button>
         </div>
-      )}
-      
-      {/* Back arrow for full page mode - at the top left */}
-      {!isOverlayMode && (
+        <div className="space-y-4">
+          <div className="rounded-2xl overflow-hidden shadow relative">
+            <div
+              className="h-56 bg-cover bg-center select-none"
+              style={{ backgroundImage: `url(${plant.image})`, userSelect: 'none' as any }}
+              aria-label={plant.name}
+            />
+          </div>
+          <div className="space-y-1 text-center">
+            <h2 className="text-3xl font-bold leading-tight">{plant.name}</h2>
+            <p className="italic text-base opacity-80">{plant.scientificName}</p>
+          </div>
+          {plant.meaning && (
+            <Card className="rounded-3xl border border-stone-200 dark:border-[#3e3e42]">
+              <CardHeader className="py-4">
+                <CardTitle className="text-base font-semibold flex items-center justify-center gap-2">
+                  <Sparkles className="h-4 w-4" />
+                  {t('plantInfo.meaning')}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm text-center leading-relaxed">
+                {plant.meaning}
+              </CardContent>
+            </Card>
+          )}
+          {renderQuickStats(compactStats, 'sm:grid-cols-3')}
+          {(colors.length > 0 || seasons.length > 0) && (
+            <div className="flex flex-wrap justify-center gap-2">
+              {colors.map((c) => (
+                <Badge key={c} variant="secondary" className="rounded-xl">{c}</Badge>
+              ))}
+              {seasons.map((s) => (
+                <span key={s} className={`text-[11px] px-2 py-0.5 rounded-full ${seasonBadge[s] ?? 'bg-stone-200 dark:bg-stone-700 text-stone-900 dark:text-stone-100'}`}>{s}</span>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="flex flex-wrap justify-center gap-2">
+          <Button variant="secondary" className="rounded-2xl px-6" onClick={handleExpand}>
+            {t('plantInfo.viewFullDetails')}
+          </Button>
+          <Button className="rounded-2xl px-6" onClick={onClose}>
+            {t('common.close')}
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+    return (
+      <div className="space-y-4 select-none">
         <div className="flex justify-start mb-2">
           <button
             onClick={handleBackToSearch}
@@ -378,7 +475,6 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
             <ChevronLeft className="h-4 w-4" />
           </button>
         </div>
-      )}
       
       <div className="grid md:grid-cols-2 gap-4 items-center">
         <div className="flex flex-col space-y-2 text-left">
@@ -431,25 +527,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
         </div>
       </div>
 
-        <div className="grid md:grid-cols-3 gap-3">
-          <Fact
-            icon={<SunMedium className="h-4 w-4" />}
-            label={t('plantInfo.sunlight')}
-            value={care?.sunlight || t('common.unknown')}
-            sub={care?.soil ? String(care.soil) : undefined}
-          />
-          <Fact
-            icon={<Droplets className="h-4 w-4" />}
-            label={t('plantInfo.water')}
-            value={derivedWater}
-            sub={freqLabel || undefined}
-          />
-          <Fact
-            icon={<Leaf className="h-4 w-4" />}
-            label={t('plantInfo.difficulty')}
-            value={care?.difficulty || t('common.unknown')}
-          />
-      </div>
+        {renderQuickStats(quickStats, 'sm:grid-cols-2 xl:grid-cols-4')}
 
       <Card className="rounded-2xl">
         <CardHeader>
@@ -1047,14 +1125,14 @@ const InfoSection = ({ title, icon, children }: { title: string; icon: React.Rea
   const key = SECTION_KEY_MAP[title]
   const translatedTitle = key ? t(`plantInfo.sections.${key}`, { defaultValue: title }) : title
   return (
-    <div className="space-y-3 pb-4 border-b border-stone-200 dark:border-[#3e3e42] last:border-0 last:pb-0">
-      <div className="flex items-center gap-2 text-base font-semibold text-stone-800 dark:text-stone-200">
-        <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-green-500 to-emerald-600 dark:from-green-600 dark:to-emerald-700 flex items-center justify-center text-white">
+    <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e1e] p-4 shadow-sm space-y-3">
+      <div className="flex items-center gap-3 text-base font-semibold text-stone-800 dark:text-stone-200">
+        <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-green-500 to-emerald-600 dark:from-green-600 dark:to-emerald-700 flex items-center justify-center text-white shadow">
           {icon}
         </div>
-        {translatedTitle}
+        <span>{translatedTitle}</span>
       </div>
-      <div className="space-y-2 pl-10">
+      <div className="space-y-2">
         {children}
       </div>
     </div>

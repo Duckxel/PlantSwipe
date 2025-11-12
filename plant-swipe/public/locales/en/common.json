@@ -331,7 +331,7 @@
     "saveChanges": "Save changes",
     "saving": "Saving..."
   },
-  "plantInfo": {
+    "plantInfo": {
     "plantNotFound": "Plant not found.",
     "failedToLoad": "Failed to load plant",
     "sunlight": "Sunlight",
@@ -357,11 +357,25 @@
     "shareCopied": "Link copied to clipboard!",
     "shareFailed": "Failed to copy link",
     "viewFullScreen": "View image in full screen",
+      "viewFullDetails": "View full details",
     "deleteConfirm": "Delete this plant? This will fail if it is used in any garden.",
     "day": "day",
     "week": "week",
     "month": "month",
     "year": "year",
+      "values": {
+        "viewLink": "View",
+        "notAvailable": "N/A",
+        "spacing": "Row: {{row}} cm, Plant: {{plant}} cm",
+        "temperatureRange": "{{min}}{{dash}}{{max}}°C",
+        "germinationDays": "{{min}}{{dash}}{{max}}",
+        "stakingRequired": "Required",
+        "stakingNotRequired": "Not required",
+        "repottingInterval": "Every {{count}} years",
+        "indoor": "Indoor",
+        "outdoor": "Outdoor",
+        "both": "Indoor & Outdoor"
+      },
     "sections": {
       "identifiers": "Identifiers",
       "traits": "Traits",
