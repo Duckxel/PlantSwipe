@@ -895,7 +895,6 @@ ${existingPromptSection}`
           { role: 'user', content: prompt }
         ],
         response_format: zodResponseFormat(PlantFillSchema, 'plant_fill'),
-        max_output_tokens: Number(process.env.OPENAI_MAX_OUTPUT_TOKENS || 6000),
         temperature: Number(process.env.OPENAI_TEMPERATURE ?? 0.2),
       }, { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 180000) })
 
