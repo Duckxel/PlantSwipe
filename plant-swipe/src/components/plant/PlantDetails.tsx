@@ -4,18 +4,30 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { 
+import {
   SunMedium, Droplets, Leaf, Heart, Share2, Maximize2, ChevronLeft, X,
   Info, Flower2, Ruler, Calendar, MapPin, Thermometer, Wind, Sprout,
   Scissors, Droplet, Package, Bug, AlertTriangle, Tag, BookOpen,
-  Globe, Shield, AlertCircle, Users, Sparkles, FileText, Home
+  Globe, Shield, AlertCircle, Users, Sparkles, FileText, Home,
+  BarChart3, Palette, Compass, Map as MapIcon
 } from "lucide-react";
 import type { Plant } from "@/types/plant";
 import { rarityTone, seasonBadge } from "@/constants/badges";
-import { deriveWaterLevelFromFrequency } from "@/lib/utils";
+import { cn, deriveWaterLevelFromFrequency } from "@/lib/utils";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/context/AuthContext";
 import { useTranslation } from "react-i18next";
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  YAxis,
+  Cell
+} from "recharts";
+import type { NameType, ValueType, TooltipProps } from "recharts";
 
 const SECTION_KEY_MAP: Record<string, string> = {
   'Identifiers': 'identifiers',
@@ -117,6 +129,118 @@ const LABEL_KEY_MAP: Record<string, string> = {
   'Source References': 'sourceReferences',
   'Author Notes': 'authorNotes',
 }
+
+const FACT_ACCENTS = [
+  'from-emerald-200/80 via-emerald-100/70 to-sky-200/70 dark:from-emerald-950/60 dark:via-emerald-900/50 dark:to-slate-900/70',
+  'from-lime-200/80 via-emerald-100/70 to-amber-200/70 dark:from-lime-900/60 dark:via-emerald-900/50 dark:to-amber-900/60',
+  'from-teal-200/80 via-sky-100/60 to-purple-200/60 dark:from-teal-900/60 dark:via-sky-900/50 dark:to-purple-900/60',
+  'from-rose-200/70 via-amber-100/60 to-emerald-100/70 dark:from-rose-900/60 dark:via-amber-900/50 dark:to-emerald-900/60'
+]
+
+const CARE_BAR_COLORS = ['#16a34a', '#0ea5e9', '#f97316', '#8b5cf6', '#facc15']
+
+const DESCRIPTOR_SCALE: Record<string, number> = {
+  'very low': 1,
+  'low': 2,
+  'shade': 2,
+  'partial shade': 3,
+  'medium': 3,
+  'moderate': 3,
+  'average': 3,
+  'partial sun': 4,
+  'high': 4,
+  'bright indirect': 4,
+  'full sun': 5,
+  'very high': 5,
+  'heavy': 5,
+  'easy': 2,
+  'beginner': 2,
+  'intermediate': 3,
+  'moderate difficulty': 3,
+  'medium difficulty': 3,
+  'moderate care': 3,
+  'advanced': 4,
+  'difficult': 4,
+  'hard': 4,
+  'expert': 5,
+  'high maintenance': 4,
+  'low maintenance': 2,
+  'medium maintenance': 3,
+  'high maintenance level': 4,
+  'low maintenance level': 2,
+  'humid': 4,
+  'dry': 2
+}
+
+const MAP_PIN_POSITIONS = [
+  { top: '16%', left: '22%' },
+  { top: '32%', left: '48%' },
+  { top: '58%', left: '30%' },
+  { top: '46%', left: '70%' },
+  { top: '68%', left: '55%' },
+  { top: '26%', left: '72%' }
+]
+
+const MONTH_KEYS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+
+const NAMED_COLOR_MAP: Record<string, string> = {
+  red: '#f87171',
+  orange: '#fb923c',
+  yellow: '#facc15',
+  green: '#34d399',
+  blue: '#60a5fa',
+  purple: '#c084fc',
+  pink: '#f472b6',
+  white: '#e5e7eb',
+  black: '#1f2937',
+  brown: '#b45309',
+  bronze: '#b45309',
+  gold: '#fbbf24',
+  silver: '#a1a1aa',
+  teal: '#14b8a6',
+  indigo: '#6366f1',
+  cyan: '#22d3ee',
+  magenta: '#d946ef'
+}
+
+const TIMELINE_COLORS: Record<string, string> = {
+  flowering: '#f97316',
+  fruiting: '#22c55e',
+  sowing: '#6366f1'
+}
+
+const HEX_COLOR_REGEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/
+
+const descriptorScore = (value?: string | null): number => {
+  if (!value) return 0
+  const normalized = value.toString().trim().toLowerCase()
+  if (!normalized) return 0
+  if (DESCRIPTOR_SCALE[normalized] !== undefined) return DESCRIPTOR_SCALE[normalized]
+  if (normalized.includes('very high')) return 5
+  if (normalized.includes('very low')) return 1
+  if (normalized.includes('high')) return 4
+  if (normalized.includes('medium') || normalized.includes('moderate')) return 3
+  if (normalized.includes('low')) return 2
+  if (normalized.includes('full sun')) return 5
+  if (normalized.includes('sun')) return 4
+  if (normalized.includes('shade')) return 2
+  if (normalized.includes('easy')) return 2
+  if (normalized.includes('difficult') || normalized.includes('hard')) return 4
+  return 3
+}
+
+const resolveColorValue = (value?: string | null): string => {
+  if (!value) return '#34d399'
+  const trimmed = value.trim()
+  if (!trimmed) return '#34d399'
+  if (HEX_COLOR_REGEX.test(trimmed)) return trimmed
+  const normalized = trimmed.toLowerCase()
+  if (NAMED_COLOR_MAP[normalized]) return NAMED_COLOR_MAP[normalized]
+  const firstWord = normalized.split(/[\s/-]+/)[0]
+  if (NAMED_COLOR_MAP[firstWord]) return NAMED_COLOR_MAP[firstWord]
+  return trimmed
+}
+
 export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?: boolean; onToggleLike?: () => void; isOverlayMode?: boolean; onRequestPlant?: () => void }> = ({ plant, onClose, liked = false, onToggleLike, isOverlayMode = false, onRequestPlant }) => {
   const navigate = useLanguageNavigate()
   const currentLang = useLanguage()
@@ -245,6 +369,190 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
     label: t('plantInfo.seedsAvailable'),
     value: plant.seedsAvailable ? t('plantInfo.yes') : t('plantInfo.no'),
   })
+
+  const heroImage = plant.image || (plant as any)?.image_url || ''
+  const friendlyFrequency = React.useMemo(
+    () => formatFrequencyLabel(freqLabel),
+    [formatFrequencyLabel, freqLabel]
+  )
+
+  const careChartData = React.useMemo(() => {
+    const data: Array<{ key: string; label: string; value: number; description: string }> = []
+    const addEntry = (key: string, label: string, descriptor?: string | null, description?: string) => {
+      if (!descriptor) return
+      const score = descriptorScore(descriptor)
+      if (score <= 0) return
+      data.push({
+        key,
+        label,
+        value: score,
+        description: description ?? formatStatValue(descriptor),
+      })
+    }
+
+    const sunlightDescriptor = care?.sunlight ?? environment.sunExposure
+    if (sunlightDescriptor) {
+      addEntry('sunlight', t('plantInfo.sunlight'), sunlightDescriptor, formatStatValue(sunlightDescriptor))
+    }
+
+    if (derivedWater) {
+      const waterDescription = friendlyFrequency
+        ? `${formatStatValue(derivedWater)} - ${friendlyFrequency}`
+        : formatStatValue(derivedWater)
+      addEntry('water', t('plantInfo.water'), derivedWater, waterDescription)
+    }
+
+    if (care?.difficulty) {
+      addEntry('difficulty', t('plantInfo.difficulty'), care.difficulty, formatStatValue(care.difficulty))
+    }
+
+    if (care?.maintenanceLevel) {
+      addEntry(
+        'maintenance',
+        t('plantInfo.labels.maintenanceLevel', { defaultValue: 'Maintenance' }),
+        care.maintenanceLevel,
+        formatStatValue(care.maintenanceLevel)
+      )
+    }
+
+    if (environment?.humidityPref) {
+      addEntry(
+        'humidity',
+        t('plantInfo.labels.humidityPreference', { defaultValue: 'Humidity' }),
+        environment.humidityPref,
+        formatStatValue(environment.humidityPref)
+      )
+    }
+
+    return data
+  }, [care?.sunlight, environment.sunExposure, derivedWater, friendlyFrequency, care?.difficulty, care?.maintenanceLevel, environment?.humidityPref, formatStatValue, t])
+
+  const seasonTimelineData = React.useMemo(() => {
+    return MONTH_KEYS.map((key, idx) => {
+      const monthNumber = idx + 1
+      return {
+        key,
+        month: t(`plantInfo.monthsShort.${key}`, { defaultValue: key.toUpperCase() }),
+        flowering: phenology?.floweringMonths?.includes?.(monthNumber) ? 1 : 0,
+        fruiting: phenology?.fruitingMonths?.includes?.(monthNumber) ? 1 : 0,
+        sowing: planting?.calendar?.sowingMonths?.includes?.(monthNumber) ? 1 : 0,
+      }
+    })
+  }, [phenology?.floweringMonths, phenology?.fruitingMonths, planting?.calendar?.sowingMonths, t])
+
+  const hasSeasonTimeline = React.useMemo(
+    () => seasonTimelineData.some((entry) => entry.flowering || entry.fruiting || entry.sowing),
+    [seasonTimelineData]
+  )
+
+  const showColorMoodboard =
+    colors.length > 0 ||
+    (phenology?.flowerColors?.length ?? 0) > 0 ||
+    (phenology?.leafColors?.length ?? 0) > 0
+
+  const showIdentifiers = Boolean(
+    identifiers?.scientificName ||
+    identifiers?.canonicalName ||
+    identifiers?.family ||
+    identifiers?.genus ||
+    identifiers?.taxonRank ||
+    identifiers?.cultivar ||
+    (identifiers?.commonNames?.length ?? 0) > 0 ||
+    (identifiers?.synonyms?.length ?? 0) > 0 ||
+    identifiers?.externalIds
+  )
+
+  const showTraits = Boolean(
+    traits?.lifeCycle ||
+    (traits?.habit?.length ?? 0) > 0 ||
+    traits?.deciduousEvergreen ||
+    traits?.growthRate ||
+    traits?.thornsSpines ||
+    (traits?.fragrance && traits.fragrance !== 'none') ||
+    traits?.toxicity ||
+    traits?.allergenicity ||
+    (traits?.invasiveness?.status && traits.invasiveness.status !== 'not invasive')
+  )
+
+  const showDimensions = Boolean(
+    dimensions?.height ||
+    dimensions?.spread ||
+    dimensions?.spacing ||
+    dimensions?.containerFriendly !== undefined
+  )
+
+  const showPhenology = Boolean(
+    (phenology?.flowerColors?.length ?? 0) > 0 ||
+    (phenology?.leafColors?.length ?? 0) > 0 ||
+    (phenology?.floweringMonths?.length ?? 0) > 0 ||
+    (phenology?.fruitingMonths?.length ?? 0) > 0 ||
+    (phenology?.scentNotes?.length ?? 0) > 0
+  )
+
+  const showEnvironment = Boolean(
+    environment?.sunExposure ||
+    environment?.lightIntensity ||
+    environment?.hardiness ||
+    (environment?.climatePref?.length ?? 0) > 0 ||
+    environment?.temperature ||
+    environment?.humidityPref ||
+    environment?.windTolerance ||
+    environment?.soil
+  )
+
+  const showCare = Boolean(
+    care?.maintenanceLevel ||
+    care?.watering?.method ||
+    care?.watering?.depthCm ||
+    care?.watering?.frequency ||
+    care?.fertilizing ||
+    care?.pruning ||
+    care?.mulching ||
+    care?.stakingSupport !== undefined ||
+    care?.repottingIntervalYears
+  )
+
+  const showPropagation = Boolean(
+    (propagation?.methods?.length ?? 0) > 0 ||
+    propagation?.seed
+  )
+
+  const showUsage = Boolean(
+    (usage?.gardenUses?.length ?? 0) > 0 ||
+    usage?.indoorOutdoor ||
+    (usage?.edibleParts?.length ?? 0) > 0 ||
+    (usage?.culinaryUses?.length ?? 0) > 0 ||
+    (usage?.medicinalUses?.length ?? 0) > 0
+  )
+
+  const showEcology = Boolean(
+    (ecology?.nativeRange?.length ?? 0) > 0 ||
+    (ecology?.pollinators?.length ?? 0) > 0 ||
+    (ecology?.wildlifeValue?.length ?? 0) > 0 ||
+    ecology?.conservationStatus
+  )
+
+  const showProblems = Boolean(
+    (problems?.pests?.length ?? 0) > 0 ||
+    (problems?.diseases?.length ?? 0) > 0 ||
+    (problems?.hazards?.length ?? 0) > 0
+  )
+
+  const showPlanting = Boolean(
+    planting?.calendar ||
+    (planting?.sitePrep?.length ?? 0) > 0 ||
+    (planting?.companionPlants?.length ?? 0) > 0 ||
+    (planting?.avoidNear?.length ?? 0) > 0
+  )
+
+  const showMeta = Boolean(
+    (meta?.tags?.length ?? 0) > 0 ||
+    meta?.funFact ||
+    (meta?.sourceReferences?.length ?? 0) > 0 ||
+    meta?.authorNotes
+  )
+
+  const hasAnyStructuredData = showIdentifiers || showTraits || showDimensions || showPhenology || showEnvironment || showCare || showPropagation || showUsage || showEcology || showProblems || showPlanting || showMeta
 
   const handleShare = async (e: React.MouseEvent) => {
     e.preventDefault()
@@ -424,9 +732,16 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
   }, [isImageFullScreen])
 
   const renderQuickStats = (stats: typeof quickStats, columns = 'sm:grid-cols-2 xl:grid-cols-4') => (
-    <div className={`grid gap-3 ${columns}`}>
-      {stats.map(({ key, icon, label, value, sub }) => (
-        <Fact key={key} icon={icon} label={label} value={value} sub={sub} />
+    <div className={cn('grid gap-3', columns)}>
+      {stats.map(({ key, icon, label, value, sub }, index) => (
+        <Fact
+          key={key}
+          icon={icon}
+          label={label}
+          value={value}
+          sub={sub}
+          accentClass={FACT_ACCENTS[index % FACT_ACCENTS.length]}
+        />
       ))}
     </div>
   )
@@ -496,105 +811,245 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
   }
 
     return (
-      <div className="space-y-4 select-none">
-        <div className="flex justify-start mb-2">
-          <button
-            onClick={handleBackToSearch}
-            type="button"
-            aria-label="Back to search"
-            className="h-8 w-8 rounded-full flex items-center justify-center border bg-white/90 dark:bg-[#2d2d30] dark:border-[#3e3e42] text-black dark:text-white hover:bg-white dark:hover:bg-[#3e3e42] transition shadow-sm"
-            title="Back to search"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
+      <div className="space-y-10 select-none">
+        <section className="relative overflow-hidden rounded-[32px] border border-emerald-300/40 bg-gradient-to-br from-emerald-200/70 via-lime-100/60 to-sky-100/70 p-6 shadow-xl dark:border-emerald-700/30 dark:from-emerald-950/50 dark:via-emerald-900/40 dark:to-slate-950 md:p-10">
+          <div className="pointer-events-none absolute -top-24 -left-24 h-64 w-64 rounded-full bg-emerald-400/35 blur-3xl sm:h-72 sm:w-72" aria-hidden="true" />
+          <div className="pointer-events-none absolute -bottom-32 -right-16 h-72 w-72 rounded-full bg-amber-200/40 blur-3xl md:h-96 md:w-[28rem]" aria-hidden="true" />
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.45),transparent_55%),radial-gradient(circle_at_80%_10%,rgba(14,165,233,0.25),transparent_60%)] dark:bg-[radial-gradient(circle_at_20%_20%,rgba(20,83,45,0.45),transparent_55%),radial-gradient(circle_at_80%_10%,rgba(2,132,199,0.25),transparent_60%)]" aria-hidden="true" />
+          <div className="relative grid gap-10 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+            <div className="space-y-6">
+              <div className="flex flex-wrap items-center gap-3 text-sm font-semibold text-emerald-800/80 dark:text-emerald-200/80">
+                <button
+                  onClick={handleBackToSearch}
+                  type="button"
+                  aria-label="Back to search"
+                  className="flex h-10 w-10 items-center justify-center rounded-full border border-emerald-500/40 bg-white/80 text-emerald-700 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-emerald-700/30 dark:bg-slate-900/70 dark:text-emerald-100"
+                >
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+                {plant.rarity && (
+                  <Badge className={cn('rounded-xl border-none bg-emerald-500/10 px-3 py-1 text-emerald-700 dark:bg-emerald-700/40 dark:text-emerald-100', rarityTone[plant.rarity] ?? '')}>
+                    {plant.rarity}
+                  </Badge>
+                )}
+                {plant.seedsAvailable && (
+                  <Badge className="rounded-xl border-none bg-emerald-500/10 px-3 py-1 text-emerald-700 dark:bg-emerald-700/40 dark:text-emerald-100">
+                    {t('plantInfo.seedsAvailable')}
+                  </Badge>
+                )}
+              </div>
+              <div className="space-y-3">
+                <h1 className="text-4xl font-bold leading-tight tracking-tight text-emerald-900 sm:text-5xl dark:text-emerald-100">
+                  {plant.name}
+                </h1>
+                {plant.scientificName && (
+                  <p className="text-lg italic text-emerald-700/80 dark:text-emerald-200/80">
+                    {plant.scientificName}
+                  </p>
+                )}
+              </div>
+              {plant.meaning && (
+                <div className="flex items-start gap-3 rounded-2xl bg-white/65 px-4 py-3 text-sm leading-relaxed text-emerald-900 shadow-sm backdrop-blur-md dark:bg-slate-900/50 dark:text-emerald-100">
+                  <span className="mt-0.5 rounded-full bg-emerald-500/20 p-2 text-emerald-600 dark:text-emerald-200">
+                    <Sparkles className="h-4 w-4" />
+                  </span>
+                  <span>{plant.meaning}</span>
+                </div>
+              )}
+              {plant.description && (
+                <p className="max-w-2xl text-sm leading-relaxed text-emerald-900/90 md:text-base dark:text-emerald-100/80">
+                  {plant.description}
+                </p>
+              )}
+              {(seasons.length > 0 || colors.length > 0) && (
+                <div className="flex flex-wrap gap-2">
+                  {seasons.map((s) => (
+                    <span
+                      key={s}
+                      className={cn(
+                        'rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide',
+                        seasonBadge[s] ?? 'bg-emerald-200/70 text-emerald-900 dark:bg-emerald-900/60 dark:text-emerald-100'
+                      )}
+                    >
+                      {s}
+                    </span>
+                  ))}
+                  {colors.slice(0, 6).map((c) => (
+                    <Badge
+                      key={c}
+                      variant="secondary"
+                      className="rounded-xl border-none bg-white/80 text-emerald-900 shadow-sm dark:bg-slate-900/60 dark:text-emerald-100"
+                    >
+                      {c}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  type="button"
+                  onClick={(e) => handleShare(e)}
+                  variant="outline"
+                  className={cn(
+                    'rounded-2xl border-emerald-500/30 bg-white/80 px-5 text-sm font-semibold text-emerald-700 shadow-sm backdrop-blur transition hover:-translate-y-0.5 hover:bg-white hover:shadow-md dark:border-emerald-700/40 dark:bg-slate-900/70 dark:text-emerald-100',
+                    shareSuccess && 'border-emerald-500/70 bg-emerald-500/90 text-white hover:bg-emerald-500 dark:bg-emerald-500/70'
+                  )}
+                >
+                  <Share2 className="mr-2 h-4 w-4" />
+                  {shareSuccess ? t('plantInfo.shareCopied') : t('plantInfo.share')}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => onToggleLike?.()}
+                  className={cn(
+                    'rounded-2xl border-rose-500/30 bg-rose-500/10 px-5 text-sm font-semibold text-rose-600 shadow-sm transition hover:-translate-y-0.5 hover:bg-rose-500/20 hover:shadow-md dark:border-rose-500/40 dark:bg-rose-500/20 dark:text-rose-100',
+                    liked && 'border-rose-500 bg-rose-500 text-white hover:bg-rose-500'
+                  )}
+                >
+                  <Heart className={cn('mr-2 h-4 w-4', liked && 'fill-current')} />
+                  {liked ? t('plantInfo.unlike') : t('plantInfo.like')}
+                </Button>
+              </div>
+            </div>
+            <div className="relative">
+              <div className="pointer-events-none absolute -top-8 -left-10 h-24 w-24 rounded-full bg-white/50 blur-2xl dark:bg-emerald-500/25" aria-hidden="true" />
+              <div className="pointer-events-none absolute -bottom-12 right-6 h-32 w-32 rounded-full bg-emerald-400/40 blur-3xl sm:h-44 sm:w-44 dark:bg-emerald-500/30" aria-hidden="true" />
+              <div
+                className={cn(
+                  'group relative overflow-hidden rounded-[28px] border border-white/50 bg-white/80 shadow-[0_24px_60px_rgba(16,185,129,0.35)] transition hover:shadow-[0_28px_70px_rgba(16,185,129,0.45)] dark:border-white/10 dark:bg-slate-900/70',
+                  heroImage ? 'cursor-zoom-in' : 'cursor-default'
+                )}
+                role={heroImage ? 'button' : undefined}
+                tabIndex={heroImage ? 0 : undefined}
+                onClick={() => heroImage && setIsImageFullScreen(true)}
+                onKeyDown={(e) => {
+                  if (heroImage && (e.key === 'Enter' || e.key === ' ')) {
+                    e.preventDefault()
+                    setIsImageFullScreen(true)
+                  }
+                }}
+                aria-label={heroImage ? t('plantInfo.viewFullScreen') : undefined}
+              >
+                {heroImage ? (
+                  <img
+                    src={heroImage}
+                    alt={plant.name}
+                    className="max-h-[420px] w-full object-cover transition duration-500 group-hover:scale-[1.04]"
+                  />
+                ) : (
+                  <div className="flex h-[320px] items-center justify-center text-emerald-700/80 dark:text-emerald-200/70">
+                    <Leaf className="mr-2 h-6 w-6" />
+                    {t('plantInfo.overview')}
+                  </div>
+                )}
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-emerald-900/40 via-transparent to-emerald-700/20 dark:from-emerald-900/60" />
+              </div>
+              <div className="absolute -bottom-8 left-1/2 z-10 flex w-[min(20rem,90%)] -translate-x-1/2 gap-3 rounded-2xl border border-emerald-500/20 bg-white/90 p-4 text-sm shadow-xl backdrop-blur-md dark:border-emerald-700/30 dark:bg-slate-900/80">
+                <div className="flex-1">
+                  <div className="text-[10px] uppercase tracking-widest text-emerald-500/80 dark:text-emerald-300/70">
+                    {t('plantInfo.water')}
+                  </div>
+                  <div className="font-semibold text-emerald-800 dark:text-emerald-100">{formatStatValue(derivedWater)}</div>
+                  {friendlyFrequency && (
+                    <div className="text-xs text-emerald-600/80 dark:text-emerald-200/70">{friendlyFrequency}</div>
+                  )}
+                </div>
+                {care?.difficulty && (
+                  <div className="flex-1">
+                    <div className="text-[10px] uppercase tracking-widest text-emerald-500/80 dark:text-emerald-300/70">
+                      {t('plantInfo.difficulty')}
+                    </div>
+                    <div className="font-semibold text-emerald-800 dark:text-emerald-100">{formatStatValue(care.difficulty)}</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="space-y-4">
+        <div className="flex items-center gap-3 text-emerald-700 dark:text-emerald-200">
+          <Sparkles className="h-5 w-5" />
+          <h2 className="text-xl font-semibold tracking-tight md:text-2xl">
+            {t('plantInfo.overview')} - {t('plantInfo.careGuide')}
+          </h2>
         </div>
-      
-      <div className="grid md:grid-cols-2 gap-4 items-center">
-        <div className="flex flex-col space-y-2 text-left">
-          <h2 className="text-3xl md:text-4xl font-bold leading-tight">{plant.name}</h2>
-          <p className="italic text-base md:text-lg opacity-80">{plant.scientificName}</p>
-        </div>
-        <div className="rounded-2xl overflow-hidden shadow relative">
-          <div 
-            className={`h-44 md:h-60 bg-cover bg-center select-none rounded-2xl ${!isOverlayMode ? 'cursor-pointer hover:opacity-90 transition-opacity' : ''}`}
-            style={{ backgroundImage: `url(${plant.image})`, userSelect: 'none' as any }}
-            onClick={() => !isOverlayMode && setIsImageFullScreen(true)}
-            role={!isOverlayMode ? 'button' : undefined}
-            tabIndex={!isOverlayMode ? 0 : undefined}
-            onKeyDown={(e) => {
-              if (!isOverlayMode && (e.key === 'Enter' || e.key === ' ')) {
-                e.preventDefault()
-                setIsImageFullScreen(true)
-              }
-            }}
-            aria-label={!isOverlayMode ? t('plantInfo.viewFullScreen') : undefined}
-          />
-          <div className="absolute bottom-3 right-3 flex gap-2">
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                console.log('Share button clicked!')
-                handleShare(e)
-              }}
-              type="button"
-              aria-label={t('plantInfo.share')}
-              className={`h-8 w-8 rounded-full flex items-center justify-center border transition shadow-[0_4px_12px_rgba(0,0,0,0.28)] ${shareSuccess ? 'bg-green-600 text-white' : 'bg-white/90 dark:bg-[#2d2d30] dark:border-[#3e3e42] text-black dark:text-white hover:bg-white dark:hover:bg-[#3e3e42]'}`}
-              title={shareSuccess ? t('plantInfo.shareCopied') : t('plantInfo.share')}
-            >
-              <span className="relative inline-flex items-center justify-center">
-                <Share2 className="h-4 w-4 stroke-[1.5]" />
-              </span>
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                onToggleLike && onToggleLike()
-              }}
-              aria-pressed={liked}
-              aria-label={liked ? t('plantInfo.unlike') : t('plantInfo.like')}
-              className={`h-8 w-8 rounded-full flex items-center justify-center border transition shadow-[0_4px_12px_rgba(0,0,0,0.28)] ${liked ? 'bg-rose-600 text-white' : 'bg-white/90 dark:bg-[#2d2d30] dark:border-[#3e3e42] text-black dark:text-white hover:bg-white dark:hover:bg-[#3e3e42]'}`}
-            >
-              <Heart className={liked ? 'fill-current' : ''} />
-            </button>
+          {renderQuickStats(quickStats, 'sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5')}
+        </section>
+
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+          <div className="space-y-6">
+            <section className="rounded-[28px] border border-emerald-200/40 bg-white/90 p-6 shadow-md backdrop-blur-md dark:border-emerald-700/30 dark:bg-slate-950/70">
+              <header className="mb-4 flex items-center gap-3 text-emerald-800 dark:text-emerald-100">
+                <Info className="h-5 w-5" />
+                <h3 className="text-lg font-semibold tracking-tight">{t('plantInfo.overview')}</h3>
+              </header>
+              {plant.description && (
+                <p className="text-sm leading-relaxed text-stone-700 md:text-base dark:text-stone-200">
+                  {plant.description}
+                </p>
+              )}
+              {plant.meaning && (
+                <div className="mt-5 rounded-2xl bg-gradient-to-r from-emerald-200/70 via-white/80 to-emerald-100/60 p-4 text-sm text-emerald-900 shadow-sm dark:from-emerald-900/40 dark:via-slate-900/60 dark:to-emerald-800/30 dark:text-emerald-100">
+                  <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-emerald-600 dark:text-emerald-300">
+                    <Sparkles className="h-4 w-4" />
+                    {t('plantInfo.meaning')}
+                  </div>
+                  <div className="text-base leading-relaxed">{plant.meaning}</div>
+                </div>
+              )}
+              <div className="mt-5 flex flex-wrap gap-2">
+                <Badge
+                  className={cn(
+                    'rounded-xl border-none bg-emerald-500/10 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-100',
+                    rarityTone[plant.rarity || 'Common'] ?? ''
+                  )}
+                >
+                  {plant.rarity || t('common.unknown')}
+                </Badge>
+                {seasons.map((s) => (
+                  <span
+                    key={s}
+                    className={cn(
+                      'rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide',
+                      seasonBadge[s] ?? 'bg-emerald-200/70 text-emerald-900 dark:bg-emerald-900/60 dark:text-emerald-100'
+                    )}
+                  >
+                    {s}
+                  </span>
+                ))}
+              </div>
+            </section>
+
+            {careChartData.length > 0 && <CareChartSection data={careChartData} />}
+
+            {hasSeasonTimeline && <SeasonalTimeline data={seasonTimelineData} planting={planting?.calendar} />}
+          </div>
+
+          <div className="space-y-6">
+            {showColorMoodboard && (
+              <ColorMoodboard
+                generalColors={colors}
+                flowerColors={phenology?.flowerColors ?? []}
+                leafColors={phenology?.leafColors ?? []}
+              />
+            )}
+            <HabitatMap
+              nativeRange={ecology?.nativeRange ?? []}
+              climatePref={environment?.climatePref ?? []}
+              zones={environment?.hardiness?.usdaZones ?? []}
+              hemisphere={planting?.calendar?.hemisphere}
+            />
           </div>
         </div>
-      </div>
 
-        {renderQuickStats(quickStats, 'sm:grid-cols-2 xl:grid-cols-4')}
-
-      <Card className="rounded-2xl">
-        <CardHeader>
-          <CardTitle className="text-lg md:text-xl">{t('plantInfo.overview')}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3 text-[15px] md:text-base leading-relaxed">
-          <p>{plant.description}</p>
-          <div className="flex flex-wrap gap-2">
-              <Badge className={`${rarityTone[plant.rarity || 'Common'] ?? ''} rounded-xl`}>{plant.rarity || t('common.unknown')}</Badge>
-              {seasons.map((s) => (
-                <span key={s} className={`text-[10px] px-2 py-0.5 rounded-full ${seasonBadge[s] ?? 'bg-stone-200 dark:bg-stone-700 text-stone-900 dark:text-stone-100'}`}>{s}</span>
-            ))}
-              {colors.map((c) => (
-              <Badge key={c} variant="secondary" className="rounded-xl">{c}</Badge>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="rounded-2xl">
-        <CardHeader>
-          <CardTitle className="text-lg md:text-xl">{t('plantInfo.meaning')}</CardTitle>
-        </CardHeader>
-        <CardContent className="text-[15px] md:text-base leading-relaxed">{plant.meaning}</CardContent>
-      </Card>
-
-      <Card className="rounded-2xl">
-        <CardHeader>
-          <CardTitle className="text-lg md:text-xl flex items-center gap-2">
-            <Info className="h-5 w-5" />
-            {t('plantInfo.moreInformation')}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
+        {hasAnyStructuredData && (
+          <section className="rounded-[32px] border border-emerald-200/40 bg-white/90 p-6 shadow-lg backdrop-blur-md dark:border-emerald-700/30 dark:bg-slate-950/70">
+            <header className="mb-6 flex items-center gap-3 text-emerald-800 dark:text-emerald-100">
+              <BookOpen className="h-5 w-5" />
+              <h3 className="text-xl font-semibold tracking-tight">{t('plantInfo.moreInformation')}</h3>
+            </header>
+            <div className="grid gap-6 xl:grid-cols-2">
           {/* Identifiers Section */}
             {(identifiers?.scientificName || identifiers?.family || identifiers?.genus || identifiers?.commonNames?.length || identifiers?.synonyms?.length || identifiers?.externalIds) && (
                 <InfoSection title="Identifiers" icon={<Flower2 className="h-5 w-5" />}>
@@ -983,49 +1438,56 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
           )}
 
           {/* Meta Section */}
-          {(meta.tags?.length || meta.funFact || meta.sourceReferences?.length || meta.authorNotes) && (
+            {(meta.tags?.length || meta.funFact || meta.sourceReferences?.length || meta.authorNotes) && (
               <InfoSection title="Additional Information" icon={<BookOpen className="h-5 w-5" />}>
-              {meta.tags?.length && (
-                <InfoItem icon={<Tag className="h-4 w-4" />} label="Tags" value={
-                  <div className="flex flex-wrap gap-2">
-                    {meta.tags.map((tag, idx) => (
-                      <Badge key={idx} variant="secondary" className="rounded-xl">{tag}</Badge>
-                    ))}
-                  </div>
-                } />
-              )}
-              {meta.funFact && (
-                <InfoItem icon={<Sparkles className="h-4 w-4" />} label="Fun Fact" value={meta.funFact} />
-              )}
-              {meta.sourceReferences?.length && (
-                <InfoItem icon={<BookOpen className="h-4 w-4" />} label="Source References" value={
-                  <ul className="list-disc list-inside space-y-1">
-                    {meta.sourceReferences.map((ref, idx) => (
-                      <li key={idx} className="text-sm">{ref}</li>
-                    ))}
-                  </ul>
-                } />
-              )}
-              {meta.authorNotes && (
-                <InfoItem icon={<FileText className="h-4 w-4" />} label="Author Notes" value={meta.authorNotes} />
-              )}
-            </InfoSection>
-          )}
-        </CardContent>
-      </Card>
-
-        <div className="flex flex-wrap justify-between gap-2">
-        {user && profile?.is_admin && (
-          <Button variant="destructive" className="rounded-2xl" onClick={async () => {
-            const yes = window.confirm(t('plantInfo.deleteConfirm'))
-            if (!yes) return
-            const { error } = await supabase.from('plants').delete().eq('id', plant.id)
-            if (error) { alert(error.message); return }
-            onClose()
-            try { window.dispatchEvent(new CustomEvent('plants:refresh')) } catch {}
-          }}>{t('common.delete')}</Button>
+                {meta.tags?.length && (
+                  <InfoItem icon={<Tag className="h-4 w-4" />} label="Tags" value={
+                    <div className="flex flex-wrap gap-2">
+                      {meta.tags.map((tag, idx) => (
+                        <Badge key={idx} variant="secondary" className="rounded-xl">{tag}</Badge>
+                      ))}
+                    </div>
+                  } />
+                )}
+                {meta.funFact && (
+                  <InfoItem icon={<Sparkles className="h-4 w-4" />} label="Fun Fact" value={meta.funFact} />
+                )}
+                {meta.sourceReferences?.length && (
+                  <InfoItem icon={<BookOpen className="h-4 w-4" />} label="Source References" value={
+                    <ul className="list-disc list-inside space-y-1">
+                      {meta.sourceReferences.map((ref, idx) => (
+                        <li key={idx} className="text-sm">{ref}</li>
+                      ))}
+                    </ul>
+                  } />
+                )}
+                {meta.authorNotes && (
+                  <InfoItem icon={<FileText className="h-4 w-4" />} label="Author Notes" value={meta.authorNotes} />
+                )}
+              </InfoSection>
+            )}
+          </div>
+        </section>
         )}
-          <div className="flex flex-wrap gap-2 ml-auto">
+
+        <div className="flex flex-wrap items-center gap-3 rounded-[28px] border border-emerald-200/40 bg-white/90 p-4 shadow-sm backdrop-blur-md dark:border-emerald-700/30 dark:bg-slate-950/70">
+          {user && profile?.is_admin && (
+            <Button
+              variant="destructive"
+              className="rounded-2xl"
+              onClick={async () => {
+                const yes = window.confirm(t('plantInfo.deleteConfirm'))
+                if (!yes) return
+                const { error } = await supabase.from('plants').delete().eq('id', plant.id)
+                if (error) { alert(error.message); return }
+                onClose()
+                try { window.dispatchEvent(new CustomEvent('plants:refresh')) } catch {}
+              }}
+            >
+              {t('common.delete')}
+            </Button>
+          )}
+          <div className="ml-auto flex flex-wrap gap-2">
             {onRequestPlant && (
               <Button
                 variant="outline"
@@ -1035,120 +1497,401 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
                 {t('requestPlant.button')}
               </Button>
             )}
-          {user && profile?.is_admin && (
-            <Button
-              variant="secondary"
-              className="rounded-2xl"
-              onClick={() => {
-                // Navigate to the dedicated edit page; do not call onClose here
-                // so we don't immediately pop back to the overlay route.
-                navigate(`/plants/${plant.id}/edit`)
-              }}
-            >
-              {t('common.edit')}
+            {user && profile?.is_admin && (
+              <Button
+                variant="secondary"
+                className="rounded-2xl"
+                onClick={() => {
+                  navigate(`/plants/${plant.id}/edit`)
+                }}
+              >
+                {t('common.edit')}
+              </Button>
+            )}
+            <Button className="rounded-2xl" onClick={onClose}>
+              {t('common.close')}
             </Button>
-          )}
-          <Button className="rounded-2xl" onClick={onClose}>{t('common.close')}</Button>
+          </div>
+        </div>
+
+        {/* Full-screen image viewer - only show when not in overlay mode */}
+        {!isOverlayMode && (
+          <Dialog open={isImageFullScreen} onOpenChange={setIsImageFullScreen}>
+            <DialogContent
+              className="max-w-[100vw] max-h-[100vh] w-screen h-screen p-0 !bg-transparent border-none rounded-none !translate-x-0 !translate-y-0 !left-0 !top-0"
+            >
+              {/* Override overlay and hide default close button */}
+              <style
+                dangerouslySetInnerHTML={{
+                  __html: `
+                    [data-radix-dialog-content] > button[data-radix-dialog-close] {
+                      display: none !important;
+                    }
+                    [data-radix-dialog-overlay] {
+                      background-color: rgba(0, 0, 0, 0.6) !important;
+                      cursor: pointer;
+                    }
+                  `
+                }}
+              />
+
+              {/* Close button - fixed position */}
+              <button
+                onClick={() => setIsImageFullScreen(false)}
+                className="fixed top-4 right-4 z-[100] h-12 w-12 rounded-full bg-black/80 hover:bg-black flex items-center justify-center transition-all shadow-lg hover:scale-110"
+                aria-label={t('common.close')}
+              >
+                <X className="h-6 w-6 text-white stroke-[2.5]" />
+              </button>
+
+              {/* Background area - clickable to close */}
+              <div
+                className="absolute inset-0 flex items-center justify-center overflow-hidden"
+                onClick={(e) => {
+                  if (imageContainerRef.current) {
+                    const rect = imageContainerRef.current.getBoundingClientRect()
+                    const clickX = e.clientX
+                    const clickY = e.clientY
+                    if (
+                      clickX < rect.left ||
+                      clickX > rect.right ||
+                      clickY < rect.top ||
+                      clickY > rect.bottom
+                    ) {
+                      setIsImageFullScreen(false)
+                    }
+                  }
+                }}
+              >
+                {/* Image container with zoom and pan */}
+                <div
+                  ref={imageContainerRef}
+                  data-image-container
+                  className="pointer-events-auto flex items-center justify-center touch-none"
+                  style={{ maxWidth: '100%', maxHeight: '100%' }}
+                  onWheel={handleImageWheel}
+                  onMouseMove={handleImageMouseMove}
+                  onMouseUp={handleImageMouseUp}
+                  onMouseLeave={handleImageMouseLeave}
+                  onTouchStart={handleTouchStart}
+                  onTouchMove={handleTouchMove}
+                  onTouchEnd={handleTouchEnd}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <img
+                    ref={imageRef}
+                    src={plant.image}
+                    alt={plant.name}
+                    className={`max-w-full max-h-full select-none object-contain ${zoom > 1 ? 'cursor-move' : 'cursor-zoom-in'}`}
+                    style={{
+                      transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`,
+                      transformOrigin: 'center center',
+                      transition: isDragging ? 'none' : 'transform 0.1s ease-out'
+                    }}
+                    onMouseDown={handleImageMouseDown}
+                    draggable={false}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
+      </div>
+    );
+  };
+
+type CareChartDatum = {
+  key: string
+  label: string
+  value: number
+  description: string
+}
+
+const CareChartSection: React.FC<{ data: CareChartDatum[] }> = ({ data }) => {
+  const { t } = useTranslation('common')
+  if (!data.length) return null
+
+  return (
+    <section className="rounded-[28px] border border-emerald-200/40 bg-white/90 p-6 shadow-md backdrop-blur-md dark:border-emerald-700/30 dark:bg-slate-950/70">
+      <header className="mb-5 flex items-center gap-3 text-emerald-800 dark:text-emerald-100">
+        <BarChart3 className="h-5 w-5" />
+        <h3 className="text-lg font-semibold tracking-tight">{t('plantInfo.careGuide', { defaultValue: 'Care Guide' })}</h3>
+      </header>
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <div className="space-y-4">
+          <p className="text-sm leading-relaxed text-emerald-700/80 dark:text-emerald-200/70">
+            {t('plantInfo.labels.careSummary', { defaultValue: "Visualize the plant's energy needs - sunlight, water, and routine - before you get your hands muddy." })}
+          </p>
+          <ul className="space-y-3">
+            {data.map((item, idx) => (
+              <li key={item.key} className="flex items-start gap-3">
+                <span
+                  className="mt-1 h-3 w-3 flex-shrink-0 rounded-full"
+                  style={{ backgroundColor: CARE_BAR_COLORS[idx % CARE_BAR_COLORS.length] }}
+                />
+                <div>
+                  <div className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">{item.label}</div>
+                  <div className="text-xs text-emerald-700/80 dark:text-emerald-200/70">{item.description}</div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="h-56 sm:h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={data} barCategoryGap="20%">
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(16,185,129,0.18)" vertical={false} />
+              <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: 'currentColor', fontSize: 12 }} />
+              <YAxis hide domain={[0, 5]} />
+              <RechartsTooltip cursor={{ fill: 'rgba(16,185,129,0.08)' }} content={<CareChartTooltip />} />
+              <Bar dataKey="value" radius={[18, 18, 18, 18]} barSize={32}>
+                {data.map((entry, idx) => (
+                  <Cell key={entry.key} fill={CARE_BAR_COLORS[idx % CARE_BAR_COLORS.length]} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       </div>
+    </section>
+  )
+}
 
-      {/* Full-screen image viewer - only show when not in overlay mode */}
-      {!isOverlayMode && (
-        <Dialog open={isImageFullScreen} onOpenChange={setIsImageFullScreen}>
-          <DialogContent 
-            className="max-w-[100vw] max-h-[100vh] w-screen h-screen p-0 !bg-transparent border-none rounded-none !translate-x-0 !translate-y-0 !left-0 !top-0"
-          >
-            {/* Override overlay and hide default close button */}
-            <style dangerouslySetInnerHTML={{
-              __html: `
-                [data-radix-dialog-content] > button[data-radix-dialog-close] {
-                  display: none !important;
-                }
-                [data-radix-dialog-overlay] {
-                  background-color: rgba(0, 0, 0, 0.6) !important;
-                  cursor: pointer;
-                }
-              `
-            }} />
-            
-            {/* Close button - fixed position */}
-            <button
-              onClick={() => setIsImageFullScreen(false)}
-              className="fixed top-4 right-4 z-[100] h-12 w-12 rounded-full bg-black/80 hover:bg-black flex items-center justify-center transition-all shadow-lg hover:scale-110"
-              aria-label={t('common.close')}
-            >
-              <X className="h-6 w-6 text-white stroke-[2.5]" />
-            </button>
-            
-            {/* Background area - clickable to close */}
-            <div 
-              className="absolute inset-0 flex items-center justify-center overflow-hidden"
-              onClick={(e) => {
-                // Close when clicking outside the image container
-                if (imageContainerRef.current) {
-                  const rect = imageContainerRef.current.getBoundingClientRect()
-                  const clickX = e.clientX
-                  const clickY = e.clientY
-                  
-                  // Check if click is outside the image container bounds
-                  if (
-                    clickX < rect.left ||
-                    clickX > rect.right ||
-                    clickY < rect.top ||
-                    clickY > rect.bottom
-                  ) {
-                    setIsImageFullScreen(false)
-                  }
-                }
-              }}
-            >
-              {/* Image container with zoom and pan */}
-              <div
-                ref={imageContainerRef}
-                data-image-container
-                className="flex items-center justify-center touch-none pointer-events-auto"
-                style={{ maxWidth: '100%', maxHeight: '100%' }}
-                onWheel={handleImageWheel}
-                onMouseMove={handleImageMouseMove}
-                onMouseUp={handleImageMouseUp}
-                onMouseLeave={handleImageMouseLeave}
-                onTouchStart={handleTouchStart}
-                onTouchMove={handleTouchMove}
-                onTouchEnd={handleTouchEnd}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <img
-                  ref={imageRef}
-                  src={plant.image}
-                  alt={plant.name}
-                  className={`max-w-full max-h-full object-contain select-none ${
-                    zoom > 1 ? 'cursor-move' : 'cursor-zoom-in'
-                  }`}
-                  style={{
-                    transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`,
-                    transformOrigin: 'center center',
-                    transition: isDragging ? 'none' : 'transform 0.1s ease-out'
-                  }}
-                  onMouseDown={handleImageMouseDown}
-                  draggable={false}
-                  onClick={(e) => e.stopPropagation()}
-                />
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
+const CareChartTooltip: React.FC<TooltipProps<ValueType, NameType>> = ({ active, payload }) => {
+  if (!active || !payload?.length) return null
+  const entry = payload[0]?.payload as CareChartDatum | undefined
+  if (!entry) return null
+  const percentage = Math.round((entry.value / 5) * 100)
+
+  return (
+    <div className="rounded-xl border border-emerald-500/30 bg-white/95 px-4 py-3 text-xs shadow-lg dark:border-emerald-600/40 dark:bg-slate-900/95">
+      <div className="text-sm font-semibold text-emerald-800 dark:text-emerald-100">{entry.label}</div>
+      <div className="mt-1 text-emerald-700/80 dark:text-emerald-200/70">{entry.description}</div>
+      <div className="mt-2 text-[10px] uppercase tracking-widest text-emerald-500/80 dark:text-emerald-300/70">
+        {percentage}% vibe score
+      </div>
     </div>
-  );
-};
+  )
+}
 
-const Fact = ({ icon, label, value, sub }: { icon: React.ReactNode; label: string; value: React.ReactNode; sub?: React.ReactNode }) => (
-  <div className="flex items-center gap-3 rounded-2xl border bg-white dark:bg-[#252526] dark:border-[#3e3e42] p-3 shadow-sm">
-    <div className="h-9 w-9 rounded-xl bg-stone-100 dark:bg-[#2d2d30] flex items-center justify-center">{icon}</div>
-    <div>
-      <div className="text-xs opacity-60 dark:opacity-70">{label}</div>
-      <div className="text-sm font-medium">{value}</div>
-      {sub ? <div className="text-xs opacity-70 dark:opacity-80 mt-0.5">{sub}</div> : null}
+type SeasonalTimelineEntry = {
+  key: string
+  month: string
+  flowering: number
+  fruiting: number
+  sowing: number
+}
+
+const SeasonalTimeline: React.FC<{ data: SeasonalTimelineEntry[]; planting?: NonNullable<NonNullable<Plant['planting']>['calendar']> }> = ({ data, planting }) => {
+  const { t } = useTranslation('common')
+  const seasonLabels = React.useMemo(
+    () => ({
+      flowering: t('plantInfo.labels.floweringMonths', { defaultValue: 'Flowering Months' }),
+      fruiting: t('plantInfo.labels.fruitingMonths', { defaultValue: 'Fruiting Months' }),
+      sowing: t('plantInfo.labels.sowingMonths', { defaultValue: 'Sowing Months' }),
+    }),
+    [t]
+  )
+
+  const hasData = data.some((entry) => entry.flowering || entry.fruiting || entry.sowing)
+  if (!hasData) return null
+
+  return (
+    <section className="rounded-[28px] border border-emerald-200/40 bg-white/90 p-6 shadow-md backdrop-blur-md dark:border-emerald-700/30 dark:bg-slate-950/70">
+      <header className="mb-4 flex items-center gap-3 text-emerald-800 dark:text-emerald-100">
+        <Calendar className="h-5 w-5" />
+        <h3 className="text-lg font-semibold tracking-tight">{t('plantInfo.sections.phenology', { defaultValue: 'Phenology' })}</h3>
+      </header>
+      <div className="h-60">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(96,165,250,0.16)" vertical={false} />
+            <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: 'currentColor', fontSize: 12 }} />
+            <YAxis hide domain={[0, 3]} />
+            <RechartsTooltip cursor={{ fill: 'rgba(59,130,246,0.08)' }} content={<SeasonalTooltip labels={seasonLabels} />} />
+            <Bar dataKey="flowering" stackId="timeline" fill={TIMELINE_COLORS.flowering} radius={[12, 12, 0, 0]} />
+            <Bar dataKey="fruiting" stackId="timeline" fill={TIMELINE_COLORS.fruiting} radius={[12, 12, 0, 0]} />
+            <Bar dataKey="sowing" stackId="timeline" fill={TIMELINE_COLORS.sowing} radius={[12, 12, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="mt-5 flex flex-wrap gap-4 text-xs text-emerald-700/80 dark:text-emerald-200/70">
+        {Object.entries(TIMELINE_COLORS).map(([key, color]) => (
+          <span key={key} className="flex items-center gap-2">
+            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
+            {seasonLabels[key]}
+          </span>
+        ))}
+      </div>
+      {planting?.hemisphere && (
+        <div className="mt-3 text-xs text-emerald-600/80 dark:text-emerald-300/70">
+          {t('plantInfo.labels.hemisphere', { defaultValue: 'Hemisphere' })}: {humanizeHemisphere(planting.hemisphere, t)}
+        </div>
+      )}
+    </section>
+  )
+}
+
+type SeasonalTooltipProps = TooltipProps<ValueType, NameType> & {
+  labels: Record<string, string>
+}
+
+const SeasonalTooltip: React.FC<SeasonalTooltipProps> = ({ active, payload, label, labels }) => {
+  if (!active || !payload?.length) return null
+  const activeSeries = payload.filter((item) => item.value)
+  if (!activeSeries.length) return null
+
+  return (
+    <div className="rounded-xl border border-sky-400/30 bg-white/95 px-4 py-3 text-xs shadow-lg dark:border-sky-500/40 dark:bg-slate-900/95">
+      <div className="text-sm font-semibold text-emerald-800 dark:text-emerald-100">{label}</div>
+      <ul className="mt-2 space-y-1 text-emerald-700/80 dark:text-emerald-200/70">
+        {activeSeries.map((series) => (
+          <li key={series.dataKey as string} className="flex items-center gap-2">
+            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: series.color ?? '#34d399' }} />
+            {labels[series.dataKey as string] ?? series.dataKey}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+const ColorMoodboard: React.FC<{
+  generalColors: string[]
+  flowerColors: NonNullable<NonNullable<Plant['phenology']>['flowerColors']>
+  leafColors: NonNullable<NonNullable<Plant['phenology']>['leafColors']>
+}> = ({ generalColors, flowerColors, leafColors }) => {
+  const { t } = useTranslation('common')
+  const swatches = React.useMemo(() => {
+    const result: Array<{ key: string; label: string; tone: string; category: string }> = []
+    generalColors.forEach((color, idx) => {
+      const tone = resolveColorValue(color)
+      result.push({ key: `general-${idx}`, label: color, tone, category: t('plantInfo.labels.generalColor', { defaultValue: 'Palette' }) })
+    })
+    flowerColors?.forEach((color, idx) => {
+      const tone = resolveColorValue(color?.hex ?? color?.name)
+      result.push({ key: `flower-${idx}`, label: color?.name ?? t('plantInfo.labels.flowerColors', { defaultValue: 'Flower' }), tone, category: t('plantInfo.labels.flowerColors', { defaultValue: 'Flower' }) })
+    })
+    leafColors?.forEach((color, idx) => {
+      const tone = resolveColorValue(color?.hex ?? color?.name)
+      result.push({ key: `leaf-${idx}`, label: color?.name ?? t('plantInfo.labels.leafColors', { defaultValue: 'Leaf' }), tone, category: t('plantInfo.labels.leafColors', { defaultValue: 'Leaf' }) })
+    })
+    return result.slice(0, 9)
+  }, [flowerColors, generalColors, leafColors, t])
+
+  if (!swatches.length) return null
+
+  return (
+    <section className="rounded-[28px] border border-emerald-200/40 bg-white/90 p-6 shadow-md backdrop-blur-md dark:border-emerald-700/30 dark:bg-slate-950/70">
+      <header className="mb-4 flex items-center gap-3 text-emerald-800 dark:text-emerald-100">
+        <Palette className="h-5 w-5" />
+        <h3 className="text-lg font-semibold tracking-tight">{t('plantInfo.labels.colorPalette', { defaultValue: 'Color Moodboard' })}</h3>
+      </header>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {swatches.map((swatch) => (
+          <div
+            key={swatch.key}
+            className="group relative overflow-hidden rounded-2xl border border-white/50 bg-white/70 p-3 shadow-sm transition hover:-translate-y-1 hover:shadow-md dark:border-emerald-800/40 dark:bg-slate-900/70"
+          >
+            <div
+              className="mb-3 h-16 w-full rounded-xl shadow-inner"
+              style={{
+                backgroundImage: `linear-gradient(135deg, ${swatch.tone}, ${swatch.tone}aa)`
+              }}
+            />
+            <div className="text-xs uppercase tracking-widest text-emerald-600/70 dark:text-emerald-300/70">{swatch.category}</div>
+            <div className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">{swatch.label}</div>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+const HabitatMap: React.FC<{
+  nativeRange: string[]
+  climatePref: string[]
+  zones: number[]
+  hemisphere?: string
+}> = ({ nativeRange, climatePref, zones, hemisphere }) => {
+  const { t } = useTranslation('common')
+  const climateChips = climatePref.slice(0, 6)
+  const hasContent = nativeRange.length > 0 || climateChips.length > 0 || zones.length > 0 || hemisphere
+
+  if (!hasContent) return null
+
+  const pins = nativeRange.slice(0, MAP_PIN_POSITIONS.length)
+
+  return (
+    <section className="rounded-[28px] border border-emerald-200/40 bg-gradient-to-br from-sky-100/80 via-white/80 to-emerald-100/80 p-6 shadow-md backdrop-blur-md dark:border-emerald-700/30 dark:from-slate-950/70 dark:via-emerald-950/40 dark:to-slate-950/70">
+      <header className="mb-4 flex items-center gap-3 text-emerald-800 dark:text-emerald-100">
+        <MapIcon className="h-5 w-5" />
+        <h3 className="text-lg font-semibold tracking-tight">{t('plantInfo.labels.habitatMap', { defaultValue: 'Habitat Map' })}</h3>
+      </header>
+      <div className="relative mb-4 h-64 overflow-hidden rounded-3xl border border-white/60 bg-gradient-to-br from-emerald-200/60 via-sky-100/60 to-emerald-100/60 shadow-inner dark:border-emerald-900/40 dark:from-emerald-950/50 dark:via-slate-900/40 dark:to-slate-950/60">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_40%,rgba(255,255,255,0.55),transparent_60%),radial-gradient(circle_at_70%_60%,rgba(255,255,255,0.45),transparent_65%)] dark:bg-[radial-gradient(circle_at_30%_40%,rgba(15,118,110,0.55),transparent_60%),radial-gradient(circle_at_70%_60%,rgba(14,165,233,0.35),transparent_65%)]" />
+        {pins.map((region, idx) => {
+          const position = MAP_PIN_POSITIONS[idx]
+          return (
+            <div
+              key={region}
+              className="absolute flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-2xl bg-white/90 px-3 py-2 text-xs font-medium text-emerald-800 shadow-md backdrop-blur-md dark:bg-slate-900/80 dark:text-emerald-100"
+              style={{ top: position.top, left: position.left }}
+            >
+              <MapPin className="h-3.5 w-3.5 text-emerald-500" />
+              <span>{region}</span>
+            </div>
+          )
+        })}
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.08)_1px,transparent_1px),linear-gradient(0deg,rgba(255,255,255,0.08)_1px,transparent_1px)] bg-[size:48px_48px] dark:bg-[linear-gradient(90deg,rgba(8,47,73,0.25)_1px,transparent_1px),linear-gradient(0deg,rgba(8,47,73,0.25)_1px,transparent_1px)]" />
+      </div>
+      {climateChips.length > 0 && (
+        <div className="mb-3 flex flex-wrap gap-2">
+          {climateChips.map((climate) => (
+            <Badge key={climate} className="rounded-xl border-none bg-emerald-500/10 text-xs font-medium text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-100">
+              <Compass className="mr-1 h-3 w-3" />
+              {climate}
+            </Badge>
+          ))}
+        </div>
+      )}
+      {zones.length > 0 && (
+        <div className="text-xs text-emerald-700/80 dark:text-emerald-200/70">
+          USDA: {zones.join(', ')}
+        </div>
+      )}
+      {hemisphere && (
+        <div className="mt-1 text-xs text-emerald-700/80 dark:text-emerald-200/70">
+          {t('plantInfo.labels.hemisphere', { defaultValue: 'Hemisphere' })}: {humanizeHemisphere(hemisphere, t)}
+        </div>
+      )}
+    </section>
+  )
+}
+
+const humanizeHemisphere = (value: string, t: (key: string, options?: Record<string, unknown>) => string): string => {
+  const normalized = value.toLowerCase()
+  if (normalized === 'north') return t('plantInfo.values.north', { defaultValue: 'Northern' })
+  if (normalized === 'south') return t('plantInfo.values.south', { defaultValue: 'Southern' })
+  if (normalized === 'equatorial') return t('plantInfo.values.equatorial', { defaultValue: 'Equatorial' })
+  return value
+}
+
+const Fact = ({ icon, label, value, sub, accentClass }: { icon: React.ReactNode; label: string; value: React.ReactNode; sub?: React.ReactNode; accentClass?: string }) => (
+  <div
+    className={cn(
+      'flex items-center gap-3 rounded-3xl border border-white/60 bg-white/90 p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-emerald-900/40 dark:bg-slate-950/60',
+      accentClass ? `bg-gradient-to-br ${accentClass}` : ''
+    )}
+  >
+    <div className="h-10 w-10 flex-shrink-0 rounded-xl bg-white/70 text-emerald-700 shadow-sm dark:bg-slate-900/70 dark:text-emerald-200">
+      <div className="flex h-full w-full items-center justify-center">{icon}</div>
+    </div>
+    <div className="text-emerald-900 dark:text-emerald-100">
+      <div className="text-xs uppercase tracking-widest text-emerald-600/80 dark:text-emerald-300/70">{label}</div>
+      <div className="text-base font-semibold leading-tight">{value}</div>
+      {sub ? <div className="mt-0.5 text-xs text-emerald-700/70 dark:text-emerald-200/70">{sub}</div> : null}
     </div>
   </div>
 );
@@ -1190,9 +1933,8 @@ const InfoItem = ({ icon, label, value }: { icon: React.ReactNode; label: string
 }
 
 const formatMonths = (months: number[], t: (key: string, options?: Record<string, unknown>) => string): string => {
-  const monthKeys = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
   return months
-    .map(m => monthKeys[m - 1])
+    .map(m => MONTH_KEYS[m - 1])
     .filter(Boolean)
     .map(key => t(`plantInfo.monthsShort.${key}`, { defaultValue: key?.toUpperCase?.() }))
     .join(', ')
