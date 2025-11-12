@@ -68,7 +68,10 @@ export async function fetchAiPlantFill({ plantName, schema, existingData, onProg
     return payload.data
   }
 
-  const fieldEntries = Object.keys(schemaObject)
+  const disallowedFields = new Set(['name', 'image', 'imageurl', 'image_url', 'imageURL'])
+  const fieldEntries = Object.keys(schemaObject).filter(
+    (key) => !disallowedFields.has(key) && !disallowedFields.has(key.toLowerCase())
+  )
   const totalFields = fieldEntries.length
   let completedFields = 0
   onProgress?.({ field: 'init', completed: completedFields, total: totalFields })
