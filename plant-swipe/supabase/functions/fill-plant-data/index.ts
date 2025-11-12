@@ -1,8 +1,8 @@
 // Supabase Edge Function to fill plant data using OpenAI
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY')
-const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions'
-const OPENAI_MODEL = 'gpt-5.1'
+const OPENAI_API_URL = 'https://api.openai.com/v1/responses'
+const OPENAI_MODEL = 'gpt-5-2025-08-07'
 
 const defaultAllowedOrigins = [
   'http://localhost:5173',
@@ -139,7 +139,13 @@ serve(async (req) => {
       )
     }
 
-      const sanitizedSchema = sanitizeTemplate(schema) as Record<string, JsonValue>
+      const sanitizedSchema = sanitizeTemplate(schema)
+      if (!sanitizedSchema || Array.isArray(sanitizedSchema) || typeof sanitizedSchema !== 'object') {
+        return new Response(
+          JSON.stringify({ error: 'Invalid schema provided' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
 
       // Build the prompt
       const prompt = `You are an encyclopedic botanical expert. Fill in the plant information JSON for "${plantName}" using the schema provided.
@@ -164,7 +170,6 @@ ${JSON.stringify(sanitizedSchema, null, 2)}
 
 Fill in as much accurate information as possible for "${plantName}". Return ONLY the JSON object.`
 
-    // Call OpenAI API
       const response = await fetch(OPENAI_API_URL, {
         method: 'POST',
         headers: {
@@ -173,17 +178,17 @@ Fill in as much accurate information as possible for "${plantName}". Return ONLY
         },
         body: JSON.stringify({
           model: OPENAI_MODEL,
-          messages: [
+          reasoning: { effort: 'high' },
+          input: [
             {
-              role: 'system',
-              content: 'You are a botanical expert assistant. You provide accurate plant information in JSON format only, with no additional text or formatting.'
+              role: 'developer',
+              content: prompt
             },
             {
               role: 'user',
-              content: prompt
+              content: `Provide the complete JSON record for the plant "${plantName}" strictly following the schema above.`
             }
           ],
-            temperature: 0.2,
           response_format: { type: 'json_object' }
         })
       })
@@ -197,48 +202,60 @@ Fill in as much accurate information as possible for "${plantName}". Return ONLY
       )
     }
 
-    const data = await response.json()
-    const content = data.choices[0]?.message?.content
+      const data = await response.json()
+      const contentText =
+        typeof data.output_text === 'string'
+          ? data.output_text
+          : Array.isArray(data.output)
+            ? data.output
+                .map((segment: Record<string, unknown>) => {
+                  const content = Array.isArray(segment.content) ? segment.content : []
+                  const firstText = content.find((entry) => entry && entry.type === 'output_text')
+                  return firstText?.text ?? ''
+                })
+                .join('')
+            : null
 
-    if (!content) {
-      return new Response(
-        JSON.stringify({ error: 'No content in AI response' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
+      if (!contentText) {
+        return new Response(
+          JSON.stringify({ error: 'No content in AI response' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
 
-      // Parse the JSON response
-      let plantData
-    try {
-      // Remove any markdown code blocks if present
-      const cleanedContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
-      plantData = JSON.parse(cleanedContent)
-    } catch (parseError) {
-      console.error('JSON parse error:', parseError, 'Content:', content)
-      return new Response(
-        JSON.stringify({ error: 'Failed to parse AI response as JSON', content }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
+      let plantData: JsonValue
+      try {
+        const cleanedContent = contentText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+        plantData = JSON.parse(cleanedContent)
+      } catch (parseError) {
+        console.error('JSON parse error:', parseError, 'Content:', contentText)
+        return new Response(
+          JSON.stringify({ error: 'Failed to parse AI response as JSON', content: contentText }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
 
-      plantData = ensureStructure(sanitizedSchema, plantData)
+      let plantData = ensureStructure(sanitizedSchema, plantData)
       plantData = stripDisallowedKeys(plantData)
 
-      // Ensure meta.funFact is populated to avoid blank meaning fields downstream
-      if (!plantData || typeof plantData !== 'object') {
-        plantData = {}
+      let plantRecord: JsonValue = plantData
+      if (!plantRecord || typeof plantRecord !== 'object' || Array.isArray(plantRecord)) {
+        plantRecord = {}
       }
 
-      if (!('meta' in plantData) || typeof plantData.meta !== 'object' || plantData.meta === null) {
-        plantData.meta = {}
+      const plantObject = plantRecord as Record<string, JsonValue>
+
+      if (!('meta' in plantObject) || typeof plantObject.meta !== 'object' || plantObject.meta === null || Array.isArray(plantObject.meta)) {
+        plantObject.meta = {}
       }
 
-      if (!plantData.meta.funFact) {
-        plantData.meta.funFact = `Symbolic meaning information for ${plantName} is currently not well documented; please supplement this entry with future research.`
+      const metaObject = plantObject.meta as Record<string, JsonValue>
+      if (!metaObject.funFact) {
+        metaObject.funFact = `Symbolic meaning information for ${plantName} is currently not well documented; please supplement this entry with future research.`
       }
 
     return new Response(
-      JSON.stringify({ success: true, data: plantData }),
+        JSON.stringify({ success: true, data: plantObject }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
