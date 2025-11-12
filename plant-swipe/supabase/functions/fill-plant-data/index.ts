@@ -1,10 +1,8 @@
 // Supabase Edge Function to fill plant data using OpenAI
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY')
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions'
-const OPENAI_MODEL = 'gpt-5'
+const OPENAI_MODEL = 'gpt-5.1'
 
 const defaultAllowedOrigins = [
   'http://localhost:5173',
@@ -25,6 +23,78 @@ const baseCorsHeaders: Record<string, string> = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Max-Age': '86400',
+}
+
+const disallowedImageKeys = new Set(['image', 'imageurl', 'image_url', 'imageURL', 'thumbnail', 'photo', 'picture'])
+
+type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue }
+
+const sanitizeTemplate = (node: JsonValue, path: string[] = []): JsonValue => {
+  if (Array.isArray(node)) {
+    return node.map((item) => sanitizeTemplate(item, path))
+  }
+  if (node && typeof node === 'object') {
+    const result: Record<string, JsonValue> = {}
+    for (const [key, value] of Object.entries(node)) {
+      const lowerKey = key.toLowerCase()
+      if (disallowedImageKeys.has(lowerKey)) {
+        continue
+      }
+      if (lowerKey === 'name' && path.length === 0) {
+        continue
+      }
+      result[key] = sanitizeTemplate(value, [...path, key])
+    }
+    return result
+  }
+  return node
+}
+
+const ensureStructure = (template: JsonValue, target: JsonValue): JsonValue => {
+  if (Array.isArray(template)) {
+    return Array.isArray(target) ? target : []
+  }
+  if (template && typeof template === 'object') {
+    const result: Record<string, JsonValue> =
+      target && typeof target === 'object' && !Array.isArray(target) ? { ...target as Record<string, JsonValue> } : {}
+
+    for (const [key, templateValue] of Object.entries(template)) {
+      if (!(key in result)) {
+        if (Array.isArray(templateValue)) {
+          result[key] = []
+        } else if (templateValue && typeof templateValue === 'object') {
+          result[key] = ensureStructure(templateValue, {})
+        } else {
+          result[key] = null
+        }
+      } else if (templateValue && typeof templateValue === 'object') {
+        result[key] = ensureStructure(templateValue, result[key])
+      }
+    }
+    return result
+  }
+  return target ?? null
+}
+
+const stripDisallowedKeys = (node: JsonValue, path: string[] = []): JsonValue => {
+  if (Array.isArray(node)) {
+    return node.map((item) => stripDisallowedKeys(item, path))
+  }
+  if (node && typeof node === 'object') {
+    const result: Record<string, JsonValue> = {}
+    for (const [key, value] of Object.entries(node)) {
+      const lowerKey = key.toLowerCase()
+      if (disallowedImageKeys.has(lowerKey)) {
+        continue
+      }
+      if (lowerKey === 'name' && path.length === 0) {
+        continue
+      }
+      result[key] = stripDisallowedKeys(value, [...path, key])
+    }
+    return result
+  }
+  return node
 }
 
 function getCorsHeaders(req: Request) {
@@ -53,7 +123,7 @@ serve(async (req) => {
   }
 
   try {
-    const { plantName, schema } = await req.json()
+      const { plantName, schema } = await req.json()
 
     if (!plantName) {
       return new Response(
@@ -69,25 +139,28 @@ serve(async (req) => {
       )
     }
 
+      const sanitizedSchema = sanitizeTemplate(schema) as Record<string, JsonValue>
+
       // Build the prompt
-      const prompt = `You are a botanical expert. Fill in the plant information JSON for the plant named "${plantName}".
+      const prompt = `You are an encyclopedic botanical expert. Fill in the plant information JSON for "${plantName}" using the schema provided.
 
 IMPORTANT INSTRUCTIONS:
 1. Return ONLY valid JSON text matching the provided schema structure
 2. Do NOT include any markdown formatting, code blocks, or explanations
 3. Do NOT include the "id" field
-4. Do NOT include the "name" field
-5. Leave fields blank/null if information is unavailable, uncertain, or not applicable
-6. Use exact values from the schema options where specified
-7. For arrays, use empty arrays [] if no data is available
-8. For nested objects, omit them entirely if all fields would be empty, otherwise include every known sub-field
-9. Ensure every top-level section in the schema (identifiers, traits, dimensions, phenology, environment, care, propagation, usage, ecology, commerce, problems, planting, meta) is evaluated and filled with best-available information
-10. In the meta.funFact field, provide a short description of the plant's cultural symbolism, traditional meaning, or notable lore; if no symbolism exists, state that explicitly instead of leaving it empty
-11. Be accurate and scientific - if you're not certain about a fact, omit it rather than guessing
-12. Return ONLY the JSON object, nothing else
+4. Do NOT include the top-level "name" field or any image / imageUrl style fields
+5. Every property that exists in the schema (including deeply nested ones) MUST be present in your JSON output. Do not omit keys—use null, empty strings, or empty arrays if you cannot supply real data.
+6. Use exact values from the schema options where specified. When options are enumerations, prefer the canonical wording used by horticulture sources.
+7. For arrays, provide rich content with at least three well-researched items whenever possible; otherwise fall back to an empty array.
+8. For textual descriptions, write thorough multi-sentence explanations. Aim for professional, detailed paragraphs.
+9. For nested objects, include every sub-field. If information is unavailable for a sub-field, set it to null instead of skipping it.
+10. Ensure every top-level section in the schema (identifiers, traits, dimensions, phenology, environment, care, propagation, usage, ecology, commerce, problems, planting, meta) contains thoughtful, specific content grounded in reputable botanical references.
+11. In the meta.funFact field, provide a detailed description of the plant's cultural symbolism, lore, or traditional meaning. If none exists, explicitly state that it is not well documented.
+12. Be accurate and scientific—if a fact is uncertain, mark the field as null rather than inventing information.
+13. Return ONLY the JSON object, nothing else.
 
 SCHEMA STRUCTURE:
-${JSON.stringify(schema, null, 2)}
+${JSON.stringify(sanitizedSchema, null, 2)}
 
 Fill in as much accurate information as possible for "${plantName}". Return ONLY the JSON object.`
 
@@ -110,7 +183,7 @@ Fill in as much accurate information as possible for "${plantName}". Return ONLY
               content: prompt
             }
           ],
-          temperature: 0.3, // Lower temperature for more consistent, factual responses
+            temperature: 0.2,
           response_format: { type: 'json_object' }
         })
       })
@@ -134,8 +207,8 @@ Fill in as much accurate information as possible for "${plantName}". Return ONLY
       )
     }
 
-    // Parse the JSON response
-    let plantData
+      // Parse the JSON response
+      let plantData
     try {
       // Remove any markdown code blocks if present
       const cleanedContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
@@ -148,15 +221,19 @@ Fill in as much accurate information as possible for "${plantName}". Return ONLY
       )
     }
 
-      // Remove id and name fields if present
-      delete plantData.id
-      delete plantData.name
+      plantData = ensureStructure(sanitizedSchema, plantData)
+      plantData = stripDisallowedKeys(plantData)
 
       // Ensure meta.funFact is populated to avoid blank meaning fields downstream
-      if (!plantData.meta) {
+      if (!plantData || typeof plantData !== 'object') {
+        plantData = {}
+      }
+
+      if (!('meta' in plantData) || typeof plantData.meta !== 'object' || plantData.meta === null) {
         plantData.meta = {}
       }
-      if (typeof plantData.meta === 'object' && !plantData.meta.funFact) {
+
+      if (!plantData.meta.funFact) {
         plantData.meta.funFact = `Symbolic meaning information for ${plantName} is currently not well documented; please supplement this entry with future research.`
       }
 

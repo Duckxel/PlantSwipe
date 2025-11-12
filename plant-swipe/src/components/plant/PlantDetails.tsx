@@ -174,26 +174,59 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
     ? t(`plantInfo.values.${usage.indoorOutdoor}`, { defaultValue: usage.indoorOutdoor })
     : null
 
+  const notAvailableLabel = React.useMemo(
+    () => t('plantInfo.values.notAvailable', { defaultValue: 'N/A' }),
+    [t],
+  )
+
+  const humanize = React.useCallback((value: string) => {
+    return value
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      .replace(/[_-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/\b\w/g, (char) => char.toUpperCase())
+  }, [])
+
+  const formatStatValue = React.useCallback((value?: string | null) => {
+    if (!value) {
+      return notAvailableLabel
+    }
+    const trimmed = value.trim()
+    if (!trimmed) {
+      return notAvailableLabel
+    }
+    const translated = t(`plantInfo.values.${trimmed}`, { defaultValue: '' })
+    if (translated) {
+      return translated
+    }
+    return humanize(trimmed)
+  }, [humanize, notAvailableLabel, t])
+
+  const formatFrequencyLabel = React.useCallback(
+    (label?: string | null) => (label ? humanize(label) : undefined),
+    [humanize],
+  )
+
   const quickStats = [
     {
       key: 'sun',
       icon: <SunMedium className="h-4 w-4" />,
       label: t('plantInfo.sunlight'),
-      value: care?.sunlight || t('plantInfo.values.notAvailable', { defaultValue: '—' }),
-      sub: care?.soil ? String(care.soil) : undefined,
+      value: formatStatValue(care?.sunlight),
     },
     {
       key: 'water',
       icon: <Droplets className="h-4 w-4" />,
       label: t('plantInfo.water'),
-      value: derivedWater,
-      sub: freqLabel || undefined,
+      value: formatStatValue(derivedWater),
+      sub: formatFrequencyLabel(freqLabel),
     },
     {
       key: 'difficulty',
       icon: <Leaf className="h-4 w-4" />,
       label: t('plantInfo.difficulty'),
-      value: care?.difficulty || t('plantInfo.values.notAvailable', { defaultValue: '—' }),
+      value: formatStatValue(care?.difficulty),
     },
   ]
 
