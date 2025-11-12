@@ -165,6 +165,75 @@ const MonthSelectorField: React.FC<{
   )
 }
 
+const KeyValueList: React.FC<{
+  label: string
+  entries?: Record<string, string>
+  onChange: (entries: Record<string, string> | undefined) => void
+  keyPlaceholder?: string
+  valuePlaceholder?: string
+}> = ({ label, entries, onChange, keyPlaceholder, valuePlaceholder }) => {
+  const [keyInput, setKeyInput] = React.useState("")
+  const [valueInput, setValueInput] = React.useState("")
+  const entryList = Object.entries(entries ?? {})
+
+  const commit = () => {
+    if (!keyInput.trim() || !valueInput.trim()) return
+    const next = { ...(entries ?? {}), [keyInput.trim()]: valueInput.trim() }
+    onChange(next)
+    setKeyInput("")
+    setValueInput("")
+  }
+
+  return (
+    <div className="grid gap-2">
+      <Label>{label}</Label>
+      <div className="flex flex-col gap-2">
+        <div className="flex gap-2 flex-wrap md:flex-nowrap">
+          <Input
+            value={keyInput}
+            onChange={(e) => setKeyInput(e.target.value)}
+            placeholder={keyPlaceholder || "Key"}
+            className="md:flex-1"
+          />
+          <Input
+            value={valueInput}
+            onChange={(e) => setValueInput(e.target.value)}
+            placeholder={valuePlaceholder || "Value"}
+            className="md:flex-1"
+          />
+          <Button type="button" onClick={commit}>
+            Add
+          </Button>
+        </div>
+        {entryList.length > 0 && (
+          <div className="space-y-2">
+            {entryList.map(([key, value]) => (
+              <div key={key} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm bg-stone-50 dark:bg-[#2d2d30] dark:border-[#3e3e42]">
+                <div className="flex-1">
+                  <div className="font-medium">{key}</div>
+                  <div className="text-xs opacity-70 break-all">{value}</div>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="text-red-600 hover:text-red-700"
+                  onClick={() => {
+                    const next = { ...(entries ?? {}) }
+                    delete next[key]
+                    onChange(Object.keys(next).length === 0 ? undefined : next)
+                  }}
+                >
+                  Remove
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // Collapsible section component
 const CollapsibleSection: React.FC<{
   title: string
@@ -231,9 +300,9 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
   problems, setProblems,
   planting, setPlanting,
   meta, setMeta,
-}) => {
-  return (
-    <div className="space-y-4 max-h-[80vh] overflow-y-auto">
+  }) => {
+    return (
+      <div className="space-y-4">
       {/* Identifiers */}
       <CollapsibleSection title="Identifiers">
         <div className="grid gap-4">
@@ -312,7 +381,22 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
               <Input placeholder="ITIS" value={identifiers?.externalIds?.itis || ''} onChange={(e) => setIdentifiers({ ...identifiers, externalIds: { ...identifiers?.externalIds, itis: e.target.value || undefined } })} />
               <Input placeholder="Wikipedia URL" value={identifiers?.externalIds?.wiki || ''} onChange={(e) => setIdentifiers({ ...identifiers, externalIds: { ...identifiers?.externalIds, wiki: e.target.value || undefined } })} />
               <Input placeholder="Kindwise" value={identifiers?.externalIds?.kindwise || ''} onChange={(e) => setIdentifiers({ ...identifiers, externalIds: { ...identifiers?.externalIds, kindwise: e.target.value || undefined } })} />
-            </div>
+              </div>
+              <KeyValueList
+                label="Other IDs"
+                keyPlaceholder="Provider"
+                valuePlaceholder="Reference"
+                entries={identifiers?.externalIds?.other}
+                onChange={(other) =>
+                  setIdentifiers({
+                    ...identifiers,
+                    externalIds: {
+                      ...identifiers?.externalIds,
+                      other,
+                    },
+                  })
+                }
+              />
           </div>
         </div>
       </CollapsibleSection>
@@ -610,11 +694,37 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
             </div>
           </div>
         </div>
-      </CollapsibleSection>
+        </CollapsibleSection>
 
-      {/* Care */}
-      <CollapsibleSection title="Care">
-        <div className="grid gap-4">
+        {/* Care */}
+        <CollapsibleSection title="Care">
+          <div className="grid gap-4">
+            <div className="grid gap-2">
+              <Label>Sunlight</Label>
+              <select
+                className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm"
+                value={care?.sunlight || ''}
+                onChange={(e) => setCare({ ...care, sunlight: e.target.value || undefined })}
+              >
+                <option value="">Select...</option>
+                {['Low', 'Medium', 'High', 'Full Sun', 'Partial Sun'].map(opt => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+            </div>
+            <div className="grid gap-2">
+              <Label>Water Level</Label>
+              <select
+                className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm"
+                value={care?.water || ''}
+                onChange={(e) => setCare({ ...care, water: e.target.value || undefined })}
+              >
+                <option value="">Select...</option>
+                {['Low', 'Medium', 'High'].map(opt => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+            </div>
           <div className="grid gap-2">
             <Label>Difficulty</Label>
             <select className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm" value={care?.difficulty || ''} onChange={(e) => setCare({ ...care, difficulty: e.target.value as any || undefined })}>
@@ -796,6 +906,30 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
             <Label>Author Notes</Label>
             <Textarea value={meta?.authorNotes || ''} onChange={(e) => setMeta({ ...meta, authorNotes: e.target.value || undefined })} placeholder="Personal notes and observations" />
           </div>
+            <div className="grid gap-2">
+              <Label>Created By</Label>
+              <Input value={meta?.createdBy || ''} onChange={(e) => setMeta({ ...meta, createdBy: e.target.value || undefined })} placeholder="Author ID or name" />
+            </div>
+            <div className="grid gap-2">
+              <Label>Updated By</Label>
+              <Input value={meta?.updatedBy || ''} onChange={(e) => setMeta({ ...meta, updatedBy: e.target.value || undefined })} placeholder="Last editor ID or name" />
+            </div>
+            <div className="grid gap-2">
+              <Label>Created At</Label>
+              <Input
+                value={meta?.createdAt || ''}
+                onChange={(e) => setMeta({ ...meta, createdAt: e.target.value || undefined })}
+                placeholder="ISO timestamp (e.g., 2024-07-18T12:00:00Z)"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Updated At</Label>
+              <Input
+                value={meta?.updatedAt || ''}
+                onChange={(e) => setMeta({ ...meta, updatedAt: e.target.value || undefined })}
+                placeholder="ISO timestamp (e.g., 2024-07-18T12:00:00Z)"
+              />
+            </div>
         </div>
       </CollapsibleSection>
     </div>

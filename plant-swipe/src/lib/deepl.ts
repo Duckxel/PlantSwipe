@@ -7,7 +7,16 @@
  */
 
 import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE, type SupportedLanguage } from './i18n'
-import type { PlantIdentifiers, PlantEcology, PlantUsage, PlantMeta } from '@/types/plant'
+import type {
+  PlantIdentifiers,
+  PlantEcology,
+  PlantUsage,
+  PlantMeta,
+  PlantPhenology,
+  PlantCare,
+  PlantPlanting,
+  PlantProblems,
+} from '@/types/plant'
 
 export interface TranslationFields {
   name?: string
@@ -20,6 +29,14 @@ export interface TranslationFields {
   ecology?: PlantEcology
   usage?: PlantUsage
   meta?: PlantMeta
+  phenology?: Pick<PlantPhenology, 'scentNotes'>
+  care?: {
+    watering?: PlantCare['watering']
+    fertilizing?: PlantCare['fertilizing']
+    mulching?: PlantCare['mulching']
+  }
+  planting?: Pick<PlantPlanting, 'sitePrep' | 'companionPlants' | 'avoidNear'>
+  problems?: PlantProblems
 }
 
 export interface TranslatedFields extends TranslationFields {}
@@ -218,6 +235,72 @@ export async function translatePlantFields(
   }
   if (fields.meta) {
     translations.meta = await translateMeta(fields.meta, targetLang, sourceLang)
+  }
+  if (fields.phenology?.scentNotes) {
+    translations.phenology = {
+      ...fields.phenology,
+      scentNotes: await translateArray(fields.phenology.scentNotes, targetLang, sourceLang),
+    }
+  }
+  if (fields.care) {
+    const translatedCare: TranslationFields['care'] = {}
+    if (fields.care.watering?.frequency) {
+      const freq = fields.care.watering.frequency
+      translatedCare.watering = {
+        ...fields.care.watering,
+        frequency: {
+          winter: freq?.winter ? await translateText(freq.winter, targetLang, sourceLang) : freq?.winter,
+          spring: freq?.spring ? await translateText(freq.spring, targetLang, sourceLang) : freq?.spring,
+          summer: freq?.summer ? await translateText(freq.summer, targetLang, sourceLang) : freq?.summer,
+          autumn: freq?.autumn ? await translateText(freq.autumn, targetLang, sourceLang) : freq?.autumn,
+        },
+      }
+    }
+    if (fields.care.fertilizing?.schedule) {
+      translatedCare.fertilizing = {
+        ...fields.care.fertilizing,
+        schedule: await translateText(fields.care.fertilizing.schedule, targetLang, sourceLang),
+      }
+    }
+    if (fields.care.mulching?.material) {
+      translatedCare.mulching = {
+        ...fields.care.mulching,
+        material: await translateText(fields.care.mulching.material, targetLang, sourceLang),
+      }
+    }
+    if (Object.keys(translatedCare).length > 0) {
+      translations.care = translatedCare as NonNullable<TranslationFields['care']>
+    }
+  }
+  if (fields.planting) {
+    const translatedPlanting: TranslationFields['planting'] = {}
+    if (fields.planting.sitePrep?.length) {
+      translatedPlanting.sitePrep = await translateArray(fields.planting.sitePrep, targetLang, sourceLang)
+    }
+    if (fields.planting.companionPlants?.length) {
+      translatedPlanting.companionPlants = await translateArray(fields.planting.companionPlants, targetLang, sourceLang)
+    }
+    if (fields.planting.avoidNear?.length) {
+      translatedPlanting.avoidNear = await translateArray(fields.planting.avoidNear, targetLang, sourceLang)
+    }
+    if (Object.keys(translatedPlanting).length > 0) {
+      translations.planting = translatedPlanting
+    }
+  }
+  if (fields.problems) {
+    const translatedProblems: PlantProblems = {}
+    if (fields.problems.pests?.length) {
+      translatedProblems.pests = await translateArray(fields.problems.pests, targetLang, sourceLang)
+    }
+    if (fields.problems.diseases?.length) {
+      translatedProblems.diseases = await translateArray(fields.problems.diseases, targetLang, sourceLang)
+    }
+    if (fields.problems.hazards?.length) {
+      translatedProblems.hazards = await translateArray(fields.problems.hazards, targetLang, sourceLang)
+    }
+    if (Object.keys(translatedProblems).length > 0) {
+      translations.problems = translatedProblems
+    }
   }
 
   return translations

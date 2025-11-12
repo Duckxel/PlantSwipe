@@ -14,6 +14,9 @@ import zlib from 'zlib'
 import crypto from 'crypto'
 import { pipeline as streamPipeline } from 'stream'
 import net from 'net'
+import OpenAI from 'openai'
+import { z } from 'zod'
+import { zodResponseFormat } from 'openai/helpers/zod'
 
 
 dotenv.config()
@@ -122,6 +125,20 @@ const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABA
 const supabaseServer = (supabaseUrlEnv && supabaseAnonKey)
   ? createSupabaseClient(supabaseUrlEnv, supabaseAnonKey, { auth: { persistSession: false, autoRefreshToken: false } })
   : null
+
+const openaiApiKey = process.env.OPENAI_KEY || process.env.OPENAI_API_KEY || ''
+const openaiModel = process.env.OPENAI_MODEL || 'gpt-5-nano'
+let openaiClient = null
+if (openaiApiKey) {
+  try {
+    openaiClient = new OpenAI({ apiKey: openaiApiKey })
+  } catch (err) {
+    console.error('[server] Failed to initialize OpenAI client:', err)
+    openaiClient = null
+  }
+} else {
+  console.warn('[server] OPENAI_KEY not configured — AI plant fill endpoint disabled')
+}
 
 const supportEmailTargetsRaw = process.env.SUPPORT_EMAIL_TO || process.env.SUPPORT_EMAIL || 'support@aphylia.app'
 const supportEmailTargets = supportEmailTargetsRaw.split(',').map(s => s.trim()).filter(Boolean)
@@ -323,6 +340,460 @@ async function ensureAdmin(req, res) {
     return null
   }
 }
+
+const disallowedImageKeys = new Set(['image', 'imageurl', 'image_url', 'imageURL', 'thumbnail', 'photo', 'picture'])
+const metadataKeys = new Set(['type', 'description', 'options', 'items', 'additionalProperties', 'examples', 'format'])
+
+const JsonValueSchema = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.array(JsonValueSchema),
+    z.object({}).catchall(JsonValueSchema)
+  ])
+)
+const PlantFillSchema = z.object({}).catchall(JsonValueSchema)
+
+function sanitizeTemplate(node, path = []) {
+  if (Array.isArray(node)) {
+    return node.map((item) => sanitizeTemplate(item, path))
+  }
+  if (node && typeof node === 'object') {
+    const result = {}
+    for (const [key, value] of Object.entries(node)) {
+      const lowerKey = key.toLowerCase()
+      if (disallowedImageKeys.has(lowerKey)) continue
+      if (lowerKey === 'name' && path.length === 0) continue
+      result[key] = sanitizeTemplate(value, [...path, key])
+    }
+    return result
+  }
+  return node
+}
+
+function ensureStructure(template, target) {
+  if (Array.isArray(template)) {
+    return Array.isArray(target) ? target : []
+  }
+  if (template && typeof template === 'object' && !Array.isArray(template)) {
+    const result =
+      target && typeof target === 'object' && !Array.isArray(target)
+        ? { ...target }
+        : {}
+    for (const [key, templateValue] of Object.entries(template)) {
+      if (!(key in result)) {
+        if (Array.isArray(templateValue)) {
+          result[key] = []
+        } else if (templateValue && typeof templateValue === 'object') {
+          result[key] = ensureStructure(templateValue, {})
+        } else {
+          result[key] = null
+        }
+      } else if (templateValue && typeof templateValue === 'object') {
+        result[key] = ensureStructure(templateValue, result[key])
+      }
+    }
+    return result
+  }
+  return target !== undefined ? target : null
+}
+
+function stripDisallowedKeys(node, path = []) {
+  if (Array.isArray(node)) {
+    return node.map((item) => stripDisallowedKeys(item, path))
+  }
+  if (node && typeof node === 'object') {
+    const result = {}
+    for (const [key, value] of Object.entries(node)) {
+      const lowerKey = key.toLowerCase()
+      if (disallowedImageKeys.has(lowerKey)) continue
+      if (lowerKey === 'name' && path.length === 0) continue
+      result[key] = stripDisallowedKeys(value, [...path, key])
+    }
+    return result
+  }
+  return node
+}
+
+function schemaToBlueprint(node) {
+  if (Array.isArray(node)) {
+    if (node.length === 0) return []
+    return node.map((item) => schemaToBlueprint(item))
+  }
+  if (!node || typeof node !== 'object') {
+    return null
+  }
+  const obj = node
+  if (typeof obj.type === 'string') {
+    const typeValue = obj.type.toLowerCase()
+    if (typeValue === 'array') {
+      const items = obj.items
+      if (!items) return []
+      const blueprintItem = schemaToBlueprint(items)
+      return Array.isArray(blueprintItem) ? blueprintItem : [blueprintItem]
+    }
+    if (typeValue === 'object') {
+      const result = {}
+      const source =
+        typeof obj.properties === 'object' && obj.properties !== null && !Array.isArray(obj.properties)
+          ? obj.properties
+          : Object.fromEntries(
+              Object.entries(obj).filter(([key]) => !metadataKeys.has(key))
+            )
+      for (const [key, value] of Object.entries(source)) {
+        result[key] = schemaToBlueprint(value)
+      }
+      return result
+    }
+    return null
+  }
+
+  const result = {}
+  for (const [key, value] of Object.entries(obj)) {
+    if (metadataKeys.has(key)) continue
+    result[key] = schemaToBlueprint(value)
+  }
+  return result
+}
+
+function pruneEmpty(node) {
+  if (Array.isArray(node)) {
+    const pruned = node
+      .map((item) => pruneEmpty(item))
+      .filter((item) => item !== undefined)
+    return pruned.length > 0 ? pruned : undefined
+  }
+  if (node && typeof node === 'object') {
+    const result = {}
+    for (const [key, value] of Object.entries(node)) {
+      const prunedValue = pruneEmpty(value)
+      if (prunedValue !== undefined) result[key] = prunedValue
+    }
+    return Object.keys(result).length > 0 ? result : undefined
+  }
+  if (node === null || node === undefined) return undefined
+  if (typeof node === 'string') {
+    return node.trim().length > 0 ? node : undefined
+  }
+  return node
+}
+
+function mergePreferExisting(aiValue, existingValue) {
+  if (existingValue === undefined) return aiValue
+  if (existingValue === null) return aiValue
+  if (Array.isArray(existingValue)) {
+    if (existingValue.length === 0) {
+      return Array.isArray(aiValue) ? aiValue : []
+    }
+    return existingValue
+  }
+  if (existingValue && typeof existingValue === 'object') {
+    const aiObj = aiValue && typeof aiValue === 'object' && !Array.isArray(aiValue) ? aiValue : {}
+    const result = { ...aiObj }
+    for (const [key, existingChild] of Object.entries(existingValue)) {
+      result[key] = mergePreferExisting(aiObj[key], existingChild)
+    }
+    return result
+  }
+  if (typeof existingValue === 'string') {
+    const trimmed = existingValue.trim()
+    if (trimmed.length > 0) return existingValue
+    if (typeof aiValue === 'string') return aiValue
+    return trimmed
+  }
+  return existingValue
+}
+
+function removeNullValues(node) {
+  if (node === null || node === undefined) {
+    return undefined
+  }
+  if (Array.isArray(node)) {
+    const cleaned = node
+      .map((item) => removeNullValues(item))
+      .filter((item) => item !== undefined)
+    return cleaned
+  }
+  if (node && typeof node === 'object') {
+    const result = {}
+    for (const [key, value] of Object.entries(node)) {
+      const cleanedValue = removeNullValues(value)
+      if (cleanedValue !== undefined) {
+        result[key] = cleanedValue
+      }
+    }
+    return Object.keys(result).length > 0 ? result : undefined
+  }
+  return node
+}
+
+function collectFieldHints(node, path, hints = new Set()) {
+  if (!node || typeof node !== 'object') {
+    return hints
+  }
+
+  const type = typeof node.type === 'string' ? node.type.toLowerCase() : null
+  if (Array.isArray(node.options) && node.options.length > 0) {
+    hints.add(`${path}: choose only from [${node.options.join(', ')}]`)
+  }
+  if (type === 'number' || type === 'integer') {
+    hints.add(`${path}: answer with numbers only.`)
+  }
+  if (type === 'boolean') {
+    hints.add(`${path}: answer with "true" or "false".`)
+  }
+  if (type === 'array') {
+    const items = node.items
+    if (typeof items === 'string') {
+      const itemType = items.toLowerCase()
+      if (itemType === 'number' || itemType === 'integer') {
+        hints.add(`${path}: provide an array of numbers.`)
+      } else if (itemType === 'boolean') {
+        hints.add(`${path}: provide an array of true/false values.`)
+      }
+    } else if (items && typeof items === 'object') {
+      collectFieldHints(items, `${path}[]`, hints)
+    }
+  }
+  if (node.additionalProperties && typeof node.additionalProperties === 'object') {
+    collectFieldHints(node.additionalProperties, `${path}.*`, hints)
+  }
+
+  const skipKeys = new Set([
+    'type',
+    'description',
+    'options',
+    'items',
+    'additionalProperties',
+    'min',
+    'max',
+    'minCm',
+    'maxCm',
+    'rowCm',
+    'plantCm',
+    'minF',
+    'maxF',
+    'minC',
+    'maxC',
+    'units',
+    'unit',
+    'example',
+    'default',
+  ])
+
+  for (const [key, value] of Object.entries(node)) {
+    if (skipKeys.has(key)) continue
+    if (value && typeof value === 'object') {
+      collectFieldHints(value, `${path}.${key}`, hints)
+    }
+  }
+
+  return hints
+}
+
+function inferExpectedKind(node) {
+  if (Array.isArray(node)) return 'array'
+  if (!node || typeof node !== 'object') {
+    return typeof node
+  }
+  if (typeof node.type === 'string') {
+    return node.type.toLowerCase()
+  }
+  return 'object'
+}
+
+function inferArrayItemKind(node) {
+  if (!node || typeof node !== 'object') return 'unknown'
+  const items = node.items
+  if (typeof items === 'string') {
+    return items.toLowerCase()
+  }
+  if (items && typeof items === 'object') {
+    if (typeof items.type === 'string') {
+      return items.type.toLowerCase()
+    }
+    return 'object'
+  }
+  return 'unknown'
+}
+
+function coerceValueForSchema(schemaNode, value, existingValue) {
+  const kind = inferExpectedKind(schemaNode)
+  if (value === undefined || value === null) {
+    return value
+  }
+
+  if (kind === 'number' || kind === 'integer') {
+    if (typeof value === 'number') {
+      return kind === 'integer' ? Math.round(value) : value
+    }
+    if (typeof value === 'string') {
+      const numericText = value.trim().match(/[-+]?\d+(\.\d+)?/g)
+      if (numericText && numericText.length > 0) {
+        const num = Number(numericText[0])
+        if (!Number.isNaN(num)) {
+          return kind === 'integer' ? Math.round(num) : num
+        }
+      }
+    }
+    return existingValue !== undefined ? existingValue : undefined
+  }
+
+  if (kind === 'boolean') {
+    if (typeof value === 'boolean') return value
+    if (typeof value === 'string') {
+      const lowered = value.trim().toLowerCase()
+      if (lowered === 'true') return true
+      if (lowered === 'false') return false
+    }
+    return existingValue !== undefined ? existingValue : undefined
+  }
+
+  if (kind === 'array') {
+    if (Array.isArray(value)) {
+      return value
+    }
+    if (typeof value === 'string') {
+      const itemKind = inferArrayItemKind(schemaNode)
+      const parts = value
+        .split(/[,;\n]+/)
+        .map((part) => part.trim())
+        .filter((part) => part.length > 0)
+      if (itemKind === 'number' || itemKind === 'integer') {
+        const numbers = parts
+          .map((part) => Number(part))
+          .filter((num) => !Number.isNaN(num))
+        return numbers
+      }
+      if (itemKind === 'boolean') {
+        const bools = parts
+          .map((part) => {
+            const lowered = part.toLowerCase()
+            if (lowered === 'true') return true
+            if (lowered === 'false') return false
+            return null
+          })
+          .filter((item) => item !== null)
+        return bools
+      }
+      return parts
+    }
+    return existingValue !== undefined ? existingValue : []
+  }
+
+  if (kind === 'object') {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      return value
+    }
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value)
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          return parsed
+        }
+      } catch {}
+    }
+    if (existingValue && typeof existingValue === 'object') {
+      return existingValue
+    }
+    return {}
+  }
+
+  if (kind === 'string') {
+    if (typeof value === 'string') {
+      return value
+    }
+    if (value != null) {
+      return String(value)
+    }
+    return existingValue !== undefined ? existingValue : ''
+  }
+
+  return value
+}
+
+async function generateFieldData(options) {
+  const { plantName, fieldKey, fieldSchema, existingField } = options || {}
+  if (!openaiClient) {
+    throw new Error('OpenAI client not configured')
+  }
+
+  const hintList = Array.from(collectFieldHints(fieldSchema, fieldKey)).slice(0, 50)
+  const commonInstructions = [
+    'You fill plant data for individual fields.',
+    'Respond only with valid JSON containing the requested field.',
+    'Never include explanations, markdown, or extra prose.',
+    'Never output null; use empty strings, empty arrays, or omit keys instead.',
+    'Reuse any existing data when it is already suitable.',
+  ].join('\n')
+
+  const promptSections = [
+    `Plant name: ${plantName}`,
+    `Field key: ${fieldKey}`,
+    `Field definition (for reference):\n${JSON.stringify(fieldSchema, null, 2)}`,
+  ]
+
+  if (hintList.length > 0) {
+    promptSections.push(`Constraints:\n- ${hintList.join('\n- ')}`)
+  }
+
+  if (existingField !== undefined) {
+    promptSections.push(`Existing data (prefer and expand when correct):\n${JSON.stringify(existingField, null, 2)}`)
+  }
+
+  promptSections.push(
+    `Respond with JSON shaped exactly like:\n{"${fieldKey}": ...}\nDo not include any other keys or commentary.`
+  )
+
+  const response = await openaiClient.responses.create(
+    {
+      model: openaiModel,
+      reasoning: { effort: 'low' },
+      instructions: commonInstructions,
+      input: promptSections.join('\n\n'),
+    },
+    { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 180000) }
+  )
+
+  const outputText = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
+  if (!outputText) {
+    throw new Error(`AI returned empty output for "${fieldKey}"`)
+  }
+
+  let parsedField
+  try {
+    parsedField = JSON.parse(outputText)
+  } catch (parseError) {
+    const jsonMatch = outputText.match(/\{[\s\S]*\}/)
+    if (jsonMatch) {
+      try {
+        parsedField = JSON.parse(jsonMatch[0])
+      } catch (innerError) {
+        console.error('[server] Failed to parse extracted AI field response:', innerError, outputText)
+      }
+    } else {
+      console.error('[server] Failed to parse AI field response:', parseError, outputText)
+    }
+  }
+
+  const rawValue =
+    parsedField && typeof parsedField === 'object' && !Array.isArray(parsedField) && fieldKey in parsedField
+      ? parsedField[fieldKey]
+      : parsedField && typeof parsedField === 'object' && !Array.isArray(parsedField)
+        ? parsedField
+        : outputText
+  const coercedValue = coerceValueForSchema(
+    fieldSchema,
+    typeof rawValue === 'string' ? rawValue.trim() : rawValue,
+    existingField
+  )
+
+  const cleanedValue = removeNullValues(coercedValue)
+  return cleanedValue !== undefined ? cleanedValue : undefined
+}
+
 
 function buildConnectionString() {
   let cs = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.POSTGRES_PRISMA_URL || process.env.SUPABASE_DB_URL
@@ -565,6 +1036,179 @@ app.get('/api/admin/admin-logs', async (req, res) => {
     res.json({ ok: true, logs: Array.isArray(rows) ? rows : [], via: 'database' })
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to load admin logs' })
+  }
+})
+
+// Admin: AI-assisted plant data fill
+app.post('/api/admin/ai/plant-fill', async (req, res) => {
+  try {
+    const caller = await ensureAdmin(req, res)
+    if (!caller) return
+    if (!openaiClient) {
+      res.status(503).json({ error: 'AI plant fill is not configured' })
+      return
+    }
+
+    const body = req.body || {}
+    const plantName = typeof body.plantName === 'string' ? body.plantName.trim() : ''
+    if (!plantName) {
+      res.status(400).json({ error: 'Plant name is required' })
+      return
+    }
+
+    const schema = body.schema
+    if (!schema || typeof schema !== 'object' || Array.isArray(schema)) {
+      res.status(400).json({ error: 'Valid schema object is required' })
+      return
+    }
+
+    const sanitizedSchemaRaw = sanitizeTemplate(schema)
+    if (!sanitizedSchemaRaw || Array.isArray(sanitizedSchemaRaw) || typeof sanitizedSchemaRaw !== 'object') {
+      res.status(400).json({ error: 'Invalid schema provided' })
+      return
+    }
+    const sanitizedSchema = sanitizedSchemaRaw
+    const schemaBlueprint = schemaToBlueprint(sanitizedSchema)
+
+    const canUseExisting = body.existingData && typeof body.existingData === 'object' && !Array.isArray(body.existingData)
+    const existingDataRaw = canUseExisting ? stripDisallowedKeys(body.existingData) || {} : {}
+
+    const aggregated = {}
+
+    for (const fieldKey of Object.keys(schemaBlueprint)) {
+      const fieldSchema = sanitizedSchema[fieldKey]
+      if (!fieldSchema) {
+        continue
+      }
+
+      const existingFieldRaw =
+        existingDataRaw && typeof existingDataRaw === 'object'
+          ? existingDataRaw[fieldKey]
+          : undefined
+      const existingFieldClean =
+        existingFieldRaw !== undefined ? removeNullValues(existingFieldRaw) : undefined
+
+      const fieldValue = await generateFieldData({
+        plantName,
+        fieldKey,
+        fieldSchema,
+        existingField: existingFieldClean,
+      })
+
+      const cleanedField =
+        fieldValue !== undefined ? removeNullValues(fieldValue) : undefined
+      if (cleanedField !== undefined) {
+        aggregated[fieldKey] = cleanedField
+      } else {
+        delete aggregated[fieldKey]
+      }
+    }
+
+    let plantData = ensureStructure(schemaBlueprint, aggregated)
+    plantData = stripDisallowedKeys(plantData)
+    plantData = mergePreferExisting(plantData, existingDataRaw)
+    plantData = ensureStructure(schemaBlueprint, plantData)
+    plantData = stripDisallowedKeys(plantData)
+    const cleanedPlantData = removeNullValues(plantData)
+    if (cleanedPlantData && typeof cleanedPlantData === 'object' && !Array.isArray(cleanedPlantData)) {
+      plantData = cleanedPlantData
+    }
+
+    if (!plantData || typeof plantData !== 'object' || Array.isArray(plantData)) {
+      throw new Error('AI output could not be transformed into a plant record')
+    }
+
+    const plantObject = plantData
+    if (!('meta' in plantObject) || typeof plantObject.meta !== 'object' || plantObject.meta === null || Array.isArray(plantObject.meta)) {
+      plantObject.meta = {}
+    }
+    const metaObject = plantObject.meta
+    if (!metaObject.funFact || (typeof metaObject.funFact === 'string' && metaObject.funFact.trim().length === 0)) {
+      metaObject.funFact = `Symbolic meaning information for ${plantName} is currently not well documented; please supplement this entry with future research.`
+    }
+
+    res.json({ success: true, data: plantObject, model: openaiModel })
+  } catch (err) {
+    console.error('[server] AI plant fill failed:', err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: err?.message || 'Failed to fill plant data' })
+    }
+  }
+})
+app.options('/api/admin/ai/plant-fill', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+app.options('/api/admin/ai/plant-fill/field', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+app.post('/api/admin/ai/plant-fill/field', async (req, res) => {
+  try {
+    const caller = await ensureAdmin(req, res)
+    if (!caller) return
+    if (!openaiClient) {
+      res.status(503).json({ error: 'AI plant fill is not configured' })
+      return
+    }
+
+    const body = req.body || {}
+    const plantName = typeof body.plantName === 'string' ? body.plantName.trim() : ''
+    const fieldKey = typeof body.fieldKey === 'string' ? body.fieldKey.trim() : ''
+    if (!plantName || !fieldKey) {
+      res.status(400).json({ error: 'Plant name and field key are required' })
+      return
+    }
+
+    const schema = body.schema
+    if (!schema || typeof schema !== 'object' || Array.isArray(schema)) {
+      res.status(400).json({ error: 'Valid schema object is required' })
+      return
+    }
+
+    const sanitizedSchemaRaw = sanitizeTemplate(schema)
+    if (!sanitizedSchemaRaw || Array.isArray(sanitizedSchemaRaw) || typeof sanitizedSchemaRaw !== 'object') {
+      res.status(400).json({ error: 'Invalid schema provided' })
+      return
+    }
+
+    const sanitizedSchema = sanitizedSchemaRaw
+    const fieldSchema = sanitizedSchema[fieldKey]
+    if (!fieldSchema) {
+      res.status(400).json({ error: `Schema for field "${fieldKey}" not found` })
+      return
+    }
+
+    const existingFieldRaw = body.existingField
+    let existingField = existingFieldRaw
+    if (existingFieldRaw && typeof existingFieldRaw === 'object') {
+      existingField = stripDisallowedKeys({ [fieldKey]: existingFieldRaw })?.[fieldKey]
+    }
+    const existingFieldClean =
+      existingField !== undefined ? removeNullValues(existingField) : undefined
+
+    const fieldValue = await generateFieldData({
+      plantName,
+      fieldKey,
+      fieldSchema,
+      existingField: existingFieldClean,
+    })
+
+    const cleanedValue = fieldValue !== undefined ? removeNullValues(fieldValue) : undefined
+
+    res.json({
+      success: true,
+      field: fieldKey,
+      data: cleanedValue ?? null,
+    })
+  } catch (err) {
+    console.error('[server] AI plant field fill failed:', err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: err?.message || 'Failed to fill field' })
+    }
   }
 })
 
@@ -1540,6 +2184,100 @@ create index if not exists requested_plants_created_at_idx on public.requested_p
   }
 }
 
+async function ensurePlantTranslationsSchema() {
+  if (!sql) return
+  const ddl = `
+create table if not exists public.plant_translations (
+  id uuid primary key default gen_random_uuid(),
+  plant_id text not null references public.plants(id) on delete cascade,
+  language text not null check (language in ('en', 'fr')),
+  name text not null,
+  identifiers jsonb,
+  ecology jsonb,
+  usage jsonb,
+  meta jsonb,
+  phenology jsonb,
+  care jsonb,
+  planting jsonb,
+  problems jsonb,
+  scientific_name text,
+  meaning text,
+  description text,
+  care_soil text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique(plant_id, language)
+);
+
+create index if not exists plant_translations_plant_id_idx on public.plant_translations(plant_id);
+create index if not exists plant_translations_language_idx on public.plant_translations(language);
+
+alter table if exists public.plant_translations add column if not exists identifiers jsonb;
+alter table if exists public.plant_translations add column if not exists ecology jsonb;
+alter table if exists public.plant_translations add column if not exists usage jsonb;
+alter table if exists public.plant_translations add column if not exists meta jsonb;
+alter table if exists public.plant_translations add column if not exists phenology jsonb;
+alter table if exists public.plant_translations add column if not exists care jsonb;
+alter table if exists public.plant_translations add column if not exists planting jsonb;
+alter table if exists public.plant_translations add column if not exists problems jsonb;
+
+alter table public.plant_translations enable row level security;
+
+do $do$ begin
+  if exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'plant_translations'
+      and policyname = 'plant_translations_select_all'
+  ) then
+    drop policy plant_translations_select_all on public.plant_translations;
+  end if;
+  create policy plant_translations_select_all on public.plant_translations for select to authenticated, anon using (true);
+end $do$;
+
+do $do$ begin
+  if exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'plant_translations'
+      and policyname = 'plant_translations_insert'
+  ) then
+    drop policy plant_translations_insert on public.plant_translations;
+  end if;
+  create policy plant_translations_insert on public.plant_translations for insert to authenticated with check (true);
+end $do$;
+
+do $do$ begin
+  if exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'plant_translations'
+      and policyname = 'plant_translations_update'
+  ) then
+    drop policy plant_translations_update on public.plant_translations;
+  end if;
+  create policy plant_translations_update on public.plant_translations for update to authenticated using (true) with check (true);
+end $do$;
+
+do $do$ begin
+  if exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'plant_translations'
+      and policyname = 'plant_translations_delete'
+  ) then
+    drop policy plant_translations_delete on public.plant_translations;
+  end if;
+  create policy plant_translations_delete on public.plant_translations for delete to authenticated using (true);
+end $do$;
+`
+  try {
+    await sql.unsafe(ddl, [], { simple: true })
+  } catch (err) {
+    console.error('[sync] failed to ensure plant_translations schema', err)
+  }
+}
+
 // Helper: verify key schema objects exist after sync for operator assurance
 async function verifySchemaAfterSync() {
   if (!sql) return null
@@ -1610,6 +2348,7 @@ async function handleSyncSchema(req, res) {
 
     // Ensure critical tables that power new features exist even if the SQL script was partially applied.
     await ensureRequestedPlantsSchema()
+    await ensurePlantTranslationsSchema()
 
     // Verify important objects exist after sync
     let summary = null
@@ -1656,6 +2395,23 @@ app.get('/api/admin/sync-schema', handleSyncSchema)
 app.options('/api/admin/sync-schema', (_req, res) => {
   // Allow standard headers for admin calls
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+app.post('/api/admin/plant-translations/ensure-schema', async (req, res) => {
+  const caller = await ensureAdmin(req, res)
+  if (!caller) return
+  try {
+    await ensurePlantTranslationsSchema()
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[server] ensure plant_translations schema failed', err)
+    res.status(500).json({ error: err?.message || 'Failed to ensure plant translation schema' })
+  }
+})
+app.options('/api/admin/plant-translations/ensure-schema', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
   res.status(204).end()
 })
