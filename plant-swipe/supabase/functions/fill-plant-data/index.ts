@@ -312,9 +312,11 @@ Fill in as much accurate information as possible for "${plantName}". Return ONLY
             text: {
               format: {
                 type: 'json_schema',
-                name: 'plant_data',
-                strict: true,
-                schema: structuredSchema
+                json_schema: {
+                  name: 'plant_data',
+                  strict: true,
+                  schema: structuredSchema
+                }
               }
             }
           })
