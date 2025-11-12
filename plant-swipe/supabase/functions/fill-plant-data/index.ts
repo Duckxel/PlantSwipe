@@ -309,16 +309,17 @@ Fill in as much accurate information as possible for "${plantName}". Return ONLY
               content: `Provide the complete JSON record for the plant "${plantName}" strictly following the schema above.`
             }
           ],
-          text: {
-            format: {
-              type: 'json_schema',
-              json_schema: {
+            text: {
+              format: {
                 name: 'plant_data',
-                strict: true,
-                schema: structuredSchema
+                type: 'json_schema',
+                json_schema: {
+                  name: 'plant_data',
+                  strict: true,
+                  schema: structuredSchema
+                }
               }
             }
-          }
         })
       })
 
