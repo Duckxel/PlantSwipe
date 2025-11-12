@@ -139,13 +139,14 @@ serve(async (req) => {
       )
     }
 
-      const sanitizedSchema = sanitizeTemplate(schema)
-      if (!sanitizedSchema || Array.isArray(sanitizedSchema) || typeof sanitizedSchema !== 'object') {
+      const sanitizedSchemaRaw = sanitizeTemplate(schema)
+      if (!sanitizedSchemaRaw || Array.isArray(sanitizedSchemaRaw) || typeof sanitizedSchemaRaw !== 'object') {
         return new Response(
           JSON.stringify({ error: 'Invalid schema provided' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
+      const sanitizedSchema = sanitizedSchemaRaw as Record<string, JsonValue>
 
       // Build the prompt
       const prompt = `You are an encyclopedic botanical expert. Fill in the plant information JSON for "${plantName}" using the schema provided.
@@ -235,7 +236,7 @@ Fill in as much accurate information as possible for "${plantName}". Return ONLY
         )
       }
 
-      let plantData = ensureStructure(sanitizedSchema, plantData)
+      plantData = ensureStructure(sanitizedSchema, plantData)
       plantData = stripDisallowedKeys(plantData)
 
       let plantRecord: JsonValue = plantData
