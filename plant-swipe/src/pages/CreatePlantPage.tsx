@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { supabase } from "@/lib/supabaseClient"
+import { fetchAiPlantFill } from "@/lib/aiPlantFill"
 import type {
   Plant,
   PlantIdentifiers,
@@ -68,7 +69,9 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
   const [inputLanguage, setInputLanguage] = React.useState<SupportedLanguage>(DEFAULT_LANGUAGE)
   const [translateToAll, setTranslateToAll] = React.useState(true) // Default to true in Advanced mode
   const [translating, setTranslating] = React.useState(false)
-  const [aiFilling, setAiFilling] = React.useState(false)
+    const [aiFilling, setAiFilling] = React.useState(false)
+    const [aiFillProgress, setAiFillProgress] = React.useState<{ completed: number; total: number; field?: string }>({ completed: 0, total: 0, field: undefined })
+    const abortControllerRef = React.useRef<AbortController | null>(null)
   
   // New JSONB structure state
   const [identifiers, setIdentifiers] = React.useState<Partial<PlantIdentifiers>>({})
@@ -110,6 +113,13 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
     }
   }, [initialName])
 
+    React.useEffect(() => {
+      return () => {
+        abortControllerRef.current?.abort()
+        abortControllerRef.current = null
+      }
+    }, [])
+
   // Load schema for AI fill
   const loadSchema = async () => {
     try {
@@ -150,34 +160,52 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
     }
 
     setAiFilling(true)
+    setAiFillProgress({ completed: 0, total: 0, field: undefined })
+    abortControllerRef.current?.abort()
+    const controller = new AbortController()
+    abortControllerRef.current = controller
     setError(null)
     setOk(null)
 
     try {
-      // Load the schema
-      const schema = await loadSchema()
-      if (!schema) {
-        setError("Failed to load schema")
-        return
-      }
-
-      // Call Supabase Edge Function
-      const { data, error: funcError } = await supabase.functions.invoke('fill-plant-data', {
-        body: {
-          plantName: name.trim(),
-          schema: schema
+        // Load the schema
+        const schema = await loadSchema()
+        if (!schema) {
+          setError("Failed to load schema")
+          return
         }
-      })
 
-      if (funcError) {
-        throw new Error(funcError.message || 'Failed to get AI response')
-      }
+        const existingData = {
+          identifiers: {
+            ...(identifiers ?? {}),
+            ...(scientificName.trim() ? { scientificName: scientificName.trim() } : {})
+          },
+          traits: { ...(traits ?? {}) },
+          dimensions: { ...(dimensions ?? {}) },
+          phenology: { ...(phenology ?? {}) },
+          environment: { ...(environment ?? {}) },
+          care: { ...(care ?? {}) },
+          propagation: { ...(propagation ?? {}) },
+          usage: { ...(usage ?? {}) },
+          ecology: { ...(ecology ?? {}) },
+          commerce: { ...(commerce ?? {}) },
+          problems: { ...(problems ?? {}) },
+          planting: { ...(planting ?? {}) },
+          meta: {
+            ...(meta ?? {}),
+            ...(meaning.trim() ? { funFact: meaning.trim() } : {})
+          }
+        }
 
-      if (!data || !data.success) {
-        throw new Error(data?.error || 'Failed to get AI response')
-      }
-
-      const aiData = data.data
+        const aiData = await fetchAiPlantFill({
+          plantName: name.trim(),
+          schema,
+          existingData,
+          signal: controller.signal,
+          onProgress: ({ completed, total, field }) => {
+            setAiFillProgress({ completed, total, field })
+          }
+        })
 
       // Populate form fields with AI data
       if (aiData.identifiers) {
@@ -236,9 +264,15 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
       setOk("AI data loaded successfully! Please review and edit before saving.")
     } catch (err: any) {
       console.error('AI fill error:', err)
-      setError(err?.message || 'Failed to fill data with AI. Please try again.')
+      if (err?.message === 'AI fill was cancelled' || err?.message === 'AI fill cancelled.') {
+        setError('AI fill cancelled.')
+      } else {
+        setError(err?.message || 'Failed to fill data with AI. Please try again.')
+      }
     } finally {
       setAiFilling(false)
+      setAiFillProgress({ completed: 0, total: 0, field: undefined })
+      abortControllerRef.current = null
     }
   }
 
@@ -524,11 +558,11 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
                     onClick={handleAiFill}
                     disabled={aiFilling || !name.trim() || saving || translating}
                     className="rounded-2xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white border-0 shadow-lg"
-                  >
+                    >
                     {aiFilling ? (
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Filling...
+                        Filling{aiFillProgress.total > 0 ? ` ${Math.round((Math.min(aiFillProgress.completed, aiFillProgress.total) / aiFillProgress.total) * 100)}%` : '...'}
                       </>
                     ) : (
                       <>
@@ -594,10 +628,50 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
             {error && <div className="text-sm text-red-600 dark:text-red-400">{error}</div>}
             {ok && <div className="text-sm text-green-600 dark:text-green-400">{ok}</div>}
             {translating && <div className="text-sm text-blue-600 dark:text-blue-400">{t('createPlant.translatingToAll')}</div>}
-            {aiFilling && <div className="text-sm text-purple-600 dark:text-purple-400 flex items-center gap-2">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              AI is filling in the plant data...
-            </div>}
+            {aiFilling && (
+              <div className="flex flex-col gap-2 text-sm text-purple-600 dark:text-purple-400">
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  AI is filling in the plant data...
+                </div>
+                {aiFillProgress.field && !['init', 'complete'].includes(aiFillProgress.field) && (
+                  <div className="text-xs font-medium">
+                    Working on: <span className="font-semibold">{aiFillProgress.field}</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
+                  <div className="h-2 flex-1 rounded-full bg-purple-200 dark:bg-purple-950">
+                    <div
+                      className="h-full rounded-full bg-purple-500 transition-all"
+                      style={{
+                        width: `${aiFillProgress.total > 0 ? Math.round((aiFillProgress.completed / aiFillProgress.total) * 100) : 0}%`,
+                      }}
+                    />
+                  </div>
+                  <span className="text-xs font-medium min-w-[4rem] text-right">
+                    {aiFillProgress.total > 0
+                      ? `${Math.min(aiFillProgress.completed, aiFillProgress.total)} / ${aiFillProgress.total}`
+                      : '...'}
+                  </span>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="self-start rounded-2xl"
+                  onClick={() => {
+                      abortControllerRef.current?.abort()
+                      abortControllerRef.current = null
+                      setAiFilling(false)
+                      setAiFillProgress({ completed: 0, total: 0, field: undefined })
+                      setOk(null)
+                      setError('AI fill cancelled.')
+                  }}
+                >
+                  Stop AI fill
+                </Button>
+              </div>
+            )}
             
             {/* Translation Option - Only shown in Advanced mode, at the bottom before save */}
             {advanced && (
