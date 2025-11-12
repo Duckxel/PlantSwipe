@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight, ChevronUp, Heart, Sparkles } from "lucide-re
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import type { Plant } from "@/types/plant"
+import type { Plant, PlantSeason } from "@/types/plant"
 import { rarityTone, seasonBadge } from "@/constants/badges"
 import { useTranslation } from "react-i18next"
 
@@ -100,12 +100,15 @@ export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, 
                     </button>
                   </div>
                   <div className="absolute bottom-0 p-5 text-white">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Badge className={`${rarityTone[current.rarity]} backdrop-blur bg-opacity-80`}>{current.rarity}</Badge>
-                      {current.seasons.map((s) => (
-                        <span key={s} className={`text-[10px] px-2 py-0.5 rounded-full ${seasonBadge[s]}`}>{s}</span>
-                      ))}
-                    </div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Badge className={`${rarityTone[current.rarity ?? 'Common']} backdrop-blur bg-opacity-80`}>{current.rarity}</Badge>
+                        {current.seasons.map((s: PlantSeason) => {
+                          const badgeClass = seasonBadge[s] ?? 'bg-stone-200 dark:bg-stone-700 text-stone-900 dark:text-stone-100'
+                          return (
+                            <span key={s} className={`text-[10px] px-2 py-0.5 rounded-full ${badgeClass}`}>{s}</span>
+                          )
+                        })}
+                      </div>
                     <h2 className="text-2xl font-semibold drop-shadow-sm">{current.name}</h2>
                     <p className="opacity-90 text-sm italic">{current.scientificName}</p>
                   </div>

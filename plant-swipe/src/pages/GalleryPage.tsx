@@ -1,5 +1,5 @@
 import React from "react"
-import type { Plant } from "@/types/plant"
+import type { Plant, PlantSeason } from "@/types/plant"
 import { rarityTone, seasonBadge } from "@/constants/badges"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -18,12 +18,15 @@ export const GalleryPage: React.FC<GalleryPageProps> = ({ plants, onOpen }) => {
           <Card className="rounded-2xl overflow-hidden hover:shadow-lg transition-shadow">
             <div className="h-36 bg-cover bg-center rounded-t-2xl" style={{ backgroundImage: `url(${p.image})` }} />
             <CardContent className="p-3">
-              <div className="flex items-center gap-2 mb-1">
-                <Badge className={`${rarityTone[p.rarity]} rounded-xl`}>{p.rarity}</Badge>
-                {p.seasons.slice(0, 1).map((s) => (
-                  <span key={s} className={`text-[10px] px-2 py-0.5 rounded-full ${seasonBadge[s]}`}>{s}</span>
-                ))}
-              </div>
+                <div className="flex items-center gap-2 mb-1">
+                  <Badge className={`${rarityTone[p.rarity ?? 'Common']} rounded-xl`}>{p.rarity}</Badge>
+                  {p.seasons.slice(0, 1).map((s: PlantSeason) => {
+                    const badgeClass = seasonBadge[s] ?? 'bg-stone-200 dark:bg-stone-700 text-stone-900 dark:text-stone-100'
+                    return (
+                      <span key={s} className={`text-[10px] px-2 py-0.5 rounded-full ${badgeClass}`}>{s}</span>
+                    )
+                  })}
+                </div>
               <div className="font-medium text-sm leading-tight">{p.name}</div>
               <div className="text-xs opacity-60 italic leading-tight">{p.scientificName}</div>
             </CardContent>

@@ -3,9 +3,20 @@
  * 
  * Translates plant data between supported languages using DeepL API
  * Requires DEEPL_API_KEY environment variable on the server
+ * Updated for new JSONB structure
  */
 
 import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE, type SupportedLanguage } from './i18n'
+import type {
+  PlantIdentifiers,
+  PlantEcology,
+  PlantUsage,
+  PlantMeta,
+  PlantPhenology,
+  PlantCare,
+  PlantPlanting,
+  PlantProblems,
+} from '@/types/plant'
 
 export interface TranslationFields {
   name?: string
@@ -13,6 +24,19 @@ export interface TranslationFields {
   meaning?: string
   description?: string
   careSoil?: string
+  // New JSONB translatable fields
+  identifiers?: PlantIdentifiers
+  ecology?: PlantEcology
+  usage?: PlantUsage
+  meta?: PlantMeta
+  phenology?: Pick<PlantPhenology, 'scentNotes'>
+  care?: {
+    watering?: PlantCare['watering']
+    fertilizing?: PlantCare['fertilizing']
+    mulching?: PlantCare['mulching']
+  }
+  planting?: Pick<PlantPlanting, 'sitePrep' | 'companionPlants' | 'avoidNear'>
+  problems?: PlantProblems
 }
 
 export interface TranslatedFields extends TranslationFields {}
@@ -55,6 +79,121 @@ async function translateText(text: string, targetLang: SupportedLanguage, source
 }
 
 /**
+ * Translate array of strings
+ */
+async function translateArray(
+  items: string[],
+  targetLang: SupportedLanguage,
+  sourceLang: SupportedLanguage = DEFAULT_LANGUAGE
+): Promise<string[]> {
+  if (!items || items.length === 0) return items
+  if (sourceLang === targetLang) return items
+  
+  const translated = await Promise.all(
+    items.map(item => translateText(item, targetLang, sourceLang))
+  )
+  return translated
+}
+
+/**
+ * Translate plant identifiers
+ */
+async function translateIdentifiers(
+  identifiers: PlantIdentifiers,
+  targetLang: SupportedLanguage,
+  sourceLang: SupportedLanguage = DEFAULT_LANGUAGE
+): Promise<PlantIdentifiers> {
+  if (sourceLang === targetLang) return identifiers
+
+  const translated: PlantIdentifiers = { ...identifiers }
+
+  if (identifiers.commonNames) {
+    translated.commonNames = await translateArray(identifiers.commonNames, targetLang, sourceLang)
+  }
+
+  // Scientific names typically don't need translation
+  // Other identifier fields are usually not translatable
+
+  return translated
+}
+
+/**
+ * Translate plant ecology
+ */
+async function translateEcology(
+  ecology: PlantEcology,
+  targetLang: SupportedLanguage,
+  sourceLang: SupportedLanguage = DEFAULT_LANGUAGE
+): Promise<PlantEcology> {
+  if (sourceLang === targetLang) return ecology
+
+  const translated: PlantEcology = { ...ecology }
+
+  if (ecology.wildlifeValue) {
+    translated.wildlifeValue = await translateArray(ecology.wildlifeValue, targetLang, sourceLang)
+  }
+
+  // nativeRange and pollinators are usually proper nouns, don't translate
+  // conservationStatus is standardized codes, don't translate
+
+  return translated
+}
+
+/**
+ * Translate plant usage
+ */
+async function translateUsage(
+  usage: PlantUsage,
+  targetLang: SupportedLanguage,
+  sourceLang: SupportedLanguage = DEFAULT_LANGUAGE
+): Promise<PlantUsage> {
+  if (sourceLang === targetLang) return usage
+
+  const translated: PlantUsage = { ...usage }
+
+  if (usage.culinaryUses) {
+    translated.culinaryUses = await translateArray(usage.culinaryUses, targetLang, sourceLang)
+  }
+
+  if (usage.medicinalUses) {
+    translated.medicinalUses = await translateArray(usage.medicinalUses, targetLang, sourceLang)
+  }
+
+  // gardenUses, indoorOutdoor, edibleParts are usually standardized terms
+
+  return translated
+}
+
+/**
+ * Translate plant meta
+ */
+async function translateMeta(
+  meta: PlantMeta,
+  targetLang: SupportedLanguage,
+  sourceLang: SupportedLanguage = DEFAULT_LANGUAGE
+): Promise<PlantMeta> {
+  if (sourceLang === targetLang) return meta
+
+  const translated: PlantMeta = { ...meta }
+
+  if (meta.funFact) {
+    translated.funFact = await translateText(meta.funFact, targetLang, sourceLang)
+  }
+
+  if (meta.authorNotes) {
+    translated.authorNotes = await translateText(meta.authorNotes, targetLang, sourceLang)
+  }
+
+  if (meta.sourceReferences) {
+    translated.sourceReferences = await translateArray(meta.sourceReferences, targetLang, sourceLang)
+  }
+
+  // tags, rarity are usually standardized
+
+  return translated
+}
+
+/**
  * Translate all plant fields to target language
  */
 export async function translatePlantFields(
@@ -68,7 +207,7 @@ export async function translatePlantFields(
 
   const translations: TranslatedFields = {}
 
-  // Translate each field if it exists (each field is sent separately to DeepL)
+  // Translate each field if it exists
   if (fields.name) {
     translations.name = await translateText(fields.name, targetLang, sourceLang)
   }
@@ -84,6 +223,84 @@ export async function translatePlantFields(
   }
   if (fields.careSoil) {
     translations.careSoil = await translateText(fields.careSoil, targetLang, sourceLang)
+  }
+  if (fields.identifiers) {
+    translations.identifiers = await translateIdentifiers(fields.identifiers, targetLang, sourceLang)
+  }
+  if (fields.ecology) {
+    translations.ecology = await translateEcology(fields.ecology, targetLang, sourceLang)
+  }
+  if (fields.usage) {
+    translations.usage = await translateUsage(fields.usage, targetLang, sourceLang)
+  }
+  if (fields.meta) {
+    translations.meta = await translateMeta(fields.meta, targetLang, sourceLang)
+  }
+  if (fields.phenology?.scentNotes) {
+    translations.phenology = {
+      ...fields.phenology,
+      scentNotes: await translateArray(fields.phenology.scentNotes, targetLang, sourceLang),
+    }
+  }
+  if (fields.care) {
+    const translatedCare: TranslationFields['care'] = {}
+    if (fields.care.watering?.frequency) {
+      const freq = fields.care.watering.frequency
+      translatedCare.watering = {
+        ...fields.care.watering,
+        frequency: {
+          winter: freq?.winter ? await translateText(freq.winter, targetLang, sourceLang) : freq?.winter,
+          spring: freq?.spring ? await translateText(freq.spring, targetLang, sourceLang) : freq?.spring,
+          summer: freq?.summer ? await translateText(freq.summer, targetLang, sourceLang) : freq?.summer,
+          autumn: freq?.autumn ? await translateText(freq.autumn, targetLang, sourceLang) : freq?.autumn,
+        },
+      }
+    }
+    if (fields.care.fertilizing?.schedule) {
+      translatedCare.fertilizing = {
+        ...fields.care.fertilizing,
+        schedule: await translateText(fields.care.fertilizing.schedule, targetLang, sourceLang),
+      }
+    }
+    if (fields.care.mulching?.material) {
+      translatedCare.mulching = {
+        ...fields.care.mulching,
+        material: await translateText(fields.care.mulching.material, targetLang, sourceLang),
+      }
+    }
+    if (Object.keys(translatedCare).length > 0) {
+      translations.care = translatedCare as NonNullable<TranslationFields['care']>
+    }
+  }
+  if (fields.planting) {
+    const translatedPlanting: TranslationFields['planting'] = {}
+    if (fields.planting.sitePrep?.length) {
+      translatedPlanting.sitePrep = await translateArray(fields.planting.sitePrep, targetLang, sourceLang)
+    }
+    if (fields.planting.companionPlants?.length) {
+      translatedPlanting.companionPlants = await translateArray(fields.planting.companionPlants, targetLang, sourceLang)
+    }
+    if (fields.planting.avoidNear?.length) {
+      translatedPlanting.avoidNear = await translateArray(fields.planting.avoidNear, targetLang, sourceLang)
+    }
+    if (Object.keys(translatedPlanting).length > 0) {
+      translations.planting = translatedPlanting
+    }
+  }
+  if (fields.problems) {
+    const translatedProblems: PlantProblems = {}
+    if (fields.problems.pests?.length) {
+      translatedProblems.pests = await translateArray(fields.problems.pests, targetLang, sourceLang)
+    }
+    if (fields.problems.diseases?.length) {
+      translatedProblems.diseases = await translateArray(fields.problems.diseases, targetLang, sourceLang)
+    }
+    if (fields.problems.hazards?.length) {
+      translatedProblems.hazards = await translateArray(fields.problems.hazards, targetLang, sourceLang)
+    }
+    if (Object.keys(translatedProblems).length > 0) {
+      translations.problems = translatedProblems
+    }
   }
 
   return translations

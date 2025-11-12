@@ -579,7 +579,7 @@ deploy_supabase_functions() {
     while IFS= read -r line || [[ -n "$line" ]]; do
       [[ "$line" =~ ^[[:space:]]*# ]] && continue
       [[ "$line" =~ ^[[:space:]]*$ ]] && continue
-      if [[ "$line" =~ ^[[:space:]]*(SUPABASE_ACCESS_TOKEN|SUPABASE_PROJECT_REF|SUPABASE_URL|VITE_SUPABASE_URL|RESEND_API_KEY|RESEND_FROM|RESEND_FROM_NAME)=(.*)$ ]]; then
+        if [[ "$line" =~ ^[[:space:]]*(SUPABASE_ACCESS_TOKEN|SUPABASE_PROJECT_REF|SUPABASE_URL|VITE_SUPABASE_URL|RESEND_API_KEY|RESEND_FROM|RESEND_FROM_NAME|OPENAI_API_KEY|OPENAI_KEY|ALLOWED_ORIGINS|AI_FILL_ALLOWED_ORIGINS|FILL_PLANT_ALLOWED_ORIGINS)=(.*)$ ]]; then
         local key="${BASH_REMATCH[1]}"; local val="${BASH_REMATCH[2]}"
         val="${val%$'\r'}"
         if [[ "${val:0:1}" == '"' && "${val: -1}" == '"' ]]; then val="${val:1:${#val}-2}"; fi
@@ -676,142 +676,142 @@ PY
   local RESEND_API_KEY="${supabase_env[RESEND_API_KEY]:-${RESEND_API_KEY:-}}"
   local RESEND_FROM="${supabase_env[RESEND_FROM]:-${RESEND_FROM:-}}"
   local RESEND_FROM_NAME="${supabase_env[RESEND_FROM_NAME]:-${RESEND_FROM_NAME:-}}"
+  local OPENAI_SECRET="${supabase_env[OPENAI_API_KEY]:-${OPENAI_API_KEY:-}}"
+  [[ -z "$OPENAI_SECRET" ]] && OPENAI_SECRET="${supabase_env[OPENAI_KEY]:-${OPENAI_KEY:-}}"
+  local ALLOWED_ORIGINS_SECRET="${supabase_env[ALLOWED_ORIGINS]:-${ALLOWED_ORIGINS:-}}"
+  [[ -z "$ALLOWED_ORIGINS_SECRET" ]] && ALLOWED_ORIGINS_SECRET="${supabase_env[AI_FILL_ALLOWED_ORIGINS]:-${AI_FILL_ALLOWED_ORIGINS:-}}"
+  [[ -z "$ALLOWED_ORIGINS_SECRET" ]] && ALLOWED_ORIGINS_SECRET="${supabase_env[FILL_PLANT_ALLOWED_ORIGINS]:-${FILL_PLANT_ALLOWED_ORIGINS:-}}"
 
-  if [[ -n "$RESEND_API_KEY" || -n "$RESEND_FROM" || -n "$RESEND_FROM_NAME" ]]; then
-    log "Syncing Supabase secrets…"
-    local secrets_env=()
-    [[ -n "$RESEND_API_KEY" ]] && secrets_env+=("RESEND_API_KEY=$RESEND_API_KEY")
-    [[ -n "$RESEND_FROM" ]] && secrets_env+=("RESEND_FROM=$RESEND_FROM")
-    [[ -n "$RESEND_FROM_NAME" ]] && secrets_env+=("RESEND_FROM_NAME=$RESEND_FROM_NAME")
-    for kv in "${secrets_env[@]}"; do
-      local secret_output=""
-      if secret_output="$("${supabase_cmd[@]}" supabase secrets set --project-ref "$SUPABASE_PROJECT_REF" --workdir "$NODE_DIR" "$kv" 2>&1)"; then
-        log "✓ Set secret: ${kv%%=*}"
-        echo "$secret_output" | grep -v "^$" | while IFS= read -r line; do
-          log "  $line"
-        done || true
+  local secrets_env=()
+  [[ -n "$RESEND_API_KEY" ]] && secrets_env+=("RESEND_API_KEY=$RESEND_API_KEY")
+  [[ -n "$RESEND_FROM" ]] && secrets_env+=("RESEND_FROM=$RESEND_FROM")
+  [[ -n "$RESEND_FROM_NAME" ]] && secrets_env+=("RESEND_FROM_NAME=$RESEND_FROM_NAME")
+  [[ -n "$OPENAI_SECRET" ]] && secrets_env+=("OPENAI_API_KEY=$OPENAI_SECRET")
+  [[ -n "$ALLOWED_ORIGINS_SECRET" ]] && secrets_env+=("ALLOWED_ORIGINS=$ALLOWED_ORIGINS_SECRET")
+
+    if ((${#secrets_env[@]})); then
+      log "Syncing Supabase secrets…"
+      for kv in "${secrets_env[@]}"; do
+        local secret_output=""
+        if secret_output="$("${supabase_cmd[@]}" supabase secrets set --project-ref "$SUPABASE_PROJECT_REF" --workdir "$NODE_DIR" "$kv" 2>&1)"; then
+          log "✓ Set secret: ${kv%%=*}"
+          echo "$secret_output" | grep -v "^$" | while IFS= read -r line; do
+            log "  $line"
+          done || true
+        else
+          log "[WARN] Failed to set Supabase secret ${kv%%=*}"
+          echo "$secret_output" | tail -n 10 | while IFS= read -r line; do
+            log "  $line"
+          done || true
+        fi
+      done
+    else
+      log "[INFO] No Supabase secrets to sync for this deployment."
+    fi
+
+    local FUNCTIONS_ROOT="$NODE_DIR/supabase/functions"
+    if [[ ! -d "$FUNCTIONS_ROOT" ]]; then
+      log "[INFO] Supabase functions directory not found at $FUNCTIONS_ROOT; skipping deployment."
+      return 0
+    fi
+
+    # Check if project is linked (create config.toml if needed)
+    local SUPABASE_CONFIG="$NODE_DIR/supabase/config.toml"
+    if [[ ! -f "$SUPABASE_CONFIG" ]]; then
+      log "Linking Supabase project $SUPABASE_PROJECT_REF…"
+      mkdir -p "$NODE_DIR/supabase" || true
+      local link_args=(supabase link --project-ref "$SUPABASE_PROJECT_REF" --workdir "$NODE_DIR")
+      if ! "${supabase_cmd[@]}" "${link_args[@]}" >/tmp/supabase-link.log 2>&1; then
+        log "[WARN] Failed to link Supabase project. See /tmp/supabase-link.log"
+        tail -n 20 /tmp/supabase-link.log 2>/dev/null || true
+        log "[INFO] Continuing with deployment anyway (project may already be linked)…"
       else
-        log "[WARN] Failed to set Supabase secret ${kv%%=*}"
-        echo "$secret_output" | tail -n 10 | while IFS= read -r line; do
-          log "  $line"
-        done || true
+        log "Supabase project linked successfully."
+      fi
+    else
+      local linked_ref=""
+      if grep -q "project_id" "$SUPABASE_CONFIG" 2>/dev/null; then
+        linked_ref="$(grep "project_id" "$SUPABASE_CONFIG" | head -n1 | sed -E 's/.*project_id[[:space:]]*=[[:space:]]*["'\'']?([^"'\'']+)["'\'']?.*/\1/' || echo "")"
+      fi
+      if [[ -n "$linked_ref" && "$linked_ref" != "$SUPABASE_PROJECT_REF" ]]; then
+        log "[WARN] Linked project ($linked_ref) differs from SUPABASE_PROJECT_REF ($SUPABASE_PROJECT_REF)"
+        log "[INFO] Re-linking to correct project…"
+        local link_args=(supabase link --project-ref "$SUPABASE_PROJECT_REF" --workdir "$NODE_DIR")
+        "${supabase_cmd[@]}" "${link_args[@]}" >/tmp/supabase-relink.log 2>&1 || true
+      else
+        log "Supabase project already linked: $SUPABASE_PROJECT_REF"
+      fi
+    fi
+
+    mapfile -t function_names < <(find "$FUNCTIONS_ROOT" -maxdepth 1 -mindepth 1 -type d -printf '%f\n' | sort)
+    if ((${#function_names[@]} == 0)); then
+      log "[INFO] No Supabase Edge Functions found under $FUNCTIONS_ROOT."
+      return 0
+    fi
+
+    local original_pwd="$(pwd)"
+    cd "$NODE_DIR" || {
+      log "[ERROR] Failed to change to directory: $NODE_DIR"
+      return 1
+    }
+
+    local deploy_failures=0
+    for fname in "${function_names[@]}"; do
+      local fpath="$FUNCTIONS_ROOT/$fname"
+      if [[ ! -f "$fpath/index.ts" && ! -f "$fpath/index.js" && ! -f "$fpath/index.tsx" ]]; then
+        log "[WARN] Skipping Supabase function '$fname' (no index.ts/js found)."
+        continue
+      fi
+
+      local deploy_args=(supabase functions deploy "$fname" --project-ref "$SUPABASE_PROJECT_REF")
+      [[ "$fname" == "contact-support" ]] && deploy_args+=(--no-verify-jwt)
+
+      log "Deploying Supabase function '$fname'…"
+      local deploy_output=""
+      local deploy_exit_code=0
+      deploy_output="$("${supabase_cmd[@]}" "${deploy_args[@]}" 2>&1)" || deploy_exit_code=$?
+
+      log "Deployment output for '$fname':"
+      echo "$deploy_output" | while IFS= read -r line; do
+        log "  $line"
+      done || true
+
+      local deploy_success=false
+      if echo "$deploy_output" | grep -qi "deployed successfully\|Deployed Functions\|Function deployed"; then
+        deploy_success=true
+      elif [[ $deploy_exit_code -eq 0 ]]; then
+        deploy_success=true
+      fi
+
+      if [[ "$deploy_success" == "true" ]]; then
+        log "✓ Supabase function '$fname' deployed successfully"
+      else
+        log "[ERROR] Deployment failed for Supabase function '$fname' (exit code: $deploy_exit_code)"
+        ((deploy_failures++))
       fi
     done
-  fi
 
-  # Verify function directory exists
-  local FUNCTION_DIR="$NODE_DIR/supabase/functions/contact-support"
-  if [[ ! -d "$FUNCTION_DIR" ]]; then
-    log "[ERROR] Function directory not found: $FUNCTION_DIR"
-    return 1
-  fi
-  if [[ ! -f "$FUNCTION_DIR/index.ts" ]]; then
-    log "[ERROR] Function file not found: $FUNCTION_DIR/index.ts"
-    return 1
-  fi
-  log "Function directory verified: $FUNCTION_DIR"
+    cd "$original_pwd" || true
 
-  # Check if project is linked (create config.toml if needed)
-  local SUPABASE_CONFIG="$NODE_DIR/supabase/config.toml"
-  if [[ ! -f "$SUPABASE_CONFIG" ]]; then
-    log "Linking Supabase project $SUPABASE_PROJECT_REF…"
-    # Ensure supabase directory exists
-    mkdir -p "$NODE_DIR/supabase" || true
-    local link_args=(supabase link --project-ref "$SUPABASE_PROJECT_REF" --workdir "$NODE_DIR")
-    if ! "${supabase_cmd[@]}" "${link_args[@]}" >/tmp/supabase-link.log 2>&1; then
-      log "[WARN] Failed to link Supabase project. See /tmp/supabase-link.log"
-      tail -n 20 /tmp/supabase-link.log 2>/dev/null || true
-      log "[INFO] Continuing with deployment anyway (project may already be linked)..."
-    else
-      log "Supabase project linked successfully."
-    fi
-  else
-    # Verify the linked project matches
-    local linked_ref=""
-    if grep -q "project_id" "$SUPABASE_CONFIG" 2>/dev/null; then
-      linked_ref="$(grep "project_id" "$SUPABASE_CONFIG" | head -n1 | sed -E 's/.*project_id[[:space:]]*=[[:space:]]*["'\'']?([^"'\'']+)["'\'']?.*/\1/' || echo "")"
-    fi
-    if [[ -n "$linked_ref" && "$linked_ref" != "$SUPABASE_PROJECT_REF" ]]; then
-      log "[WARN] Linked project ($linked_ref) differs from SUPABASE_PROJECT_REF ($SUPABASE_PROJECT_REF)"
-      log "[INFO] Re-linking to correct project…"
-      local link_args=(supabase link --project-ref "$SUPABASE_PROJECT_REF" --workdir "$NODE_DIR")
-      "${supabase_cmd[@]}" "${link_args[@]}" >/tmp/supabase-relink.log 2>&1 || true
-    else
-      log "Supabase project already linked: $SUPABASE_PROJECT_REF"
-    fi
-  fi
-
-  # Deploy the contact-support function with verbose output
-  log "Deploying contact-support Edge Function to project $SUPABASE_PROJECT_REF…"
-  log "Function path: $FUNCTION_DIR"
-  log "Working directory: $NODE_DIR"
-  
-  # Change to the node directory for deployment (more reliable than --workdir)
-  local original_pwd="$(pwd)"
-  cd "$NODE_DIR" || {
-    log "[ERROR] Failed to change to directory: $NODE_DIR"
-    return 1
-  }
-  
-  # Build deployment command - try with and without --workdir for compatibility
-  local deploy_args=(supabase functions deploy contact-support --no-verify-jwt --project-ref "$SUPABASE_PROJECT_REF")
-  
-  # Show the command being run
-  log "Running from $NODE_DIR: ${supabase_cmd[*]} ${deploy_args[*]}"
-  
-  # Run deployment and capture output directly (avoid permission issues with log files)
-  local deploy_output=""
-  local deploy_exit_code=0
-  deploy_output="$("${supabase_cmd[@]}" "${deploy_args[@]}" 2>&1)" || deploy_exit_code=$?
-  
-  # Return to original directory
-  cd "$original_pwd" || true
-  
-  # Always show the deployment output for debugging
-  log "Deployment output:"
-  echo "$deploy_output" | while IFS= read -r line; do
-    log "  $line"
-  done || true
-  
-  # Check for success indicators in output (more reliable than exit code)
-  local deploy_success=false
-  if echo "$deploy_output" | grep -qi "Deployed Functions\|deployed successfully\|Successfully deployed"; then
-    deploy_success=true
-  elif [[ $deploy_exit_code -eq 0 ]]; then
-    deploy_success=true
-  fi
-  
-  if [[ "$deploy_success" == "true" ]]; then
-    log "✓ Supabase Edge Function contact-support deployed successfully"
-  else
-    log "[ERROR] Supabase Edge Function deployment failed (exit code: $deploy_exit_code)"
-    return 1
-  fi
-  
-  # Verify deployment by checking function status
-  log "Verifying deployment…"
-  cd "$NODE_DIR" || true
-  local verify_output=""
-  if verify_output="$("${supabase_cmd[@]}" supabase functions list --project-ref "$SUPABASE_PROJECT_REF" 2>&1)"; then
-    if echo "$verify_output" | grep -q "contact-support"; then
-      log "✓ Function 'contact-support' verified in project $SUPABASE_PROJECT_REF"
-      log "Function details:"
-      echo "$verify_output" | grep -A 2 "contact-support" | while IFS= read -r line; do
+    log "Verifying Supabase functions in project $SUPABASE_PROJECT_REF…"
+    local verify_output=""
+    if verify_output="$("${supabase_cmd[@]}" supabase functions list --project-ref "$SUPABASE_PROJECT_REF" 2>&1)"; then
+      echo "$verify_output" | while IFS= read -r line; do
         log "  $line"
       done || true
     else
-      log "[WARN] Function 'contact-support' not found in function list."
-      log "Available functions:"
+      log "[WARN] Unable to list Supabase functions after deployment."
       echo "$verify_output" | while IFS= read -r line; do
         log "  $line"
       done || true
     fi
-  else
-    log "[INFO] Could not verify deployment (function list failed), but deployment appeared successful."
-  fi
-  cd "$original_pwd" || true
-  
-  log "Supabase Edge Function contact-support deployment completed."
+
+    if ((deploy_failures > 0)); then
+      log "[ERROR] One or more Supabase functions failed to deploy."
+      return 1
+    fi
+
+    log "Supabase Edge Function deployment completed."
 }
 
 # Optionally skip Supabase deployment if requested

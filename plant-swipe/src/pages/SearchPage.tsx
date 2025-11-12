@@ -1,5 +1,5 @@
 import React from "react"
-import type { Plant } from "@/types/plant"
+import type { Plant, PlantSeason } from "@/types/plant"
 import { rarityTone, seasonBadge } from "@/constants/badges"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -40,15 +40,18 @@ export const SearchPage: React.FC<SearchPageProps> = ({ plants, openInfo, likedI
               ) : null}
             </div>
             <div className="p-3">
-              <div className="flex items-center gap-2 mb-1">
-                <Badge className={`${rarityTone[p.rarity]} rounded-xl`}>{p.rarity}</Badge>
-                {p.seasons.map((s) => (
-                  <span key={s} className={`text-[10px] px-2 py-0.5 rounded-full ${seasonBadge[s]}`}>{s}</span>
-                ))}
-                {likedIds.includes(p.id) && (
-                  <Badge className="rounded-xl bg-rose-600 dark:bg-rose-500 text-white">{t('plant.liked')}</Badge>
-                )}
-              </div>
+                <div className="flex items-center gap-2 mb-1">
+                  <Badge className={`${rarityTone[p.rarity ?? 'Common']} rounded-xl`}>{p.rarity}</Badge>
+                    {p.seasons.map((s: PlantSeason) => {
+                      const badgeClass = seasonBadge[s] ?? 'bg-stone-200 dark:bg-stone-700 text-stone-900 dark:text-stone-100'
+                    return (
+                      <span key={s} className={`text-[10px] px-2 py-0.5 rounded-full ${badgeClass}`}>{s}</span>
+                    )
+                  })}
+                  {likedIds.includes(p.id) && (
+                    <Badge className="rounded-xl bg-rose-600 dark:bg-rose-500 text-white">{t('plant.liked')}</Badge>
+                  )}
+                </div>
               <div className="font-medium truncate">{p.name}</div>
               <div className="text-xs italic opacity-60 truncate">{p.scientificName}</div>
               <p className="text-sm mt-1 line-clamp-2">{p.description}</p>
