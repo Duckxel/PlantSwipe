@@ -895,7 +895,7 @@ ${existingPromptSection}`
           { role: 'user', content: prompt }
         ],
         response_format: zodResponseFormat(PlantFillSchema, 'plant_fill'),
-        temperature: Number(process.env.OPENAI_TEMPERATURE ?? 0.2),
+        reasoning: { effort: 'low' },
       }, { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 180000) })
 
       aiPayload = completion?.choices?.[0]?.message?.parsed ?? null
