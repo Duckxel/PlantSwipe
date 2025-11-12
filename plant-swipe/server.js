@@ -581,136 +581,6 @@ function mergePreferExisting(aiValue, existingValue) {
   return existingValue
 }
 
-const PLANT_FILL_JOB_TTL_MS = Number(process.env.AI_FILL_JOB_TTL_MS || 1000 * 60 * 10)
-const plantFillJobs = new Map()
-
-async function generatePlantFillData({
-  plantName,
-  sanitizedSchema,
-  schemaBlueprint,
-  structuredSchema,
-  existingDataRaw,
-}) {
-  if (!openaiClient) {
-    throw new Error('OpenAI client not configured')
-  }
-
-  const existingDataForPrompt = pruneEmpty(existingDataRaw) || {}
-  const existingPromptSection = Object.keys(existingDataForPrompt).length > 0
-    ? `Existing data supplied by the user (treat these as authoritative; extend but never contradict them unless they are null/empty placeholders):
-${JSON.stringify(existingDataForPrompt, null, 2)}`
-    : 'No existing data was provided.'
-
-  const prompt = `You are an encyclopedic botanical expert tasked with completing a comprehensive plant knowledge base entry for "${plantName}".
-
-Follow these requirements precisely:
-1. Return ONLY valid JSON that conforms to the provided schema structure. Do not include code fences, markdown, or commentary.
-2. Populate every property defined by the schema except for the top-level "name" and any image or thumbnail fields.
-3. When you lack reputable information for a field, set it to null instead of inventing content.
-4. For arrays, supply at least three high-quality, well-researched items when possible.
-5. Respect enumerations and field descriptions. Use professional, detailed language grounded in authoritative botanical sources.
-6. Incorporate any supplied existing data without deleting or contradicting substantive values; enhance them with richer detail when appropriate.
-7. Ensure that every top-level section (identifiers, traits, dimensions, phenology, environment, care, propagation, usage, ecology, commerce, problems, planting, meta) is populated.
-8. In meta.funFact, describe cultural symbolism, lore, or explicitly note when it is not documented.
-9. Respond with the fully populated JSON object and nothing else.
-
-Schema blueprint (preserve this structure exactly):
-${JSON.stringify(sanitizedSchema, null, 2)}
-
-Strict JSON schema reference:
-${JSON.stringify(structuredSchema, null, 2)}
-
-${existingPromptSection}`
-
-  let aiPayload = null
-  const completion = await openaiClient.chat.completions.parse({
-    model: openaiModel,
-    messages: [
-      { role: 'system', content: 'You are a helpful botanical research assistant that provides accurate, richly detailed plant data.' },
-      { role: 'user', content: prompt }
-    ],
-    response_format: zodResponseFormat(PlantFillSchema, 'plant_fill'),
-  }, { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 180000) })
-
-  aiPayload = completion?.choices?.[0]?.message?.parsed ?? null
-  if (!aiPayload) {
-    const content = completion?.choices?.[0]?.message?.content
-    const text = Array.isArray(content)
-      ? content.map((entry) => (typeof entry === 'string' ? entry : entry?.text || '')).join('\n')
-      : (typeof content === 'string' ? content : '')
-    if (!text || text.trim().length === 0) {
-      throw new Error('AI response was empty')
-    }
-    aiPayload = PlantFillSchema.parse(JSON.parse(text))
-  }
-
-  if (!aiPayload || typeof aiPayload !== 'object' || Array.isArray(aiPayload)) {
-    throw new Error('AI response did not include valid structured data')
-  }
-
-  let plantData = ensureStructure(schemaBlueprint, aiPayload)
-  plantData = stripDisallowedKeys(plantData)
-  const merged = mergePreferExisting(plantData, existingDataRaw)
-  const structured = ensureStructure(schemaBlueprint, merged)
-  const finalData = stripDisallowedKeys(structured)
-
-  if (!finalData || typeof finalData !== 'object' || Array.isArray(finalData)) {
-    throw new Error('Failed to build plant data object')
-  }
-
-  if (!('meta' in finalData) || typeof finalData.meta !== 'object' || finalData.meta === null || Array.isArray(finalData.meta)) {
-    finalData.meta = {}
-  }
-  if (!finalData.meta.funFact || (typeof finalData.meta.funFact === 'string' && finalData.meta.funFact.trim().length === 0)) {
-    finalData.meta.funFact = `Symbolic meaning information for ${plantName} is currently not well documented; please supplement this entry with future research.`
-  }
-
-  return finalData
-}
-
-function startPlantFillJob(payload) {
-  const jobId = crypto.randomUUID()
-  const record = {
-    status: 'pending',
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    data: null,
-    error: null,
-  }
-  plantFillJobs.set(jobId, record)
-
-  ;(async () => {
-    try {
-      record.status = 'running'
-      record.updatedAt = Date.now()
-      const result = await generatePlantFillData(payload)
-      record.status = 'completed'
-      record.data = result
-    } catch (error) {
-      const message = error?.message || 'Failed to fill plant data'
-      const status = error?.status || error?.response?.status || null
-      const details = error?.response?.data || null
-      record.status = 'failed'
-      record.error = {
-        message,
-        ...(status ? { status } : {}),
-        ...(details ? { details } : {}),
-      }
-      console.error('[server] Plant fill job failed:', error)
-    } finally {
-      record.updatedAt = Date.now()
-      setTimeout(() => {
-        try {
-          plantFillJobs.delete(jobId)
-        } catch {}
-      }, PLANT_FILL_JOB_TTL_MS)
-    }
-  })().catch((error) => {
-    console.error('[server] Plant fill job encountered an unexpected error:', error)
-  })
-
-  return jobId
-}
 
 function buildConnectionString() {
   let cs = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.POSTGRES_PRISMA_URL || process.env.SUPABASE_DB_URL
@@ -986,20 +856,97 @@ app.post('/api/admin/ai/plant-fill', async (req, res) => {
     }
     const sanitizedSchema = sanitizedSchemaRaw
     const schemaBlueprint = schemaToBlueprint(sanitizedSchema)
-    const structuredSchema = buildJsonSchema(sanitizedSchema)
 
     const canUseExisting = body.existingData && typeof body.existingData === 'object' && !Array.isArray(body.existingData)
     const existingDataRaw = canUseExisting ? stripDisallowedKeys(body.existingData) : {}
 
-    const jobId = startPlantFillJob({
-      plantName,
-      sanitizedSchema,
-      schemaBlueprint,
-      structuredSchema,
-      existingDataRaw,
-    })
+    const aggregated: Record<string, unknown> = {}
 
-    res.status(202).json({ success: true, jobId })
+    for (const fieldKey of Object.keys(schemaBlueprint)) {
+      const fieldSchema = sanitizedSchema[fieldKey]
+      if (!fieldSchema) {
+        continue
+      }
+
+      const fieldJsonSchema = buildJsonSchema({ [fieldKey]: fieldSchema })
+      const existingField = existingDataRaw && typeof existingDataRaw === 'object' ? (existingDataRaw as Record<string, unknown>)[fieldKey] : undefined
+
+      const fieldInstructions = [
+        `You are enriching the "${fieldKey}" section for the plant "${plantName}".`,
+        `Return a JSON object with a single "${fieldKey}" property that strictly matches the provided schema.`,
+        `If you lack reliable information for a nested property, set it to null or an empty collection rather than inventing data.`,
+        `Schema for "${fieldKey}": ${JSON.stringify(fieldSchema, null, 2)}`,
+        `Existing data (treat as authoritative when present): ${existingField !== undefined ? JSON.stringify(existingField, null, 2) : 'null'}`,
+      ].join('\n\n')
+
+      let response
+      try {
+        response = await openaiClient.responses.create({
+          model: openaiModel,
+          reasoning: { effort: 'low' },
+          instructions: `PLANT NAME : ${plantName}`,
+          input: fieldInstructions,
+          text: {
+            format: {
+              type: 'json_schema',
+              json_schema: {
+                name: `plant_${fieldKey}`,
+                strict: true,
+                schema: fieldJsonSchema,
+              },
+            },
+          },
+        }, { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 180000) })
+      } catch (error) {
+        const errMessage =
+          error instanceof Error
+            ? error.message
+            : typeof error === 'string'
+              ? error
+              : JSON.stringify(error)
+        throw new Error(`Failed to fetch AI data for "${fieldKey}": ${errMessage}`)
+      }
+
+      const outputText = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
+      if (!outputText) {
+        throw new Error(`AI returned empty output for "${fieldKey}"`)
+      }
+
+      let parsedField: Record<string, unknown>
+      try {
+        parsedField = JSON.parse(outputText)
+      } catch (parseError) {
+        console.error('[server] Failed to parse AI field response:', parseError, outputText)
+        throw new Error(`Failed to parse AI output for "${fieldKey}"`)
+      }
+
+      if (parsedField && typeof parsedField === 'object' && fieldKey in parsedField) {
+        aggregated[fieldKey] = parsedField[fieldKey]
+      } else {
+        aggregated[fieldKey] = parsedField
+      }
+    }
+
+    let plantData = ensureStructure(schemaBlueprint, aggregated as JsonValue)
+    plantData = stripDisallowedKeys(plantData)
+    plantData = mergePreferExisting(plantData, existingDataRaw)
+    plantData = ensureStructure(schemaBlueprint, plantData)
+    plantData = stripDisallowedKeys(plantData)
+
+    if (!plantData || typeof plantData !== 'object' || Array.isArray(plantData)) {
+      throw new Error('AI output could not be transformed into a plant record')
+    }
+
+    const plantObject = plantData as Record<string, JsonValue>
+    if (!('meta' in plantObject) || typeof plantObject.meta !== 'object' || plantObject.meta === null || Array.isArray(plantObject.meta)) {
+      plantObject.meta = {}
+    }
+    const metaObject = plantObject.meta as Record<string, JsonValue>
+    if (!metaObject.funFact || (typeof metaObject.funFact === 'string' && metaObject.funFact.trim().length === 0)) {
+      metaObject.funFact = `Symbolic meaning information for ${plantName} is currently not well documented; please supplement this entry with future research.`
+    }
+
+    res.json({ success: true, data: plantObject, model: openaiModel })
   } catch (err) {
     console.error('[server] AI plant fill failed:', err)
     if (!res.headersSent) {
@@ -1011,33 +958,6 @@ app.options('/api/admin/ai/plant-fill', (_req, res) => {
   res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
   res.status(204).end()
-})
-
-app.get('/api/admin/ai/plant-fill/:jobId', async (req, res) => {
-  const caller = await ensureAdmin(req, res)
-  if (!caller) return
-
-  const jobId = String(req.params.jobId || '').trim()
-  if (!jobId) {
-    res.status(400).json({ error: 'Job id is required' })
-    return
-  }
-
-  const record = plantFillJobs.get(jobId)
-  if (!record) {
-    res.status(404).json({ error: 'Job not found', jobId })
-    return
-  }
-
-  res.json({
-    jobId,
-    status: record.status,
-    success: record.status === 'completed',
-    data: record.status === 'completed' ? record.data : undefined,
-    error: record.status === 'failed' ? record.error : undefined,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-  })
 })
 
 // Admin: generic log endpoint to record an action from admin_api or UI
