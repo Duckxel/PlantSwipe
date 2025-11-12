@@ -2184,6 +2184,100 @@ create index if not exists requested_plants_created_at_idx on public.requested_p
   }
 }
 
+async function ensurePlantTranslationsSchema() {
+  if (!sql) return
+  const ddl = `
+create table if not exists public.plant_translations (
+  id uuid primary key default gen_random_uuid(),
+  plant_id text not null references public.plants(id) on delete cascade,
+  language text not null check (language in ('en', 'fr')),
+  name text not null,
+  identifiers jsonb,
+  ecology jsonb,
+  usage jsonb,
+  meta jsonb,
+  phenology jsonb,
+  care jsonb,
+  planting jsonb,
+  problems jsonb,
+  scientific_name text,
+  meaning text,
+  description text,
+  care_soil text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique(plant_id, language)
+);
+
+create index if not exists plant_translations_plant_id_idx on public.plant_translations(plant_id);
+create index if not exists plant_translations_language_idx on public.plant_translations(language);
+
+alter table if exists public.plant_translations add column if not exists identifiers jsonb;
+alter table if exists public.plant_translations add column if not exists ecology jsonb;
+alter table if exists public.plant_translations add column if not exists usage jsonb;
+alter table if exists public.plant_translations add column if not exists meta jsonb;
+alter table if exists public.plant_translations add column if not exists phenology jsonb;
+alter table if exists public.plant_translations add column if not exists care jsonb;
+alter table if exists public.plant_translations add column if not exists planting jsonb;
+alter table if exists public.plant_translations add column if not exists problems jsonb;
+
+alter table public.plant_translations enable row level security;
+
+do $do$ begin
+  if exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'plant_translations'
+      and policyname = 'plant_translations_select_all'
+  ) then
+    drop policy plant_translations_select_all on public.plant_translations;
+  end if;
+  create policy plant_translations_select_all on public.plant_translations for select to authenticated, anon using (true);
+end $do$;
+
+do $do$ begin
+  if exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'plant_translations'
+      and policyname = 'plant_translations_insert'
+  ) then
+    drop policy plant_translations_insert on public.plant_translations;
+  end if;
+  create policy plant_translations_insert on public.plant_translations for insert to authenticated with check (true);
+end $do$;
+
+do $do$ begin
+  if exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'plant_translations'
+      and policyname = 'plant_translations_update'
+  ) then
+    drop policy plant_translations_update on public.plant_translations;
+  end if;
+  create policy plant_translations_update on public.plant_translations for update to authenticated using (true) with check (true);
+end $do$;
+
+do $do$ begin
+  if exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'plant_translations'
+      and policyname = 'plant_translations_delete'
+  ) then
+    drop policy plant_translations_delete on public.plant_translations;
+  end if;
+  create policy plant_translations_delete on public.plant_translations for delete to authenticated using (true);
+end $do$;
+`
+  try {
+    await sql.unsafe(ddl, [], { simple: true })
+  } catch (err) {
+    console.error('[sync] failed to ensure plant_translations schema', err)
+  }
+}
+
 // Helper: verify key schema objects exist after sync for operator assurance
 async function verifySchemaAfterSync() {
   if (!sql) return null
@@ -2254,6 +2348,7 @@ async function handleSyncSchema(req, res) {
 
     // Ensure critical tables that power new features exist even if the SQL script was partially applied.
     await ensureRequestedPlantsSchema()
+    await ensurePlantTranslationsSchema()
 
     // Verify important objects exist after sync
     let summary = null
@@ -2300,6 +2395,23 @@ app.get('/api/admin/sync-schema', handleSyncSchema)
 app.options('/api/admin/sync-schema', (_req, res) => {
   // Allow standard headers for admin calls
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+app.post('/api/admin/plant-translations/ensure-schema', async (req, res) => {
+  const caller = await ensureAdmin(req, res)
+  if (!caller) return
+  try {
+    await ensurePlantTranslationsSchema()
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[server] ensure plant_translations schema failed', err)
+    res.status(500).json({ error: err?.message || 'Failed to ensure plant translation schema' })
+  }
+})
+app.options('/api/admin/plant-translations/ensure-schema', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
   res.status(204).end()
 })
