@@ -458,81 +458,6 @@ function schemaToBlueprint(node) {
   return result
 }
 
-function buildJsonSchema(node) {
-  if (Array.isArray(node)) {
-    const itemSchema = node.length > 0 ? buildJsonSchema(node[0]) : {}
-    return { type: 'array', items: itemSchema }
-  }
-  if (!node || typeof node !== 'object') {
-    return { type: 'string' }
-  }
-
-  const obj = node
-  if (typeof obj.type === 'string') {
-    const typeValue = obj.type.toLowerCase()
-    const schema = {
-      type: ['string', 'number', 'integer', 'boolean', 'array', 'object', 'null'].includes(typeValue)
-        ? typeValue
-        : 'string'
-    }
-    if (typeof obj.description === 'string') {
-      schema.description = obj.description
-    }
-    if (Array.isArray(obj.options) && obj.options.length > 0) {
-      schema.enum = obj.options
-    }
-    if (typeValue === 'array') {
-      const items = obj.items
-      if (typeof items === 'string') {
-        schema.items = { type: items }
-      } else if (items && typeof items === 'object') {
-        schema.items = buildJsonSchema(items)
-      } else {
-        schema.items = {}
-      }
-    } else if (typeValue === 'object') {
-      const source =
-        typeof obj.properties === 'object' && obj.properties !== null && !Array.isArray(obj.properties)
-          ? obj.properties
-          : Object.fromEntries(
-              Object.entries(obj).filter(([key]) => !metadataKeys.has(key))
-            )
-      const properties = {}
-      for (const [key, value] of Object.entries(source)) {
-        properties[key] = buildJsonSchema(value)
-      }
-      schema.properties = properties
-      if (!('additionalProperties' in schema)) {
-        schema.additionalProperties = false
-      }
-    }
-
-    if ('additionalProperties' in obj) {
-      const ap = obj.additionalProperties
-      if (typeof ap === 'string') {
-        schema.additionalProperties = { type: ap }
-      } else if (ap && typeof ap === 'object') {
-        schema.additionalProperties = buildJsonSchema(ap)
-      } else if (typeof ap === 'boolean') {
-        schema.additionalProperties = ap
-      }
-    }
-
-    return schema
-  }
-
-  const properties = {}
-  for (const [key, value] of Object.entries(obj)) {
-    if (metadataKeys.has(key)) continue
-    properties[key] = buildJsonSchema(value)
-  }
-  return {
-    type: 'object',
-    properties,
-    additionalProperties: false
-  }
-}
-
 function pruneEmpty(node) {
   if (Array.isArray(node)) {
     const pruned = node
@@ -604,39 +529,233 @@ function removeNullValues(node) {
   return node
 }
 
+function collectFieldHints(node, path, hints = new Set()) {
+  if (!node || typeof node !== 'object') {
+    return hints
+  }
+
+  const type = typeof node.type === 'string' ? node.type.toLowerCase() : null
+  if (Array.isArray(node.options) && node.options.length > 0) {
+    hints.add(`${path}: choose only from [${node.options.join(', ')}]`)
+  }
+  if (type === 'number' || type === 'integer') {
+    hints.add(`${path}: answer with numbers only.`)
+  }
+  if (type === 'boolean') {
+    hints.add(`${path}: answer with "true" or "false".`)
+  }
+  if (type === 'array') {
+    const items = node.items
+    if (typeof items === 'string') {
+      const itemType = items.toLowerCase()
+      if (itemType === 'number' || itemType === 'integer') {
+        hints.add(`${path}: provide an array of numbers.`)
+      } else if (itemType === 'boolean') {
+        hints.add(`${path}: provide an array of true/false values.`)
+      }
+    } else if (items && typeof items === 'object') {
+      collectFieldHints(items, `${path}[]`, hints)
+    }
+  }
+  if (node.additionalProperties && typeof node.additionalProperties === 'object') {
+    collectFieldHints(node.additionalProperties, `${path}.*`, hints)
+  }
+
+  const skipKeys = new Set([
+    'type',
+    'description',
+    'options',
+    'items',
+    'additionalProperties',
+    'min',
+    'max',
+    'minCm',
+    'maxCm',
+    'rowCm',
+    'plantCm',
+    'minF',
+    'maxF',
+    'minC',
+    'maxC',
+    'units',
+    'unit',
+    'example',
+    'default',
+  ])
+
+  for (const [key, value] of Object.entries(node)) {
+    if (skipKeys.has(key)) continue
+    if (value && typeof value === 'object') {
+      collectFieldHints(value, `${path}.${key}`, hints)
+    }
+  }
+
+  return hints
+}
+
+function inferExpectedKind(node) {
+  if (Array.isArray(node)) return 'array'
+  if (!node || typeof node !== 'object') {
+    return typeof node
+  }
+  if (typeof node.type === 'string') {
+    return node.type.toLowerCase()
+  }
+  return 'object'
+}
+
+function inferArrayItemKind(node) {
+  if (!node || typeof node !== 'object') return 'unknown'
+  const items = node.items
+  if (typeof items === 'string') {
+    return items.toLowerCase()
+  }
+  if (items && typeof items === 'object') {
+    if (typeof items.type === 'string') {
+      return items.type.toLowerCase()
+    }
+    return 'object'
+  }
+  return 'unknown'
+}
+
+function coerceValueForSchema(schemaNode, value, existingValue) {
+  const kind = inferExpectedKind(schemaNode)
+  if (value === undefined || value === null) {
+    return value
+  }
+
+  if (kind === 'number' || kind === 'integer') {
+    if (typeof value === 'number') {
+      return kind === 'integer' ? Math.round(value) : value
+    }
+    if (typeof value === 'string') {
+      const numericText = value.trim().match(/[-+]?\d+(\.\d+)?/g)
+      if (numericText && numericText.length > 0) {
+        const num = Number(numericText[0])
+        if (!Number.isNaN(num)) {
+          return kind === 'integer' ? Math.round(num) : num
+        }
+      }
+    }
+    return existingValue !== undefined ? existingValue : undefined
+  }
+
+  if (kind === 'boolean') {
+    if (typeof value === 'boolean') return value
+    if (typeof value === 'string') {
+      const lowered = value.trim().toLowerCase()
+      if (lowered === 'true') return true
+      if (lowered === 'false') return false
+    }
+    return existingValue !== undefined ? existingValue : undefined
+  }
+
+  if (kind === 'array') {
+    if (Array.isArray(value)) {
+      return value
+    }
+    if (typeof value === 'string') {
+      const itemKind = inferArrayItemKind(schemaNode)
+      const parts = value
+        .split(/[,;\n]+/)
+        .map((part) => part.trim())
+        .filter((part) => part.length > 0)
+      if (itemKind === 'number' || itemKind === 'integer') {
+        const numbers = parts
+          .map((part) => Number(part))
+          .filter((num) => !Number.isNaN(num))
+        return numbers
+      }
+      if (itemKind === 'boolean') {
+        const bools = parts
+          .map((part) => {
+            const lowered = part.toLowerCase()
+            if (lowered === 'true') return true
+            if (lowered === 'false') return false
+            return null
+          })
+          .filter((item) => item !== null)
+        return bools
+      }
+      return parts
+    }
+    return existingValue !== undefined ? existingValue : []
+  }
+
+  if (kind === 'object') {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      return value
+    }
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value)
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          return parsed
+        }
+      } catch {}
+    }
+    if (existingValue && typeof existingValue === 'object') {
+      return existingValue
+    }
+    return {}
+  }
+
+  if (kind === 'string') {
+    if (typeof value === 'string') {
+      return value
+    }
+    if (value != null) {
+      return String(value)
+    }
+    return existingValue !== undefined ? existingValue : ''
+  }
+
+  return value
+}
+
 async function generateFieldData(options) {
   const { plantName, fieldKey, fieldSchema, existingField } = options || {}
   if (!openaiClient) {
     throw new Error('OpenAI client not configured')
   }
 
-  const fieldJsonSchema = buildJsonSchema({ [fieldKey]: fieldSchema })
+  const hintList = Array.from(collectFieldHints(fieldSchema, fieldKey)).slice(0, 50)
+  const commonInstructions = [
+    'You fill plant data for individual fields.',
+    'Respond only with valid JSON containing the requested field.',
+    'Never include explanations, markdown, or extra prose.',
+    'Never output null; use empty strings, empty arrays, or omit keys instead.',
+    'Reuse any existing data when it is already suitable.',
+  ].join('\n')
 
-  const fieldInstructions = [
-    `You are enriching the "${fieldKey}" section for the plant "${plantName}".`,
-    `Return a JSON object with a single "${fieldKey}" property that strictly matches the provided schema.`,
-    `If you lack reliable information for a nested property, set it to an empty string, an empty array/object, or omit the property entirely.`,
-    `Never output literal null values for any property.`,
-    `Schema for "${fieldKey}": ${JSON.stringify(fieldSchema, null, 2)}`,
-    `Existing data (treat as authoritative when present): ${existingField !== undefined ? JSON.stringify(existingField, null, 2) : 'null'}`,
-  ].join('\n\n')
+  const promptSections = [
+    `Plant name: ${plantName}`,
+    `Field key: ${fieldKey}`,
+    `Field definition (for reference):\n${JSON.stringify(fieldSchema, null, 2)}`,
+  ]
 
-  const response = await openaiClient.responses.create({
-    model: openaiModel,
-    reasoning: { effort: 'low' },
-    instructions: `PLANT NAME : ${plantName}`,
-    input: fieldInstructions,
-    text: {
-      format: {
-        type: 'json_schema',
-        json_schema: {
-          name: `plant_${fieldKey}`,
-          strict: true,
-          schema: fieldJsonSchema,
-        },
-      },
+  if (hintList.length > 0) {
+    promptSections.push(`Constraints:\n- ${hintList.join('\n- ')}`)
+  }
+
+  if (existingField !== undefined) {
+    promptSections.push(`Existing data (prefer and expand when correct):\n${JSON.stringify(existingField, null, 2)}`)
+  }
+
+  promptSections.push(
+    `Respond with JSON shaped exactly like:\n{"${fieldKey}": ...}\nDo not include any other keys or commentary.`
+  )
+
+  const response = await openaiClient.responses.create(
+    {
+      model: openaiModel,
+      reasoning: { effort: 'low' },
+      instructions: commonInstructions,
+      input: promptSections.join('\n\n'),
     },
-  }, { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 180000) })
+    { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 180000) }
+  )
 
   const outputText = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
   if (!outputText) {
@@ -647,17 +766,32 @@ async function generateFieldData(options) {
   try {
     parsedField = JSON.parse(outputText)
   } catch (parseError) {
-    console.error('[server] Failed to parse AI field response:', parseError, outputText)
-    throw new Error(`Failed to parse AI output for "${fieldKey}"`)
+    const jsonMatch = outputText.match(/\{[\s\S]*\}/)
+    if (jsonMatch) {
+      try {
+        parsedField = JSON.parse(jsonMatch[0])
+      } catch (innerError) {
+        console.error('[server] Failed to parse extracted AI field response:', innerError, outputText)
+      }
+    } else {
+      console.error('[server] Failed to parse AI field response:', parseError, outputText)
+    }
   }
 
   const rawValue =
-    parsedField && typeof parsedField === 'object' && fieldKey in parsedField
+    parsedField && typeof parsedField === 'object' && !Array.isArray(parsedField) && fieldKey in parsedField
       ? parsedField[fieldKey]
-      : parsedField
+      : parsedField && typeof parsedField === 'object' && !Array.isArray(parsedField)
+        ? parsedField
+        : outputText
+  const coercedValue = coerceValueForSchema(
+    fieldSchema,
+    typeof rawValue === 'string' ? rawValue.trim() : rawValue,
+    existingField
+  )
 
-  const cleanedValue = removeNullValues(rawValue)
-  return cleanedValue
+  const cleanedValue = removeNullValues(coercedValue)
+  return cleanedValue !== undefined ? cleanedValue : undefined
 }
 
 
