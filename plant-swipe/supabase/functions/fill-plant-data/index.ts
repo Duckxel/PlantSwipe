@@ -1,7 +1,8 @@
 // Supabase Edge Function to fill plant data using OpenAI
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY')
-const OPENAI_API_URL = 'https://api.openai.com/v1/responses'
+import OpenAI from "npm:openai@4.61.1"
+
 const OPENAI_MODEL = 'gpt-5-2025-08-07'
 
 const defaultAllowedOrigins = [
@@ -290,26 +291,22 @@ ${JSON.stringify(sanitizedSchema, null, 2)}
 
 Fill in as much accurate information as possible for "${plantName}". Return ONLY the JSON object.`
 
-      const response = await fetch(OPENAI_API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${OPENAI_API_KEY}`
-        },
-          body: JSON.stringify({
-            model: OPENAI_MODEL,
-            reasoning: { effort: 'high' },
-            input: [
-              {
-                role: 'developer',
-                content: prompt
-              },
-              {
-                role: 'user',
-                content: `Provide the complete JSON record for the plant "${plantName}" strictly following the schema above.`
-              }
-            ],
-          response_format: {
+      const client = new OpenAI({ apiKey: OPENAI_API_KEY })
+      const completion = await client.responses.create({
+        model: OPENAI_MODEL,
+        reasoning: { effort: 'high' },
+        input: [
+          {
+            role: 'developer',
+            content: prompt
+          },
+          {
+            role: 'user',
+            content: `Provide the complete JSON record for the plant "${plantName}" strictly following the schema above.`
+          }
+        ],
+        text: {
+          format: {
             type: 'json_schema',
             json_schema: {
               name: 'plant_data',
@@ -317,31 +314,21 @@ Fill in as much accurate information as possible for "${plantName}". Return ONLY
               schema: structuredSchema
             }
           }
-          })
+        }
       })
 
-    if (!response.ok) {
-      const errorData = await response.text()
-      console.error('OpenAI API error:', errorData)
-      return new Response(
-        JSON.stringify({ error: 'Failed to get AI response', details: errorData }),
-        { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-
-      const data = await response.json()
       const contentText =
-        typeof data.output_text === 'string'
-          ? data.output_text
-          : Array.isArray(data.output)
-            ? data.output
+        typeof completion.output_text === 'string'
+          ? completion.output_text
+          : Array.isArray(completion.output)
+            ? completion.output
                 .map((segment: Record<string, unknown>) => {
                   const content = Array.isArray(segment.content) ? segment.content : []
                   const firstText = content.find((entry) => entry && entry.type === 'output_text')
-                  return firstText?.text ?? ''
+                  return typeof firstText?.text === 'string' ? firstText.text : ''
                 })
                 .join('')
-            : null
+            : ''
 
       if (!contentText) {
         return new Response(
