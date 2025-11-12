@@ -25,19 +25,21 @@ export async function fetchAiPlantFill({ plantName, schema, existingData, onProg
   }
 
   try {
-    const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
-    if (adminToken) {
-      headers['X-Admin-Token'] = String(adminToken)
+    const env = typeof globalThis !== 'undefined' && globalThis && typeof globalThis === 'object'
+      ? globalThis.__ENV__
+      : undefined
+    if (env && env.VITE_ADMIN_STATIC_TOKEN) {
+      headers['X-Admin-Token'] = String(env.VITE_ADMIN_STATIC_TOKEN)
     }
   } catch {}
 
   const schemaObject = schema && typeof schema === 'object' && !Array.isArray(schema)
-    ? schema as Record<string, unknown>
+    ? schema
     : null
 
   const aggregated: Record<string, unknown> =
-    existingData && typeof existingData === 'object'
-      ? { ...(existingData as Record<string, unknown>) }
+    existingData && typeof existingData === 'object' && !Array.isArray(existingData)
+      ? { ...existingData }
       : {}
 
   if (!schemaObject) {
@@ -85,7 +87,10 @@ export async function fetchAiPlantFill({ plantName, schema, existingData, onProg
         plantName,
         schema,
         fieldKey,
-        existingField: existingData && typeof existingData === 'object' ? (existingData as Record<string, unknown>)[fieldKey] : undefined,
+          existingField:
+            existingData && typeof existingData === 'object' && !Array.isArray(existingData)
+              ? existingData[fieldKey]
+              : undefined,
       }),
       signal,
     })

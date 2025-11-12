@@ -581,7 +581,7 @@ function mergePreferExisting(aiValue, existingValue) {
   return existingValue
 }
 
-function removeNullValues(node: JsonValue): JsonValue | undefined {
+function removeNullValues(node) {
   if (node === null || node === undefined) {
     return undefined
   }
@@ -599,22 +599,13 @@ function removeNullValues(node: JsonValue): JsonValue | undefined {
         result[key] = cleanedValue
       }
     }
-    return result
+    return Object.keys(result).length > 0 ? result : undefined
   }
   return node
 }
 
-async function generateFieldData({
-  plantName,
-  fieldKey,
-  fieldSchema,
-  existingField,
-}: {
-  plantName: string
-  fieldKey: string
-  fieldSchema: JsonValue
-  existingField?: unknown
-}) {
+async function generateFieldData(options) {
+  const { plantName, fieldKey, fieldSchema, existingField } = options || {}
   if (!openaiClient) {
     throw new Error('OpenAI client not configured')
   }
@@ -946,9 +937,9 @@ app.post('/api/admin/ai/plant-fill', async (req, res) => {
     const schemaBlueprint = schemaToBlueprint(sanitizedSchema)
 
     const canUseExisting = body.existingData && typeof body.existingData === 'object' && !Array.isArray(body.existingData)
-    const existingDataRaw = canUseExisting ? stripDisallowedKeys(body.existingData) : {}
+    const existingDataRaw = canUseExisting ? stripDisallowedKeys(body.existingData) || {} : {}
 
-    const aggregated: Record<string, JsonValue> = {}
+    const aggregated = {}
 
     for (const fieldKey of Object.keys(schemaBlueprint)) {
       const fieldSchema = sanitizedSchema[fieldKey]
@@ -958,10 +949,10 @@ app.post('/api/admin/ai/plant-fill', async (req, res) => {
 
       const existingFieldRaw =
         existingDataRaw && typeof existingDataRaw === 'object'
-          ? (existingDataRaw as Record<string, unknown>)[fieldKey]
+          ? existingDataRaw[fieldKey]
           : undefined
       const existingFieldClean =
-        existingFieldRaw !== undefined ? removeNullValues(existingFieldRaw as JsonValue) : undefined
+        existingFieldRaw !== undefined ? removeNullValues(existingFieldRaw) : undefined
 
       const fieldValue = await generateFieldData({
         plantName,
@@ -973,16 +964,18 @@ app.post('/api/admin/ai/plant-fill', async (req, res) => {
       const cleanedField =
         fieldValue !== undefined ? removeNullValues(fieldValue) : undefined
       if (cleanedField !== undefined) {
-        aggregated[fieldKey] = cleanedField as JsonValue
+        aggregated[fieldKey] = cleanedField
+      } else {
+        delete aggregated[fieldKey]
       }
     }
 
-    let plantData = ensureStructure(schemaBlueprint, aggregated as JsonValue)
+    let plantData = ensureStructure(schemaBlueprint, aggregated)
     plantData = stripDisallowedKeys(plantData)
     plantData = mergePreferExisting(plantData, existingDataRaw)
     plantData = ensureStructure(schemaBlueprint, plantData)
     plantData = stripDisallowedKeys(plantData)
-    const cleanedPlantData = removeNullValues(plantData as JsonValue)
+    const cleanedPlantData = removeNullValues(plantData)
     if (cleanedPlantData && typeof cleanedPlantData === 'object' && !Array.isArray(cleanedPlantData)) {
       plantData = cleanedPlantData
     }
@@ -991,11 +984,11 @@ app.post('/api/admin/ai/plant-fill', async (req, res) => {
       throw new Error('AI output could not be transformed into a plant record')
     }
 
-    const plantObject = plantData as Record<string, JsonValue>
+    const plantObject = plantData
     if (!('meta' in plantObject) || typeof plantObject.meta !== 'object' || plantObject.meta === null || Array.isArray(plantObject.meta)) {
       plantObject.meta = {}
     }
-    const metaObject = plantObject.meta as Record<string, JsonValue>
+    const metaObject = plantObject.meta
     if (!metaObject.funFact || (typeof metaObject.funFact === 'string' && metaObject.funFact.trim().length === 0)) {
       metaObject.funFact = `Symbolic meaning information for ${plantName} is currently not well documented; please supplement this entry with future research.`
     }
@@ -1061,7 +1054,7 @@ app.post('/api/admin/ai/plant-fill/field', async (req, res) => {
       existingField = stripDisallowedKeys({ [fieldKey]: existingFieldRaw })?.[fieldKey]
     }
     const existingFieldClean =
-      existingField !== undefined ? removeNullValues(existingField as JsonValue) : undefined
+      existingField !== undefined ? removeNullValues(existingField) : undefined
 
     const fieldValue = await generateFieldData({
       plantName,

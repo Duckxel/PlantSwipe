@@ -82,6 +82,13 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
     setSeasons((cur: string[]) => (cur.includes(s) ? cur.filter((x: string) => x !== s) : [...cur, s]))
   }
 
+    React.useEffect(() => {
+      return () => {
+        abortControllerRef.current?.abort()
+        abortControllerRef.current = null
+      }
+    }, [])
+
   const loadSchema = async () => {
     try {
       const response = await fetch('/PLANT-INFO-SCHEMA.json')

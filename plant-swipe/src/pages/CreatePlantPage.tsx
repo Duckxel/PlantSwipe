@@ -113,6 +113,13 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
     }
   }, [initialName])
 
+    React.useEffect(() => {
+      return () => {
+        abortControllerRef.current?.abort()
+        abortControllerRef.current = null
+      }
+    }, [])
+
   // Load schema for AI fill
   const loadSchema = async () => {
     try {
