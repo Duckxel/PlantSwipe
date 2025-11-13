@@ -12,9 +12,10 @@ interface MobileNavBarProps {
   canCreate?: boolean
   onProfile?: () => void
   onLogout?: () => void
+  onLogin?: () => void
 }
 
-export const MobileNavBar: React.FC<MobileNavBarProps> = ({ canCreate, onProfile, onLogout }) => {
+export const MobileNavBar: React.FC<MobileNavBarProps> = ({ canCreate, onProfile, onLogout, onLogin }) => {
   const pathWithoutLang = usePathWithoutLanguage()
   const navigate = useLanguageNavigate()
   const { user, profile } = useAuth()
@@ -76,7 +77,7 @@ export const MobileNavBar: React.FC<MobileNavBarProps> = ({ canCreate, onProfile
                 <Search className="h-6 w-6" />
               </Link>
             </Button>
-            {user ? (
+              {user ? (
               <Button 
                 variant={"secondary"} 
                 size={"icon"} 
@@ -87,11 +88,22 @@ export const MobileNavBar: React.FC<MobileNavBarProps> = ({ canCreate, onProfile
                 <User className="h-6 w-6" />
               </Button>
             ) : (
-              <Button asChild variant={"secondary"} size={"icon"} className="h-12 w-12 rounded-2xl bg-white dark:bg-[#2d2d30] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#3e3e42]">
-                <Link to="/" aria-label="Profile" className="no-underline flex items-center justify-center">
+                <Button
+                  variant={"secondary"}
+                  size={"icon"}
+                  className="h-12 w-12 rounded-2xl bg-white dark:bg-[#2d2d30] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#3e3e42]"
+                  type="button"
+                  onClick={() => {
+                    if (onLogin) {
+                      onLogin()
+                    } else {
+                      navigate('/')
+                    }
+                  }}
+                  aria-label={t('common.login')}
+                >
                   <User className="h-6 w-6" />
-                </Link>
-              </Button>
+                </Button>
             )}
           </div>
         </div>

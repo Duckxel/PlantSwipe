@@ -2,12 +2,13 @@ import React from "react"
 import { useParams, Link, useNavigate } from "react-router-dom"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { createPortal } from "react-dom"
 import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
 import { EditProfileDialog, type EditProfileValues } from "@/components/profile/EditProfileDialog"
 import { applyAccentByKey, saveAccentKey } from "@/lib/accent"
-import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff, Flame, Sprout, Home, Trophy } from "lucide-react"
+import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff, Flame, Sprout, Home, Trophy, Search as SearchIcon, Loader2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import i18n from "@/lib/i18n"
 import { ProfilePageSkeleton } from "@/components/garden/GardenSkeletons"
@@ -39,6 +40,18 @@ type PublicStats = {
 
 type DayAgg = { day: string; completed: number; any_success: boolean }
 
+type ProfileSuggestion = {
+  id: string
+  displayName: string | null
+  username: string | null
+  country: string | null
+  avatarUrl: string | null
+  isPrivate: boolean
+  isFriend: boolean
+  isSelf: boolean
+  canView: boolean
+}
+
 export default function PublicProfilePage() {
   const params = useParams()
   const navigate = useNavigate()
@@ -53,6 +66,13 @@ export default function PublicProfilePage() {
   const [monthDays, setMonthDays] = React.useState<DayAgg[]>([])
   const [privateInfo, setPrivateInfo] = React.useState<{ id: string; email: string | null } | null>(null)
   const [canViewProfile, setCanViewProfile] = React.useState(true)
+  const [searchTerm, setSearchTerm] = React.useState('')
+  const [searchOpen, setSearchOpen] = React.useState(false)
+  const [searchResults, setSearchResults] = React.useState<ProfileSuggestion[]>([])
+  const [searchLoading, setSearchLoading] = React.useState(false)
+  const [searchError, setSearchError] = React.useState<string | null>(null)
+  const searchContainerRef = React.useRef<HTMLDivElement | null>(null)
+  const searchRequestRef = React.useRef(0)
   
 
   const formatLastSeen = React.useCallback((iso: string | null | undefined) => {
@@ -258,6 +278,90 @@ export default function PublicProfilePage() {
   }, [displayParam, user?.id])
 
   const isOwner = user?.id && pp?.id && user.id === pp.id
+
+  React.useEffect(() => {
+    setSearchTerm('')
+    setSearchOpen(false)
+    setSearchResults([])
+    setSearchError(null)
+  }, [displayParam])
+
+  React.useEffect(() => {
+    if (!searchOpen) return
+    const handlePointer = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as Node
+      if (searchContainerRef.current && !searchContainerRef.current.contains(target)) {
+        setSearchOpen(false)
+      }
+    }
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSearchOpen(false)
+    }
+    document.addEventListener('mousedown', handlePointer)
+    document.addEventListener('touchstart', handlePointer)
+    document.addEventListener('keydown', handleKey)
+    return () => {
+      document.removeEventListener('mousedown', handlePointer)
+      document.removeEventListener('touchstart', handlePointer)
+      document.removeEventListener('keydown', handleKey)
+    }
+  }, [searchOpen])
+
+  React.useEffect(() => {
+    if (!searchOpen || !user?.id) {
+      searchRequestRef.current += 1
+      setSearchLoading(false)
+      if (!searchOpen) setSearchError(null)
+      setSearchResults([])
+      return
+    }
+    const requestId = ++searchRequestRef.current
+    const trimmedTerm = searchTerm.trim()
+    const fallbackError = t('profile.searchUsers.error')
+    setSearchLoading(true)
+    setSearchError(null)
+    const handle = window.setTimeout(async () => {
+      try {
+        const { data, error } = await supabase.rpc('search_user_profiles', {
+          _term: trimmedTerm,
+          _limit: 8,
+        })
+        if (requestId !== searchRequestRef.current) return
+        if (error) {
+          setSearchError(fallbackError)
+          setSearchResults([])
+          return
+        }
+        if (Array.isArray(data)) {
+          setSearchResults(data.map((row: any) => ({
+            id: String(row.id),
+            displayName: row.display_name ?? null,
+            username: row.username ?? null,
+            country: row.country ?? null,
+            avatarUrl: row.avatar_url ?? null,
+            isPrivate: Boolean(row.is_private),
+            isFriend: Boolean(row.is_friend),
+            isSelf: Boolean(row.is_self),
+            canView: Boolean(row.can_view),
+          })))
+          setSearchError(null)
+        } else {
+          setSearchResults([])
+        }
+      } catch {
+        if (requestId !== searchRequestRef.current) return
+        setSearchError(fallbackError)
+        setSearchResults([])
+      } finally {
+        if (requestId === searchRequestRef.current) {
+          setSearchLoading(false)
+        }
+      }
+    }, 200)
+    return () => {
+      window.clearTimeout(handle)
+    }
+  }, [searchTerm, searchOpen, user?.id, t])
 
   // Load private info for owners
   React.useEffect(() => {
@@ -532,8 +636,120 @@ export default function PublicProfilePage() {
   }
   const hideTooltip = () => setTooltip(null)
 
+  const handleSelectSuggestion = React.useCallback((suggestion: ProfileSuggestion) => {
+    if (!suggestion) return
+    searchRequestRef.current += 1
+    setSearchOpen(false)
+    setSearchTerm('')
+    setSearchResults([])
+    setSearchError(null)
+    const target = suggestion.displayName || suggestion.username
+    if (suggestion.isSelf && (!target || target.trim() === '')) {
+      navigate('/u/_me')
+      return
+    }
+    if (target) {
+      navigate(`/u/${encodeURIComponent(target)}`)
+    }
+  }, [navigate])
+
   return (
     <div className="max-w-5xl mx-auto mt-8 px-4 md:px-0">
+      {user?.id && (
+        <div ref={searchContainerRef} className="relative mb-6">
+          <label
+            htmlFor="profile-user-search"
+            className="block text-xs font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400"
+          >
+            {t('profile.searchUsers.label')}
+          </label>
+          <div className="relative mt-2">
+            <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" aria-hidden />
+            <Input
+              id="profile-user-search"
+              value={searchTerm}
+              autoComplete="off"
+              onChange={(event) => {
+                const { value } = event.target
+                setSearchTerm(value)
+                if (!searchOpen) setSearchOpen(true)
+              }}
+              onFocus={() => setSearchOpen(true)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && searchResults.length > 0) {
+                  event.preventDefault()
+                  handleSelectSuggestion(searchResults[0])
+                }
+              }}
+              placeholder={t('profile.searchUsers.placeholder')}
+              className="pl-10 pr-10 rounded-2xl"
+            />
+            {searchLoading && (
+              <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-stone-400" aria-hidden />
+            )}
+          </div>
+          {searchOpen && (
+            <div className="absolute z-40 mt-2 w-full overflow-hidden rounded-2xl border border-stone-300 bg-white shadow-xl dark:border-[#3e3e42] dark:bg-[#252526]">
+              {searchError && (
+                <div className="px-3 py-2 text-xs text-red-600">
+                  {searchError}
+                </div>
+              )}
+              {!searchError && searchResults.length === 0 && !searchLoading && (
+                <div className="px-3 py-4 text-sm text-stone-500 dark:text-stone-400">
+                  {t('profile.searchUsers.noResults')}
+                </div>
+              )}
+              {!searchError && searchResults.length > 0 && (
+                <ul className="max-h-64 overflow-auto py-1">
+                  {searchResults.map((suggestion) => {
+                    const secondaryText = !suggestion.canView && !suggestion.isSelf
+                      ? t('profile.searchUsers.privateHint')
+                      : suggestion.country || ''
+                    return (
+                      <li key={suggestion.id}>
+                        <button
+                          type="button"
+                          onMouseDown={(event) => {
+                            event.preventDefault()
+                            handleSelectSuggestion(suggestion)
+                          }}
+                          className="flex w-full items-center gap-3 px-3 py-2 text-left transition hover:bg-stone-50 focus:bg-stone-50 dark:hover:bg-[#2d2d30] dark:focus:bg-[#2d2d30]"
+                        >
+                          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-stone-100 dark:bg-[#2d2d30]">
+                            <UserIcon className="h-5 w-5 text-stone-500 dark:text-stone-300" aria-hidden />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 text-sm font-medium text-stone-900 dark:text-stone-100">
+                              <span className="truncate">
+                                {suggestion.displayName || suggestion.username || t('profile.member')}
+                              </span>
+                                {!suggestion.isFriend && !suggestion.isSelf && suggestion.isPrivate && (
+                                  <span
+                                    className="inline-flex items-center text-stone-400"
+                                    title={t('profile.searchUsers.privateTooltip')}
+                                    aria-label={t('profile.searchUsers.privateTooltip')}
+                                  >
+                                    <EyeOff className="h-4 w-4" aria-hidden />
+                                  </span>
+                                )}
+                            </div>
+                            {secondaryText && (
+                              <div className="truncate text-xs text-stone-500 dark:text-stone-400">
+                                {secondaryText}
+                              </div>
+                            )}
+                          </div>
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
+      )}
       {loading && <ProfilePageSkeleton />}
       {error && !loading && (
         <div className="p-8 text-center">

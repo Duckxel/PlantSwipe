@@ -3184,6 +3184,111 @@ $$;
 
 grant execute on function public.get_friend_email(uuid) to authenticated;
 
+-- Function to search user profiles with friend prioritization and privacy metadata
+create or replace function public.search_user_profiles(_term text, _limit integer default 8)
+returns table (
+  id uuid,
+  display_name text,
+  username text,
+  country text,
+  avatar_url text,
+  is_private boolean,
+  is_friend boolean,
+  is_self boolean,
+  can_view boolean
+)
+language sql
+security definer
+set search_path = public
+as $$
+  with params as (
+    select
+      trim(coalesce(_term, '')) as term,
+      greatest(1, coalesce(_limit, 8)) as limit_value
+  ),
+  viewer as (
+    select auth.uid() as viewer_id
+  ),
+  base as (
+    select
+      p.id,
+      p.display_name,
+      p.username,
+      p.country,
+      p.avatar_url,
+      coalesce(p.is_private, false) as is_private,
+      params.term,
+      params.limit_value,
+      v.viewer_id
+    from public.profiles p
+    cross join params
+    cross join viewer v
+    where v.viewer_id is not null
+  ),
+  relation as (
+    select
+      b.*,
+      exists (
+        select 1
+        from public.friends f
+        where (f.user_id = b.viewer_id and f.friend_id = b.id)
+           or (f.user_id = b.id and f.friend_id = b.viewer_id)
+      ) as is_friend,
+      (b.viewer_id = b.id) as is_self
+    from base b
+  ),
+  filtered as (
+    select
+      r.*,
+      case
+        when r.term = '' then (r.is_self or r.is_friend)
+        else (
+          lower(coalesce(r.display_name, '')) like '%' || lower(r.term) || '%'
+          or lower(coalesce(r.username, '')) like '%' || lower(r.term) || '%'
+        )
+      end as matches_term
+    from relation r
+  ),
+  matched as (
+    select
+      f.*,
+      (not f.is_private) or f.is_self or f.is_friend as can_view,
+      case
+        when f.term = '' then 2
+        when lower(coalesce(f.display_name, '')) = lower(f.term) then 0
+        when lower(coalesce(f.username, '')) = lower(f.term) then 0
+        when lower(coalesce(f.display_name, '')) like lower(f.term) || '%' then 1
+        when lower(coalesce(f.username, '')) like lower(f.term) || '%' then 1
+        when lower(coalesce(f.display_name, '')) like '%' || lower(f.term) || '%' then 2
+        when lower(coalesce(f.username, '')) like '%' || lower(f.term) || '%' then 2
+        else 3
+      end as match_rank,
+      lower(coalesce(f.display_name, f.username, '')) as sort_name
+    from filtered f
+    where f.matches_term
+  )
+  select
+    m.id,
+    m.display_name,
+    m.username,
+    m.country,
+    m.avatar_url,
+    m.is_private,
+    m.is_friend,
+    m.is_self,
+    m.can_view
+  from matched m
+  order by
+    case when m.is_self then -1 else 0 end,
+    case when m.is_friend then 0 else 1 end,
+    m.match_rank,
+    m.sort_name asc,
+    m.id
+  limit (select limit_value from params);
+$$;
+
+grant execute on function public.search_user_profiles(text, integer) to authenticated;
+
 -- ========== Garden Task Cache System ==========
 -- Pre-computed task data tables to avoid expensive recalculations
 -- Cache is automatically refreshed via triggers when source data changes

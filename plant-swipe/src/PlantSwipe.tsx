@@ -464,42 +464,43 @@ export default function PlantSwipe() {
     }
   }, [user])
 
-  return (
-    <AuthActionsProvider openLogin={openLogin} openSignup={openSignup}>
-    <div className="min-h-screen w-full bg-gradient-to-b from-stone-100 to-stone-200 dark:from-[#252526] dark:to-[#1e1e1e] p-4 pb-24 md:p-8 md:pb-8 overflow-x-hidden">
-  <TopBar
-    openLogin={openLogin}
-    openSignup={openSignup}
-    user={user}
-    displayName={profile?.display_name || null}
-    onProfile={() => navigate('/profile')}
-    onLogout={async () => { await signOut(); navigate('/') }}
-  />
+    return (
+      <AuthActionsProvider openLogin={openLogin} openSignup={openSignup}>
+        <div className="min-h-screen w-full bg-gradient-to-b from-stone-100 to-stone-200 dark:from-[#252526] dark:to-[#1e1e1e] p-4 pb-24 md:p-8 md:pb-8 overflow-x-hidden">
+          <TopBar
+            openLogin={openLogin}
+            openSignup={openSignup}
+            user={user}
+            displayName={profile?.display_name || null}
+            onProfile={() => navigate('/profile')}
+            onLogout={async () => { await signOut(); navigate('/') }}
+          />
 
-      {/* Mobile Logo and App Name - Only on Discovery page (exact path match, no other routes) */}
-      {pathWithoutLang === "/" && location.pathname.replace(/^\/[a-z]{2}(-[A-Z]{2})?/, '') === "/" && (
-        <div className="md:hidden flex flex-col items-center justify-center mb-6 mt-4">
-          <div className="h-12 w-12 rounded-2xl bg-green-200 dark:bg-green-800 flex items-center justify-center shadow mb-2">
-            <Leaf className="h-6 w-6 text-green-800 dark:text-green-200" />
-          </div>
-          <Link
-            to="/"
-            className="text-2xl font-semibold tracking-tight no-underline text-black dark:text-white hover:text-black dark:hover:text-white visited:text-black dark:visited:text-white active:text-black dark:active:text-white focus:text-black dark:focus:text-white focus-visible:outline-none outline-none hover:opacity-90"
-            style={{ WebkitTapHighlightColor: 'transparent' }}
-          >
-            {t('common.appName')}
-          </Link>
-        </div>
-      )}
+          {/* Mobile Logo and App Name - Only on Discovery page (exact path match, no other routes) */}
+          {pathWithoutLang === "/" && location.pathname.replace(/^\/[a-z]{2}(-[A-Z]{2})?/, '') === "/" && (
+            <div className="md:hidden flex flex-col items-center justify-center mb-6 mt-4">
+              <div className="h-12 w-12 rounded-2xl bg-green-200 dark:bg-green-800 flex items-center justify-center shadow mb-2">
+                <Leaf className="h-6 w-6 text-green-800 dark:text-green-200" />
+              </div>
+              <Link
+                to="/"
+                className="text-2xl font-semibold tracking-tight no-underline text-black dark:text-white hover:text-black dark:hover:text-white visited:text-black dark:visited:text-white active:text-black dark:active:text-white focus:text-black dark:focus:text-white focus-visible:outline-none outline-none hover:opacity-90"
+                style={{ WebkitTapHighlightColor: 'transparent' }}
+              >
+                {t('common.appName')}
+              </Link>
+            </div>
+          )}
 
-      {/* Mobile bottom nav (hide Create on phones) */}
-      <MobileNavBar 
-        canCreate={false} 
-        onProfile={() => navigate('/profile')}
-        onLogout={async () => { await signOut(); navigate('/') }}
-      />
+          {/* Mobile bottom nav (hide Create on phones) */}
+          <MobileNavBar 
+            canCreate={false} 
+            onProfile={() => navigate('/profile')}
+            onLogout={async () => { await signOut(); navigate('/') }}
+            onLogin={openLogin}
+          />
 
-      {/* Layout: grid only when search view (to avoid narrow column in other views) */}
+          {/* Layout: grid only when search view (to avoid narrow column in other views) */}
       <div className={`max-w-6xl mx-auto mt-6 ${currentView === 'search' ? 'lg:grid lg:grid-cols-[260px_1fr] lg:gap-10' : ''}`}>
         {/* Sidebar / Filters */}
         {currentView === 'search' && (
