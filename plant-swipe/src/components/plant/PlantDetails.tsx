@@ -2529,6 +2529,7 @@ const InfoSection = ({ title, icon, children }: { title: string; icon: React.Rea
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, amount: 0.1 }}
       transition={{ duration: 0.4 }}
+      style={{ transformStyle: 'preserve-3d' }}
     >
       <Card className="rounded-3xl h-full border-stone-200/70 dark:border-[#3e3e42]/70">
         <CardHeader className="space-y-3">
