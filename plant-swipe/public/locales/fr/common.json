@@ -347,10 +347,17 @@
       "completedAllTasks": "a terminé toutes les tâches dues sur \"{{plantName}}\"",
       "plant": "Plante"
     },
-    "member": "membre",
-    "members": "membres",
-    "streak": "série",
-    "failedToLoad": "Échec du chargement des jardins"
+      "member": "membre",
+      "members": "membres",
+      "streak": "série",
+      "failedToLoad": "Échec du chargement des jardins",
+      "listPage": {
+        "hero": {
+          "badge": "Hub du jardin",
+          "title": "Vos jardins, magnifiquement organisés",
+          "subtitle": "Suivez les soins quotidiens, célébrez les progrès et invitez vos proches à faire prospérer chaque espace."
+        }
+      }
   },
   "createPlant": {
     "title": "Ajouter une plante",
@@ -565,7 +572,12 @@
       "dec": "déc."
     }
   },
-  "gardenDashboard": {
+    "gardenDashboard": {
+      "hero": {
+        "badge": "Tableau de bord du jardin",
+        "title": "Rythme maîtrisé pour {{name}}",
+        "subtitle": "Consultez les progrès du jour, la routine à venir et gardez toute l'équipe synchronisée."
+      },
     "loading": "Chargement...",
     "overview": "Aperçu",
     "plants": "Plantes",

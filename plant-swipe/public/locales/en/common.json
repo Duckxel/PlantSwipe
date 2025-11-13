@@ -336,21 +336,28 @@
     "markAllCompleted": "MARK ALL AS COMPLETED",
     "loadingTasks": "Loading tasks...",
     "noTasksToday": "No tasks due today. 🌿",
-    "done": "done",
-    "completeAll": "Complete all",
-    "completed": "Completed",
-    "doneBy": "Done by",
-    "someone": "Someone",
-    "activity": {
-      "completedTask": "has completed \"{{taskType}}\" Task on \"{{plantName}}\"",
-      "progressedTask": "has progressed \"{{taskType}}\" Task on \"{{plantName}}\" ({{completed}}/{{required}})",
-      "completedAllTasks": "completed all due tasks on \"{{plantName}}\"",
-      "plant": "Plant"
-    },
-    "member": "member",
-    "members": "members",
-    "streak": "streak",
-    "failedToLoad": "Failed to load gardens"
+      "done": "done",
+      "completeAll": "Complete all",
+      "completed": "Completed",
+      "doneBy": "Done by",
+      "someone": "Someone",
+      "activity": {
+        "completedTask": "has completed \"{{taskType}}\" Task on \"{{plantName}}\"",
+        "progressedTask": "has progressed \"{{taskType}}\" Task on \"{{plantName}}\" ({{completed}}/{{required}})",
+        "completedAllTasks": "completed all due tasks on \"{{plantName}}\"",
+        "plant": "Plant"
+      },
+      "member": "member",
+      "members": "members",
+      "streak": "streak",
+      "failedToLoad": "Failed to load gardens",
+      "listPage": {
+        "hero": {
+          "badge": "Garden hub",
+          "title": "Your gardens, beautifully organized",
+          "subtitle": "Track daily care, celebrate progress, and invite friends to help every space thrive."
+        }
+      }
   },
   "createPlant": {
     "title": "Add plant",
@@ -565,7 +572,12 @@
       "dec": "Dec"
     }
   },
-  "gardenDashboard": {
+    "gardenDashboard": {
+      "hero": {
+        "badge": "Garden dashboard",
+        "title": "Steady rhythm for {{name}}",
+        "subtitle": "Review today's progress, upcoming routines, and keep everyone in sync."
+      },
     "loading": "Loading...",
     "overview": "Overview",
     "plants": "Plants",
