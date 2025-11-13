@@ -906,30 +906,6 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
             <Label>Author Notes</Label>
             <Textarea value={meta?.authorNotes || ''} onChange={(e) => setMeta({ ...meta, authorNotes: e.target.value || undefined })} placeholder="Personal notes and observations" />
           </div>
-            <div className="grid gap-2">
-              <Label>Created By</Label>
-              <Input value={meta?.createdBy || ''} onChange={(e) => setMeta({ ...meta, createdBy: e.target.value || undefined })} placeholder="Author ID or name" />
-            </div>
-            <div className="grid gap-2">
-              <Label>Updated By</Label>
-              <Input value={meta?.updatedBy || ''} onChange={(e) => setMeta({ ...meta, updatedBy: e.target.value || undefined })} placeholder="Last editor ID or name" />
-            </div>
-            <div className="grid gap-2">
-              <Label>Created At</Label>
-              <Input
-                value={meta?.createdAt || ''}
-                onChange={(e) => setMeta({ ...meta, createdAt: e.target.value || undefined })}
-                placeholder="ISO timestamp (e.g., 2024-07-18T12:00:00Z)"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label>Updated At</Label>
-              <Input
-                value={meta?.updatedAt || ''}
-                onChange={(e) => setMeta({ ...meta, updatedAt: e.target.value || undefined })}
-                placeholder="ISO timestamp (e.g., 2024-07-18T12:00:00Z)"
-              />
-            </div>
         </div>
       </CollapsibleSection>
     </div>
