@@ -27,7 +27,8 @@ import {
   YAxis,
   Cell
 } from "recharts";
-import type { NameType, ValueType, TooltipProps } from "recharts";
+import type { TooltipContentProps } from "recharts";
+import type { Payload as RechartsTooltipPayload, NameType, ValueType } from "recharts/types/component/DefaultTooltipContent";
 
 const SECTION_KEY_MAP: Record<string, string> = {
   'Identifiers': 'identifiers',
@@ -208,6 +209,14 @@ const TIMELINE_COLORS: Record<string, string> = {
   fruiting: '#22c55e',
   sowing: '#6366f1'
 }
+
+type SeasonKey = keyof typeof TIMELINE_COLORS;
+type SeasonLabels = Record<SeasonKey, string>;
+type NumericTooltipProps = TooltipContentProps<ValueType, NameType>;
+type NumericTooltipPayload = RechartsTooltipPayload<ValueType, NameType>;
+
+const isSeasonKey = (value: unknown): value is SeasonKey =>
+  typeof value === 'string' && value in TIMELINE_COLORS;
 
 const HEX_COLOR_REGEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/
 
@@ -1644,7 +1653,10 @@ const CareChartSection: React.FC<{ data: CareChartDatum[] }> = ({ data }) => {
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(16,185,129,0.18)" vertical={false} />
               <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: 'currentColor', fontSize: 12 }} />
               <YAxis hide domain={[0, 5]} />
-              <RechartsTooltip cursor={{ fill: 'rgba(16,185,129,0.08)' }} content={<CareChartTooltip />} />
+              <RechartsTooltip
+                cursor={{ fill: 'rgba(16,185,129,0.08)' }}
+                content={(props) => <CareChartTooltip {...props} />}
+              />
               <Bar dataKey="value" radius={[18, 18, 18, 18]} barSize={32}>
                 {data.map((entry, idx) => (
                   <Cell key={entry.key} fill={CARE_BAR_COLORS[idx % CARE_BAR_COLORS.length]} />
@@ -1658,9 +1670,10 @@ const CareChartSection: React.FC<{ data: CareChartDatum[] }> = ({ data }) => {
   )
 }
 
-const CareChartTooltip: React.FC<TooltipProps<ValueType, NameType>> = ({ active, payload }) => {
-  if (!active || !payload?.length) return null
-  const entry = payload[0]?.payload as CareChartDatum | undefined
+const CareChartTooltip: React.FC<NumericTooltipProps> = ({ active, payload }) => {
+  const tooltipPayload = (payload ?? []) as NumericTooltipPayload[]
+  if (!active || !tooltipPayload.length) return null
+  const entry = tooltipPayload[0]?.payload as CareChartDatum | undefined
   if (!entry) return null
   const percentage = Math.round((entry.value / 5) * 100)
 
@@ -1685,7 +1698,7 @@ type SeasonalTimelineEntry = {
 
 const SeasonalTimeline: React.FC<{ data: SeasonalTimelineEntry[]; planting?: NonNullable<NonNullable<Plant['planting']>['calendar']> }> = ({ data, planting }) => {
   const { t } = useTranslation('common')
-  const seasonLabels = React.useMemo(
+  const seasonLabels = React.useMemo<SeasonLabels>(
     () => ({
       flowering: t('plantInfo.labels.floweringMonths', { defaultValue: 'Flowering Months' }),
       fruiting: t('plantInfo.labels.fruitingMonths', { defaultValue: 'Fruiting Months' }),
@@ -1697,61 +1710,71 @@ const SeasonalTimeline: React.FC<{ data: SeasonalTimelineEntry[]; planting?: Non
   const hasData = data.some((entry) => entry.flowering || entry.fruiting || entry.sowing)
   if (!hasData) return null
 
-  return (
-    <section className="rounded-[28px] border border-emerald-200/40 bg-white/90 p-6 shadow-md backdrop-blur-md dark:border-emerald-700/30 dark:bg-slate-950/70">
-      <header className="mb-4 flex items-center gap-3 text-emerald-800 dark:text-emerald-100">
-        <Calendar className="h-5 w-5" />
-        <h3 className="text-lg font-semibold tracking-tight">{t('plantInfo.sections.phenology', { defaultValue: 'Phenology' })}</h3>
-      </header>
-      <div className="h-60">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(96,165,250,0.16)" vertical={false} />
-            <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: 'currentColor', fontSize: 12 }} />
-            <YAxis hide domain={[0, 3]} />
-            <RechartsTooltip cursor={{ fill: 'rgba(59,130,246,0.08)' }} content={<SeasonalTooltip labels={seasonLabels} />} />
-            <Bar dataKey="flowering" stackId="timeline" fill={TIMELINE_COLORS.flowering} radius={[12, 12, 0, 0]} />
-            <Bar dataKey="fruiting" stackId="timeline" fill={TIMELINE_COLORS.fruiting} radius={[12, 12, 0, 0]} />
-            <Bar dataKey="sowing" stackId="timeline" fill={TIMELINE_COLORS.sowing} radius={[12, 12, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-      <div className="mt-5 flex flex-wrap gap-4 text-xs text-emerald-700/80 dark:text-emerald-200/70">
-        {Object.entries(TIMELINE_COLORS).map(([key, color]) => (
-          <span key={key} className="flex items-center gap-2">
-            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
-            {seasonLabels[key]}
-          </span>
-        ))}
-      </div>
-      {planting?.hemisphere && (
-        <div className="mt-3 text-xs text-emerald-600/80 dark:text-emerald-300/70">
-          {t('plantInfo.labels.hemisphere', { defaultValue: 'Hemisphere' })}: {humanizeHemisphere(planting.hemisphere, t)}
+    return (
+      <section className="rounded-[28px] border border-emerald-200/40 bg-white/90 p-6 shadow-md backdrop-blur-md dark:border-emerald-700/30 dark:bg-slate-950/70">
+        <header className="mb-4 flex items-center gap-3 text-emerald-800 dark:text-emerald-100">
+          <Calendar className="h-5 w-5" />
+          <h3 className="text-lg font-semibold tracking-tight">{t('plantInfo.sections.phenology', { defaultValue: 'Phenology' })}</h3>
+        </header>
+        <div className="h-60">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={data}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(96,165,250,0.16)" vertical={false} />
+              <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: 'currentColor', fontSize: 12 }} />
+              <YAxis hide domain={[0, 3]} />
+              <RechartsTooltip
+                cursor={{ fill: 'rgba(59,130,246,0.08)' }}
+                content={(props) => <SeasonalTooltip {...props} labels={seasonLabels} />}
+              />
+              <Bar dataKey="flowering" stackId="timeline" fill={TIMELINE_COLORS.flowering} radius={[12, 12, 0, 0]} />
+              <Bar dataKey="fruiting" stackId="timeline" fill={TIMELINE_COLORS.fruiting} radius={[12, 12, 0, 0]} />
+              <Bar dataKey="sowing" stackId="timeline" fill={TIMELINE_COLORS.sowing} radius={[12, 12, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
-      )}
-    </section>
-  )
+        <div className="mt-5 flex flex-wrap gap-4 text-xs text-emerald-700/80 dark:text-emerald-200/70">
+          {Object.entries(TIMELINE_COLORS).map(([key, color]) => (
+            <span key={key} className="flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
+              {seasonLabels[key]}
+            </span>
+          ))}
+        </div>
+        {planting?.hemisphere && (
+          <div className="mt-3 text-xs text-emerald-600/80 dark:text-emerald-300/70">
+            {t('plantInfo.labels.hemisphere', { defaultValue: 'Hemisphere' })}: {humanizeHemisphere(planting.hemisphere, t)}
+          </div>
+        )}
+      </section>
+    )
 }
 
-type SeasonalTooltipProps = TooltipProps<ValueType, NameType> & {
-  labels: Record<string, string>
+type SeasonalTooltipProps = NumericTooltipProps & {
+  labels: SeasonLabels
 }
 
 const SeasonalTooltip: React.FC<SeasonalTooltipProps> = ({ active, payload, label, labels }) => {
-  if (!active || !payload?.length) return null
-  const activeSeries = payload.filter((item) => item.value)
+  const tooltipPayload = (payload ?? []) as NumericTooltipPayload[]
+  if (!active) return null
+  const activeSeries = tooltipPayload.filter((item) => item.value)
   if (!activeSeries.length) return null
+  const resolvedLabel = label ?? ''
 
   return (
     <div className="rounded-xl border border-sky-400/30 bg-white/95 px-4 py-3 text-xs shadow-lg dark:border-sky-500/40 dark:bg-slate-900/95">
-      <div className="text-sm font-semibold text-emerald-800 dark:text-emerald-100">{label}</div>
+      <div className="text-sm font-semibold text-emerald-800 dark:text-emerald-100">{resolvedLabel}</div>
       <ul className="mt-2 space-y-1 text-emerald-700/80 dark:text-emerald-200/70">
-        {activeSeries.map((series) => (
-          <li key={series.dataKey as string} className="flex items-center gap-2">
-            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: series.color ?? '#34d399' }} />
-            {labels[series.dataKey as string] ?? series.dataKey}
-          </li>
-        ))}
+        {activeSeries.map((series, index) => {
+          const seasonKey = isSeasonKey(series.dataKey) ? series.dataKey : undefined
+          const itemLabel = seasonKey ? labels[seasonKey] : series.name ?? String(series.dataKey ?? '')
+          const itemKey = seasonKey ?? `${series.dataKey ?? index}`
+          return (
+            <li key={itemKey} className="flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: series.color ?? '#34d399' }} />
+              {itemLabel}
+            </li>
+          )
+        })}
       </ul>
     </div>
   )
