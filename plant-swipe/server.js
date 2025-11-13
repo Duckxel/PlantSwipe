@@ -746,7 +746,7 @@ async function generateFieldData(options) {
 
   if (fieldKey === 'meta') {
     promptSections.push(
-      'When providing symbolic or cultural meaning (e.g., funFact), produce a thoughtful narrative between 80 and 200 words that explores the plant’s symbolism, traditional associations, and notable stories. Keep the tone informative and avoid bullet lists or markdown.'
+      'When providing symbolic or cultural meaning (e.g., funFact), write one to three complete sentences that explore symbolism, traditions, or memorable stories about the plant. Keep the tone rich and informative, aim for roughly 60–150 words overall, and avoid bullet lists or markdown.'
     )
   }
 

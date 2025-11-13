@@ -1,4 +1,4 @@
-export type RequiredFieldId = 'scientificName' | 'colors' | 'seasons' | 'description'
+export type RequiredFieldId = 'scientificName' | 'colors' | 'seasons' | 'description' | 'funFact'
 
 export type AiFieldStatus = 'pending' | 'working' | 'filled' | 'missing'
 
@@ -27,6 +27,11 @@ export const REQUIRED_FIELD_CONFIG: Array<{
     label: 'Description',
     sourceKeys: ['description', 'meta'],
   },
+  {
+    id: 'funFact',
+    label: 'Meaning / Symbolism',
+    sourceKeys: ['meta'],
+  },
 ]
 
 export const AI_FIELD_STATUS_TEXT: Record<AiFieldStatus, string> = {
@@ -41,7 +46,11 @@ export interface AiFieldStateSnapshot {
   colors: string
   seasons: string[]
   description: string
+  funFact: string
 }
+
+export const MIN_DESCRIPTION_WORDS = 100
+export const MAX_DESCRIPTION_WORDS = 400
 
 export function createInitialStatuses(): Record<RequiredFieldId, AiFieldStatus> {
   return REQUIRED_FIELD_CONFIG.reduce(
@@ -138,6 +147,29 @@ export function normalizeSeasonList(value: unknown): string[] {
   return Array.from(seasons)
 }
 
+export function countWords(text: string): number {
+  return text.trim().split(/\s+/).filter(Boolean).length
+}
+
+export function countSentences(text: string): number {
+  return text
+    .split(/[.!?]+/)
+    .map((sentence) => sentence.replace(/\s+/g, ' ').trim())
+    .filter(Boolean).length
+}
+
+export function isDescriptionValid(value: string): boolean {
+  const words = countWords(value)
+  return words >= MIN_DESCRIPTION_WORDS && words <= MAX_DESCRIPTION_WORDS
+}
+
+export function isFunFactValid(value: string): boolean {
+  const trimmed = value.trim()
+  if (!trimmed) return false
+  const sentenceCount = countSentences(trimmed)
+  return sentenceCount >= 1 && sentenceCount <= 3
+}
+
 export function isFieldFilledFromState(id: RequiredFieldId, state: AiFieldStateSnapshot): boolean {
   switch (id) {
     case 'scientificName':
@@ -147,7 +179,9 @@ export function isFieldFilledFromState(id: RequiredFieldId, state: AiFieldStateS
     case 'seasons':
       return Array.isArray(state.seasons) && state.seasons.length > 0
     case 'description':
-      return state.description.trim().length > 0
+      return isDescriptionValid(state.description)
+    case 'funFact':
+      return isFunFactValid(state.funFact)
     default:
       return false
   }
@@ -188,12 +222,22 @@ export function isFieldFilledFromData(
       return false
     }
     case 'description': {
-      if (fieldKey === 'description' && typeof fieldData === 'string') {
-        return fieldData.trim().length > 0
-      }
+    if (fieldKey === 'description' && typeof fieldData === 'string') {
+      return isDescriptionValid(fieldData)
+    }
+    if (fieldKey === 'meta' && fieldData && typeof fieldData === 'object') {
+      const value = (fieldData as any).description || (fieldData as any).longDescription
+      return typeof value === 'string' && isDescriptionValid(value)
+    }
+    return false
+  }
+    case 'funFact': {
       if (fieldKey === 'meta' && fieldData && typeof fieldData === 'object') {
-        const value = (fieldData as any).description || (fieldData as any).longDescription
-        return typeof value === 'string' && value.trim().length > 0
+        const value = (fieldData as any).funFact
+        return typeof value === 'string' && isFunFactValid(value)
+      }
+      if (fieldKey === 'funFact' && typeof fieldData === 'string') {
+        return isFunFactValid(fieldData)
       }
       return false
     }

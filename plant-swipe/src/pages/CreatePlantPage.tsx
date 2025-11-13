@@ -37,6 +37,10 @@ import {
   normalizeSeasonList,
   isFieldFilledFromData,
   isFieldFilledFromState,
+  isDescriptionValid,
+  isFunFactValid,
+  countWords,
+  countSentences,
   type AiFieldStatus,
   type RequiredFieldId,
   type AiFieldStateSnapshot,
@@ -48,8 +52,6 @@ const AI_STATUS_STYLES: Record<AiFieldStatus, { text: string }> = {
   filled: { text: "text-green-600 dark:text-green-400" },
   missing: { text: "text-red-600 dark:text-red-400" },
 }
-
-const countWords = (text: string) => text.trim().split(/\s+/).filter(Boolean).length
 
 function generateUUIDv4(): string {
   try {
@@ -101,10 +103,6 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
     setAiFieldStatuses(createInitialStatuses())
     setAiMissingFields([])
   }
-  const isDescriptionWithinRange = (value: string) => {
-    const words = countWords(value)
-    return words >= 100 && words <= 400
-  }
   const markFieldWorking = (fieldKey: string) => {
     if (!fieldKey || fieldKey === 'init' || fieldKey === 'complete') return
     setAiFieldStatuses((prev) => {
@@ -125,9 +123,15 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
       for (const config of REQUIRED_FIELD_CONFIG) {
         if (!config.sourceKeys.includes(fieldKey)) continue
         let filled = isFieldFilledFromData(config.id, fieldKey, fieldData)
-        if (config.id === 'description') {
-          const value = typeof fieldData === 'string' ? fieldData : ''
-          filled = isDescriptionWithinRange(value)
+        if (config.id === 'description' && typeof fieldData === 'string') {
+          filled = isDescriptionValid(fieldData)
+        }
+        if (config.id === 'funFact') {
+          const funFactValue =
+            typeof fieldData === 'string'
+              ? fieldData
+              : (fieldData && typeof fieldData === 'object' ? (fieldData as any).funFact : '')
+          filled = isFunFactValid(typeof funFactValue === 'string' ? funFactValue : '')
         }
         if (filled && prev[config.id] !== 'filled') {
           if (!updated) updated = { ...prev }
@@ -144,10 +148,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
     const next = createInitialStatuses()
     const missing: RequiredFieldId[] = []
     for (const config of REQUIRED_FIELD_CONFIG) {
-      let filled = isFieldFilledFromState(config.id, snapshot)
-      if (config.id === 'description') {
-        filled = isDescriptionWithinRange(snapshot.description)
-      }
+      const filled = isFieldFilledFromState(config.id, snapshot)
       next[config.id] = filled ? 'filled' : 'missing'
       if (!filled) missing.push(config.id)
     }
@@ -167,6 +168,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
         return <Circle className="h-4 w-4 text-muted-foreground" />
     }
   }
+  const funFactState = (meta?.funFact ?? meaning ?? '').trim()
   React.useEffect(() => {
     if (aiFilling) return
     const hasStarted = Object.values(aiFieldStatuses).some((status) => status !== 'pending')
@@ -176,34 +178,21 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
       colors,
       seasons,
       description,
+      funFact: funFactState,
     }
     const nextStatuses: Record<RequiredFieldId, AiFieldStatus> = { ...aiFieldStatuses }
-    let changed = false
+    let statusChanged = false
     const missing: RequiredFieldId[] = []
     for (const config of REQUIRED_FIELD_CONFIG) {
-      let filled = isFieldFilledFromState(config.id, snapshot)
-      if (config.id === 'description') {
-        filled = isDescriptionWithinRange(snapshot.description)
+      const filled = isFieldFilledFromState(config.id, snapshot)
+      const desired: AiFieldStatus = filled ? 'filled' : 'missing'
+      if (nextStatuses[config.id] !== desired) {
+        nextStatuses[config.id] = desired
+        statusChanged = true
       }
-      if (filled) {
-        if (nextStatuses[config.id] !== 'filled') {
-          nextStatuses[config.id] = 'filled'
-          changed = true
-        }
-      } else {
-        if (nextStatuses[config.id] !== 'working' && nextStatuses[config.id] !== 'missing') {
-          nextStatuses[config.id] = 'missing'
-          changed = true
-        } else if (nextStatuses[config.id] === 'filled') {
-          nextStatuses[config.id] = 'missing'
-          changed = true
-        }
-        if (!missing.includes(config.id)) {
-          missing.push(config.id)
-        }
-      }
+      if (!filled) missing.push(config.id)
     }
-    if (changed) {
+    if (statusChanged) {
       setAiFieldStatuses(nextStatuses)
     }
     setAiMissingFields((current) => {
@@ -212,7 +201,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
       }
       return missing
     })
-  }, [aiFilling, aiFieldStatuses, scientificName, colors, seasons, description, isDescriptionWithinRange])
+  }, [aiFilling, aiFieldStatuses, scientificName, colors, seasons, description, funFactState])
   // New JSONB structure state
   const [identifiers, setIdentifiers] = React.useState<Partial<PlantIdentifiers>>({})
   const [traits, setTraits] = React.useState<Partial<PlantTraits>>({})
@@ -382,6 +371,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
         let nextColorsString = colors
         let nextSeasons = seasons
         let nextDescription = description
+        let nextFunFact = (meta?.funFact ?? meaning ?? '').trim()
 
         if (aiData.identifiers) {
           const { externalIds: _ignoredExternalIds, ...restIdentifiers } = aiData.identifiers
@@ -443,8 +433,14 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
         if (aiData.planting) setPlanting(aiData.planting)
         if (aiData.meta) {
           setMeta((prev) => ({ ...(prev ?? {}), ...aiData.meta }))
-          if (aiData.meta.funFact && !meaning) {
-            setMeaning(aiData.meta.funFact)
+          if (typeof aiData.meta.funFact === 'string') {
+            const aiFunFact = aiData.meta.funFact.trim()
+            if (aiFunFact) {
+              nextFunFact = aiFunFact
+              if (!meaning.trim()) {
+                setMeaning(aiFunFact)
+              }
+            }
           }
           if (aiData.meta.rarity) {
             const rarityMap: Record<string, Plant['rarity']> = {
@@ -472,6 +468,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
           colors: nextColorsString,
           seasons: nextSeasons,
           description: nextDescription,
+          funFact: nextFunFact,
         }
         const missing = finalizeAiStatuses(snapshot)
         if (missing.length === 0) {
@@ -484,6 +481,10 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
           if (missing.includes('description')) {
             const wordCount = countWords(nextDescription)
             message += ` The description must be between 100 and 400 words (currently ${wordCount}).`
+          }
+          if (missing.includes('funFact')) {
+            const sentenceCount = countSentences(nextFunFact)
+            message += ` The fun fact must contain between 1 and 3 sentences (currently ${sentenceCount}).`
           }
           setError(message)
         }
@@ -541,6 +542,13 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
     const actorLabel = profile?.display_name?.trim() || user?.email?.trim() || user?.id || 'Unknown admin'
     const nowIso = new Date().toISOString()
     const metaBase = meta ?? {}
+    const baseFunFact = typeof metaBase.funFact === 'string' ? metaBase.funFact.trim() : ''
+    const funFactText = baseFunFact || meaning.trim()
+    if (!isFunFactValid(funFactText)) {
+      const sentenceCount = countSentences(funFactText)
+      setError(`Fun fact must contain between 1 and 3 sentences (currently ${sentenceCount}).`)
+      return
+    }
     const createdAtValue = typeof metaBase.createdAt === 'string' && metaBase.createdAt.trim().length > 0
       ? metaBase.createdAt.trim()
       : nowIso
@@ -549,6 +557,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
       : actorLabel
     const metaForInsert: Partial<PlantMeta> = {
       ...metaBase,
+      funFact: funFactText || undefined,
       createdAt: createdAtValue,
       updatedAt: nowIso,
       createdBy: createdByValue,
