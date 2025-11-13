@@ -2012,183 +2012,209 @@ export const AdminPage: React.FC = () => {
     return () => clearTimeout(t)
   }, [activeTab])
 
-  return (
-    <div className="flex flex-col md:flex-row min-h-screen bg-stone-50 dark:bg-[#1e1e1e] rounded-t-3xl mt-4 md:mt-0">
-      {/* Mobile Navigation */}
-      <div className="md:hidden w-full border-b border-stone-200/50 dark:border-[#3e3e42]/50 bg-stone-50/80 dark:bg-[#1e1e1e]/80 backdrop-blur-sm sticky top-0 z-10 rounded-b-3xl">
-        <div className="p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <ShieldCheck className="h-5 w-5" style={{ color: accentColor }} />
-            <div className="text-sm font-semibold">Admin Panel</div>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => setActiveTab('overview')}
-              className={`flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-sm transition-all duration-200 ${
-                activeTab === 'overview'
-                  ? 'bg-white dark:bg-white text-black dark:text-black shadow-md'
-                  : 'text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]'
-              }`}
-              style={activeTab === 'overview' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
-            >
-              <LayoutDashboard className="h-4 w-4" />
-              <span>Overview</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('members')}
-              className={`flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-sm transition-all duration-200 ${
-                activeTab === 'members'
-                  ? 'bg-white dark:bg-white text-black dark:text-black shadow-md'
-                  : 'text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]'
-              }`}
-              style={activeTab === 'members' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
-            >
-              <Users className="h-4 w-4" />
-              <span>Members</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('requests')}
-              className={`flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-sm transition-all duration-200 ${
-                activeTab === 'requests'
-                  ? 'bg-white dark:bg-white text-black dark:text-black shadow-md'
-                  : 'text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]'
-              }`}
-              style={activeTab === 'requests' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
-            >
-              <FileText className="h-4 w-4" />
-              <span>Requests</span>
-              {uniqueRequestedPlantsCount > 0 && (
-                <span className="ml-1 px-1.5 py-0.5 text-xs font-semibold rounded-full bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-300">
-                  {uniqueRequestedPlantsCount}
-                </span>
-              )}
-            </button>
-            <button
-              onClick={() => setActiveTab('admin_logs')}
-              className={`flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-sm transition-all duration-200 ${
-                activeTab === 'admin_logs'
-                  ? 'bg-white dark:bg-white text-black dark:text-black shadow-md'
-                  : 'text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]'
-              }`}
-              style={activeTab === 'admin_logs' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
-            >
-              <ScrollText className="h-4 w-4" />
-              <span>Logs</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Sidebar Navigation - Desktop Only */}
-      <aside className="hidden md:flex w-64 border-r border-stone-200/50 dark:border-[#3e3e42]/50 bg-stone-50/80 dark:bg-[#1e1e1e]/80 backdrop-blur-sm flex-shrink-0 flex-col m-4 rounded-3xl">
-        <div className="p-6 border-b border-stone-200/50 dark:border-[#3e3e42]/50">
-          <div className="flex items-center gap-3">
-            <ShieldCheck className="h-6 w-6" style={{ color: accentColor }} />
-            <div>
-              <div className="text-lg font-semibold">Admin Panel</div>
-              <div className="text-xs opacity-60">Control Center</div>
+    return (
+      <div className="max-w-6xl mx-auto px-4 md:px-0 pb-16 space-y-10">
+        <section className="relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50 via-white to-stone-100 dark:from-[#252526] dark:via-[#1e1e1e] dark:to-[#171717]">
+          <div
+            className="absolute -right-24 -top-24 h-64 w-64 rounded-full bg-emerald-200/40 dark:bg-emerald-500/10 blur-3xl"
+            aria-hidden="true"
+          />
+          <div
+            className="absolute -left-16 bottom-[-25%] h-72 w-72 rounded-full bg-emerald-100/40 dark:bg-emerald-500/10 blur-3xl"
+            aria-hidden="true"
+          />
+          <div className="relative space-y-6 p-8 md:p-12">
+            <Badge className="rounded-2xl px-4 py-1 bg-white/70 dark:bg-[#2d2d30]/70 backdrop-blur">
+              Admin Control
+            </Badge>
+            <h1 className="text-3xl md:text-4xl font-semibold tracking-tight">
+              Operations command center
+            </h1>
+            <p className="text-base md:text-lg max-w-3xl text-stone-600 dark:text-stone-300">
+              Monitor infrastructure health, triage member requests, and run maintenance actions without leaving this dashboard.
+            </p>
+            <div className="flex flex-wrap gap-3 pt-1.5">
+              <Button className="rounded-2xl" onClick={refreshHealth} disabled={healthRefreshing}>
+                <RefreshCw className={`mr-2 h-4 w-4 ${healthRefreshing ? 'animate-spin' : ''}`} />
+                Refresh health
+              </Button>
+              <Button variant="outline" className="rounded-2xl" onClick={() => navigate('/')}>
+                <ArrowUpRight className="mr-2 h-4 w-4" />
+                Back to app
+              </Button>
             </div>
           </div>
-        </div>
-        <nav className="p-4 space-y-2 flex-1 overflow-y-auto">
-          <button
-            onClick={() => setActiveTab('overview')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 ${
-              activeTab === 'overview'
-                ? 'bg-white dark:bg-white text-black dark:text-black shadow-md'
-                : 'text-stone-700 dark:text-stone-300 hover:bg-stone-100/50 dark:hover:bg-[#2d2d30]/50'
-            }`}
-            style={activeTab === 'overview' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
-          >
-            <LayoutDashboard className={`h-5 w-5 ${activeTab === 'overview' ? '' : 'opacity-70'}`} />
-            <span className="font-medium">Overview</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('members')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 ${
-              activeTab === 'members'
-                ? 'bg-white dark:bg-white text-black dark:text-black shadow-md'
-                : 'text-stone-700 dark:text-stone-300 hover:bg-stone-100/50 dark:hover:bg-[#2d2d30]/50'
-            }`}
-            style={activeTab === 'members' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
-          >
-            <Users className={`h-5 w-5 ${activeTab === 'members' ? '' : 'opacity-70'}`} />
-            <span className="font-medium">Members</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('requests')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 ${
-              activeTab === 'requests'
-                ? 'bg-white dark:bg-white text-black dark:text-black shadow-md'
-                : 'text-stone-700 dark:text-stone-300 hover:bg-stone-100/50 dark:hover:bg-[#2d2d30]/50'
-            }`}
-            style={activeTab === 'requests' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
-          >
-            <FileText className={`h-5 w-5 ${activeTab === 'requests' ? '' : 'opacity-70'}`} />
-            <span className="font-medium">Requests</span>
-            {uniqueRequestedPlantsCount > 0 && (
-              <span className="ml-auto px-2 py-0.5 text-xs font-semibold rounded-full bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-300">
-                {uniqueRequestedPlantsCount}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => setActiveTab('admin_logs')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 ${
-              activeTab === 'admin_logs'
-                ? 'bg-white dark:bg-white text-black dark:text-black shadow-md'
-                : 'text-stone-700 dark:text-stone-300 hover:bg-stone-100/50 dark:hover:bg-[#2d2d30]/50'
-            }`}
-            style={activeTab === 'admin_logs' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
-          >
-            <ScrollText className={`h-5 w-5 ${activeTab === 'admin_logs' ? '' : 'opacity-70'}`} />
-            <span className="font-medium">Admin Logs</span>
-          </button>
-        </nav>
-      </aside>
+        </section>
 
-      {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto w-full">
-        <div className="flex justify-center w-full">
-          <div className="w-full max-w-5xl mt-4 md:mt-8 px-4 md:px-6 lg:px-8 pb-8">
-          {/* Connection Status Banner - Show when APIs are down */}
-          {(apiProbe.ok === false || adminProbe.ok === false || dbProbe.ok === false) && (
-            <Card className="rounded-2xl mb-4 border-red-500 dark:border-red-500 bg-red-50 dark:bg-red-950/20">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0" />
-                  <div className="flex-1">
-                    <div className="text-sm font-medium text-red-900 dark:text-red-100">Connection Issues Detected</div>
-                    <div className="text-xs text-red-700 dark:text-red-300 mt-1">
-                      {!apiProbe.ok && 'API '}
-                      {!adminProbe.ok && 'Admin API '}
-                      {!dbProbe.ok && 'Database '}
-                      {(!apiProbe.ok || !adminProbe.ok || !dbProbe.ok) && 'may be unavailable. Some features may not work correctly.'}
-                    </div>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="rounded-xl border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30"
-                    onClick={refreshHealth}
-                    disabled={healthRefreshing}
-                  >
-                    <RefreshCw className={`h-4 w-4 mr-1 ${healthRefreshing ? 'animate-spin' : ''}`} />
-                    Retry
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-          
-          <Card className="rounded-3xl">
-            <CardContent className="p-6 md:p-8 space-y-6">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                <div>
-                  <div className="text-2xl font-semibold tracking-tight">Admin Controls</div>
-                  <div className="text-sm opacity-60 mt-1">Admin actions: monitor and manage infrastructure.</div>
-                </div>
+        <div className="grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)] gap-8">
+          <aside className="hidden lg:flex flex-col gap-4 rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/75 dark:bg-[#1f1f1f]/75 backdrop-blur px-6 py-6 shadow-sm">
+            <div className="flex items-center gap-3">
+              <ShieldCheck className="h-6 w-6" style={{ color: accentColor }} />
+              <div>
+                <div className="text-lg font-semibold">Admin Panel</div>
+                <div className="text-xs text-stone-500 dark:text-stone-400">Control center</div>
               </div>
+            </div>
+            <nav className="space-y-2">
+              <button
+                onClick={() => setActiveTab('overview')}
+                className={`w-full flex items-center gap-3 rounded-2xl px-4 py-3 text-sm transition-all duration-200 ${
+                  activeTab === 'overview'
+                    ? 'bg-white text-stone-900 shadow-lg dark:bg-white dark:text-black'
+                    : 'text-stone-700 hover:bg-stone-100/60 dark:text-stone-300 dark:hover:bg-[#2d2d30]/60'
+                }`}
+                style={activeTab === 'overview' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
+              >
+                <LayoutDashboard className="h-5 w-5" />
+                <span className="font-medium">Overview</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('members')}
+                className={`w-full flex items-center gap-3 rounded-2xl px-4 py-3 text-sm transition-all duration-200 ${
+                  activeTab === 'members'
+                    ? 'bg-white text-stone-900 shadow-lg dark:bg-white dark:text-black'
+                    : 'text-stone-700 hover:bg-stone-100/60 dark:text-stone-300 dark:hover:bg-[#2d2d30]/60'
+                }`}
+                style={activeTab === 'members' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
+              >
+                <Users className="h-5 w-5" />
+                <span className="font-medium">Members</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('requests')}
+                className={`w-full flex items-center gap-3 rounded-2xl px-4 py-3 text-sm transition-all duration-200 ${
+                  activeTab === 'requests'
+                    ? 'bg-white text-stone-900 shadow-lg dark:bg-white dark:text-black'
+                    : 'text-stone-700 hover:bg-stone-100/60 dark:text-stone-300 dark:hover:bg-[#2d2d30]/60'
+                }`}
+                style={activeTab === 'requests' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
+              >
+                <FileText className="h-5 w-5" />
+                <span className="font-medium">Requests</span>
+                {uniqueRequestedPlantsCount > 0 && (
+                  <span className="ml-auto px-2 py-0.5 text-xs font-semibold rounded-full bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-300">
+                    {uniqueRequestedPlantsCount}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setActiveTab('admin_logs')}
+                className={`w-full flex items-center gap-3 rounded-2xl px-4 py-3 text-sm transition-all duration-200 ${
+                  activeTab === 'admin_logs'
+                    ? 'bg-white text-stone-900 shadow-lg dark:bg-white dark:text-black'
+                    : 'text-stone-700 hover:bg-stone-100/60 dark:text-stone-300 dark:hover:bg-[#2d2d30]/60'
+                }`}
+                style={activeTab === 'admin_logs' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
+              >
+                <ScrollText className="h-5 w-5" />
+                <span className="font-medium">Admin Logs</span>
+              </button>
+            </nav>
+          </aside>
+
+          <div className="space-y-6">
+            <div className="lg:hidden rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/75 dark:bg-[#1f1f1f]/75 backdrop-blur px-4 py-4 shadow-sm">
+              <div className="flex items-center gap-2 mb-3">
+                <ShieldCheck className="h-5 w-5" style={{ color: accentColor }} />
+                <div className="text-sm font-semibold">Admin Panel</div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setActiveTab('overview')}
+                  className={`flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-sm transition-all duration-200 ${
+                    activeTab === 'overview'
+                      ? 'bg-white text-stone-900 shadow-md dark:bg-white dark:text-black'
+                      : 'text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]'
+                  }`}
+                  style={activeTab === 'overview' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
+                >
+                  <LayoutDashboard className="h-4 w-4" />
+                  <span>Overview</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('members')}
+                  className={`flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-sm transition-all duration-200 ${
+                    activeTab === 'members'
+                      ? 'bg-white text-stone-900 shadow-md dark:bg-white dark:text-black'
+                      : 'text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]'
+                  }`}
+                  style={activeTab === 'members' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
+                >
+                  <Users className="h-4 w-4" />
+                  <span>Members</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('requests')}
+                  className={`flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-sm transition-all duration-200 ${
+                    activeTab === 'requests'
+                      ? 'bg-white text-stone-900 shadow-md dark:bg-white dark:text-black'
+                      : 'text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]'
+                  }`}
+                  style={activeTab === 'requests' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
+                >
+                  <FileText className="h-4 w-4" />
+                  <span>Requests</span>
+                  {uniqueRequestedPlantsCount > 0 && (
+                    <span className="ml-1 px-1.5 py-0.5 text-xs font-semibold rounded-full bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-300">
+                      {uniqueRequestedPlantsCount}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={() => setActiveTab('admin_logs')}
+                  className={`flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-sm transition-all duration-200 ${
+                    activeTab === 'admin_logs'
+                      ? 'bg-white text-stone-900 shadow-md dark:bg-white dark:text-black'
+                      : 'text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]'
+                  }`}
+                  style={activeTab === 'admin_logs' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
+                >
+                  <ScrollText className="h-4 w-4" />
+                  <span>Logs</span>
+                </button>
+              </div>
+            </div>
+
+            <section className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/75 dark:bg-[#1f1f1f]/75 backdrop-blur px-4 py-6 md:px-8 md:py-8 shadow-sm">
+              <div className="flex justify-center w-full">
+                <div className="w-full max-w-5xl space-y-6">
+                  {(apiProbe.ok === false || adminProbe.ok === false || dbProbe.ok === false) && (
+                    <Card className="rounded-2xl border-red-500 dark:border-red-500 bg-red-50 dark:bg-red-950/20">
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-3">
+                          <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0" />
+                          <div className="flex-1">
+                            <div className="text-sm font-medium text-red-900 dark:text-red-100">Connection Issues Detected</div>
+                            <div className="text-xs text-red-700 dark:text-red-300 mt-1">
+                              {!apiProbe.ok && 'API '}
+                              {!adminProbe.ok && 'Admin API '}
+                              {!dbProbe.ok && 'Database '}
+                              {(!apiProbe.ok || !adminProbe.ok || !dbProbe.ok) && 'may be unavailable. Some features may not work correctly.'}
+                            </div>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="rounded-xl border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30"
+                            onClick={refreshHealth}
+                            disabled={healthRefreshing}
+                          >
+                            <RefreshCw className={`h-4 w-4 mr-1 ${healthRefreshing ? 'animate-spin' : ''}`} />
+                            Retry
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  <Card className="rounded-3xl">
+                    <CardContent className="p-6 md:p-8 space-y-6">
+                      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                        <div>
+                          <div className="text-2xl font-semibold tracking-tight">Admin Controls</div>
+                          <div className="text-sm opacity-60 mt-1">Admin actions: monitor and manage infrastructure.</div>
+                        </div>
+                      </div>
 
           {/* Overview Tab */}
           {activeTab === 'overview' && (
@@ -3744,10 +3770,12 @@ export const AdminPage: React.FC = () => {
         </CardContent>
       </Card>
 
+            </div>
           </div>
-        </div>
-      </main>
+        </section>
+      </div>
     </div>
+  </div>
   )
 }
 
