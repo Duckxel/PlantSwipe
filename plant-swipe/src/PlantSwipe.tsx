@@ -713,24 +713,25 @@ export default function PlantSwipe() {
                 ) : (
                   <Navigate to="/" replace />
                 )} />
-                <Route path="/plants/:id" element={<PlantInfoPage />} />
-                <Route
-                  path="/*"
-                  element={plants.length > 0 ? (
-                    <SwipePage
-                      current={current}
-                      index={index}
-                      setIndex={setIndex}
-                      x={x}
-                      y={y}
-                      onDragEnd={onDragEnd}
-                      handleInfo={handleInfo}
-                      handlePass={handlePass}
-                      handlePrevious={handlePrevious}
-                      liked={current ? likedIds.includes(current.id) : false}
-                      onToggleLike={() => { if (current) toggleLiked(current.id) }}
-                    />
-                  ) : (
+                  <Route path="/plants/:id" element={<PlantInfoPage />} />
+                  <Route
+                    path="/*"
+                    element={plants.length > 0 ? (
+                      <SwipePage
+                        current={current}
+                        index={index}
+                        setIndex={setIndex}
+                        x={x}
+                        y={y}
+                        onDragEnd={onDragEnd}
+                        handleInfo={handleInfo}
+                        handlePass={handlePass}
+                        handlePrevious={handlePrevious}
+                        liked={current ? likedIds.includes(current.id) : false}
+                        onToggleLike={() => { if (current) toggleLiked(current.id) }}
+                        total={swipeList.length}
+                      />
+                    ) : (
                     <>
                       {loading && <div className="p-8 text-center text-sm opacity-60">{t('common.loading')}</div>}
                       {loadError && <div className="p-8 text-center text-sm text-red-600">{t('common.error')}: {loadError}</div>}

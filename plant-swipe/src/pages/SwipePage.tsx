@@ -1,12 +1,41 @@
 import React from "react"
 import { motion, AnimatePresence, type MotionValue } from "framer-motion"
-import { ChevronLeft, ChevronRight, ChevronUp, Heart, Sparkles } from "lucide-react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { ChevronLeft, ChevronRight, ChevronUp, Heart, Sparkles, PartyPopper, Palette, Wand2 } from "lucide-react"
+import type { LucideIcon } from "lucide-react"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import type { Plant, PlantSeason } from "@/types/plant"
 import { rarityTone, seasonBadge } from "@/constants/badges"
 import { useTranslation } from "react-i18next"
+import { Link } from "@/components/i18n/Link"
+
+const colorTokenMap: Record<string, string> = {
+  red: "#ef4444",
+  pink: "#f472b6",
+  yellow: "#facc15",
+  white: "#f5f5f4",
+  purple: "#c084fc",
+  blue: "#60a5fa",
+  orange: "#fb923c",
+  green: "#4ade80",
+  violet: "#a855f7",
+  magenta: "#db2777",
+  turquoise: "#2dd4bf",
+  gold: "#fbbf24",
+  amber: "#f59e0b",
+  coral: "#fb7185",
+  teal: "#5eead4",
+  lilac: "#c4b5fd",
+  lavender: "#c084fc",
+  indigo: "#6366f1",
+  bronze: "#b45309",
+  brown: "#b45309",
+  copper: "#d97706",
+  silver: "#d1d5db",
+  gray: "#9ca3af",
+  black: "#1f2937",
+}
 
 interface SwipePageProps {
   current: Plant | undefined
@@ -20,167 +49,374 @@ interface SwipePageProps {
   handlePrevious: () => void
   liked?: boolean
   onToggleLike?: () => void
+  total: number
 }
 
-export const SwipePage: React.FC<SwipePageProps> = ({ current, index, setIndex, x, y, onDragEnd, handleInfo, handlePass, handlePrevious, liked = false, onToggleLike }) => {
-  const { t } = useTranslation('common')
-  // Keyboard navigation
+export const SwipePage: React.FC<SwipePageProps> = ({
+  current,
+  index,
+  setIndex,
+  x,
+  y,
+  onDragEnd,
+  handleInfo,
+  handlePass,
+  handlePrevious,
+  liked = false,
+  onToggleLike,
+  total,
+}) => {
+  const { t } = useTranslation("common")
+
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Only handle arrow keys when not typing in an input/textarea
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
         return
       }
-      
+
       switch (e.key) {
-        case 'ArrowLeft':
+        case "ArrowLeft":
           e.preventDefault()
-          handlePass() // Swipe left = Next
+          handlePass()
           break
-        case 'ArrowRight':
+        case "ArrowRight":
           e.preventDefault()
-          handlePrevious() // Swipe right = Previous
+          handlePrevious()
           break
-        case 'ArrowUp':
+        case "ArrowUp":
           e.preventDefault()
-          handleInfo() // Swipe up = Info
+          handleInfo()
           break
       }
     }
 
-    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener("keydown", handleKeyDown)
     return () => {
-      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener("keydown", handleKeyDown)
     }
   }, [handleInfo, handlePass, handlePrevious])
 
+  const position = total > 0 ? ((index % total) + total) % total + 1 : null
+  const statusLabel = position ? t("discoveryPage.status.position", { current: position, total }) : t("discoveryPage.status.empty")
+  const meaning = current?.meaning?.trim()
+  const colorChips = current?.colors?.slice(0, 6) ?? []
+  const seedsCopy = current?.seedsAvailable ? t("discoveryPage.infoCard.seedsAvailable") : t("discoveryPage.infoCard.seedsUnavailable")
+  const cardHeight = "min(680px, calc(100vh - 14rem))"
+
+  const gestures: Array<{ icon: LucideIcon; title: string; description: string }> = [
+    {
+      icon: ChevronRight,
+      title: t("discoveryPage.instructions.backTitle"),
+      description: t("discoveryPage.instructions.backDescription"),
+    },
+    {
+      icon: ChevronUp,
+      title: t("discoveryPage.instructions.infoTitle"),
+      description: t("discoveryPage.instructions.infoDescription"),
+    },
+    {
+      icon: ChevronLeft,
+      title: t("discoveryPage.instructions.nextTitle"),
+      description: t("discoveryPage.instructions.nextDescription"),
+    },
+  ]
+
+  const rarityKey = current?.rarity && rarityTone[current.rarity] ? current.rarity : "Common"
+  const seasons = (current?.seasons ?? []) as PlantSeason[]
+
   return (
-    <div className="max-w-3xl mx-auto mt-8 px-4 md:px-0 mb-4">
-      <div className="relative" style={{ height: 'min(650px, calc(100vh - 16rem))' }}>
-        <AnimatePresence initial={false} mode="wait">
-          {current ? (
-            <motion.div
-              key={current.id + index}
-              drag
-              dragElastic={0.3}
-              dragMomentum={false}
-              style={{ x, y }}
-              dragConstraints={{ left: -500, right: 500, top: -500, bottom: 500 }}
-              onDragEnd={onDragEnd}
-              initial={{ scale: 0.96, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.96, opacity: 0 }}
-              transition={{ duration: 0.15, ease: "easeOut" }}
-              className="absolute inset-0 cursor-grab active:cursor-grabbing select-none"
-            >
-              <Card className="h-full rounded-3xl overflow-hidden shadow-xl">
-                <div className="h-2/3 relative">
-                  <div className="absolute inset-0 bg-cover bg-center rounded-t-3xl" style={{ backgroundImage: `url(${current.image})` }} />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent rounded-t-3xl" />
-                  {/* Upward arrow indicator - minimalist geometric */}
-                  <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
-                    <div className="relative flex flex-col items-center">
-                      {/* Minimalist white chevron pointing up */}
-                      <ChevronUp 
-                        className="h-10 w-10 text-white" 
-                        strokeWidth={3}
-                        style={{ filter: 'drop-shadow(0 6px 20px rgba(0,0,0,0.95))' }}
-                      />
-                    </div>
-                  </div>
-                  <div className="absolute top-2 right-2 z-10">
-                    <button
-                      onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); onToggleLike && onToggleLike() }}
-                      onPointerDown={(e) => e.stopPropagation()}
-                      aria-pressed={liked}
-                      aria-label={liked ? 'Unlike' : 'Like'}
-                      className={`h-8 w-8 rounded-full flex items-center justify-center shadow border transition ${liked ? 'bg-rose-600 text-white' : 'bg-white/90 text-black hover:bg-white'}`}
-                    >
-                      <Heart className={liked ? 'fill-current' : ''} />
-                    </button>
-                  </div>
-                  <div className="absolute bottom-0 p-5 text-white">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Badge className={`${rarityTone[current.rarity ?? 'Common']} backdrop-blur bg-opacity-80`}>{current.rarity}</Badge>
-                        {current.seasons.map((s: PlantSeason) => {
-                          const badgeClass = seasonBadge[s] ?? 'bg-stone-200 dark:bg-stone-700 text-stone-900 dark:text-stone-100'
-                          return (
-                            <span key={s} className={`text-[10px] px-2 py-0.5 rounded-full ${badgeClass}`}>{s}</span>
-                          )
-                        })}
+    <div className="max-w-5xl mx-auto mt-8 px-4 md:px-0 pb-16 space-y-12">
+      <motion.section
+        initial={{ opacity: 0, y: 24 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+        className="relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50 via-white to-stone-100 dark:from-[#252526] dark:via-[#1e1e1e] dark:to-[#171717]"
+      >
+        <div className="absolute -right-24 -top-24 h-64 w-64 rounded-full bg-emerald-200/40 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
+        <div className="absolute -left-16 bottom-[-35%] h-72 w-72 rounded-full bg-emerald-100/50 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
+        <motion.div className="relative p-8 md:p-16 space-y-6" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1, duration: 0.5 }}>
+          <Badge className="rounded-2xl px-4 py-1 bg-white/70 dark:bg-[#2d2d30]/70 backdrop-blur">
+            {t("discoveryPage.hero.eyebrow")}
+          </Badge>
+          <motion.h1
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15, duration: 0.5 }}
+            className="text-3xl md:text-4xl font-semibold tracking-tight"
+          >
+            {t("discoveryPage.hero.title")}
+          </motion.h1>
+          <motion.p
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2, duration: 0.5 }}
+            className="text-base md:text-lg max-w-2xl text-stone-600 dark:text-stone-300"
+          >
+            {t("discoveryPage.hero.subtitle")}
+          </motion.p>
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.25, duration: 0.5 }}
+            className="flex flex-wrap gap-3 pt-2"
+          >
+            <Button asChild className="rounded-2xl">
+              <Link to="/search">
+                <Sparkles className="h-4 w-4 mr-2" />
+                {t("discoveryPage.hero.ctaPrimary")}
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="rounded-2xl">
+              <Link to="/gardens">
+                <Palette className="h-4 w-4 mr-2" />
+                {t("discoveryPage.hero.ctaSecondary")}
+              </Link>
+            </Button>
+          </motion.div>
+        </motion.div>
+      </motion.section>
+
+      <section className="relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-white via-emerald-50/60 to-stone-100 dark:from-[#1e1e1e] dark:via-[#252526] dark:to-[#171717] shadow-[0_30px_80px_-40px_rgba(16,185,129,0.45)]">
+        <div className="absolute inset-x-12 -top-24 h-56 rounded-full bg-emerald-200/40 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
+        <div className="absolute inset-x-0 bottom-[-40%] h-72 rounded-full bg-emerald-100/50 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
+        <div className="relative p-6 md:p-12 space-y-10">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <Badge className="rounded-2xl px-4 py-1 bg-white/80 dark:bg-[#252526]/80 backdrop-blur">
+              {statusLabel}
+            </Badge>
+            <Badge variant="outline" className="rounded-2xl border-dashed">
+              <Wand2 className="h-4 w-4 mr-1" />
+              {t("common.discovery")}
+            </Badge>
+          </div>
+
+          <div className="relative mx-auto w-full max-w-3xl" style={{ height: cardHeight }}>
+            <AnimatePresence initial={false} mode="wait">
+              {current ? (
+                <motion.div
+                  key={`${current.id}-${index}`}
+                  drag
+                  dragElastic={0.28}
+                  dragMomentum={false}
+                  style={{ x, y }}
+                  dragConstraints={{ left: -500, right: 500, top: -500, bottom: 500 }}
+                  onDragEnd={onDragEnd}
+                  initial={{ scale: 0.94, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.94, opacity: 0 }}
+                  transition={{ duration: 0.2, ease: "easeOut" }}
+                  className="absolute inset-0 cursor-grab active:cursor-grabbing select-none"
+                >
+                  <Card className="h-full rounded-[28px] border border-white/60 dark:border-white/10 bg-white/85 dark:bg-[#111111]/85 backdrop-blur shadow-2xl">
+                    <div className="relative h-2/3 rounded-t-[28px] overflow-hidden">
+                      {current.image ? (
+                        <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${current.image})` }} />
+                      ) : (
+                        <div className="absolute inset-0 bg-gradient-to-br from-emerald-200 via-emerald-100 to-white" />
+                      )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-transparent" />
+                      <div className="absolute top-4 left-4 z-20">
+                        {position && (
+                          <Badge className="rounded-2xl px-3 py-1 bg-black/60 text-white backdrop-blur">
+                            <PartyPopper className="h-4 w-4 mr-1" />
+                            {t("discoveryPage.status.position", { current: position, total })}
+                          </Badge>
+                        )}
                       </div>
-                    <h2 className="text-2xl font-semibold drop-shadow-sm">{current.name}</h2>
-                    <p className="opacity-90 text-sm italic">{current.scientificName}</p>
-                  </div>
+                      <div className="absolute top-4 right-4 z-20">
+                        <button
+                          onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+                            e.stopPropagation()
+                            onToggleLike && onToggleLike()
+                          }}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          aria-pressed={liked}
+                          aria-label={liked ? "Unlike" : "Like"}
+                          className={`h-10 w-10 rounded-full flex items-center justify-center shadow border transition ${
+                            liked ? "bg-rose-600 text-white border-rose-500" : "bg-white/90 text-black hover:bg-white"
+                          }`}
+                        >
+                          <Heart className={`h-5 w-5 ${liked ? "fill-current" : ""}`} />
+                        </button>
+                      </div>
+                      <div className="absolute bottom-0 left-0 right-0 p-6 text-white">
+                        <div className="flex flex-wrap items-center gap-2 mb-3">
+                          <Badge className={`${rarityTone[rarityKey]} backdrop-blur bg-opacity-90`}>{current?.rarity ?? "Common"}</Badge>
+                          {seasons.map((s) => {
+                            const badgeClass = seasonBadge[s] ?? "bg-stone-200/70 dark:bg-stone-700/70 text-stone-900 dark:text-stone-100"
+                            return (
+                              <span key={s} className={`text-[11px] px-2.5 py-1 rounded-full shadow ${badgeClass}`}>
+                                {s}
+                              </span>
+                            )
+                          })}
+                        </div>
+                        <h2 className="text-3xl font-semibold tracking-tight drop-shadow-sm">{current.name}</h2>
+                        {current.scientificName && <p className="opacity-90 text-sm italic">{current.scientificName}</p>}
+                      </div>
+                    </div>
+
+                    <CardContent className="h-1/3 p-6 flex flex-col gap-4">
+                      {current.description && (
+                        <p className="text-sm text-stone-600 dark:text-stone-300 line-clamp-3">{current.description}</p>
+                      )}
+
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="rounded-2xl border border-emerald-100/70 dark:border-emerald-900/40 bg-emerald-50/60 dark:bg-emerald-900/10 p-4 backdrop-blur-sm">
+                          <div className="text-xs uppercase tracking-wide text-emerald-700 dark:text-emerald-300 font-semibold mb-1">
+                            {t("discoveryPage.infoCard.meaningLabel")}
+                          </div>
+                          <p className="text-sm text-emerald-900 dark:text-emerald-100">
+                            {meaning || t("discoveryPage.infoCard.meaningFallback")}
+                          </p>
+                        </div>
+
+                        <div className="rounded-2xl border border-stone-200/80 dark:border-[#3e3e42]/60 bg-white/70 dark:bg-[#1f1f1f]/60 p-4 backdrop-blur-sm space-y-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-xs uppercase tracking-wide opacity-70">{t("discoveryPage.infoCard.colorsLabel")}</span>
+                            <Badge
+                              className={`rounded-full text-[11px] font-medium border-none px-3 py-1 ${
+                                current?.seedsAvailable
+                                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200"
+                                  : "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-200"
+                              }`}
+                            >
+                              {seedsCopy}
+                            </Badge>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {colorChips.length > 0 ? (
+                              colorChips.map((color) => {
+                                const key = color.toLowerCase().split(/[\s-]/)[0]
+                                const swatch = colorTokenMap[key] ?? "#a8a29e"
+                                return (
+                                  <span
+                                    key={color}
+                                    className="flex items-center gap-2 rounded-full border border-white/60 dark:border-white/10 bg-white/80 dark:bg-[#111111]/80 px-3 py-1 text-xs font-medium text-stone-700 dark:text-stone-100 shadow-sm"
+                                  >
+                                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: swatch }} />
+                                    {color}
+                                  </span>
+                                )
+                              })
+                            ) : (
+                              <span className="text-xs text-stone-500 dark:text-stone-400">{t("plant.none")}</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-auto flex flex-wrap items-center justify-between gap-2">
+                        <Button
+                          variant="outline"
+                          className="rounded-2xl flex-1 min-w-[120px]"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handlePrevious()
+                          }}
+                          onPointerDown={(e) => e.stopPropagation()}
+                        >
+                          <ChevronLeft className="h-4 w-4 mr-1" />
+                          {t("plant.back")}
+                        </Button>
+                        <Button
+                          className="rounded-2xl flex-1 min-w-[120px]"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleInfo()
+                          }}
+                          onPointerDown={(e) => e.stopPropagation()}
+                        >
+                          {t("plant.info")}
+                          <ChevronUp className="h-4 w-4 ml-1" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="rounded-2xl flex-1 min-w-[120px]"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handlePass()
+                          }}
+                          onPointerDown={(e) => e.stopPropagation()}
+                        >
+                          {t("plant.next")}
+                          <ChevronRight className="h-4 w-4 ml-1" />
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <EmptyState onReset={() => setIndex(0)} />
                 </div>
-                <CardContent className="h-1/3 p-4 flex flex-col gap-3">
-                  <p className="text-sm line-clamp-3">{current.description}</p>
-                  <div className="flex flex-wrap gap-2">
-                    {current.colors.slice(0, 6).map((c) => (
-                      <Badge key={c} variant="secondary" className="rounded-xl">{c}</Badge>
-                    ))}
-                  </div>
-                  <div className="mt-auto flex items-center justify-between gap-2">
-                    <Button 
-                      variant="secondary" 
-                      className="rounded-2xl flex-1" 
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handlePrevious()
-                      }}
-                      onPointerDown={(e) => e.stopPropagation()}
-                    >
-                      <ChevronLeft className="h-4 w-4 mr-1" /> {t('plant.back')}
-                    </Button>
-                    <Button 
-                      className="rounded-2xl flex-1" 
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleInfo()
-                      }}
-                      onPointerDown={(e) => e.stopPropagation()}
-                    >
-                      {t('plant.info')} <ChevronUp className="h-4 w-4 ml-1" />
-                    </Button>
-                    <Button 
-                      variant="secondary" 
-                      className="rounded-2xl flex-1" 
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handlePass()
-                      }}
-                      onPointerDown={(e) => e.stopPropagation()}
-                    >
-                      {t('plant.next')} <ChevronRight className="h-4 w-4 ml-1" />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          ) : (
-            <EmptyState onReset={() => setIndex(0)} />
-          )}
-        </AnimatePresence>
-      </div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          <div className="space-y-6 pt-12">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-2xl font-semibold">{t("discoveryPage.instructions.title")}</h2>
+              <Badge variant="outline" className="rounded-2xl border-dashed">
+                <Sparkles className="h-4 w-4 mr-1" />
+                {t("common.discovery")}
+              </Badge>
+            </div>
+            <div className="grid gap-4 md:grid-cols-3">
+              {gestures.map(({ icon: Icon, title, description }, idx) => (
+                <motion.div
+                  key={title}
+                  initial={{ opacity: 0, y: 16 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  transition={{ delay: idx * 0.08, duration: 0.4 }}
+                  viewport={{ once: true, amount: 0.4 }}
+                >
+                  <Card className="h-full rounded-3xl border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/70 dark:bg-[#1f1f1f]/70 backdrop-blur">
+                    <CardContent className="p-5 space-y-3">
+                      <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200">
+                        <Icon className="h-5 w-5" />
+                      </span>
+                      <h3 className="text-base font-medium">{title}</h3>
+                      <p className="text-sm text-stone-600 dark:text-stone-400">{description}</p>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              ))}
+            </div>
+            <p className="text-sm text-stone-500 dark:text-stone-400">{t("discoveryPage.instructions.invite")}</p>
+          </div>
+        </div>
+      </section>
     </div>
   )
 }
 
 const EmptyState = ({ onReset }: { onReset: () => void }) => {
-  const { t } = useTranslation('common')
+  const { t } = useTranslation("common")
   return (
-  <Card className="rounded-3xl p-8 text-center">
-    <CardHeader>
-      <CardTitle className="flex items-center justify-center gap-2">
-        <Sparkles className="h-5 w-5" /> {t('plant.noResults')}
-      </CardTitle>
-    </CardHeader>
-    <CardContent className="space-y-4">
-      <p className="text-sm opacity-70 max-w-md mx-auto">{t('plant.tryAnotherSearch')}</p>
-      <div className="flex items-center justify-center gap-3">
-        <Button variant="secondary" className="rounded-2xl" onClick={onReset}>{t('plant.reset')}</Button>
+    <Card className="relative overflow-hidden rounded-[28px] border border-dashed border-stone-200/80 dark:border-[#3e3e42]/80 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur text-center shadow-lg max-w-lg w-full">
+      <div className="absolute -top-32 right-10 h-56 w-56 rounded-full bg-emerald-200/40 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
+      <div className="absolute -bottom-24 left-10 h-56 w-56 rounded-full bg-emerald-100/50 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
+      <div className="relative p-10 space-y-6">
+        <Badge variant="outline" className="rounded-2xl border-dashed w-fit mx-auto">
+          <Sparkles className="h-4 w-4 mr-1" />
+          {t("plant.noResults")}
+        </Badge>
+        <CardHeader className="space-y-3 text-center">
+          <CardTitle className="text-xl flex items-center justify-center gap-2">
+            <PartyPopper className="h-5 w-5 text-emerald-600 dark:text-emerald-300" />
+            {t("discoveryPage.empty.title")}
+          </CardTitle>
+          <CardDescription className="text-sm text-stone-600 dark:text-stone-400">
+            {t("discoveryPage.empty.subtitle")}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex justify-center">
+          <Button variant="secondary" className="rounded-2xl" onClick={onReset}>
+            {t("discoveryPage.empty.reset")}
+          </Button>
+        </CardContent>
       </div>
-    </CardContent>
-  </Card>
+    </Card>
   )
 }
