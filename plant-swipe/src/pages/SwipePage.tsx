@@ -191,10 +191,6 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                       </div>
 
                       <CardContent className="h-1/3 p-6 flex flex-col gap-4">
-                        {(meaning || description) && (
-                          <p className="text-sm text-stone-600 dark:text-stone-300 line-clamp-3">{meaning || description}</p>
-                        )}
-
                         <div className="grid gap-3 sm:grid-cols-2">
                           <div className="rounded-2xl border border-emerald-100/70 dark:border-emerald-900/40 bg-emerald-50/60 dark:bg-emerald-900/10 p-4 backdrop-blur-sm space-y-2">
                             <div className="mb-1 text-xs uppercase tracking-wide text-emerald-700 dark:text-emerald-300 font-semibold">
