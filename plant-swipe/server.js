@@ -342,6 +342,7 @@ async function ensureAdmin(req, res) {
 }
 
 const disallowedImageKeys = new Set(['image', 'imageurl', 'image_url', 'imageURL', 'thumbnail', 'photo', 'picture'])
+const disallowedFieldKeys = new Set(['externalids'])
 const metadataKeys = new Set(['type', 'description', 'options', 'items', 'additionalProperties', 'examples', 'format'])
 
 const JsonValueSchema = z.lazy(() =>
@@ -365,6 +366,7 @@ function sanitizeTemplate(node, path = []) {
     for (const [key, value] of Object.entries(node)) {
       const lowerKey = key.toLowerCase()
       if (disallowedImageKeys.has(lowerKey)) continue
+      if (disallowedFieldKeys.has(lowerKey)) continue
       if (lowerKey === 'name' && path.length === 0) continue
       result[key] = sanitizeTemplate(value, [...path, key])
     }
@@ -409,6 +411,7 @@ function stripDisallowedKeys(node, path = []) {
     for (const [key, value] of Object.entries(node)) {
       const lowerKey = key.toLowerCase()
       if (disallowedImageKeys.has(lowerKey)) continue
+      if (disallowedFieldKeys.has(lowerKey)) continue
       if (lowerKey === 'name' && path.length === 0) continue
       result[key] = stripDisallowedKeys(value, [...path, key])
     }
@@ -735,6 +738,18 @@ async function generateFieldData(options) {
     `Field definition (for reference):\n${JSON.stringify(fieldSchema, null, 2)}`,
   ]
 
+  if (fieldKey === 'description') {
+    promptSections.push(
+      'Write a cohesive botanical description between 100 and 400 words. Use complete sentences and paragraph-style prose, highlight appearance, growth habit, seasonal interest, and growing requirements. Do not use bullet lists, headings, or markdown. Stay factual and avoid repetition.'
+    )
+  }
+
+  if (fieldKey === 'meta') {
+    promptSections.push(
+      'When providing symbolic or cultural meaning (e.g., funFact), produce a thoughtful narrative between 80 and 200 words that explores the plant’s symbolism, traditional associations, and notable stories. Keep the tone informative and avoid bullet lists or markdown.'
+    )
+  }
+
   if (hintList.length > 0) {
     promptSections.push(`Constraints:\n- ${hintList.join('\n- ')}`)
   }
@@ -792,6 +807,19 @@ async function generateFieldData(options) {
 
   const cleanedValue = removeNullValues(coercedValue)
   return cleanedValue !== undefined ? cleanedValue : undefined
+}
+
+function removeExternalIds(node) {
+  if (!node || typeof node !== 'object') return node
+  if (Array.isArray(node)) {
+    return node.map((item) => removeExternalIds(item))
+  }
+  const result = {}
+  for (const [key, value] of Object.entries(node)) {
+    if (key.toLowerCase() === 'externalids') continue
+    result[key] = removeExternalIds(value)
+  }
+  return result
 }
 
 
@@ -1097,11 +1125,11 @@ app.post('/api/admin/ai/plant-fill', async (req, res) => {
 
       const cleanedField =
         fieldValue !== undefined ? removeNullValues(fieldValue) : undefined
-      if (cleanedField !== undefined) {
-        aggregated[fieldKey] = cleanedField
-      } else {
-        delete aggregated[fieldKey]
-      }
+    if (cleanedField !== undefined) {
+      aggregated[fieldKey] = removeExternalIds(cleanedField)
+    } else {
+      delete aggregated[fieldKey]
+    }
     }
 
     let plantData = ensureStructure(schemaBlueprint, aggregated)
@@ -1118,7 +1146,7 @@ app.post('/api/admin/ai/plant-fill', async (req, res) => {
       throw new Error('AI output could not be transformed into a plant record')
     }
 
-    const plantObject = plantData
+    const plantObject = removeExternalIds(plantData)
     if (!('meta' in plantObject) || typeof plantObject.meta !== 'object' || plantObject.meta === null || Array.isArray(plantObject.meta)) {
       plantObject.meta = {}
     }
@@ -1198,11 +1226,12 @@ app.post('/api/admin/ai/plant-fill/field', async (req, res) => {
     })
 
     const cleanedValue = fieldValue !== undefined ? removeNullValues(fieldValue) : undefined
+    const sanitizedValue = cleanedValue !== undefined ? removeExternalIds(cleanedValue) : undefined
 
     res.json({
       success: true,
       field: fieldKey,
-      data: cleanedValue ?? null,
+      data: sanitizedValue ?? null,
     })
   } catch (err) {
     console.error('[server] AI plant field fill failed:', err)

@@ -48,6 +48,8 @@ const AI_STATUS_STYLES: Record<AiFieldStatus, { text: string }> = {
   missing: { text: "text-red-600 dark:text-red-400" },
 }
 
+const countWords = (text: string) => text.trim().split(/\s+/).filter(Boolean).length
+
 interface EditPlantPageProps {
   onCancel: () => void
   onSaved?: (plantId: string) => void
@@ -89,6 +91,10 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
     setAiFieldStatuses(createInitialStatuses())
     setAiMissingFields([])
   }
+  const isDescriptionWithinRange = (value: string) => {
+    const words = countWords(value)
+    return words >= 100 && words <= 400
+  }
   const markFieldWorking = (fieldKey: string) => {
     if (!fieldKey || fieldKey === 'init' || fieldKey === 'complete') return
     setAiFieldStatuses((prev) => {
@@ -108,7 +114,11 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
       let updated: Record<RequiredFieldId, AiFieldStatus> | null = null
       for (const config of REQUIRED_FIELD_CONFIG) {
         if (!config.sourceKeys.includes(fieldKey)) continue
-        const filled = isFieldFilledFromData(config.id, fieldKey, fieldData)
+        let filled = isFieldFilledFromData(config.id, fieldKey, fieldData)
+        if (config.id === 'description') {
+          const value = typeof fieldData === 'string' ? fieldData : ''
+          filled = isDescriptionWithinRange(value)
+        }
         if (filled && prev[config.id] !== 'filled') {
           if (!updated) updated = { ...prev }
           updated[config.id] = 'filled'
@@ -121,20 +131,17 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
     })
   }
   const finalizeAiStatuses = (snapshot: AiFieldStateSnapshot) => {
-    setAiFieldStatuses((prev) => {
-      const next = { ...prev }
-      for (const config of REQUIRED_FIELD_CONFIG) {
-        if (isFieldFilledFromState(config.id, snapshot)) {
-          next[config.id] = 'filled'
-        } else if (next[config.id] !== 'filled') {
-          next[config.id] = 'missing'
-        }
+    const next = createInitialStatuses()
+    const missing: RequiredFieldId[] = []
+    for (const config of REQUIRED_FIELD_CONFIG) {
+      let filled = isFieldFilledFromState(config.id, snapshot)
+      if (config.id === 'description') {
+        filled = isDescriptionWithinRange(snapshot.description)
       }
-      return next
-    })
-    const missing = REQUIRED_FIELD_CONFIG
-      .filter(({ id }) => !isFieldFilledFromState(id, snapshot))
-      .map(({ id }) => id)
+      next[config.id] = filled ? 'filled' : 'missing'
+      if (!filled) missing.push(config.id)
+    }
+    setAiFieldStatuses(next)
     setAiMissingFields(missing)
     return missing
   }
@@ -152,43 +159,50 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
   }
   React.useEffect(() => {
     if (aiFilling) return
+    const hasStarted = Object.values(aiFieldStatuses).some((status) => status !== 'pending')
+    if (!hasStarted) return
     const snapshot: AiFieldStateSnapshot = {
       scientificName,
       colors,
       seasons,
       description,
     }
-    setAiFieldStatuses((prev) => {
-      let changed = false
-      const next = { ...prev }
-      for (const config of REQUIRED_FIELD_CONFIG) {
-        const filled = isFieldFilledFromState(config.id, snapshot)
-        if (filled) {
-          if (next[config.id] !== 'filled') {
-            next[config.id] = 'filled'
-            changed = true
-          }
-        } else if (next[config.id] === 'filled') {
-          next[config.id] = 'missing'
-          changed = true
-        } else if (next[config.id] !== 'working' && next[config.id] !== 'missing') {
-          next[config.id] = 'missing'
+    const nextStatuses: Record<RequiredFieldId, AiFieldStatus> = { ...aiFieldStatuses }
+    let changed = false
+    const missing: RequiredFieldId[] = []
+    for (const config of REQUIRED_FIELD_CONFIG) {
+      let filled = isFieldFilledFromState(config.id, snapshot)
+      if (config.id === 'description') {
+        filled = isDescriptionWithinRange(snapshot.description)
+      }
+      if (filled) {
+        if (nextStatuses[config.id] !== 'filled') {
+          nextStatuses[config.id] = 'filled'
           changed = true
         }
+      } else {
+        if (nextStatuses[config.id] !== 'working' && nextStatuses[config.id] !== 'missing') {
+          nextStatuses[config.id] = 'missing'
+          changed = true
+        } else if (nextStatuses[config.id] === 'filled') {
+          nextStatuses[config.id] = 'missing'
+          changed = true
+        }
+        if (!missing.includes(config.id)) {
+          missing.push(config.id)
+        }
       }
-      return changed ? next : prev
-    })
-    const missing = REQUIRED_FIELD_CONFIG
-      .filter(({ id }) => !isFieldFilledFromState(id, snapshot))
-      .map(({ id }) => id)
+    }
+    if (changed) {
+      setAiFieldStatuses(nextStatuses)
+    }
     setAiMissingFields((current) => {
       if (current.length === missing.length && current.every((id) => missing.includes(id))) {
         return current
       }
       return missing
     })
-  }, [scientificName, colors, seasons, description, aiFilling])
-  
+  }, [aiFilling, aiFieldStatuses, scientificName, colors, seasons, description, isDescriptionWithinRange])
   // New JSONB structure state
   const [identifiers, setIdentifiers] = React.useState<Partial<PlantIdentifiers>>({})
   const [traits, setTraits] = React.useState<Partial<PlantTraits>>({})
@@ -357,7 +371,12 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
         let nextDescription = description
 
         if (aiData.identifiers) {
-          setIdentifiers(aiData.identifiers)
+          const { externalIds: _ignoredExternalIds, ...restIdentifiers } = aiData.identifiers
+          setIdentifiers((prev) => ({
+            ...(prev ?? {}),
+            ...restIdentifiers,
+            externalIds: prev?.externalIds,
+          }))
           const aiScientificName = typeof aiData.identifiers.scientificName === 'string'
             ? aiData.identifiers.scientificName.trim()
             : ''
@@ -487,7 +506,12 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
           const missingLabels = REQUIRED_FIELD_CONFIG
             .filter(({ id }) => missing.includes(id))
             .map(({ label }) => label)
-          setError(`AI could not fill the following required fields: ${missingLabels.join(', ')}. Please complete them manually.`)
+          let message = `AI could not fill the following required fields: ${missingLabels.join(', ')}. Please complete them manually.`
+          if (missing.includes('description')) {
+            const wordCount = countWords(nextDescription)
+            message += ` The description must be between 100 and 400 words (currently ${wordCount}).`
+          }
+          setError(message)
         }
       } catch (err: any) {
         console.error('AI fill error:', err)
@@ -735,6 +759,11 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
     if (normalizedColors.length === 0) { setError("At least one color is required"); return }
     if (seasons.length === 0) { setError("Select at least one season"); return }
     if (!description.trim()) { setError("Description is required"); return }
+    const descriptionWordCount = countWords(description)
+    if (descriptionWordCount < 100 || descriptionWordCount > 400) {
+      setError(`Description must be between 100 and 400 words (currently ${descriptionWordCount}).`)
+      return
+    }
     // Validate frequency constraints
     const periodMax: Record<'week'|'month'|'year', number> = { week: 7, month: 4, year: 12 }
     const maxAllowed = periodMax[waterFreqPeriod]
@@ -849,10 +878,10 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
           culinaryUses: usage.culinaryUses,
           medicinalUses: usage.medicinalUses,
         } : undefined,
-        meta: meta ? {
-          funFact: meta.funFact,
-          authorNotes: meta.authorNotes,
-          sourceReferences: meta.sourceReferences,
+        meta: metaForUpdate ? {
+          funFact: metaForUpdate.funFact,
+          authorNotes: metaForUpdate.authorNotes,
+          sourceReferences: metaForUpdate.sourceReferences,
         } : undefined,
           phenology: translationPhenology,
           care: translationCarePayload,
