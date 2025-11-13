@@ -906,50 +906,6 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
             <Label>Author Notes</Label>
             <Textarea value={meta?.authorNotes || ''} onChange={(e) => setMeta({ ...meta, authorNotes: e.target.value || undefined })} placeholder="Personal notes and observations" />
           </div>
-            <div className="grid gap-2">
-              <Label>Created By</Label>
-              <Input
-                value={meta?.createdBy || ''}
-                readOnly
-                aria-readonly="true"
-                placeholder="Will auto-fill on save"
-                className="cursor-not-allowed bg-muted/60 dark:bg-[#1f1f22] opacity-80"
-              />
-              <p className="text-xs text-muted-foreground">Auto-managed when you save the plant.</p>
-            </div>
-            <div className="grid gap-2">
-              <Label>Updated By</Label>
-              <Input
-                value={meta?.updatedBy || ''}
-                readOnly
-                aria-readonly="true"
-                placeholder="Will auto-fill on save"
-                className="cursor-not-allowed bg-muted/60 dark:bg-[#1f1f22] opacity-80"
-              />
-              <p className="text-xs text-muted-foreground">Updates automatically whenever you edit.</p>
-            </div>
-            <div className="grid gap-2">
-              <Label>Created At</Label>
-              <Input
-                value={meta?.createdAt || ''}
-                readOnly
-                aria-readonly="true"
-                placeholder="Will auto-fill on save"
-                className="cursor-not-allowed bg-muted/60 dark:bg-[#1f1f22] opacity-80"
-              />
-              <p className="text-xs text-muted-foreground">Auto-generated when the plant is created.</p>
-            </div>
-            <div className="grid gap-2">
-              <Label>Updated At</Label>
-              <Input
-                value={meta?.updatedAt || ''}
-                readOnly
-                aria-readonly="true"
-                placeholder="Will auto-fill on save"
-                className="cursor-not-allowed bg-muted/60 dark:bg-[#1f1f22] opacity-80"
-              />
-              <p className="text-xs text-muted-foreground">Updated automatically on each save.</p>
-            </div>
         </div>
       </CollapsibleSection>
     </div>

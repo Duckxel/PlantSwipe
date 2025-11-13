@@ -1,22 +1,6 @@
 import { supabase } from "@/lib/supabaseClient"
 
-interface PlantFillRequest {
-  plantName: string
-  schema: unknown
-  existingData?: Record<string, unknown>
-  onProgress?: (info: { field: string; completed: number; total: number }) => void
-  onFieldComplete?: (info: { field: string; data: unknown }) => void
-  signal?: AbortSignal
-}
-
-export async function fetchAiPlantFill({
-  plantName,
-  schema,
-  existingData,
-  onProgress,
-  onFieldComplete,
-  signal,
-}: PlantFillRequest) {
+async function buildAuthHeaders() {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
@@ -40,6 +24,28 @@ export async function fetchAiPlantFill({
       headers['X-Admin-Token'] = String(token)
     }
   } catch {}
+
+  return headers
+}
+
+interface PlantFillRequest {
+  plantName: string
+  schema: unknown
+  existingData?: Record<string, unknown>
+  onProgress?: (info: { field: string; completed: number; total: number }) => void
+  onFieldComplete?: (info: { field: string; data: unknown }) => void
+  signal?: AbortSignal
+}
+
+export async function fetchAiPlantFill({
+  plantName,
+  schema,
+  existingData,
+  onProgress,
+  onFieldComplete,
+  signal,
+}: PlantFillRequest) {
+  const headers = await buildAuthHeaders()
 
   const schemaObject = schema && typeof schema === 'object' && !Array.isArray(schema)
     ? schema
@@ -135,4 +141,55 @@ export async function fetchAiPlantFill({
   onProgress?.({ field: 'complete', completed: completedFields, total: totalFields })
 
   return aggregated
+}
+
+interface PlantFillFieldRequest {
+  plantName: string
+  schema: unknown
+  fieldKey: string
+  existingField?: unknown
+  onFieldComplete?: (info: { field: string; data: unknown }) => void
+  signal?: AbortSignal
+}
+
+export async function fetchAiPlantFillField({
+  plantName,
+  schema,
+  fieldKey,
+  existingField,
+  onFieldComplete,
+  signal,
+}: PlantFillFieldRequest) {
+  const headers = await buildAuthHeaders()
+
+  const response = await fetch('/api/admin/ai/plant-fill/field', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      plantName,
+      schema,
+      fieldKey,
+      existingField,
+    }),
+    signal,
+  })
+
+  let payload: any = null
+  try {
+    payload = await response.json()
+  } catch {}
+
+  if (!response.ok) {
+    const message = payload?.error || `AI fill failed for "${fieldKey}" with status ${response.status}`
+    throw new Error(message)
+  }
+
+  if (!payload?.success) {
+    const message = payload?.error || `AI fill failed for "${fieldKey}"`
+    throw new Error(message)
+  }
+
+  onFieldComplete?.({ field: fieldKey, data: payload?.data ?? null })
+
+  return payload?.data ?? null
 }

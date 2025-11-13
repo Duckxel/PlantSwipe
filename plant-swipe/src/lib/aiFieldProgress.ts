@@ -24,7 +24,7 @@ export const REQUIRED_FIELD_CONFIG: Array<{
   },
   {
     id: 'description',
-    label: 'Description',
+    label: 'Overview',
     sourceKeys: ['description', 'meta'],
   },
   {
@@ -39,6 +39,14 @@ export const AI_FIELD_STATUS_TEXT: Record<AiFieldStatus, string> = {
   working: 'In progress',
   filled: 'Filled',
   missing: 'Needs review',
+}
+
+export const REQUIRED_FIELD_TO_SCHEMA_KEY: Record<RequiredFieldId, string> = {
+  scientificName: 'identifiers',
+  colors: 'colors',
+  seasons: 'seasons',
+  description: 'description',
+  funFact: 'meta',
 }
 
 export interface AiFieldStateSnapshot {
