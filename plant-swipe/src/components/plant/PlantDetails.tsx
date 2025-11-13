@@ -17,6 +17,7 @@ import { rarityTone, seasonBadge } from "@/constants/badges";
 import { cn, deriveWaterLevelFromFrequency } from "@/lib/utils";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/context/AuthContext";
+import { useTheme } from "@/context/ThemeContext";
 import { useTranslation } from "react-i18next";
 import {
   ResponsiveContainer,
@@ -28,6 +29,8 @@ import {
   YAxis,
   Cell
 } from "recharts";
+import worldMapLight from "@/assets/world-map-light.svg?url";
+import worldMapDark from "@/assets/world-map-dark.svg?url";
 
 const SECTION_KEY_MAP: Record<string, string> = {
   'Identifiers': 'identifiers',
@@ -1887,9 +1890,6 @@ const CareChartSection: React.FC<{ data: CareChartDatum[] }> = ({ data }) => {
       </header>
       <div className="relative grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div className="space-y-4">
-          <p className="text-sm leading-relaxed text-stone-600 dark:text-stone-400">
-            {t('plantInfo.labels.careSummary', { defaultValue: "Visualize the plant's energy needs - sunlight, water, and routine - before you get your hands muddy." })}
-          </p>
           <ul className="space-y-3">
             {data.map((item, idx) => (
               <li key={item.key} className="flex items-start gap-3">
@@ -1965,53 +1965,90 @@ const SeasonalTimeline: React.FC<{ data: SeasonalTimelineEntry[]; planting?: Non
     [t]
   )
 
+  const topStackByIndex = React.useMemo(() => {
+    const order: SeasonKey[] = ['flowering', 'fruiting', 'sowing']
+    return data.map((entry) => {
+      for (let i = order.length - 1; i >= 0; i -= 1) {
+        const key = order[i]
+        if ((entry as Record<SeasonKey, number>)[key]) {
+          return key
+        }
+      }
+      return null
+    })
+  }, [data])
+
   const hasData = data.some((entry) => entry.flowering || entry.fruiting || entry.sowing)
   if (!hasData) return null
 
-    return (
-      <motion.section
-        initial={{ opacity: 0, y: 20 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, amount: 0.1 }}
-        transition={{ duration: 0.4 }}
-        className="relative overflow-hidden rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-6"
-      >
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,_129,_0.12),_transparent_55%)] dark:bg-[radial-gradient(circle_at_top,_rgba(16,_185,_129,_0.18),_transparent_60%)]" aria-hidden="true" />
-        <header className="relative mb-4 flex items-center gap-3">
-          <Calendar className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-          <h3 className="text-lg font-semibold tracking-tight">{t('plantInfo.sections.phenology', { defaultValue: 'Phenology' })}</h3>
-        </header>
-        <div className="relative h-60">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(120,113,108,0.16)" vertical={false} />
-              <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: 'currentColor', fontSize: 12 }} />
-              <YAxis hide domain={[0, 3]} />
-              <RechartsTooltip
-                cursor={{ fill: 'rgba(120,113,108,0.08)' }}
-                content={(props) => <SeasonalTooltip {...props} labels={seasonLabels} />}
-              />
-              <Bar dataKey="flowering" stackId="timeline" fill={TIMELINE_COLORS.flowering} radius={[12, 12, 0, 0]} />
-              <Bar dataKey="fruiting" stackId="timeline" fill={TIMELINE_COLORS.fruiting} radius={[12, 12, 0, 0]} />
-              <Bar dataKey="sowing" stackId="timeline" fill={TIMELINE_COLORS.sowing} radius={[12, 12, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.1 }}
+      transition={{ duration: 0.4 }}
+      className="relative overflow-hidden rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-6"
+    >
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,_129,_0.12),_transparent_55%)] dark:bg-[radial-gradient(circle_at_top,_rgba(16,_185,_129,_0.18),_transparent_60%)]" aria-hidden="true" />
+      <header className="relative mb-4 flex items-center gap-3">
+        <Calendar className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+        <h3 className="text-lg font-semibold tracking-tight">{t('plantInfo.sections.phenology', { defaultValue: 'Phenology' })}</h3>
+      </header>
+      <div className="relative h-60">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(120,113,108,0.16)" vertical={false} />
+            <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: 'currentColor', fontSize: 12 }} />
+            <YAxis hide domain={[0, 3]} />
+            <RechartsTooltip
+              cursor={{ fill: 'rgba(120,113,108,0.08)' }}
+              content={(props) => <SeasonalTooltip {...props} labels={seasonLabels} />}
+            />
+            <Bar dataKey="flowering" stackId="timeline">
+              {data.map((entry, idx) => (
+                <Cell
+                  key={`flowering-${entry.key}`}
+                  fill={TIMELINE_COLORS.flowering}
+                  radius={topStackByIndex[idx] === 'flowering' ? [12, 12, 0, 0] : [0, 0, 0, 0]}
+                />
+              ))}
+            </Bar>
+            <Bar dataKey="fruiting" stackId="timeline">
+              {data.map((entry, idx) => (
+                <Cell
+                  key={`fruiting-${entry.key}`}
+                  fill={TIMELINE_COLORS.fruiting}
+                  radius={topStackByIndex[idx] === 'fruiting' ? [12, 12, 0, 0] : [0, 0, 0, 0]}
+                />
+              ))}
+            </Bar>
+            <Bar dataKey="sowing" stackId="timeline">
+              {data.map((entry, idx) => (
+                <Cell
+                  key={`sowing-${entry.key}`}
+                  fill={TIMELINE_COLORS.sowing}
+                  radius={topStackByIndex[idx] === 'sowing' ? [12, 12, 0, 0] : [0, 0, 0, 0]}
+                />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="mt-5 flex flex-wrap gap-4 text-xs text-stone-600 dark:text-stone-400">
+        {(Object.entries(TIMELINE_COLORS) as Array<[SeasonKey, string]>).map(([key, color]) => (
+          <span key={key} className="flex items-center gap-2">
+            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
+            {seasonLabels[key]}
+          </span>
+        ))}
+      </div>
+      {planting?.hemisphere && (
+        <div className="mt-3 text-xs text-stone-600 dark:text-stone-400">
+          {t('plantInfo.labels.hemisphere', { defaultValue: 'Hemisphere' })}: {humanizeHemisphere(planting.hemisphere, t)}
         </div>
-        <div className="mt-5 flex flex-wrap gap-4 text-xs text-stone-600 dark:text-stone-400">
-          {(Object.entries(TIMELINE_COLORS) as Array<[SeasonKey, string]>).map(([key, color]) => (
-            <span key={key} className="flex items-center gap-2">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
-              {seasonLabels[key]}
-            </span>
-          ))}
-        </div>
-        {planting?.hemisphere && (
-          <div className="mt-3 text-xs text-stone-600 dark:text-stone-400">
-            {t('plantInfo.labels.hemisphere', { defaultValue: 'Hemisphere' })}: {humanizeHemisphere(planting.hemisphere, t)}
-          </div>
-        )}
-      </motion.section>
-    )
+      )}
+    </motion.section>
+  )
 }
 
 type SeasonalTooltipProps = BaseTooltipProps & {
@@ -2110,6 +2147,11 @@ const HabitatMap: React.FC<{
   hemisphere?: string
 }> = ({ nativeRange, climatePref, zones, hemisphere }) => {
   const { t } = useTranslation('common')
+  const { effectiveTheme } = useTheme()
+  const mapImage = React.useMemo(
+    () => (effectiveTheme === 'dark' ? worldMapDark : worldMapLight),
+    [effectiveTheme]
+  )
 
   const normalizedNativeRange = React.useMemo(
     () => normalizeStringArray(nativeRange as unknown),
@@ -2155,6 +2197,14 @@ const HabitatMap: React.FC<{
         </h3>
       </header>
       <div className="relative mb-4 h-64 overflow-hidden rounded-3xl border border-white/60 bg-gradient-to-br from-emerald-200/60 via-sky-100/60 to-emerald-100/60 shadow-inner dark:border-emerald-800/40 dark:bg-gradient-to-br dark:from-[#052c2b]/80 dark:via-[#072c40]/78 dark:to-[#111b2d]/82">
+        <img
+          src={mapImage}
+          alt=""
+          aria-hidden="true"
+          className="absolute inset-0 h-full w-full select-none object-cover opacity-90 dark:opacity-75 pointer-events-none"
+          loading="lazy"
+          draggable={false}
+        />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_40%,rgba(255,255,255,0.55),transparent_60%),radial-gradient(circle_at_70%_60%,rgba(255,255,255,0.45),transparent_65%)] dark:bg-[radial-gradient(circle_at_28%_32%,rgba(16,185,129,0.14),transparent_56%),radial-gradient(circle_at_74%_65%,rgba(59,130,246,0.12),transparent_66%)]" />
         {pins.map((region, idx) => {
           const position = MAP_PIN_POSITIONS[idx]
