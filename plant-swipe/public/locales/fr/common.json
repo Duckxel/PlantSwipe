@@ -35,17 +35,17 @@
       "termsOfServices": "Conditions d'utilisation"
     }
   },
-    "search": {
-      "hero": {
-        "badge": "Bibliothèque végétale",
-        "title": "Trouvez la plante idéale",
-        "subtitle": "Recherchez par couleur, rareté ou saison pour découvrir des plantes adaptées à votre style et à votre routine d’entretien."
-      },
-      "empty": {
-        "title": "Aucun résultat pour le moment",
-        "description": "Ajustez vos filtres ou vérifiez l’orthographe — votre prochaine plante coup de cœur est peut-être à un clic."
-      }
+  "search": {
+    "hero": {
+      "badge": "Bibliothèque végétale",
+      "title": "Trouvez la plante idéale",
+      "subtitle": "Recherchez par couleur, rareté ou saison pour découvrir des plantes adaptées à votre style et à votre routine d’entretien."
     },
+    "empty": {
+      "title": "Aucun résultat pour le moment",
+      "description": "Ajustez vos filtres ou vérifiez l’orthographe — votre prochaine plante coup de cœur est peut-être à un clic."
+    }
+  },
   "contactUs": {
     "title": "Nous contacter",
     "description": "Nous sommes là pour vous aider ! Contactez notre équipe de support.",
@@ -283,49 +283,49 @@
       "currentTheme": "Thème actuel"
     }
   },
-    "plant": {
-      "searchPlaceholder": "Rechercher nom, signification, couleur ?",
-      "seedsOnly": "Graines uniquement",
-      "favoritesOnly": "Favoris uniquement",
-      "favoritesFirst": "Favoris en premier",
-      "season": "Saison",
-      "color": "Couleur",
-      "active": "Actif",
-      "none": "Aucun",
-      "spring": "Printemps",
-      "summer": "Été",
-      "autumn": "Automne",
-      "winter": "Hiver",
-      "red": "Rouge",
-      "pink": "Rose",
-      "yellow": "Jaune",
-      "white": "Blanc",
-      "purple": "Violet",
-      "blue": "Bleu",
-      "orange": "Orange",
-      "green": "Vert",
-      "refineFilters": "Affinez avec les filtres ci-dessus. Cliquez sur une carte pour plus de détails.",
-      "noResults": "Aucun résultat",
-      "liked": "Aimé",
-      "back": "Retour",
-      "info": "Info",
-      "next": "Suivant",
-      "tryAnotherSearch": "Essayez une autre recherche ou ajustez vos filtres.",
-      "reset": "Réinitialiser"
-    },
-    "requestPlant": {
-      "button": "Demander une plante",
-      "title": "Demander une plante",
-      "description": "Dites-nous quelle plante vous souhaitez voir ajoutée à l'encyclopédie.",
-      "plantName": "Nom de la plante",
-      "placeholder": "Entrez le nom de la plante...",
-      "nameRequired": "Le nom de la plante est obligatoire",
-      "mustBeLoggedIn": "Vous devez être connecté pour demander une plante",
-      "submit": "Envoyer la demande",
-      "success": "Merci ! Votre demande a été envoyée.",
-      "error": "Échec de l'envoi de la demande"
-    },
-    "garden": {
+  "plant": {
+    "searchPlaceholder": "Rechercher nom, signification, couleur ?",
+    "seedsOnly": "Graines uniquement",
+    "favoritesOnly": "Favoris uniquement",
+    "favoritesFirst": "Favoris en premier",
+    "season": "Saison",
+    "color": "Couleur",
+    "active": "Actif",
+    "none": "Aucun",
+    "spring": "Printemps",
+    "summer": "Été",
+    "autumn": "Automne",
+    "winter": "Hiver",
+    "red": "Rouge",
+    "pink": "Rose",
+    "yellow": "Jaune",
+    "white": "Blanc",
+    "purple": "Violet",
+    "blue": "Bleu",
+    "orange": "Orange",
+    "green": "Vert",
+    "refineFilters": "Affinez avec les filtres ci-dessus. Cliquez sur une carte pour plus de détails.",
+    "noResults": "Aucun résultat",
+    "liked": "Aimé",
+    "back": "Retour",
+    "info": "Info",
+    "next": "Suivant",
+    "tryAnotherSearch": "Essayez une autre recherche ou ajustez vos filtres.",
+    "reset": "Réinitialiser"
+  },
+  "requestPlant": {
+    "button": "Demander une plante",
+    "title": "Demander une plante",
+    "description": "Dites-nous quelle plante vous souhaitez voir ajoutée à l'encyclopédie.",
+    "plantName": "Nom de la plante",
+    "placeholder": "Entrez le nom de la plante...",
+    "nameRequired": "Le nom de la plante est obligatoire",
+    "mustBeLoggedIn": "Vous devez être connecté pour demander une plante",
+    "submit": "Envoyer la demande",
+    "success": "Merci ! Votre demande a été envoyée.",
+    "error": "Échec de l'envoi de la demande"
+  },
+  "garden": {
     "title": "Jardins",
     "yourGardens": "Vos jardins",
     "create": "Créer un jardin",
@@ -363,17 +363,17 @@
       "completedAllTasks": "a terminé toutes les tâches dues sur \"{{plantName}}\"",
       "plant": "Plante"
     },
-      "member": "membre",
-      "members": "membres",
-      "streak": "série",
-      "failedToLoad": "Échec du chargement des jardins",
-      "listPage": {
-        "hero": {
-          "badge": "Hub du jardin",
-          "title": "Vos jardins, magnifiquement organisés",
-          "subtitle": "Suivez les soins quotidiens, célébrez les progrès et invitez vos proches à faire prospérer chaque espace."
-        }
+    "member": "membre",
+    "members": "membres",
+    "streak": "série",
+    "failedToLoad": "Échec du chargement des jardins",
+    "listPage": {
+      "hero": {
+        "badge": "Hub du jardin",
+        "title": "Vos jardins, magnifiquement organisés",
+        "subtitle": "Suivez les soins quotidiens, célébrez les progrès et invitez vos proches à faire prospérer chaque espace."
       }
+    }
   },
   "createPlant": {
     "title": "Ajouter une plante",
@@ -418,51 +418,51 @@
     "saveChanges": "Enregistrer les modifications",
     "saving": "Enregistrement..."
   },
-    "plantInfo": {
-      "plantNotFound": "Plante introuvable.",
-      "failedToLoad": "Échec du chargement de la plante",
-      "sunlight": "Ensoleillement",
-      "water": "Eau",
-      "difficulty": "Difficulté",
-      "overview": "Aperçu",
-      "meaning": "Signification",
-      "careGuide": "Guide d'entretien",
-      "sunlightLabel": "Ensoleillement :",
-      "waterLabel": "Eau :",
-      "waterFrequency": "Fréquence d'arrosage :",
-      "soilLabel": "Sol :",
-      "difficultyLabel": "Difficulté :",
-      "seedsAvailable": "Graines disponibles :",
-      "yes": "Oui",
-      "no": "Non",
-      "time": "fois",
-      "times": "fois",
-      "per": "par",
-      "like": "J'aime",
-      "unlike": "Je n'aime plus",
-      "share": "Partager",
-      "shareCopied": "Lien copié dans le presse-papiers !",
-      "shareFailed": "Échec de la copie du lien",
-      "viewFullScreen": "Voir l'image en plein écran",
-      "viewFullDetails": "Afficher tous les détails",
-      "deleteConfirm": "Supprimer cette plante ? Cela échouera si elle est utilisée dans un jardin.",
-      "day": "jour",
-      "week": "semaine",
-      "month": "mois",
-      "year": "année",
-      "values": {
-        "viewLink": "Voir",
-        "notAvailable": "N/D",
-        "spacing": "Ligne : {{row}} cm, Plante : {{plant}} cm",
-        "temperatureRange": "{{min}}{{dash}}{{max}}°C",
-        "germinationDays": "{{min}}{{dash}}{{max}}",
-        "stakingRequired": "Requis",
-        "stakingNotRequired": "Non requis",
-        "repottingInterval": "Tous les {{count}} ans",
-        "indoor": "Intérieur",
-        "outdoor": "Extérieur",
-        "both": "Intérieur et extérieur"
-      },
+  "plantInfo": {
+    "plantNotFound": "Plante introuvable.",
+    "failedToLoad": "Échec du chargement de la plante",
+    "sunlight": "Ensoleillement",
+    "water": "Eau",
+    "difficulty": "Difficulté",
+    "overview": "Aperçu",
+    "meaning": "Signification",
+    "careGuide": "Guide d'entretien",
+    "sunlightLabel": "Ensoleillement :",
+    "waterLabel": "Eau :",
+    "waterFrequency": "Fréquence d'arrosage :",
+    "soilLabel": "Sol :",
+    "difficultyLabel": "Difficulté :",
+    "seedsAvailable": "Graines disponibles :",
+    "yes": "Oui",
+    "no": "Non",
+    "time": "fois",
+    "times": "fois",
+    "per": "par",
+    "like": "J'aime",
+    "unlike": "Je n'aime plus",
+    "share": "Partager",
+    "shareCopied": "Lien copié dans le presse-papiers !",
+    "shareFailed": "Échec de la copie du lien",
+    "viewFullScreen": "Voir l'image en plein écran",
+    "viewFullDetails": "Afficher tous les détails",
+    "deleteConfirm": "Supprimer cette plante ? Cela échouera si elle est utilisée dans un jardin.",
+    "day": "jour",
+    "week": "semaine",
+    "month": "mois",
+    "year": "année",
+    "values": {
+      "viewLink": "Voir",
+      "notAvailable": "N/D",
+      "spacing": "Ligne : {{row}} cm, Plante : {{plant}} cm",
+      "temperatureRange": "{{min}}{{dash}}{{max}}°C",
+      "germinationDays": "{{min}}{{dash}}{{max}}",
+      "stakingRequired": "Requis",
+      "stakingNotRequired": "Non requis",
+      "repottingInterval": "Tous les {{count}} ans",
+      "indoor": "Intérieur",
+      "outdoor": "Extérieur",
+      "both": "Intérieur et extérieur"
+    },
     "sections": {
       "identifiers": "Identifiants",
       "traits": "Caractéristiques",
@@ -588,12 +588,12 @@
       "dec": "déc."
     }
   },
-    "gardenDashboard": {
-      "hero": {
-        "badge": "Tableau de bord du jardin",
-        "title": "Rythme maîtrisé pour {{name}}",
-        "subtitle": "Consultez les progrès du jour, la routine à venir et gardez toute l'équipe synchronisée."
-      },
+  "gardenDashboard": {
+    "hero": {
+      "badge": "Tableau de bord du jardin",
+      "title": "Rythme maîtrisé pour {{name}}",
+      "subtitle": "Consultez les progrès du jour, la routine à venir et gardez toute l'équipe synchronisée."
+    },
     "loading": "Chargement...",
     "overview": "Aperçu",
     "plants": "Plantes",
@@ -768,6 +768,11 @@
     }
   },
   "friends": {
+    "hero": {
+      "badge": "Hub d'amis",
+      "title": "Élargissez votre cercle Plantswipe",
+      "subtitle": "Répondez aux invitations, trouvez de nouveaux coéquipiers et gardez votre équipe de jardinage synchronisée."
+    },
     "title": "Amis",
     "pleaseLogin": "Veuillez vous connecter pour gérer vos amis",
     "pendingInvitations": "Invitations en attente",
@@ -832,14 +837,14 @@
       "title": "Ce profil est privé",
       "description": "Seuls les amis peuvent voir ce profil et cette activité."
     },
-      "searchUsers": {
-        "label": "Rechercher des utilisateurs",
-        "placeholder": "Recherchez par nom d'affichage ou pseudo...",
-        "noResults": "Aucun utilisateur ne correspond à votre recherche.",
-        "error": "Impossible de charger les suggestions. Réessayez bientôt.",
-        "privateTooltip": "Profil privé — seuls les amis peuvent voir",
-        "privateHint": "Profil privé • seuls les amis peuvent voir"
-      },
+    "searchUsers": {
+      "label": "Rechercher des utilisateurs",
+      "placeholder": "Recherchez par nom d'affichage ou pseudo...",
+      "noResults": "Aucun utilisateur ne correspond à votre recherche.",
+      "error": "Impossible de charger les suggestions. Réessayez bientôt.",
+      "privateTooltip": "Profil privé — seuls les amis peuvent voir",
+      "privateHint": "Profil privé • seuls les amis peuvent voir"
+    },
     "highlights": "Aperçu",
     "plantsOwned": "Plantes possédées",
     "gardens": "Jardins",

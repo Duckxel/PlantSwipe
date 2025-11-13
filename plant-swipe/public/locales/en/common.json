@@ -35,17 +35,17 @@
       "termsOfServices": "Terms of Services"
     }
   },
-    "search": {
-      "hero": {
-        "badge": "Plant library",
-        "title": "Find the perfect plant companion",
-        "subtitle": "Search by color, rarity, or season to discover plants that fit your aesthetic and care routine."
-      },
-      "empty": {
-        "title": "No matches just yet",
-        "description": "Try tweaking filters or checking spelling—your next favorite plant might be one search away."
-      }
+  "search": {
+    "hero": {
+      "badge": "Plant library",
+      "title": "Find the perfect plant companion",
+      "subtitle": "Search by color, rarity, or season to discover plants that fit your aesthetic and care routine."
     },
+    "empty": {
+      "title": "No matches just yet",
+      "description": "Try tweaking filters or checking spelling—your next favorite plant might be one search away."
+    }
+  },
   "contactUs": {
     "title": "Contact Us",
     "description": "We're here to help! Get in touch with our support team.",
@@ -283,49 +283,49 @@
       "currentTheme": "Current theme"
     }
   },
-    "plant": {
-      "searchPlaceholder": "Search name, meaning, color?",
-      "seedsOnly": "Seeds only",
-      "favoritesOnly": "Favorites only",
-      "favoritesFirst": "Favorites first",
-      "season": "Season",
-      "color": "Color",
-      "active": "Active",
-      "none": "None",
-      "spring": "Spring",
-      "summer": "Summer",
-      "autumn": "Autumn",
-      "winter": "Winter",
-      "red": "Red",
-      "pink": "Pink",
-      "yellow": "Yellow",
-      "white": "White",
-      "purple": "Purple",
-      "blue": "Blue",
-      "orange": "Orange",
-      "green": "Green",
-      "refineFilters": "Refine with filters above. Click a card for full details.",
-      "noResults": "No results",
-      "liked": "Liked",
-      "back": "Back",
-      "info": "Info",
-      "next": "Next",
-      "tryAnotherSearch": "Try another search or adjust your filters.",
-      "reset": "Reset"
-    },
-    "requestPlant": {
-      "button": "Request Plant",
-      "title": "Request a Plant",
-      "description": "Let us know which plant you would like to see added to the encyclopedia.",
-      "plantName": "Plant name",
-      "placeholder": "Enter plant name...",
-      "nameRequired": "Plant name is required",
-      "mustBeLoggedIn": "You must be logged in to request a plant",
-      "submit": "Submit request",
-      "success": "Thank you! Your request has been submitted.",
-      "error": "Failed to submit request"
-    },
-    "garden": {
+  "plant": {
+    "searchPlaceholder": "Search name, meaning, color?",
+    "seedsOnly": "Seeds only",
+    "favoritesOnly": "Favorites only",
+    "favoritesFirst": "Favorites first",
+    "season": "Season",
+    "color": "Color",
+    "active": "Active",
+    "none": "None",
+    "spring": "Spring",
+    "summer": "Summer",
+    "autumn": "Autumn",
+    "winter": "Winter",
+    "red": "Red",
+    "pink": "Pink",
+    "yellow": "Yellow",
+    "white": "White",
+    "purple": "Purple",
+    "blue": "Blue",
+    "orange": "Orange",
+    "green": "Green",
+    "refineFilters": "Refine with filters above. Click a card for full details.",
+    "noResults": "No results",
+    "liked": "Liked",
+    "back": "Back",
+    "info": "Info",
+    "next": "Next",
+    "tryAnotherSearch": "Try another search or adjust your filters.",
+    "reset": "Reset"
+  },
+  "requestPlant": {
+    "button": "Request Plant",
+    "title": "Request a Plant",
+    "description": "Let us know which plant you would like to see added to the encyclopedia.",
+    "plantName": "Plant name",
+    "placeholder": "Enter plant name...",
+    "nameRequired": "Plant name is required",
+    "mustBeLoggedIn": "You must be logged in to request a plant",
+    "submit": "Submit request",
+    "success": "Thank you! Your request has been submitted.",
+    "error": "Failed to submit request"
+  },
+  "garden": {
     "title": "Gardens",
     "yourGardens": "Your Gardens",
     "create": "Create Garden",
@@ -352,28 +352,28 @@
     "markAllCompleted": "MARK ALL AS COMPLETED",
     "loadingTasks": "Loading tasks...",
     "noTasksToday": "No tasks due today. 🌿",
-      "done": "done",
-      "completeAll": "Complete all",
-      "completed": "Completed",
-      "doneBy": "Done by",
-      "someone": "Someone",
-      "activity": {
-        "completedTask": "has completed \"{{taskType}}\" Task on \"{{plantName}}\"",
-        "progressedTask": "has progressed \"{{taskType}}\" Task on \"{{plantName}}\" ({{completed}}/{{required}})",
-        "completedAllTasks": "completed all due tasks on \"{{plantName}}\"",
-        "plant": "Plant"
-      },
-      "member": "member",
-      "members": "members",
-      "streak": "streak",
-      "failedToLoad": "Failed to load gardens",
-      "listPage": {
-        "hero": {
-          "badge": "Garden hub",
-          "title": "Your gardens, beautifully organized",
-          "subtitle": "Track daily care, celebrate progress, and invite friends to help every space thrive."
-        }
+    "done": "done",
+    "completeAll": "Complete all",
+    "completed": "Completed",
+    "doneBy": "Done by",
+    "someone": "Someone",
+    "activity": {
+      "completedTask": "has completed \"{{taskType}}\" Task on \"{{plantName}}\"",
+      "progressedTask": "has progressed \"{{taskType}}\" Task on \"{{plantName}}\" ({{completed}}/{{required}})",
+      "completedAllTasks": "completed all due tasks on \"{{plantName}}\"",
+      "plant": "Plant"
+    },
+    "member": "member",
+    "members": "members",
+    "streak": "streak",
+    "failedToLoad": "Failed to load gardens",
+    "listPage": {
+      "hero": {
+        "badge": "Garden hub",
+        "title": "Your gardens, beautifully organized",
+        "subtitle": "Track daily care, celebrate progress, and invite friends to help every space thrive."
       }
+    }
   },
   "createPlant": {
     "title": "Add plant",
@@ -418,51 +418,51 @@
     "saveChanges": "Save changes",
     "saving": "Saving..."
   },
-    "plantInfo": {
-      "plantNotFound": "Plant not found.",
-      "failedToLoad": "Failed to load plant",
-      "sunlight": "Sunlight",
-      "water": "Water",
-      "difficulty": "Difficulty",
-      "overview": "Overview",
-      "meaning": "Meaning",
-      "careGuide": "Care Guide",
-      "sunlightLabel": "Sunlight:",
-      "waterLabel": "Water:",
-      "waterFrequency": "Water frequency:",
-      "soilLabel": "Soil:",
-      "difficultyLabel": "Difficulty:",
-      "seedsAvailable": "Seeds available:",
-      "yes": "Yes",
-      "no": "No",
-      "time": "time",
-      "times": "times",
-      "per": "per",
-      "like": "Like",
-      "unlike": "Unlike",
-      "share": "Share",
-      "shareCopied": "Link copied to clipboard!",
-      "shareFailed": "Failed to copy link",
-      "viewFullScreen": "View image in full screen",
-      "viewFullDetails": "View full details",
-      "deleteConfirm": "Delete this plant? This will fail if it is used in any garden.",
-      "day": "day",
-      "week": "week",
-      "month": "month",
-      "year": "year",
-      "values": {
-        "viewLink": "View",
-        "notAvailable": "N/A",
-        "spacing": "Row: {{row}} cm, Plant: {{plant}} cm",
-        "temperatureRange": "{{min}}{{dash}}{{max}}°C",
-        "germinationDays": "{{min}}{{dash}}{{max}}",
-        "stakingRequired": "Required",
-        "stakingNotRequired": "Not required",
-        "repottingInterval": "Every {{count}} years",
-        "indoor": "Indoor",
-        "outdoor": "Outdoor",
-        "both": "Indoor & Outdoor"
-      },
+  "plantInfo": {
+    "plantNotFound": "Plant not found.",
+    "failedToLoad": "Failed to load plant",
+    "sunlight": "Sunlight",
+    "water": "Water",
+    "difficulty": "Difficulty",
+    "overview": "Overview",
+    "meaning": "Meaning",
+    "careGuide": "Care Guide",
+    "sunlightLabel": "Sunlight:",
+    "waterLabel": "Water:",
+    "waterFrequency": "Water frequency:",
+    "soilLabel": "Soil:",
+    "difficultyLabel": "Difficulty:",
+    "seedsAvailable": "Seeds available:",
+    "yes": "Yes",
+    "no": "No",
+    "time": "time",
+    "times": "times",
+    "per": "per",
+    "like": "Like",
+    "unlike": "Unlike",
+    "share": "Share",
+    "shareCopied": "Link copied to clipboard!",
+    "shareFailed": "Failed to copy link",
+    "viewFullScreen": "View image in full screen",
+    "viewFullDetails": "View full details",
+    "deleteConfirm": "Delete this plant? This will fail if it is used in any garden.",
+    "day": "day",
+    "week": "week",
+    "month": "month",
+    "year": "year",
+    "values": {
+      "viewLink": "View",
+      "notAvailable": "N/A",
+      "spacing": "Row: {{row}} cm, Plant: {{plant}} cm",
+      "temperatureRange": "{{min}}{{dash}}{{max}}°C",
+      "germinationDays": "{{min}}{{dash}}{{max}}",
+      "stakingRequired": "Required",
+      "stakingNotRequired": "Not required",
+      "repottingInterval": "Every {{count}} years",
+      "indoor": "Indoor",
+      "outdoor": "Outdoor",
+      "both": "Indoor & Outdoor"
+    },
     "sections": {
       "identifiers": "Identifiers",
       "traits": "Traits",
@@ -588,12 +588,12 @@
       "dec": "Dec"
     }
   },
-    "gardenDashboard": {
-      "hero": {
-        "badge": "Garden dashboard",
-        "title": "Steady rhythm for {{name}}",
-        "subtitle": "Review today's progress, upcoming routines, and keep everyone in sync."
-      },
+  "gardenDashboard": {
+    "hero": {
+      "badge": "Garden dashboard",
+      "title": "Steady rhythm for {{name}}",
+      "subtitle": "Review today's progress, upcoming routines, and keep everyone in sync."
+    },
     "loading": "Loading...",
     "overview": "Overview",
     "plants": "Plants",
@@ -768,6 +768,11 @@
     }
   },
   "friends": {
+    "hero": {
+      "badge": "Friend hub",
+      "title": "Grow your Plantswipe circle",
+      "subtitle": "Respond to invitations, discover new teammates, and keep your garden crew in sync."
+    },
     "title": "Friends",
     "pleaseLogin": "Please log in to manage friends",
     "pendingInvitations": "Pending Invitations",
@@ -826,20 +831,20 @@
     "deleteAccount": "Delete account",
     "friendRequest": "Friend Request",
     "requestSent": "Request Sent",
-      "acceptRequest": "Accept Request",
-      "since": "since",
-      "privateProfile": {
-        "title": "This profile is private",
-        "description": "Only friends can see this profile and activity."
-      },
-      "searchUsers": {
-        "label": "Search users",
-        "placeholder": "Search by display name or username...",
-        "noResults": "No users match your search yet.",
-        "error": "We couldn't load suggestions. Try again shortly.",
-        "privateTooltip": "Private profile — only friends can view",
-        "privateHint": "Private profile • only friends can view"
-      },
+    "acceptRequest": "Accept Request",
+    "since": "since",
+    "privateProfile": {
+      "title": "This profile is private",
+      "description": "Only friends can see this profile and activity."
+    },
+    "searchUsers": {
+      "label": "Search users",
+      "placeholder": "Search by display name or username...",
+      "noResults": "No users match your search yet.",
+      "error": "We couldn't load suggestions. Try again shortly.",
+      "privateTooltip": "Private profile — only friends can view",
+      "privateHint": "Private profile • only friends can view"
+    },
     "highlights": "Highlights",
     "plantsOwned": "Plants owned",
     "gardens": "Gardens",
