@@ -1504,14 +1504,15 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
           </div>
         </div>
 
-      {hasAnyStructuredData && (
-        <motion.section
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.1 }}
-          transition={{ duration: 0.4 }}
-          className="space-y-6"
-        >
+        {hasAnyStructuredData && (
+          <motion.section
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.1 }}
+            transition={{ duration: 0.4 }}
+            className="space-y-6"
+            style={{ transformStyle: 'preserve-3d' }}
+          >
           <div className="flex items-center gap-3">
             <h2 className="text-2xl font-semibold">{t('plantInfo.moreInformation')}</h2>
           </div>
