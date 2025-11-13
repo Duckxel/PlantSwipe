@@ -7,12 +7,12 @@ import { Navigate } from '@/components/i18n/Navigate'
 import { useLanguageNavigate, removeLanguagePrefix } from '@/lib/i18nRouting'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { PlantDetails } from '@/components/plant/PlantDetails'
-import { Info, ArrowUpRight } from 'lucide-react'
+import { Info, ArrowUpRight, Sparkles } from 'lucide-react'
 import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
 import { TaskEditorDialog } from '@/components/plant/TaskEditorDialog'
 import type { Garden } from '@/types/garden'
@@ -1528,83 +1528,206 @@ export const GardenDashboardPage: React.FC = () => {
     }
   }, [todayTaskOccurrences, id, plants, getActorColorCss, load, loadHeavyForCurrentTab, emitGardenRealtime, user?.id, t])
 
+  const todayProgress = React.useMemo(() => {
+    if (!serverToday) return { due: 0, completed: 0, percent: 0 }
+    const found = dailyStats.find((d) => d.date === serverToday)
+    const due = found?.due ?? 0
+    const completed = found?.completed ?? 0
+    const percent = due === 0 ? 100 : Math.min(100, Math.round((completed / Math.max(1, due)) * 100))
+    return { due, completed, percent }
+  }, [dailyStats, serverToday])
+
+  const heroSubtitle = t('gardenDashboard.heroSubtitle')
+  const heroMembers = members.length
+  const heroStreak = garden?.streak ?? 0
+
   return (
-    <div className="max-w-6xl mx-auto mt-6 grid grid-cols-1 md:grid-cols-[220px_1fr] lg:grid-cols-[220px_1fr] gap-6">
-      {error && <div className="p-6 text-sm text-red-600">{error}</div>}
-      {loading && (
-        <>
-          <aside className="space-y-2 md:sticky md:top-4 self-start">
-            <div className="h-7 w-32 bg-stone-200 dark:bg-stone-700 rounded animate-pulse mb-4" />
-            <nav className="flex flex-wrap md:flex-col gap-2">
-              {Array.from({ length: 4 }).map((_, idx) => (
-                <div key={idx} className="h-10 w-full bg-stone-200 dark:bg-stone-700 rounded-2xl animate-pulse" />
-              ))}
-            </nav>
+    <div className="max-w-6xl mx-auto px-4 md:px-0 pb-16 space-y-10">
+      <section className="relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50 via-white to-stone-100 dark:from-[#252526] dark:via-[#1e1e1e] dark:to-[#151515] shadow-[0_32px_80px_-40px_rgba(16,185,129,0.45)]">
+        <div className="absolute -right-24 -top-24 h-64 w-64 rounded-full bg-emerald-200/40 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
+        <div className="absolute -left-24 bottom-[-35%] h-72 w-72 rounded-full bg-emerald-100/50 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
+        <div className="relative p-8 md:p-12 space-y-8">
+          <div className="flex flex-wrap items-start justify-between gap-6">
+            <div className="space-y-3 max-w-3xl">
+              <Badge variant="outline" className="rounded-2xl border-dashed bg-white/70 dark:bg-[#252526]/70 backdrop-blur-sm">
+                {t('gardenDashboard.heroEyebrow')}
+              </Badge>
+              <h1 className="text-3xl md:text-4xl font-semibold tracking-tight">
+                {loading ? (
+                  <span className="block h-8 w-48 rounded-lg bg-white/60 dark:bg-white/10 animate-pulse" />
+                ) : garden ? (
+                  garden.name
+                ) : (
+                  t('gardenDashboard.loading')
+                )}
+              </h1>
+              <p className="text-base md:text-lg text-stone-600 dark:text-stone-300">
+                {heroSubtitle}
+              </p>
+            </div>
+            <div className="relative h-20 w-20 rounded-[24px] border border-white/60 dark:border-white/10 bg-white/70 dark:bg-[#111111]/60 backdrop-blur overflow-hidden shadow-lg">
+              {loading ? (
+                <span className="absolute inset-0 animate-pulse bg-stone-200 dark:bg-[#2d2d30]" />
+              ) : garden?.coverImageUrl ? (
+                <img src={garden.coverImageUrl} alt={garden.name} className="absolute inset-0 h-full w-full object-cover" />
+              ) : (
+                <span className="absolute inset-0 flex items-center justify-center text-3xl">🌿</span>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <Button className="rounded-2xl" onClick={() => setAddOpen(true)} disabled={loading || !garden}>
+              <Sparkles className="h-4 w-4 mr-2" />
+              {t('gardenDashboard.plantsSection.addPlant')}
+            </Button>
+            <Button variant="outline" className="rounded-2xl" onClick={() => id && navigate(`/garden/${id}/routine`)} disabled={loading || !garden}>
+              {t('gardenDashboard.routine')}
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <Card className="rounded-[24px] border border-white/50 dark:border-white/10 bg-white/80 dark:bg-[#1b1b1b]/70 backdrop-blur p-4 shadow-sm">
+              <div className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                {t('gardenDashboard.overviewSection.plants')}
+              </div>
+              <div className="text-2xl font-semibold text-stone-900 dark:text-white">
+                {loading ? <span className="block h-6 w-12 bg-stone-200 dark:bg-[#2d2d30] rounded animate-pulse" /> : totalOnHand}
+              </div>
+              <div className="text-xs text-stone-500 dark:text-stone-400">
+                {t('gardenDashboard.overviewSection.species')} {loading ? '—' : speciesOnHand}
+              </div>
+            </Card>
+            <Card className="rounded-[24px] border border-white/50 dark:border-white/10 bg-white/80 dark:bg-[#1b1b1b]/70 backdrop-blur p-4 shadow-sm">
+              <div className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                {t('gardenDashboard.overviewSection.members')}
+              </div>
+              <div className="text-2xl font-semibold text-stone-900 dark:text-white">
+                {loading ? <span className="block h-6 w-10 bg-stone-200 dark:bg-[#2d2d30] rounded animate-pulse" /> : heroMembers}
+              </div>
+            </Card>
+            <Card className="rounded-[24px] border border-white/50 dark:border-white/10 bg-white/80 dark:bg-[#1b1b1b]/70 backdrop-blur p-4 shadow-sm">
+              <div className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                {t('gardenDashboard.overviewSection.streak')}
+              </div>
+              <div className="text-2xl font-semibold text-stone-900 dark:text-white">
+                {loading ? <span className="block h-6 w-12 bg-stone-200 dark:bg-[#2d2d30] rounded animate-pulse" /> : `${heroStreak} ${t('gardenDashboard.overviewSection.days')}`}
+              </div>
+            </Card>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs text-stone-500 dark:text-stone-400">
+              <span>{t('gardenDashboard.overviewSection.todaysProgress')}</span>
+              <span>{loading ? '—' : `${todayProgress.completed} / ${todayProgress.due}`}</span>
+            </div>
+            <div className="h-2 bg-white/60 dark:bg-white/10 rounded-full overflow-hidden">
+              <div className="h-2 bg-emerald-500" style={{ width: `${loading ? 0 : todayProgress.percent}%` }} />
+            </div>
+          </div>
+
+          {error && (
+            <div className="rounded-[24px] border border-rose-200/70 dark:border-rose-900/40 bg-rose-50/80 dark:bg-rose-900/20 p-4 text-sm text-rose-700 dark:text-rose-200 shadow-sm">
+              {error}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] lg:grid-cols-[220px_1fr] gap-8">
+          <aside className="md:sticky md:top-28 self-start">
+            <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/70 backdrop-blur p-6 space-y-4 animate-pulse">
+              <div className="h-6 w-40 rounded bg-stone-200 dark:bg-[#2d2d30]" />
+              <div className="flex flex-col gap-2">
+                {Array.from({ length: 4 }).map((_, idx) => (
+                  <div key={idx} className="h-10 w-full rounded-2xl bg-stone-200 dark:bg-[#2d2d30]" />
+                ))}
+              </div>
+            </Card>
           </aside>
-          <main className="min-h-[60vh]">
-            {tab === 'overview' && <OverviewSectionSkeleton />}
-            {tab !== 'overview' && <div className="p-6 text-sm opacity-60">{t('gardenDashboard.loading')}</div>}
+          <main className="min-h-[60vh] space-y-6">
+            {tab === 'overview' ? (
+              <OverviewSectionSkeleton />
+            ) : (
+              <div className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/70 backdrop-blur p-6 text-sm text-stone-600 dark:text-stone-300 shadow-sm">
+                {t('gardenDashboard.loading')}
+              </div>
+            )}
           </main>
-        </>
-      )}
-      {!loading && garden && (
-        <>
-          <aside className="space-y-2 md:sticky md:top-4 self-start">
-            <div className="text-xl font-semibold">{garden.name}</div>
-            <nav className="flex flex-wrap md:flex-col gap-2">
-              {([
-                ['overview', t('gardenDashboard.overview')],
-                ['plants', t('gardenDashboard.plants')],
-                ['routine', t('gardenDashboard.routine')],
-                ['settings', t('gardenDashboard.settings')],
-              ] as Array<[TabKey, string]>).map(([k, label]) => (
-                <Button key={k} asChild variant={tab === k ? 'default' : 'secondary'} className="rounded-2xl md:w-full">
-                  <NavLink to={`/garden/${id}/${k}`} className="no-underline">{label}</NavLink>
-                </Button>
-              ))}
-            </nav>
+        </div>
+      ) : garden ? (
+        <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] lg:grid-cols-[220px_1fr] gap-8">
+          <aside className="md:sticky md:top-28 self-start">
+            <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/85 dark:bg-[#1b1b1b]/75 backdrop-blur p-6 space-y-6 shadow-[0_24px_60px_-40px_rgba(16,185,129,0.45)]">
+              <div>
+                <div className="text-sm uppercase tracking-wide text-stone-500 dark:text-stone-400">{t('garden.title')}</div>
+                <div className="text-xl font-semibold text-stone-900 dark:text-white">{garden.name}</div>
+              </div>
+              <nav className="flex flex-wrap md:flex-col gap-2">
+                {([
+                  ['overview', t('gardenDashboard.overview')],
+                  ['plants', t('gardenDashboard.plants')],
+                  ['routine', t('gardenDashboard.routine')],
+                  ['settings', t('gardenDashboard.settings')],
+                ] as Array<[TabKey, string]>).map(([k, label]) => (
+                  <Button
+                    key={k}
+                    asChild
+                    variant={tab === k ? 'default' : 'outline'}
+                    className={`rounded-2xl md:w-full justify-start transition ${tab === k ? 'bg-emerald-500 text-white shadow-lg hover:bg-emerald-500/90' : 'border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/70 dark:bg-[#252526]/70 text-stone-600 dark:text-stone-300 hover:border-emerald-400/60'}`}
+                  >
+                    <NavLink to={`/garden/${id}/${k}`} className="no-underline">
+                      {label}
+                    </NavLink>
+                  </Button>
+                ))}
+              </nav>
+            </Card>
           </aside>
-          <main className="min-h-[60vh]">
+          <main className="min-h-[60vh] space-y-6">
             <Routes>
               <Route path="overview" element={<OverviewSection gardenId={id!} activityRev={activityRev} plants={plants} membersCount={members.length} serverToday={serverToday} dailyStats={dailyStats} totalOnHand={totalOnHand} speciesOnHand={speciesOnHand} baseStreak={garden.streak || 0} />} />
               <Route path="plants" element={(
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <div className="text-lg font-medium">{t('gardenDashboard.plantsSection.plantsInGarden')}</div>
-                    <Button className="rounded-2xl" onClick={() => setAddOpen(true)}>{t('gardenDashboard.plantsSection.addPlant')}</Button>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {plants.map((gp: any, idx: number) => (
-                      <Card key={gp.id} className={`rounded-2xl overflow-hidden relative ${dragIdx === idx ? 'ring-2 ring-black' : ''}`}
-                        draggable
-                        onDragStart={(e) => {
-                          // Prevent drag when starting from interactive controls
-                          const target = e.target as HTMLElement
-                          if (target && target.closest('button, a, input, textarea, select, [role="menuitem"]')) {
-                            e.preventDefault()
-                            return
-                          }
-                          setDragIdx(idx)
-                        }}
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={async () => {
-                          if (dragIdx === null || dragIdx === idx) return
-                          const next = plants.slice()
-                          const [moved] = next.splice(dragIdx, 1)
-                          next.splice(idx, 0, moved)
-                          setPlants(next)
-                          setDragIdx(null)
-                          try {
-                            await updateGardenPlantsOrder({ gardenId: id!, orderedIds: next.map((p: any) => p.id) })
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <div className="text-lg font-medium">{t('gardenDashboard.plantsSection.plantsInGarden')}</div>
+                      <Button className="rounded-2xl" onClick={() => setAddOpen(true)}>{t('gardenDashboard.plantsSection.addPlant')}</Button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {plants.map((gp: any, idx: number) => (
+                        <Card
+                          key={gp.id}
+                          className={`rounded-[24px] overflow-hidden relative border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/85 dark:bg-[#1b1b1b]/75 backdrop-blur ${dragIdx === idx ? 'ring-2 ring-emerald-500/60' : ''}`}
+                          draggable
+                          onDragStart={(e) => {
+                            // Prevent drag when starting from interactive controls
+                            const target = e.target as HTMLElement
+                            if (target && target.closest('button, a, input, textarea, select, [role="menuitem"]')) {
+                              e.preventDefault()
+                              return
+                            }
+                            setDragIdx(idx)
+                          }}
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={async () => {
+                            if (dragIdx === null || dragIdx === idx) return
+                            const next = plants.slice()
+                            const [moved] = next.splice(dragIdx, 1)
+                            next.splice(idx, 0, moved)
+                            setPlants(next)
+                            setDragIdx(null)
                             try {
-                              const actorColorCss = getActorColorCss()
-                              await logGardenActivity({ gardenId: id!, kind: 'note' as any, message: 'reordered plants', actorColor: actorColorCss || null })
-                              setActivityRev((r) => r + 1)
+                              await updateGardenPlantsOrder({ gardenId: id!, orderedIds: next.map((p: any) => p.id) })
+                              try {
+                                const actorColorCss = getActorColorCss()
+                                await logGardenActivity({ gardenId: id!, kind: 'note' as any, message: 'reordered plants', actorColor: actorColorCss || null })
+                                setActivityRev((r) => r + 1)
+                              } catch {}
+                              emitGardenRealtime('plants')
                             } catch {}
-                            emitGardenRealtime('plants')
-                          } catch {}
-                        }}
-                      >
+                          }}
+                        >
                         <div className="absolute top-2 right-2 z-10">
                           <button
                             onClick={(e: any) => { e.stopPropagation(); if (gp?.plant) navigate(`/plants/${gp.plant.id}`, { state: { backgroundLocation: location } }) }}
@@ -1714,9 +1837,9 @@ export const GardenDashboardPage: React.FC = () => {
                       </div>
                     </Card>
                   )}
-                  <div className="space-y-3">
-                    <div className="text-lg font-medium">{t('gardenDashboard.settingsSection.gardenDetails')}</div>
-                    <Card className="rounded-2xl p-4">
+                    <div className="space-y-3">
+                      <div className="text-lg font-medium">{t('gardenDashboard.settingsSection.gardenDetails')}</div>
+                      <Card className="rounded-[24px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/85 dark:bg-[#1b1b1b]/75 backdrop-blur p-4 shadow-sm">
                       <GardenDetailsEditor garden={garden} onSaved={load} canEdit={viewerIsOwner} />
                     </Card>
                   </div>
@@ -1890,6 +2013,10 @@ export const GardenDashboardPage: React.FC = () => {
             </DialogContent>
           </Dialog>
         </>
+      ) : (
+        <div className="rounded-[28px] border border-rose-200/70 dark:border-rose-900/40 bg-rose-50/80 dark:bg-rose-900/20 p-8 text-center text-sm text-rose-700 dark:text-rose-200 shadow-sm">
+          {error || t('gardenDashboard.loading')}
+        </div>
       )}
     </div>
   )
@@ -1939,7 +2066,7 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
   return (
     <div className="space-y-4">
       <div className="text-lg font-medium">{t('gardenDashboard.routineSection.thisWeek')}</div>
-      <Card className="rounded-2xl p-4">
+      <Card className="rounded-[24px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/85 dark:bg-[#1b1b1b]/75 backdrop-blur p-4 shadow-sm">
         <div className="text-sm opacity-60 mb-3">{t('gardenDashboard.routineSection.mondayToSunday')}</div>
         <div className="grid grid-cols-7 gap-2">
           {weekDays.map((ds, idx) => {
@@ -1979,13 +2106,13 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
       </div>
       {hasTodayTasks ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {plants.map((gp: any) => {
+            {plants.map((gp: any) => {
             const occs = occsByPlant[gp.id] || []
             const totalReq = occs.reduce((a, o) => a + Math.max(1, o.requiredCount || 1), 0)
             const totalDone = occs.reduce((a, o) => a + Math.min(Math.max(1, o.requiredCount || 1), o.completedCount || 0), 0)
             if (occs.length === 0) return null
             return (
-              <Card key={gp.id} className="rounded-2xl p-4">
+                <Card key={gp.id} className="rounded-[24px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/85 dark:bg-[#1b1b1b]/75 backdrop-blur p-4 shadow-sm">
                 <div className="flex items-center justify-between mb-2">
                   <div>
                     <div className="font-medium">{gp.nickname || gp.plant?.name}</div>
@@ -2053,17 +2180,17 @@ function RoutineSection({ plants, duePlantIds, onLogWater, weekDays, weekCounts,
             )
           })}
         </div>
-      ) : (
-        <Card className="rounded-2xl p-6 text-center">
-          <div className="text-base">{randomEmptyPhrase}</div>
-        </Card>
+        ) : (
+          <Card className="rounded-[24px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/85 dark:bg-[#1b1b1b]/75 backdrop-blur p-6 text-center shadow-sm">
+            <div className="text-base">{randomEmptyPhrase}</div>
+          </Card>
       )}
       <div className="pt-2">
         <div className="text-base font-medium">{t('gardenDashboard.routineSection.dueThisWeek')}</div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {plants.filter((gp: any) => (dueThisWeekByPlant[gp.id]?.length || 0) > 0 && !(duePlantIds?.has(gp.id))).map((gp: any) => (
-          <Card key={gp.id} className="rounded-2xl p-4">
+            <Card key={gp.id} className="rounded-[24px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/85 dark:bg-[#1b1b1b]/75 backdrop-blur p-4 shadow-sm">
             <div className="font-medium">{gp.nickname || gp.plant?.name}</div>
             {gp.nickname && <div className="text-xs opacity-60">{gp.plant?.name}</div>}
             <div className="text-sm opacity-70">{t('gardenDashboard.routineSection.waterNeed')} {gp.plant?.care.water}</div>
@@ -2150,12 +2277,12 @@ function OverviewSection({ gardenId, activityRev, plants, membersCount, serverTo
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="rounded-2xl p-4">
+        <Card className="rounded-[24px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/85 dark:bg-[#1b1b1b]/75 backdrop-blur p-4 shadow-sm">
           <div className="text-xs opacity-60">{t('gardenDashboard.overviewSection.plants')}</div>
           <div className="text-2xl font-semibold">{totalOnHand}</div>
           <div className="text-[11px] opacity-60">{t('gardenDashboard.overviewSection.species')} {speciesOnHand}</div>
         </Card>
-        <Card className="rounded-2xl p-4">
+        <Card className="rounded-[24px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/85 dark:bg-[#1b1b1b]/75 backdrop-blur p-4 shadow-sm">
           <div className="text-xs opacity-60">{t('gardenDashboard.overviewSection.members')}</div>
           <div className="flex items-center gap-2 mt-1">
             <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2164,7 +2291,7 @@ function OverviewSection({ gardenId, activityRev, plants, membersCount, serverTo
             <div className="text-2xl font-semibold">{membersCount}</div>
           </div>
         </Card>
-        <Card className="rounded-2xl p-4">
+        <Card className="rounded-[24px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/85 dark:bg-[#1b1b1b]/75 backdrop-blur p-4 shadow-sm">
           <div className="text-xs opacity-60">{t('gardenDashboard.overviewSection.streak')}</div>
           <div className="flex items-center gap-2 mt-1">
             <svg className="w-4 h-4 text-orange-500" fill="currentColor" viewBox="0 0 20 20">
@@ -2175,7 +2302,7 @@ function OverviewSection({ gardenId, activityRev, plants, membersCount, serverTo
         </Card>
       </div>
 
-      <Card className="rounded-2xl p-4">
+      <Card className="rounded-[24px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/85 dark:bg-[#1b1b1b]/75 backdrop-blur p-4 shadow-sm">
         <div className="font-medium mb-2">{t('gardenDashboard.overviewSection.todaysProgress')}</div>
         <div className="text-sm opacity-60 mb-2">{completedToday} / {totalToDoToday || 0} {t('gardenDashboard.overviewSection.tasksDone')}</div>
         <div className="h-3 bg-stone-200 dark:bg-stone-800 rounded-full overflow-hidden">
@@ -2183,7 +2310,7 @@ function OverviewSection({ gardenId, activityRev, plants, membersCount, serverTo
         </div>
       </Card>
 
-      <Card className="rounded-2xl p-4">
+      <Card className="rounded-[24px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/85 dark:bg-[#1b1b1b]/75 backdrop-blur p-4 shadow-sm">
         <div className="font-medium mb-3">{t('gardenDashboard.overviewSection.last30Days')}</div>
         <div className="grid grid-cols-7 gap-x-3 gap-y-3 place-items-center">
           {days.map((d, idx) => (
@@ -2198,7 +2325,7 @@ function OverviewSection({ gardenId, activityRev, plants, membersCount, serverTo
       </Card>
 
       {/* Activity (today) */}
-      <Card className="rounded-2xl p-4">
+      <Card className="rounded-[24px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/85 dark:bg-[#1b1b1b]/75 backdrop-blur p-4 shadow-sm">
         <div className="font-medium mb-2">{t('gardenDashboard.overviewSection.activityToday')}</div>
         {loadingAct && <div className="text-sm opacity-60">{t('gardenDashboard.overviewSection.loadingActivity')}</div>}
         {errAct && <div className="text-sm text-red-600">{errAct}</div>}
@@ -2364,7 +2491,7 @@ function MemberCard({ member, gardenId, onChanged, viewerIsOwner, ownerCount, cu
     }
   }
   return (
-    <Card className="rounded-2xl p-4 relative">
+    <Card className="rounded-[24px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/85 dark:bg-[#1b1b1b]/75 backdrop-blur p-4 relative shadow-sm">
       {/* Top-right actions: profile arrow + menu, same size and alignment */}
       <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
         {member.displayName && (

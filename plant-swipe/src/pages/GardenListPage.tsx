@@ -3,8 +3,9 @@ import React from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, Sparkles } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { getUserGardens, createGarden, fetchServerNowISO, getGardenTodayProgressUltraFast, getGardensTodayProgressBatchCached, getGardenPlantsMinimal, listGardenTasksMinimal, listOccurrencesForTasks, listOccurrencesForMultipleGardens, resyncTaskOccurrencesForGarden, progressTaskOccurrence, listCompletionsForOccurrences, logGardenActivity, getGardenTodayOccurrencesCached, getUserGardensTasksTodayCached, refreshGardenTaskCache, refreshUserTaskCache } from '@/lib/gardens'
 import { useAuthActions } from '@/context/AuthActionsContext'
@@ -1351,29 +1352,60 @@ export const GardenListPage: React.FC = () => {
   const totalTasks = React.useMemo(() => todayTaskOccurrences.reduce((a, o) => a + Math.max(1, Number(o.requiredCount || 1)), 0), [todayTaskOccurrences])
   const totalDone = React.useMemo(() => todayTaskOccurrences.reduce((a, o) => a + Math.min(Math.max(1, Number(o.requiredCount || 1)), Number(o.completedCount || 0)), 0), [todayTaskOccurrences])
 
+  const heroSubtitle = user ? t('garden.heroSubtitleLoggedIn') : t('garden.heroSubtitleLoggedOut')
+
   return (
-    <div className="max-w-6xl mx-auto px-4 md:px-0">
-      <div className={`grid grid-cols-1 ${user ? 'lg:grid-cols-[minmax(0,1fr)_360px]' : ''} gap-6`}>
-        <div className="max-w-3xl mx-auto w-full">
-          <div className="flex items-center justify-between mt-6 mb-4">
-            <h1 className="text-2xl font-semibold">{t('garden.yourGardens')}</h1>
-            {user && (
-              <Button className="rounded-2xl" onClick={() => setOpen(true)}>{t('garden.create')}</Button>
-            )}
+    <div className="max-w-6xl mx-auto px-4 md:px-0 pb-16 space-y-10">
+      <section className="relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50 via-white to-stone-100 dark:from-[#252526] dark:via-[#1e1e1e] dark:to-[#151515] shadow-[0_32px_80px_-40px_rgba(16,185,129,0.45)]">
+        <div className="absolute -right-24 -top-24 h-64 w-64 rounded-full bg-emerald-200/40 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
+        <div className="absolute -left-24 bottom-[-35%] h-72 w-72 rounded-full bg-emerald-100/50 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
+        <div className="relative p-8 md:p-12 space-y-6">
+          <Badge variant="outline" className="rounded-2xl border-dashed bg-white/70 dark:bg-[#252526]/70 backdrop-blur-sm">
+            {t('garden.heroEyebrow')}
+          </Badge>
+          <div className="flex flex-wrap items-end justify-between gap-6">
+            <div className="space-y-3 max-w-3xl">
+              <h1 className="text-3xl md:text-4xl font-semibold tracking-tight">{t('garden.heroTitle')}</h1>
+              <p className="text-base md:text-lg text-stone-600 dark:text-stone-300">
+                {heroSubtitle}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              {user ? (
+                <Button className="rounded-2xl" onClick={() => setOpen(true)}>
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  {t('garden.create')}
+                </Button>
+              ) : (
+                <Button className="rounded-2xl" onClick={openLogin}>
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  {t('auth.login')}
+                </Button>
+              )}
+            </div>
           </div>
+        </div>
+      </section>
+
+      <div className={`grid grid-cols-1 ${user ? 'lg:grid-cols-[minmax(0,1fr)_360px]' : ''} gap-8`}>
+        <div className="w-full space-y-6">
           {loading && <GardenListSkeleton />}
-          {error && <div className="p-6 text-sm text-red-600">{error}</div>}
+            {error && (
+              <div className="rounded-[28px] border border-rose-200/70 dark:border-rose-900/40 bg-rose-50/80 dark:bg-rose-900/20 p-6 text-sm text-rose-700 dark:text-rose-200 shadow-sm">
+              {error}
+            </div>
+          )}
           {!loading && !error && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               {gardens.map((g, idx) => (
-                <Card 
-                  key={g.id} 
-                  className={`group rounded-2xl overflow-hidden relative transition-all duration-300 hover:shadow-xl hover:scale-[1.02] cursor-pointer border-2 hover:border-accent/50 ${dragIndex === idx ? 'ring-2 ring-black' : ''}`} 
-                  draggable 
-                  onDragStart={() => setDragIndex(idx)} 
-                  onDragOver={(e) => e.preventDefault()} 
+                <Card
+                  key={g.id}
+                  className={`group relative overflow-hidden rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1a1a1a]/80 backdrop-blur transition-all duration-300 shadow-[0_28px_70px_-45px_rgba(16,185,129,0.55)] hover:-translate-y-1 hover:shadow-[0_38px_90px_-40px_rgba(16,185,129,0.65)] cursor-pointer ${dragIndex === idx ? 'ring-2 ring-emerald-500/60' : ''}`}
+                  draggable
+                  onDragStart={() => setDragIndex(idx)}
+                  onDragOver={(e) => e.preventDefault()}
                   onDrop={() => {
-                    if (dragIndex === null || dragIndex === idx) return;
+                    if (dragIndex === null || dragIndex === idx) return
                     const arr = gardens.slice()
                     const [moved] = arr.splice(dragIndex, 1)
                     arr.splice(idx, 0, moved)
@@ -1381,28 +1413,30 @@ export const GardenListPage: React.FC = () => {
                     setDragIndex(null)
                   }}
                 >
-                  {progressByGarden[g.id] && (
-                    (() => {
-                      const { due, completed } = progressByGarden[g.id]
-                      const done = due === 0 || completed >= due
-                      const inProgress = due > 0 && completed > 0 && completed < due
-                      const color = done ? 'bg-emerald-500 text-white' : inProgress ? 'bg-amber-500 text-white' : 'bg-red-500 text-white'
-                      const label = done ? t('garden.allDone') : `${completed} / ${due}`
-                      return (
-                        <div className={`pointer-events-none absolute top-3 right-3 rounded-xl px-3 py-1.5 text-sm font-semibold shadow-lg z-20 backdrop-blur-sm ${color}`}>
+                  {progressByGarden[g.id] && (() => {
+                    const { due, completed } = progressByGarden[g.id]
+                    const done = due === 0 || completed >= due
+                    const inProgress = due > 0 && completed > 0 && completed < due
+                    const badgeTone = done ? 'bg-emerald-500/90 text-white' : inProgress ? 'bg-amber-500/90 text-white' : 'bg-rose-500/90 text-white'
+                    const indicatorTone = done ? 'bg-emerald-300' : inProgress ? 'bg-amber-300' : 'bg-rose-300'
+                    const label = done ? t('garden.allDone') : `${completed} / ${due}`
+                    return (
+                      <div className="absolute top-4 right-4 z-20">
+                        <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold shadow-lg backdrop-blur ${badgeTone}`}>
+                          <span className={`h-2.5 w-2.5 rounded-full ${indicatorTone}`} />
                           {label}
-                        </div>
-                      )
-                    })()
-                  )}
+                        </span>
+                      </div>
+                    )
+                  })()}
                   {!progressByGarden[g.id] && (
-                    // Show loading indicator if cache is being populated
-                    <div className="pointer-events-none absolute top-2 right-2 rounded-xl px-2 py-0.5 text-xs font-medium shadow z-10 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400">
+                    <div className="pointer-events-none absolute top-4 right-4 rounded-full px-3 py-1 text-xs font-medium shadow bg-white/80 dark:bg-[#111111]/80 text-stone-500 dark:text-stone-300 backdrop-blur">
                       ...
                     </div>
                   )}
                   <Link to={`/garden/${g.id}`} className="block w-full h-full">
-                    <div className="relative aspect-[5/3] overflow-hidden bg-gradient-to-br from-stone-100 to-stone-200 dark:from-[#2d2d30] dark:to-[#252526]">
+                    <div className="relative aspect-[5/3] overflow-hidden">
+                      <div className="absolute inset-0 bg-gradient-to-br from-stone-100 via-white to-stone-200 dark:from-[#2d2d30] dark:via-[#252526] dark:to-[#1a1a1a]" aria-hidden="true" />
                       {g.coverImageUrl ? (
                         <img
                           src={g.coverImageUrl}
@@ -1411,37 +1445,34 @@ export const GardenListPage: React.FC = () => {
                           loading="lazy"
                         />
                       ) : (
-                        <div className="absolute inset-0 w-full h-full flex items-center justify-center">
-                          <div className="text-6xl opacity-30">🌱</div>
-                        </div>
+                        <div className="absolute inset-0 flex items-center justify-center text-6xl opacity-30">🌱</div>
                       )}
-                      {/* Gradient overlay for better text readability */}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
                     </div>
-                    <div className="p-4 bg-card">
+                    <div className="relative p-6 space-y-4">
                       <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-bold text-xl truncate group-hover:text-accent transition-colors mb-2">
+                        <div className="flex-1 min-w-0 space-y-2">
+                          <h3 className="font-semibold text-xl truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
                             {g.name}
                           </h3>
-                          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                            <div className="flex items-center gap-1.5">
+                          <div className="flex flex-wrap items-center gap-3 text-sm text-stone-600 dark:text-stone-300">
+                            <span className="inline-flex items-center gap-2 rounded-full border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/70 dark:bg-[#1f1f1f]/70 px-3 py-1">
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                               </svg>
                               <span>{memberCountsByGarden[g.id] ?? 1} {memberCountsByGarden[g.id] === 1 ? t('garden.member') : t('garden.members')}</span>
-                            </div>
+                            </span>
                             {(g.streak ?? 0) > 0 && (
-                              <div className="flex items-center gap-1.5">
-                                <svg className="w-4 h-4 text-orange-500" fill="currentColor" viewBox="0 0 20 20">
+                              <span className="inline-flex items-center gap-2 rounded-full border border-orange-200/70 dark:border-orange-900/40 bg-orange-50/80 dark:bg-orange-900/30 px-3 py-1 text-orange-600 dark:text-orange-200">
+                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                                   <path d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" />
                                 </svg>
                                 <span className="font-medium">{g.streak} {t('garden.streak')}</span>
-                              </div>
+                              </span>
                             )}
                           </div>
                         </div>
-                        <div className="flex-shrink-0 text-muted-foreground group-hover:text-accent transition-colors">
+                        <div className="flex-shrink-0 text-stone-400 group-hover:text-emerald-500 transition-colors">
                           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                           </svg>
@@ -1454,23 +1485,23 @@ export const GardenListPage: React.FC = () => {
             </div>
           )}
           {!loading && !error && gardens.length === 0 && (
-            <div className="p-10 text-center">
+            <Card className="rounded-[28px] border border-dashed border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/85 dark:bg-[#1c1c1c]/75 backdrop-blur p-10 text-center shadow-[0_28px_70px_-45px_rgba(16,185,129,0.45)]">
               {!user ? (
-                <Card className="rounded-2xl p-6 max-w-md mx-auto">
-                  <div className="space-y-4">
-                    <div className="text-lg font-semibold">{t('common.login')}</div>
-                    <div className="text-sm opacity-70">
-                      {t('garden.noGardens')}. {t('garden.createFirst')}
-                    </div>
-                    <Button className="rounded-2xl w-full" onClick={openLogin}>
-                      {t('auth.login')}
-                    </Button>
-                  </div>
-                </Card>
+                <div className="space-y-4 max-w-md mx-auto">
+                  <div className="text-lg font-semibold">{t('common.login')}</div>
+                  <p className="text-sm text-stone-600 dark:text-stone-300">
+                    {t('garden.noGardens')} {t('garden.createFirst')}
+                  </p>
+                  <Button className="rounded-2xl w-full" onClick={openLogin}>
+                    {t('auth.login')}
+                  </Button>
+                </div>
               ) : (
-                <div className="opacity-60 text-sm">{t('garden.noGardens')}. {t('garden.createFirst')}</div>
+                <p className="text-sm text-stone-600 dark:text-stone-300 opacity-80">
+                  {t('garden.noGardens')} {t('garden.createFirst')}
+                </p>
               )}
-            </div>
+            </Card>
           )}
 
           <Dialog open={open} onOpenChange={setOpen}>
@@ -1488,167 +1519,179 @@ export const GardenListPage: React.FC = () => {
                   <Input value={imageUrl} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setImageUrl(e.target.value)} placeholder={t('garden.coverImageUrlPlaceholder')} />
                 </div>
                 <div className="flex gap-2 justify-end pt-2">
-                  <Button variant="secondary" className="rounded-2xl" onClick={() => setOpen(false)}>{t('common.cancel')}</Button>
-                  <Button className="rounded-2xl" onClick={onCreate} disabled={!name.trim() || submitting}>{submitting ? t('garden.creating') : t('common.create')}</Button>
+                  <Button variant="secondary" className="rounded-2xl" onClick={() => setOpen(false)}>
+                    {t('common.cancel')}
+                  </Button>
+                  <Button className="rounded-2xl" onClick={onCreate} disabled={!name.trim() || submitting}>
+                    {submitting ? t('garden.creating') : t('common.create')}
+                  </Button>
                 </div>
               </div>
             </DialogContent>
           </Dialog>
         </div>
 
-        {/* Right-side Tasks sidebar for all gardens - hidden for non-logged-in users */}
         {user && (
-          <aside className="mt-6 lg:mt-6 lg:border-l lg:border-stone-200 dark:lg:border-[#3e3e42] lg:pl-6">
-            <div className="space-y-3">
-              <div className="text-lg font-semibold">{t('garden.tasks')}</div>
-              <Card className="rounded-2xl p-4">
-              <div className="text-sm opacity-60 mb-2">{t('garden.allGardens')}</div>
-              <div className="h-2 bg-stone-200 dark:bg-[#3e3e42] rounded-full overflow-hidden">
-                <div className="h-2 bg-emerald-500" style={{ width: `${totalTasks === 0 ? 100 : Math.min(100, Math.round((totalDone / totalTasks) * 100))}%` }} />
-              </div>
-              <div className="text-xs opacity-70 mt-1">{t('garden.today')}: {totalDone} / {totalTasks}</div>
-            </Card>
-            {totalTasks > totalDone && (
-              <div>
-                <Button className="rounded-2xl w-full" onClick={onMarkAllCompleted} disabled={markingAllCompleted}>
-                  {markingAllCompleted ? (
-                    <span className="flex items-center gap-2">
-                      <span className="animate-spin">⏳</span>
-                      {t('garden.completing')}
-                    </span>
-                  ) : (
-                    t('garden.markAllCompleted')
-                  )}
-                </Button>
-              </div>
-            )}
-            {loadingTasks && (
-              <Card className="rounded-2xl p-4 text-sm opacity-70">
-                {t('garden.loadingTasks')}
-                {mismatchReloadAttempts > 0 && (
-                  <div className="text-xs opacity-60 mt-1">Reload attempt {mismatchReloadAttempts}/3</div>
-                )}
-              </Card>
-            )}
-            {!loadingTasks && gardensWithTasks.length === 0 && todayTaskOccurrences.length === 0 && (
-              <Card className="rounded-2xl p-4">
-                <div className="text-sm opacity-70 mb-2">{t('garden.noTasksToday')}</div>
-                {/* Show reload button if progress indicates tasks exist */}
-                {Object.values(progressByGarden).some(prog => (prog.due || 0) > 0) && (
-                  <Button 
-                    className="rounded-xl w-full mt-2" 
-                    variant="outline"
-                    onClick={() => {
-                      // Reset mismatch counter
-                      mismatchReloadAttemptsRef.current = 0
-                      setMismatchReloadAttempts(0)
-                      // Clear all caches and force reload
-                      taskDataCacheRef.current = null
-                      clearLocalStorageCache(`garden_tasks_cache_`)
-                      const today = serverTodayRef.current ?? serverToday
-                      if (today) {
-                        Object.keys(resyncCacheRef.current).forEach(key => {
-                          if (key.endsWith(`::${today}`)) {
-                            delete resyncCacheRef.current[key]
-                          }
-                        })
-                      }
-                      setLoadingTasks(true)
-                      loadAllTodayOccurrences(undefined, undefined, false).catch(() => {
-                        setLoadingTasks(false)
-                      })
-                    }}
-                  >
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Reload Tasks
+          <aside className="lg:mt-0">
+            <div className="lg:sticky lg:top-28 space-y-4">
+              <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/85 dark:bg-[#1b1b1b]/80 backdrop-blur p-6 space-y-4 shadow-[0_28px_70px_-45px_rgba(16,185,129,0.45)]">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <div className="text-sm uppercase tracking-wide text-stone-500 dark:text-stone-400">{t('garden.tasks')}</div>
+                    <div className="text-2xl font-semibold text-stone-900 dark:text-white">{t('garden.allGardens')}</div>
+                  </div>
+                  <Badge className="rounded-2xl bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200 px-3 py-1">
+                    {totalDone} / {totalTasks}
+                  </Badge>
+                </div>
+                <div>
+                  <div className="h-2 bg-stone-200/70 dark:bg-[#3e3e42] rounded-full overflow-hidden">
+                    <div className="h-2 bg-emerald-500" style={{ width: `${totalTasks === 0 ? 100 : Math.min(100, Math.round((totalDone / totalTasks) * 100))}%` }} />
+                  </div>
+                  <div className="text-xs text-stone-500 dark:text-stone-400 mt-2">
+                    {t('garden.today')}: {totalDone} / {totalTasks}
+                  </div>
+                </div>
+                {totalTasks > totalDone && (
+                  <Button className="rounded-2xl w-full" onClick={onMarkAllCompleted} disabled={markingAllCompleted}>
+                    {markingAllCompleted ? (
+                      <span className="flex items-center gap-2">
+                        <span className="animate-spin">⏳</span>
+                        {t('garden.completing')}
+                      </span>
+                    ) : (
+                      t('garden.markAllCompleted')
+                    )}
                   </Button>
                 )}
               </Card>
-            )}
-            {!loadingTasks && gardensWithTasks.length > 0 && gardensWithTasks.map((gw) => (
-              <Card key={gw.gardenId} className="rounded-2xl p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="font-medium">{gw.gardenName}</div>
-                    <div className="text-xs opacity-70">{gw.done} / {gw.req} {t('garden.done')}</div>
+
+              {loadingTasks && (
+                <Card className="rounded-[24px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/70 backdrop-blur p-4 text-sm text-stone-600 dark:text-stone-300 shadow-sm">
+                  {t('garden.loadingTasks')}
+                  {mismatchReloadAttempts > 0 && (
+                    <div className="text-xs opacity-70 mt-1">Reload attempt {mismatchReloadAttempts}/3</div>
+                  )}
+                </Card>
+              )}
+
+              {!loadingTasks && gardensWithTasks.length === 0 && todayTaskOccurrences.length === 0 && (
+                <Card className="rounded-[24px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/70 backdrop-blur p-4 space-y-3 shadow-sm">
+                  <div className="text-sm text-stone-600 dark:text-stone-300">{t('garden.noTasksToday')}</div>
+                  {Object.values(progressByGarden).some(prog => (prog.due || 0) > 0) && (
+                    <Button
+                      className="rounded-2xl w-full"
+                      variant="outline"
+                      onClick={() => {
+                        mismatchReloadAttemptsRef.current = 0
+                        setMismatchReloadAttempts(0)
+                        taskDataCacheRef.current = null
+                        clearLocalStorageCache(`garden_tasks_cache_`)
+                        const today = serverTodayRef.current ?? serverToday
+                        if (today) {
+                          Object.keys(resyncCacheRef.current).forEach(key => {
+                            if (key.endsWith(`::${today}`)) {
+                              delete resyncCacheRef.current[key]
+                            }
+                          })
+                        }
+                        setLoadingTasks(true)
+                        loadAllTodayOccurrences(undefined, undefined, false).catch(() => {
+                          setLoadingTasks(false)
+                        })
+                      }}
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Reload Tasks
+                    </Button>
+                  )}
+                </Card>
+              )}
+
+              {!loadingTasks && gardensWithTasks.length > 0 && gardensWithTasks.map((gw) => (
+                <Card key={gw.gardenId} className="rounded-[24px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/85 dark:bg-[#1b1b1b]/80 backdrop-blur p-5 space-y-4 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-medium text-stone-900 dark:text-white">{gw.gardenName}</div>
+                      <div className="text-xs text-stone-500 dark:text-stone-400">{gw.done} / {gw.req} {t('garden.done')}</div>
+                    </div>
                   </div>
-                </div>
-                <div className="mt-3 space-y-3">
-                  {gw.plants.map((gp: any) => {
-                    const occs = occsByPlant[gp.id] || []
-                    const req = occs.reduce((a: number, o: any) => a + Math.max(1, Number(o.requiredCount || 1)), 0)
-                    const done = occs.reduce((a: number, o: any) => a + Math.min(Math.max(1, Number(o.requiredCount || 1)), Number(o.completedCount || 0)), 0)
-                    return (
-                      <Card key={gp.id} className="rounded-2xl p-3">
-                        <div className="flex items-center justify-between">
-                          <div className="text-sm font-medium">{gp.nickname || gp.plant?.name}</div>
-                          {done < req && (
-                            <Button 
-                              size="sm" 
-                              className="rounded-xl" 
-                              onClick={() => onCompleteAllForPlant(gp.id)}
-                              disabled={completingPlantIds.has(gp.id)}
-                            >
-                              {completingPlantIds.has(gp.id) ? (
-                                <span className="flex items-center gap-1">
-                                  <span className="animate-spin">⏳</span>
-                                  {t('garden.completing')}
-                                </span>
-                              ) : (
-                                t('garden.completeAll')
-                              )}
-                            </Button>
-                          )}
-                        </div>
-                        <div className="text-[11px] opacity-60">{done} / {req} {t('garden.done')}</div>
-                        <div className="mt-2 space-y-2">
-                          {occs.map((o: any) => {
-                            const tt = (o as any).taskType || 'custom'
-                            const badgeClass = `${tt === 'water' ? 'bg-blue-600 dark:bg-blue-500' : tt === 'fertilize' ? 'bg-green-600 dark:bg-green-500' : tt === 'harvest' ? 'bg-yellow-500 dark:bg-yellow-400' : tt === 'cut' ? 'bg-orange-600 dark:bg-orange-500' : 'bg-purple-600 dark:bg-purple-500'} ${tt === 'harvest' ? 'text-black dark:text-black' : 'text-white'}`
-                            const taskEmoji = (o as any).taskEmoji
-                            const icon = (taskEmoji && taskEmoji !== '??' && taskEmoji !== '???' && taskEmoji.trim() !== '') ? taskEmoji : (tt === 'water' ? '💧' : tt === 'fertilize' ? '🍽️' : tt === 'harvest' ? '🌾' : tt === 'cut' ? '✂️' : '🪴')
-                            const isDone = (Number(o.completedCount || 0) >= Number(o.requiredCount || 1))
-                            const completions = completionsByOcc[o.id] || []
-                            return (
-                              <div key={o.id} className={`flex items-center justify-between gap-3 text-sm rounded-xl border border-stone-300 dark:border-[#3e3e42] p-2 ${isDone ? 'bg-stone-50 dark:bg-[#2d2d30]' : 'bg-white dark:bg-[#252526]'}`}>
-                                <div className="flex items-center gap-2">
-                                  <span className={`h-6 w-6 flex items-center justify-center rounded-md border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30]`}>{icon}</span>
-                                  <span className={`text-[10px] px-2 py-0.5 rounded-full ${badgeClass}`}>{t(`garden.taskTypes.${tt}`)}</span>
-                                  <span className="text-xs opacity-70 text-black dark:text-white">{gp.nickname || gp.plant?.name}</span>
-                                </div>
-                                {!isDone ? (
-                                  <>
-                                    <div className="opacity-80 text-black dark:text-white">{o.completedCount} / {o.requiredCount}</div>
-                                    <Button 
-                                      className="rounded-xl" 
-                                      size="sm" 
-                                      onClick={() => onProgressOccurrence(o.id, 1)} 
-                                      disabled={(o.completedCount || 0) >= (o.requiredCount || 1) || progressingOccIds.has(o.id)}
-                                    >
-                                      {progressingOccIds.has(o.id) ? (
-                                        <span className="animate-spin">⏳</span>
-                                      ) : (
-                                        '+1'
-                                      )}
-                                    </Button>
-                                  </>
+                  <div className="space-y-3">
+                    {gw.plants.map((gp: any) => {
+                      const occs = occsByPlant[gp.id] || []
+                      const req = occs.reduce((a: number, o: any) => a + Math.max(1, Number(o.requiredCount || 1)), 0)
+                      const done = occs.reduce((a: number, o: any) => a + Math.min(Math.max(1, Number(o.requiredCount || 1)), Number(o.completedCount || 0)), 0)
+                      return (
+                        <Card key={gp.id} className="rounded-[20px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/85 dark:bg-[#252526]/70 backdrop-blur p-4 space-y-2 shadow-sm">
+                          <div className="flex items-center justify-between">
+                            <div className="text-sm font-medium text-stone-900 dark:text-white">{gp.nickname || gp.plant?.name}</div>
+                            {done < req && (
+                              <Button
+                                size="sm"
+                                className="rounded-xl"
+                                onClick={() => onCompleteAllForPlant(gp.id)}
+                                disabled={completingPlantIds.has(gp.id)}
+                              >
+                                {completingPlantIds.has(gp.id) ? (
+                                  <span className="flex items-center gap-1">
+                                    <span className="animate-spin">⏳</span>
+                                    {t('garden.completing')}
+                                  </span>
                                 ) : (
-                                  <div className="text-xs opacity-70 truncate max-w-[50%] text-black dark:text-white">
-                                    {completions.length === 0 ? t('garden.completed') : `${t('garden.doneBy')} ${completions.map(c => c.displayName || t('garden.someone')).join(', ')}`}
-                                  </div>
+                                  t('garden.completeAll')
                                 )}
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </Card>
-                    )
-                  })}
-                </div>
-              </Card>
-            ))}
-          </div>
-        </aside>
+                              </Button>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-stone-500 dark:text-stone-400">{done} / {req} {t('garden.done')}</div>
+                          <div className="space-y-2">
+                            {occs.map((o: any) => {
+                              const tt = (o as any).taskType || 'custom'
+                              const badgeClass = `${tt === 'water' ? 'bg-blue-600 dark:bg-blue-500' : tt === 'fertilize' ? 'bg-green-600 dark:bg-green-500' : tt === 'harvest' ? 'bg-yellow-500 dark:bg-yellow-400 text-black' : tt === 'cut' ? 'bg-orange-600 dark:bg-orange-500' : 'bg-purple-600 dark:bg-purple-500 text-white'}`
+                              const taskEmoji = (o as any).taskEmoji
+                              const icon = (taskEmoji && taskEmoji !== '??' && taskEmoji !== '???' && taskEmoji.trim() !== '') ? taskEmoji : (tt === 'water' ? '💧' : tt === 'fertilize' ? '🍽️' : tt === 'harvest' ? '🌾' : tt === 'cut' ? '✂️' : '🪴')
+                              const isDone = (Number(o.completedCount || 0) >= Math.max(1, Number(o.requiredCount || 1)))
+                              const completions = completionsByOcc[o.id] || []
+                              return (
+                                <div key={o.id} className={`flex items-center justify-between gap-3 rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 px-3 py-2 text-sm ${isDone ? 'bg-emerald-50/60 dark:bg-emerald-900/20' : 'bg-white/80 dark:bg-[#1f1f1f]/70'} backdrop-blur`}>
+                                  <div className="flex items-center gap-2">
+                                    <span className="h-7 w-7 flex items-center justify-center rounded-xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#2d2d2d]/70">{icon}</span>
+                                    <span className={`text-[10px] px-2 py-0.5 rounded-full ${badgeClass}`}>{t(`garden.taskTypes.${tt}`)}</span>
+                                    <span className="text-xs text-stone-600 dark:text-stone-200">{gp.nickname || gp.plant?.name}</span>
+                                  </div>
+                                  {!isDone ? (
+                                    <>
+                                      <div className="text-xs text-stone-600 dark:text-stone-200">{o.completedCount} / {o.requiredCount}</div>
+                                      <Button
+                                        className="rounded-xl"
+                                        size="sm"
+                                        onClick={() => onProgressOccurrence(o.id, 1)}
+                                        disabled={(o.completedCount || 0) >= (o.requiredCount || 1) || progressingOccIds.has(o.id)}
+                                      >
+                                        {progressingOccIds.has(o.id) ? (
+                                          <span className="animate-spin">⏳</span>
+                                        ) : (
+                                          '+1'
+                                        )}
+                                      </Button>
+                                    </>
+                                  ) : (
+                                    <div className="text-xs text-stone-500 dark:text-stone-300 truncate max-w-[50%]">
+                                      {completions.length === 0 ? t('garden.completed') : `${t('garden.doneBy')} ${completions.map(c => c.displayName || t('garden.someone')).join(', ')}`}
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </Card>
+                      )
+                    })}
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </aside>
         )}
       </div>
     </div>

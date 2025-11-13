@@ -345,9 +345,13 @@
       "error": "Échec de l'envoi de la demande"
     },
     "garden": {
-    "title": "Jardins",
-    "yourGardens": "Vos jardins",
-    "create": "Créer un jardin",
+      "title": "Jardins",
+      "yourGardens": "Vos jardins",
+      "heroEyebrow": "Vue d'ensemble quotidienne",
+      "heroTitle": "Prenez soin de chaque espace que vous faites pousser",
+      "heroSubtitleLoggedIn": "Parcourez vos collections vivantes, suivez la progression et invitez vos proches à jardiner avec vous.",
+      "heroSubtitleLoggedOut": "Connectez-vous pour créer un jardin, consigner vos soins et embarquer vos amis.",
+      "create": "Créer un jardin",
     "createGarden": "Créer un jardin",
     "name": "Nom",
     "namePlaceholder": "Mon jardin de balcon",
@@ -599,14 +603,16 @@
       "nov": "nov.",
       "dec": "déc."
     }
-  },
-  "gardenDashboard": {
-    "loading": "Chargement...",
-    "overview": "Aperçu",
-    "plants": "Plantes",
-    "routine": "Routine",
-    "settings": "Paramètres",
-    "overviewSection": {
+    },
+    "gardenDashboard": {
+      "heroEyebrow": "Tableau de bord du jardin",
+      "heroSubtitle": "Suivez les tâches du jour, célébrez vos séries et coordonnez les soins en un seul endroit.",
+      "loading": "Chargement...",
+      "overview": "Aperçu",
+      "plants": "Plantes",
+      "routine": "Routine",
+      "settings": "Paramètres",
+      "overviewSection": {
       "plants": "Plantes",
       "species": "Espèces :",
       "members": "Membres",

@@ -345,9 +345,13 @@
       "error": "Failed to submit request"
     },
     "garden": {
-    "title": "Gardens",
-    "yourGardens": "Your Gardens",
-    "create": "Create Garden",
+      "title": "Gardens",
+      "yourGardens": "Your Gardens",
+      "heroEyebrow": "Daily blooms overview",
+      "heroTitle": "Tend every space you grow",
+      "heroSubtitleLoggedIn": "Browse your living collections, track progress, and invite friends to co-garden.",
+      "heroSubtitleLoggedOut": "Sign in to start a garden, log your care rituals, and bring friends along.",
+      "create": "Create Garden",
     "createGarden": "Create a Garden",
     "name": "Name",
     "namePlaceholder": "My balcony garden",
@@ -600,13 +604,15 @@
       "dec": "Dec"
     }
   },
-  "gardenDashboard": {
-    "loading": "Loading...",
-    "overview": "Overview",
-    "plants": "Plants",
-    "routine": "Routine",
-    "settings": "Settings",
-    "overviewSection": {
+    "gardenDashboard": {
+      "heroEyebrow": "Garden dashboard",
+      "heroSubtitle": "Monitor today's tasks, celebrate streaks, and coordinate care in one place.",
+      "loading": "Loading...",
+      "overview": "Overview",
+      "plants": "Plants",
+      "routine": "Routine",
+      "settings": "Settings",
+      "overviewSection": {
       "plants": "Plants",
       "species": "Species:",
       "members": "Members",
