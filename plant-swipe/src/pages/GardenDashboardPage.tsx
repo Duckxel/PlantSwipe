@@ -1543,96 +1543,94 @@ export const GardenDashboardPage: React.FC = () => {
 
   return (
     <div className="max-w-6xl mx-auto px-4 md:px-0 pb-16 space-y-10">
-      <section className="relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50 via-white to-stone-100 dark:from-[#252526] dark:via-[#1e1e1e] dark:to-[#151515] shadow-[0_32px_80px_-40px_rgba(16,185,129,0.45)]">
-        <div className="absolute -right-24 -top-24 h-64 w-64 rounded-full bg-emerald-200/40 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
-        <div className="absolute -left-24 bottom-[-35%] h-72 w-72 rounded-full bg-emerald-100/50 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
-        <div className="relative p-8 md:p-12 space-y-8">
-          <div className="flex flex-wrap items-start justify-between gap-6">
-            <div className="space-y-3 max-w-3xl">
-              <Badge variant="outline" className="rounded-2xl border-dashed bg-white/70 dark:bg-[#252526]/70 backdrop-blur-sm">
-                {t('gardenDashboard.heroEyebrow')}
-              </Badge>
-              <h1 className="text-3xl md:text-4xl font-semibold tracking-tight">
-                {loading ? (
-                  <span className="block h-8 w-48 rounded-lg bg-white/60 dark:bg-white/10 animate-pulse" />
-                ) : garden ? (
-                  garden.name
-                ) : (
-                  t('gardenDashboard.loading')
-                )}
-              </h1>
-              <p className="text-base md:text-lg text-stone-600 dark:text-stone-300">
-                {heroSubtitle}
-              </p>
-            </div>
-            <div className="relative h-20 w-20 rounded-[24px] border border-white/60 dark:border-white/10 bg-white/70 dark:bg-[#111111]/60 backdrop-blur overflow-hidden shadow-lg">
+      <div className="pt-10 space-y-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="space-y-2 max-w-3xl">
+            <Badge variant="outline" className="rounded-xl border-dashed text-[11px] tracking-wide bg-white/80 dark:bg-[#2a2a2a]/80">
+              {t('gardenDashboard.heroEyebrow')}
+            </Badge>
+            <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">
               {loading ? (
-                <span className="absolute inset-0 animate-pulse bg-stone-200 dark:bg-[#2d2d30]" />
-              ) : garden?.coverImageUrl ? (
-                <img src={garden.coverImageUrl} alt={garden.name} className="absolute inset-0 h-full w-full object-cover" />
+                <span className="block h-7 w-44 rounded-lg bg-stone-200 dark:bg-[#2d2d30] animate-pulse" />
+              ) : garden ? (
+                garden.name
               ) : (
-                <span className="absolute inset-0 flex items-center justify-center text-3xl">🌿</span>
+                t('gardenDashboard.loading')
+              )}
+            </h1>
+            <p className="text-sm md:text-base text-stone-600 dark:text-stone-300">
+              {heroSubtitle}
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="h-16 w-16 rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#181818] overflow-hidden shadow-sm">
+              {loading ? (
+                <span className="block h-full w-full animate-pulse bg-stone-200 dark:bg-[#2d2d30]" />
+              ) : garden?.coverImageUrl ? (
+                <img src={garden.coverImageUrl} alt={garden.name} className="h-full w-full object-cover" />
+              ) : (
+                <span className="flex h-full w-full items-center justify-center text-2xl">🌿</span>
               )}
             </div>
           </div>
-
-          <div className="flex flex-wrap gap-3">
-            <Button className="rounded-2xl" onClick={() => setAddOpen(true)} disabled={loading || !garden}>
-              <Sparkles className="h-4 w-4 mr-2" />
-              {t('gardenDashboard.plantsSection.addPlant')}
-            </Button>
-            <Button variant="outline" className="rounded-2xl" onClick={() => id && navigate(`/garden/${id}/routine`)} disabled={loading || !garden}>
-              {t('gardenDashboard.routine')}
-            </Button>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <Card className="rounded-[24px] border border-white/50 dark:border-white/10 bg-white/80 dark:bg-[#1b1b1b]/70 backdrop-blur p-4 shadow-sm">
-              <div className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
-                {t('gardenDashboard.overviewSection.plants')}
-              </div>
-              <div className="text-2xl font-semibold text-stone-900 dark:text-white">
-                {loading ? <span className="block h-6 w-12 bg-stone-200 dark:bg-[#2d2d30] rounded animate-pulse" /> : totalOnHand}
-              </div>
-              <div className="text-xs text-stone-500 dark:text-stone-400">
-                {t('gardenDashboard.overviewSection.species')} {loading ? '—' : speciesOnHand}
-              </div>
-            </Card>
-            <Card className="rounded-[24px] border border-white/50 dark:border-white/10 bg-white/80 dark:bg-[#1b1b1b]/70 backdrop-blur p-4 shadow-sm">
-              <div className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
-                {t('gardenDashboard.overviewSection.members')}
-              </div>
-              <div className="text-2xl font-semibold text-stone-900 dark:text-white">
-                {loading ? <span className="block h-6 w-10 bg-stone-200 dark:bg-[#2d2d30] rounded animate-pulse" /> : heroMembers}
-              </div>
-            </Card>
-            <Card className="rounded-[24px] border border-white/50 dark:border-white/10 bg-white/80 dark:bg-[#1b1b1b]/70 backdrop-blur p-4 shadow-sm">
-              <div className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
-                {t('gardenDashboard.overviewSection.streak')}
-              </div>
-              <div className="text-2xl font-semibold text-stone-900 dark:text-white">
-                {loading ? <span className="block h-6 w-12 bg-stone-200 dark:bg-[#2d2d30] rounded animate-pulse" /> : `${heroStreak} ${t('gardenDashboard.overviewSection.days')}`}
-              </div>
-            </Card>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs text-stone-500 dark:text-stone-400">
-              <span>{t('gardenDashboard.overviewSection.todaysProgress')}</span>
-              <span>{loading ? '—' : `${todayProgress.completed} / ${todayProgress.due}`}</span>
-            </div>
-            <div className="h-2 bg-white/60 dark:bg-white/10 rounded-full overflow-hidden">
-              <div className="h-2 bg-emerald-500" style={{ width: `${loading ? 0 : todayProgress.percent}%` }} />
-            </div>
-          </div>
-
-          {error && (
-            <div className="rounded-[24px] border border-rose-200/70 dark:border-rose-900/40 bg-rose-50/80 dark:bg-rose-900/20 p-4 text-sm text-rose-700 dark:text-rose-200 shadow-sm">
-              {error}
-            </div>
-          )}
         </div>
-      </section>
+
+        <div className="flex flex-wrap gap-2">
+          <Button className="rounded-2xl" onClick={() => setAddOpen(true)} disabled={loading || !garden}>
+            <Sparkles className="h-4 w-4 mr-2" />
+            {t('gardenDashboard.plantsSection.addPlant')}
+          </Button>
+          <Button variant="outline" className="rounded-2xl" onClick={() => id && navigate(`/garden/${id}/routine`)} disabled={loading || !garden}>
+            {t('gardenDashboard.routine')}
+          </Button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <Card className="rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 shadow-sm">
+            <div className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
+              {t('gardenDashboard.overviewSection.plants')}
+            </div>
+            <div className="text-xl font-semibold text-stone-900 dark:text-white">
+              {loading ? <span className="block h-6 w-10 bg-stone-200 dark:bg-[#2d2d30] rounded animate-pulse" /> : totalOnHand}
+            </div>
+            <div className="text-xs text-stone-500 dark:text-stone-400">
+              {t('gardenDashboard.overviewSection.species')} {loading ? '—' : speciesOnHand}
+            </div>
+          </Card>
+          <Card className="rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 shadow-sm">
+            <div className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
+              {t('gardenDashboard.overviewSection.members')}
+            </div>
+            <div className="text-xl font-semibold text-stone-900 dark:text-white">
+              {loading ? <span className="block h-6 w-8 bg-stone-200 dark:bg-[#2d2d30] rounded animate-pulse" /> : heroMembers}
+            </div>
+          </Card>
+          <Card className="rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 shadow-sm">
+            <div className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
+              {t('gardenDashboard.overviewSection.streak')}
+            </div>
+            <div className="text-xl font-semibold text-stone-900 dark:text-white">
+              {loading ? <span className="block h-6 w-12 bg-stone-200 dark:bg-[#2d2d30] rounded animate-pulse" /> : `${heroStreak} ${t('gardenDashboard.overviewSection.days')}`}
+            </div>
+          </Card>
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-xs text-stone-500 dark:text-stone-400">
+            <span>{t('gardenDashboard.overviewSection.todaysProgress')}</span>
+            <span>{loading ? '—' : `${todayProgress.completed} / ${todayProgress.due}`}</span>
+          </div>
+          <div className="h-2 bg-stone-200/70 dark:bg-white/10 rounded-full overflow-hidden">
+            <div className="h-2 bg-emerald-500" style={{ width: `${loading ? 0 : todayProgress.percent}%` }} />
+          </div>
+        </div>
+
+        {error && (
+          <div className="rounded-2xl border border-rose-200/70 dark:border-rose-900/40 bg-rose-50/90 dark:bg-rose-900/20 p-4 text-sm text-rose-700 dark:text-rose-200 shadow-sm">
+            {error}
+          </div>
+        )}
+      </div>
 
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] lg:grid-cols-[220px_1fr] gap-8">
