@@ -895,10 +895,14 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
 
     return (
       <div className="space-y-10 select-none">
-        <section className="relative overflow-hidden rounded-[32px] border border-emerald-300/40 bg-gradient-to-br from-emerald-200/70 via-lime-100/60 to-sky-100/70 p-6 shadow-xl dark:border-emerald-500/30 dark:from-[#031e20]/95 dark:via-[#062a3b]/92 dark:to-[#0c1320]/95 dark:shadow-[0_20px_70px_rgba(8,145,178,0.12)] md:p-10">
-          <div className="pointer-events-none absolute -top-24 -left-24 h-64 w-64 rounded-full bg-emerald-400/35 blur-3xl sm:h-72 sm:w-72 dark:bg-[#0f766e]/18" aria-hidden="true" />
-          <div className="pointer-events-none absolute -bottom-32 -right-16 h-72 w-72 rounded-full bg-amber-200/40 blur-3xl md:h-96 md:w-[28rem] dark:bg-[#1f3b57]/18" aria-hidden="true" />
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.45),transparent_55%),radial-gradient(circle_at_80%_10%,rgba(14,165,233,0.25),transparent_60%)] dark:bg-[radial-gradient(circle_at_18%_18%,rgba(34,197,94,0.08),transparent_50%),radial-gradient(circle_at_82%_12%,rgba(14,165,233,0.1),transparent_56%),radial-gradient(circle_at_45%_82%,rgba(196,181,253,0.06),transparent_68%)]" aria-hidden="true" />
+        <motion.section
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
+          className="relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50 via-white to-stone-100 dark:from-[#252526] dark:via-[#1e1e1e] dark:to-[#171717] p-6 md:p-10"
+        >
+          <div className="absolute -right-24 -top-24 h-64 w-64 rounded-full bg-emerald-200/40 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
+          <div className="absolute -left-16 bottom-[-30%] h-72 w-72 rounded-full bg-emerald-100/50 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
           <div className="relative z-10 grid gap-10 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
             <div className="space-y-6">
               <div className="flex flex-wrap items-center gap-3 text-sm font-semibold text-emerald-800/80 dark:text-emerald-200/80">
@@ -1792,7 +1796,7 @@ const CareChartSection: React.FC<{ data: CareChartDatum[] }> = ({ data }) => {
           </ResponsiveContainer>
         </div>
       </div>
-    </section>
+    </motion.section>
   )
 }
 
