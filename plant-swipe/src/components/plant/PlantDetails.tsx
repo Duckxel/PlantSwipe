@@ -361,6 +361,8 @@ type CubeScale = {
 
 const DimensionCube: React.FC<{ scale: CubeScale }> = ({ scale }) => {
   const containerRef = React.useRef<HTMLDivElement>(null)
+  const rendererRef = React.useRef<WebGLRenderer | null>(null)
+  const cubeGroupRef = React.useRef<Group | null>(null)
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return
@@ -370,6 +372,14 @@ const DimensionCube: React.FC<{ scale: CubeScale }> = ({ scale }) => {
     const renderer = new WebGLRenderer({ antialias: true, alpha: true })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio ?? 1, 2))
     renderer.setClearColor(0x000000, 0)
+
+    const gl = renderer.getContext()
+    if (!gl) {
+      container.innerText = 'WebGL failed to initialise'
+      return
+    }
+
+    rendererRef.current = renderer
     container.appendChild(renderer.domElement)
 
     const scene = new Scene()
@@ -388,31 +398,36 @@ const DimensionCube: React.FC<{ scale: CubeScale }> = ({ scale }) => {
     scene.add(rimLight)
 
     const cubeGroup = new Group()
+    cubeGroupRef.current = cubeGroup
     scene.add(cubeGroup)
 
+    const disposables: { dispose: () => void }[] = []
+
     const geometry = new BoxGeometry(1, 1, 1)
+    disposables.push(geometry)
+
     const cubeShellMaterial = new MeshStandardMaterial({
-      color: 0x052e2b,
+      color: 0x041f1d,
       transparent: true,
-      opacity: 0.08,
+      opacity: 0.18,
       metalness: 0.15,
-      roughness: 0.8,
-      emissive: 0x022c22,
-      emissiveIntensity: 0.6,
+      roughness: 0.75,
+      emissive: 0x00ff99,
+      emissiveIntensity: 0.55,
     })
-    const cubeShell = new Mesh(geometry, cubeShellMaterial)
-    cubeGroup.add(cubeShell)
+    cubeGroup.add(new Mesh(geometry, cubeShellMaterial))
+    disposables.push(cubeShellMaterial)
 
     const outerWireGeometry = new EdgesGeometry(geometry)
-    const outerWireMaterial = new LineBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.95 })
-    const outerWire = new LineSegments(outerWireGeometry, outerWireMaterial)
-    cubeGroup.add(outerWire)
+    const outerWireMaterial = new LineBasicMaterial({ color: 0x00ff99, transparent: false })
+    cubeGroup.add(new LineSegments(outerWireGeometry, outerWireMaterial))
+    disposables.push(outerWireGeometry, outerWireMaterial)
 
     const innerGeometry = new BoxGeometry(0.68, 0.68, 0.68)
     const innerWireGeometry = new EdgesGeometry(innerGeometry)
-    const innerWireMaterial = new LineBasicMaterial({ color: 0x34d399, transparent: true, opacity: 0.8 })
-    const innerWire = new LineSegments(innerWireGeometry, innerWireMaterial)
-    cubeGroup.add(innerWire)
+    const innerWireMaterial = new LineBasicMaterial({ color: 0x34d399, transparent: true, opacity: 0.85 })
+    cubeGroup.add(new LineSegments(innerWireGeometry, innerWireMaterial))
+    disposables.push(innerGeometry, innerWireGeometry, innerWireMaterial)
 
     const glowGeometry = new CircleGeometry(1.8, 64)
     const glowMaterial = new MeshBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.25 })
@@ -420,30 +435,13 @@ const DimensionCube: React.FC<{ scale: CubeScale }> = ({ scale }) => {
     glow.rotation.x = -Math.PI / 2
     glow.position.y = -1.25
     scene.add(glow)
-
-    const applyCubeScale = () => {
-      const multiplier = 1.45
-      cubeGroup.scale.set(scale.x * multiplier, scale.y * multiplier, scale.z * multiplier)
-    }
-    applyCubeScale()
-
-    let frameId: number
-    const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
-
-    const animate = () => {
-      frameId = window.requestAnimationFrame(animate)
-      if (!motionQuery.matches) {
-        cubeGroup.rotation.y += 0.006
-        cubeGroup.rotation.x = 0.55
-      }
-      renderer.render(scene, camera)
-    }
-    animate()
+    disposables.push(glowGeometry, glowMaterial)
 
     const handleResize = () => {
-      const width = container.clientWidth || container.parentElement?.clientWidth || 1
-      const height = container.clientHeight || width
-      renderer.setSize(width, height)
+      const parentWidth = container.parentElement?.clientWidth ?? 0
+      const width = parentWidth > 0 ? parentWidth : container.clientWidth || 320
+      const height = width
+      renderer.setSize(width, height, false)
       camera.aspect = width / height
       camera.updateProjectionMatrix()
     }
@@ -455,23 +453,41 @@ const DimensionCube: React.FC<{ scale: CubeScale }> = ({ scale }) => {
         : null
     resizeObserver?.observe(container)
 
+    let frameId = 0
+    const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const animate = () => {
+      frameId = window.requestAnimationFrame(animate)
+      if (!motionQuery.matches && cubeGroupRef.current) {
+        cubeGroupRef.current.rotation.y += 0.006
+        cubeGroupRef.current.rotation.x = 0.55
+      }
+      renderer.render(scene, camera)
+    }
+    animate()
+
     return () => {
       cancelAnimationFrame(frameId)
       resizeObserver?.disconnect()
-      geometry.dispose()
-      innerGeometry.dispose()
-      outerWireGeometry.dispose()
-      innerWireGeometry.dispose()
-      cubeShellMaterial.dispose()
-      outerWireMaterial.dispose()
-      innerWireMaterial.dispose()
-      glowGeometry.dispose()
-      glowMaterial.dispose()
+      cubeGroupRef.current = null
+      rendererRef.current = null
+      disposables.forEach((item) => {
+        try {
+          item.dispose()
+        } catch {
+          // ignore
+        }
+      })
       renderer.dispose()
       if (container.contains(renderer.domElement)) {
         container.removeChild(renderer.domElement)
       }
     }
+  }, [])
+
+  React.useEffect(() => {
+    if (!cubeGroupRef.current) return
+    const multiplier = 1.45
+    cubeGroupRef.current.scale.set(scale.x * multiplier, scale.y * multiplier, scale.z * multiplier)
   }, [scale.x, scale.y, scale.z])
 
   return <div ref={containerRef} className="relative h-full w-full min-h-[220px]" />
