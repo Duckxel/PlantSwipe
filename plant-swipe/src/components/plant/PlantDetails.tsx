@@ -214,6 +214,13 @@ const TIMELINE_COLORS: Record<string, string> = {
 
 const DIMENSION_CUBE_STYLE_ID = 'dimension-cube-styles'
 const DIMENSION_CUBE_STYLES = `
+@-webkit-keyframes dimensionCubeRotate {
+  0% { transform: rotateX(-32deg) rotateY(28deg) rotateZ(0deg); }
+  25% { transform: rotateX(-20deg) rotateY(115deg) rotateZ(4deg); }
+  50% { transform: rotateX(-38deg) rotateY(205deg) rotateZ(-6deg); }
+  75% { transform: rotateX(-24deg) rotateY(295deg) rotateZ(3deg); }
+  100% { transform: rotateX(-32deg) rotateY(388deg) rotateZ(0deg); }
+}
 @keyframes dimensionCubeRotate {
   0% { transform: rotateX(-32deg) rotateY(28deg) rotateZ(0deg); }
   25% { transform: rotateX(-20deg) rotateY(115deg) rotateZ(4deg); }
@@ -227,11 +234,13 @@ const DIMENSION_CUBE_STYLES = `
   height: 220px;
   margin: 0 auto;
   perspective: 1100px;
+  -webkit-perspective: 1100px;
 }
 .dimension-cube-wrapper {
   width: 100%;
   height: 100%;
   transform-style: preserve-3d;
+  -webkit-transform-style: preserve-3d;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -241,6 +250,7 @@ const DIMENSION_CUBE_STYLES = `
   width: 100%;
   height: 100%;
   transform-style: preserve-3d;
+  -webkit-transform-style: preserve-3d;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -250,7 +260,9 @@ const DIMENSION_CUBE_STYLES = `
   width: 160px;
   height: 160px;
   transform-style: preserve-3d;
+  -webkit-transform-style: preserve-3d;
   animation: dimensionCubeRotate 78s linear infinite;
+  -webkit-animation: dimensionCubeRotate 78s linear infinite;
   filter: drop-shadow(0 26px 36px rgba(16,185,129,0.28));
 }
 .dimension-cube-face {
@@ -261,6 +273,7 @@ const DIMENSION_CUBE_STYLES = `
   box-shadow: inset 0 0 36px rgba(15,118,110,0.58);
   backdrop-filter: blur(1.1px);
   backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 .dimension-cube-face::after {
   content: "";
