@@ -41,11 +41,43 @@ export const PlantInfoPage: React.FC = () => {
       setError(null)
       try {
         // Load base plant data
-        const { data, error } = await supabase
-          .from('plants')
-          .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount')
-          .eq('id', id)
-          .maybeSingle()
+          const { data, error } = await supabase
+            .from('plants')
+            .select(`
+              id,
+              name,
+              scientific_name,
+              colors,
+              seasons,
+              rarity,
+              meaning,
+              description,
+              image_url,
+              care_sunlight,
+              care_water,
+              care_soil,
+              care_difficulty,
+              seeds_available,
+              water_freq_unit,
+              water_freq_value,
+              water_freq_period,
+              water_freq_amount,
+              identifiers,
+              traits,
+              dimensions,
+              phenology,
+              environment,
+              care,
+              propagation,
+              usage,
+              ecology,
+              commerce,
+              problems,
+              planting,
+              meta
+            `)
+            .eq('id', id)
+            .maybeSingle()
         if (error) throw new Error(error.message)
         if (!data) {
           setPlant(null)

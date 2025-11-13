@@ -12,11 +12,12 @@ import {
   Globe, Shield, AlertCircle, Users, Sparkles, FileText, Home,
   BarChart3, Palette, Compass, Map as MapIcon, Pencil, Trash2, ChevronDown, ChevronUp
 } from "lucide-react";
-import type { Plant } from "@/types/plant";
+import type { Plant, PlantDimensions } from "@/types/plant";
 import { rarityTone, seasonBadge } from "@/constants/badges";
 import { cn, deriveWaterLevelFromFrequency } from "@/lib/utils";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/context/AuthContext";
+import { useTheme } from "@/context/ThemeContext";
 import { useTranslation } from "react-i18next";
 import {
   ResponsiveContainer,
@@ -28,6 +29,8 @@ import {
   YAxis,
   Cell
 } from "recharts";
+import worldMapLight from "@/assets/world-map-light.svg?url";
+import worldMapDark from "@/assets/world-map-dark.svg?url";
 
 const SECTION_KEY_MAP: Record<string, string> = {
   'Identifiers': 'identifiers',
@@ -207,6 +210,333 @@ const TIMELINE_COLORS: Record<string, string> = {
   flowering: '#f97316',
   fruiting: '#22c55e',
   sowing: '#6366f1'
+}
+
+const DIMENSION_CUBE_STYLE_ID = 'dimension-cube-styles'
+const DIMENSION_CUBE_STYLES = `
+@keyframes dimensionCubeRotate {
+  0% { transform: rotateX(-32deg) rotateY(28deg) rotateZ(0deg); }
+  25% { transform: rotateX(-20deg) rotateY(115deg) rotateZ(4deg); }
+  50% { transform: rotateX(-38deg) rotateY(205deg) rotateZ(-6deg); }
+  75% { transform: rotateX(-24deg) rotateY(295deg) rotateZ(3deg); }
+  100% { transform: rotateX(-32deg) rotateY(388deg) rotateZ(0deg); }
+}
+.dimension-cube-scene {
+  position: relative;
+  width: 220px;
+  height: 220px;
+  margin: 0 auto;
+  perspective: 1100px;
+}
+.dimension-cube-wrapper {
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: rotateX(-34deg) rotateY(34deg);
+}
+.dimension-cube-scale {
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dimension-cube {
+  position: relative;
+  width: 160px;
+  height: 160px;
+  transform-style: preserve-3d;
+  animation: dimensionCubeRotate 78s linear infinite;
+  filter: drop-shadow(0 26px 36px rgba(16,185,129,0.28));
+}
+.dimension-cube-face {
+  position: absolute;
+  inset: 0;
+  border: 2px solid rgba(16,185,129,0.92);
+  background: rgba(15,118,110,0.22);
+  box-shadow: inset 0 0 36px rgba(15,118,110,0.58);
+  backdrop-filter: blur(1.1px);
+  backface-visibility: hidden;
+}
+.dimension-cube-face::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px solid rgba(255,255,255,0.22);
+  mix-blend-mode: screen;
+}
+.dimension-cube-face::before {
+  content: "";
+  position: absolute;
+  inset: 20%;
+  border: 1px dashed rgba(167,243,208,0.58);
+  filter: blur(0.08px);
+}
+.dimension-cube-face--front {
+  transform: translateZ(80px);
+  background: linear-gradient(160deg, rgba(59,130,246,0.38), rgba(6,95,70,0.28));
+}
+.dimension-cube-face--back {
+  transform: rotateY(180deg) translateZ(80px);
+  background: linear-gradient(210deg, rgba(6,95,70,0.44), rgba(34,197,94,0.28));
+}
+.dimension-cube-face--left {
+  transform: rotateY(-90deg) translateZ(80px);
+  background: linear-gradient(180deg, rgba(8,145,178,0.4), rgba(15,118,110,0.24));
+}
+.dimension-cube-face--right {
+  transform: rotateY(90deg) translateZ(80px);
+  background: linear-gradient(175deg, rgba(34,197,94,0.38), rgba(15,118,110,0.24));
+}
+.dimension-cube-face--top {
+  transform: rotateX(90deg) translateZ(80px);
+  background: linear-gradient(160deg, rgba(236,253,245,0.8), rgba(45,212,191,0.35));
+  border-color: rgba(167,243,208,0.95);
+}
+.dimension-cube-face--bottom {
+  transform: rotateX(-90deg) translateZ(80px);
+  background: linear-gradient(200deg, rgba(6,68,59,0.5), rgba(15,118,110,0.3));
+  border-color: rgba(12,74,61,0.94);
+}
+.dimension-cube-glow {
+  position: absolute;
+  inset: 0;
+  transform: translateZ(-68px);
+  background: radial-gradient(circle at center, rgba(16,185,129,0.36), transparent 82%);
+  filter: blur(52px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .dimension-cube { animation: none; transform: rotateX(-34deg) rotateY(34deg); }
+}
+`
+
+const normalizeStringArray = (value: unknown): string[] => {
+  if (value === undefined || value === null) return []
+
+  const items = Array.isArray(value) ? value : [value]
+  const results: string[] = []
+
+  for (const item of items) {
+    if (item === undefined || item === null) continue
+
+    if (Array.isArray(item)) {
+      results.push(...normalizeStringArray(item))
+      continue
+    }
+
+    if (typeof item === 'string') {
+      const trimmed = item.trim()
+      if (!trimmed) continue
+
+      if (
+        (trimmed.startsWith('[') && trimmed.endsWith(']')) ||
+        (trimmed.startsWith('"') && trimmed.endsWith('"'))
+      ) {
+        try {
+          const parsed = JSON.parse(trimmed)
+          results.push(...normalizeStringArray(parsed))
+          continue
+        } catch {
+          // fall through to the delimiter split
+        }
+      }
+
+      const parts = trimmed.split(/[\n,;|]/)
+      if (parts.length > 1) {
+        for (const part of parts) {
+          const candidate = part.trim()
+          if (candidate) results.push(candidate)
+        }
+      } else {
+        results.push(trimmed)
+      }
+      continue
+    }
+
+    if (typeof item === 'number' || typeof item === 'boolean') {
+      results.push(String(item))
+    }
+  }
+
+  const seen = new Set<string>()
+  const deduped: string[] = []
+  for (const entry of results) {
+    const key = entry.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    deduped.push(entry)
+  }
+  return deduped
+}
+
+const normalizeNumberArray = (value: unknown): number[] => {
+  if (value === undefined || value === null) return []
+
+  const items = Array.isArray(value) ? value : [value]
+  const numbers: number[] = []
+
+  for (const item of items) {
+    if (item === undefined || item === null) continue
+
+    if (Array.isArray(item)) {
+      numbers.push(...normalizeNumberArray(item))
+      continue
+    }
+
+    if (typeof item === 'number') {
+      if (Number.isFinite(item)) numbers.push(item)
+      continue
+    }
+
+    if (typeof item === 'string') {
+      const trimmed = item.trim()
+      if (!trimmed) continue
+
+      if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+        try {
+          const parsed = JSON.parse(trimmed)
+          numbers.push(...normalizeNumberArray(parsed))
+          continue
+        } catch {
+          // fall through to manual parsing
+        }
+      }
+
+      const matches = trimmed.match(/-?\d+(\.\d+)?/g)
+      if (!matches) continue
+      for (const match of matches) {
+        const parsed = Number(match)
+        if (Number.isFinite(parsed)) numbers.push(parsed)
+      }
+    }
+  }
+
+  const unique = Array.from(new Set(numbers))
+  unique.sort((a, b) => a - b)
+  return unique
+}
+
+const clampNumber = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
+
+const formatDimensionValue = (value: number): string => {
+  if (value >= 100) {
+    const meters = value / 100
+    const decimals = meters >= 10 ? 1 : 2
+    return `${Math.round(value)} cm (${meters.toFixed(decimals)} m)`
+  }
+  if (value >= 1) {
+    return `${Math.round(value)} cm`
+  }
+  return `${value.toFixed(2)} cm`
+}
+
+const parsePositiveNumber = (value: number | null | undefined): number | undefined =>
+  typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined
+
+const DimensionVisualizer: React.FC<{ dimensions: Partial<PlantDimensions> }> = ({ dimensions }) => {
+  const { t } = useTranslation('common')
+
+  React.useEffect(() => {
+    if (typeof document === 'undefined') return
+    if (document.getElementById(DIMENSION_CUBE_STYLE_ID)) return
+    const style = document.createElement('style')
+    style.id = DIMENSION_CUBE_STYLE_ID
+    style.textContent = DIMENSION_CUBE_STYLES
+    document.head.appendChild(style)
+  }, [])
+
+  const heightCandidate = parsePositiveNumber(dimensions.height?.maxCm ?? dimensions.height?.minCm)
+  const spreadCandidate = parsePositiveNumber(dimensions.spread?.maxCm ?? dimensions.spread?.minCm)
+  const spacingCandidate = parsePositiveNumber(dimensions.spacing?.plantCm ?? dimensions.spacing?.rowCm)
+
+  const widthCandidate = spreadCandidate ?? spacingCandidate ?? heightCandidate
+  const depthCandidate = spreadCandidate ?? spacingCandidate ?? heightCandidate
+
+  const available = [heightCandidate, widthCandidate, depthCandidate].filter(
+    (v): v is number => typeof v === 'number'
+  )
+  if (!available.length) return null
+
+  const fallbackValue = available[0]
+  const resolvedHeight = heightCandidate ?? fallbackValue
+  const resolvedWidth = widthCandidate ?? fallbackValue
+  const resolvedDepth = depthCandidate ?? fallbackValue
+
+  const maxDimension = Math.max(resolvedHeight, resolvedWidth, resolvedDepth, 1)
+  const scaleFor = (value: number) => clampNumber(0.45 + (value / maxDimension) * 0.55, 0.35, 1.08)
+
+  const scaleX = scaleFor(resolvedWidth)
+  const scaleY = scaleFor(resolvedHeight)
+  const scaleZ = scaleFor(resolvedDepth)
+
+  const scaleStyle: React.CSSProperties = {
+    transform: `scale3d(${scaleX.toFixed(3)}, ${scaleY.toFixed(3)}, ${scaleZ.toFixed(3)})`,
+  }
+
+  const spreadLabel = t('plantInfo.labels.spread', { defaultValue: 'Spread' })
+  const spacingLabel = t('plantInfo.labels.spacing', { defaultValue: 'Spacing' })
+  const heightLabel = t('plantInfo.labels.height', { defaultValue: 'Height' })
+
+  const usingSpacingFallback = !spreadCandidate && !!spacingCandidate
+
+  const spreadLegendValue = spreadCandidate ?? spacingCandidate ?? resolvedWidth
+
+  const legendItems = [
+    {
+      key: 'height',
+      label: heightLabel,
+      value: formatDimensionValue(resolvedHeight),
+    },
+  ]
+
+  legendItems.push({
+    key: 'spread',
+    label: usingSpacingFallback ? spacingLabel : spreadLabel,
+    value: formatDimensionValue(spreadLegendValue),
+  })
+
+  return (
+      <div className="rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-50/70 via-white/60 to-white/10 p-5 dark:border-emerald-500/30 dark:from-emerald-500/10 dark:via-transparent dark:to-transparent">
+      <div className="flex flex-col items-stretch gap-6 lg:flex-row lg:gap-8">
+        <div className="dimension-cube-scene flex-[1.35] max-w-[260px] self-center lg:self-auto">
+          <div className="dimension-cube-wrapper">
+            <div className="dimension-cube-scale" style={scaleStyle}>
+              <div className="dimension-cube" aria-hidden="true">
+                <div className="dimension-cube-glow" />
+                <div className="dimension-cube-face dimension-cube-face--front" />
+                <div className="dimension-cube-face dimension-cube-face--back" />
+                <div className="dimension-cube-face dimension-cube-face--left" />
+                <div className="dimension-cube-face dimension-cube-face--right" />
+                <div className="dimension-cube-face dimension-cube-face--top" />
+                <div className="dimension-cube-face dimension-cube-face--bottom" />
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="flex-1 w-full max-w-lg">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 h-full">
+            {legendItems.map((item) => (
+              <div
+                key={item.key}
+                className="rounded-xl border border-emerald-500/20 bg-white/85 px-4 py-3 text-sm font-medium text-stone-700 shadow-sm backdrop-blur-sm dark:border-emerald-500/30 dark:bg-[#0f1f1f]/70 dark:text-emerald-100 flex flex-col justify-center"
+              >
+                <div className="mb-1 text-[10px] uppercase tracking-widest text-emerald-600/75 dark:text-emerald-300/75">
+                  {item.label}
+                </div>
+                <div className="text-sm font-semibold text-stone-900 dark:text-stone-100">
+                  {item.value}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 type SeasonKey = keyof typeof TIMELINE_COLORS;
@@ -1263,8 +1593,9 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
           )}
 
           {/* Dimensions Section */}
-          {(dimensions?.height || dimensions?.spread || dimensions?.spacing || dimensions?.containerFriendly !== undefined) && (
-              <InfoSection title="Dimensions" icon={<Ruler className="h-5 w-5" />}>
+            {(dimensions?.height || dimensions?.spread || dimensions?.spacing || dimensions?.containerFriendly !== undefined) && (
+                <InfoSection title="Dimensions" icon={<Ruler className="h-5 w-5" />}>
+                <DimensionVisualizer dimensions={dimensions} />
               {dimensions?.height && (
                 <InfoItem icon={<Ruler className="h-4 w-4" />} label="Height" value={`${dimensions.height.minCm || ''}${dimensions.height.minCm && dimensions.height.maxCm ? '-' : ''}${dimensions.height.maxCm || ''} cm`} />
               )}
@@ -1781,9 +2112,6 @@ const CareChartSection: React.FC<{ data: CareChartDatum[] }> = ({ data }) => {
       </header>
       <div className="relative grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div className="space-y-4">
-          <p className="text-sm leading-relaxed text-stone-600 dark:text-stone-400">
-            {t('plantInfo.labels.careSummary', { defaultValue: "Visualize the plant's energy needs - sunlight, water, and routine - before you get your hands muddy." })}
-          </p>
           <ul className="space-y-3">
             {data.map((item, idx) => (
               <li key={item.key} className="flex items-start gap-3">
@@ -1859,53 +2187,108 @@ const SeasonalTimeline: React.FC<{ data: SeasonalTimelineEntry[]; planting?: Non
     [t]
   )
 
+  const topStackByIndex = React.useMemo(() => {
+    const order: SeasonKey[] = ['flowering', 'fruiting', 'sowing']
+    return data.map((entry) => {
+      const valueByKey: Record<SeasonKey, number> = {
+        flowering: entry.flowering,
+        fruiting: entry.fruiting,
+        sowing: entry.sowing,
+      }
+      for (let i = order.length - 1; i >= 0; i -= 1) {
+        const key = order[i]
+        const value = valueByKey[key]
+        if (value > 0) {
+          return key
+        }
+      }
+      return null
+    })
+  }, [data])
+
   const hasData = data.some((entry) => entry.flowering || entry.fruiting || entry.sowing)
   if (!hasData) return null
 
-    return (
-      <motion.section
-        initial={{ opacity: 0, y: 20 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, amount: 0.1 }}
-        transition={{ duration: 0.4 }}
-        className="relative overflow-hidden rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-6"
-      >
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,_129,_0.12),_transparent_55%)] dark:bg-[radial-gradient(circle_at_top,_rgba(16,_185,_129,_0.18),_transparent_60%)]" aria-hidden="true" />
-        <header className="relative mb-4 flex items-center gap-3">
-          <Calendar className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-          <h3 className="text-lg font-semibold tracking-tight">{t('plantInfo.sections.phenology', { defaultValue: 'Phenology' })}</h3>
-        </header>
-        <div className="relative h-60">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(120,113,108,0.16)" vertical={false} />
-              <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: 'currentColor', fontSize: 12 }} />
-              <YAxis hide domain={[0, 3]} />
-              <RechartsTooltip
-                cursor={{ fill: 'rgba(120,113,108,0.08)' }}
-                content={(props) => <SeasonalTooltip {...props} labels={seasonLabels} />}
-              />
-              <Bar dataKey="flowering" stackId="timeline" fill={TIMELINE_COLORS.flowering} radius={[12, 12, 0, 0]} />
-              <Bar dataKey="fruiting" stackId="timeline" fill={TIMELINE_COLORS.fruiting} radius={[12, 12, 0, 0]} />
-              <Bar dataKey="sowing" stackId="timeline" fill={TIMELINE_COLORS.sowing} radius={[12, 12, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.1 }}
+      transition={{ duration: 0.4 }}
+      className="relative overflow-hidden rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-6"
+    >
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,_129,_0.12),_transparent_55%)] dark:bg-[radial-gradient(circle_at_top,_rgba(16,_185,_129,_0.18),_transparent_60%)]" aria-hidden="true" />
+      <header className="relative mb-4 flex items-center gap-3">
+        <Calendar className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+        <h3 className="text-lg font-semibold tracking-tight">{t('plantInfo.sections.phenology', { defaultValue: 'Phenology' })}</h3>
+      </header>
+      <div className="relative h-60">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(120,113,108,0.16)" vertical={false} />
+            <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: 'currentColor', fontSize: 12 }} />
+            <YAxis hide domain={[0, 3]} />
+            <RechartsTooltip
+              cursor={{ fill: 'rgba(120,113,108,0.08)' }}
+              content={(props) => <SeasonalTooltip {...props} labels={seasonLabels} />}
+            />
+              <Bar dataKey="flowering" stackId="timeline">
+              {data.map((entry, idx) => (
+                <Cell
+                  key={`flowering-${entry.key}`}
+                  fill={TIMELINE_COLORS.flowering}
+                    radius={
+                      (topStackByIndex[idx] === 'flowering'
+                        ? [12, 12, 0, 0]
+                        : [0, 0, 0, 0]) as unknown as number
+                    }
+                />
+              ))}
+            </Bar>
+            <Bar dataKey="fruiting" stackId="timeline">
+              {data.map((entry, idx) => (
+                <Cell
+                  key={`fruiting-${entry.key}`}
+                  fill={TIMELINE_COLORS.fruiting}
+                    radius={
+                      (topStackByIndex[idx] === 'fruiting'
+                        ? [12, 12, 0, 0]
+                        : [0, 0, 0, 0]) as unknown as number
+                    }
+                />
+              ))}
+            </Bar>
+            <Bar dataKey="sowing" stackId="timeline">
+              {data.map((entry, idx) => (
+                <Cell
+                  key={`sowing-${entry.key}`}
+                  fill={TIMELINE_COLORS.sowing}
+                    radius={
+                      (topStackByIndex[idx] === 'sowing'
+                        ? [12, 12, 0, 0]
+                        : [0, 0, 0, 0]) as unknown as number
+                    }
+                />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="mt-5 flex flex-wrap gap-4 text-xs text-stone-600 dark:text-stone-400">
+        {(Object.entries(TIMELINE_COLORS) as Array<[SeasonKey, string]>).map(([key, color]) => (
+          <span key={key} className="flex items-center gap-2">
+            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
+            {seasonLabels[key]}
+          </span>
+        ))}
+      </div>
+      {planting?.hemisphere && (
+        <div className="mt-3 text-xs text-stone-600 dark:text-stone-400">
+          {t('plantInfo.labels.hemisphere', { defaultValue: 'Hemisphere' })}: {humanizeHemisphere(planting.hemisphere, t)}
         </div>
-        <div className="mt-5 flex flex-wrap gap-4 text-xs text-stone-600 dark:text-stone-400">
-          {(Object.entries(TIMELINE_COLORS) as Array<[SeasonKey, string]>).map(([key, color]) => (
-            <span key={key} className="flex items-center gap-2">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
-              {seasonLabels[key]}
-            </span>
-          ))}
-        </div>
-        {planting?.hemisphere && (
-          <div className="mt-3 text-xs text-stone-600 dark:text-stone-400">
-            {t('plantInfo.labels.hemisphere', { defaultValue: 'Hemisphere' })}: {humanizeHemisphere(planting.hemisphere, t)}
-          </div>
-        )}
-      </motion.section>
-    )
+      )}
+    </motion.section>
+  )
 }
 
 type SeasonalTooltipProps = BaseTooltipProps & {
@@ -2004,12 +2387,40 @@ const HabitatMap: React.FC<{
   hemisphere?: string
 }> = ({ nativeRange, climatePref, zones, hemisphere }) => {
   const { t } = useTranslation('common')
-  const climateChips = climatePref.slice(0, 6)
-  const hasContent = nativeRange.length > 0 || climateChips.length > 0 || zones.length > 0 || hemisphere
+  const { effectiveTheme } = useTheme()
+  const mapImage = React.useMemo(
+    () => (effectiveTheme === 'dark' ? worldMapDark : worldMapLight),
+    [effectiveTheme]
+  )
+
+  const normalizedNativeRange = React.useMemo(
+    () => normalizeStringArray(nativeRange as unknown),
+    [nativeRange]
+  )
+  const normalizedClimatePref = React.useMemo(
+    () => normalizeStringArray(climatePref as unknown),
+    [climatePref]
+  )
+  const normalizedZones = React.useMemo(
+    () => normalizeNumberArray(zones as unknown),
+    [zones]
+  )
+  const hemisphereValue = React.useMemo(() => {
+    if (typeof hemisphere !== 'string') return undefined
+    const trimmed = hemisphere.trim()
+    return trimmed || undefined
+  }, [hemisphere])
+
+  const climateChips = normalizedClimatePref.slice(0, 6)
+  const hasContent =
+    normalizedNativeRange.length > 0 ||
+    climateChips.length > 0 ||
+    normalizedZones.length > 0 ||
+    Boolean(hemisphereValue)
 
   if (!hasContent) return null
 
-  const pins = nativeRange.slice(0, MAP_PIN_POSITIONS.length)
+  const pins = normalizedNativeRange.slice(0, MAP_PIN_POSITIONS.length)
 
   return (
     <motion.section
@@ -2021,15 +2432,25 @@ const HabitatMap: React.FC<{
     >
       <header className="relative mb-4 flex items-center gap-3">
         <MapIcon className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-        <h3 className="text-lg font-semibold tracking-tight">{t('plantInfo.labels.habitatMap', { defaultValue: 'Habitat Map' })}</h3>
+        <h3 className="text-lg font-semibold tracking-tight">
+          {t('plantInfo.labels.habitatMap', { defaultValue: 'Habitat Map' })}
+        </h3>
       </header>
       <div className="relative mb-4 h-64 overflow-hidden rounded-3xl border border-white/60 bg-gradient-to-br from-emerald-200/60 via-sky-100/60 to-emerald-100/60 shadow-inner dark:border-emerald-800/40 dark:bg-gradient-to-br dark:from-[#052c2b]/80 dark:via-[#072c40]/78 dark:to-[#111b2d]/82">
+        <img
+          src={mapImage}
+          alt=""
+          aria-hidden="true"
+          className="absolute inset-0 h-full w-full select-none object-cover opacity-90 dark:opacity-75 pointer-events-none"
+          loading="lazy"
+          draggable={false}
+        />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_40%,rgba(255,255,255,0.55),transparent_60%),radial-gradient(circle_at_70%_60%,rgba(255,255,255,0.45),transparent_65%)] dark:bg-[radial-gradient(circle_at_28%_32%,rgba(16,185,129,0.14),transparent_56%),radial-gradient(circle_at_74%_65%,rgba(59,130,246,0.12),transparent_66%)]" />
         {pins.map((region, idx) => {
           const position = MAP_PIN_POSITIONS[idx]
           return (
             <div
-              key={region}
+              key={`${region}-${idx}`}
               className="absolute flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-2xl bg-white/90 px-3 py-2 text-xs font-medium text-stone-800 shadow-md backdrop-blur-md dark:bg-[#2d2d30]/90 dark:text-stone-100"
               style={{ top: position.top, left: position.left }}
             >
@@ -2042,22 +2463,22 @@ const HabitatMap: React.FC<{
       </div>
       {climateChips.length > 0 && (
         <div className="mb-3 flex flex-wrap gap-2">
-          {climateChips.map((climate) => (
-            <Badge key={climate} className="rounded-2xl border-none bg-stone-100 dark:bg-[#2d2d30] text-xs font-medium">
+          {climateChips.map((climate, idx) => (
+            <Badge key={`${climate}-${idx}`} className="rounded-2xl border-none bg-stone-100 dark:bg-[#2d2d30] text-xs font-medium">
               <Compass className="mr-1 h-3 w-3" />
               {climate}
             </Badge>
           ))}
         </div>
       )}
-      {zones.length > 0 && (
+      {normalizedZones.length > 0 && (
         <div className="relative text-xs text-stone-600 dark:text-stone-400">
-          USDA: {zones.join(', ')}
+          USDA: {normalizedZones.join(', ')}
         </div>
       )}
-      {hemisphere && (
+      {hemisphereValue && (
         <div className="relative mt-1 text-xs text-stone-600 dark:text-stone-400">
-          {t('plantInfo.labels.hemisphere', { defaultValue: 'Hemisphere' })}: {humanizeHemisphere(hemisphere, t)}
+          {t('plantInfo.labels.hemisphere', { defaultValue: 'Hemisphere' })}: {humanizeHemisphere(hemisphereValue, t)}
         </div>
       )}
     </motion.section>
