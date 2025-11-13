@@ -385,6 +385,7 @@ const DimensionCube: React.FC<{ scale: CubeScale }> = ({ scale }) => {
     const scene = new Scene()
     const camera = new PerspectiveCamera(38, 1, 0.1, 100)
     camera.position.set(3, 2.6, 4.5)
+    camera.lookAt(0, 0, 0)
 
     const ambientLight = new AmbientLight(0xbfffe0, 0.45)
     scene.add(ambientLight)
@@ -398,6 +399,7 @@ const DimensionCube: React.FC<{ scale: CubeScale }> = ({ scale }) => {
     scene.add(rimLight)
 
     const cubeGroup = new Group()
+    cubeGroup.rotation.set(0.4, 0.2, 0)
     cubeGroupRef.current = cubeGroup
     scene.add(cubeGroup)
 
