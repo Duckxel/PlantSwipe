@@ -1530,8 +1530,8 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
         </section>
         )}
 
-    <div className="relative flex flex-wrap items-center gap-3 rounded-[28px] border border-emerald-200/40 bg-gradient-to-br from-emerald-200/60 via-emerald-100/60 to-teal-200/60 p-4 shadow-sm backdrop-blur-md dark:border-emerald-600/35 dark:bg-gradient-to-br dark:from-[#05171a]/92 dark:via-[#0a2434]/90 dark:to-[#0f1d2c]/92 dark:shadow-[0_12px_36px_rgba(13,148,136,0.1)]">
-      <div className="pointer-events-none absolute inset-0 rounded-[28px] bg-[radial-gradient(circle_at_18%_18%,rgba(20,184,166,0.16),transparent_58%),radial-gradient(circle_at_82%_12%,rgba(34,197,94,0.12),transparent_60%)] dark:bg-[radial-gradient(circle_at_22%_22%,rgba(45,212,191,0.1),transparent_53%),radial-gradient(circle_at_80%_18%,rgba(56,189,248,0.1),transparent_58%)]" aria-hidden="true" />
+    <div className="relative flex flex-wrap items-center gap-3 rounded-[28px] border border-emerald-200/40 bg-gradient-to-br from-emerald-200/70 via-sky-100/60 to-teal-100/60 p-4 shadow-sm backdrop-blur-md dark:border-emerald-600/35 dark:bg-gradient-to-br dark:from-[#05171a]/92 dark:via-[#0a2434]/90 dark:to-[#0f1d2c]/92 dark:shadow-[0_12px_36px_rgba(13,148,136,0.1)]">
+      <div className="pointer-events-none absolute inset-0 rounded-[28px] bg-[radial-gradient(circle_at_18%_18%,rgba(56,189,248,0.14),transparent_60%),radial-gradient(circle_at_82%_12%,rgba(16,185,129,0.16),transparent_58%)] dark:bg-[radial-gradient(circle_at_22%_22%,rgba(45,212,191,0.1),transparent_53%),radial-gradient(circle_at_80%_18%,rgba(56,189,248,0.1),transparent_58%)]" aria-hidden="true" />
         {isAdmin && (
           <Button
             variant="destructive"
