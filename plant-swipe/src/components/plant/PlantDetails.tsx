@@ -27,8 +27,6 @@ import {
   YAxis,
   Cell
 } from "recharts";
-import type { TooltipContentProps } from "recharts";
-import type { Payload as RechartsTooltipPayload, NameType, ValueType } from "recharts/types/component/DefaultTooltipContent";
 
 const SECTION_KEY_MAP: Record<string, string> = {
   'Identifiers': 'identifiers',
@@ -212,8 +210,22 @@ const TIMELINE_COLORS: Record<string, string> = {
 
 type SeasonKey = keyof typeof TIMELINE_COLORS;
 type SeasonLabels = Record<SeasonKey, string>;
-type NumericTooltipProps = TooltipContentProps<ValueType, NameType>;
-type NumericTooltipPayload = RechartsTooltipPayload<ValueType, NameType>;
+
+type TooltipValue = number | string | Array<number | string>;
+
+type TooltipPayloadItem = {
+  color?: string;
+  dataKey?: string | number;
+  name?: string | number;
+  value?: TooltipValue;
+  payload?: unknown;
+};
+
+type BaseTooltipProps = {
+  active?: boolean;
+  payload?: TooltipPayloadItem[];
+  label?: string | number;
+} & Record<string, unknown>;
 
 const isSeasonKey = (value: unknown): value is SeasonKey =>
   typeof value === 'string' && value in TIMELINE_COLORS;
@@ -1617,6 +1629,16 @@ type CareChartDatum = {
   description: string
 }
 
+const isCareChartDatum = (value: unknown): value is CareChartDatum => {
+  if (!value || typeof value !== 'object') return false
+  const candidate = value as Partial<CareChartDatum>
+  return (
+    typeof candidate.key === 'string' &&
+    typeof candidate.label === 'string' &&
+    typeof candidate.value === 'number'
+  )
+}
+
 const CareChartSection: React.FC<{ data: CareChartDatum[] }> = ({ data }) => {
   const { t } = useTranslation('common')
   if (!data.length) return null
@@ -1670,11 +1692,11 @@ const CareChartSection: React.FC<{ data: CareChartDatum[] }> = ({ data }) => {
   )
 }
 
-const CareChartTooltip: React.FC<NumericTooltipProps> = ({ active, payload }) => {
-  const tooltipPayload = (payload ?? []) as NumericTooltipPayload[]
-  if (!active || !tooltipPayload.length) return null
-  const entry = tooltipPayload[0]?.payload as CareChartDatum | undefined
-  if (!entry) return null
+const CareChartTooltip: React.FC<BaseTooltipProps> = ({ active, payload }) => {
+  if (!active || !payload || payload.length === 0) return null
+  const rawEntry = payload[0]?.payload
+  if (!isCareChartDatum(rawEntry)) return null
+  const entry = rawEntry
   const percentage = Math.round((entry.value / 5) * 100)
 
   return (
@@ -1733,7 +1755,7 @@ const SeasonalTimeline: React.FC<{ data: SeasonalTimelineEntry[]; planting?: Non
           </ResponsiveContainer>
         </div>
         <div className="mt-5 flex flex-wrap gap-4 text-xs text-emerald-700/80 dark:text-emerald-200/70">
-          {Object.entries(TIMELINE_COLORS).map(([key, color]) => (
+          {(Object.entries(TIMELINE_COLORS) as Array<[SeasonKey, string]>).map(([key, color]) => (
             <span key={key} className="flex items-center gap-2">
               <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
               {seasonLabels[key]}
@@ -1749,14 +1771,13 @@ const SeasonalTimeline: React.FC<{ data: SeasonalTimelineEntry[]; planting?: Non
     )
 }
 
-type SeasonalTooltipProps = NumericTooltipProps & {
+type SeasonalTooltipProps = BaseTooltipProps & {
   labels: SeasonLabels
 }
 
 const SeasonalTooltip: React.FC<SeasonalTooltipProps> = ({ active, payload, label, labels }) => {
-  const tooltipPayload = (payload ?? []) as NumericTooltipPayload[]
-  if (!active) return null
-  const activeSeries = tooltipPayload.filter((item) => item.value)
+  if (!active || !payload) return null
+  const activeSeries = payload.filter((item): item is TooltipPayloadItem => Boolean(item && item.value))
   if (!activeSeries.length) return null
   const resolvedLabel = label ?? ''
 
