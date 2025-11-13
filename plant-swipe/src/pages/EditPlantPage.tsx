@@ -531,7 +531,7 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
 
       const buildExistingData = () => {
         const normalizedColors = normalizeColorList(latestColors)
-        const carePayload: Partial<PlantCare> = {
+        const carePayload: any = {
           ...(latestCare ?? {}),
         }
         if (latestCareSunlight) {
@@ -544,7 +544,7 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
           carePayload.watering = {
             ...(carePayload.watering ?? {}),
             interval: {
-              ...((carePayload.watering as any)?.interval ?? {}),
+              ...((carePayload.watering ?? {}).interval ?? {}),
               value: latestWaterFreqAmount,
               unit: latestWaterFreqPeriod,
             },
