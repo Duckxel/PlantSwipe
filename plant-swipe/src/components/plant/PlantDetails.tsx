@@ -215,9 +215,9 @@ const TIMELINE_COLORS: Record<string, string> = {
 const DIMENSION_CUBE_STYLE_ID = 'dimension-cube-styles'
 const DIMENSION_CUBE_STYLES = `
 @keyframes dimensionCubeRotate {
-  0% { transform: rotateX(-24deg) rotateY(24deg); }
-  50% { transform: rotateX(-24deg) rotateY(204deg); }
-  100% { transform: rotateX(-24deg) rotateY(384deg); }
+  0% { transform: rotateX(-24deg) rotateY(16deg); }
+  50% { transform: rotateX(-24deg) rotateY(196deg); }
+  100% { transform: rotateX(-24deg) rotateY(376deg); }
 }
 .dimension-cube-scene {
   position: relative;
@@ -239,22 +239,30 @@ const DIMENSION_CUBE_STYLES = `
   width: 120px;
   height: 120px;
   transform-style: preserve-3d;
-  animation: dimensionCubeRotate 24s linear infinite;
-  filter: drop-shadow(0 18px 24px rgba(16,185,129,0.18));
+  animation: dimensionCubeRotate 48s linear infinite;
+  filter: drop-shadow(0 18px 26px rgba(16,185,129,0.22));
 }
 .dimension-cube-face {
   position: absolute;
   inset: 0;
-  border: 1px solid rgba(16,185,129,0.65);
-  background: linear-gradient(145deg, rgba(16,185,129,0.18), rgba(16,185,129,0.05));
-  backdrop-filter: blur(1.5px);
+  border: 2px solid rgba(16,185,129,0.72);
+  background: linear-gradient(155deg, rgba(16,185,129,0.18), rgba(16,185,129,0.04));
+  box-shadow: inset 0 0 18px rgba(15,118,110,0.32);
+  backdrop-filter: blur(1.2px);
 }
 .dimension-cube-face::after {
   content: "";
   position: absolute;
   inset: 0;
-  border: 1px solid rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.18);
   mix-blend-mode: screen;
+}
+.dimension-cube-face::before {
+  content: "";
+  position: absolute;
+  inset: 14%;
+  border: 1px dashed rgba(16,185,129,0.45);
+  filter: blur(0.2px);
 }
 .dimension-cube-face--front { transform: translateZ(60px); }
 .dimension-cube-face--back { transform: rotateY(180deg) translateZ(60px); }
@@ -270,7 +278,7 @@ const DIMENSION_CUBE_STYLES = `
   filter: blur(30px);
 }
 @media (prefers-reduced-motion: reduce) {
-  .dimension-cube { animation: none; transform: rotateX(-24deg) rotateY(32deg); }
+  .dimension-cube { animation: none; transform: rotateX(-24deg) rotateY(24deg); }
 }
 `
 
@@ -410,16 +418,11 @@ const DimensionVisualizer: React.FC<{ dimensions: Partial<PlantDimensions> }> = 
   }, [])
 
   const heightCandidate = parsePositiveNumber(dimensions.height?.maxCm ?? dimensions.height?.minCm)
-  const widthCandidate = parsePositiveNumber(
-    dimensions.spread?.maxCm ?? dimensions.spread?.minCm ?? dimensions.spacing?.plantCm
-  )
-  const depthCandidate = (() => {
-    const row = parsePositiveNumber(dimensions.spacing?.rowCm)
-    if (row) return row
-    const plant = parsePositiveNumber(dimensions.spacing?.plantCm)
-    if (plant) return plant
-    return parsePositiveNumber(dimensions.spread?.minCm ?? dimensions.spread?.maxCm)
-  })()
+  const spreadCandidate = parsePositiveNumber(dimensions.spread?.maxCm ?? dimensions.spread?.minCm)
+  const spacingCandidate = parsePositiveNumber(dimensions.spacing?.plantCm ?? dimensions.spacing?.rowCm)
+
+  const widthCandidate = spreadCandidate ?? spacingCandidate ?? heightCandidate
+  const depthCandidate = spreadCandidate ?? spacingCandidate ?? heightCandidate
 
   const available = [heightCandidate, widthCandidate, depthCandidate].filter(
     (v): v is number => typeof v === 'number'
@@ -442,28 +445,28 @@ const DimensionVisualizer: React.FC<{ dimensions: Partial<PlantDimensions> }> = 
     transform: `scale3d(${scaleX.toFixed(3)}, ${scaleY.toFixed(3)}, ${scaleZ.toFixed(3)})`,
   }
 
-  const baseSpacingLabel = t('plantInfo.labels.spacing', { defaultValue: 'Spacing' })
-  const spacingDescriptor = dimensions.spacing?.rowCm
-    ? `${baseSpacingLabel} (Row)`
-    : dimensions.spacing?.plantCm
-    ? `${baseSpacingLabel} (Plant)`
-    : baseSpacingLabel
+  const axisSpreadLabel = t('plantInfo.labels.spread', { defaultValue: 'Spread' })
+  const heightLabel = t('plantInfo.labels.height', { defaultValue: 'Height' })
+
+  const usingSpacingFallback = !spreadCandidate && !!spacingCandidate
+
+  const spreadLegendValue = spreadCandidate ?? spacingCandidate ?? resolvedWidth
 
   const legendItems = [
     {
       key: 'height',
-      label: t('plantInfo.labels.height', { defaultValue: 'Height' }),
+      label: `${heightLabel} (Y axis)`,
       value: formatDimensionValue(resolvedHeight),
     },
     {
       key: 'width',
-      label: t('plantInfo.labels.spread', { defaultValue: 'Spread' }),
-      value: formatDimensionValue(resolvedWidth),
+      label: `${axisSpreadLabel} (X axis)`,
+      value: formatDimensionValue(spreadLegendValue),
     },
     {
       key: 'depth',
-      label: spacingDescriptor,
-      value: formatDimensionValue(resolvedDepth),
+      label: `${axisSpreadLabel} (Z axis)`,
+      value: formatDimensionValue(spreadLegendValue),
     },
   ]
 
@@ -506,7 +509,9 @@ const DimensionVisualizer: React.FC<{ dimensions: Partial<PlantDimensions> }> = 
           </div>
           <div className="text-[11px] text-stone-500 dark:text-stone-400">
             {t('plantInfo.labels.dimensionReference', {
-              defaultValue: 'Scaled from recorded dimensions. Largest edge: {{value}} cm.',
+              defaultValue: usingSpacingFallback
+                ? 'Scaled from recorded dimensions (height → Y, spread/spacing → X & Z). Largest edge: {{value}} cm.'
+                : 'Scaled from recorded dimensions (height → Y, spread → X & Z). Largest edge: {{value}} cm.',
               value: Math.round(maxDimension),
             })}
           </div>
