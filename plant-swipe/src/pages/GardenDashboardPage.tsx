@@ -1865,7 +1865,7 @@ export const GardenDashboardPage: React.FC = () => {
               )} />
               <Route path="" element={<Navigate to={`overview`} replace />} />
               <Route path="*" element={<Navigate to={`overview`} replace />} />
-            </Routes>
+              </Routes>
           </main>
           
           {/* Tasks sidebar removed per requirement: tasks now on Garden list page */}
