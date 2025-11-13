@@ -746,13 +746,13 @@ async function generateFieldData(options) {
 
   if (fieldKey === 'meta') {
     promptSections.push(
-      'When providing symbolic or cultural meaning (e.g., funFact), write one or two concise sentences (under 45 words total). Focus exclusively on symbolism and cultural meanings, highlighting how specific cultures interpret the plant. Avoid general trivia, care tips, bullet lists, or markdown.'
+      'When filling meta.funFact, write one or two concise sentences (under 40 words total) that share a distinct trivia, historical note, or surprising usage. Do not repeat symbolism information covered in the meaning field. Avoid lists, markdown, or restating care guidance.'
     )
   }
 
   if (fieldKey === 'meaning') {
     promptSections.push(
-      'Provide one or two concise sentences (under 45 words total) that describe the plant’s symbolism across cultures. Mention the cultures explicitly when possible and avoid care advice, botanical facts, or non-symbolic trivia. Do not use bullet lists or markdown.'
+      'Return a single string with two or three short lines (under 45 words total). Each line must name a culture or region, followed by its symbolic interpretation of the plant using the format "Culture – meaning". Do not include bullet characters, markdown, care tips, or botanical details.'
     )
   }
 
