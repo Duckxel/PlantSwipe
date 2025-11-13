@@ -1,6 +1,22 @@
 import React from "react";
 import { motion } from "framer-motion";
-import * as THREE from "three";
+import {
+  AmbientLight,
+  BoxGeometry,
+  CircleGeometry,
+  DirectionalLight,
+  EdgesGeometry,
+  LineBasicMaterial,
+  LineSegments,
+  Material,
+  Mesh,
+  MeshBasicMaterial,
+  MeshStandardMaterial,
+  PerspectiveCamera,
+  PointLight,
+  Scene,
+  WebGLRenderer,
+} from "three";
 import { useLanguageNavigate, useLanguage } from "@/lib/i18nRouting";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -351,47 +367,47 @@ const DimensionCube: React.FC<{ scale: CubeScale }> = ({ scale }) => {
     const container = containerRef.current
     if (!container) return
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
+    const renderer = new WebGLRenderer({ antialias: true, alpha: true })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio ?? 1, 2))
     container.appendChild(renderer.domElement)
 
-    const scene = new THREE.Scene()
-    const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100)
+    const scene = new Scene()
+    const camera = new PerspectiveCamera(38, 1, 0.1, 100)
     camera.position.set(3, 2.6, 4.5)
 
-    const ambientLight = new THREE.AmbientLight(0xbfffe0, 0.45)
+    const ambientLight = new AmbientLight(0xbfffe0, 0.45)
     scene.add(ambientLight)
 
-    const keyLight = new THREE.DirectionalLight(0xffffff, 0.85)
+    const keyLight = new DirectionalLight(0xffffff, 0.85)
     keyLight.position.set(4, 6, 5)
     scene.add(keyLight)
 
-    const rimLight = new THREE.PointLight(0x34d399, 0.8, 18, 2)
+    const rimLight = new PointLight(0x34d399, 0.8, 18, 2)
     rimLight.position.set(-3, -2, -6)
     scene.add(rimLight)
 
-    const geometry = new THREE.BoxGeometry(1, 1, 1)
-    const faceMaterials: THREE.Material[] = [
-      new THREE.MeshStandardMaterial({ color: 0x1ecad5, emissive: 0x0f766e, transparent: true, opacity: 0.9, metalness: 0.35, roughness: 0.25 }),
-      new THREE.MeshStandardMaterial({ color: 0x34d399, emissive: 0x065f46, transparent: true, opacity: 0.85, metalness: 0.3, roughness: 0.35 }),
-      new THREE.MeshStandardMaterial({ color: 0xecfdf5, emissive: 0x1f2937, transparent: true, opacity: 0.92, metalness: 0.2, roughness: 0.4 }),
-      new THREE.MeshStandardMaterial({ color: 0x0f766e, emissive: 0x052e2b, transparent: true, opacity: 0.9, metalness: 0.3, roughness: 0.5 }),
-      new THREE.MeshStandardMaterial({ color: 0x2563eb, emissive: 0x0f172a, transparent: true, opacity: 0.88, metalness: 0.35, roughness: 0.3 }),
-      new THREE.MeshStandardMaterial({ color: 0x059669, emissive: 0x064e3b, transparent: true, opacity: 0.88, metalness: 0.3, roughness: 0.35 }),
+    const geometry = new BoxGeometry(1, 1, 1)
+    const faceMaterials: Material[] = [
+      new MeshStandardMaterial({ color: 0x1ecad5, emissive: 0x0f766e, transparent: true, opacity: 0.9, metalness: 0.35, roughness: 0.25 }),
+      new MeshStandardMaterial({ color: 0x34d399, emissive: 0x065f46, transparent: true, opacity: 0.85, metalness: 0.3, roughness: 0.35 }),
+      new MeshStandardMaterial({ color: 0xecfdf5, emissive: 0x1f2937, transparent: true, opacity: 0.92, metalness: 0.2, roughness: 0.4 }),
+      new MeshStandardMaterial({ color: 0x0f766e, emissive: 0x052e2b, transparent: true, opacity: 0.9, metalness: 0.3, roughness: 0.5 }),
+      new MeshStandardMaterial({ color: 0x2563eb, emissive: 0x0f172a, transparent: true, opacity: 0.88, metalness: 0.35, roughness: 0.3 }),
+      new MeshStandardMaterial({ color: 0x059669, emissive: 0x064e3b, transparent: true, opacity: 0.88, metalness: 0.3, roughness: 0.35 }),
     ]
 
-    const cube = new THREE.Mesh(geometry, faceMaterials)
+    const cube = new Mesh(geometry, faceMaterials)
     cube.rotation.x = -0.35
     scene.add(cube)
 
-    const wireGeometry = new THREE.EdgesGeometry(geometry)
-    const wireMaterial = new THREE.LineBasicMaterial({ color: 0xf0fdf4, transparent: true, opacity: 0.45 })
-    const edges = new THREE.LineSegments(wireGeometry, wireMaterial)
+    const wireGeometry = new EdgesGeometry(geometry)
+    const wireMaterial = new LineBasicMaterial({ color: 0xf0fdf4, transparent: true, opacity: 0.45 })
+    const edges = new LineSegments(wireGeometry, wireMaterial)
     cube.add(edges)
 
-    const glowGeometry = new THREE.CircleGeometry(1.8, 64)
-    const glowMaterial = new THREE.MeshBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.3 })
-    const glow = new THREE.Mesh(glowGeometry, glowMaterial)
+    const glowGeometry = new CircleGeometry(1.8, 64)
+    const glowMaterial = new MeshBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.3 })
+    const glow = new Mesh(glowGeometry, glowMaterial)
     glow.rotation.x = -Math.PI / 2
     glow.position.y = -1.25
     scene.add(glow)
