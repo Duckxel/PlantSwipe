@@ -746,7 +746,13 @@ async function generateFieldData(options) {
 
   if (fieldKey === 'meta') {
     promptSections.push(
-      'When providing symbolic or cultural meaning (e.g., funFact), write one to three complete sentences that explore symbolism, traditions, or memorable stories about the plant. Keep the tone rich and informative, aim for roughly 60–150 words overall, and avoid bullet lists or markdown.'
+      'When providing symbolic or cultural meaning (e.g., funFact), write one or two concise sentences (under 45 words total). Focus exclusively on symbolism and cultural meanings, highlighting how specific cultures interpret the plant. Avoid general trivia, care tips, bullet lists, or markdown.'
+    )
+  }
+
+  if (fieldKey === 'meaning') {
+    promptSections.push(
+      'Provide one or two concise sentences (under 45 words total) that describe the plant’s symbolism across cultures. Mention the cultures explicitly when possible and avoid care advice, botanical facts, or non-symbolic trivia. Do not use bullet lists or markdown.'
     )
   }
 
