@@ -9,7 +9,7 @@ import {
   Info, Flower2, Ruler, Calendar, MapPin, Thermometer, Wind, Sprout,
   Scissors, Droplet, Package, Bug, AlertTriangle, Tag, BookOpen,
   Globe, Shield, AlertCircle, Users, Sparkles, FileText, Home,
-  BarChart3, Palette, Compass, Map as MapIcon, Pencil, Trash2
+  BarChart3, Palette, Compass, Map as MapIcon, Pencil, Trash2, ChevronDown, ChevronUp
 } from "lucide-react";
 import type { Plant } from "@/types/plant";
 import { rarityTone, seasonBadge } from "@/constants/badges";
@@ -269,6 +269,8 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
   const { t } = useTranslation('common')
   const [shareSuccess, setShareSuccess] = React.useState(false)
   const shareTimeoutRef = React.useRef<number | null>(null)
+  const [isDescriptionExpanded, setIsDescriptionExpanded] = React.useState(false)
+  const [isMeaningExpanded, setIsMeaningExpanded] = React.useState(false)
   const showShareSuccess = React.useCallback(() => {
     setShareSuccess(true)
     if (shareTimeoutRef.current !== null) {
@@ -848,13 +850,61 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
                 </CardTitle>
               </CardHeader>
               <CardContent className="text-sm text-center leading-relaxed">
-                {plant.meaning}
+                <div className={cn(
+                  "overflow-hidden transition-all duration-300",
+                  isMeaningExpanded ? "max-h-none" : "max-h-20"
+                )}>
+                  {plant.meaning}
+                </div>
+                {plant.meaning.length > 150 && (
+                  <button
+                    onClick={() => setIsMeaningExpanded(!isMeaningExpanded)}
+                    className="mt-2 mx-auto flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-300"
+                    type="button"
+                  >
+                    {isMeaningExpanded ? (
+                      <>
+                        <ChevronUp className="h-3 w-3" />
+                        {t('common.showLess', { defaultValue: 'Show Less' })}
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown className="h-3 w-3" />
+                        {t('common.showMore', { defaultValue: 'Show More' })}
+                      </>
+                    )}
+                  </button>
+                )}
               </CardContent>
             </Card>
           )}
           {plant.description && (
             <div className="rounded-2xl bg-white/85 px-4 py-3 text-sm leading-relaxed text-stone-700 shadow-sm dark:bg-[#1e262f]/80 dark:text-stone-200">
-              {plant.description}
+              <div className={cn(
+                "overflow-hidden transition-all duration-300",
+                isDescriptionExpanded ? "max-h-none" : "max-h-24"
+              )}>
+                {plant.description}
+              </div>
+              {plant.description.length > 200 && (
+                <button
+                  onClick={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
+                  className="mt-2 flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-300"
+                  type="button"
+                >
+                  {isDescriptionExpanded ? (
+                    <>
+                      <ChevronUp className="h-3 w-3" />
+                      {t('common.showLess', { defaultValue: 'Show Less' })}
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="h-3 w-3" />
+                      {t('common.showMore', { defaultValue: 'Show More' })}
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           )}
           {renderQuickStats(compactStats, 'sm:grid-cols-3')}
@@ -924,17 +974,69 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
                 )}
               </div>
               {plant.meaning && (
-                <div className="flex items-start gap-3 rounded-2xl bg-white/65 px-4 py-3 text-sm leading-relaxed text-emerald-900 shadow-sm backdrop-blur-md dark:bg-slate-900/50 dark:text-emerald-100">
-                  <span className="mt-0.5 rounded-full bg-emerald-500/20 p-2 text-emerald-600 dark:text-emerald-200">
-                    <Sparkles className="h-4 w-4" />
-                  </span>
-                  <span>{plant.meaning}</span>
+                <div className="rounded-2xl bg-white/65 px-4 py-3 text-sm leading-relaxed text-emerald-900 shadow-sm backdrop-blur-md dark:bg-slate-900/50 dark:text-emerald-100">
+                  <button
+                    onClick={() => setIsMeaningExpanded(!isMeaningExpanded)}
+                    className="flex w-full items-start gap-3 text-left"
+                    type="button"
+                  >
+                    <span className="mt-0.5 flex-shrink-0 rounded-full bg-emerald-500/20 p-2 text-emerald-600 dark:text-emerald-200">
+                      <Sparkles className="h-4 w-4" />
+                    </span>
+                    <div className="flex-1">
+                      <div className={cn(
+                        "overflow-hidden transition-all duration-300",
+                        isMeaningExpanded ? "max-h-none" : "max-h-20"
+                      )}>
+                        <span>{plant.meaning}</span>
+                      </div>
+                      {plant.meaning.length > 150 && (
+                        <div className="mt-2 flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-300">
+                          {isMeaningExpanded ? (
+                            <>
+                              <ChevronUp className="h-3 w-3" />
+                              {t('common.showLess', { defaultValue: 'Show Less' })}
+                            </>
+                          ) : (
+                            <>
+                              <ChevronDown className="h-3 w-3" />
+                              {t('common.showMore', { defaultValue: 'Show More' })}
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </button>
                 </div>
               )}
               {plant.description && (
-                <p className="max-w-2xl text-sm leading-relaxed text-emerald-900/90 md:text-base dark:text-emerald-100/80">
-                  {plant.description}
-                </p>
+                <div className="max-w-2xl">
+                  <div className={cn(
+                    "text-sm leading-relaxed text-emerald-900/90 md:text-base dark:text-emerald-100/80 overflow-hidden transition-all duration-300",
+                    isDescriptionExpanded ? "max-h-none" : "max-h-24"
+                  )}>
+                    {plant.description}
+                  </div>
+                  {plant.description.length > 200 && (
+                    <button
+                      onClick={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
+                      className="mt-2 flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-300"
+                      type="button"
+                    >
+                      {isDescriptionExpanded ? (
+                        <>
+                          <ChevronUp className="h-3 w-3" />
+                          {t('common.showLess', { defaultValue: 'Show Less' })}
+                        </>
+                      ) : (
+                        <>
+                          <ChevronDown className="h-3 w-3" />
+                          {t('common.showMore', { defaultValue: 'Show More' })}
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
               )}
               {(seasons.length > 0 || colors.length > 0) && (
                 <div className="flex flex-wrap gap-2">
@@ -1542,8 +1644,8 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
         </section>
         )}
 
-    <div className="relative flex flex-wrap items-center gap-3 rounded-[28px] border border-emerald-200/40 bg-gradient-to-br from-emerald-500/70 via-emerald-600/60 to-emerald-700/60 p-4 shadow-sm backdrop-blur-md dark:border-emerald-600/35 dark:bg-gradient-to-br dark:from-[#05171a]/92 dark:via-[#0a2434]/90 dark:to-[#0f1d2c]/92 dark:shadow-[0_12px_36px_rgba(13,148,136,0.1)]">
-      <div className="pointer-events-none absolute inset-0 rounded-[28px] bg-[radial-gradient(circle_at_18%_18%,rgba(56,189,248,0.14),transparent_60%),radial-gradient(circle_at_82%_12%,rgba(16,185,129,0.16),transparent_58%)] dark:bg-[radial-gradient(circle_at_22%_22%,rgba(45,212,191,0.1),transparent_53%),radial-gradient(circle_at_80%_18%,rgba(56,189,248,0.1),transparent_58%)]" aria-hidden="true" />
+    <div className="relative flex flex-wrap items-center gap-3 rounded-[28px] border border-emerald-200/40 bg-white/90 p-4 shadow-md backdrop-blur-md dark:border-emerald-600/30 dark:bg-gradient-to-br dark:from-[#07191d]/90 dark:via-[#0b2334]/88 dark:to-[#111c2f]/90 dark:shadow-[0_20px_60px_rgba(13,148,136,0.16)]">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_16%_18%,rgba(16,185,129,0.14),transparent_58%),radial-gradient(circle_at_82%_10%,rgba(56,189,248,0.12),transparent_62%)] dark:bg-[radial-gradient(circle_at_18%_22%,rgba(45,212,191,0.12),transparent_58%),radial-gradient(circle_at_80%_12%,rgba(59,130,246,0.14),transparent_60%)]" aria-hidden="true" />
         {isAdmin && (
           <Button
             variant="destructive"
