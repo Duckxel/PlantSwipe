@@ -9,7 +9,7 @@ import {
   Info, Flower2, Ruler, Calendar, MapPin, Thermometer, Wind, Sprout,
   Scissors, Droplet, Package, Bug, AlertTriangle, Tag, BookOpen,
   Globe, Shield, AlertCircle, Users, Sparkles, FileText, Home,
-  BarChart3, Palette, Compass, Map as MapIcon, Pencil, Trash2
+  BarChart3, Palette, Compass, Map as MapIcon, Pencil, Trash2, ChevronDown, ChevronUp
 } from "lucide-react";
 import type { Plant } from "@/types/plant";
 import { rarityTone, seasonBadge } from "@/constants/badges";
@@ -848,13 +848,13 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
                 </CardTitle>
               </CardHeader>
               <CardContent className="text-sm text-center leading-relaxed">
-                {plant.meaning}
+                <CollapsibleText text={plant.meaning} maxLength={200} />
               </CardContent>
             </Card>
           )}
           {plant.description && (
             <div className="rounded-2xl bg-white/85 px-4 py-3 text-sm leading-relaxed text-stone-700 shadow-sm dark:bg-[#1e262f]/80 dark:text-stone-200">
-              {plant.description}
+              <CollapsibleText text={plant.description} maxLength={300} />
             </div>
           )}
           {renderQuickStats(compactStats, 'sm:grid-cols-3')}
@@ -928,13 +928,15 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
                   <span className="mt-0.5 rounded-full bg-emerald-500/20 p-2 text-emerald-600 dark:text-emerald-200">
                     <Sparkles className="h-4 w-4" />
                   </span>
-                  <span>{plant.meaning}</span>
+                  <div className="flex-1">
+                    <CollapsibleText text={plant.meaning} maxLength={200} />
+                  </div>
                 </div>
               )}
               {plant.description && (
-                <p className="max-w-2xl text-sm leading-relaxed text-emerald-900/90 md:text-base dark:text-emerald-100/80">
-                  {plant.description}
-                </p>
+                <div className="max-w-2xl text-sm leading-relaxed text-emerald-900/90 md:text-base dark:text-emerald-100/80">
+                  <CollapsibleText text={plant.description} maxLength={300} />
+                </div>
               )}
               {(seasons.length > 0 || colors.length > 0) && (
                 <div className="flex flex-wrap gap-2">
@@ -1066,7 +1068,9 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
                     <Sparkles className="h-4 w-4" />
                     {t('plantInfo.symbolism', { defaultValue: 'Meaning & Symbolism' })}
                   </div>
-                  <div className="text-base leading-relaxed">{plant.meaning}</div>
+                  <div className="text-base leading-relaxed">
+                    <CollapsibleText text={plant.meaning} maxLength={200} />
+                  </div>
                 </div>
               )}
               <div className="relative z-10 mt-5 flex flex-wrap gap-2">
@@ -2004,8 +2008,8 @@ const InfoSection = ({ title, icon, children }: { title: string; icon: React.Rea
   const key = SECTION_KEY_MAP[title]
   const translatedTitle = key ? t(`plantInfo.sections.${key}`, { defaultValue: title }) : title
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-stone-200 bg-white p-4 shadow-sm space-y-3 dark:border-emerald-700/40 dark:bg-gradient-to-br dark:from-[#0b1f1a]/80 dark:via-[#0c2733]/85 dark:to-[#14233b]/80 dark:shadow-[0_6px_22px_rgba(6,182,212,0.1)] dark:ring-1 dark:ring-emerald-500/12">
-      <div className="flex items-center gap-3 text-base font-semibold text-stone-800 dark:text-stone-200">
+    <div className="relative overflow-hidden rounded-2xl border border-emerald-200/40 bg-gradient-to-br from-sky-100/80 via-white/80 to-emerald-100/80 p-4 shadow-sm space-y-3 dark:border-emerald-600/40 dark:bg-gradient-to-br dark:from-[#03191b]/90 dark:via-[#04263d]/85 dark:to-[#071321]/90 dark:shadow-[0_6px_22px_rgba(14,165,233,0.1)]">
+      <div className="flex items-center gap-3 text-base font-semibold text-emerald-800 dark:text-emerald-200">
         <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-green-500 to-emerald-600 dark:from-[#10b981] dark:via-[#0ea5e9] dark:to-[#6366f1] dark:shadow-[0_12px_28px_rgba(56,189,248,0.35)] flex items-center justify-center text-white shadow">
           {icon}
         </div>
@@ -2041,4 +2045,37 @@ const formatMonths = (months: number[], t: (key: string, options?: Record<string
     .filter(Boolean)
     .map(key => t(`plantInfo.monthsShort.${key}`, { defaultValue: key?.toUpperCase?.() }))
     .join(', ')
+}
+
+const CollapsibleText: React.FC<{ text: string; maxLength?: number; className?: string }> = ({ text, maxLength = 300, className = '' }) => {
+  const [isExpanded, setIsExpanded] = React.useState(false)
+  const shouldCollapse = text.length > maxLength
+  const displayText = shouldCollapse && !isExpanded ? text.slice(0, maxLength) + '...' : text
+
+  if (!shouldCollapse) {
+    return <div className={className}>{text}</div>
+  }
+
+  return (
+    <div className={className}>
+      <div className="whitespace-pre-wrap">{displayText}</div>
+      <button
+        type="button"
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="mt-2 flex items-center gap-1 text-sm font-medium text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 transition-colors"
+      >
+        {isExpanded ? (
+          <>
+            <ChevronUp className="h-4 w-4" />
+            Show Less
+          </>
+        ) : (
+          <>
+            <ChevronDown className="h-4 w-4" />
+            Show More
+          </>
+        )}
+      </button>
+    </div>
+  )
 }
