@@ -15,7 +15,6 @@ import {
   PointLight,
   Scene,
   SphereGeometry,
-  TorusGeometry,
   WebGLRenderer,
 } from "three";
 import { useLanguageNavigate, useLanguage } from "@/lib/i18nRouting";
@@ -385,8 +384,8 @@ const DimensionCube: React.FC<{ scale: CubeScale }> = ({ scale }) => {
 
     const scene = new Scene()
     const camera = new PerspectiveCamera(38, 1, 0.1, 100)
-    camera.position.set(3.8, 2.6, 3.2)
-    camera.lookAt(0, 0.15, 0)
+    camera.position.set(3.2, 2.3, 3.2)
+    camera.lookAt(0, 0.05, 0)
 
     const ambientLight = new AmbientLight(0xbfffe0, 0.45)
     scene.add(ambientLight)
@@ -400,7 +399,7 @@ const DimensionCube: React.FC<{ scale: CubeScale }> = ({ scale }) => {
     scene.add(rimLight)
 
     const cubeGroup = new Group()
-    cubeGroup.rotation.set(0.45, 0, 0)
+    cubeGroup.rotation.set(0.32, 0, 0)
     cubeGroupRef.current = cubeGroup
     scene.add(cubeGroup)
 
@@ -431,15 +430,6 @@ const DimensionCube: React.FC<{ scale: CubeScale }> = ({ scale }) => {
     const innerWireMaterial = new LineBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.8 })
     cubeGroup.add(new LineSegments(innerWireGeometry, innerWireMaterial))
     disposables.push(innerGeometry, innerWireGeometry, innerWireMaterial)
-    
-    const accentRingGeometry = new TorusGeometry(1.02, 0.01, 10, 80)
-    const accentRingMaterial = new MeshBasicMaterial({ color: 0x14f0c2, transparent: true, opacity: 0.35 })
-    const accentRing = new Mesh(accentRingGeometry, accentRingMaterial)
-    accentRing.rotation.x = Math.PI / 2
-    accentRing.position.y = -0.52
-    scene.add(accentRing)
-    disposables.push(accentRingGeometry, accentRingMaterial)
-
     const cornerGeometry = new SphereGeometry(0.05, 16, 16)
     const cornerMaterial = new MeshBasicMaterial({ color: 0xa7f3d0, transparent: true, opacity: 0.9 })
     disposables.push(cornerGeometry, cornerMaterial)
