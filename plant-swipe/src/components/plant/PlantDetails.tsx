@@ -1,4 +1,5 @@
 import React from "react";
+import { motion } from "framer-motion";
 import { useLanguageNavigate, useLanguage } from "@/lib/i18nRouting";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,7 +10,7 @@ import {
   Info, Flower2, Ruler, Calendar, MapPin, Thermometer, Wind, Sprout,
   Scissors, Droplet, Package, Bug, AlertTriangle, Tag, BookOpen,
   Globe, Shield, AlertCircle, Users, Sparkles, FileText, Home,
-  BarChart3, Palette, Compass, Map as MapIcon, Pencil, Trash2
+  BarChart3, Palette, Compass, Map as MapIcon, Pencil, Trash2, ChevronDown, ChevronUp
 } from "lucide-react";
 import type { Plant } from "@/types/plant";
 import { rarityTone, seasonBadge } from "@/constants/badges";
@@ -776,16 +777,23 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
   }, [isImageFullScreen])
 
   const renderQuickStats = (stats: typeof quickStats, columns = 'sm:grid-cols-2 xl:grid-cols-4') => (
-    <div className={cn('grid gap-3', columns)}>
+    <div className={cn('grid gap-4', columns)}>
       {stats.map(({ key, icon, label, value, sub }, index) => (
-        <Fact
+        <motion.div
           key={key}
-          icon={icon}
-          label={label}
-          value={value}
-          sub={sub}
-          accentClass={FACT_ACCENTS[index % FACT_ACCENTS.length]}
-        />
+          initial={{ opacity: 0, y: 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.1 }}
+          transition={{ delay: index * 0.08, duration: 0.4 }}
+        >
+          <Fact
+            icon={icon}
+            label={label}
+            value={value}
+            sub={sub}
+            accentClass={FACT_ACCENTS[index % FACT_ACCENTS.length]}
+          />
+        </motion.div>
       ))}
     </div>
   )
@@ -793,8 +801,18 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
   if (isOverlayMode) {
     const compactStats = quickStats.slice(0, 3)
     return (
-      <div className="space-y-5 select-none">
-        <div className="flex items-center justify-end gap-2">
+      <>
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `
+              [data-radix-dialog-content] > button[data-radix-dialog-close] {
+                display: none !important;
+              }
+            `
+          }}
+        />
+        <div className="space-y-5 select-none">
+          <div className="flex items-center justify-end gap-2">
           {isAdmin && (
             <>
               <button
@@ -821,10 +839,19 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
             onClick={handleExpand}
             type="button"
             aria-label="Expand to full page"
-            className="h-9 w-9 rounded-full flex items-center justify-center border bg-white/90 dark:bg-[#2d2d30] dark:border-[#3e3e42] text-black dark:text-white hover:bg-white dark:hover:bg-[#3e3e42] transition shadow-sm"
+            className="h-9 w-9 rounded-full flex items-center justify-center border bg-white/90 dark:bg-[#2d2d30] dark:border-[#3e3e42] text-black dark:text-white hover:bg-white dark:hover:bg-[#3e3e42] transition shadow-sm hover:-translate-y-0.5"
             title="Expand to full page"
           >
             <Maximize2 className="h-4 w-4" />
+          </button>
+          <button
+            onClick={onClose}
+            type="button"
+            aria-label={t('common.close')}
+            title={t('common.close')}
+            className="h-9 w-9 rounded-full flex items-center justify-center border border-stone-300/30 bg-white/90 text-stone-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-white dark:border-stone-600/30 dark:bg-[#2d2d30] dark:text-stone-300 dark:hover:bg-[#3e3e42]"
+          >
+            <X className="h-4 w-4" />
           </button>
         </div>
         <div className="space-y-4">
@@ -848,13 +875,13 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
                 </CardTitle>
               </CardHeader>
               <CardContent className="text-sm text-center leading-relaxed">
-                {plant.meaning}
+                <CollapsibleText text={plant.meaning} maxLength={200} />
               </CardContent>
             </Card>
           )}
           {plant.description && (
             <div className="rounded-2xl bg-white/85 px-4 py-3 text-sm leading-relaxed text-stone-700 shadow-sm dark:bg-[#1e262f]/80 dark:text-stone-200">
-              {plant.description}
+              <CollapsibleText text={plant.description} maxLength={300} />
             </div>
           )}
           {renderQuickStats(compactStats, 'sm:grid-cols-3')}
@@ -881,16 +908,21 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
             {t('common.close')}
           </Button>
         </div>
-      </div>
+        </div>
+      </>
     )
   }
 
     return (
       <div className="space-y-10 select-none">
-        <section className="relative overflow-hidden rounded-[32px] border border-emerald-300/40 bg-gradient-to-br from-emerald-200/70 via-lime-100/60 to-sky-100/70 p-6 shadow-xl dark:border-emerald-500/30 dark:from-[#031e20]/95 dark:via-[#062a3b]/92 dark:to-[#0c1320]/95 dark:shadow-[0_20px_70px_rgba(8,145,178,0.12)] md:p-10">
-          <div className="pointer-events-none absolute -top-24 -left-24 h-64 w-64 rounded-full bg-emerald-400/35 blur-3xl sm:h-72 sm:w-72 dark:bg-[#0f766e]/18" aria-hidden="true" />
-          <div className="pointer-events-none absolute -bottom-32 -right-16 h-72 w-72 rounded-full bg-amber-200/40 blur-3xl md:h-96 md:w-[28rem] dark:bg-[#1f3b57]/18" aria-hidden="true" />
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.45),transparent_55%),radial-gradient(circle_at_80%_10%,rgba(14,165,233,0.25),transparent_60%)] dark:bg-[radial-gradient(circle_at_18%_18%,rgba(34,197,94,0.08),transparent_50%),radial-gradient(circle_at_82%_12%,rgba(14,165,233,0.1),transparent_56%),radial-gradient(circle_at_45%_82%,rgba(196,181,253,0.06),transparent_68%)]" aria-hidden="true" />
+        <motion.section
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
+          className="relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50 via-white to-stone-100 dark:from-[#252526] dark:via-[#1e1e1e] dark:to-[#171717] p-6 md:p-10"
+        >
+          <div className="absolute -right-24 -top-24 h-64 w-64 rounded-full bg-emerald-200/40 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
+          <div className="absolute -left-16 bottom-[-30%] h-72 w-72 rounded-full bg-emerald-100/50 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
           <div className="relative z-10 grid gap-10 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
             <div className="space-y-6">
               <div className="flex flex-wrap items-center gap-3 text-sm font-semibold text-emerald-800/80 dark:text-emerald-200/80">
@@ -928,13 +960,15 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
                   <span className="mt-0.5 rounded-full bg-emerald-500/20 p-2 text-emerald-600 dark:text-emerald-200">
                     <Sparkles className="h-4 w-4" />
                   </span>
-                  <span>{plant.meaning}</span>
+                  <div className="flex-1">
+                    <CollapsibleText text={plant.meaning} maxLength={200} />
+                  </div>
                 </div>
               )}
               {plant.description && (
-                <p className="max-w-2xl text-sm leading-relaxed text-emerald-900/90 md:text-base dark:text-emerald-100/80">
-                  {plant.description}
-                </p>
+                <div className="max-w-2xl text-sm leading-relaxed text-emerald-900/90 md:text-base dark:text-emerald-100/80">
+                  <CollapsibleText text={plant.description} maxLength={300} />
+                </div>
               )}
               {(seasons.length > 0 || colors.length > 0) && (
                 <div className="flex flex-wrap gap-2">
@@ -986,12 +1020,15 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
                 </Button>
               </div>
             </div>
-            <div className="relative">
-              <div className="pointer-events-none absolute -top-8 -left-10 h-24 w-24 rounded-full bg-white/50 blur-2xl dark:bg-emerald-500/25" aria-hidden="true" />
-              <div className="pointer-events-none absolute -bottom-12 right-6 h-32 w-32 rounded-full bg-emerald-400/40 blur-3xl sm:h-44 sm:w-44 dark:bg-emerald-500/30" aria-hidden="true" />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.3, duration: 0.6 }}
+              className="relative"
+            >
               <div
                 className={cn(
-                  'group relative overflow-hidden rounded-[28px] border border-white/50 bg-white/80 shadow-[0_24px_60px_rgba(16,185,129,0.35)] transition hover:shadow-[0_28px_70px_rgba(16,185,129,0.45)] dark:border-white/10 dark:bg-slate-900/70',
+                  'group relative overflow-hidden rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] shadow-lg transition hover:shadow-xl',
                   heroImage ? 'cursor-zoom-in' : 'cursor-default'
                 )}
                 role={heroImage ? 'button' : undefined}
@@ -1009,73 +1046,89 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
                   <img
                     src={heroImage}
                     alt={plant.name}
-                    className="max-h-[420px] w-full object-cover transition duration-500 group-hover:scale-[1.04]"
+                    className="max-h-[420px] w-full object-cover transition duration-500 group-hover:scale-[1.02]"
                   />
                 ) : (
-                  <div className="flex h-[320px] items-center justify-center text-emerald-700/80 dark:text-emerald-200/70">
+                  <div className="flex h-[320px] items-center justify-center text-stone-600 dark:text-stone-400">
                     <Leaf className="mr-2 h-6 w-6" />
                     {t('plantInfo.overview')}
                   </div>
                 )}
-                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-emerald-900/40 via-transparent to-emerald-700/20 dark:from-emerald-900/60" />
               </div>
-              <div className="absolute -bottom-8 left-1/2 z-10 flex w-[min(20rem,90%)] -translate-x-1/2 gap-3 rounded-2xl border border-emerald-500/20 bg-white/90 p-4 text-sm shadow-xl backdrop-blur-md dark:border-emerald-700/30 dark:bg-slate-900/80">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.5, duration: 0.6 }}
+                className="absolute -bottom-8 left-1/2 z-10 flex w-[min(20rem,90%)] -translate-x-1/2 gap-3 rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#2d2d30]/90 backdrop-blur p-4 text-sm shadow-xl"
+              >
                 <div className="flex-1">
-                  <div className="text-[10px] uppercase tracking-widest text-emerald-500/80 dark:text-emerald-300/70">
+                  <div className="text-[10px] uppercase tracking-widest text-stone-500 dark:text-stone-400">
                     {t('plantInfo.water')}
                   </div>
-                  <div className="font-semibold text-emerald-800 dark:text-emerald-100">{formatStatValue(derivedWater)}</div>
+                  <div className="font-semibold text-stone-900 dark:text-stone-100">{formatStatValue(derivedWater)}</div>
                   {friendlyFrequency && (
-                    <div className="text-xs text-emerald-600/80 dark:text-emerald-200/70">{friendlyFrequency}</div>
+                    <div className="text-xs text-stone-600 dark:text-stone-400">{friendlyFrequency}</div>
                   )}
                 </div>
                 {care?.difficulty && (
                   <div className="flex-1">
-                    <div className="text-[10px] uppercase tracking-widest text-emerald-500/80 dark:text-emerald-300/70">
+                    <div className="text-[10px] uppercase tracking-widest text-stone-500 dark:text-stone-400">
                       {t('plantInfo.difficulty')}
                     </div>
-                    <div className="font-semibold text-emerald-800 dark:text-emerald-100">{formatStatValue(care.difficulty)}</div>
+                    <div className="font-semibold text-stone-900 dark:text-stone-100">{formatStatValue(care.difficulty)}</div>
                   </div>
                 )}
-              </div>
-            </div>
+              </motion.div>
+            </motion.div>
           </div>
-        </section>
+        </motion.section>
 
-        <section className="space-y-4">
-          <div className="flex items-center gap-3 text-emerald-700 dark:text-emerald-200">
-            <Sparkles className="h-5 w-5" />
-            <h2 className="text-xl font-semibold tracking-tight md:text-2xl">
-              {t('plantInfo.overview')} - {t('plantInfo.careGuide')}
-            </h2>
+        <motion.section
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.1 }}
+          transition={{ duration: 0.4 }}
+          className="space-y-6"
+        >
+          <div className="flex items-center gap-3">
+            <h2 className="text-2xl font-semibold">{t('plantInfo.overview')} - {t('plantInfo.careGuide')}</h2>
           </div>
           {renderQuickStats(quickStats, 'sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5')}
-        </section>
+        </motion.section>
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
           <div className="space-y-6">
-            <section className="relative overflow-hidden rounded-[28px] border border-emerald-200/40 bg-white/90 p-6 shadow-md backdrop-blur-md dark:border-emerald-600/30 dark:bg-gradient-to-br dark:from-[#07191d]/90 dark:via-[#0b2334]/88 dark:to-[#111c2f]/90 dark:shadow-[0_20px_60px_rgba(13,148,136,0.16)]">
-              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_16%_18%,rgba(16,185,129,0.14),transparent_58%),radial-gradient(circle_at_82%_10%,rgba(56,189,248,0.12),transparent_62%)] dark:bg-[radial-gradient(circle_at_18%_22%,rgba(45,212,191,0.12),transparent_58%),radial-gradient(circle_at_80%_12%,rgba(59,130,246,0.14),transparent_60%)]" aria-hidden="true" />
-              <header className="relative z-10 mb-4 flex items-center gap-3 text-emerald-800 dark:text-emerald-100">
-                <Info className="h-5 w-5" />
+            <motion.section
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.1 }}
+              transition={{ duration: 0.4 }}
+              className="relative overflow-hidden rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-6"
+            >
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,_129,_0.12),_transparent_55%)] dark:bg-[radial-gradient(circle_at_top,_rgba(16,_185,_129,_0.18),_transparent_60%)]" aria-hidden="true" />
+              <header className="relative mb-4 flex items-center gap-3">
+                <Info className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                 <h3 className="text-lg font-semibold tracking-tight">{t('plantInfo.overview')}</h3>
               </header>
               {plant.meaning && (
-                <div className="relative z-10 mt-4 rounded-2xl border border-emerald-200/50 bg-gradient-to-br from-emerald-100/80 via-white/80 to-sky-100/70 p-5 text-sm text-emerald-900 shadow-sm dark:border-emerald-700/40 dark:from-[#0a352d]/70 dark:via-[#10243a]/75 dark:to-[#1a2c45]/75 dark:text-emerald-100 dark:shadow-[0_14px_38px_rgba(56,189,248,0.14)]">
-                  <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-emerald-600 dark:text-emerald-300">
-                    <Sparkles className="h-4 w-4" />
-                    {t('plantInfo.symbolism', { defaultValue: 'Meaning & Symbolism' })}
-                  </div>
-                  <div className="text-base leading-relaxed">{plant.meaning}</div>
-                </div>
+                <Card className="relative mt-4 rounded-3xl border-stone-200/70 dark:border-[#3e3e42]/70">
+                  <CardHeader className="space-y-3">
+                    <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+                      <Sparkles className="h-4 w-4" />
+                      <span className="text-xs uppercase tracking-wide">
+                        {t('plantInfo.symbolism', { defaultValue: 'Meaning & Symbolism' })}
+                      </span>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-base leading-relaxed text-stone-700 dark:text-stone-300">
+                      <CollapsibleText text={plant.meaning} maxLength={200} />
+                    </div>
+                  </CardContent>
+                </Card>
               )}
-              <div className="relative z-10 mt-5 flex flex-wrap gap-2">
-                <Badge
-                  className={cn(
-                    'rounded-xl border-none bg-emerald-500/10 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-100',
-                    rarityTone[plant.rarity || 'Common'] ?? ''
-                  )}
-                >
+              <div className="relative mt-5 flex flex-wrap gap-2">
+                <Badge className={cn('rounded-2xl border-none bg-stone-100 dark:bg-[#2d2d30]', rarityTone[plant.rarity || 'Common'] ?? '')}>
                   {plant.rarity || t('common.unknown')}
                 </Badge>
                 {seasons.map((s) => (
@@ -1083,14 +1136,14 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
                     key={s}
                     className={cn(
                       'rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide',
-                      seasonBadge[s] ?? 'bg-emerald-200/70 text-emerald-900 dark:bg-emerald-900/60 dark:text-emerald-100'
+                      seasonBadge[s] ?? 'bg-stone-200/70 text-stone-900 dark:bg-stone-800/60 dark:text-stone-100'
                     )}
                   >
                     {s}
                   </span>
                 ))}
               </div>
-            </section>
+            </motion.section>
 
             {careChartData.length > 0 && <CareChartSection data={careChartData} />}
 
@@ -1115,13 +1168,17 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
         </div>
 
       {hasAnyStructuredData && (
-        <section className="relative overflow-hidden rounded-[32px] border border-emerald-200/40 bg-white/90 p-6 shadow-lg backdrop-blur-md dark:border-emerald-600/40 dark:bg-gradient-to-br dark:from-[#041519]/95 dark:via-[#081d2c]/92 dark:to-[#0d1f2f]/95 dark:shadow-[0_18px_60px_rgba(13,148,136,0.12)]">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_18%,rgba(134,239,172,0.22),transparent_55%),radial-gradient(circle_at_88%_8%,rgba(56,189,248,0.18),transparent_58%)] dark:bg-[radial-gradient(circle_at_15%_15%,rgba(45,212,191,0.08),transparent_50%),radial-gradient(circle_at_85%_10%,rgba(56,189,248,0.1),transparent_56%),radial-gradient(circle_at_50%_85%,rgba(192,132,252,0.05),transparent_66%)]" aria-hidden="true" />
-          <header className="relative z-10 mb-6 flex items-center gap-3 text-emerald-800 dark:text-emerald-100">
-              <BookOpen className="h-5 w-5" />
-              <h3 className="text-xl font-semibold tracking-tight">{t('plantInfo.moreInformation')}</h3>
-            </header>
-          <div className="relative z-10 grid gap-6 xl:grid-cols-2">
+        <motion.section
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.1 }}
+          transition={{ duration: 0.4 }}
+          className="space-y-6"
+        >
+          <div className="flex items-center gap-3">
+            <h2 className="text-2xl font-semibold">{t('plantInfo.moreInformation')}</h2>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-2">
           {/* Identifiers Section */}
             {(identifiers?.scientificName || identifiers?.family || identifiers?.genus || identifiers?.commonNames?.length || identifiers?.synonyms?.length || identifiers?.externalIds) && (
                 <InfoSection title="Identifiers" icon={<Flower2 className="h-5 w-5" />}>
@@ -1539,21 +1596,19 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
               </InfoSection>
             )}
           </div>
-        </section>
+        </motion.section>
         )}
 
-    <div className="relative flex flex-wrap items-center gap-3 rounded-[28px] border border-emerald-200/40 bg-gradient-to-br from-emerald-200/70 via-sky-100/60 to-teal-100/60 p-4 shadow-sm backdrop-blur-md dark:border-emerald-600/35 dark:bg-gradient-to-br dark:from-[#05171a]/92 dark:via-[#0a2434]/90 dark:to-[#0f1d2c]/92 dark:shadow-[0_12px_36px_rgba(13,148,136,0.1)]">
-      <div className="pointer-events-none absolute inset-0 rounded-[28px] bg-[radial-gradient(circle_at_18%_18%,rgba(56,189,248,0.14),transparent_60%),radial-gradient(circle_at_82%_12%,rgba(16,185,129,0.16),transparent_58%)] dark:bg-[radial-gradient(circle_at_22%_22%,rgba(45,212,191,0.1),transparent_53%),radial-gradient(circle_at_80%_18%,rgba(56,189,248,0.1),transparent_58%)]" aria-hidden="true" />
-        {isAdmin && (
-          <Button
-            variant="destructive"
-            className="rounded-2xl"
-            onClick={handleDelete}
-          >
-            {t('common.delete')}
-          </Button>
-        )}
-        <div className="relative z-10 ml-auto flex flex-wrap gap-2">
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.1 }}
+      transition={{ duration: 0.4 }}
+      className="relative overflow-hidden rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] px-8 py-6"
+    >
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,_129,_0.12),_transparent_55%)] dark:bg-[radial-gradient(circle_at_top,_rgba(16,_185,_129,_0.18),_transparent_60%)]" aria-hidden="true" />
+      <div className="relative flex flex-wrap items-center justify-between gap-4">
+        <div className="flex flex-wrap gap-2">
           {onRequestPlant && (
             <Button
               variant="outline"
@@ -1561,6 +1616,17 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
               onClick={onRequestPlant}
             >
               {t('requestPlant.button')}
+            </Button>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {isAdmin && (
+            <Button
+              variant="destructive"
+              className="rounded-2xl"
+              onClick={handleDelete}
+            >
+              {t('common.delete')}
             </Button>
           )}
           {isAdmin && (
@@ -1577,6 +1643,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
           </Button>
         </div>
       </div>
+    </motion.div>
 
         {/* Full-screen image viewer - only show when not in overlay mode */}
         {!isOverlayMode && (
@@ -1700,15 +1767,21 @@ const CareChartSection: React.FC<{ data: CareChartDatum[] }> = ({ data }) => {
   if (!data.length) return null
 
   return (
-    <section className="relative overflow-hidden rounded-[28px] border border-emerald-200/40 bg-white/90 p-6 shadow-md backdrop-blur-md dark:border-emerald-600/35 dark:bg-gradient-to-br dark:from-[#05181b]/90 dark:via-[#08253a]/88 dark:to-[#0d1d2f]/90 dark:shadow-[0_16px_54px_rgba(8,145,178,0.1)]">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_12%,rgba(16,185,129,0.16),transparent_60%),radial-gradient(circle_at_84%_16%,rgba(59,130,246,0.14),transparent_62%)] dark:bg-[radial-gradient(circle_at_16%_18%,rgba(45,212,191,0.1),transparent_56%),radial-gradient(circle_at_80%_14%,rgba(59,130,246,0.1),transparent_58%),linear-gradient(135deg,rgba(99,102,241,0.05),transparent)]" aria-hidden="true" />
-      <header className="relative z-10 mb-5 flex items-center gap-3 text-emerald-800 dark:text-emerald-100">
-        <BarChart3 className="h-5 w-5" />
+    <motion.section
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.6 }}
+      transition={{ duration: 0.4 }}
+      className="relative overflow-hidden rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-6"
+    >
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,_129,_0.12),_transparent_55%)] dark:bg-[radial-gradient(circle_at_top,_rgba(16,_185,_129,_0.18),_transparent_60%)]" aria-hidden="true" />
+      <header className="relative mb-5 flex items-center gap-3">
+        <BarChart3 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
         <h3 className="text-lg font-semibold tracking-tight">{t('plantInfo.careGuide', { defaultValue: 'Care Guide' })}</h3>
       </header>
-      <div className="relative z-10 grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <div className="relative grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div className="space-y-4">
-          <p className="text-sm leading-relaxed text-emerald-700/80 dark:text-emerald-200/70">
+          <p className="text-sm leading-relaxed text-stone-600 dark:text-stone-400">
             {t('plantInfo.labels.careSummary', { defaultValue: "Visualize the plant's energy needs - sunlight, water, and routine - before you get your hands muddy." })}
           </p>
           <ul className="space-y-3">
@@ -1719,8 +1792,8 @@ const CareChartSection: React.FC<{ data: CareChartDatum[] }> = ({ data }) => {
                   style={{ backgroundColor: CARE_BAR_COLORS[idx % CARE_BAR_COLORS.length] }}
                 />
                 <div>
-                  <div className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">{item.label}</div>
-                  <div className="text-xs text-emerald-700/80 dark:text-emerald-200/70">{item.description}</div>
+                  <div className="text-sm font-semibold text-stone-900 dark:text-stone-100">{item.label}</div>
+                  <div className="text-xs text-stone-600 dark:text-stone-400">{item.description}</div>
                 </div>
               </li>
             ))}
@@ -1745,7 +1818,7 @@ const CareChartSection: React.FC<{ data: CareChartDatum[] }> = ({ data }) => {
           </ResponsiveContainer>
         </div>
       </div>
-    </section>
+    </motion.section>
   )
 }
 
@@ -1790,20 +1863,26 @@ const SeasonalTimeline: React.FC<{ data: SeasonalTimelineEntry[]; planting?: Non
   if (!hasData) return null
 
     return (
-      <section className="relative overflow-hidden rounded-[28px] border border-emerald-200/40 bg-white/90 p-6 shadow-md backdrop-blur-md dark:border-emerald-600/35 dark:bg-gradient-to-br dark:from-[#04171a]/90 dark:via-[#072337]/88 dark:to-[#111d2f]/90 dark:shadow-[0_16px_54px_rgba(99,102,241,0.1)]">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_14%_18%,rgba(56,189,248,0.16),transparent_58%),radial-gradient(circle_at_86%_12%,rgba(129,140,248,0.16),transparent_60%)] dark:bg-[radial-gradient(circle_at_20%_20%,rgba(14,165,233,0.1),transparent_53%),radial-gradient(circle_at_78%_14%,rgba(129,140,248,0.12),transparent_60%)]" aria-hidden="true" />
-        <header className="relative z-10 mb-4 flex items-center gap-3 text-emerald-800 dark:text-emerald-100">
-          <Calendar className="h-5 w-5" />
+      <motion.section
+        initial={{ opacity: 0, y: 20 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, amount: 0.1 }}
+        transition={{ duration: 0.4 }}
+        className="relative overflow-hidden rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-6"
+      >
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,_129,_0.12),_transparent_55%)] dark:bg-[radial-gradient(circle_at_top,_rgba(16,_185,_129,_0.18),_transparent_60%)]" aria-hidden="true" />
+        <header className="relative mb-4 flex items-center gap-3">
+          <Calendar className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
           <h3 className="text-lg font-semibold tracking-tight">{t('plantInfo.sections.phenology', { defaultValue: 'Phenology' })}</h3>
         </header>
-        <div className="relative z-10 h-60">
+        <div className="relative h-60">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(96,165,250,0.16)" vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(120,113,108,0.16)" vertical={false} />
               <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: 'currentColor', fontSize: 12 }} />
               <YAxis hide domain={[0, 3]} />
               <RechartsTooltip
-                cursor={{ fill: 'rgba(59,130,246,0.08)' }}
+                cursor={{ fill: 'rgba(120,113,108,0.08)' }}
                 content={(props) => <SeasonalTooltip {...props} labels={seasonLabels} />}
               />
               <Bar dataKey="flowering" stackId="timeline" fill={TIMELINE_COLORS.flowering} radius={[12, 12, 0, 0]} />
@@ -1812,7 +1891,7 @@ const SeasonalTimeline: React.FC<{ data: SeasonalTimelineEntry[]; planting?: Non
             </BarChart>
           </ResponsiveContainer>
         </div>
-        <div className="mt-5 flex flex-wrap gap-4 text-xs text-emerald-700/80 dark:text-emerald-200/70">
+        <div className="mt-5 flex flex-wrap gap-4 text-xs text-stone-600 dark:text-stone-400">
           {(Object.entries(TIMELINE_COLORS) as Array<[SeasonKey, string]>).map(([key, color]) => (
             <span key={key} className="flex items-center gap-2">
               <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
@@ -1821,11 +1900,11 @@ const SeasonalTimeline: React.FC<{ data: SeasonalTimelineEntry[]; planting?: Non
           ))}
         </div>
         {planting?.hemisphere && (
-          <div className="mt-3 text-xs text-emerald-600/80 dark:text-emerald-300/70">
+          <div className="mt-3 text-xs text-stone-600 dark:text-stone-400">
             {t('plantInfo.labels.hemisphere', { defaultValue: 'Hemisphere' })}: {humanizeHemisphere(planting.hemisphere, t)}
           </div>
         )}
-      </section>
+      </motion.section>
     )
 }
 
@@ -1885,17 +1964,23 @@ const ColorMoodboard: React.FC<{
   if (!swatches.length) return null
 
   return (
-    <section className="relative overflow-hidden rounded-[28px] border border-emerald-200/40 bg-white/90 p-6 shadow-md backdrop-blur-md dark:border-emerald-600/35 dark:bg-gradient-to-br dark:from-[#05161c]/90 dark:via-[#0b2234]/88 dark:to-[#101d2f]/90 dark:shadow-[0_16px_54px_rgba(129,140,248,0.1)]">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,rgba(16,185,129,0.14),transparent_58%),radial-gradient(circle_at_82%_12%,rgba(236,72,153,0.12),transparent_62%)] dark:bg-[radial-gradient(circle_at_22%_24%,rgba(45,212,191,0.1),transparent_56%),radial-gradient(circle_at_78%_16%,rgba(192,132,252,0.1),transparent_60%)]" aria-hidden="true" />
-      <header className="relative z-10 mb-4 flex items-center gap-3 text-emerald-800 dark:text-emerald-100">
-        <Palette className="h-5 w-5" />
+    <motion.section
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.6 }}
+      transition={{ duration: 0.4 }}
+      className="relative overflow-hidden rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-6"
+    >
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,_129,_0.12),_transparent_55%)] dark:bg-[radial-gradient(circle_at_top,_rgba(16,_185,_129,_0.18),_transparent_60%)]" aria-hidden="true" />
+      <header className="relative mb-4 flex items-center gap-3">
+        <Palette className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
         <h3 className="text-lg font-semibold tracking-tight">{t('plantInfo.labels.colorPalette', { defaultValue: 'Color Moodboard' })}</h3>
       </header>
-      <div className="relative z-10 grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <div className="relative grid grid-cols-2 gap-3 sm:grid-cols-3">
         {swatches.map((swatch) => (
           <div
             key={swatch.key}
-            className="group relative overflow-hidden rounded-2xl border border-white/50 bg-white/70 p-3 shadow-sm transition hover:-translate-y-1 hover:shadow-md dark:border-emerald-800/40 dark:bg-slate-900/70"
+            className="group relative overflow-hidden rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#2d2d30] p-3 shadow-sm transition hover:-translate-y-1 hover:shadow-md"
           >
             <div
               className="mb-3 h-16 w-full rounded-xl shadow-inner"
@@ -1903,12 +1988,12 @@ const ColorMoodboard: React.FC<{
                 backgroundImage: `linear-gradient(135deg, ${swatch.tone}, ${swatch.tone}aa)`
               }}
             />
-            <div className="text-xs uppercase tracking-widest text-emerald-600/70 dark:text-emerald-300/70">{swatch.category}</div>
-            <div className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">{swatch.label}</div>
+            <div className="text-xs uppercase tracking-widest text-stone-500 dark:text-stone-400">{swatch.category}</div>
+            <div className="text-sm font-semibold text-stone-900 dark:text-stone-100">{swatch.label}</div>
           </div>
         ))}
       </div>
-    </section>
+    </motion.section>
   )
 }
 
@@ -1927,19 +2012,25 @@ const HabitatMap: React.FC<{
   const pins = nativeRange.slice(0, MAP_PIN_POSITIONS.length)
 
   return (
-    <section className="rounded-[28px] border border-emerald-200/40 bg-gradient-to-br from-sky-100/80 via-white/80 to-emerald-100/80 p-6 shadow-md backdrop-blur-md dark:border-emerald-600/40 dark:bg-gradient-to-br dark:from-[#03191b]/90 dark:via-[#04263d]/85 dark:to-[#071321]/90 dark:shadow-[0_16px_54px_rgba(14,165,233,0.1)]">
-      <header className="relative z-10 mb-4 flex items-center gap-3 text-emerald-800 dark:text-emerald-100">
-        <MapIcon className="h-5 w-5" />
+    <motion.section
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.1 }}
+      transition={{ duration: 0.4 }}
+      className="rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br from-sky-100/80 via-white/80 to-emerald-100/80 p-6 dark:bg-gradient-to-br dark:from-[#03191b]/90 dark:via-[#04263d]/85 dark:to-[#071321]/90"
+    >
+      <header className="relative mb-4 flex items-center gap-3">
+        <MapIcon className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
         <h3 className="text-lg font-semibold tracking-tight">{t('plantInfo.labels.habitatMap', { defaultValue: 'Habitat Map' })}</h3>
       </header>
-      <div className="relative z-10 mb-4 h-64 overflow-hidden rounded-3xl border border-white/60 bg-gradient-to-br from-emerald-200/60 via-sky-100/60 to-emerald-100/60 shadow-inner dark:border-emerald-800/40 dark:bg-gradient-to-br dark:from-[#052c2b]/80 dark:via-[#072c40]/78 dark:to-[#111b2d]/82">
+      <div className="relative mb-4 h-64 overflow-hidden rounded-3xl border border-white/60 bg-gradient-to-br from-emerald-200/60 via-sky-100/60 to-emerald-100/60 shadow-inner dark:border-emerald-800/40 dark:bg-gradient-to-br dark:from-[#052c2b]/80 dark:via-[#072c40]/78 dark:to-[#111b2d]/82">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_40%,rgba(255,255,255,0.55),transparent_60%),radial-gradient(circle_at_70%_60%,rgba(255,255,255,0.45),transparent_65%)] dark:bg-[radial-gradient(circle_at_28%_32%,rgba(16,185,129,0.14),transparent_56%),radial-gradient(circle_at_74%_65%,rgba(59,130,246,0.12),transparent_66%)]" />
         {pins.map((region, idx) => {
           const position = MAP_PIN_POSITIONS[idx]
           return (
             <div
               key={region}
-              className="absolute flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-2xl bg-white/90 px-3 py-2 text-xs font-medium text-emerald-800 shadow-md backdrop-blur-md dark:bg-slate-900/80 dark:text-emerald-100"
+              className="absolute flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-2xl bg-white/90 px-3 py-2 text-xs font-medium text-stone-800 shadow-md backdrop-blur-md dark:bg-[#2d2d30]/90 dark:text-stone-100"
               style={{ top: position.top, left: position.left }}
             >
               <MapPin className="h-3.5 w-3.5 text-emerald-500" />
@@ -1952,7 +2043,7 @@ const HabitatMap: React.FC<{
       {climateChips.length > 0 && (
         <div className="mb-3 flex flex-wrap gap-2">
           {climateChips.map((climate) => (
-            <Badge key={climate} className="rounded-xl border-none bg-emerald-500/10 text-xs font-medium text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-100">
+            <Badge key={climate} className="rounded-2xl border-none bg-stone-100 dark:bg-[#2d2d30] text-xs font-medium">
               <Compass className="mr-1 h-3 w-3" />
               {climate}
             </Badge>
@@ -1960,16 +2051,16 @@ const HabitatMap: React.FC<{
         </div>
       )}
       {zones.length > 0 && (
-        <div className="relative z-10 text-xs text-emerald-700/80 dark:text-emerald-200/70">
+        <div className="relative text-xs text-stone-600 dark:text-stone-400">
           USDA: {zones.join(', ')}
         </div>
       )}
       {hemisphere && (
-        <div className="relative z-10 mt-1 text-xs text-emerald-700/80 dark:text-emerald-200/70">
+        <div className="relative mt-1 text-xs text-stone-600 dark:text-stone-400">
           {t('plantInfo.labels.hemisphere', { defaultValue: 'Hemisphere' })}: {humanizeHemisphere(hemisphere, t)}
         </div>
       )}
-    </section>
+    </motion.section>
   )
 }
 
@@ -1982,21 +2073,21 @@ const humanizeHemisphere = (value: string, t: (key: string, options?: Record<str
 }
 
 const Fact = ({ icon, label, value, sub, accentClass }: { icon: React.ReactNode; label: string; value: React.ReactNode; sub?: React.ReactNode; accentClass?: string }) => (
-  <div
-    className={cn(
-      'flex items-center gap-3 rounded-3xl border border-white/60 bg-white/90 p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-emerald-900/40 dark:bg-[#0b1720]/60 dark:backdrop-blur-sm dark:shadow-[0_6px_18px_rgba(3,94,121,0.12)] dark:hover:shadow-[0_10px_26px_rgba(14,165,233,0.18)]',
-      accentClass ? `bg-gradient-to-br ${accentClass}` : ''
-    )}
-  >
-    <div className="h-10 w-10 flex-shrink-0 rounded-xl bg-white/70 text-emerald-700 shadow-sm dark:bg-gradient-to-br dark:from-[#0c2c36] dark:via-[#0f1f2d] dark:to-[#1e2740] dark:text-emerald-200">
-      <div className="flex h-full w-full items-center justify-center">{icon}</div>
-    </div>
-    <div className="text-emerald-900 dark:text-emerald-100">
-      <div className="text-xs uppercase tracking-widest text-emerald-600/80 dark:text-emerald-300/70">{label}</div>
-      <div className="text-base font-semibold leading-tight">{value}</div>
-      {sub ? <div className="mt-0.5 text-xs text-emerald-700/70 dark:text-emerald-200/70">{sub}</div> : null}
-    </div>
-  </div>
+  <Card className={cn(
+    'rounded-3xl h-full border-stone-200/70 dark:border-[#3e3e42]/70 transition hover:shadow-lg',
+    accentClass ? `bg-gradient-to-br ${accentClass}` : ''
+  )}>
+    <CardContent className="flex items-center gap-3 p-4">
+      <div className="h-10 w-10 flex-shrink-0 rounded-xl bg-stone-100 dark:bg-[#2d2d30] text-stone-700 dark:text-stone-300 flex items-center justify-center">
+        {icon}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-xs uppercase tracking-widest text-stone-500 dark:text-stone-400 mb-1">{label}</div>
+        <div className="text-base font-semibold leading-tight text-stone-900 dark:text-stone-100">{value}</div>
+        {sub ? <div className="mt-0.5 text-xs text-stone-600 dark:text-stone-400">{sub}</div> : null}
+      </div>
+    </CardContent>
+  </Card>
 );
 
 const InfoSection = ({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) => {
@@ -2004,17 +2095,26 @@ const InfoSection = ({ title, icon, children }: { title: string; icon: React.Rea
   const key = SECTION_KEY_MAP[title]
   const translatedTitle = key ? t(`plantInfo.sections.${key}`, { defaultValue: title }) : title
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-stone-200 bg-white p-4 shadow-sm space-y-3 dark:border-emerald-700/40 dark:bg-gradient-to-br dark:from-[#0b1f1a]/80 dark:via-[#0c2733]/85 dark:to-[#14233b]/80 dark:shadow-[0_6px_22px_rgba(6,182,212,0.1)] dark:ring-1 dark:ring-emerald-500/12">
-      <div className="flex items-center gap-3 text-base font-semibold text-stone-800 dark:text-stone-200">
-        <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-green-500 to-emerald-600 dark:from-[#10b981] dark:via-[#0ea5e9] dark:to-[#6366f1] dark:shadow-[0_12px_28px_rgba(56,189,248,0.35)] flex items-center justify-center text-white shadow">
-          {icon}
-        </div>
-        <span>{translatedTitle}</span>
-      </div>
-      <div className="space-y-2">
-        {children}
-      </div>
-    </div>
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.1 }}
+      transition={{ duration: 0.4 }}
+    >
+      <Card className="rounded-3xl h-full border-stone-200/70 dark:border-[#3e3e42]/70">
+        <CardHeader className="space-y-3">
+          <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+            {icon}
+            <span className="text-xs uppercase tracking-wide">
+              {translatedTitle}
+            </span>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {children}
+        </CardContent>
+      </Card>
+    </motion.div>
   )
 }
 
@@ -2041,4 +2141,37 @@ const formatMonths = (months: number[], t: (key: string, options?: Record<string
     .filter(Boolean)
     .map(key => t(`plantInfo.monthsShort.${key}`, { defaultValue: key?.toUpperCase?.() }))
     .join(', ')
+}
+
+const CollapsibleText: React.FC<{ text: string; maxLength?: number; className?: string }> = ({ text, maxLength = 300, className = '' }) => {
+  const [isExpanded, setIsExpanded] = React.useState(false)
+  const shouldCollapse = text.length > maxLength
+  const displayText = shouldCollapse && !isExpanded ? text.slice(0, maxLength) + '...' : text
+
+  if (!shouldCollapse) {
+    return <div className={className}>{text}</div>
+  }
+
+  return (
+    <div className={className}>
+      <div className="whitespace-pre-wrap">{displayText}</div>
+      <button
+        type="button"
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="mt-2 flex items-center gap-1 text-sm font-medium text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 transition-colors"
+      >
+        {isExpanded ? (
+          <>
+            <ChevronUp className="h-4 w-4" />
+            Show Less
+          </>
+        ) : (
+          <>
+            <ChevronDown className="h-4 w-4" />
+            Show More
+          </>
+        )}
+      </button>
+    </div>
+  )
 }
