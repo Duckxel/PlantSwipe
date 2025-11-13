@@ -1,5 +1,6 @@
 import React from "react";
 import { motion } from "framer-motion";
+import * as THREE from "three";
 import { useLanguageNavigate, useLanguage } from "@/lib/i18nRouting";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -212,114 +213,6 @@ const TIMELINE_COLORS: Record<string, string> = {
   sowing: '#6366f1'
 }
 
-const DIMENSION_CUBE_STYLE_ID = 'dimension-cube-styles'
-const DIMENSION_CUBE_STYLES = `
-@-webkit-keyframes dimensionCubeRotate {
-  0% { transform: rotateY(0deg); }
-  100% { transform: rotateY(360deg); }
-}
-@keyframes dimensionCubeRotate {
-  0% { transform: rotateY(0deg); }
-  100% { transform: rotateY(360deg); }
-}
-.dimension-cube-scene {
-  position: relative;
-  width: 220px;
-  height: 220px;
-  margin: 0 auto;
-  perspective: 1100px;
-  -webkit-perspective: 1100px;
-}
-.dimension-cube-wrapper {
-  width: 100%;
-  height: 100%;
-  transform-style: preserve-3d;
-  -webkit-transform-style: preserve-3d;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transform: rotateX(-34deg) rotateY(34deg);
-}
-.dimension-cube-scale {
-  width: 100%;
-  height: 100%;
-  transform-style: preserve-3d;
-  -webkit-transform-style: preserve-3d;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.dimension-cube {
-  position: relative;
-  width: 160px;
-  height: 160px;
-  transform-style: preserve-3d;
-  -webkit-transform-style: preserve-3d;
-  animation: dimensionCubeRotate 78s linear infinite;
-  -webkit-animation: dimensionCubeRotate 78s linear infinite;
-  filter: drop-shadow(0 26px 36px rgba(16,185,129,0.28));
-}
-.dimension-cube-face {
-  position: absolute;
-  inset: 0;
-  border: 2px solid rgba(16,185,129,0.92);
-  background: rgba(15,118,110,0.22);
-  box-shadow: inset 0 0 36px rgba(15,118,110,0.58);
-  backdrop-filter: blur(1.1px);
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-}
-.dimension-cube-face::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border: 1px solid rgba(255,255,255,0.22);
-  mix-blend-mode: screen;
-}
-.dimension-cube-face::before {
-  content: "";
-  position: absolute;
-  inset: 20%;
-  border: 1px dashed rgba(167,243,208,0.58);
-  filter: blur(0.08px);
-}
-.dimension-cube-face--front {
-  transform: translateZ(80px);
-  background: linear-gradient(160deg, rgba(59,130,246,0.38), rgba(6,95,70,0.28));
-}
-.dimension-cube-face--back {
-  transform: rotateY(180deg) translateZ(80px);
-  background: linear-gradient(210deg, rgba(6,95,70,0.44), rgba(34,197,94,0.28));
-}
-.dimension-cube-face--left {
-  transform: rotateY(-90deg) translateZ(80px);
-  background: linear-gradient(180deg, rgba(8,145,178,0.4), rgba(15,118,110,0.24));
-}
-.dimension-cube-face--right {
-  transform: rotateY(90deg) translateZ(80px);
-  background: linear-gradient(175deg, rgba(34,197,94,0.38), rgba(15,118,110,0.24));
-}
-.dimension-cube-face--top {
-  transform: rotateX(90deg) translateZ(80px);
-  background: linear-gradient(160deg, rgba(236,253,245,0.8), rgba(45,212,191,0.35));
-  border-color: rgba(167,243,208,0.95);
-}
-.dimension-cube-face--bottom {
-  transform: rotateX(-90deg) translateZ(80px);
-  background: linear-gradient(200deg, rgba(6,68,59,0.5), rgba(15,118,110,0.3));
-  border-color: rgba(12,74,61,0.94);
-}
-.dimension-cube-glow {
-  position: absolute;
-  inset: 0;
-  transform: translateZ(-68px);
-  background: radial-gradient(circle at center, rgba(16,185,129,0.36), transparent 82%);
-  filter: blur(52px);
-}
-@media (prefers-reduced-motion: reduce) {
-  .dimension-cube { animation: none; transform: rotateX(-34deg) rotateY(34deg); }
-}
-`
 
 const normalizeStringArray = (value: unknown): string[] => {
   if (value === undefined || value === null) return []
@@ -444,17 +337,119 @@ const formatDimensionValue = (value: number): string => {
 const parsePositiveNumber = (value: number | null | undefined): number | undefined =>
   typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined
 
-const DimensionVisualizer: React.FC<{ dimensions: Partial<PlantDimensions> }> = ({ dimensions }) => {
-  const { t } = useTranslation('common')
+type CubeScale = {
+  x: number
+  y: number
+  z: number
+}
+
+const DimensionCube: React.FC<{ scale: CubeScale }> = ({ scale }) => {
+  const containerRef = React.useRef<HTMLDivElement>(null)
 
   React.useEffect(() => {
-    if (typeof document === 'undefined') return
-    if (document.getElementById(DIMENSION_CUBE_STYLE_ID)) return
-    const style = document.createElement('style')
-    style.id = DIMENSION_CUBE_STYLE_ID
-    style.textContent = DIMENSION_CUBE_STYLES
-    document.head.appendChild(style)
-  }, [])
+    if (typeof window === 'undefined') return
+    const container = containerRef.current
+    if (!container) return
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio ?? 1, 2))
+    container.appendChild(renderer.domElement)
+
+    const scene = new THREE.Scene()
+    const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100)
+    camera.position.set(3, 2.6, 4.5)
+
+    const ambientLight = new THREE.AmbientLight(0xbfffe0, 0.45)
+    scene.add(ambientLight)
+
+    const keyLight = new THREE.DirectionalLight(0xffffff, 0.85)
+    keyLight.position.set(4, 6, 5)
+    scene.add(keyLight)
+
+    const rimLight = new THREE.PointLight(0x34d399, 0.8, 18, 2)
+    rimLight.position.set(-3, -2, -6)
+    scene.add(rimLight)
+
+    const geometry = new THREE.BoxGeometry(1, 1, 1)
+    const faceMaterials: THREE.Material[] = [
+      new THREE.MeshStandardMaterial({ color: 0x1ecad5, emissive: 0x0f766e, transparent: true, opacity: 0.9, metalness: 0.35, roughness: 0.25 }),
+      new THREE.MeshStandardMaterial({ color: 0x34d399, emissive: 0x065f46, transparent: true, opacity: 0.85, metalness: 0.3, roughness: 0.35 }),
+      new THREE.MeshStandardMaterial({ color: 0xecfdf5, emissive: 0x1f2937, transparent: true, opacity: 0.92, metalness: 0.2, roughness: 0.4 }),
+      new THREE.MeshStandardMaterial({ color: 0x0f766e, emissive: 0x052e2b, transparent: true, opacity: 0.9, metalness: 0.3, roughness: 0.5 }),
+      new THREE.MeshStandardMaterial({ color: 0x2563eb, emissive: 0x0f172a, transparent: true, opacity: 0.88, metalness: 0.35, roughness: 0.3 }),
+      new THREE.MeshStandardMaterial({ color: 0x059669, emissive: 0x064e3b, transparent: true, opacity: 0.88, metalness: 0.3, roughness: 0.35 }),
+    ]
+
+    const cube = new THREE.Mesh(geometry, faceMaterials)
+    cube.rotation.x = -0.35
+    scene.add(cube)
+
+    const wireGeometry = new THREE.EdgesGeometry(geometry)
+    const wireMaterial = new THREE.LineBasicMaterial({ color: 0xf0fdf4, transparent: true, opacity: 0.45 })
+    const edges = new THREE.LineSegments(wireGeometry, wireMaterial)
+    cube.add(edges)
+
+    const glowGeometry = new THREE.CircleGeometry(1.8, 64)
+    const glowMaterial = new THREE.MeshBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.3 })
+    const glow = new THREE.Mesh(glowGeometry, glowMaterial)
+    glow.rotation.x = -Math.PI / 2
+    glow.position.y = -1.25
+    scene.add(glow)
+
+    const applyCubeScale = () => {
+      const multiplier = 1.45
+      cube.scale.set(scale.x * multiplier, scale.y * multiplier, scale.z * multiplier)
+    }
+    applyCubeScale()
+
+    let frameId: number
+    const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
+
+    const animate = () => {
+      frameId = window.requestAnimationFrame(animate)
+      if (!motionQuery.matches) {
+        cube.rotation.y += 0.01
+      }
+      renderer.render(scene, camera)
+    }
+    animate()
+
+    const handleResize = () => {
+      const width = container.clientWidth || container.parentElement?.clientWidth || 1
+      const height = container.clientHeight || width
+      renderer.setSize(width, height)
+      camera.aspect = width / height
+      camera.updateProjectionMatrix()
+    }
+    handleResize()
+
+    const resizeObserver =
+      typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(() => handleResize())
+        : null
+    resizeObserver?.observe(container)
+
+    return () => {
+      cancelAnimationFrame(frameId)
+      resizeObserver?.disconnect()
+      geometry.dispose()
+      wireGeometry.dispose()
+      glowGeometry.dispose()
+      faceMaterials.forEach((material) => material.dispose())
+      wireMaterial.dispose()
+      glowMaterial.dispose()
+      renderer.dispose()
+      if (container.contains(renderer.domElement)) {
+        container.removeChild(renderer.domElement)
+      }
+    }
+  }, [scale.x, scale.y, scale.z])
+
+  return <div ref={containerRef} className="relative h-full w-full" />
+}
+
+const DimensionVisualizer: React.FC<{ dimensions: Partial<PlantDimensions> }> = ({ dimensions }) => {
+  const { t } = useTranslation('common')
 
   const heightCandidate = parsePositiveNumber(dimensions.height?.maxCm ?? dimensions.height?.minCm)
   const spreadCandidate = parsePositiveNumber(dimensions.spread?.maxCm ?? dimensions.spread?.minCm)
@@ -480,9 +475,14 @@ const DimensionVisualizer: React.FC<{ dimensions: Partial<PlantDimensions> }> = 
   const scaleY = scaleFor(resolvedHeight)
   const scaleZ = scaleFor(resolvedDepth)
 
-  const scaleStyle: React.CSSProperties = {
-    transform: `scale3d(${scaleX.toFixed(3)}, ${scaleY.toFixed(3)}, ${scaleZ.toFixed(3)})`,
-  }
+  const cubeScale = React.useMemo<CubeScale>(
+    () => ({
+      x: Number(scaleX.toFixed(3)),
+      y: Number(scaleY.toFixed(3)),
+      z: Number(scaleZ.toFixed(3)),
+    }),
+    [scaleX, scaleY, scaleZ]
+  )
 
   const spreadLabel = t('plantInfo.labels.spread', { defaultValue: 'Spread' })
   const spacingLabel = t('plantInfo.labels.spacing', { defaultValue: 'Spacing' })
@@ -508,22 +508,14 @@ const DimensionVisualizer: React.FC<{ dimensions: Partial<PlantDimensions> }> = 
 
   return (
       <div className="rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-50/70 via-white/60 to-white/10 p-5 dark:border-emerald-500/30 dark:from-emerald-500/10 dark:via-transparent dark:to-transparent">
-      <div className="flex flex-col items-stretch gap-6 lg:flex-row lg:gap-8">
-        <div className="dimension-cube-scene flex-[1.35] max-w-[260px] self-center lg:self-auto">
-          <div className="dimension-cube-wrapper">
-            <div className="dimension-cube-scale" style={scaleStyle}>
-              <div className="dimension-cube" aria-hidden="true">
-                <div className="dimension-cube-glow" />
-                <div className="dimension-cube-face dimension-cube-face--front" />
-                <div className="dimension-cube-face dimension-cube-face--back" />
-                <div className="dimension-cube-face dimension-cube-face--left" />
-                <div className="dimension-cube-face dimension-cube-face--right" />
-                <div className="dimension-cube-face dimension-cube-face--top" />
-                <div className="dimension-cube-face dimension-cube-face--bottom" />
-              </div>
+        <div className="flex flex-col items-stretch gap-6 lg:flex-row lg:gap-8">
+          <div className="flex-[1.35] max-w-[260px] self-center lg:self-auto">
+            <div className="relative aspect-square w-full overflow-hidden rounded-[32px] border border-emerald-500/25 bg-gradient-to-br from-emerald-50/80 via-white/60 to-transparent shadow-[0_18px_50px_rgba(16,185,129,0.2)] dark:border-emerald-500/30 dark:from-emerald-900/30 dark:via-[#0f1f1f]/80 dark:to-transparent">
+              <DimensionCube scale={cubeScale} />
+              <div className="pointer-events-none absolute inset-3 rounded-[28px] border border-white/30 dark:border-emerald-500/30" />
+              <div className="pointer-events-none absolute inset-x-6 bottom-3 h-14 rounded-full bg-emerald-400/30 blur-3xl" />
             </div>
           </div>
-        </div>
         <div className="flex-1 w-full max-w-lg">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 h-full">
             {legendItems.map((item) => (
