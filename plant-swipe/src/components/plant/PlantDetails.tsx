@@ -387,7 +387,7 @@ const DimensionCube: React.FC<{ scale: CubeScale }> = ({ scale }) => {
 
     const scene = new Scene()
     const camera = new PerspectiveCamera(38, 1, 0.1, 100)
-    camera.position.set(3.2, 2.3, 3.2)
+    camera.position.set(2.6, 1.6, 2.6)
     camera.lookAt(0, 0.05, 0)
     cameraRef.current = camera
 
@@ -404,7 +404,7 @@ const DimensionCube: React.FC<{ scale: CubeScale }> = ({ scale }) => {
 
     const cubeGroup = new Group()
     cubeGroup.rotation.set(0, 0, 0)
-    cubeGroup.position.y = 0.5
+      cubeGroup.position.y = 0.5
     cubeGroupRef.current = cubeGroup
     scene.add(cubeGroup)
 
@@ -482,19 +482,18 @@ const DimensionCube: React.FC<{ scale: CubeScale }> = ({ scale }) => {
     const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
     const animate = () => {
       frameId = window.requestAnimationFrame(animate)
-      if (!motionQuery.matches && cubeGroupRef.current) {
-        cubeGroupRef.current.rotation.y += 0.005
+      if (!motionQuery.matches) {
+        pivotAngleRef.current += 0.0012
       }
 
-      pivotAngleRef.current += 0.0015
-      const pivotRadius = 3.2
+      const pivotRadius = 2.6
       const refCamera = cameraRef.current
       const activeCamera = refCamera ?? camera
       if (refCamera) {
         const angle = pivotAngleRef.current
         refCamera.position.set(
           Math.cos(angle) * pivotRadius,
-          2.2 + Math.sin(angle * 0.6) * 0.2,
+          1.5 + Math.sin(angle * 0.5) * 0.15,
           Math.sin(angle) * pivotRadius
         )
         refCamera.lookAt(0, 0.05, 0)
