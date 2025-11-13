@@ -5,6 +5,7 @@ import {
   BoxGeometry,
   DirectionalLight,
   EdgesGeometry,
+  GridHelper,
   Group,
   LineBasicMaterial,
   LineSegments,
@@ -443,6 +444,19 @@ const DimensionCube: React.FC<{ scale: CubeScale }> = ({ scale }) => {
         }
       }
     }
+
+    const grid = new GridHelper(4, 12, 0x34f5c6, 0x0f766e)
+    grid.position.y = -0.55
+    const gridMaterials = Array.isArray(grid.material) ? grid.material : [grid.material]
+    gridMaterials.forEach((material) => {
+      if (material instanceof LineBasicMaterial) {
+        material.transparent = true
+        material.opacity = 0.25
+      }
+    })
+    scene.add(grid)
+    disposables.push(grid.geometry)
+    gridMaterials.forEach((material) => disposables.push(material))
 
     const handleResize = () => {
       const parentWidth = container.parentElement?.clientWidth ?? 0
