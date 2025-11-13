@@ -783,7 +783,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
           key={key}
           initial={{ opacity: 0, y: 16 }}
           whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.6 }}
+          viewport={{ once: true, amount: 0.1 }}
           transition={{ delay: index * 0.08, duration: 0.4 }}
         >
           <Fact
@@ -1086,7 +1086,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
         <motion.section
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.6 }}
+          viewport={{ once: true, amount: 0.1 }}
           transition={{ duration: 0.4 }}
           className="space-y-6"
         >
@@ -1101,7 +1101,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
             <motion.section
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, amount: 0.6 }}
+              viewport={{ once: true, amount: 0.1 }}
               transition={{ duration: 0.4 }}
               className="relative overflow-hidden rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-6"
             >
@@ -1171,7 +1171,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
         <motion.section
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.6 }}
+          viewport={{ once: true, amount: 0.1 }}
           transition={{ duration: 0.4 }}
           className="space-y-6"
         >
@@ -1602,7 +1602,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, amount: 0.6 }}
+      viewport={{ once: true, amount: 0.1 }}
       transition={{ duration: 0.4 }}
       className="relative overflow-hidden rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] px-8 py-6"
     >
@@ -1866,7 +1866,7 @@ const SeasonalTimeline: React.FC<{ data: SeasonalTimelineEntry[]; planting?: Non
       <motion.section
         initial={{ opacity: 0, y: 20 }}
         whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, amount: 0.6 }}
+        viewport={{ once: true, amount: 0.1 }}
         transition={{ duration: 0.4 }}
         className="relative overflow-hidden rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-6"
       >
@@ -2015,7 +2015,7 @@ const HabitatMap: React.FC<{
     <motion.section
       initial={{ opacity: 0, y: 20 }}
       whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, amount: 0.6 }}
+      viewport={{ once: true, amount: 0.1 }}
       transition={{ duration: 0.4 }}
       className="rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br from-sky-100/80 via-white/80 to-emerald-100/80 p-6 dark:bg-gradient-to-br dark:from-[#03191b]/90 dark:via-[#04263d]/85 dark:to-[#071321]/90"
     >
@@ -2098,7 +2098,7 @@ const InfoSection = ({ title, icon, children }: { title: string; icon: React.Rea
     <motion.div
       initial={{ opacity: 0, y: 16 }}
       whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, amount: 0.6 }}
+      viewport={{ once: true, amount: 0.1 }}
       transition={{ duration: 0.4 }}
     >
       <Card className="rounded-3xl h-full border-stone-200/70 dark:border-[#3e3e42]/70">
