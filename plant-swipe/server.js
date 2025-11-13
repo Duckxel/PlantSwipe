@@ -752,7 +752,7 @@ async function generateFieldData(options) {
 
   if (fieldKey === 'meaning') {
     promptSections.push(
-      'Return a single string with two or three short lines (under 45 words total). Each line must name a culture or region, followed by its symbolic interpretation of the plant using the format "Culture – meaning". Do not include bullet characters, markdown, care tips, or botanical details.'
+      'Return a single string under 50 words that concentrates on the plant’s symbolism—highlight key themes such as emotions, rites, or values (e.g., love, marriage, protection). Mention cultural or historical contexts only when they reinforce the symbolism. Do not include care advice, botanical traits, bullet characters, or markdown.'
     )
   }
 
