@@ -3,7 +3,6 @@ import { motion } from "framer-motion";
 import {
   AmbientLight,
   BoxGeometry,
-  CircleGeometry,
   DirectionalLight,
   EdgesGeometry,
   Group,
@@ -15,6 +14,8 @@ import {
   PerspectiveCamera,
   PointLight,
   Scene,
+  SphereGeometry,
+  TorusGeometry,
   WebGLRenderer,
 } from "three";
 import { useLanguageNavigate, useLanguage } from "@/lib/i18nRouting";
@@ -384,8 +385,8 @@ const DimensionCube: React.FC<{ scale: CubeScale }> = ({ scale }) => {
 
     const scene = new Scene()
     const camera = new PerspectiveCamera(38, 1, 0.1, 100)
-    camera.position.set(3, 2.6, 4.5)
-    camera.lookAt(0, 0, 0)
+    camera.position.set(3.8, 2.6, 3.2)
+    camera.lookAt(0, 0.15, 0)
 
     const ambientLight = new AmbientLight(0xbfffe0, 0.45)
     scene.add(ambientLight)
@@ -399,7 +400,7 @@ const DimensionCube: React.FC<{ scale: CubeScale }> = ({ scale }) => {
     scene.add(rimLight)
 
     const cubeGroup = new Group()
-    cubeGroup.rotation.set(0.4, 0.2, 0)
+    cubeGroup.rotation.set(0.45, 0, 0)
     cubeGroupRef.current = cubeGroup
     scene.add(cubeGroup)
 
@@ -409,35 +410,49 @@ const DimensionCube: React.FC<{ scale: CubeScale }> = ({ scale }) => {
     disposables.push(geometry)
 
     const cubeShellMaterial = new MeshStandardMaterial({
-      color: 0x041f1d,
+      color: 0x031512,
       transparent: true,
-      opacity: 0.18,
-      metalness: 0.15,
-      roughness: 0.75,
-      emissive: 0x00ff99,
-      emissiveIntensity: 0.55,
+      opacity: 0.22,
+      metalness: 0.35,
+      roughness: 0.55,
+      emissive: 0x0d9488,
+      emissiveIntensity: 0.65,
     })
     cubeGroup.add(new Mesh(geometry, cubeShellMaterial))
     disposables.push(cubeShellMaterial)
 
     const outerWireGeometry = new EdgesGeometry(geometry)
-    const outerWireMaterial = new LineBasicMaterial({ color: 0x00ff99, transparent: false })
+    const outerWireMaterial = new LineBasicMaterial({ color: 0x34f5c6, transparent: false, linewidth: 1 })
     cubeGroup.add(new LineSegments(outerWireGeometry, outerWireMaterial))
     disposables.push(outerWireGeometry, outerWireMaterial)
 
     const innerGeometry = new BoxGeometry(0.68, 0.68, 0.68)
     const innerWireGeometry = new EdgesGeometry(innerGeometry)
-    const innerWireMaterial = new LineBasicMaterial({ color: 0x34d399, transparent: true, opacity: 0.85 })
+    const innerWireMaterial = new LineBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.8 })
     cubeGroup.add(new LineSegments(innerWireGeometry, innerWireMaterial))
     disposables.push(innerGeometry, innerWireGeometry, innerWireMaterial)
+    
+    const accentRingGeometry = new TorusGeometry(1.02, 0.01, 10, 80)
+    const accentRingMaterial = new MeshBasicMaterial({ color: 0x14f0c2, transparent: true, opacity: 0.35 })
+    const accentRing = new Mesh(accentRingGeometry, accentRingMaterial)
+    accentRing.rotation.x = Math.PI / 2
+    accentRing.position.y = -0.52
+    scene.add(accentRing)
+    disposables.push(accentRingGeometry, accentRingMaterial)
 
-    const glowGeometry = new CircleGeometry(1.8, 64)
-    const glowMaterial = new MeshBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.25 })
-    const glow = new Mesh(glowGeometry, glowMaterial)
-    glow.rotation.x = -Math.PI / 2
-    glow.position.y = -1.25
-    scene.add(glow)
-    disposables.push(glowGeometry, glowMaterial)
+    const cornerGeometry = new SphereGeometry(0.05, 16, 16)
+    const cornerMaterial = new MeshBasicMaterial({ color: 0xa7f3d0, transparent: true, opacity: 0.9 })
+    disposables.push(cornerGeometry, cornerMaterial)
+    const cornerPositions = [-0.5, 0.5]
+    for (const x of cornerPositions) {
+      for (const y of cornerPositions) {
+        for (const z of cornerPositions) {
+          const corner = new Mesh(cornerGeometry, cornerMaterial)
+          corner.position.set(x, y, z)
+          cubeGroup.add(corner)
+        }
+      }
+    }
 
     const handleResize = () => {
       const parentWidth = container.parentElement?.clientWidth ?? 0
@@ -460,8 +475,7 @@ const DimensionCube: React.FC<{ scale: CubeScale }> = ({ scale }) => {
     const animate = () => {
       frameId = window.requestAnimationFrame(animate)
       if (!motionQuery.matches && cubeGroupRef.current) {
-        cubeGroupRef.current.rotation.y += 0.006
-        cubeGroupRef.current.rotation.x = 0.55
+        cubeGroupRef.current.rotation.y += 0.005
       }
       renderer.render(scene, camera)
     }
