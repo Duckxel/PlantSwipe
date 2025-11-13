@@ -1968,10 +1968,15 @@ const SeasonalTimeline: React.FC<{ data: SeasonalTimelineEntry[]; planting?: Non
   const topStackByIndex = React.useMemo(() => {
     const order: SeasonKey[] = ['flowering', 'fruiting', 'sowing']
     return data.map((entry) => {
+      const valueByKey: Record<SeasonKey, number> = {
+        flowering: entry.flowering,
+        fruiting: entry.fruiting,
+        sowing: entry.sowing,
+      }
       for (let i = order.length - 1; i >= 0; i -= 1) {
         const key = order[i]
-        const value = entry[key]
-        if (typeof value === 'number' && value > 0) {
+        const value = valueByKey[key]
+        if (value > 0) {
           return key
         }
       }
