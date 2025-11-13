@@ -98,6 +98,70 @@
       "rateLimitedMessage": "Veuillez patienter un peu avant d'envoyer un nouveau message."
     }
   },
+  "aboutPage": {
+    "hero": {
+      "eyebrow": "En construction",
+      "title": "À propos d'Aphylia (presque prêt à éclore)",
+      "subtitle": "Nous peaufinons encore le récit d'origine. Considérez cette page comme l'échafaudage stylé de la magie à venir.",
+      "ctaPrimary": "Passer dire bonjour",
+      "ctaSecondary": "Retour à la découverte"
+    },
+    "highlights": {
+      "title": "Les blocs essentiels, en attente de contenu",
+      "subtitle": "Ces modules tiennent la pose pendant que l'histoire s'écrit.",
+      "badge": "Mode plan",
+      "cards": {
+        "origin": {
+          "tagline": "Chapitre zéro",
+          "title": "Origines à venir",
+          "description": "Nous rassemblons les anecdotes les plus savoureuses avant de les immortaliser en ligne."
+        },
+        "impact": {
+          "tagline": "Potins du jardin",
+          "title": "Impact en brouillon",
+          "description": "Statistiques, jalons et moments de fierté pousseront bientôt ici."
+        },
+        "culture": {
+          "tagline": "Ambiance avant tout",
+          "title": "Culture en chargement",
+          "description": "Attendez-vous à des valeurs d'équipe, des rituels, et peut-être une playlist une fois la sélection terminée."
+        }
+      }
+    },
+    "timeline": {
+      "title": "Feuille de route légère",
+      "subtitle": "Une chronologie ludique pour donner de la tenue à la mise en page.",
+      "status": "En story-board",
+      "items": {
+        "chapterZero": {
+          "title": "Graine plantée",
+          "caption": "Ici fleurira le mythe fondateur. Imaginez des flashbacks cinématographiques."
+        },
+        "chapterOne": {
+          "title": "Floraison bêta",
+          "caption": "Notes d'amour d'utilisateurs et premières victoires s'afficheront ici dès qu'on range les preuves."
+        },
+        "chapterTwo": {
+          "title": "Aventures suivantes",
+          "caption": "Nous esquissons déjà nos ambitions futures tout en évitant les spoilers."
+        }
+      }
+    },
+    "team": {
+      "title": "Future galerie d'équipe",
+      "subtitle": "Imaginez des sourires, des bios dramatiques et probablement un jeu de mots botanique par profil.",
+      "badge": "Casting bientôt",
+      "cardTitle": "Espace réservé",
+      "cardHeading": "Nom à définir",
+      "cardDescription": "Portrait en attente de validation par nos futurs nous.",
+      "cardPlaceholder": "De vraies personnes remplaceront ce bloc dès que la séance photo sera prête."
+    },
+    "cta": {
+      "title": "Envie de découvrir l'histoire plus vite ?",
+      "subtitle": "Signalez votre curiosité et nous remonterons cette page dans la file des priorités.",
+      "button": "Explorer l'encyclopédie végétale"
+    }
+  },
   "auth": {
     "login": "Se connecter",
     "signup": "Créer votre compte",

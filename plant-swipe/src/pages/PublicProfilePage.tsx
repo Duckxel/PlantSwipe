@@ -892,7 +892,6 @@ export default function PublicProfilePage() {
                               onMouseLeave={hideTooltip}
                               onFocus={(e: React.FocusEvent<HTMLDivElement>) => showTooltip(e.currentTarget as HTMLDivElement, item)}
                               onBlur={hideTooltip}
-                              title={`${item.value} ${t('profile.tasks')} ${t('profile.tasksOn')} ${new Date(item.date).toLocaleDateString(i18n.language)}`}
                               aria-label={`${new Date(item.date).toLocaleDateString(i18n.language)}: ${item.value} ${t('profile.tasks')}${item.success ? `, ${t('profile.completedDay')}` : ''}`}
                             />
                           ))}

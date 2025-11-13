@@ -32,6 +32,7 @@ import RequireAdmin from "@/pages/RequireAdmin";
 import { FriendsPage } from "@/pages/FriendsPage";
 import SettingsPage from "@/pages/SettingsPage";
 import ContactUsPage from "@/pages/ContactUsPage";
+import AboutPage from "@/pages/AboutPage";
 import { supabase } from "@/lib/supabaseClient";
 import { useLanguage } from "@/lib/i18nRouting";
 import { loadPlantsWithTranslations } from "@/lib/plantTranslationLoader";
@@ -678,13 +679,17 @@ export default function PlantSwipe() {
                       openInfo={(p) => navigate(`/plants/${p.id}`, { state: { backgroundLocation: location } })}
                       likedIds={likedIds}
                     />
-                  }
-                />
-                <Route path="/profile" element={user ? (profile?.display_name ? <Navigate to={`/u/${encodeURIComponent(profile.display_name)}`} replace /> : <Navigate to="/u/_me" replace />) : <Navigate to="/" replace />} />
-                <Route path="/u/:username" element={<PublicProfilePage />} />
-                <Route path="/friends" element={user ? <FriendsPage /> : <Navigate to="/" replace />} />
-                <Route path="/settings" element={user ? <SettingsPage /> : <Navigate to="/" replace />} />
-                <Route path="/contact" element={<ContactUsPage />} />
+                    }
+                  />
+                  <Route
+                    path="/profile"
+                    element={user ? (profile?.display_name ? <Navigate to={`/u/${encodeURIComponent(profile.display_name)}`} replace /> : <Navigate to="/u/_me" replace />) : <Navigate to="/" replace />}
+                  />
+                  <Route path="/u/:username" element={<PublicProfilePage />} />
+                  <Route path="/friends" element={user ? <FriendsPage /> : <Navigate to="/" replace />} />
+                  <Route path="/settings" element={user ? <SettingsPage /> : <Navigate to="/" replace />} />
+                  <Route path="/contact" element={<ContactUsPage />} />
+                  <Route path="/about" element={<AboutPage />} />
                 <Route path="/admin" element={
                   <RequireAdmin>
                     <Suspense fallback={<div className="p-8 text-center text-sm opacity-60">Loading admin panel...</div>}>
