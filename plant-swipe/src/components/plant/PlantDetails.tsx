@@ -387,7 +387,7 @@ const DimensionCube: React.FC<{ scale: CubeScale }> = ({ scale }) => {
 
     const scene = new Scene()
     const camera = new PerspectiveCamera(38, 1, 0.1, 100)
-    camera.position.set(2.6, 1.6, 2.6)
+    camera.position.set(3.4, 1.8, 3.4)
     camera.lookAt(0, 0.05, 0)
     cameraRef.current = camera
 
@@ -449,7 +449,7 @@ const DimensionCube: React.FC<{ scale: CubeScale }> = ({ scale }) => {
       }
     }
 
-    const grid = new GridHelper(4, 12, 0x34f5c6, 0x0f766e)
+    const grid = new GridHelper(6, 18, 0x34f5c6, 0x0f766e)
     grid.position.y = 0
     const gridMaterials = Array.isArray(grid.material) ? grid.material : [grid.material]
     gridMaterials.forEach((material) => {
@@ -486,7 +486,7 @@ const DimensionCube: React.FC<{ scale: CubeScale }> = ({ scale }) => {
         pivotAngleRef.current += 0.0012
       }
 
-      const pivotRadius = 2.6
+      const pivotRadius = 3.4
       const refCamera = cameraRef.current
       const activeCamera = refCamera ?? camera
       if (refCamera) {
