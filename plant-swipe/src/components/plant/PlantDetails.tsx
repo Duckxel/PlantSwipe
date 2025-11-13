@@ -360,50 +360,54 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
     [humanize],
   )
 
-  const quickStats = [
-    {
-      key: 'sun',
-      icon: <SunMedium className="h-4 w-4" />,
-      label: t('plantInfo.sunlight'),
-      value: formatStatValue(sunlightLevel),
-    },
-    {
-      key: 'water',
-      icon: <Droplets className="h-4 w-4" />,
-      label: t('plantInfo.water'),
-      value: formatStatValue(derivedWater),
-      sub: formatFrequencyLabel(freqLabel),
-    },
-    {
-      key: 'difficulty',
-      icon: <Leaf className="h-4 w-4" />,
-      label: t('plantInfo.difficulty'),
-      value: formatStatValue(care?.difficulty),
-    },
-  ]
-
-  if (indoorOutdoorLabel) {
-    quickStats.push({
-      key: 'indoorOutdoor',
-      icon: <Home className="h-4 w-4" />,
-      label: t('plantInfo.labels.location'),
-      value: indoorOutdoorLabel,
-    })
-  }
-
-  quickStats.push({
-    key: 'seeds',
-    icon: <Package className="h-4 w-4" />,
-    label: t('plantInfo.seedsAvailable'),
-    value: plant.seedsAvailable ? t('plantInfo.yes') : t('plantInfo.no'),
-  })
-
   const heroImage = plant.image || (plant as any)?.image_url || ''
   const friendlyFrequency = React.useMemo(
     () => formatFrequencyLabel(freqLabel),
     [formatFrequencyLabel, freqLabel]
   )
   const sunlightLevel = care?.sunlight ?? environment.sunExposure
+
+  const quickStats = React.useMemo(() => {
+    const stats = [
+      {
+        key: 'sun',
+        icon: <SunMedium className="h-4 w-4" />,
+        label: t('plantInfo.sunlight'),
+        value: formatStatValue(sunlightLevel),
+      },
+      {
+        key: 'water',
+        icon: <Droplets className="h-4 w-4" />,
+        label: t('plantInfo.water'),
+        value: formatStatValue(derivedWater),
+        sub: formatFrequencyLabel(freqLabel),
+      },
+      {
+        key: 'difficulty',
+        icon: <Leaf className="h-4 w-4" />,
+        label: t('plantInfo.difficulty'),
+        value: formatStatValue(care?.difficulty),
+      },
+    ]
+
+    if (indoorOutdoorLabel) {
+      stats.push({
+        key: 'indoorOutdoor',
+        icon: <Home className="h-4 w-4" />,
+        label: t('plantInfo.labels.location'),
+        value: indoorOutdoorLabel,
+      })
+    }
+
+    stats.push({
+      key: 'seeds',
+      icon: <Package className="h-4 w-4" />,
+      label: t('plantInfo.seedsAvailable'),
+      value: plant.seedsAvailable ? t('plantInfo.yes') : t('plantInfo.no'),
+    })
+
+    return stats
+  }, [care?.difficulty, derivedWater, formatFrequencyLabel, formatStatValue, freqLabel, indoorOutdoorLabel, plant.seedsAvailable, sunlightLevel, t])
 
   const careChartData = React.useMemo(() => {
     const data: Array<{ key: string; label: string; value: number; description: string }> = []
