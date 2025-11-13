@@ -162,6 +162,41 @@
       "button": "Explore the plant encyclopedia"
     }
   },
+  "discoveryPage": {
+    "hero": {
+      "eyebrow": "Curated deck, refreshed often",
+      "title": "Discover your next plant crush",
+      "subtitle": "Swipe through handpicked species, peek at their lore, and bookmark anything that sparks joy.",
+      "ctaPrimary": "Browse the encyclopedia",
+      "ctaSecondary": "Visit the gardens"
+    },
+    "status": {
+      "position": "{{current}} of {{total}} in rotation",
+      "empty": "Deck warming up..."
+    },
+    "infoCard": {
+      "descriptionLabel": "Description",
+      "descriptionFallback": "Description coming soon",
+      "colorsLabel": "Palette",
+      "seedsAvailable": "Seeds available",
+      "seedsUnavailable": "Seeds unavailable"
+    },
+    "instructions": {
+      "title": "Swipe cheat sheet",
+      "backTitle": "Revisit the previous bloom",
+      "backDescription": "Swipe right or tap Back to see the last card again.",
+      "infoTitle": "Open the plant story",
+      "infoDescription": "Swipe up or tap Info to dive into full details.",
+      "nextTitle": "Meet the next surprise",
+      "nextDescription": "Swipe left or tap Next to discover another plant.",
+      "invite": "Tip: arrow keys work too if you're on desktop."
+    },
+    "empty": {
+      "title": "You're all caught up",
+      "subtitle": "Adjust your filters or reset the deck to keep discovering fresh plants.",
+      "reset": "Reset deck"
+    }
+  },
   "auth": {
     "login": "Log in",
     "signup": "Create your account",

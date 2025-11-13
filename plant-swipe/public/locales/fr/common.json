@@ -162,6 +162,41 @@
       "button": "Explorer l'encyclopédie végétale"
     }
   },
+  "discoveryPage": {
+    "hero": {
+      "eyebrow": "Sélection soignée, souvent renouvelée",
+      "title": "Découvrez votre prochain coup de cœur botanique",
+      "subtitle": "Balayez des espèces triées, découvrez leur histoire et enregistrez celles qui vous inspirent.",
+      "ctaPrimary": "Explorer l'encyclopédie",
+      "ctaSecondary": "Visiter les jardins"
+    },
+    "status": {
+      "position": "{{current}} sur {{total}} en rotation",
+      "empty": "Le paquet s'échauffe..."
+    },
+    "infoCard": {
+      "descriptionLabel": "Description",
+      "descriptionFallback": "Description à venir",
+      "colorsLabel": "Palette",
+      "seedsAvailable": "Graines disponibles",
+      "seedsUnavailable": "Graines indisponibles"
+    },
+    "instructions": {
+      "title": "Guide des gestes",
+      "backTitle": "Revenir à la floraison précédente",
+      "backDescription": "Balayez vers la droite ou touchez Retour pour revoir la carte précédente.",
+      "infoTitle": "Ouvrir l'histoire de la plante",
+      "infoDescription": "Balayez vers le haut ou touchez Info pour tout savoir.",
+      "nextTitle": "Rencontrer la prochaine surprise",
+      "nextDescription": "Balayez vers la gauche ou touchez Suivant pour découvrir une autre plante.",
+      "invite": "Astuce : les flèches du clavier fonctionnent aussi sur ordinateur."
+    },
+    "empty": {
+      "title": "Vous avez tout parcouru",
+      "subtitle": "Ajustez vos filtres ou réinitialisez le paquet pour poursuivre la découverte.",
+      "reset": "Réinitialiser le paquet"
+    }
+  },
   "auth": {
     "login": "Se connecter",
     "signup": "Créer votre compte",
