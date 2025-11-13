@@ -168,40 +168,6 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
         return <Circle className="h-4 w-4 text-muted-foreground" />
     }
   }
-  const funFactState = (meta?.funFact ?? meaning ?? '').trim()
-  React.useEffect(() => {
-    if (aiFilling) return
-    const hasStarted = Object.values(aiFieldStatuses).some((status) => status !== 'pending')
-    if (!hasStarted) return
-    const snapshot: AiFieldStateSnapshot = {
-      scientificName,
-      colors,
-      seasons,
-      description,
-      funFact: funFactState,
-    }
-    const nextStatuses: Record<RequiredFieldId, AiFieldStatus> = { ...aiFieldStatuses }
-    let statusChanged = false
-    const missing: RequiredFieldId[] = []
-    for (const config of REQUIRED_FIELD_CONFIG) {
-      const filled = isFieldFilledFromState(config.id, snapshot)
-      const desired: AiFieldStatus = filled ? 'filled' : 'missing'
-      if (nextStatuses[config.id] !== desired) {
-        nextStatuses[config.id] = desired
-        statusChanged = true
-      }
-      if (!filled) missing.push(config.id)
-    }
-    if (statusChanged) {
-      setAiFieldStatuses(nextStatuses)
-    }
-    setAiMissingFields((current) => {
-      if (current.length === missing.length && current.every((id) => missing.includes(id))) {
-        return current
-      }
-      return missing
-    })
-  }, [aiFilling, aiFieldStatuses, scientificName, colors, seasons, description, funFactState])
   // New JSONB structure state
   const [identifiers, setIdentifiers] = React.useState<Partial<PlantIdentifiers>>({})
   const [traits, setTraits] = React.useState<Partial<PlantTraits>>({})
@@ -230,6 +196,42 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
   const [seedsAvailable] = React.useState(false)
   const [waterFreqPeriod] = React.useState<'week' | 'month' | 'year'>('week')
   const [waterFreqAmount] = React.useState<number>(1)
+
+  const funFact = React.useMemo(() => (meta?.funFact ?? meaning ?? '').trim(), [meta?.funFact, meaning])
+
+  React.useEffect(() => {
+    if (aiFilling) return
+    const hasStarted = Object.values(aiFieldStatuses).some((status) => status !== 'pending')
+    if (!hasStarted) return
+    const snapshot: AiFieldStateSnapshot = {
+      scientificName,
+      colors,
+      seasons,
+      description,
+      funFact,
+    }
+    const nextStatuses: Record<RequiredFieldId, AiFieldStatus> = { ...aiFieldStatuses }
+    let statusChanged = false
+    const missing: RequiredFieldId[] = []
+    for (const config of REQUIRED_FIELD_CONFIG) {
+      const filled = isFieldFilledFromState(config.id, snapshot)
+      const desired: AiFieldStatus = filled ? 'filled' : 'missing'
+      if (nextStatuses[config.id] !== desired) {
+        nextStatuses[config.id] = desired
+        statusChanged = true
+      }
+      if (!filled) missing.push(config.id)
+    }
+    if (statusChanged) {
+      setAiFieldStatuses(nextStatuses)
+    }
+    setAiMissingFields((current) => {
+      if (current.length === missing.length && current.every((id) => missing.includes(id))) {
+        return current
+      }
+      return missing
+    })
+  }, [aiFilling, aiFieldStatuses, scientificName, colors, seasons, description, funFact])
 
   const toggleSeason = (s: Plant["seasons"][number]) => {
     setSeasons((cur: string[]) => (cur.includes(s) ? cur.filter((x: string) => x !== s) : [...cur, s]))

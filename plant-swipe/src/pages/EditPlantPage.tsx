@@ -158,7 +158,23 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
         return <Circle className="h-4 w-4 text-muted-foreground" />
     }
   }
-  const funFactState = (meta?.funFact ?? meaning ?? '').trim()
+  // New JSONB structure state
+  const [identifiers, setIdentifiers] = React.useState<Partial<PlantIdentifiers>>({})
+  const [traits, setTraits] = React.useState<Partial<PlantTraits>>({})
+  const [dimensions, setDimensions] = React.useState<Partial<PlantDimensions>>({})
+  const [phenology, setPhenology] = React.useState<Partial<PlantPhenology>>({})
+  const [environment, setEnvironment] = React.useState<Partial<PlantEnvironment>>({})
+  const [care, setCare] = React.useState<Partial<PlantCare>>({})
+  const [propagation, setPropagation] = React.useState<Partial<PlantPropagation>>({})
+  const [usage, setUsage] = React.useState<Partial<PlantUsage>>({})
+  const [ecology, setEcology] = React.useState<Partial<PlantEcology>>({})
+  const [commerce, setCommerce] = React.useState<Partial<PlantCommerce>>({})
+  const [problems, setProblems] = React.useState<Partial<PlantProblems>>({})
+  const [planting, setPlanting] = React.useState<Partial<PlantPlanting>>({})
+  const [meta, setMeta] = React.useState<Partial<PlantMeta>>({})
+
+  const funFact = React.useMemo(() => (meta?.funFact ?? meaning ?? '').trim(), [meta?.funFact, meaning])
+
   React.useEffect(() => {
     if (aiFilling) return
     const hasStarted = Object.values(aiFieldStatuses).some((status) => status !== 'pending')
@@ -168,7 +184,7 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
       colors,
       seasons,
       description,
-      funFact: funFactState,
+      funFact,
     }
     const nextStatuses: Record<RequiredFieldId, AiFieldStatus> = { ...aiFieldStatuses }
     let statusChanged = false
@@ -191,21 +207,7 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
       }
       return missing
     })
-  }, [aiFilling, aiFieldStatuses, scientificName, colors, seasons, description, funFactState])
-  // New JSONB structure state
-  const [identifiers, setIdentifiers] = React.useState<Partial<PlantIdentifiers>>({})
-  const [traits, setTraits] = React.useState<Partial<PlantTraits>>({})
-  const [dimensions, setDimensions] = React.useState<Partial<PlantDimensions>>({})
-  const [phenology, setPhenology] = React.useState<Partial<PlantPhenology>>({})
-  const [environment, setEnvironment] = React.useState<Partial<PlantEnvironment>>({})
-  const [care, setCare] = React.useState<Partial<PlantCare>>({})
-  const [propagation, setPropagation] = React.useState<Partial<PlantPropagation>>({})
-  const [usage, setUsage] = React.useState<Partial<PlantUsage>>({})
-  const [ecology, setEcology] = React.useState<Partial<PlantEcology>>({})
-  const [commerce, setCommerce] = React.useState<Partial<PlantCommerce>>({})
-  const [problems, setProblems] = React.useState<Partial<PlantProblems>>({})
-  const [planting, setPlanting] = React.useState<Partial<PlantPlanting>>({})
-  const [meta, setMeta] = React.useState<Partial<PlantMeta>>({})
+  }, [aiFilling, aiFieldStatuses, scientificName, colors, seasons, description, funFact])
 
   const toggleSeason = (s: Plant["seasons"][number]) => {
     setSeasons((cur: string[]) => (cur.includes(s) ? cur.filter((x: string) => x !== s) : [...cur, s]))
@@ -573,7 +575,8 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
           const resolvedName = String(translation?.name || data.name || '')
           const resolvedScientificName = String(translation?.scientific_name || data.scientific_name || parsedIdentifiers?.scientificName || '')
           const resolvedMeaning = String(translation?.meaning || data.meaning || translationMeta?.funFact || parsedMeta?.funFact || '')
-          const resolvedDescription = String(translation?.description || data.description || '')
+        const resolvedDescription = String(translation?.description || data.description || '')
+        const resolvedFunFact = String(translationMeta?.funFact || parsedMeta?.funFact || data.meaning || '')
           const englishScientificName = String(data.scientific_name || parsedIdentifiers?.scientificName || '')
           const englishDescription = String(data.description || '')
           const resolvedColorsArray = Array.isArray(data.colors) ? (data.colors as string[]) : []
@@ -639,6 +642,7 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
             colors: resolvedColorsString,
             seasons: resolvedSeasons,
             description: englishDescription || resolvedDescription,
+            funFact: resolvedFunFact,
           })
       } catch (e: any) {
         setError(e?.message || 'Failed to load plant')
@@ -685,11 +689,31 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
           return { pests, diseases, hazards }
         })()
         
+      const funFactForTranslation = (meta?.funFact ?? meaning.trim()).trim()
+      const authorNotesForTranslation =
+        typeof meta?.authorNotes === 'string' ? meta.authorNotes.trim() : meta?.authorNotes
+      const sourceReferencesForTranslation =
+        typeof meta?.sourceReferences === 'string' ? meta.sourceReferences.trim() : meta?.sourceReferences
+      const metaPayloadForTranslation = (() => {
+        if (
+          !funFactForTranslation &&
+          !authorNotesForTranslation &&
+          !sourceReferencesForTranslation
+        ) {
+          return undefined
+        }
+        return {
+          funFact: funFactForTranslation || undefined,
+          authorNotes: authorNotesForTranslation || undefined,
+          sourceReferences: sourceReferencesForTranslation || undefined,
+        }
+      })()
+        
       // Get current fields
       const fields = {
         name: name.trim() || undefined,
         scientificName: scientificName.trim() || identifiers?.scientificName || undefined,
-        meaning: meta?.funFact || meaning.trim() || undefined,
+        meaning: funFactForTranslation || undefined,
         description: description.trim() || undefined,
         careSoil: environment?.soil?.texture?.join(', ') || careSoil.trim() || undefined,
         identifiers: identifiers ? {
@@ -703,11 +727,7 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
           culinaryUses: usage.culinaryUses,
           medicinalUses: usage.medicinalUses,
         } : undefined,
-          meta: metaForUpdate ? {
-            funFact: metaForUpdate.funFact,
-            authorNotes: metaForUpdate.authorNotes,
-            sourceReferences: metaForUpdate.sourceReferences,
-          } : undefined,
+          meta: metaPayloadForTranslation,
           phenology: translationPhenology,
           care: translationCarePayload,
           planting: translationPlanting,
