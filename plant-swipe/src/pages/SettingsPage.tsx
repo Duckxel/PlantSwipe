@@ -1,611 +1,729 @@
-import React from "react"
-import { useLanguageNavigate } from "@/lib/i18nRouting"
-import { useChangeLanguage, useLanguage } from "@/lib/i18nRouting"
-import { useTranslation } from "react-i18next"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { supabase } from "@/lib/supabaseClient"
-import { useAuth } from "@/context/AuthContext"
-import { useTheme } from "@/context/ThemeContext"
-import { Settings, Mail, Lock, Trash2, AlertTriangle, Check, ChevronDown, ChevronUp, Globe, Monitor, Sun, Moon } from "lucide-react"
-import { SUPPORTED_LANGUAGES } from "@/lib/i18n"
+import React from "react";
+import { useLanguageNavigate } from "@/lib/i18nRouting";
+import { useChangeLanguage, useLanguage } from "@/lib/i18nRouting";
+import { useTranslation } from "react-i18next";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { supabase } from "@/lib/supabaseClient";
+import { useAuth } from "@/context/AuthContext";
+import { useTheme } from "@/context/ThemeContext";
+import {
+  Settings,
+  Mail,
+  Lock,
+  Trash2,
+  AlertTriangle,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Globe,
+  Monitor,
+  Sun,
+  Moon,
+} from "lucide-react";
+import { SUPPORTED_LANGUAGES } from "@/lib/i18n";
 
 export default function SettingsPage() {
-  const { user, profile, refreshProfile, deleteAccount, signOut } = useAuth()
-  const navigate = useLanguageNavigate()
-  const changeLanguage = useChangeLanguage()
-  const currentLang = useLanguage()
-  const { t } = useTranslation('common')
-  const { theme, setTheme } = useTheme()
+  const { user, profile, refreshProfile, deleteAccount, signOut } = useAuth();
+  const navigate = useLanguageNavigate();
+  const changeLanguage = useChangeLanguage();
+  const currentLang = useLanguage();
+  const { t } = useTranslation("common");
+  const { theme, setTheme } = useTheme();
 
-  const [email, setEmail] = React.useState("")
-  const [newEmail, setNewEmail] = React.useState("")
-  const [currentPassword, setCurrentPassword] = React.useState("")
-  const [newPassword, setNewPassword] = React.useState("")
-  const [confirmPassword, setConfirmPassword] = React.useState("")
-  const [isPrivate, setIsPrivate] = React.useState(false)
-  const [disableFriendRequests, setDisableFriendRequests] = React.useState(false)
-  const [emailExpanded, setEmailExpanded] = React.useState(false)
-  const [passwordExpanded, setPasswordExpanded] = React.useState(false)
-  const [loading, setLoading] = React.useState(true)
-  const [saving, setSaving] = React.useState(false)
-  const [error, setError] = React.useState<string | null>(null)
-  const [success, setSuccess] = React.useState<string | null>(null)
-  const [deleteConfirm, setDeleteConfirm] = React.useState(false)
-  const [deleteConfirmText, setDeleteConfirmText] = React.useState("")
-  const [deleting, setDeleting] = React.useState(false)
+  const [email, setEmail] = React.useState("");
+  const [newEmail, setNewEmail] = React.useState("");
+  const [currentPassword, setCurrentPassword] = React.useState("");
+  const [newPassword, setNewPassword] = React.useState("");
+  const [confirmPassword, setConfirmPassword] = React.useState("");
+  const [isPrivate, setIsPrivate] = React.useState(false);
+  const [disableFriendRequests, setDisableFriendRequests] =
+    React.useState(false);
+  const [emailExpanded, setEmailExpanded] = React.useState(false);
+  const [passwordExpanded, setPasswordExpanded] = React.useState(false);
+  const [loading, setLoading] = React.useState(true);
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [success, setSuccess] = React.useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = React.useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = React.useState("");
+  const [deleting, setDeleting] = React.useState(false);
 
   // Function to partially censor email
   const censorEmail = (email: string): string => {
-    if (!email || email.length === 0) return email
-    const [localPart, domain] = email.split('@')
-    if (!domain) return email
-    
+    if (!email || email.length === 0) return email;
+    const [localPart, domain] = email.split("@");
+    if (!domain) return email;
+
     // Show first 2 characters and last character of local part, censor the rest
     if (localPart.length <= 3) {
-      return `${localPart[0]}***@${domain}`
+      return `${localPart[0]}***@${domain}`;
     }
-    const visibleStart = localPart.substring(0, 2)
-    const visibleEnd = localPart.substring(localPart.length - 1)
-    const censored = '*'.repeat(Math.max(3, localPart.length - 3))
-    return `${visibleStart}${censored}${visibleEnd}@${domain}`
-  }
+    const visibleStart = localPart.substring(0, 2);
+    const visibleEnd = localPart.substring(localPart.length - 1);
+    const censored = "*".repeat(Math.max(3, localPart.length - 3));
+    return `${visibleStart}${censored}${visibleEnd}@${domain}`;
+  };
+
+  const cardBaseClass =
+    "rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/75 dark:bg-[#1f1f1f]/75 backdrop-blur";
+
+  const heroSection = (
+    <section className="relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50 via-white to-stone-100 dark:from-[#252526] dark:via-[#1e1e1e] dark:to-[#171717]">
+      <div className="absolute -right-24 -top-24 h-64 w-64 rounded-full bg-emerald-200/40 dark:bg-emerald-500/10 blur-3xl" />
+      <div className="absolute -left-16 bottom-[-25%] h-72 w-72 rounded-full bg-emerald-100/40 dark:bg-emerald-500/10 blur-3xl" />
+      <div className="relative space-y-6 p-8 md:p-12">
+        <Badge className="inline-flex items-center gap-2 rounded-2xl px-4 py-1 bg-white/70 dark:bg-[#2d2d30]/70 backdrop-blur">
+          <Settings className="h-4 w-4" />
+          {t("settings.hero.badge")}
+        </Badge>
+        <h1 className="text-3xl md:text-4xl font-semibold tracking-tight">
+          {t("settings.hero.title")}
+        </h1>
+        <p className="text-base md:text-lg max-w-3xl text-stone-600 dark:text-stone-300">
+          {t("settings.hero.subtitle")}
+        </p>
+      </div>
+    </section>
+  );
 
   // Load current user data
   React.useEffect(() => {
     const loadData = async () => {
       if (!user?.id) {
-        navigate("/")
-        return
+        navigate("/");
+        return;
       }
 
       try {
         // Get current email
-        const { data: { user: authUser } } = await supabase.auth.getUser()
+        const {
+          data: { user: authUser },
+        } = await supabase.auth.getUser();
         if (authUser?.email) {
-          setEmail(authUser.email)
+          setEmail(authUser.email);
         }
 
         // Load profile privacy setting
         if (profile) {
-          setIsPrivate(Boolean((profile as any).is_private || false))
-          setDisableFriendRequests(Boolean((profile as any).disable_friend_requests || false))
+          setIsPrivate(Boolean((profile as any).is_private || false));
+          setDisableFriendRequests(
+            Boolean((profile as any).disable_friend_requests || false),
+          );
         } else {
           // Fetch profile if not loaded
           const { data } = await supabase
-            .from('profiles')
-            .select('is_private, disable_friend_requests')
-            .eq('id', user.id)
-            .maybeSingle()
+            .from("profiles")
+            .select("is_private, disable_friend_requests")
+            .eq("id", user.id)
+            .maybeSingle();
           if (data) {
-            setIsPrivate(Boolean(data.is_private || false))
-            setDisableFriendRequests(Boolean(data.disable_friend_requests || false))
+            setIsPrivate(Boolean(data.is_private || false));
+            setDisableFriendRequests(
+              Boolean(data.disable_friend_requests || false),
+            );
           }
         }
       } catch (e: any) {
-        setError(e?.message || t('settings.failedToLoad'))
+        setError(e?.message || t("settings.failedToLoad"));
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
-    }
-    loadData()
-  }, [user?.id, profile, navigate])
+    };
+    loadData();
+  }, [user?.id, profile, navigate]);
 
   const handleUpdateEmail = async () => {
     if (!newEmail || newEmail === email) {
-      setError(t('settings.email.enterNewEmail'))
-      return
+      setError(t("settings.email.enterNewEmail"));
+      return;
     }
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
-      setError(t('settings.email.enterValidEmail'))
-      return
+      setError(t("settings.email.enterValidEmail"));
+      return;
     }
 
-    setSaving(true)
-    setError(null)
-    setSuccess(null)
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
 
     try {
       const { error: updateError } = await supabase.auth.updateUser({
-        email: newEmail
-      })
+        email: newEmail,
+      });
 
-      if (updateError) throw updateError
+      if (updateError) throw updateError;
 
-      setSuccess(t('settings.email.updateRequestSent'))
-      setNewEmail("")
+      setSuccess(t("settings.email.updateRequestSent"));
+      setNewEmail("");
       // Refresh auth state
-      const { data: { user: authUser } } = await supabase.auth.getUser()
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser();
       if (authUser?.email) {
-        setEmail(authUser.email)
+        setEmail(authUser.email);
       }
     } catch (e: any) {
-      setError(e?.message || t('settings.email.failedToUpdate'))
+      setError(e?.message || t("settings.email.failedToUpdate"));
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
-  }
+  };
 
   const handleUpdatePassword = async () => {
     if (!currentPassword) {
-      setError(t('settings.password.enterCurrentPassword'))
-      return
+      setError(t("settings.password.enterCurrentPassword"));
+      return;
     }
 
     if (!newPassword || newPassword.length < 6) {
-      setError(t('settings.password.passwordTooShort'))
-      return
+      setError(t("settings.password.passwordTooShort"));
+      return;
     }
 
     if (newPassword !== confirmPassword) {
-      setError(t('settings.password.passwordsDontMatch'))
-      return
+      setError(t("settings.password.passwordsDontMatch"));
+      return;
     }
 
-    setSaving(true)
-    setError(null)
-    setSuccess(null)
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
 
     try {
       // Verify current password by attempting to sign in
       const { error: signInError } = await supabase.auth.signInWithPassword({
         email: email,
-        password: currentPassword
-      })
+        password: currentPassword,
+      });
 
       if (signInError) {
-        throw new Error(t('settings.password.currentPasswordIncorrect'))
+        throw new Error(t("settings.password.currentPasswordIncorrect"));
       }
 
       // If sign in succeeds, update the password
       const { error: updateError } = await supabase.auth.updateUser({
-        password: newPassword
-      })
+        password: newPassword,
+      });
 
-      if (updateError) throw updateError
+      if (updateError) throw updateError;
 
-      setSuccess(t('settings.password.updated'))
-      setCurrentPassword("")
-      setNewPassword("")
-      setConfirmPassword("")
+      setSuccess(t("settings.password.updated"));
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
     } catch (e: any) {
-      setError(e?.message || t('settings.password.failedToUpdate'))
+      setError(e?.message || t("settings.password.failedToUpdate"));
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
-  }
+  };
 
   const handleTogglePrivacy = async () => {
-    if (!user?.id) return
+    if (!user?.id) return;
 
-    const newPrivacyValue = !isPrivate
-    setSaving(true)
-    setError(null)
-    setSuccess(null)
+    const newPrivacyValue = !isPrivate;
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
 
     try {
       const { error: updateError } = await supabase
-        .from('profiles')
+        .from("profiles")
         .update({ is_private: newPrivacyValue })
-        .eq('id', user.id)
+        .eq("id", user.id);
 
-      if (updateError) throw updateError
+      if (updateError) throw updateError;
 
-      setIsPrivate(newPrivacyValue)
-      setSuccess(newPrivacyValue ? t('settings.privacy.profileNowPrivate') : t('settings.privacy.profileNowPublic'))
-      await refreshProfile()
+      setIsPrivate(newPrivacyValue);
+      setSuccess(
+        newPrivacyValue
+          ? t("settings.privacy.profileNowPrivate")
+          : t("settings.privacy.profileNowPublic"),
+      );
+      await refreshProfile();
     } catch (e: any) {
-      setError(e?.message || t('settings.privacy.failedToUpdate'))
-      setIsPrivate(!newPrivacyValue) // Revert on error
+      setError(e?.message || t("settings.privacy.failedToUpdate"));
+      setIsPrivate(!newPrivacyValue); // Revert on error
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
-  }
+  };
 
   const handleToggleFriendRequests = async () => {
-    if (!user?.id) return
+    if (!user?.id) return;
 
-    const newValue = !disableFriendRequests
-    setSaving(true)
-    setError(null)
-    setSuccess(null)
+    const newValue = !disableFriendRequests;
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
 
     try {
       const { error: updateError } = await supabase
-        .from('profiles')
+        .from("profiles")
         .update({ disable_friend_requests: newValue })
-        .eq('id', user.id)
+        .eq("id", user.id);
 
-      if (updateError) throw updateError
+      if (updateError) throw updateError;
 
-      setDisableFriendRequests(newValue)
-      setSuccess(newValue ? t('settings.friendRequests.friendRequestsNowDisabled') : t('settings.friendRequests.friendRequestsNowEnabled'))
-      await refreshProfile()
+      setDisableFriendRequests(newValue);
+      setSuccess(
+        newValue
+          ? t("settings.friendRequests.friendRequestsNowDisabled")
+          : t("settings.friendRequests.friendRequestsNowEnabled"),
+      );
+      await refreshProfile();
     } catch (e: any) {
-      setError(e?.message || t('settings.friendRequests.failedToUpdate'))
-      setDisableFriendRequests(!newValue) // Revert on error
+      setError(e?.message || t("settings.friendRequests.failedToUpdate"));
+      setDisableFriendRequests(!newValue); // Revert on error
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
-  }
+  };
 
   const handleDeleteAccount = async () => {
     if (!deleteConfirm || deleteConfirmText !== "DELETE") {
-      setError(t('settings.dangerZone.typeDeleteToConfirm'))
-      return
+      setError(t("settings.dangerZone.typeDeleteToConfirm"));
+      return;
     }
 
-    setDeleting(true)
-    setError(null)
+    setDeleting(true);
+    setError(null);
 
     try {
-      const result = await deleteAccount()
+      const result = await deleteAccount();
       if (result?.error) {
-        throw new Error(result.error)
+        throw new Error(result.error);
       }
 
       // Sign out and redirect
-      await signOut()
-      navigate("/")
+      await signOut();
+      navigate("/");
     } catch (e: any) {
-      setError(e?.message || t('settings.dangerZone.failedToDelete'))
-      setDeleting(false)
+      setError(e?.message || t("settings.dangerZone.failedToDelete"));
+      setDeleting(false);
     }
-  }
+  };
 
   if (loading) {
     return (
-      <div className="max-w-4xl mx-auto mt-8 px-4 md:px-0">
-        <div className="p-8 text-center text-sm opacity-60">{t('settings.loading')}</div>
+      <div className="max-w-6xl mx-auto px-4 md:px-0 pb-16 space-y-8">
+        {heroSection}
+        <section className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/75 dark:bg-[#1f1f1f]/75 backdrop-blur px-4 md:px-8 py-10 shadow-sm text-center text-sm text-stone-600 dark:text-stone-300">
+          {t("settings.loading")}
+        </section>
       </div>
-    )
+    );
   }
 
   return (
-    <div className="max-w-4xl mx-auto mt-8 px-4 md:px-0">
-      <div className="mb-6">
-        <h1 className="text-3xl font-semibold flex items-center gap-3">
-          <Settings className="h-6 w-6" />
-          {t('settings.title')}
-        </h1>
-        <p className="text-sm opacity-70 mt-2">{t('settings.description')}</p>
-      </div>
-
-      {error && (
-        <div className="mb-4 p-4 rounded-2xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 text-red-700 dark:text-red-400 flex items-start gap-2">
-          <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" />
-          <div className="flex-1">{error}</div>
-        </div>
-      )}
-
-      {success && (
-        <div className="mb-4 p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50 text-emerald-700 dark:text-emerald-400 flex items-start gap-2">
-          <Check className="h-5 w-5 mt-0.5 shrink-0" />
-          <div className="flex-1">{success}</div>
-        </div>
-      )}
-
-      {/* Account Information */}
-      <Card className="rounded-3xl mb-4">
-        <CardHeader>
-          <button
-            onClick={() => setEmailExpanded(!emailExpanded)}
-            className="w-full text-left flex items-center justify-between gap-2 hover:opacity-80 transition-opacity"
-          >
-            <div className="flex items-center gap-2">
-              <Mail className="h-5 w-5" />
-              <CardTitle>{t('settings.email.title')}</CardTitle>
+    <div className="max-w-6xl mx-auto px-4 md:px-0 pb-16 space-y-8">
+      {heroSection}
+      <section className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/75 dark:bg-[#1f1f1f]/75 backdrop-blur px-4 md:px-8 py-6 md:py-8 shadow-sm">
+        <div className="space-y-4">
+          {error && (
+            <div className="flex items-start gap-3 rounded-[24px] border border-red-500/40 bg-red-50/70 px-4 py-3 text-sm text-red-700 dark:border-red-700/50 dark:bg-red-900/30 dark:text-red-300">
+              <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" />
+              <div className="flex-1">{error}</div>
             </div>
-            {emailExpanded ? (
-              <ChevronUp className="h-5 w-5 opacity-60" />
-            ) : (
-              <ChevronDown className="h-5 w-5 opacity-60" />
-            )}
-          </button>
-          {!emailExpanded ? (
-            <CardDescription className="mt-2">
-              {t('settings.email.emailAddressLabel')} <span className="font-medium">{censorEmail(email)}</span>
-            </CardDescription>
-          ) : (
-            <CardDescription className="mt-2">
-              {t('settings.email.description')}
-            </CardDescription>
           )}
-        </CardHeader>
-        {emailExpanded && (
-          <CardContent className="space-y-4">
-            <div className="grid gap-2">
-              <Label htmlFor="current-email">{t('settings.email.currentEmail')}</Label>
-              <Input
-                id="current-email"
-                type="email"
-                value={email}
-                disabled
-                className="bg-stone-50 dark:bg-[#252526]"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="new-email">{t('settings.email.newEmail')}</Label>
-              <Input
-                id="new-email"
-                type="email"
-                placeholder={t('settings.email.newEmailPlaceholder')}
-                value={newEmail}
-                onChange={(e) => setNewEmail(e.target.value)}
-                disabled={saving}
-              />
-            </div>
-            <Button
-              onClick={handleUpdateEmail}
-              disabled={saving || !newEmail || newEmail === email}
-              className="rounded-2xl"
-            >
-              {saving ? t('settings.email.updating') : t('settings.email.update')}
-            </Button>
-          </CardContent>
-        )}
-      </Card>
 
-      {/* Password */}
-      <Card className="rounded-3xl mb-4">
-        <CardHeader>
-          <button
-            onClick={() => setPasswordExpanded(!passwordExpanded)}
-            className="w-full text-left flex items-center justify-between gap-2 hover:opacity-80 transition-opacity"
-          >
-            <div className="flex items-center gap-2">
-              <Lock className="h-5 w-5" />
-              <CardTitle>{t('settings.password.title')}</CardTitle>
+          {success && (
+            <div className="flex items-start gap-3 rounded-[24px] border border-emerald-500/40 bg-emerald-50/70 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-700/50 dark:bg-emerald-900/30 dark:text-emerald-300">
+              <Check className="h-5 w-5 mt-0.5 shrink-0" />
+              <div className="flex-1">{success}</div>
             </div>
-            {passwordExpanded ? (
-              <ChevronUp className="h-5 w-5 opacity-60" />
-            ) : (
-              <ChevronDown className="h-5 w-5 opacity-60" />
-            )}
-          </button>
-          {!passwordExpanded ? (
-            <CardDescription className="mt-2">
-              {t('settings.password.passwordLabel')} <span className="font-medium">••••••••</span>
-            </CardDescription>
-          ) : (
-            <CardDescription className="mt-2">
-              {t('settings.password.description')}
-            </CardDescription>
           )}
-        </CardHeader>
-        {passwordExpanded && (
-          <CardContent className="space-y-4">
-            <div className="grid gap-2">
-              <Label htmlFor="current-password">{t('settings.password.currentPassword')}</Label>
-              <Input
-                id="current-password"
-                type="password"
-                placeholder={t('settings.password.currentPasswordPlaceholder')}
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                disabled={saving}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="new-password">{t('settings.password.newPassword')}</Label>
-              <Input
-                id="new-password"
-                type="password"
-                placeholder={t('settings.password.newPasswordPlaceholder')}
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                disabled={saving}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="confirm-password">{t('settings.password.confirmPassword')}</Label>
-              <Input
-                id="confirm-password"
-                type="password"
-                placeholder={t('settings.password.confirmPasswordPlaceholder')}
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                disabled={saving}
-              />
-            </div>
-            <Button
-              onClick={handleUpdatePassword}
-              disabled={saving || !currentPassword || !newPassword || newPassword !== confirmPassword}
-              className="rounded-2xl"
-            >
-              {saving ? t('settings.password.updating') : t('settings.password.update')}
-            </Button>
-          </CardContent>
-        )}
-      </Card>
 
-      {/* Privacy Settings */}
-      <Card className="rounded-3xl mb-4">
-        <CardHeader>
-          <CardTitle>{t('settings.privacy.title')}</CardTitle>
-          <CardDescription>{t('settings.privacy.description')}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-start gap-3">
-            <input
-              type="checkbox"
-              id="private-profile"
-              checked={isPrivate}
-              onChange={handleTogglePrivacy}
-              disabled={saving}
-              className="mt-1 h-4 w-4 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
-            />
-            <div className="flex-1">
-              <Label htmlFor="private-profile" className="font-medium cursor-pointer">
-                {t('settings.privacy.privateProfile')}
-              </Label>
-              <p className="text-sm opacity-70 mt-1">
-                {t('settings.privacy.privateProfileDescription')}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-start gap-3">
-            <input
-              type="checkbox"
-              id="disable-friend-requests"
-              checked={disableFriendRequests}
-              onChange={handleToggleFriendRequests}
-              disabled={saving}
-              className="mt-1 h-4 w-4 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
-            />
-            <div className="flex-1">
-              <Label htmlFor="disable-friend-requests" className="font-medium cursor-pointer">
-                {t('settings.friendRequests.disable')}
-              </Label>
-              <p className="text-sm opacity-70 mt-1">
-                {t('settings.friendRequests.disableDescription')}
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          <div className="space-y-6">
+            {/* Account Information */}
+            <Card className={cardBaseClass}>
+              <CardHeader>
+                <button
+                  onClick={() => setEmailExpanded(!emailExpanded)}
+                  className="w-full text-left flex items-center justify-between gap-2 hover:opacity-80 transition-opacity"
+                >
+                  <div className="flex items-center gap-2">
+                    <Mail className="h-5 w-5" />
+                    <CardTitle>{t("settings.email.title")}</CardTitle>
+                  </div>
+                  {emailExpanded ? (
+                    <ChevronUp className="h-5 w-5 opacity-60" />
+                  ) : (
+                    <ChevronDown className="h-5 w-5 opacity-60" />
+                  )}
+                </button>
+                {!emailExpanded ? (
+                  <CardDescription className="mt-2">
+                    {t("settings.email.emailAddressLabel")}{" "}
+                    <span className="font-medium">{censorEmail(email)}</span>
+                  </CardDescription>
+                ) : (
+                  <CardDescription className="mt-2">
+                    {t("settings.email.description")}
+                  </CardDescription>
+                )}
+              </CardHeader>
+              {emailExpanded && (
+                <CardContent className="space-y-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="current-email">
+                      {t("settings.email.currentEmail")}
+                    </Label>
+                    <Input
+                      id="current-email"
+                      type="email"
+                      value={email}
+                      disabled
+                      className="bg-stone-50 dark:bg-[#252526]"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="new-email">
+                      {t("settings.email.newEmail")}
+                    </Label>
+                    <Input
+                      id="new-email"
+                      type="email"
+                      placeholder={t("settings.email.newEmailPlaceholder")}
+                      value={newEmail}
+                      onChange={(e) => setNewEmail(e.target.value)}
+                      disabled={saving}
+                    />
+                  </div>
+                  <Button
+                    onClick={handleUpdateEmail}
+                    disabled={saving || !newEmail || newEmail === email}
+                    className="rounded-2xl"
+                  >
+                    {saving
+                      ? t("settings.email.updating")
+                      : t("settings.email.update")}
+                  </Button>
+                </CardContent>
+              )}
+            </Card>
 
-      {/* Language Settings */}
-      <Card className="rounded-3xl mb-4">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Globe className="h-5 w-5" />
-            {t('settings.language.title')}
-          </CardTitle>
-          <CardDescription>
-            {t('settings.language.description')}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-2">
-            <Label htmlFor="language-select">{t('settings.language.selectLanguage')}</Label>
-            <select
-              id="language-select"
-              value={currentLang}
-              onChange={(e) => changeLanguage(e.target.value as typeof currentLang)}
-              className="w-full rounded-2xl border border-stone-300 bg-white dark:bg-[#2d2d30] dark:border-[#3e3e42] px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
-            >
-              {SUPPORTED_LANGUAGES.map((lang) => (
-                <option key={lang} value={lang}>
-                  {lang === 'en' ? t('settings.language.english') : t('settings.language.french')}
-                </option>
-              ))}
-            </select>
-          </div>
-        </CardContent>
-      </Card>
+            {/* Password */}
+            <Card className={cardBaseClass}>
+              <CardHeader>
+                <button
+                  onClick={() => setPasswordExpanded(!passwordExpanded)}
+                  className="w-full text-left flex items-center justify-between gap-2 hover:opacity-80 transition-opacity"
+                >
+                  <div className="flex items-center gap-2">
+                    <Lock className="h-5 w-5" />
+                    <CardTitle>{t("settings.password.title")}</CardTitle>
+                  </div>
+                  {passwordExpanded ? (
+                    <ChevronUp className="h-5 w-5 opacity-60" />
+                  ) : (
+                    <ChevronDown className="h-5 w-5 opacity-60" />
+                  )}
+                </button>
+                {!passwordExpanded ? (
+                  <CardDescription className="mt-2">
+                    {t("settings.password.passwordLabel")}{" "}
+                    <span className="font-medium">••••••••</span>
+                  </CardDescription>
+                ) : (
+                  <CardDescription className="mt-2">
+                    {t("settings.password.description")}
+                  </CardDescription>
+                )}
+              </CardHeader>
+              {passwordExpanded && (
+                <CardContent className="space-y-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="current-password">
+                      {t("settings.password.currentPassword")}
+                    </Label>
+                    <Input
+                      id="current-password"
+                      type="password"
+                      placeholder={t(
+                        "settings.password.currentPasswordPlaceholder",
+                      )}
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      disabled={saving}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="new-password">
+                      {t("settings.password.newPassword")}
+                    </Label>
+                    <Input
+                      id="new-password"
+                      type="password"
+                      placeholder={t(
+                        "settings.password.newPasswordPlaceholder",
+                      )}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      disabled={saving}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="confirm-password">
+                      {t("settings.password.confirmPassword")}
+                    </Label>
+                    <Input
+                      id="confirm-password"
+                      type="password"
+                      placeholder={t(
+                        "settings.password.confirmPasswordPlaceholder",
+                      )}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      disabled={saving}
+                    />
+                  </div>
+                  <Button
+                    onClick={handleUpdatePassword}
+                    disabled={
+                      saving ||
+                      !currentPassword ||
+                      !newPassword ||
+                      newPassword !== confirmPassword
+                    }
+                    className="rounded-2xl"
+                  >
+                    {saving
+                      ? t("settings.password.updating")
+                      : t("settings.password.update")}
+                  </Button>
+                </CardContent>
+              )}
+            </Card>
 
-      {/* Theme Settings */}
-      <Card className="rounded-3xl mb-4">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Monitor className="h-5 w-5" />
-            {t('settings.theme.title')}
-          </CardTitle>
-          <CardDescription>
-            {t('settings.theme.description')}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-2">
-            <Label htmlFor="theme-select">{t('settings.theme.selectTheme')}</Label>
-            <div className="relative">
-              <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                {theme === 'system' && <Monitor className="h-4 w-4 opacity-60" />}
-                {theme === 'light' && <Sun className="h-4 w-4 opacity-60" />}
-                {theme === 'dark' && <Moon className="h-4 w-4 opacity-60" />}
-              </div>
-              <select
-                id="theme-select"
-                value={theme}
-                onChange={(e) => setTheme(e.target.value as 'system' | 'light' | 'dark')}
-                className="w-full rounded-2xl border border-stone-300 bg-white dark:bg-[#2d2d30] dark:border-[#3e3e42] pl-10 pr-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors appearance-none"
-              >
-                <option value="system">{t('settings.theme.system')}</option>
-                <option value="light">{t('settings.theme.light')}</option>
-                <option value="dark">{t('settings.theme.dark')}</option>
-              </select>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Danger Zone */}
-      <Card className="rounded-3xl border-red-200 dark:border-red-800/50 bg-red-50/50 dark:bg-red-900/20">
-        <CardHeader>
-          <CardTitle className="text-red-700 dark:text-red-400 flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5" />
-            {t('settings.dangerZone.title')}
-          </CardTitle>
-          <CardDescription className="text-red-600/80 dark:text-red-400/80">
-            {t('settings.dangerZone.description')}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {!deleteConfirm ? (
-            <>
-              <p className="text-sm opacity-90">
-                {t('settings.dangerZone.deleteWarning')}
-              </p>
-              <Button
-                onClick={() => setDeleteConfirm(true)}
-                variant="destructive"
-                className="rounded-2xl"
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                {t('settings.dangerZone.deleteAccount')}
-              </Button>
-            </>
-          ) : (
-            <>
-              <div className="p-4 rounded-xl bg-white dark:bg-[#252526] border border-red-200 dark:border-red-800/50 space-y-4">
-                <p className="text-sm font-medium text-red-700 dark:text-red-400">
-                  {t('settings.dangerZone.confirmDelete')}
-                </p>
-                <div className="grid gap-2">
-                  <Label htmlFor="confirm-delete" className="text-sm">
-                    {t('settings.dangerZone.typeDelete')}
-                  </Label>
-                  <Input
-                    id="confirm-delete"
-                    type="text"
-                    placeholder="DELETE"
-                    value={deleteConfirmText}
-                    onChange={(e) => setDeleteConfirmText(e.target.value)}
-                    disabled={deleting}
-                    className="font-mono"
+            {/* Privacy Settings */}
+            <Card className={cardBaseClass}>
+              <CardHeader>
+                <CardTitle>{t("settings.privacy.title")}</CardTitle>
+                <CardDescription>
+                  {t("settings.privacy.description")}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    id="private-profile"
+                    checked={isPrivate}
+                    onChange={handleTogglePrivacy}
+                    disabled={saving}
+                    className="mt-1 h-4 w-4 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
                   />
+                  <div className="flex-1">
+                    <Label
+                      htmlFor="private-profile"
+                      className="font-medium cursor-pointer"
+                    >
+                      {t("settings.privacy.privateProfile")}
+                    </Label>
+                    <p className="text-sm opacity-70 mt-1">
+                      {t("settings.privacy.privateProfileDescription")}
+                    </p>
+                  </div>
                 </div>
-                <div className="flex gap-2">
-                  <Button
-                    onClick={handleDeleteAccount}
-                    variant="destructive"
-                    disabled={deleting || deleteConfirmText !== "DELETE"}
-                    className="rounded-2xl"
-                  >
-                    {deleting ? t('settings.dangerZone.deleting') : t('settings.dangerZone.yesDelete')}
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      setDeleteConfirm(false)
-                      setDeleteConfirmText("")
-                      setError(null)
-                    }}
-                    variant="secondary"
-                    disabled={deleting}
-                    className="rounded-2xl"
-                  >
-                    {t('common.cancel')}
-                  </Button>
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    id="disable-friend-requests"
+                    checked={disableFriendRequests}
+                    onChange={handleToggleFriendRequests}
+                    disabled={saving}
+                    className="mt-1 h-4 w-4 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <div className="flex-1">
+                    <Label
+                      htmlFor="disable-friend-requests"
+                      className="font-medium cursor-pointer"
+                    >
+                      {t("settings.friendRequests.disable")}
+                    </Label>
+                    <p className="text-sm opacity-70 mt-1">
+                      {t("settings.friendRequests.disableDescription")}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
+              </CardContent>
+            </Card>
+
+            {/* Language Settings */}
+            <Card className={cardBaseClass}>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Globe className="h-5 w-5" />
+                  {t("settings.language.title")}
+                </CardTitle>
+                <CardDescription>
+                  {t("settings.language.description")}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="language-select">
+                    {t("settings.language.selectLanguage")}
+                  </Label>
+                  <select
+                    id="language-select"
+                    value={currentLang}
+                    onChange={(e) =>
+                      changeLanguage(e.target.value as typeof currentLang)
+                    }
+                    className="w-full rounded-2xl border border-stone-300 bg-white dark:bg-[#2d2d30] dark:border-[#3e3e42] px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
+                  >
+                    {SUPPORTED_LANGUAGES.map((lang) => (
+                      <option key={lang} value={lang}>
+                        {lang === "en"
+                          ? t("settings.language.english")
+                          : t("settings.language.french")}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Theme Settings */}
+            <Card className={cardBaseClass}>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Monitor className="h-5 w-5" />
+                  {t("settings.theme.title")}
+                </CardTitle>
+                <CardDescription>
+                  {t("settings.theme.description")}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="theme-select">
+                    {t("settings.theme.selectTheme")}
+                  </Label>
+                  <div className="relative">
+                    <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                      {theme === "system" && (
+                        <Monitor className="h-4 w-4 opacity-60" />
+                      )}
+                      {theme === "light" && (
+                        <Sun className="h-4 w-4 opacity-60" />
+                      )}
+                      {theme === "dark" && (
+                        <Moon className="h-4 w-4 opacity-60" />
+                      )}
+                    </div>
+                    <select
+                      id="theme-select"
+                      value={theme}
+                      onChange={(e) =>
+                        setTheme(e.target.value as "system" | "light" | "dark")
+                      }
+                      className="w-full rounded-2xl border border-stone-300 bg-white dark:bg-[#2d2d30] dark:border-[#3e3e42] pl-10 pr-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors appearance-none"
+                    >
+                      <option value="system">
+                        {t("settings.theme.system")}
+                      </option>
+                      <option value="light">{t("settings.theme.light")}</option>
+                      <option value="dark">{t("settings.theme.dark")}</option>
+                    </select>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Danger Zone */}
+            <Card
+              className={`${cardBaseClass} border-red-200 dark:border-red-800/60 bg-red-50/60 dark:bg-red-900/20`}
+            >
+              <CardHeader>
+                <CardTitle className="text-red-700 dark:text-red-400 flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5" />
+                  {t("settings.dangerZone.title")}
+                </CardTitle>
+                <CardDescription className="text-red-600/80 dark:text-red-400/80">
+                  {t("settings.dangerZone.description")}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {!deleteConfirm ? (
+                  <>
+                    <p className="text-sm opacity-90">
+                      {t("settings.dangerZone.deleteWarning")}
+                    </p>
+                    <Button
+                      onClick={() => setDeleteConfirm(true)}
+                      variant="destructive"
+                      className="rounded-2xl"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      {t("settings.dangerZone.deleteAccount")}
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <div className="p-4 rounded-xl bg-white dark:bg-[#252526] border border-red-200 dark:border-red-800/50 space-y-4">
+                      <p className="text-sm font-medium text-red-700 dark:text-red-400">
+                        {t("settings.dangerZone.confirmDelete")}
+                      </p>
+                      <div className="grid gap-2">
+                        <Label htmlFor="confirm-delete" className="text-sm">
+                          {t("settings.dangerZone.typeDelete")}
+                        </Label>
+                        <Input
+                          id="confirm-delete"
+                          type="text"
+                          placeholder="DELETE"
+                          value={deleteConfirmText}
+                          onChange={(e) => setDeleteConfirmText(e.target.value)}
+                          disabled={deleting}
+                          className="font-mono"
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={handleDeleteAccount}
+                          variant="destructive"
+                          disabled={deleting || deleteConfirmText !== "DELETE"}
+                          className="rounded-2xl"
+                        >
+                          {deleting
+                            ? t("settings.dangerZone.deleting")
+                            : t("settings.dangerZone.yesDelete")}
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            setDeleteConfirm(false);
+                            setDeleteConfirmText("");
+                            setError(null);
+                          }}
+                          variant="secondary"
+                          disabled={deleting}
+                          className="rounded-2xl"
+                        >
+                          {t("common.cancel")}
+                        </Button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </section>
     </div>
-  )
+  );
 }

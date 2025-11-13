@@ -194,6 +194,11 @@
     "unexpectedError": "Erreur inattendue"
   },
   "settings": {
+    "hero": {
+      "badge": "Paramètres du compte",
+      "title": "Peaufinez votre expérience Plantswipe",
+      "subtitle": "Mettez à jour vos informations, personnalisez vos préférences et contrôlez la façon dont les autres peuvent vous contacter."
+    },
     "title": "Paramètres du compte",
     "description": "Gérez vos préférences de compte et votre sécurité",
     "loading": "Chargement des paramètres…",

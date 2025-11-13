@@ -1,13 +1,13 @@
-import React from "react"
-import { Badge } from "@/components/ui/badge"
+import React from "react";
+import { Badge } from "@/components/ui/badge";
 
 interface SearchLayoutProps {
-  title: string
-  subtitle: string
-  badge: string
-  leftActions?: React.ReactNode
-  rightActions?: React.ReactNode
-  children: React.ReactNode
+  title: string;
+  subtitle: string;
+  badge: string;
+  leftActions?: React.ReactNode;
+  rightActions?: React.ReactNode;
+  children: React.ReactNode;
 }
 
 export const SearchLayout: React.FC<SearchLayoutProps> = ({
@@ -27,7 +27,9 @@ export const SearchLayout: React.FC<SearchLayoutProps> = ({
           <Badge className="rounded-2xl px-4 py-1 bg-white/70 dark:bg-[#2d2d30]/70 backdrop-blur">
             {badge}
           </Badge>
-          <h1 className="text-3xl md:text-4xl font-semibold tracking-tight">{title}</h1>
+          <h1 className="text-3xl md:text-4xl font-semibold tracking-tight">
+            {title}
+          </h1>
           <p className="text-base md:text-lg max-w-3xl text-stone-600 dark:text-stone-300">
             {subtitle}
           </p>
@@ -44,5 +46,5 @@ export const SearchLayout: React.FC<SearchLayoutProps> = ({
         {children}
       </section>
     </div>
-  )
-}
+  );
+};

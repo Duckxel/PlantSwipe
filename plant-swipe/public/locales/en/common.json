@@ -194,6 +194,11 @@
     "unexpectedError": "Unexpected error"
   },
   "settings": {
+    "hero": {
+      "badge": "Account settings",
+      "title": "Fine-tune your Plantswipe experience",
+      "subtitle": "Update account details, personalize preferences, and decide how others can reach you."
+    },
     "title": "Account Settings",
     "description": "Manage your account preferences and security",
     "loading": "Loading settings…",
