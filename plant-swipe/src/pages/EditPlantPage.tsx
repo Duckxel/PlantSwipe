@@ -690,10 +690,13 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
         })()
         
       const funFactForTranslation = (meta?.funFact ?? meaning.trim()).trim()
+      const authorNotesRaw = meta?.authorNotes
       const authorNotesForTranslation =
-        typeof meta?.authorNotes === 'string' ? meta.authorNotes.trim() : meta?.authorNotes
-      const sourceReferencesForTranslation =
-        typeof meta?.sourceReferences === 'string' ? meta.sourceReferences.trim() : meta?.sourceReferences
+        typeof authorNotesRaw === 'string' ? authorNotesRaw.trim() : undefined
+      const sourceReferencesRaw = meta?.sourceReferences
+      const sourceReferencesForTranslation = Array.isArray(sourceReferencesRaw)
+        ? sourceReferencesRaw
+        : undefined
       const metaPayloadForTranslation = (() => {
         if (
           !funFactForTranslation &&
