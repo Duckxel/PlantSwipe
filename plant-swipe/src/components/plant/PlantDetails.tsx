@@ -215,16 +215,26 @@ const TIMELINE_COLORS: Record<string, string> = {
 const DIMENSION_CUBE_STYLE_ID = 'dimension-cube-styles'
 const DIMENSION_CUBE_STYLES = `
 @keyframes dimensionCubeRotate {
-  0% { transform: rotateX(-24deg) rotateY(16deg); }
-  50% { transform: rotateX(-24deg) rotateY(196deg); }
-  100% { transform: rotateX(-24deg) rotateY(376deg); }
+  0% { transform: rotateX(-20deg) rotateY(24deg); }
+  33% { transform: rotateX(-32deg) rotateY(144deg); }
+  66% { transform: rotateX(-18deg) rotateY(264deg); }
+  100% { transform: rotateX(-20deg) rotateY(384deg); }
 }
 .dimension-cube-scene {
   position: relative;
   width: 160px;
   height: 160px;
   margin: 0 auto;
-  perspective: 900px;
+  perspective: 1200px;
+}
+.dimension-cube-wrapper {
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: rotateX(-18deg) rotateY(32deg);
 }
 .dimension-cube-scale {
   width: 100%;
@@ -239,16 +249,16 @@ const DIMENSION_CUBE_STYLES = `
   width: 120px;
   height: 120px;
   transform-style: preserve-3d;
-  animation: dimensionCubeRotate 48s linear infinite;
-  filter: drop-shadow(0 18px 26px rgba(16,185,129,0.22));
+  animation: dimensionCubeRotate 64s linear infinite;
+  filter: drop-shadow(0 22px 28px rgba(16,185,129,0.24));
 }
 .dimension-cube-face {
   position: absolute;
   inset: 0;
-  border: 2px solid rgba(16,185,129,0.72);
-  background: linear-gradient(155deg, rgba(16,185,129,0.18), rgba(16,185,129,0.04));
-  box-shadow: inset 0 0 18px rgba(15,118,110,0.32);
-  backdrop-filter: blur(1.2px);
+  border: 2px solid rgba(16,185,129,0.85);
+  background: rgba(15,118,110,0.12);
+  box-shadow: inset 0 0 24px rgba(15,118,110,0.4);
+  backdrop-filter: blur(1.5px);
 }
 .dimension-cube-face::after {
   content: "";
@@ -260,25 +270,45 @@ const DIMENSION_CUBE_STYLES = `
 .dimension-cube-face::before {
   content: "";
   position: absolute;
-  inset: 14%;
-  border: 1px dashed rgba(16,185,129,0.45);
-  filter: blur(0.2px);
+  inset: 18%;
+  border: 1px dashed rgba(16,185,129,0.55);
+  filter: blur(0.15px);
 }
-.dimension-cube-face--front { transform: translateZ(60px); }
-.dimension-cube-face--back { transform: rotateY(180deg) translateZ(60px); }
-.dimension-cube-face--left { transform: rotateY(-90deg) translateZ(60px); }
-.dimension-cube-face--right { transform: rotateY(90deg) translateZ(60px); }
-.dimension-cube-face--top { transform: rotateX(90deg) translateZ(60px); }
-.dimension-cube-face--bottom { transform: rotateX(-90deg) translateZ(60px); }
+.dimension-cube-face--front {
+  transform: translateZ(60px);
+  background: linear-gradient(160deg, rgba(16,185,129,0.4), rgba(6,95,70,0.25));
+}
+.dimension-cube-face--back {
+  transform: rotateY(180deg) translateZ(60px);
+  background: linear-gradient(200deg, rgba(6,95,70,0.35), rgba(16,185,129,0.22));
+}
+.dimension-cube-face--left {
+  transform: rotateY(-90deg) translateZ(60px);
+  background: linear-gradient(160deg, rgba(6,78,59,0.4), rgba(16,185,129,0.22));
+}
+.dimension-cube-face--right {
+  transform: rotateY(90deg) translateZ(60px);
+  background: linear-gradient(160deg, rgba(16,185,129,0.38), rgba(6,78,59,0.22));
+}
+.dimension-cube-face--top {
+  transform: rotateX(90deg) translateZ(60px);
+  background: linear-gradient(160deg, rgba(224,255,244,0.55), rgba(16,185,129,0.22));
+  border-color: rgba(167,243,208,0.9);
+}
+.dimension-cube-face--bottom {
+  transform: rotateX(-90deg) translateZ(60px);
+  background: linear-gradient(200deg, rgba(6,78,59,0.35), rgba(15,118,110,0.22));
+  border-color: rgba(12,74,61,0.85);
+}
 .dimension-cube-glow {
   position: absolute;
   inset: 0;
-  transform: translateZ(-40px);
-  background: radial-gradient(circle at center, rgba(16,185,129,0.22), transparent 70%);
-  filter: blur(30px);
+  transform: translateZ(-48px);
+  background: radial-gradient(circle at center, rgba(16,185,129,0.28), transparent 75%);
+  filter: blur(42px);
 }
 @media (prefers-reduced-motion: reduce) {
-  .dimension-cube { animation: none; transform: rotateX(-24deg) rotateY(24deg); }
+  .dimension-cube { animation: none; transform: rotateX(-20deg) rotateY(36deg); }
 }
 `
 
@@ -474,15 +504,17 @@ const DimensionVisualizer: React.FC<{ dimensions: Partial<PlantDimensions> }> = 
     <div className="rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-50/70 via-white/60 to-white/10 p-4 dark:border-emerald-500/30 dark:from-emerald-500/10 dark:via-transparent dark:to-transparent">
       <div className="flex flex-col items-center gap-6 lg:flex-row lg:justify-between">
         <div className="dimension-cube-scene">
-          <div className="dimension-cube-scale" style={scaleStyle}>
-            <div className="dimension-cube" aria-hidden="true">
-              <div className="dimension-cube-glow" />
-              <div className="dimension-cube-face dimension-cube-face--front" />
-              <div className="dimension-cube-face dimension-cube-face--back" />
-              <div className="dimension-cube-face dimension-cube-face--left" />
-              <div className="dimension-cube-face dimension-cube-face--right" />
-              <div className="dimension-cube-face dimension-cube-face--top" />
-              <div className="dimension-cube-face dimension-cube-face--bottom" />
+          <div className="dimension-cube-wrapper">
+            <div className="dimension-cube-scale" style={scaleStyle}>
+              <div className="dimension-cube" aria-hidden="true">
+                <div className="dimension-cube-glow" />
+                <div className="dimension-cube-face dimension-cube-face--front" />
+                <div className="dimension-cube-face dimension-cube-face--back" />
+                <div className="dimension-cube-face dimension-cube-face--left" />
+                <div className="dimension-cube-face dimension-cube-face--right" />
+                <div className="dimension-cube-face dimension-cube-face--top" />
+                <div className="dimension-cube-face dimension-cube-face--bottom" />
+              </div>
             </div>
           </div>
         </div>
