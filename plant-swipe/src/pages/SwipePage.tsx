@@ -196,11 +196,11 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                         )}
 
                         <div className="grid gap-3 sm:grid-cols-2">
-                          <div className="rounded-2xl border border-emerald-100/70 dark:border-emerald-900/40 bg-emerald-50/60 dark:bg-emerald-900/10 p-4 backdrop-blur-sm">
+                          <div className="rounded-2xl border border-emerald-100/70 dark:border-emerald-900/40 bg-emerald-50/60 dark:bg-emerald-900/10 p-4 backdrop-blur-sm space-y-2">
                             <div className="mb-1 text-xs uppercase tracking-wide text-emerald-700 dark:text-emerald-300 font-semibold">
                               {t("discoveryPage.infoCard.descriptionLabel")}
                             </div>
-                            <p className="text-sm text-emerald-900 dark:text-emerald-100">
+                            <p className="text-sm text-emerald-900 dark:text-emerald-100 line-clamp-4">
                               {description || t("discoveryPage.infoCard.descriptionFallback")}
                             </p>
                           </div>
