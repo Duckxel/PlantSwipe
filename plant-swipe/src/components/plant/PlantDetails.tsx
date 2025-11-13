@@ -1970,7 +1970,8 @@ const SeasonalTimeline: React.FC<{ data: SeasonalTimelineEntry[]; planting?: Non
     return data.map((entry) => {
       for (let i = order.length - 1; i >= 0; i -= 1) {
         const key = order[i]
-        if ((entry as Record<SeasonKey, number>)[key]) {
+        const value = entry[key]
+        if (typeof value === 'number' && value > 0) {
           return key
         }
       }
@@ -2004,12 +2005,16 @@ const SeasonalTimeline: React.FC<{ data: SeasonalTimelineEntry[]; planting?: Non
               cursor={{ fill: 'rgba(120,113,108,0.08)' }}
               content={(props) => <SeasonalTooltip {...props} labels={seasonLabels} />}
             />
-            <Bar dataKey="flowering" stackId="timeline">
+              <Bar dataKey="flowering" stackId="timeline">
               {data.map((entry, idx) => (
                 <Cell
                   key={`flowering-${entry.key}`}
                   fill={TIMELINE_COLORS.flowering}
-                  radius={topStackByIndex[idx] === 'flowering' ? [12, 12, 0, 0] : [0, 0, 0, 0]}
+                    radius={
+                      (topStackByIndex[idx] === 'flowering'
+                        ? [12, 12, 0, 0]
+                        : [0, 0, 0, 0]) as unknown as number
+                    }
                 />
               ))}
             </Bar>
@@ -2018,7 +2023,11 @@ const SeasonalTimeline: React.FC<{ data: SeasonalTimelineEntry[]; planting?: Non
                 <Cell
                   key={`fruiting-${entry.key}`}
                   fill={TIMELINE_COLORS.fruiting}
-                  radius={topStackByIndex[idx] === 'fruiting' ? [12, 12, 0, 0] : [0, 0, 0, 0]}
+                    radius={
+                      (topStackByIndex[idx] === 'fruiting'
+                        ? [12, 12, 0, 0]
+                        : [0, 0, 0, 0]) as unknown as number
+                    }
                 />
               ))}
             </Bar>
@@ -2027,7 +2036,11 @@ const SeasonalTimeline: React.FC<{ data: SeasonalTimelineEntry[]; planting?: Non
                 <Cell
                   key={`sowing-${entry.key}`}
                   fill={TIMELINE_COLORS.sowing}
-                  radius={topStackByIndex[idx] === 'sowing' ? [12, 12, 0, 0] : [0, 0, 0, 0]}
+                    radius={
+                      (topStackByIndex[idx] === 'sowing'
+                        ? [12, 12, 0, 0]
+                        : [0, 0, 0, 0]) as unknown as number
+                    }
                 />
               ))}
             </Bar>
