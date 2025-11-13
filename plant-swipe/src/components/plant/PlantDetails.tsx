@@ -1599,14 +1599,27 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
                 }}
               />
 
-              {/* Close button - fixed position */}
-              <button
-                onClick={() => setIsImageFullScreen(false)}
-                className="fixed top-4 right-4 z-[100] h-12 w-12 rounded-full bg-black/80 hover:bg-black flex items-center justify-center transition-all shadow-lg hover:scale-110"
-                aria-label={t('common.close')}
-              >
-                <X className="h-6 w-6 text-white stroke-[2.5]" />
-              </button>
+              {/* Fullscreen and Close buttons - fixed position */}
+              <div className="fixed top-4 right-4 z-[100] flex items-center gap-2">
+                <button
+                  onClick={handleExpand}
+                  type="button"
+                  aria-label="Expand to full page"
+                  className="h-9 w-9 rounded-full flex items-center justify-center border bg-white/90 dark:bg-[#2d2d30] dark:border-[#3e3e42] text-black dark:text-white hover:bg-white dark:hover:bg-[#3e3e42] transition shadow-sm"
+                  title="Expand to full page"
+                >
+                  <Maximize2 className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => setIsImageFullScreen(false)}
+                  type="button"
+                  aria-label={t('common.close')}
+                  className="h-9 w-9 rounded-full flex items-center justify-center border bg-white/90 dark:bg-[#2d2d30] dark:border-[#3e3e42] text-black dark:text-white hover:bg-white dark:hover:bg-[#3e3e42] transition shadow-sm"
+                  title={t('common.close')}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
 
               {/* Background area - clickable to close */}
               <div
