@@ -365,7 +365,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
       key: 'sun',
       icon: <SunMedium className="h-4 w-4" />,
       label: t('plantInfo.sunlight'),
-      value: formatStatValue(care?.sunlight),
+      value: formatStatValue(sunlightLevel),
     },
     {
       key: 'water',
@@ -403,6 +403,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
     () => formatFrequencyLabel(freqLabel),
     [formatFrequencyLabel, freqLabel]
   )
+  const sunlightLevel = care?.sunlight ?? environment.sunExposure
 
   const careChartData = React.useMemo(() => {
     const data: Array<{ key: string; label: string; value: number; description: string }> = []
@@ -418,9 +419,8 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
       })
     }
 
-    const sunlightDescriptor = care?.sunlight ?? environment.sunExposure
-    if (sunlightDescriptor) {
-      addEntry('sunlight', t('plantInfo.sunlight'), sunlightDescriptor, formatStatValue(sunlightDescriptor))
+    if (sunlightLevel) {
+      addEntry('sunlight', t('plantInfo.sunlight'), sunlightLevel, formatStatValue(sunlightLevel))
     }
 
     if (derivedWater) {
@@ -453,7 +453,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
     }
 
     return data
-  }, [care?.sunlight, environment.sunExposure, derivedWater, friendlyFrequency, care?.difficulty, care?.maintenanceLevel, environment?.humidityPref, formatStatValue, t])
+  }, [sunlightLevel, derivedWater, friendlyFrequency, care?.difficulty, care?.maintenanceLevel, environment?.humidityPref, formatStatValue, t])
 
   const seasonTimelineData = React.useMemo(() => {
     return MONTH_KEYS.map((key, idx) => {
@@ -836,6 +836,11 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
               </CardContent>
             </Card>
           )}
+          {plant.description && (
+            <div className="rounded-2xl bg-white/85 px-4 py-3 text-sm leading-relaxed text-stone-700 shadow-sm dark:bg-[#1e262f]/80 dark:text-stone-200">
+              {plant.description}
+            </div>
+          )}
           {renderQuickStats(compactStats, 'sm:grid-cols-3')}
           {(colors.length > 0 || seasons.length > 0) && (
             <div className="flex flex-wrap justify-center gap-2">
@@ -1039,16 +1044,11 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
                 <Info className="h-5 w-5" />
                 <h3 className="text-lg font-semibold tracking-tight">{t('plantInfo.overview')}</h3>
               </header>
-              {plant.description && (
-                <p className="relative z-10 text-sm leading-relaxed text-stone-700 md:text-base dark:text-stone-200">
-                  {plant.description}
-                </p>
-              )}
               {plant.meaning && (
-                <div className="relative z-10 mt-5 rounded-2xl bg-gradient-to-r from-emerald-200/70 via-white/80 to-emerald-100/60 p-4 text-sm text-emerald-900 shadow-sm dark:from-[#0b3f36]/60 dark:via-[#0f2538]/60 dark:to-[#1b2d4a]/60 dark:text-emerald-100 dark:shadow-[0_18px_42px_rgba(56,189,248,0.18)]">
-                  <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-emerald-600 dark:text-emerald-300">
+                <div className="relative z-10 mt-4 rounded-2xl border border-emerald-200/50 bg-gradient-to-br from-emerald-100/80 via-white/80 to-sky-100/70 p-5 text-sm text-emerald-900 shadow-sm dark:border-emerald-700/40 dark:from-[#0a352d]/70 dark:via-[#10243a]/75 dark:to-[#1a2c45]/75 dark:text-emerald-100 dark:shadow-[0_14px_38px_rgba(56,189,248,0.14)]">
+                  <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-emerald-600 dark:text-emerald-300">
                     <Sparkles className="h-4 w-4" />
-                    {t('plantInfo.meaning')}
+                    {t('plantInfo.symbolism', { defaultValue: 'Meaning & Symbolism' })}
                   </div>
                   <div className="text-base leading-relaxed">{plant.meaning}</div>
                 </div>
@@ -1526,7 +1526,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
         </section>
         )}
 
-    <div className="relative flex flex-wrap items-center gap-3 rounded-[28px] border border-emerald-200/40 bg-white/90 p-4 shadow-sm backdrop-blur-md dark:border-emerald-600/35 dark:bg-gradient-to-br dark:from-[#05171a]/92 dark:via-[#0a2434]/90 dark:to-[#0f1d2c]/92 dark:shadow-[0_12px_36px_rgba(13,148,136,0.1)]">
+    <div className="relative flex flex-wrap items-center gap-3 rounded-[28px] border border-emerald-200/40 bg-gradient-to-br from-emerald-100/70 via-white/80 to-sky-100/70 p-4 shadow-sm backdrop-blur-md dark:border-emerald-600/35 dark:bg-gradient-to-br dark:from-[#05171a]/92 dark:via-[#0a2434]/90 dark:to-[#0f1d2c]/92 dark:shadow-[0_12px_36px_rgba(13,148,136,0.1)]">
       <div className="pointer-events-none absolute inset-0 rounded-[28px] bg-[radial-gradient(circle_at_18%_18%,rgba(16,185,129,0.14),transparent_58%),radial-gradient(circle_at_82%_12%,rgba(14,165,233,0.12),transparent_60%)] dark:bg-[radial-gradient(circle_at_22%_22%,rgba(45,212,191,0.1),transparent_53%),radial-gradient(circle_at_80%_18%,rgba(56,189,248,0.1),transparent_58%)]" aria-hidden="true" />
         {isAdmin && (
           <Button
