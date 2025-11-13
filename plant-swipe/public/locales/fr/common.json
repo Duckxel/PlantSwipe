@@ -894,6 +894,29 @@
       "error": "Échec de l'envoi de la demande",
       "nameRequired": "Le nom de la plante est requis",
       "mustBeLoggedIn": "Vous devez être connecté pour demander une plante"
-    }
+      },
+      "adminPage": {
+        "heroEyebrow": "Contrôle opérationnel",
+        "heroTitle": "Centre de commande admin",
+        "heroSubtitle": "Surveillez l'infrastructure, gérez les membres et gardez Aphylia fluide.",
+        "primaryAction": "Vue d'ensemble",
+        "secondaryAction": "Ouvrir le site",
+        "tabs": {
+          "overview": "Aperçu",
+          "members": "Membres",
+          "requests": "Demandes",
+          "logs": "Journaux admin"
+        },
+        "status": {
+          "api": "API",
+          "admin": "API admin",
+          "database": "Base de données",
+          "operational": "Opérationnel",
+          "degraded": "Dégradé",
+          "offline": "Hors ligne",
+          "checking": "Vérification…",
+          "latency": "{{value}} ms"
+        }
+      }
   }
 }

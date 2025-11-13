@@ -883,7 +883,7 @@
       "failedToSendFriendRequest": "Failed to send friend request",
       "failedToAcceptFriendRequest": "Failed to accept friend request"
     },
-    "requestPlant": {
+      "requestPlant": {
       "button": "Request Plant",
       "title": "Request a Plant",
       "description": "Let us know which plant you would like to see added to the encyclopedia.",
@@ -894,6 +894,29 @@
       "error": "Failed to submit request",
       "nameRequired": "Plant name is required",
       "mustBeLoggedIn": "You must be logged in to request a plant"
-    }
+      },
+      "adminPage": {
+        "heroEyebrow": "Operational control",
+        "heroTitle": "Admin Command Center",
+        "heroSubtitle": "Monitor infrastructure, review membership, and keep Aphylia humming.",
+        "primaryAction": "Overview",
+        "secondaryAction": "Open site",
+        "tabs": {
+          "overview": "Overview",
+          "members": "Members",
+          "requests": "Requests",
+          "logs": "Admin logs"
+        },
+        "status": {
+          "api": "API",
+          "admin": "Admin API",
+          "database": "Database",
+          "operational": "Operational",
+          "degraded": "Degraded",
+          "offline": "Offline",
+          "checking": "Checking…",
+          "latency": "{{value}} ms"
+        }
+      }
   }
 }

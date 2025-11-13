@@ -10,6 +10,7 @@ import { LazyCharts, ChartSuspense } from '@/components/admin/LazyChart'
 import { useTheme } from '@/context/ThemeContext'
 import { useAuth } from '@/context/AuthContext'
 import { getAccentOption } from '@/lib/accent'
+import { useTranslation } from "react-i18next"
 // Re-export for convenience
 const {
   ResponsiveContainer,
@@ -44,6 +45,7 @@ export const AdminPage: React.FC = () => {
   const { effectiveTheme } = useTheme()
   const { user, profile } = useAuth()
   const isDark = effectiveTheme === 'dark'
+  const { t } = useTranslation("common")
   
   // Get user's accent color (more subtle version)
   const accentColor = React.useMemo(() => {
@@ -884,6 +886,7 @@ export const AdminPage: React.FC = () => {
     errorCode: string | null
     errorMessage: string | null
   }
+  type AdminTab = 'overview' | 'members' | 'requests' | 'admin_logs'
   const emptyProbe: ProbeResult = { ok: null, latencyMs: null, updatedAt: null, status: null, errorCode: null, errorMessage: null }
   const [apiProbe, setApiProbe] = React.useState<ProbeResult>(emptyProbe)
   const [adminProbe, setAdminProbe] = React.useState<ProbeResult>(emptyProbe)
@@ -1528,7 +1531,7 @@ export const AdminPage: React.FC = () => {
   }, [loadVisitorsStats])
 
   // ---- Members tab state ----
-  const [activeTab, setActiveTab] = React.useState<'overview' | 'members' | 'requests' | 'admin_logs'>('overview')
+  const [activeTab, setActiveTab] = React.useState<AdminTab>('overview')
   
   // Load plant requests on mount to show count in menu
   React.useEffect(() => {
@@ -2012,177 +2015,185 @@ export const AdminPage: React.FC = () => {
     return () => clearTimeout(t)
   }, [activeTab])
 
-  return (
-    <div className="flex flex-col md:flex-row min-h-screen bg-stone-50 dark:bg-[#1e1e1e] rounded-t-3xl mt-4 md:mt-0">
-      {/* Mobile Navigation */}
-      <div className="md:hidden w-full border-b border-stone-200/50 dark:border-[#3e3e42]/50 bg-stone-50/80 dark:bg-[#1e1e1e]/80 backdrop-blur-sm sticky top-0 z-10 rounded-b-3xl">
-        <div className="p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <ShieldCheck className="h-5 w-5" style={{ color: accentColor }} />
-            <div className="text-sm font-semibold">Admin Panel</div>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => setActiveTab('overview')}
-              className={`flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-sm transition-all duration-200 ${
-                activeTab === 'overview'
-                  ? 'bg-white dark:bg-white text-black dark:text-black shadow-md'
-                  : 'text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]'
-              }`}
-              style={activeTab === 'overview' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
-            >
-              <LayoutDashboard className="h-4 w-4" />
-              <span>Overview</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('members')}
-              className={`flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-sm transition-all duration-200 ${
-                activeTab === 'members'
-                  ? 'bg-white dark:bg-white text-black dark:text-black shadow-md'
-                  : 'text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]'
-              }`}
-              style={activeTab === 'members' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
-            >
-              <Users className="h-4 w-4" />
-              <span>Members</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('requests')}
-              className={`flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-sm transition-all duration-200 ${
-                activeTab === 'requests'
-                  ? 'bg-white dark:bg-white text-black dark:text-black shadow-md'
-                  : 'text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]'
-              }`}
-              style={activeTab === 'requests' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
-            >
-              <FileText className="h-4 w-4" />
-              <span>Requests</span>
-              {uniqueRequestedPlantsCount > 0 && (
-                <span className="ml-1 px-1.5 py-0.5 text-xs font-semibold rounded-full bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-300">
-                  {uniqueRequestedPlantsCount}
-                </span>
-              )}
-            </button>
-            <button
-              onClick={() => setActiveTab('admin_logs')}
-              className={`flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-sm transition-all duration-200 ${
-                activeTab === 'admin_logs'
-                  ? 'bg-white dark:bg-white text-black dark:text-black shadow-md'
-                  : 'text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]'
-              }`}
-              style={activeTab === 'admin_logs' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
-            >
-              <ScrollText className="h-4 w-4" />
-              <span>Logs</span>
-            </button>
-          </div>
-        </div>
-      </div>
+  const getStatusLabel = React.useCallback((probe: ProbeResult) => {
+    if (probe.ok === null) return t('adminPage.status.checking')
+    if (!probe.ok) return t('adminPage.status.offline')
+    if (probe.latencyMs !== null && probe.latencyMs > 900) return t('adminPage.status.degraded')
+    return t('adminPage.status.operational')
+  }, [t])
 
-      {/* Sidebar Navigation - Desktop Only */}
-      <aside className="hidden md:flex w-64 border-r border-stone-200/50 dark:border-[#3e3e42]/50 bg-stone-50/80 dark:bg-[#1e1e1e]/80 backdrop-blur-sm flex-shrink-0 flex-col m-4 rounded-3xl">
-        <div className="p-6 border-b border-stone-200/50 dark:border-[#3e3e42]/50">
-          <div className="flex items-center gap-3">
-            <ShieldCheck className="h-6 w-6" style={{ color: accentColor }} />
-            <div>
-              <div className="text-lg font-semibold">Admin Panel</div>
-              <div className="text-xs opacity-60">Control Center</div>
+  const getStatusTone = React.useCallback((probe: ProbeResult) => {
+    if (probe.ok === null) return 'bg-stone-100/80 dark:bg-[#2d2d30]/70 text-stone-600 dark:text-stone-200'
+    if (!probe.ok) return 'bg-rose-100/80 dark:bg-rose-900/30 text-rose-700 dark:text-rose-200'
+    if (probe.latencyMs !== null && probe.latencyMs > 900) return 'bg-amber-100/80 dark:bg-amber-900/30 text-amber-700 dark:text-amber-200'
+    return 'bg-emerald-100/80 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-200'
+  }, [])
+
+  const serviceStatuses = React.useMemo(() => ([
+    { key: 'api' as const, label: t('adminPage.status.api'), probe: apiProbe, Icon: Server },
+    { key: 'admin' as const, label: t('adminPage.status.admin'), probe: adminProbe, Icon: ShieldCheck },
+    { key: 'database' as const, label: t('adminPage.status.database'), probe: dbProbe, Icon: Database },
+  ]), [t, apiProbe, adminProbe, dbProbe])
+
+  const navItems = React.useMemo(() => ([
+    { key: 'overview' as AdminTab, label: t('adminPage.tabs.overview'), Icon: LayoutDashboard },
+    { key: 'members' as AdminTab, label: t('adminPage.tabs.members'), Icon: Users },
+    { key: 'requests' as AdminTab, label: t('adminPage.tabs.requests'), Icon: FileText, badge: uniqueRequestedPlantsCount },
+    { key: 'admin_logs' as AdminTab, label: t('adminPage.tabs.logs'), Icon: ScrollText },
+  ]), [t, uniqueRequestedPlantsCount])
+
+  return (
+    <div className="min-h-screen bg-stone-50 dark:bg-[#1e1e1e]">
+      <div className="max-w-6xl mx-auto px-4 md:px-0 pb-20 space-y-10">
+        <section
+          className="relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50 via-white to-stone-100 dark:from-[#252526] dark:via-[#1e1e1e] dark:to-[#151515]"
+          style={{ boxShadow: `0 32px 80px -40px ${accentColorWithOpacity}` }}
+        >
+          <div className="absolute -right-24 -top-24 h-64 w-64 rounded-full bg-emerald-200/40 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
+          <div className="absolute -left-24 bottom-[-35%] h-72 w-72 rounded-full bg-emerald-100/50 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
+          <div className="relative p-8 md:p-12 space-y-8">
+            <Badge variant="outline" className="rounded-2xl border-dashed bg-white/70 dark:bg-[#252526]/70 backdrop-blur-sm">
+              {t('adminPage.heroEyebrow')}
+            </Badge>
+            <div className="flex flex-wrap items-end justify-between gap-6">
+              <div className="space-y-3 max-w-3xl">
+                <h1 className="text-3xl md:text-4xl font-semibold tracking-tight">{t('adminPage.heroTitle')}</h1>
+                <p className="text-base md:text-lg text-stone-600 dark:text-stone-300">
+                  {t('adminPage.heroSubtitle')}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <Button className="rounded-2xl" onClick={() => setActiveTab('overview')}>
+                  <LayoutDashboard className="h-4 w-4 mr-2" />
+                  {t('adminPage.primaryAction')}
+                </Button>
+                <Button variant="outline" className="rounded-2xl" onClick={() => navigate('/')}>
+                  <ArrowUpRight className="h-4 w-4 mr-2" />
+                  {t('adminPage.secondaryAction')}
+                </Button>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+              {serviceStatuses.map(({ key, label, probe, Icon }) => {
+                const tone = getStatusTone(probe)
+                const latencyText = probe.latencyMs !== null ? t('adminPage.status.latency', { value: probe.latencyMs }) : '—'
+                const metaText = latencyText === '—' ? getStatusLabel(probe) : `${getStatusLabel(probe)} • ${latencyText}`
+                return (
+                  <div key={key} className="flex items-center gap-4 rounded-[20px] border border-white/60 dark:border-white/10 bg-white/80 dark:bg-[#101010]/60 backdrop-blur px-4 py-3 shadow-sm">
+                    <div className={`flex items-center justify-center h-10 w-10 rounded-xl border border-white/40 dark:border-white/10 ${tone}`}>
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-stone-800 dark:text-stone-100 truncate">{label}</div>
+                      <div className="text-xs text-stone-500 dark:text-stone-400">{metaText}</div>
+                    </div>
+                    <StatusDot ok={probe.ok} title={!probe.ok ? (probe.errorCode || undefined) : undefined} />
+                  </div>
+                )
+              })}
             </div>
           </div>
-        </div>
-        <nav className="p-4 space-y-2 flex-1 overflow-y-auto">
-          <button
-            onClick={() => setActiveTab('overview')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 ${
-              activeTab === 'overview'
-                ? 'bg-white dark:bg-white text-black dark:text-black shadow-md'
-                : 'text-stone-700 dark:text-stone-300 hover:bg-stone-100/50 dark:hover:bg-[#2d2d30]/50'
-            }`}
-            style={activeTab === 'overview' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
-          >
-            <LayoutDashboard className={`h-5 w-5 ${activeTab === 'overview' ? '' : 'opacity-70'}`} />
-            <span className="font-medium">Overview</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('members')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 ${
-              activeTab === 'members'
-                ? 'bg-white dark:bg-white text-black dark:text-black shadow-md'
-                : 'text-stone-700 dark:text-stone-300 hover:bg-stone-100/50 dark:hover:bg-[#2d2d30]/50'
-            }`}
-            style={activeTab === 'members' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
-          >
-            <Users className={`h-5 w-5 ${activeTab === 'members' ? '' : 'opacity-70'}`} />
-            <span className="font-medium">Members</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('requests')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 ${
-              activeTab === 'requests'
-                ? 'bg-white dark:bg-white text-black dark:text-black shadow-md'
-                : 'text-stone-700 dark:text-stone-300 hover:bg-stone-100/50 dark:hover:bg-[#2d2d30]/50'
-            }`}
-            style={activeTab === 'requests' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
-          >
-            <FileText className={`h-5 w-5 ${activeTab === 'requests' ? '' : 'opacity-70'}`} />
-            <span className="font-medium">Requests</span>
-            {uniqueRequestedPlantsCount > 0 && (
-              <span className="ml-auto px-2 py-0.5 text-xs font-semibold rounded-full bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-300">
-                {uniqueRequestedPlantsCount}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => setActiveTab('admin_logs')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 ${
-              activeTab === 'admin_logs'
-                ? 'bg-white dark:bg-white text-black dark:text-black shadow-md'
-                : 'text-stone-700 dark:text-stone-300 hover:bg-stone-100/50 dark:hover:bg-[#2d2d30]/50'
-            }`}
-            style={activeTab === 'admin_logs' ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` } : {}}
-          >
-            <ScrollText className={`h-5 w-5 ${activeTab === 'admin_logs' ? '' : 'opacity-70'}`} />
-            <span className="font-medium">Admin Logs</span>
-          </button>
-        </nav>
-      </aside>
+        </section>
 
-      {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto w-full">
-        <div className="flex justify-center w-full">
-          <div className="w-full max-w-5xl mt-4 md:mt-8 px-4 md:px-6 lg:px-8 pb-8">
-          {/* Connection Status Banner - Show when APIs are down */}
-          {(apiProbe.ok === false || adminProbe.ok === false || dbProbe.ok === false) && (
-            <Card className="rounded-2xl mb-4 border-red-500 dark:border-red-500 bg-red-50 dark:bg-red-950/20">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0" />
-                  <div className="flex-1">
-                    <div className="text-sm font-medium text-red-900 dark:text-red-100">Connection Issues Detected</div>
-                    <div className="text-xs text-red-700 dark:text-red-300 mt-1">
-                      {!apiProbe.ok && 'API '}
-                      {!adminProbe.ok && 'Admin API '}
-                      {!dbProbe.ok && 'Database '}
-                      {(!apiProbe.ok || !adminProbe.ok || !dbProbe.ok) && 'may be unavailable. Some features may not work correctly.'}
-                    </div>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="rounded-xl border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30"
-                    onClick={refreshHealth}
-                    disabled={healthRefreshing}
-                  >
-                    <RefreshCw className={`h-4 w-4 mr-1 ${healthRefreshing ? 'animate-spin' : ''}`} />
-                    Retry
-                  </Button>
+        <div className="md:hidden grid grid-cols-2 gap-2">
+          {navItems.map(({ key, label, Icon, badge }) => {
+            const isActive = activeTab === key
+            return (
+              <button
+                key={key}
+                onClick={() => setActiveTab(key)}
+                className={`flex items-center justify-center gap-2 rounded-2xl px-3 py-2 text-sm transition-all duration-200 ${
+                  isActive
+                    ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
+                    : 'border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#252526]/70 text-stone-700 dark:text-stone-300 hover:border-emerald-400/60'
+                }`}
+                style={isActive ? { boxShadow: `0 18px 38px -20px ${accentColorWithOpacity}` } : undefined}
+              >
+                <Icon className="h-4 w-4" />
+                <span className="font-medium">{label}</span>
+                {badge && badge > 0 && (
+                  <span className="ml-1 px-2 py-0.5 text-xs font-semibold rounded-full bg-white/80 text-emerald-700 dark:text-emerald-200">
+                    {badge}
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] gap-8">
+          <aside className="md:sticky md:top-28 self-start">
+            <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/85 dark:bg-[#1b1b1b]/75 backdrop-blur p-6 space-y-6 shadow-[0_24px_60px_-40px_rgba(16,185,129,0.45)]">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#141414]/70 flex items-center justify-center shadow-inner">
+                  <ShieldCheck className="h-5 w-5" style={{ color: accentColor }} />
                 </div>
-              </CardContent>
+                <div>
+                  <div className="text-sm font-semibold text-stone-600 dark:text-stone-300">{t('adminPage.heroEyebrow')}</div>
+                  <div className="text-lg font-semibold text-stone-900 dark:text-white">Admin</div>
+                </div>
+              </div>
+              <nav className="flex flex-wrap md:flex-col gap-2">
+                {navItems.map(({ key, label, Icon, badge }) => {
+                  const isActive = activeTab === key
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => setActiveTab(key)}
+                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 ${
+                        isActive
+                          ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
+                          : 'border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/70 dark:bg-[#252526]/70 text-stone-600 dark:text-stone-300 hover:border-emerald-400/60'
+                      }`}
+                      style={isActive ? { boxShadow: `0 18px 45px -18px ${accentColorWithOpacity}` } : undefined}
+                    >
+                      <Icon className={`h-5 w-5 ${isActive ? 'text-white' : 'text-stone-500 dark:text-stone-400'}`} />
+                      <span className="font-medium">{label}</span>
+                      {badge && badge > 0 && (
+                        <span className="ml-auto px-2 py-0.5 text-xs font-semibold rounded-full bg-white/80 text-emerald-700 dark:text-emerald-200">
+                          {badge}
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </nav>
             </Card>
-          )}
-          
-          <Card className="rounded-3xl">
-            <CardContent className="p-6 md:p-8 space-y-6">
+          </aside>
+          <main className="w-full">
+            <div className="w-full max-w-5xl mx-auto space-y-6">
+                {/* Connection Status Banner - Show when APIs are down */}
+                {(apiProbe.ok === false || adminProbe.ok === false || dbProbe.ok === false) && (
+                  <Card className="rounded-[24px] mb-4 border border-rose-200/70 dark:border-rose-900/40 bg-rose-50/90 dark:bg-rose-900/20 shadow-[0_20px_45px_-24px_rgba(244,63,94,0.45)]">
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-3">
+                        <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0" />
+                        <div className="flex-1">
+                          <div className="text-sm font-medium text-red-900 dark:text-red-100">Connection Issues Detected</div>
+                          <div className="text-xs text-red-700 dark:text-red-300 mt-1">
+                            {!apiProbe.ok && 'API '}
+                            {!adminProbe.ok && 'Admin API '}
+                            {!dbProbe.ok && 'Database '}
+                            {(!apiProbe.ok || !adminProbe.ok || !dbProbe.ok) && 'may be unavailable. Some features may not work correctly.'}
+                          </div>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="rounded-2xl border border-rose-300/80 dark:border-rose-800/60 text-rose-700 dark:text-rose-200 hover:bg-rose-100 dark:hover:bg-rose-900/30"
+                          onClick={refreshHealth}
+                          disabled={healthRefreshing}
+                        >
+                          <RefreshCw className={`h-4 w-4 mr-1 ${healthRefreshing ? 'animate-spin' : ''}`} />
+                          Retry
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                <Card className="rounded-[32px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1b1b1b]/80 backdrop-blur shadow-[0_28px_70px_-40px_rgba(16,185,129,0.35)]">
+                  <CardContent className="p-6 md:p-8 space-y-6">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div>
                   <div className="text-2xl font-semibold tracking-tight">Admin Controls</div>
@@ -3741,12 +3752,14 @@ export const AdminPage: React.FC = () => {
               </CardContent>
             </Card>
           )}
-        </CardContent>
-      </Card>
+          </CardContent>
+          </Card>
 
+              </div>
+            </main>
           </div>
         </div>
-      </main>
+      </div>
     </div>
   )
 }
