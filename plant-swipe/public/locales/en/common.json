@@ -35,6 +35,17 @@
       "termsOfServices": "Terms of Services"
     }
   },
+    "search": {
+      "hero": {
+        "badge": "Plant library",
+        "title": "Find the perfect plant companion",
+        "subtitle": "Search by color, rarity, or season to discover plants that fit your aesthetic and care routine."
+      },
+      "empty": {
+        "title": "No matches just yet",
+        "description": "Try tweaking filters or checking spelling—your next favorite plant might be one search away."
+      }
+    },
   "contactUs": {
     "title": "Contact Us",
     "description": "We're here to help! Get in touch with our support team.",

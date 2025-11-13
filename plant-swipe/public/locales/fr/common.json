@@ -35,6 +35,17 @@
       "termsOfServices": "Conditions d'utilisation"
     }
   },
+    "search": {
+      "hero": {
+        "badge": "Bibliothèque végétale",
+        "title": "Trouvez la plante idéale",
+        "subtitle": "Recherchez par couleur, rareté ou saison pour découvrir des plantes adaptées à votre style et à votre routine d’entretien."
+      },
+      "empty": {
+        "title": "Aucun résultat pour le moment",
+        "description": "Ajustez vos filtres ou vérifiez l’orthographe — votre prochaine plante coup de cœur est peut-être à un clic."
+      }
+    },
   "contactUs": {
     "title": "Nous contacter",
     "description": "Nous sommes là pour vous aider ! Contactez notre équipe de support.",
