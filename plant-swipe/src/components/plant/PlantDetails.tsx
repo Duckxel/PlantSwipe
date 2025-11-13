@@ -1588,16 +1588,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
     >
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,_129,_0.12),_transparent_55%)] dark:bg-[radial-gradient(circle_at_top,_rgba(16,_185,_129,_0.18),_transparent_60%)]" aria-hidden="true" />
       <div className="relative flex flex-wrap items-center justify-between gap-4">
-        {isAdmin && (
-          <Button
-            variant="destructive"
-            className="rounded-2xl"
-            onClick={handleDelete}
-          >
-            {t('common.delete')}
-          </Button>
-        )}
-        <div className="ml-auto flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2">
           {onRequestPlant && (
             <Button
               variant="outline"
@@ -1605,6 +1596,17 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
               onClick={onRequestPlant}
             >
               {t('requestPlant.button')}
+            </Button>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {isAdmin && (
+            <Button
+              variant="destructive"
+              className="rounded-2xl"
+              onClick={handleDelete}
+            >
+              {t('common.delete')}
             </Button>
           )}
           {isAdmin && (
