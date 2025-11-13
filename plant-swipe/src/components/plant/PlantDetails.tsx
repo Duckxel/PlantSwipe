@@ -132,10 +132,10 @@ const LABEL_KEY_MAP: Record<string, string> = {
 }
 
 const FACT_ACCENTS = [
-  'from-emerald-200/80 via-emerald-100/70 to-sky-200/70 dark:from-[#03312f]/85 dark:via-[#0a334d]/80 dark:to-[#14213d]/85 dark:shadow-[0_12px_30px_rgba(20,184,166,0.25)] dark:ring-1 dark:ring-emerald-500/25',
-  'from-lime-200/80 via-emerald-100/70 to-amber-200/70 dark:from-[#2f3e0f]/85 dark:via-[#1a3f3a]/80 dark:to-[#332b58]/85 dark:shadow-[0_12px_30px_rgba(190,242,100,0.18)] dark:ring-1 dark:ring-lime-400/20',
-  'from-teal-200/80 via-sky-100/60 to-purple-200/60 dark:from-[#033646]/85 dark:via-[#132b4d]/80 dark:to-[#311f4f]/85 dark:shadow-[0_12px_30px_rgba(59,130,246,0.2)] dark:ring-1 dark:ring-sky-400/20',
-  'from-rose-200/70 via-amber-100/60 to-emerald-100/70 dark:from-[#3b112a]/85 dark:via-[#42200b]/80 dark:to-[#0f2f2c]/85 dark:shadow-[0_12px_30px_rgba(244,114,182,0.2)] dark:ring-1 dark:ring-rose-400/20'
+  'from-emerald-200/80 via-emerald-100/70 to-sky-200/70 dark:from-[#03312f]/85 dark:via-[#0a334d]/80 dark:to-[#14213d]/85 dark:shadow-[0_8px_22px_rgba(20,184,166,0.16)] dark:ring-1 dark:ring-emerald-500/18',
+  'from-lime-200/80 via-emerald-100/70 to-amber-200/70 dark:from-[#2f3e0f]/85 dark:via-[#1a3f3a]/80 dark:to-[#332b58]/85 dark:shadow-[0_8px_22px_rgba(190,242,100,0.12)] dark:ring-1 dark:ring-lime-400/14',
+  'from-teal-200/80 via-sky-100/60 to-purple-200/60 dark:from-[#033646]/85 dark:via-[#132b4d]/80 dark:to-[#311f4f]/85 dark:shadow-[0_8px_22px_rgba(59,130,246,0.14)] dark:ring-1 dark:ring-sky-400/14',
+  'from-rose-200/70 via-amber-100/60 to-emerald-100/70 dark:from-[#3b112a]/85 dark:via-[#42200b]/80 dark:to-[#0f2f2c]/85 dark:shadow-[0_8px_22px_rgba(244,114,182,0.14)] dark:ring-1 dark:ring-rose-400/14'
 ]
 
 const CARE_BAR_COLORS = ['#16a34a', '#0ea5e9', '#f97316', '#8b5cf6', '#facc15']
@@ -866,10 +866,10 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
 
     return (
       <div className="space-y-10 select-none">
-        <section className="relative overflow-hidden rounded-[32px] border border-emerald-300/40 bg-gradient-to-br from-emerald-200/70 via-lime-100/60 to-sky-100/70 p-6 shadow-xl dark:border-emerald-500/30 dark:from-[#031e20]/95 dark:via-[#062a3b]/92 dark:to-[#0c1320]/95 dark:shadow-[0_28px_90px_rgba(8,145,178,0.18)] md:p-10">
-          <div className="pointer-events-none absolute -top-24 -left-24 h-64 w-64 rounded-full bg-emerald-400/35 blur-3xl sm:h-72 sm:w-72 dark:bg-[#0f766e]/30" aria-hidden="true" />
-          <div className="pointer-events-none absolute -bottom-32 -right-16 h-72 w-72 rounded-full bg-amber-200/40 blur-3xl md:h-96 md:w-[28rem] dark:bg-[#1f3b57]/32" aria-hidden="true" />
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.45),transparent_55%),radial-gradient(circle_at_80%_10%,rgba(14,165,233,0.25),transparent_60%)] dark:bg-[radial-gradient(circle_at_18%_18%,rgba(34,197,94,0.12),transparent_52%),radial-gradient(circle_at_82%_12%,rgba(14,165,233,0.16),transparent_58%),radial-gradient(circle_at_45%_82%,rgba(196,181,253,0.1),transparent_70%)]" aria-hidden="true" />
+        <section className="relative overflow-hidden rounded-[32px] border border-emerald-300/40 bg-gradient-to-br from-emerald-200/70 via-lime-100/60 to-sky-100/70 p-6 shadow-xl dark:border-emerald-500/30 dark:from-[#031e20]/95 dark:via-[#062a3b]/92 dark:to-[#0c1320]/95 dark:shadow-[0_20px_70px_rgba(8,145,178,0.12)] md:p-10">
+          <div className="pointer-events-none absolute -top-24 -left-24 h-64 w-64 rounded-full bg-emerald-400/35 blur-3xl sm:h-72 sm:w-72 dark:bg-[#0f766e]/18" aria-hidden="true" />
+          <div className="pointer-events-none absolute -bottom-32 -right-16 h-72 w-72 rounded-full bg-amber-200/40 blur-3xl md:h-96 md:w-[28rem] dark:bg-[#1f3b57]/18" aria-hidden="true" />
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.45),transparent_55%),radial-gradient(circle_at_80%_10%,rgba(14,165,233,0.25),transparent_60%)] dark:bg-[radial-gradient(circle_at_18%_18%,rgba(34,197,94,0.08),transparent_50%),radial-gradient(circle_at_82%_12%,rgba(14,165,233,0.1),transparent_56%),radial-gradient(circle_at_45%_82%,rgba(196,181,253,0.06),transparent_68%)]" aria-hidden="true" />
           <div className="relative z-10 grid gap-10 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
             <div className="space-y-6">
               <div className="flex flex-wrap items-center gap-3 text-sm font-semibold text-emerald-800/80 dark:text-emerald-200/80">
@@ -1099,8 +1099,8 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
         </div>
 
       {hasAnyStructuredData && (
-        <section className="relative overflow-hidden rounded-[32px] border border-emerald-200/40 bg-white/90 p-6 shadow-lg backdrop-blur-md dark:border-emerald-600/40 dark:bg-gradient-to-br dark:from-[#041519]/95 dark:via-[#081d2c]/92 dark:to-[#0d1f2f]/95 dark:shadow-[0_26px_80px_rgba(13,148,136,0.16)]">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_18%,rgba(134,239,172,0.22),transparent_55%),radial-gradient(circle_at_88%_8%,rgba(56,189,248,0.18),transparent_58%)] dark:bg-[radial-gradient(circle_at_15%_15%,rgba(45,212,191,0.1),transparent_52%),radial-gradient(circle_at_85%_10%,rgba(56,189,248,0.12),transparent_58%),radial-gradient(circle_at_50%_85%,rgba(192,132,252,0.08),transparent_68%)]" aria-hidden="true" />
+        <section className="relative overflow-hidden rounded-[32px] border border-emerald-200/40 bg-white/90 p-6 shadow-lg backdrop-blur-md dark:border-emerald-600/40 dark:bg-gradient-to-br dark:from-[#041519]/95 dark:via-[#081d2c]/92 dark:to-[#0d1f2f]/95 dark:shadow-[0_18px_60px_rgba(13,148,136,0.12)]">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_18%,rgba(134,239,172,0.22),transparent_55%),radial-gradient(circle_at_88%_8%,rgba(56,189,248,0.18),transparent_58%)] dark:bg-[radial-gradient(circle_at_15%_15%,rgba(45,212,191,0.08),transparent_50%),radial-gradient(circle_at_85%_10%,rgba(56,189,248,0.1),transparent_56%),radial-gradient(circle_at_50%_85%,rgba(192,132,252,0.05),transparent_66%)]" aria-hidden="true" />
           <header className="relative z-10 mb-6 flex items-center gap-3 text-emerald-800 dark:text-emerald-100">
               <BookOpen className="h-5 w-5" />
               <h3 className="text-xl font-semibold tracking-tight">{t('plantInfo.moreInformation')}</h3>
@@ -1526,8 +1526,8 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
         </section>
         )}
 
-      <div className="relative flex flex-wrap items-center gap-3 rounded-[28px] border border-emerald-200/40 bg-white/90 p-4 shadow-sm backdrop-blur-md dark:border-emerald-600/35 dark:bg-gradient-to-br dark:from-[#05171a]/92 dark:via-[#0a2434]/90 dark:to-[#0f1d2c]/92 dark:shadow-[0_18px_50px_rgba(13,148,136,0.14)]">
-        <div className="pointer-events-none absolute inset-0 rounded-[28px] bg-[radial-gradient(circle_at_18%_18%,rgba(16,185,129,0.14),transparent_58%),radial-gradient(circle_at_82%_12%,rgba(14,165,233,0.12),transparent_60%)] dark:bg-[radial-gradient(circle_at_22%_22%,rgba(45,212,191,0.14),transparent_55%),radial-gradient(circle_at_80%_18%,rgba(56,189,248,0.12),transparent_60%)]" aria-hidden="true" />
+    <div className="relative flex flex-wrap items-center gap-3 rounded-[28px] border border-emerald-200/40 bg-white/90 p-4 shadow-sm backdrop-blur-md dark:border-emerald-600/35 dark:bg-gradient-to-br dark:from-[#05171a]/92 dark:via-[#0a2434]/90 dark:to-[#0f1d2c]/92 dark:shadow-[0_12px_36px_rgba(13,148,136,0.1)]">
+      <div className="pointer-events-none absolute inset-0 rounded-[28px] bg-[radial-gradient(circle_at_18%_18%,rgba(16,185,129,0.14),transparent_58%),radial-gradient(circle_at_82%_12%,rgba(14,165,233,0.12),transparent_60%)] dark:bg-[radial-gradient(circle_at_22%_22%,rgba(45,212,191,0.1),transparent_53%),radial-gradient(circle_at_80%_18%,rgba(56,189,248,0.1),transparent_58%)]" aria-hidden="true" />
         {isAdmin && (
           <Button
             variant="destructive"
@@ -1661,8 +1661,8 @@ const CareChartSection: React.FC<{ data: CareChartDatum[] }> = ({ data }) => {
   if (!data.length) return null
 
   return (
-    <section className="relative overflow-hidden rounded-[28px] border border-emerald-200/40 bg-white/90 p-6 shadow-md backdrop-blur-md dark:border-emerald-600/35 dark:bg-gradient-to-br dark:from-[#05181b]/90 dark:via-[#08253a]/88 dark:to-[#0d1d2f]/90 dark:shadow-[0_22px_70px_rgba(8,145,178,0.16)]">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_12%,rgba(16,185,129,0.16),transparent_60%),radial-gradient(circle_at_84%_16%,rgba(59,130,246,0.14),transparent_62%)] dark:bg-[radial-gradient(circle_at_16%_18%,rgba(45,212,191,0.12),transparent_58%),radial-gradient(circle_at_80%_14%,rgba(59,130,246,0.14),transparent_60%),linear-gradient(135deg,rgba(99,102,241,0.08),transparent)]" aria-hidden="true" />
+    <section className="relative overflow-hidden rounded-[28px] border border-emerald-200/40 bg-white/90 p-6 shadow-md backdrop-blur-md dark:border-emerald-600/35 dark:bg-gradient-to-br dark:from-[#05181b]/90 dark:via-[#08253a]/88 dark:to-[#0d1d2f]/90 dark:shadow-[0_16px_54px_rgba(8,145,178,0.1)]">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_12%,rgba(16,185,129,0.16),transparent_60%),radial-gradient(circle_at_84%_16%,rgba(59,130,246,0.14),transparent_62%)] dark:bg-[radial-gradient(circle_at_16%_18%,rgba(45,212,191,0.1),transparent_56%),radial-gradient(circle_at_80%_14%,rgba(59,130,246,0.1),transparent_58%),linear-gradient(135deg,rgba(99,102,241,0.05),transparent)]" aria-hidden="true" />
       <header className="relative z-10 mb-5 flex items-center gap-3 text-emerald-800 dark:text-emerald-100">
         <BarChart3 className="h-5 w-5" />
         <h3 className="text-lg font-semibold tracking-tight">{t('plantInfo.careGuide', { defaultValue: 'Care Guide' })}</h3>
@@ -1751,8 +1751,8 @@ const SeasonalTimeline: React.FC<{ data: SeasonalTimelineEntry[]; planting?: Non
   if (!hasData) return null
 
     return (
-      <section className="relative overflow-hidden rounded-[28px] border border-emerald-200/40 bg-white/90 p-6 shadow-md backdrop-blur-md dark:border-emerald-600/35 dark:bg-gradient-to-br dark:from-[#04171a]/90 dark:via-[#072337]/88 dark:to-[#111d2f]/90 dark:shadow-[0_22px_70px_rgba(99,102,241,0.14)]">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_14%_18%,rgba(56,189,248,0.16),transparent_58%),radial-gradient(circle_at_86%_12%,rgba(129,140,248,0.16),transparent_60%)] dark:bg-[radial-gradient(circle_at_20%_20%,rgba(14,165,233,0.14),transparent_55%),radial-gradient(circle_at_78%_14%,rgba(129,140,248,0.16),transparent_62%)]" aria-hidden="true" />
+      <section className="relative overflow-hidden rounded-[28px] border border-emerald-200/40 bg-white/90 p-6 shadow-md backdrop-blur-md dark:border-emerald-600/35 dark:bg-gradient-to-br dark:from-[#04171a]/90 dark:via-[#072337]/88 dark:to-[#111d2f]/90 dark:shadow-[0_16px_54px_rgba(99,102,241,0.1)]">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_14%_18%,rgba(56,189,248,0.16),transparent_58%),radial-gradient(circle_at_86%_12%,rgba(129,140,248,0.16),transparent_60%)] dark:bg-[radial-gradient(circle_at_20%_20%,rgba(14,165,233,0.1),transparent_53%),radial-gradient(circle_at_78%_14%,rgba(129,140,248,0.12),transparent_60%)]" aria-hidden="true" />
         <header className="relative z-10 mb-4 flex items-center gap-3 text-emerald-800 dark:text-emerald-100">
           <Calendar className="h-5 w-5" />
           <h3 className="text-lg font-semibold tracking-tight">{t('plantInfo.sections.phenology', { defaultValue: 'Phenology' })}</h3>
@@ -1847,8 +1847,8 @@ const ColorMoodboard: React.FC<{
   if (!swatches.length) return null
 
   return (
-    <section className="relative overflow-hidden rounded-[28px] border border-emerald-200/40 bg-white/90 p-6 shadow-md backdrop-blur-md dark:border-emerald-600/35 dark:bg-gradient-to-br dark:from-[#05161c]/90 dark:via-[#0b2234]/88 dark:to-[#101d2f]/90 dark:shadow-[0_22px_70px_rgba(129,140,248,0.14)]">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,rgba(16,185,129,0.14),transparent_58%),radial-gradient(circle_at_82%_12%,rgba(236,72,153,0.12),transparent_62%)] dark:bg-[radial-gradient(circle_at_22%_24%,rgba(45,212,191,0.12),transparent_58%),radial-gradient(circle_at_78%_16%,rgba(192,132,252,0.12),transparent_62%)]" aria-hidden="true" />
+    <section className="relative overflow-hidden rounded-[28px] border border-emerald-200/40 bg-white/90 p-6 shadow-md backdrop-blur-md dark:border-emerald-600/35 dark:bg-gradient-to-br dark:from-[#05161c]/90 dark:via-[#0b2234]/88 dark:to-[#101d2f]/90 dark:shadow-[0_16px_54px_rgba(129,140,248,0.1)]">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,rgba(16,185,129,0.14),transparent_58%),radial-gradient(circle_at_82%_12%,rgba(236,72,153,0.12),transparent_62%)] dark:bg-[radial-gradient(circle_at_22%_24%,rgba(45,212,191,0.1),transparent_56%),radial-gradient(circle_at_78%_16%,rgba(192,132,252,0.1),transparent_60%)]" aria-hidden="true" />
       <header className="relative z-10 mb-4 flex items-center gap-3 text-emerald-800 dark:text-emerald-100">
         <Palette className="h-5 w-5" />
         <h3 className="text-lg font-semibold tracking-tight">{t('plantInfo.labels.colorPalette', { defaultValue: 'Color Moodboard' })}</h3>
@@ -1889,13 +1889,13 @@ const HabitatMap: React.FC<{
   const pins = nativeRange.slice(0, MAP_PIN_POSITIONS.length)
 
   return (
-    <section className="rounded-[28px] border border-emerald-200/40 bg-gradient-to-br from-sky-100/80 via-white/80 to-emerald-100/80 p-6 shadow-md backdrop-blur-md dark:border-emerald-600/40 dark:bg-gradient-to-br dark:from-[#03191b]/90 dark:via-[#04263d]/85 dark:to-[#071321]/90 dark:shadow-[0_22px_70px_rgba(14,165,233,0.14)]">
+    <section className="rounded-[28px] border border-emerald-200/40 bg-gradient-to-br from-sky-100/80 via-white/80 to-emerald-100/80 p-6 shadow-md backdrop-blur-md dark:border-emerald-600/40 dark:bg-gradient-to-br dark:from-[#03191b]/90 dark:via-[#04263d]/85 dark:to-[#071321]/90 dark:shadow-[0_16px_54px_rgba(14,165,233,0.1)]">
       <header className="relative z-10 mb-4 flex items-center gap-3 text-emerald-800 dark:text-emerald-100">
         <MapIcon className="h-5 w-5" />
         <h3 className="text-lg font-semibold tracking-tight">{t('plantInfo.labels.habitatMap', { defaultValue: 'Habitat Map' })}</h3>
       </header>
       <div className="relative z-10 mb-4 h-64 overflow-hidden rounded-3xl border border-white/60 bg-gradient-to-br from-emerald-200/60 via-sky-100/60 to-emerald-100/60 shadow-inner dark:border-emerald-800/40 dark:bg-gradient-to-br dark:from-[#052c2b]/80 dark:via-[#072c40]/78 dark:to-[#111b2d]/82">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_40%,rgba(255,255,255,0.55),transparent_60%),radial-gradient(circle_at_70%_60%,rgba(255,255,255,0.45),transparent_65%)] dark:bg-[radial-gradient(circle_at_28%_32%,rgba(16,185,129,0.18),transparent_58%),radial-gradient(circle_at_74%_65%,rgba(59,130,246,0.16),transparent_68%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_40%,rgba(255,255,255,0.55),transparent_60%),radial-gradient(circle_at_70%_60%,rgba(255,255,255,0.45),transparent_65%)] dark:bg-[radial-gradient(circle_at_28%_32%,rgba(16,185,129,0.14),transparent_56%),radial-gradient(circle_at_74%_65%,rgba(59,130,246,0.12),transparent_66%)]" />
         {pins.map((region, idx) => {
           const position = MAP_PIN_POSITIONS[idx]
           return (
@@ -1946,7 +1946,7 @@ const humanizeHemisphere = (value: string, t: (key: string, options?: Record<str
 const Fact = ({ icon, label, value, sub, accentClass }: { icon: React.ReactNode; label: string; value: React.ReactNode; sub?: React.ReactNode; accentClass?: string }) => (
   <div
     className={cn(
-      'flex items-center gap-3 rounded-3xl border border-white/60 bg-white/90 p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-emerald-900/40 dark:bg-[#0b1720]/60 dark:backdrop-blur-sm dark:shadow-[0_8px_24px_rgba(3,94,121,0.18)] dark:hover:shadow-[0_14px_36px_rgba(14,165,233,0.24)]',
+      'flex items-center gap-3 rounded-3xl border border-white/60 bg-white/90 p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-emerald-900/40 dark:bg-[#0b1720]/60 dark:backdrop-blur-sm dark:shadow-[0_6px_18px_rgba(3,94,121,0.12)] dark:hover:shadow-[0_10px_26px_rgba(14,165,233,0.18)]',
       accentClass ? `bg-gradient-to-br ${accentClass}` : ''
     )}
   >
@@ -1966,7 +1966,7 @@ const InfoSection = ({ title, icon, children }: { title: string; icon: React.Rea
   const key = SECTION_KEY_MAP[title]
   const translatedTitle = key ? t(`plantInfo.sections.${key}`, { defaultValue: title }) : title
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-stone-200 bg-white p-4 shadow-sm space-y-3 dark:border-emerald-700/40 dark:bg-gradient-to-br dark:from-[#0b1f1a]/80 dark:via-[#0c2733]/85 dark:to-[#14233b]/80 dark:shadow-[0_10px_36px_rgba(6,182,212,0.12)] dark:ring-1 dark:ring-emerald-500/15">
+    <div className="relative overflow-hidden rounded-2xl border border-stone-200 bg-white p-4 shadow-sm space-y-3 dark:border-emerald-700/40 dark:bg-gradient-to-br dark:from-[#0b1f1a]/80 dark:via-[#0c2733]/85 dark:to-[#14233b]/80 dark:shadow-[0_6px_22px_rgba(6,182,212,0.1)] dark:ring-1 dark:ring-emerald-500/12">
       <div className="flex items-center gap-3 text-base font-semibold text-stone-800 dark:text-stone-200">
         <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-green-500 to-emerald-600 dark:from-[#10b981] dark:via-[#0ea5e9] dark:to-[#6366f1] dark:shadow-[0_12px_28px_rgba(56,189,248,0.35)] flex items-center justify-center text-white shadow">
           {icon}
