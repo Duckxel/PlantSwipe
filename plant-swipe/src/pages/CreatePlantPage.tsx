@@ -25,9 +25,29 @@ import type {
 import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE, type SupportedLanguage } from "@/lib/i18n"
 import { translatePlantToAllLanguages } from "@/lib/deepl"
 import { savePlantTranslations, type PlantTranslation } from "@/lib/plantTranslations"
-import { Languages, Sparkles, Loader2 } from "lucide-react"
+import { Languages, Sparkles, Loader2, CheckCircle2, AlertCircle, Circle } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { CompleteAdvancedForm } from "@/components/plant/CompleteAdvancedForm"
+import { useAuth } from "@/context/AuthContext"
+import {
+  REQUIRED_FIELD_CONFIG,
+  AI_FIELD_STATUS_TEXT,
+  createInitialStatuses,
+  normalizeColorList,
+  normalizeSeasonList,
+  isFieldFilledFromData,
+  isFieldFilledFromState,
+  type AiFieldStatus,
+  type RequiredFieldId,
+  type AiFieldStateSnapshot,
+} from "@/lib/aiFieldProgress"
+
+const AI_STATUS_STYLES: Record<AiFieldStatus, { text: string }> = {
+  pending: { text: "text-muted-foreground" },
+  working: { text: "text-purple-600 dark:text-purple-300" },
+  filled: { text: "text-green-600 dark:text-green-400" },
+  missing: { text: "text-red-600 dark:text-red-400" },
+}
 
 function generateUUIDv4(): string {
   try {
@@ -59,6 +79,7 @@ interface CreatePlantPageProps {
 
 export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSaved, initialName }) => {
   const { t } = useTranslation('common')
+  const { user, profile } = useAuth()
   const [name, setName] = React.useState(initialName || "")
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -69,9 +90,114 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
   const [inputLanguage, setInputLanguage] = React.useState<SupportedLanguage>(DEFAULT_LANGUAGE)
   const [translateToAll, setTranslateToAll] = React.useState(true) // Default to true in Advanced mode
   const [translating, setTranslating] = React.useState(false)
-    const [aiFilling, setAiFilling] = React.useState(false)
-    const [aiFillProgress, setAiFillProgress] = React.useState<{ completed: number; total: number; field?: string }>({ completed: 0, total: 0, field: undefined })
-    const abortControllerRef = React.useRef<AbortController | null>(null)
+  const [aiFilling, setAiFilling] = React.useState(false)
+  const [aiFillProgress, setAiFillProgress] = React.useState<{ completed: number; total: number; field?: string }>({ completed: 0, total: 0, field: undefined })
+  const [aiFieldStatuses, setAiFieldStatuses] = React.useState<Record<RequiredFieldId, AiFieldStatus>>(() => createInitialStatuses())
+  const [aiMissingFields, setAiMissingFields] = React.useState<RequiredFieldId[]>([])
+  const abortControllerRef = React.useRef<AbortController | null>(null)
+  const resetAiTracking = () => {
+    setAiFieldStatuses(createInitialStatuses())
+    setAiMissingFields([])
+  }
+  const markFieldWorking = (fieldKey: string) => {
+    if (!fieldKey || fieldKey === 'init' || fieldKey === 'complete') return
+    setAiFieldStatuses((prev) => {
+      let updated: Record<RequiredFieldId, AiFieldStatus> | null = null
+      for (const config of REQUIRED_FIELD_CONFIG) {
+        if (config.sourceKeys.includes(fieldKey) && prev[config.id] === 'pending') {
+          if (!updated) updated = { ...prev }
+          updated[config.id] = 'working'
+        }
+      }
+      return updated ?? prev
+    })
+  }
+  const markFieldResult = (fieldKey: string, fieldData: unknown) => {
+    if (!fieldKey || fieldKey === 'init' || fieldKey === 'complete') return
+    setAiFieldStatuses((prev) => {
+      let updated: Record<RequiredFieldId, AiFieldStatus> | null = null
+      for (const config of REQUIRED_FIELD_CONFIG) {
+        if (!config.sourceKeys.includes(fieldKey)) continue
+        const filled = isFieldFilledFromData(config.id, fieldKey, fieldData)
+        if (filled && prev[config.id] !== 'filled') {
+          if (!updated) updated = { ...prev }
+          updated[config.id] = 'filled'
+        } else if (!filled && prev[config.id] !== 'filled') {
+          if (!updated) updated = { ...prev }
+          updated[config.id] = 'missing'
+        }
+      }
+      return updated ?? prev
+    })
+  }
+  const finalizeAiStatuses = (snapshot: AiFieldStateSnapshot) => {
+    setAiFieldStatuses((prev) => {
+      const next = { ...prev }
+      for (const config of REQUIRED_FIELD_CONFIG) {
+        if (isFieldFilledFromState(config.id, snapshot)) {
+          next[config.id] = 'filled'
+        } else if (next[config.id] !== 'filled') {
+          next[config.id] = 'missing'
+        }
+      }
+      return next
+    })
+    const missing = REQUIRED_FIELD_CONFIG
+      .filter(({ id }) => !isFieldFilledFromState(id, snapshot))
+      .map(({ id }) => id)
+    setAiMissingFields(missing)
+    return missing
+  }
+  const renderStatusIcon = (status: AiFieldStatus) => {
+    switch (status) {
+      case 'filled':
+        return <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+      case 'missing':
+        return <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+      case 'working':
+        return <Loader2 className="h-4 w-4 text-purple-600 dark:text-purple-300 animate-spin" />
+      default:
+        return <Circle className="h-4 w-4 text-muted-foreground" />
+    }
+  }
+  React.useEffect(() => {
+    if (aiFilling) return
+    const snapshot: AiFieldStateSnapshot = {
+      scientificName,
+      colors,
+      seasons,
+      description,
+    }
+    setAiFieldStatuses((prev) => {
+      let changed = false
+      const next = { ...prev }
+      for (const config of REQUIRED_FIELD_CONFIG) {
+        const filled = isFieldFilledFromState(config.id, snapshot)
+        if (filled) {
+          if (next[config.id] !== 'filled') {
+            next[config.id] = 'filled'
+            changed = true
+          }
+        } else if (next[config.id] === 'filled') {
+          next[config.id] = 'missing'
+          changed = true
+        } else if (next[config.id] !== 'working' && next[config.id] !== 'missing') {
+          next[config.id] = 'missing'
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+    const missing = REQUIRED_FIELD_CONFIG
+      .filter(({ id }) => !isFieldFilledFromState(id, snapshot))
+      .map(({ id }) => id)
+    setAiMissingFields((current) => {
+      if (current.length === missing.length && current.every((id) => missing.includes(id))) {
+        return current
+      }
+      return missing
+    })
+  }, [scientificName, colors, seasons, description, aiFilling])
   
   // New JSONB structure state
   const [identifiers, setIdentifiers] = React.useState<Partial<PlantIdentifiers>>({})
@@ -159,6 +285,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
       return
     }
 
+    resetAiTracking()
     setAiFilling(true)
     setAiFillProgress({ completed: 0, total: 0, field: undefined })
     abortControllerRef.current?.abort()
@@ -175,10 +302,33 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
           return
         }
 
+        const schemaWithMandatory: Record<string, unknown> = { ...(schema as Record<string, unknown>) }
+        if (!('colors' in schemaWithMandatory)) {
+          schemaWithMandatory.colors = {
+            type: 'array',
+            items: 'string',
+            description: 'List of primary flower or foliage colors (simple color names).',
+          }
+        }
+        if (!('seasons' in schemaWithMandatory)) {
+          schemaWithMandatory.seasons = {
+            type: 'array',
+            items: 'string',
+            description: 'Seasons when the plant is most active or in bloom (Spring, Summer, Autumn, Winter).',
+          }
+        }
+        if (!('description' in schemaWithMandatory)) {
+          schemaWithMandatory.description = {
+            type: 'string',
+            description: 'A concise botanical description covering appearance, notable traits, and growth habits.',
+          }
+        }
+
+        const existingColors = normalizeColorList(colors)
         const existingData = {
           identifiers: {
             ...(identifiers ?? {}),
-            ...(scientificName.trim() ? { scientificName: scientificName.trim() } : {})
+            ...(scientificName.trim() ? { scientificName: scientificName.trim() } : {}),
           },
           traits: { ...(traits ?? {}) },
           dimensions: { ...(dimensions ?? {}) },
@@ -193,75 +343,126 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
           planting: { ...(planting ?? {}) },
           meta: {
             ...(meta ?? {}),
-            ...(meaning.trim() ? { funFact: meaning.trim() } : {})
-          }
+            ...(meaning.trim() ? { funFact: meaning.trim() } : {}),
+          },
+          colors: existingColors.length > 0 ? existingColors : undefined,
+          seasons: seasons.length > 0 ? seasons : undefined,
+          description: description.trim() || undefined,
         }
 
         const aiData = await fetchAiPlantFill({
           plantName: name.trim(),
-          schema,
+          schema: schemaWithMandatory,
           existingData,
           signal: controller.signal,
           onProgress: ({ completed, total, field }) => {
             setAiFillProgress({ completed, total, field })
-          }
+            if (field) markFieldWorking(field)
+          },
+          onFieldComplete: ({ field, data }) => {
+            markFieldResult(field, data)
+          },
         })
 
-      // Populate form fields with AI data
-      if (aiData.identifiers) {
-        setIdentifiers(aiData.identifiers)
-        if (aiData.identifiers.scientificName && !scientificName) {
-          setScientificName(aiData.identifiers.scientificName)
-        }
-      }
-      if (aiData.traits) setTraits(aiData.traits)
-      if (aiData.dimensions) setDimensions(aiData.dimensions)
-      if (aiData.phenology) {
-        setPhenology(aiData.phenology)
-        // Also update legacy colors and seasons if available
-        if (aiData.phenology.flowerColors?.length > 0 && !colors) {
-          setColors(aiData.phenology.flowerColors.map((c: any) => c.name).join(', '))
-        }
-        if (aiData.phenology.floweringMonths?.length > 0 && seasons.length === 0) {
-          // Convert months to seasons (rough approximation)
-          const monthSeasons: Record<number, string> = {
-            12: 'Winter', 1: 'Winter', 2: 'Winter',
-            3: 'Spring', 4: 'Spring', 5: 'Spring',
-            6: 'Summer', 7: 'Summer', 8: 'Summer',
-            9: 'Autumn', 10: 'Autumn', 11: 'Autumn'
-          }
-          const newSeasons = [...new Set(aiData.phenology.floweringMonths.map((m: number) => monthSeasons[m]))].filter(Boolean) as string[]
-          if (newSeasons.length > 0) setSeasons(newSeasons)
-        }
-      }
-      if (aiData.environment) setEnvironment(aiData.environment)
-      if (aiData.care) setCare(aiData.care)
-      if (aiData.propagation) setPropagation(aiData.propagation)
-      if (aiData.usage) setUsage(aiData.usage)
-      if (aiData.ecology) setEcology(aiData.ecology)
-      if (aiData.commerce) setCommerce(aiData.commerce)
-      if (aiData.problems) setProblems(aiData.problems)
-      if (aiData.planting) setPlanting(aiData.planting)
-      if (aiData.meta) {
-        setMeta(aiData.meta)
-        if (aiData.meta.funFact && !meaning) {
-          setMeaning(aiData.meta.funFact)
-        }
-        if (aiData.meta.rarity) {
-          const rarityMap: Record<string, Plant['rarity']> = {
-            'common': 'Common',
-            'uncommon': 'Uncommon',
-            'rare': 'Rare',
-            'very rare': 'Legendary'
-          }
-          setRarity(rarityMap[aiData.meta.rarity] || 'Common')
-        }
-      }
-      if (aiData.image && !imageUrl) {
-        setImageUrl(aiData.image)
-      }
+        let nextScientificName = scientificName
+        let nextColorsString = colors
+        let nextSeasons = seasons
+        let nextDescription = description
 
-      setOk("AI data loaded successfully! Please review and edit before saving.")
+        if (aiData.identifiers) {
+          setIdentifiers(aiData.identifiers)
+          const aiScientificName = typeof aiData.identifiers.scientificName === 'string'
+            ? aiData.identifiers.scientificName.trim()
+            : ''
+          if (aiScientificName) {
+            nextScientificName = aiScientificName
+            setScientificName(aiScientificName)
+          }
+        }
+        if (aiData.traits) setTraits(aiData.traits)
+        if (aiData.dimensions) setDimensions(aiData.dimensions)
+
+        const directColors = normalizeColorList((aiData as any).colors)
+        if (directColors.length > 0) {
+          nextColorsString = directColors.join(', ')
+          setColors(nextColorsString)
+        }
+        const directSeasons = normalizeSeasonList((aiData as any).seasons)
+        if (directSeasons.length > 0) {
+          nextSeasons = directSeasons
+          setSeasons(directSeasons)
+        }
+        if (typeof (aiData as any).description === 'string' && (aiData as any).description.trim()) {
+          nextDescription = (aiData as any).description.trim()
+          setDescription(nextDescription)
+        }
+
+        if (aiData.phenology) {
+          setPhenology(aiData.phenology)
+          if (normalizeColorList(nextColorsString).length === 0) {
+            const phenologyColors = normalizeColorList(aiData.phenology.flowerColors)
+            if (phenologyColors.length > 0) {
+              nextColorsString = phenologyColors.join(', ')
+              setColors(nextColorsString)
+            }
+          }
+          if (nextSeasons.length === 0 && Array.isArray(aiData.phenology.floweringMonths)) {
+            const derivedSeasons = normalizeSeasonList(aiData.phenology.floweringMonths)
+            if (derivedSeasons.length > 0) {
+              nextSeasons = derivedSeasons
+              setSeasons(derivedSeasons)
+            }
+          }
+        }
+        if (aiData.environment) setEnvironment(aiData.environment)
+        if (aiData.care) setCare(aiData.care)
+        if (aiData.propagation) setPropagation(aiData.propagation)
+        if (aiData.usage) setUsage(aiData.usage)
+        if (aiData.ecology) setEcology(aiData.ecology)
+        if (aiData.commerce) setCommerce(aiData.commerce)
+        if (aiData.problems) setProblems(aiData.problems)
+        if (aiData.planting) setPlanting(aiData.planting)
+        if (aiData.meta) {
+          setMeta((prev) => ({ ...(prev ?? {}), ...aiData.meta }))
+          if (aiData.meta.funFact && !meaning) {
+            setMeaning(aiData.meta.funFact)
+          }
+          if (aiData.meta.rarity) {
+            const rarityMap: Record<string, Plant['rarity']> = {
+              'common': 'Common',
+              'uncommon': 'Uncommon',
+              'rare': 'Rare',
+              'very rare': 'Legendary',
+            }
+            setRarity(rarityMap[aiData.meta.rarity] || 'Common')
+          }
+          if (typeof (aiData.meta as any).description === 'string' && !(aiData as any).description) {
+            const metaDescription = (aiData.meta as any).description.trim()
+            if (metaDescription && !description.trim()) {
+              nextDescription = metaDescription
+              setDescription(metaDescription)
+            }
+          }
+        }
+        if (aiData.image && !imageUrl) {
+          setImageUrl(aiData.image)
+        }
+
+        const snapshot: AiFieldStateSnapshot = {
+          scientificName: nextScientificName,
+          colors: nextColorsString,
+          seasons: nextSeasons,
+          description: nextDescription,
+        }
+        const missing = finalizeAiStatuses(snapshot)
+        if (missing.length === 0) {
+          setOk("AI data loaded successfully! Please review and edit before saving.")
+        } else {
+          const missingLabels = REQUIRED_FIELD_CONFIG
+            .filter(({ id }) => missing.includes(id))
+            .map(({ label }) => label)
+          setError(`AI could not fill the following required fields: ${missingLabels.join(', ')}. Please complete them manually.`)
+        }
     } catch (err: any) {
       console.error('AI fill error:', err)
       if (err?.message === 'AI fill was cancelled' || err?.message === 'AI fill cancelled.') {
@@ -280,6 +481,12 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
     setError(null)
     setOk(null)
     if (!name.trim()) { setError("Name is required"); return }
+    const trimmedScientificName = scientificName.trim()
+    if (!trimmedScientificName) { setError("Scientific name is required"); return }
+    const normalizedColors = normalizeColorList(colors)
+    if (normalizedColors.length === 0) { setError("At least one color is required"); return }
+    if (seasons.length === 0) { setError("Select at least one season"); return }
+    if (!description.trim()) { setError("Description is required"); return }
     // Validate frequency constraints
     const periodMax: Record<'week'|'month'|'year', number> = { week: 7, month: 4, year: 12 }
     const maxAllowed = periodMax[waterFreqPeriod]
@@ -301,8 +508,30 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
 
       const id = generateUUIDv4()
       const nameNorm = name.trim()
-      const sciNorm = scientificName.trim()
-      const colorArray = colors.split(",").map((c) => c.trim()).filter(Boolean)
+    const sciNorm = trimmedScientificName
+    const actorLabel = profile?.display_name?.trim() || user?.email?.trim() || user?.id || 'Unknown admin'
+    const nowIso = new Date().toISOString()
+    const metaBase = meta ?? {}
+    const createdAtValue = typeof metaBase.createdAt === 'string' && metaBase.createdAt.trim().length > 0
+      ? metaBase.createdAt.trim()
+      : nowIso
+    const createdByValue = typeof metaBase.createdBy === 'string' && metaBase.createdBy.trim().length > 0
+      ? metaBase.createdBy.trim()
+      : actorLabel
+    const metaForInsert: Partial<PlantMeta> = {
+      ...metaBase,
+      createdAt: createdAtValue,
+      updatedAt: nowIso,
+      createdBy: createdByValue,
+      updatedBy: actorLabel,
+    }
+    setMeta(metaForInsert)
+    const shouldPersistMeta = Object.values(metaForInsert).some((value) => {
+      if (value === undefined || value === null) return false
+      if (typeof value === 'string') return value.trim().length > 0
+      if (Array.isArray(value)) return value.length > 0
+      return true
+    })
       // If the user has ever switched to Advanced, keep those values even
       // when saving from Simplified so they persist across toggles.
       const includeAdvanced = advanced || everAdvanced
@@ -328,13 +557,13 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
         commerce: includeAdvanced && Object.keys(commerce).length > 0 ? commerce : null,
         problems: includeAdvanced && Object.keys(problems).length > 0 ? problems : null,
         planting: includeAdvanced && Object.keys(planting).length > 0 ? planting : null,
-        meta: includeAdvanced && Object.keys(meta).length > 0 ? meta : null,
+          meta: shouldPersistMeta ? metaForInsert : null,
         // Legacy fields for backward compatibility
         scientific_name: sciNorm || identifiers?.scientificName || null,
-        colors: colorArray,
+          colors: normalizedColors,
         seasons,
-        rarity: meta?.rarity === 'common' ? 'Common' : meta?.rarity === 'uncommon' ? 'Uncommon' : meta?.rarity === 'rare' ? 'Rare' : meta?.rarity === 'very rare' ? 'Legendary' : rarity,
-        meaning: meta?.funFact || meaning || null,
+          rarity: metaForInsert?.rarity === 'common' ? 'Common' : metaForInsert?.rarity === 'uncommon' ? 'Uncommon' : metaForInsert?.rarity === 'rare' ? 'Rare' : metaForInsert?.rarity === 'very rare' ? 'Legendary' : rarity,
+          meaning: metaForInsert?.funFact || meaning || null,
         image_url: imageUrl || null,
         care_sunlight: careSunlightValue,
         care_water: 'Low',
@@ -394,10 +623,10 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
           culinaryUses: usage.culinaryUses,
           medicinalUses: usage.medicinalUses,
         } : undefined,
-        meta: includeAdvanced && meta ? {
-          funFact: meta.funFact,
-          authorNotes: meta.authorNotes,
-          sourceReferences: meta.sourceReferences,
+          meta: includeAdvanced && metaForInsert ? {
+            funFact: metaForInsert.funFact,
+            authorNotes: metaForInsert.authorNotes,
+            sourceReferences: metaForInsert.sourceReferences,
         } : undefined,
           phenology: includeAdvanced ? translationPhenology : undefined,
           care: includeAdvanced ? translationCarePayload : undefined,
@@ -405,7 +634,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
           problems: includeAdvanced ? translationProblems : undefined,
         // Legacy fields for backward compatibility
         scientific_name: sciNorm || identifiers?.scientificName || null,
-        meaning: meta?.funFact || meaning || null,
+          meaning: metaForInsert?.funFact || meaning || null,
         description: description || null,
         care_soil: environment?.soil?.texture?.join(', ') || careSoil || null,
       }
@@ -422,7 +651,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
           const allTranslations = await translatePlantToAllLanguages({
             name: nameNorm,
             scientificName: sciNorm || identifiers?.scientificName || undefined,
-            meaning: meta?.funFact || meaning || undefined,
+              meaning: metaForInsert?.funFact || meaning || undefined,
             description: description || undefined,
             careSoil: environment?.soil?.texture?.join(', ') || careSoil || undefined,
             identifiers: includeAdvanced && identifiers ? {
@@ -436,10 +665,10 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
               culinaryUses: usage.culinaryUses,
               medicinalUses: usage.medicinalUses,
             } : undefined,
-            meta: includeAdvanced && meta ? {
-              funFact: meta.funFact,
-              authorNotes: meta.authorNotes,
-              sourceReferences: meta.sourceReferences,
+              meta: includeAdvanced && metaForInsert ? {
+                funFact: metaForInsert.funFact,
+                authorNotes: metaForInsert.authorNotes,
+                sourceReferences: metaForInsert.sourceReferences,
             } : undefined,
               phenology: includeAdvanced ? translationPhenology : undefined,
               care: includeAdvanced ? translationCarePayload : undefined,
@@ -572,6 +801,35 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
                     )}
                   </Button>
                 </div>
+                  <div className="mb-4 rounded-xl border border-purple-100 bg-purple-50/70 p-4 dark:border-purple-900/40 dark:bg-purple-950/20">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-purple-700 dark:text-purple-300">
+                      Required AI Fields
+                    </div>
+                    <div className="mt-2 space-y-2">
+                      {REQUIRED_FIELD_CONFIG.map(({ id, label }) => {
+                        const status = aiFieldStatuses[id]
+                        return (
+                          <div key={id} className="flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-2">
+                              {renderStatusIcon(status)}
+                              <span className="text-muted-foreground dark:text-stone-300">{label}</span>
+                            </div>
+                            <span className={`font-medium ${AI_STATUS_STYLES[status].text}`}>
+                              {AI_FIELD_STATUS_TEXT[status]}
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                    {aiMissingFields.length > 0 && (
+                      <div className="mt-3 text-xs text-red-600 dark:text-red-400">
+                        Missing:{" "}
+                        {REQUIRED_FIELD_CONFIG.filter(({ id }) => aiMissingFields.includes(id))
+                          .map(({ label }) => label)
+                          .join(", ")}
+                      </div>
+                    )}
+                  </div>
                 <div className="grid gap-2">
                   <Label htmlFor="plant-scientific">{t('createPlant.scientificName')}</Label>
                   <Input id="plant-scientific" autoComplete="off" value={scientificName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setScientificName(e.target.value)} />
@@ -660,12 +918,13 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
                   size="sm"
                   className="self-start rounded-2xl"
                   onClick={() => {
-                      abortControllerRef.current?.abort()
-                      abortControllerRef.current = null
-                      setAiFilling(false)
-                      setAiFillProgress({ completed: 0, total: 0, field: undefined })
-                      setOk(null)
-                      setError('AI fill cancelled.')
+                    abortControllerRef.current?.abort()
+                    abortControllerRef.current = null
+                    setAiFilling(false)
+                    setAiFillProgress({ completed: 0, total: 0, field: undefined })
+                    setOk(null)
+                    setError('AI fill cancelled.')
+                    resetAiTracking()
                   }}
                 >
                   Stop AI fill

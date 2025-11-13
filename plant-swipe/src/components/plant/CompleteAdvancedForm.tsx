@@ -908,27 +908,47 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
           </div>
             <div className="grid gap-2">
               <Label>Created By</Label>
-              <Input value={meta?.createdBy || ''} onChange={(e) => setMeta({ ...meta, createdBy: e.target.value || undefined })} placeholder="Author ID or name" />
+              <Input
+                value={meta?.createdBy || ''}
+                readOnly
+                aria-readonly="true"
+                placeholder="Will auto-fill on save"
+                className="cursor-not-allowed bg-muted/60 dark:bg-[#1f1f22] opacity-80"
+              />
+              <p className="text-xs text-muted-foreground">Auto-managed when you save the plant.</p>
             </div>
             <div className="grid gap-2">
               <Label>Updated By</Label>
-              <Input value={meta?.updatedBy || ''} onChange={(e) => setMeta({ ...meta, updatedBy: e.target.value || undefined })} placeholder="Last editor ID or name" />
+              <Input
+                value={meta?.updatedBy || ''}
+                readOnly
+                aria-readonly="true"
+                placeholder="Will auto-fill on save"
+                className="cursor-not-allowed bg-muted/60 dark:bg-[#1f1f22] opacity-80"
+              />
+              <p className="text-xs text-muted-foreground">Updates automatically whenever you edit.</p>
             </div>
             <div className="grid gap-2">
               <Label>Created At</Label>
               <Input
                 value={meta?.createdAt || ''}
-                onChange={(e) => setMeta({ ...meta, createdAt: e.target.value || undefined })}
-                placeholder="ISO timestamp (e.g., 2024-07-18T12:00:00Z)"
+                readOnly
+                aria-readonly="true"
+                placeholder="Will auto-fill on save"
+                className="cursor-not-allowed bg-muted/60 dark:bg-[#1f1f22] opacity-80"
               />
+              <p className="text-xs text-muted-foreground">Auto-generated when the plant is created.</p>
             </div>
             <div className="grid gap-2">
               <Label>Updated At</Label>
               <Input
                 value={meta?.updatedAt || ''}
-                onChange={(e) => setMeta({ ...meta, updatedAt: e.target.value || undefined })}
-                placeholder="ISO timestamp (e.g., 2024-07-18T12:00:00Z)"
+                readOnly
+                aria-readonly="true"
+                placeholder="Will auto-fill on save"
+                className="cursor-not-allowed bg-muted/60 dark:bg-[#1f1f22] opacity-80"
               />
+              <p className="text-xs text-muted-foreground">Updated automatically on each save.</p>
             </div>
         </div>
       </CollapsibleSection>

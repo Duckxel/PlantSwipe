@@ -5,10 +5,18 @@ interface PlantFillRequest {
   schema: unknown
   existingData?: Record<string, unknown>
   onProgress?: (info: { field: string; completed: number; total: number }) => void
+  onFieldComplete?: (info: { field: string; data: unknown }) => void
   signal?: AbortSignal
 }
 
-export async function fetchAiPlantFill({ plantName, schema, existingData, onProgress, signal }: PlantFillRequest) {
+export async function fetchAiPlantFill({
+  plantName,
+  schema,
+  existingData,
+  onProgress,
+  onFieldComplete,
+  signal,
+}: PlantFillRequest) {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
@@ -65,6 +73,7 @@ export async function fetchAiPlantFill({ plantName, schema, existingData, onProg
     }
 
     onProgress?.({ field: 'complete', completed: 1, total: 1 })
+    onFieldComplete?.({ field: 'complete', data: payload.data })
     return payload.data
   }
 
@@ -116,6 +125,8 @@ export async function fetchAiPlantFill({ plantName, schema, existingData, onProg
     } else {
       delete aggregated[fieldKey]
     }
+
+    onFieldComplete?.({ field: fieldKey, data: payload?.data ?? null })
 
     completedFields += 1
     onProgress?.({ field: fieldKey, completed: completedFields, total: totalFields })
