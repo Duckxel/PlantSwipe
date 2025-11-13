@@ -215,18 +215,12 @@ const TIMELINE_COLORS: Record<string, string> = {
 const DIMENSION_CUBE_STYLE_ID = 'dimension-cube-styles'
 const DIMENSION_CUBE_STYLES = `
 @-webkit-keyframes dimensionCubeRotate {
-  0% { transform: rotateX(-32deg) rotateY(28deg) rotateZ(0deg); }
-  25% { transform: rotateX(-20deg) rotateY(115deg) rotateZ(4deg); }
-  50% { transform: rotateX(-38deg) rotateY(205deg) rotateZ(-6deg); }
-  75% { transform: rotateX(-24deg) rotateY(295deg) rotateZ(3deg); }
-  100% { transform: rotateX(-32deg) rotateY(388deg) rotateZ(0deg); }
+  0% { transform: rotateY(0deg); }
+  100% { transform: rotateY(360deg); }
 }
 @keyframes dimensionCubeRotate {
-  0% { transform: rotateX(-32deg) rotateY(28deg) rotateZ(0deg); }
-  25% { transform: rotateX(-20deg) rotateY(115deg) rotateZ(4deg); }
-  50% { transform: rotateX(-38deg) rotateY(205deg) rotateZ(-6deg); }
-  75% { transform: rotateX(-24deg) rotateY(295deg) rotateZ(3deg); }
-  100% { transform: rotateX(-32deg) rotateY(388deg) rotateZ(0deg); }
+  0% { transform: rotateY(0deg); }
+  100% { transform: rotateY(360deg); }
 }
 .dimension-cube-scene {
   position: relative;
