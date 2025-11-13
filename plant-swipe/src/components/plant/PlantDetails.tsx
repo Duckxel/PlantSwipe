@@ -209,6 +209,112 @@ const TIMELINE_COLORS: Record<string, string> = {
   sowing: '#6366f1'
 }
 
+const normalizeStringArray = (value: unknown): string[] => {
+  if (value === undefined || value === null) return []
+
+  const items = Array.isArray(value) ? value : [value]
+  const results: string[] = []
+
+  for (const item of items) {
+    if (item === undefined || item === null) continue
+
+    if (Array.isArray(item)) {
+      results.push(...normalizeStringArray(item))
+      continue
+    }
+
+    if (typeof item === 'string') {
+      const trimmed = item.trim()
+      if (!trimmed) continue
+
+      if (
+        (trimmed.startsWith('[') && trimmed.endsWith(']')) ||
+        (trimmed.startsWith('"') && trimmed.endsWith('"'))
+      ) {
+        try {
+          const parsed = JSON.parse(trimmed)
+          results.push(...normalizeStringArray(parsed))
+          continue
+        } catch {
+          // fall through to the delimiter split
+        }
+      }
+
+      const parts = trimmed.split(/[\n,;|]/)
+      if (parts.length > 1) {
+        for (const part of parts) {
+          const candidate = part.trim()
+          if (candidate) results.push(candidate)
+        }
+      } else {
+        results.push(trimmed)
+      }
+      continue
+    }
+
+    if (typeof item === 'number' || typeof item === 'boolean') {
+      results.push(String(item))
+    }
+  }
+
+  const seen = new Set<string>()
+  const deduped: string[] = []
+  for (const entry of results) {
+    const key = entry.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    deduped.push(entry)
+  }
+  return deduped
+}
+
+const normalizeNumberArray = (value: unknown): number[] => {
+  if (value === undefined || value === null) return []
+
+  const items = Array.isArray(value) ? value : [value]
+  const numbers: number[] = []
+
+  for (const item of items) {
+    if (item === undefined || item === null) continue
+
+    if (Array.isArray(item)) {
+      numbers.push(...normalizeNumberArray(item))
+      continue
+    }
+
+    if (typeof item === 'number') {
+      if (Number.isFinite(item)) numbers.push(item)
+      continue
+    }
+
+    if (typeof item === 'string') {
+      const trimmed = item.trim()
+      if (!trimmed) continue
+
+      if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+        try {
+          const parsed = JSON.parse(trimmed)
+          numbers.push(...normalizeNumberArray(parsed))
+          continue
+        } catch {
+          // fall through to manual parsing
+        }
+      }
+
+      const matches = trimmed.match(/-?\d+(\.\d+)?/g)
+      if (!matches) continue
+      for (const match of matches) {
+        const parsed = Number(match)
+        if (Number.isFinite(parsed)) numbers.push(parsed)
+      }
+    }
+  }
+
+  const unique = Array.from(new Set(numbers))
+  unique.sort((a, b) => a - b)
+  return unique
+}
+
 type SeasonKey = keyof typeof TIMELINE_COLORS;
 type SeasonLabels = Record<SeasonKey, string>;
 
@@ -2004,12 +2110,35 @@ const HabitatMap: React.FC<{
   hemisphere?: string
 }> = ({ nativeRange, climatePref, zones, hemisphere }) => {
   const { t } = useTranslation('common')
-  const climateChips = climatePref.slice(0, 6)
-  const hasContent = nativeRange.length > 0 || climateChips.length > 0 || zones.length > 0 || hemisphere
+
+  const normalizedNativeRange = React.useMemo(
+    () => normalizeStringArray(nativeRange as unknown),
+    [nativeRange]
+  )
+  const normalizedClimatePref = React.useMemo(
+    () => normalizeStringArray(climatePref as unknown),
+    [climatePref]
+  )
+  const normalizedZones = React.useMemo(
+    () => normalizeNumberArray(zones as unknown),
+    [zones]
+  )
+  const hemisphereValue = React.useMemo(() => {
+    if (typeof hemisphere !== 'string') return undefined
+    const trimmed = hemisphere.trim()
+    return trimmed || undefined
+  }, [hemisphere])
+
+  const climateChips = normalizedClimatePref.slice(0, 6)
+  const hasContent =
+    normalizedNativeRange.length > 0 ||
+    climateChips.length > 0 ||
+    normalizedZones.length > 0 ||
+    Boolean(hemisphereValue)
 
   if (!hasContent) return null
 
-  const pins = nativeRange.slice(0, MAP_PIN_POSITIONS.length)
+  const pins = normalizedNativeRange.slice(0, MAP_PIN_POSITIONS.length)
 
   return (
     <motion.section
@@ -2021,7 +2150,9 @@ const HabitatMap: React.FC<{
     >
       <header className="relative mb-4 flex items-center gap-3">
         <MapIcon className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-        <h3 className="text-lg font-semibold tracking-tight">{t('plantInfo.labels.habitatMap', { defaultValue: 'Habitat Map' })}</h3>
+        <h3 className="text-lg font-semibold tracking-tight">
+          {t('plantInfo.labels.habitatMap', { defaultValue: 'Habitat Map' })}
+        </h3>
       </header>
       <div className="relative mb-4 h-64 overflow-hidden rounded-3xl border border-white/60 bg-gradient-to-br from-emerald-200/60 via-sky-100/60 to-emerald-100/60 shadow-inner dark:border-emerald-800/40 dark:bg-gradient-to-br dark:from-[#052c2b]/80 dark:via-[#072c40]/78 dark:to-[#111b2d]/82">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_40%,rgba(255,255,255,0.55),transparent_60%),radial-gradient(circle_at_70%_60%,rgba(255,255,255,0.45),transparent_65%)] dark:bg-[radial-gradient(circle_at_28%_32%,rgba(16,185,129,0.14),transparent_56%),radial-gradient(circle_at_74%_65%,rgba(59,130,246,0.12),transparent_66%)]" />
@@ -2029,7 +2160,7 @@ const HabitatMap: React.FC<{
           const position = MAP_PIN_POSITIONS[idx]
           return (
             <div
-              key={region}
+              key={`${region}-${idx}`}
               className="absolute flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-2xl bg-white/90 px-3 py-2 text-xs font-medium text-stone-800 shadow-md backdrop-blur-md dark:bg-[#2d2d30]/90 dark:text-stone-100"
               style={{ top: position.top, left: position.left }}
             >
@@ -2042,22 +2173,22 @@ const HabitatMap: React.FC<{
       </div>
       {climateChips.length > 0 && (
         <div className="mb-3 flex flex-wrap gap-2">
-          {climateChips.map((climate) => (
-            <Badge key={climate} className="rounded-2xl border-none bg-stone-100 dark:bg-[#2d2d30] text-xs font-medium">
+          {climateChips.map((climate, idx) => (
+            <Badge key={`${climate}-${idx}`} className="rounded-2xl border-none bg-stone-100 dark:bg-[#2d2d30] text-xs font-medium">
               <Compass className="mr-1 h-3 w-3" />
               {climate}
             </Badge>
           ))}
         </div>
       )}
-      {zones.length > 0 && (
+      {normalizedZones.length > 0 && (
         <div className="relative text-xs text-stone-600 dark:text-stone-400">
-          USDA: {zones.join(', ')}
+          USDA: {normalizedZones.join(', ')}
         </div>
       )}
-      {hemisphere && (
+      {hemisphereValue && (
         <div className="relative mt-1 text-xs text-stone-600 dark:text-stone-400">
-          {t('plantInfo.labels.hemisphere', { defaultValue: 'Hemisphere' })}: {humanizeHemisphere(hemisphere, t)}
+          {t('plantInfo.labels.hemisphere', { defaultValue: 'Hemisphere' })}: {humanizeHemisphere(hemisphereValue, t)}
         </div>
       )}
     </motion.section>
