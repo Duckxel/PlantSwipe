@@ -12,7 +12,7 @@ import {
   Globe, Shield, AlertCircle, Users, Sparkles, FileText, Home,
   BarChart3, Palette, Compass, Map as MapIcon, Pencil, Trash2, ChevronDown, ChevronUp
 } from "lucide-react";
-import type { Plant } from "@/types/plant";
+import type { Plant, PlantDimensions } from "@/types/plant";
 import { rarityTone, seasonBadge } from "@/constants/badges";
 import { cn, deriveWaterLevelFromFrequency } from "@/lib/utils";
 import { supabase } from "@/lib/supabaseClient";
@@ -212,6 +212,68 @@ const TIMELINE_COLORS: Record<string, string> = {
   sowing: '#6366f1'
 }
 
+const DIMENSION_CUBE_STYLE_ID = 'dimension-cube-styles'
+const DIMENSION_CUBE_STYLES = `
+@keyframes dimensionCubeRotate {
+  0% { transform: rotateX(-24deg) rotateY(24deg); }
+  50% { transform: rotateX(-24deg) rotateY(204deg); }
+  100% { transform: rotateX(-24deg) rotateY(384deg); }
+}
+.dimension-cube-scene {
+  position: relative;
+  width: 160px;
+  height: 160px;
+  margin: 0 auto;
+  perspective: 900px;
+}
+.dimension-cube-scale {
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dimension-cube {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  transform-style: preserve-3d;
+  animation: dimensionCubeRotate 24s linear infinite;
+  filter: drop-shadow(0 18px 24px rgba(16,185,129,0.18));
+}
+.dimension-cube-face {
+  position: absolute;
+  inset: 0;
+  border: 1px solid rgba(16,185,129,0.65);
+  background: linear-gradient(145deg, rgba(16,185,129,0.18), rgba(16,185,129,0.05));
+  backdrop-filter: blur(1.5px);
+}
+.dimension-cube-face::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px solid rgba(255,255,255,0.12);
+  mix-blend-mode: screen;
+}
+.dimension-cube-face--front { transform: translateZ(60px); }
+.dimension-cube-face--back { transform: rotateY(180deg) translateZ(60px); }
+.dimension-cube-face--left { transform: rotateY(-90deg) translateZ(60px); }
+.dimension-cube-face--right { transform: rotateY(90deg) translateZ(60px); }
+.dimension-cube-face--top { transform: rotateX(90deg) translateZ(60px); }
+.dimension-cube-face--bottom { transform: rotateX(-90deg) translateZ(60px); }
+.dimension-cube-glow {
+  position: absolute;
+  inset: 0;
+  transform: translateZ(-40px);
+  background: radial-gradient(circle at center, rgba(16,185,129,0.22), transparent 70%);
+  filter: blur(30px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .dimension-cube { animation: none; transform: rotateX(-24deg) rotateY(32deg); }
+}
+`
+
 const normalizeStringArray = (value: unknown): string[] => {
   if (value === undefined || value === null) return []
 
@@ -316,6 +378,142 @@ const normalizeNumberArray = (value: unknown): number[] => {
   const unique = Array.from(new Set(numbers))
   unique.sort((a, b) => a - b)
   return unique
+}
+
+const clampNumber = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
+
+const formatDimensionValue = (value: number): string => {
+  if (value >= 100) {
+    const meters = value / 100
+    const decimals = meters >= 10 ? 1 : 2
+    return `${Math.round(value)} cm (${meters.toFixed(decimals)} m)`
+  }
+  if (value >= 1) {
+    return `${Math.round(value)} cm`
+  }
+  return `${value.toFixed(2)} cm`
+}
+
+const parsePositiveNumber = (value: number | null | undefined): number | undefined =>
+  typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined
+
+const DimensionVisualizer: React.FC<{ dimensions: Partial<PlantDimensions> }> = ({ dimensions }) => {
+  const { t } = useTranslation('common')
+
+  React.useEffect(() => {
+    if (typeof document === 'undefined') return
+    if (document.getElementById(DIMENSION_CUBE_STYLE_ID)) return
+    const style = document.createElement('style')
+    style.id = DIMENSION_CUBE_STYLE_ID
+    style.textContent = DIMENSION_CUBE_STYLES
+    document.head.appendChild(style)
+  }, [])
+
+  const heightCandidate = parsePositiveNumber(dimensions.height?.maxCm ?? dimensions.height?.minCm)
+  const widthCandidate = parsePositiveNumber(
+    dimensions.spread?.maxCm ?? dimensions.spread?.minCm ?? dimensions.spacing?.plantCm
+  )
+  const depthCandidate = (() => {
+    const row = parsePositiveNumber(dimensions.spacing?.rowCm)
+    if (row) return row
+    const plant = parsePositiveNumber(dimensions.spacing?.plantCm)
+    if (plant) return plant
+    return parsePositiveNumber(dimensions.spread?.minCm ?? dimensions.spread?.maxCm)
+  })()
+
+  const available = [heightCandidate, widthCandidate, depthCandidate].filter(
+    (v): v is number => typeof v === 'number'
+  )
+  if (!available.length) return null
+
+  const fallbackValue = available[0]
+  const resolvedHeight = heightCandidate ?? fallbackValue
+  const resolvedWidth = widthCandidate ?? fallbackValue
+  const resolvedDepth = depthCandidate ?? fallbackValue
+
+  const maxDimension = Math.max(resolvedHeight, resolvedWidth, resolvedDepth, 1)
+  const scaleFor = (value: number) => clampNumber(0.45 + (value / maxDimension) * 0.55, 0.35, 1.08)
+
+  const scaleX = scaleFor(resolvedWidth)
+  const scaleY = scaleFor(resolvedHeight)
+  const scaleZ = scaleFor(resolvedDepth)
+
+  const scaleStyle: React.CSSProperties = {
+    transform: `scale3d(${scaleX.toFixed(3)}, ${scaleY.toFixed(3)}, ${scaleZ.toFixed(3)})`,
+  }
+
+  const baseSpacingLabel = t('plantInfo.labels.spacing', { defaultValue: 'Spacing' })
+  const spacingDescriptor = dimensions.spacing?.rowCm
+    ? `${baseSpacingLabel} (Row)`
+    : dimensions.spacing?.plantCm
+    ? `${baseSpacingLabel} (Plant)`
+    : baseSpacingLabel
+
+  const legendItems = [
+    {
+      key: 'height',
+      label: t('plantInfo.labels.height', { defaultValue: 'Height' }),
+      value: formatDimensionValue(resolvedHeight),
+    },
+    {
+      key: 'width',
+      label: t('plantInfo.labels.spread', { defaultValue: 'Spread' }),
+      value: formatDimensionValue(resolvedWidth),
+    },
+    {
+      key: 'depth',
+      label: spacingDescriptor,
+      value: formatDimensionValue(resolvedDepth),
+    },
+  ]
+
+  return (
+    <div className="rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-50/70 via-white/60 to-white/10 p-4 dark:border-emerald-500/30 dark:from-emerald-500/10 dark:via-transparent dark:to-transparent">
+      <div className="flex flex-col items-center gap-6 lg:flex-row lg:justify-between">
+        <div className="dimension-cube-scene">
+          <div className="dimension-cube-scale" style={scaleStyle}>
+            <div className="dimension-cube" aria-hidden="true">
+              <div className="dimension-cube-glow" />
+              <div className="dimension-cube-face dimension-cube-face--front" />
+              <div className="dimension-cube-face dimension-cube-face--back" />
+              <div className="dimension-cube-face dimension-cube-face--left" />
+              <div className="dimension-cube-face dimension-cube-face--right" />
+              <div className="dimension-cube-face dimension-cube-face--top" />
+              <div className="dimension-cube-face dimension-cube-face--bottom" />
+            </div>
+          </div>
+        </div>
+        <div className="w-full max-w-md space-y-3">
+          <div className="text-[11px] uppercase tracking-widest text-emerald-700/80 dark:text-emerald-300/70">
+            {t('plantInfo.labels.dimensionScale', {
+              defaultValue: 'Relative proportions (largest edge = 100%)',
+            })}
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            {legendItems.map((item) => (
+              <div
+                key={item.key}
+                className="rounded-xl border border-emerald-500/20 bg-white/80 px-3 py-2 text-sm font-medium text-stone-700 shadow-sm backdrop-blur-sm dark:border-emerald-500/30 dark:bg-[#0f1f1f]/70 dark:text-emerald-100"
+              >
+                <div className="mb-1 text-[10px] uppercase tracking-widest text-emerald-600/75 dark:text-emerald-300/75">
+                  {item.label}
+                </div>
+                <div className="text-sm font-semibold text-stone-900 dark:text-stone-100">
+                  {item.value}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="text-[11px] text-stone-500 dark:text-stone-400">
+            {t('plantInfo.labels.dimensionReference', {
+              defaultValue: 'Scaled from recorded dimensions. Largest edge: {{value}} cm.',
+              value: Math.round(maxDimension),
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 type SeasonKey = keyof typeof TIMELINE_COLORS;
@@ -1372,8 +1570,9 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
           )}
 
           {/* Dimensions Section */}
-          {(dimensions?.height || dimensions?.spread || dimensions?.spacing || dimensions?.containerFriendly !== undefined) && (
-              <InfoSection title="Dimensions" icon={<Ruler className="h-5 w-5" />}>
+            {(dimensions?.height || dimensions?.spread || dimensions?.spacing || dimensions?.containerFriendly !== undefined) && (
+                <InfoSection title="Dimensions" icon={<Ruler className="h-5 w-5" />}>
+                <DimensionVisualizer dimensions={dimensions} />
               {dimensions?.height && (
                 <InfoItem icon={<Ruler className="h-4 w-4" />} label="Height" value={`${dimensions.height.minCm || ''}${dimensions.height.minCm && dimensions.height.maxCm ? '-' : ''}${dimensions.height.maxCm || ''} cm`} />
               )}
