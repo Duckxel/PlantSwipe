@@ -829,10 +829,19 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
             onClick={handleExpand}
             type="button"
             aria-label="Expand to full page"
-            className="h-9 w-9 rounded-full flex items-center justify-center border bg-white/90 dark:bg-[#2d2d30] dark:border-[#3e3e42] text-black dark:text-white hover:bg-white dark:hover:bg-[#3e3e42] transition shadow-sm"
+            className="h-9 w-9 rounded-full flex items-center justify-center border bg-white/90 dark:bg-[#2d2d30] dark:border-[#3e3e42] text-black dark:text-white hover:bg-white dark:hover:bg-[#3e3e42] transition shadow-sm hover:-translate-y-0.5"
             title="Expand to full page"
           >
             <Maximize2 className="h-4 w-4" />
+          </button>
+          <button
+            onClick={onClose}
+            type="button"
+            aria-label={t('common.close')}
+            title={t('common.close')}
+            className="h-9 w-9 rounded-full flex items-center justify-center border border-stone-300/30 bg-white/90 text-stone-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-white dark:border-stone-600/30 dark:bg-[#2d2d30] dark:text-stone-300 dark:hover:bg-[#3e3e42]"
+          >
+            <X className="h-4 w-4" />
           </button>
         </div>
         <div className="space-y-4">
