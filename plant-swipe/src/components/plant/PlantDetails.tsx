@@ -215,18 +215,18 @@ const TIMELINE_COLORS: Record<string, string> = {
 const DIMENSION_CUBE_STYLE_ID = 'dimension-cube-styles'
 const DIMENSION_CUBE_STYLES = `
 @keyframes dimensionCubeRotate {
-  0% { transform: rotateX(-26deg) rotateY(26deg) rotateZ(0deg); }
-  25% { transform: rotateX(-6deg) rotateY(116deg) rotateZ(3deg); }
-  50% { transform: rotateX(-34deg) rotateY(206deg) rotateZ(-2deg); }
-  75% { transform: rotateX(-10deg) rotateY(296deg) rotateZ(4deg); }
-  100% { transform: rotateX(-26deg) rotateY(386deg) rotateZ(0deg); }
+  0% { transform: rotateX(-32deg) rotateY(28deg) rotateZ(0deg); }
+  25% { transform: rotateX(-20deg) rotateY(115deg) rotateZ(4deg); }
+  50% { transform: rotateX(-38deg) rotateY(205deg) rotateZ(-6deg); }
+  75% { transform: rotateX(-24deg) rotateY(295deg) rotateZ(3deg); }
+  100% { transform: rotateX(-32deg) rotateY(388deg) rotateZ(0deg); }
 }
 .dimension-cube-scene {
   position: relative;
-  width: 160px;
-  height: 160px;
+  width: 220px;
+  height: 220px;
   margin: 0 auto;
-  perspective: 880px;
+  perspective: 1100px;
 }
 .dimension-cube-wrapper {
   width: 100%;
@@ -235,7 +235,7 @@ const DIMENSION_CUBE_STYLES = `
   display: flex;
   align-items: center;
   justify-content: center;
-  transform: rotateX(-6deg) rotateY(18deg);
+  transform: rotateX(-34deg) rotateY(34deg);
 }
 .dimension-cube-scale {
   width: 100%;
@@ -247,70 +247,70 @@ const DIMENSION_CUBE_STYLES = `
 }
 .dimension-cube {
   position: relative;
-  width: 120px;
-  height: 120px;
+  width: 160px;
+  height: 160px;
   transform-style: preserve-3d;
-  animation: dimensionCubeRotate 72s linear infinite;
-  filter: drop-shadow(0 22px 32px rgba(16,185,129,0.26));
+  animation: dimensionCubeRotate 78s linear infinite;
+  filter: drop-shadow(0 26px 36px rgba(16,185,129,0.28));
 }
 .dimension-cube-face {
   position: absolute;
   inset: 0;
-  border: 2px solid rgba(16,185,129,0.9);
-  background: rgba(15,118,110,0.18);
-  box-shadow: inset 0 0 28px rgba(15,118,110,0.52);
-  backdrop-filter: blur(1.2px);
+  border: 2px solid rgba(16,185,129,0.92);
+  background: rgba(15,118,110,0.22);
+  box-shadow: inset 0 0 36px rgba(15,118,110,0.58);
+  backdrop-filter: blur(1.1px);
   backface-visibility: hidden;
 }
 .dimension-cube-face::after {
   content: "";
   position: absolute;
   inset: 0;
-  border: 1px solid rgba(255,255,255,0.2);
+  border: 1px solid rgba(255,255,255,0.22);
   mix-blend-mode: screen;
 }
 .dimension-cube-face::before {
   content: "";
   position: absolute;
-  inset: 18%;
-  border: 1px dashed rgba(167,243,208,0.55);
-  filter: blur(0.1px);
+  inset: 20%;
+  border: 1px dashed rgba(167,243,208,0.58);
+  filter: blur(0.08px);
 }
 .dimension-cube-face--front {
-  transform: translateZ(60px);
-  background: linear-gradient(160deg, rgba(56,189,248,0.3), rgba(6,95,70,0.25));
+  transform: translateZ(80px);
+  background: linear-gradient(160deg, rgba(59,130,246,0.38), rgba(6,95,70,0.28));
 }
 .dimension-cube-face--back {
-  transform: rotateY(180deg) translateZ(60px);
-  background: linear-gradient(210deg, rgba(6,95,70,0.4), rgba(16,185,129,0.26));
+  transform: rotateY(180deg) translateZ(80px);
+  background: linear-gradient(210deg, rgba(6,95,70,0.44), rgba(34,197,94,0.28));
 }
 .dimension-cube-face--left {
-  transform: rotateY(-90deg) translateZ(60px);
-  background: linear-gradient(170deg, rgba(6,95,70,0.42), rgba(34,197,94,0.28));
+  transform: rotateY(-90deg) translateZ(80px);
+  background: linear-gradient(180deg, rgba(8,145,178,0.4), rgba(15,118,110,0.24));
 }
 .dimension-cube-face--right {
-  transform: rotateY(90deg) translateZ(60px);
-  background: linear-gradient(170deg, rgba(34,197,94,0.35), rgba(6,95,70,0.26));
+  transform: rotateY(90deg) translateZ(80px);
+  background: linear-gradient(175deg, rgba(34,197,94,0.38), rgba(15,118,110,0.24));
 }
 .dimension-cube-face--top {
-  transform: rotateX(90deg) translateZ(60px);
-  background: linear-gradient(150deg, rgba(236,253,245,0.75), rgba(34,197,94,0.32));
-  border-color: rgba(167,243,208,0.92);
+  transform: rotateX(90deg) translateZ(80px);
+  background: linear-gradient(160deg, rgba(236,253,245,0.8), rgba(45,212,191,0.35));
+  border-color: rgba(167,243,208,0.95);
 }
 .dimension-cube-face--bottom {
-  transform: rotateX(-90deg) translateZ(60px);
-  background: linear-gradient(200deg, rgba(6,78,59,0.45), rgba(15,118,110,0.28));
-  border-color: rgba(12,74,61,0.9);
+  transform: rotateX(-90deg) translateZ(80px);
+  background: linear-gradient(200deg, rgba(6,68,59,0.5), rgba(15,118,110,0.3));
+  border-color: rgba(12,74,61,0.94);
 }
 .dimension-cube-glow {
   position: absolute;
   inset: 0;
-  transform: translateZ(-54px);
-  background: radial-gradient(circle at center, rgba(16,185,129,0.32), transparent 78%);
-  filter: blur(48px);
+  transform: translateZ(-68px);
+  background: radial-gradient(circle at center, rgba(16,185,129,0.36), transparent 82%);
+  filter: blur(52px);
 }
 @media (prefers-reduced-motion: reduce) {
-  .dimension-cube { animation: none; transform: rotateX(-18deg) rotateY(32deg); }
+  .dimension-cube { animation: none; transform: rotateX(-34deg) rotateY(34deg); }
 }
 `
 
@@ -500,9 +500,9 @@ const DimensionVisualizer: React.FC<{ dimensions: Partial<PlantDimensions> }> = 
   })
 
   return (
-    <div className="rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-50/70 via-white/60 to-white/10 p-4 dark:border-emerald-500/30 dark:from-emerald-500/10 dark:via-transparent dark:to-transparent">
-      <div className="flex flex-col items-center gap-6 lg:flex-row lg:justify-between">
-        <div className="dimension-cube-scene">
+      <div className="rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-50/70 via-white/60 to-white/10 p-5 dark:border-emerald-500/30 dark:from-emerald-500/10 dark:via-transparent dark:to-transparent">
+      <div className="flex flex-col items-stretch gap-6 lg:flex-row lg:gap-8">
+        <div className="dimension-cube-scene flex-[1.35] max-w-[260px] self-center lg:self-auto">
           <div className="dimension-cube-wrapper">
             <div className="dimension-cube-scale" style={scaleStyle}>
               <div className="dimension-cube" aria-hidden="true">
@@ -517,17 +517,12 @@ const DimensionVisualizer: React.FC<{ dimensions: Partial<PlantDimensions> }> = 
             </div>
           </div>
         </div>
-        <div className="w-full max-w-md space-y-3">
-          <div className="text-[11px] uppercase tracking-widest text-emerald-700/80 dark:text-emerald-300/70">
-            {t('plantInfo.labels.dimensionScale', {
-              defaultValue: 'Relative proportions (largest edge = 100%)',
-            })}
-          </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="flex-1 w-full max-w-lg">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 h-full">
             {legendItems.map((item) => (
               <div
                 key={item.key}
-                className="rounded-xl border border-emerald-500/20 bg-white/80 px-3 py-2 text-sm font-medium text-stone-700 shadow-sm backdrop-blur-sm dark:border-emerald-500/30 dark:bg-[#0f1f1f]/70 dark:text-emerald-100"
+                className="rounded-xl border border-emerald-500/20 bg-white/85 px-4 py-3 text-sm font-medium text-stone-700 shadow-sm backdrop-blur-sm dark:border-emerald-500/30 dark:bg-[#0f1f1f]/70 dark:text-emerald-100 flex flex-col justify-center"
               >
                 <div className="mb-1 text-[10px] uppercase tracking-widest text-emerald-600/75 dark:text-emerald-300/75">
                   {item.label}
