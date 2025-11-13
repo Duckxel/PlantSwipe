@@ -801,8 +801,18 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
   if (isOverlayMode) {
     const compactStats = quickStats.slice(0, 3)
     return (
-      <div className="space-y-5 select-none">
-        <div className="flex items-center justify-end gap-2">
+      <>
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `
+              [data-radix-dialog-content] > button[data-radix-dialog-close] {
+                display: none !important;
+              }
+            `
+          }}
+        />
+        <div className="space-y-5 select-none">
+          <div className="flex items-center justify-end gap-2">
           {isAdmin && (
             <>
               <button
@@ -898,7 +908,8 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
             {t('common.close')}
           </Button>
         </div>
-      </div>
+        </div>
+      </>
     )
   }
 
