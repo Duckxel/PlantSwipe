@@ -364,6 +364,8 @@ const DimensionCube: React.FC<{ scale: CubeScale }> = ({ scale }) => {
   const containerRef = React.useRef<HTMLDivElement>(null)
   const rendererRef = React.useRef<WebGLRenderer | null>(null)
   const cubeGroupRef = React.useRef<Group | null>(null)
+  const cameraRef = React.useRef<PerspectiveCamera | null>(null)
+  const pivotAngleRef = React.useRef(0)
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return
@@ -387,6 +389,7 @@ const DimensionCube: React.FC<{ scale: CubeScale }> = ({ scale }) => {
     const camera = new PerspectiveCamera(38, 1, 0.1, 100)
     camera.position.set(3.2, 2.3, 3.2)
     camera.lookAt(0, 0.05, 0)
+    cameraRef.current = camera
 
     const ambientLight = new AmbientLight(0xbfffe0, 0.45)
     scene.add(ambientLight)
@@ -400,7 +403,8 @@ const DimensionCube: React.FC<{ scale: CubeScale }> = ({ scale }) => {
     scene.add(rimLight)
 
     const cubeGroup = new Group()
-    cubeGroup.rotation.set(0.32, 0, 0)
+    cubeGroup.rotation.set(0, 0, 0)
+    cubeGroup.position.y = 0.5
     cubeGroupRef.current = cubeGroup
     scene.add(cubeGroup)
 
@@ -446,7 +450,7 @@ const DimensionCube: React.FC<{ scale: CubeScale }> = ({ scale }) => {
     }
 
     const grid = new GridHelper(4, 12, 0x34f5c6, 0x0f766e)
-    grid.position.y = -0.55
+    grid.position.y = 0
     const gridMaterials = Array.isArray(grid.material) ? grid.material : [grid.material]
     gridMaterials.forEach((material) => {
       if (material instanceof LineBasicMaterial) {
@@ -481,7 +485,22 @@ const DimensionCube: React.FC<{ scale: CubeScale }> = ({ scale }) => {
       if (!motionQuery.matches && cubeGroupRef.current) {
         cubeGroupRef.current.rotation.y += 0.005
       }
-      renderer.render(scene, camera)
+
+      pivotAngleRef.current += 0.0015
+      const pivotRadius = 3.2
+      const refCamera = cameraRef.current
+      const activeCamera = refCamera ?? camera
+      if (refCamera) {
+        const angle = pivotAngleRef.current
+        refCamera.position.set(
+          Math.cos(angle) * pivotRadius,
+          2.2 + Math.sin(angle * 0.6) * 0.2,
+          Math.sin(angle) * pivotRadius
+        )
+        refCamera.lookAt(0, 0.05, 0)
+      }
+
+      renderer.render(scene, activeCamera)
     }
     animate()
 
