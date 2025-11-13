@@ -215,17 +215,18 @@ const TIMELINE_COLORS: Record<string, string> = {
 const DIMENSION_CUBE_STYLE_ID = 'dimension-cube-styles'
 const DIMENSION_CUBE_STYLES = `
 @keyframes dimensionCubeRotate {
-  0% { transform: rotateX(-20deg) rotateY(24deg); }
-  33% { transform: rotateX(-32deg) rotateY(144deg); }
-  66% { transform: rotateX(-18deg) rotateY(264deg); }
-  100% { transform: rotateX(-20deg) rotateY(384deg); }
+  0% { transform: rotateX(-26deg) rotateY(26deg) rotateZ(0deg); }
+  25% { transform: rotateX(-6deg) rotateY(116deg) rotateZ(3deg); }
+  50% { transform: rotateX(-34deg) rotateY(206deg) rotateZ(-2deg); }
+  75% { transform: rotateX(-10deg) rotateY(296deg) rotateZ(4deg); }
+  100% { transform: rotateX(-26deg) rotateY(386deg) rotateZ(0deg); }
 }
 .dimension-cube-scene {
   position: relative;
   width: 160px;
   height: 160px;
   margin: 0 auto;
-  perspective: 1200px;
+  perspective: 880px;
 }
 .dimension-cube-wrapper {
   width: 100%;
@@ -234,7 +235,7 @@ const DIMENSION_CUBE_STYLES = `
   display: flex;
   align-items: center;
   justify-content: center;
-  transform: rotateX(-18deg) rotateY(32deg);
+  transform: rotateX(-6deg) rotateY(18deg);
 }
 .dimension-cube-scale {
   width: 100%;
@@ -249,66 +250,67 @@ const DIMENSION_CUBE_STYLES = `
   width: 120px;
   height: 120px;
   transform-style: preserve-3d;
-  animation: dimensionCubeRotate 64s linear infinite;
-  filter: drop-shadow(0 22px 28px rgba(16,185,129,0.24));
+  animation: dimensionCubeRotate 72s linear infinite;
+  filter: drop-shadow(0 22px 32px rgba(16,185,129,0.26));
 }
 .dimension-cube-face {
   position: absolute;
   inset: 0;
-  border: 2px solid rgba(16,185,129,0.85);
-  background: rgba(15,118,110,0.12);
-  box-shadow: inset 0 0 24px rgba(15,118,110,0.4);
-  backdrop-filter: blur(1.5px);
+  border: 2px solid rgba(16,185,129,0.9);
+  background: rgba(15,118,110,0.18);
+  box-shadow: inset 0 0 28px rgba(15,118,110,0.52);
+  backdrop-filter: blur(1.2px);
+  backface-visibility: hidden;
 }
 .dimension-cube-face::after {
   content: "";
   position: absolute;
   inset: 0;
-  border: 1px solid rgba(255,255,255,0.18);
+  border: 1px solid rgba(255,255,255,0.2);
   mix-blend-mode: screen;
 }
 .dimension-cube-face::before {
   content: "";
   position: absolute;
   inset: 18%;
-  border: 1px dashed rgba(16,185,129,0.55);
-  filter: blur(0.15px);
+  border: 1px dashed rgba(167,243,208,0.55);
+  filter: blur(0.1px);
 }
 .dimension-cube-face--front {
   transform: translateZ(60px);
-  background: linear-gradient(160deg, rgba(16,185,129,0.4), rgba(6,95,70,0.25));
+  background: linear-gradient(160deg, rgba(56,189,248,0.3), rgba(6,95,70,0.25));
 }
 .dimension-cube-face--back {
   transform: rotateY(180deg) translateZ(60px);
-  background: linear-gradient(200deg, rgba(6,95,70,0.35), rgba(16,185,129,0.22));
+  background: linear-gradient(210deg, rgba(6,95,70,0.4), rgba(16,185,129,0.26));
 }
 .dimension-cube-face--left {
   transform: rotateY(-90deg) translateZ(60px);
-  background: linear-gradient(160deg, rgba(6,78,59,0.4), rgba(16,185,129,0.22));
+  background: linear-gradient(170deg, rgba(6,95,70,0.42), rgba(34,197,94,0.28));
 }
 .dimension-cube-face--right {
   transform: rotateY(90deg) translateZ(60px);
-  background: linear-gradient(160deg, rgba(16,185,129,0.38), rgba(6,78,59,0.22));
+  background: linear-gradient(170deg, rgba(34,197,94,0.35), rgba(6,95,70,0.26));
 }
 .dimension-cube-face--top {
   transform: rotateX(90deg) translateZ(60px);
-  background: linear-gradient(160deg, rgba(224,255,244,0.55), rgba(16,185,129,0.22));
-  border-color: rgba(167,243,208,0.9);
+  background: linear-gradient(150deg, rgba(236,253,245,0.75), rgba(34,197,94,0.32));
+  border-color: rgba(167,243,208,0.92);
 }
 .dimension-cube-face--bottom {
   transform: rotateX(-90deg) translateZ(60px);
-  background: linear-gradient(200deg, rgba(6,78,59,0.35), rgba(15,118,110,0.22));
-  border-color: rgba(12,74,61,0.85);
+  background: linear-gradient(200deg, rgba(6,78,59,0.45), rgba(15,118,110,0.28));
+  border-color: rgba(12,74,61,0.9);
 }
 .dimension-cube-glow {
   position: absolute;
   inset: 0;
-  transform: translateZ(-48px);
-  background: radial-gradient(circle at center, rgba(16,185,129,0.28), transparent 75%);
-  filter: blur(42px);
+  transform: translateZ(-54px);
+  background: radial-gradient(circle at center, rgba(16,185,129,0.32), transparent 78%);
+  filter: blur(48px);
 }
 @media (prefers-reduced-motion: reduce) {
-  .dimension-cube { animation: none; transform: rotateX(-20deg) rotateY(36deg); }
+  .dimension-cube { animation: none; transform: rotateX(-18deg) rotateY(32deg); }
 }
 `
 
@@ -475,7 +477,8 @@ const DimensionVisualizer: React.FC<{ dimensions: Partial<PlantDimensions> }> = 
     transform: `scale3d(${scaleX.toFixed(3)}, ${scaleY.toFixed(3)}, ${scaleZ.toFixed(3)})`,
   }
 
-  const axisSpreadLabel = t('plantInfo.labels.spread', { defaultValue: 'Spread' })
+  const spreadLabel = t('plantInfo.labels.spread', { defaultValue: 'Spread' })
+  const spacingLabel = t('plantInfo.labels.spacing', { defaultValue: 'Spacing' })
   const heightLabel = t('plantInfo.labels.height', { defaultValue: 'Height' })
 
   const usingSpacingFallback = !spreadCandidate && !!spacingCandidate
@@ -485,20 +488,16 @@ const DimensionVisualizer: React.FC<{ dimensions: Partial<PlantDimensions> }> = 
   const legendItems = [
     {
       key: 'height',
-      label: `${heightLabel} (Y axis)`,
+      label: heightLabel,
       value: formatDimensionValue(resolvedHeight),
     },
-    {
-      key: 'width',
-      label: `${axisSpreadLabel} (X axis)`,
-      value: formatDimensionValue(spreadLegendValue),
-    },
-    {
-      key: 'depth',
-      label: `${axisSpreadLabel} (Z axis)`,
-      value: formatDimensionValue(spreadLegendValue),
-    },
   ]
+
+  legendItems.push({
+    key: 'spread',
+    label: usingSpacingFallback ? spacingLabel : spreadLabel,
+    value: formatDimensionValue(spreadLegendValue),
+  })
 
   return (
     <div className="rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-50/70 via-white/60 to-white/10 p-4 dark:border-emerald-500/30 dark:from-emerald-500/10 dark:via-transparent dark:to-transparent">
@@ -538,14 +537,6 @@ const DimensionVisualizer: React.FC<{ dimensions: Partial<PlantDimensions> }> = 
                 </div>
               </div>
             ))}
-          </div>
-          <div className="text-[11px] text-stone-500 dark:text-stone-400">
-            {t('plantInfo.labels.dimensionReference', {
-              defaultValue: usingSpacingFallback
-                ? 'Scaled from recorded dimensions (height → Y, spread/spacing → X & Z). Largest edge: {{value}} cm.'
-                : 'Scaled from recorded dimensions (height → Y, spread → X & Z). Largest edge: {{value}} cm.',
-              value: Math.round(maxDimension),
-            })}
           </div>
         </div>
       </div>
