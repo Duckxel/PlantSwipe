@@ -411,9 +411,8 @@ const DimensionCube: React.FC<DimensionCubeProps> = ({ scale, humanScale }) => {
     rimLight.position.set(-3, -2, -6)
     scene.add(rimLight)
 
-    const cubeGroup = new Group()
-    cubeGroup.rotation.set(0, 0, 0)
-      cubeGroup.position.y = 0.5
+      const cubeGroup = new Group()
+      cubeGroup.rotation.set(0, 0, 0)
     cubeGroupRef.current = cubeGroup
     scene.add(cubeGroup)
 
@@ -586,6 +585,7 @@ const DimensionCube: React.FC<DimensionCubeProps> = ({ scale, humanScale }) => {
     const multiplier = 1.45
     if (cubeGroupRef.current) {
       cubeGroupRef.current.scale.set(scale.x * multiplier, scale.y * multiplier, scale.z * multiplier)
+      cubeGroupRef.current.position.y = (scale.y * multiplier) / 2
     }
     if (humanGroupRef.current) {
       humanGroupRef.current.scale.setScalar(humanScale * multiplier)
