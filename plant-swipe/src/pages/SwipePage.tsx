@@ -98,6 +98,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
   const position = total > 0 ? ((index % total) + total) % total + 1 : null
   const statusLabel = position ? t("discoveryPage.status.position", { current: position, total }) : t("discoveryPage.status.empty")
   const meaning = current?.meaning?.trim()
+  const description = current?.description?.trim()
   const colorChips = current?.colors?.slice(0, 6) ?? []
   const seedsCopy = current?.seedsAvailable ? t("discoveryPage.infoCard.seedsAvailable") : t("discoveryPage.infoCard.seedsUnavailable")
   const cardHeight = "min(680px, calc(100vh - 14rem))"
@@ -116,10 +117,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
           <div className="absolute inset-x-12 -top-24 h-56 rounded-full bg-emerald-200/40 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
           <div className="absolute inset-x-0 bottom-[-40%] h-72 rounded-full bg-emerald-100/50 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
           <div className="relative p-6 md:p-12 space-y-8">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <Badge className="rounded-2xl px-4 py-1 bg-white/80 dark:bg-[#252526]/80 backdrop-blur">
-                {statusLabel}
-              </Badge>
+            <div className="flex flex-wrap items-center justify-end gap-4">
               <Badge variant="outline" className="rounded-2xl border-dashed">
                 <Wand2 className="h-4 w-4 mr-1" />
                 {t("common.discovery")}
@@ -155,7 +153,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                           {position && (
                             <Badge className="rounded-2xl px-3 py-1 bg-black/60 text-white backdrop-blur">
                               <PartyPopper className="h-4 w-4 mr-1" />
-                              {t("discoveryPage.status.position", { current: position, total })}
+                              {statusLabel}
                             </Badge>
                           )}
                         </div>
@@ -193,17 +191,17 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                       </div>
 
                       <CardContent className="h-1/3 p-6 flex flex-col gap-4">
-                        {current.description && (
-                          <p className="text-sm text-stone-600 dark:text-stone-300 line-clamp-3">{current.description}</p>
+                        {(meaning || description) && (
+                          <p className="text-sm text-stone-600 dark:text-stone-300 line-clamp-3">{meaning || description}</p>
                         )}
 
                         <div className="grid gap-3 sm:grid-cols-2">
                           <div className="rounded-2xl border border-emerald-100/70 dark:border-emerald-900/40 bg-emerald-50/60 dark:bg-emerald-900/10 p-4 backdrop-blur-sm">
                             <div className="mb-1 text-xs uppercase tracking-wide text-emerald-700 dark:text-emerald-300 font-semibold">
-                              {t("discoveryPage.infoCard.meaningLabel")}
+                              {t("discoveryPage.infoCard.descriptionLabel")}
                             </div>
                             <p className="text-sm text-emerald-900 dark:text-emerald-100">
-                              {meaning || t("discoveryPage.infoCard.meaningFallback")}
+                              {description || t("discoveryPage.infoCard.descriptionFallback")}
                             </p>
                           </div>
 

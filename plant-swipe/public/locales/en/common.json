@@ -175,8 +175,8 @@
       "empty": "Deck warming up..."
     },
     "infoCard": {
-      "meaningLabel": "Meaning",
-      "meaningFallback": "Meaning coming soon",
+      "descriptionLabel": "Description",
+      "descriptionFallback": "Description coming soon",
       "colorsLabel": "Palette",
       "seedsAvailable": "Seeds available",
       "seedsUnavailable": "Seeds unavailable"

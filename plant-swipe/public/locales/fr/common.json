@@ -175,8 +175,8 @@
       "empty": "Le paquet s'échauffe..."
     },
     "infoCard": {
-      "meaningLabel": "Signification",
-      "meaningFallback": "Signification à venir",
+      "descriptionLabel": "Description",
+      "descriptionFallback": "Description à venir",
       "colorsLabel": "Palette",
       "seedsAvailable": "Graines disponibles",
       "seedsUnavailable": "Graines indisponibles"
