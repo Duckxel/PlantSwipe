@@ -2162,38 +2162,37 @@ export const AdminPage: React.FC = () => {
           </aside>
           <main className="w-full">
             <div className="w-full max-w-5xl mx-auto space-y-6">
-                {/* Connection Status Banner - Show when APIs are down */}
-                {(apiProbe.ok === false || adminProbe.ok === false || dbProbe.ok === false) && (
-                  <Card className="rounded-[24px] mb-4 border border-rose-200/70 dark:border-rose-900/40 bg-rose-50/90 dark:bg-rose-900/20 shadow-[0_20px_45px_-24px_rgba(244,63,94,0.45)]">
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-3">
-                        <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0" />
-                        <div className="flex-1">
-                          <div className="text-sm font-medium text-red-900 dark:text-red-100">Connection Issues Detected</div>
-                          <div className="text-xs text-red-700 dark:text-red-300 mt-1">
-                            {!apiProbe.ok && 'API '}
-                            {!adminProbe.ok && 'Admin API '}
-                            {!dbProbe.ok && 'Database '}
-                            {(!apiProbe.ok || !adminProbe.ok || !dbProbe.ok) && 'may be unavailable. Some features may not work correctly.'}
-                          </div>
+              {(apiProbe.ok === false || adminProbe.ok === false || dbProbe.ok === false) && (
+                <Card className="rounded-[24px] mb-4 border border-rose-200/70 dark:border-rose-900/40 bg-rose-50/90 dark:bg-rose-900/20 shadow-[0_20px_45px_-24px_rgba(244,63,94,0.45)]">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3">
+                      <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0" />
+                      <div className="flex-1">
+                        <div className="text-sm font-medium text-red-900 dark:text-red-100">Connection Issues Detected</div>
+                        <div className="text-xs text-red-700 dark:text-red-300 mt-1">
+                          {!apiProbe.ok && 'API '}
+                          {!adminProbe.ok && 'Admin API '}
+                          {!dbProbe.ok && 'Database '}
+                          {(!apiProbe.ok || !adminProbe.ok || !dbProbe.ok) && 'may be unavailable. Some features may not work correctly.'}
                         </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="rounded-2xl border border-rose-300/80 dark:border-rose-800/60 text-rose-700 dark:text-rose-200 hover:bg-rose-100 dark:hover:bg-rose-900/30"
-                          onClick={refreshHealth}
-                          disabled={healthRefreshing}
-                        >
-                          <RefreshCw className={`h-4 w-4 mr-1 ${healthRefreshing ? 'animate-spin' : ''}`} />
-                          Retry
-                        </Button>
                       </div>
-                    </CardContent>
-                  </Card>
-                )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="rounded-2xl border border-rose-300/80 dark:border-rose-800/60 text-rose-700 dark:text-rose-200 hover:bg-rose-100 dark:hover:bg-rose-900/30"
+                        onClick={refreshHealth}
+                        disabled={healthRefreshing}
+                      >
+                        <RefreshCw className={`h-4 w-4 mr-1 ${healthRefreshing ? 'animate-spin' : ''}`} />
+                        Retry
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
-                <Card className="rounded-[32px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1b1b1b]/80 backdrop-blur shadow-[0_28px_70px_-40px_rgba(16,185,129,0.35)]">
-                  <CardContent className="p-6 md:p-8 space-y-6">
+              <Card className="rounded-[32px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1b1b1b]/80 backdrop-blur shadow-[0_28px_70px_-40px_rgba(16,185,129,0.35)]">
+                <CardContent className="p-6 md:p-8 space-y-6">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div>
                   <div className="text-2xl font-semibold tracking-tight">Admin Controls</div>
@@ -3114,10 +3113,10 @@ export const AdminPage: React.FC = () => {
           )}
 
           {/* Members Tab */}
-          {activeTab === 'members' && (
-            <div className="space-y-4" ref={membersContainerRef}>
-          <Card className="rounded-2xl">
-                <CardContent className="p-4 space-y-3">
+            {activeTab === 'members' && (
+              <div className="space-y-4" ref={membersContainerRef}>
+                <Card className="rounded-2xl">
+                  <CardContent className="p-4 space-y-3">
                   <div className="text-sm font-medium flex items-center gap-2"><UserSearch className="h-4 w-4" /> Find member by email or username</div>
                   <div className="flex gap-2 relative">
                     <div className="flex-1 relative">
@@ -3749,19 +3748,17 @@ export const AdminPage: React.FC = () => {
                     )}
                   </div>
                 )}
-              </CardContent>
-            </Card>
-          )}
+                </CardContent>
+              </Card>
+            )}
           </CardContent>
           </Card>
-
-              </div>
-            </main>
-          </div>
         </div>
-      </div>
+      </main>
     </div>
-  )
+  </div>
+</div>
+)
 }
 
 // --- Broadcast controls (Overview tab) ---

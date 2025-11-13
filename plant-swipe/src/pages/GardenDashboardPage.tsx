@@ -1656,40 +1656,41 @@ export const GardenDashboardPage: React.FC = () => {
             )}
           </main>
         </div>
-      ) : garden ? (
-        <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] lg:grid-cols-[220px_1fr] gap-8">
-          <aside className="md:sticky md:top-28 self-start">
-            <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/85 dark:bg-[#1b1b1b]/75 backdrop-blur p-6 space-y-6 shadow-[0_24px_60px_-40px_rgba(16,185,129,0.45)]">
-              <div>
-                <div className="text-sm uppercase tracking-wide text-stone-500 dark:text-stone-400">{t('garden.title')}</div>
-                <div className="text-xl font-semibold text-stone-900 dark:text-white">{garden.name}</div>
-              </div>
-              <nav className="flex flex-wrap md:flex-col gap-2">
-                {([
-                  ['overview', t('gardenDashboard.overview')],
-                  ['plants', t('gardenDashboard.plants')],
-                  ['routine', t('gardenDashboard.routine')],
-                  ['settings', t('gardenDashboard.settings')],
-                ] as Array<[TabKey, string]>).map(([k, label]) => (
-                  <Button
-                    key={k}
-                    asChild
-                    variant={tab === k ? 'default' : 'outline'}
-                    className={`rounded-2xl md:w-full justify-start transition ${tab === k ? 'bg-emerald-500 text-white shadow-lg hover:bg-emerald-500/90' : 'border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/70 dark:bg-[#252526]/70 text-stone-600 dark:text-stone-300 hover:border-emerald-400/60'}`}
-                  >
-                    <NavLink to={`/garden/${id}/${k}`} className="no-underline">
-                      {label}
-                    </NavLink>
-                  </Button>
-                ))}
-              </nav>
-            </Card>
-          </aside>
-          <main className="min-h-[60vh] space-y-6">
-            <Routes>
-              <Route path="overview" element={<OverviewSection gardenId={id!} activityRev={activityRev} plants={plants} membersCount={members.length} serverToday={serverToday} dailyStats={dailyStats} totalOnHand={totalOnHand} speciesOnHand={speciesOnHand} baseStreak={garden.streak || 0} />} />
-              <Route path="plants" element={(
-                  <div className="space-y-3">
+        ) : garden ? (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] lg:grid-cols-[220px_1fr] gap-8">
+              <aside className="md:sticky md:top-28 self-start">
+                <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/85 dark:bg-[#1b1b1b]/75 backdrop-blur p-6 space-y-6 shadow-[0_24px_60px_-40px_rgba(16,185,129,0.45)]">
+                  <div>
+                    <div className="text-sm uppercase tracking-wide text-stone-500 dark:text-stone-400">{t('garden.title')}</div>
+                    <div className="text-xl font-semibold text-stone-900 dark:text-white">{garden.name}</div>
+                  </div>
+                  <nav className="flex flex-wrap md:flex-col gap-2">
+                    {([
+                      ['overview', t('gardenDashboard.overview')],
+                      ['plants', t('gardenDashboard.plants')],
+                      ['routine', t('gardenDashboard.routine')],
+                      ['settings', t('gardenDashboard.settings')],
+                    ] as Array<[TabKey, string]>).map(([k, label]) => (
+                      <Button
+                        key={k}
+                        asChild
+                        variant={tab === k ? 'default' : 'outline'}
+                        className={`rounded-2xl md:w-full justify-start transition ${tab === k ? 'bg-emerald-500 text-white shadow-lg hover:bg-emerald-500/90' : 'border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/70 dark:bg-[#252526]/70 text-stone-600 dark:text-stone-300 hover:border-emerald-400/60'}`}
+                      >
+                        <NavLink to={`/garden/${id}/${k}`} className="no-underline">
+                          {label}
+                        </NavLink>
+                      </Button>
+                    ))}
+                  </nav>
+                </Card>
+              </aside>
+              <main className="min-h-[60vh] space-y-6">
+                <Routes>
+                  <Route path="overview" element={<OverviewSection gardenId={id!} activityRev={activityRev} plants={plants} membersCount={members.length} serverToday={serverToday} dailyStats={dailyStats} totalOnHand={totalOnHand} speciesOnHand={speciesOnHand} baseStreak={garden.streak || 0} />} />
+                  <Route path="plants" element={(
+                    <div className="space-y-3">
                     <div className="flex justify-between items-center">
                       <div className="text-lg font-medium">{t('gardenDashboard.plantsSection.plantsInGarden')}</div>
                       <Button className="rounded-2xl" onClick={() => setAddOpen(true)}>{t('gardenDashboard.plantsSection.addPlant')}</Button>
@@ -1865,10 +1866,11 @@ export const GardenDashboardPage: React.FC = () => {
               )} />
               <Route path="" element={<Navigate to={`overview`} replace />} />
               <Route path="*" element={<Navigate to={`overview`} replace />} />
-              </Routes>
-          </main>
-          
-          {/* Tasks sidebar removed per requirement: tasks now on Garden list page */}
+                </Routes>
+              </main>
+            </div>
+
+            {/* Tasks sidebar removed per requirement: tasks now on Garden list page */}
 
           {/* Add Plant Dialog */}
           <Dialog open={addOpen} onOpenChange={setAddOpen}>
@@ -2012,7 +2014,7 @@ export const GardenDashboardPage: React.FC = () => {
               </div>
             </DialogContent>
           </Dialog>
-        </>
+          </>
       ) : (
         <div className="rounded-[28px] border border-rose-200/70 dark:border-rose-900/40 bg-rose-50/80 dark:bg-rose-900/20 p-8 text-center text-sm text-rose-700 dark:text-rose-200 shadow-sm">
           {error || t('gardenDashboard.loading')}
