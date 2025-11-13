@@ -97,7 +97,6 @@ export const SwipePage: React.FC<SwipePageProps> = ({
 
   const position = total > 0 ? ((index % total) + total) % total + 1 : null
   const statusLabel = position ? t("discoveryPage.status.position", { current: position, total }) : t("discoveryPage.status.empty")
-  const meaning = current?.meaning?.trim()
   const description = current?.description?.trim()
   const colorChips = current?.colors?.slice(0, 6) ?? []
   const seedsCopy = current?.seedsAvailable ? t("discoveryPage.infoCard.seedsAvailable") : t("discoveryPage.infoCard.seedsUnavailable")
