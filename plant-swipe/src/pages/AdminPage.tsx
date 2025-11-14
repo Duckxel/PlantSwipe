@@ -101,7 +101,7 @@ export const AdminPage: React.FC = () => {
     }
     return `hsl(${accentOption.hsl} / 0.2)`;
   }, [profile]);
-  const glassPanelClass =
+  const mobileNavPanelClass =
     "rounded-[24px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/95 dark:bg-[#16161a]/95 backdrop-blur shadow-[0_18px_45px_-25px_rgba(15,23,42,0.45)]";
   const glassCardClass =
     "rounded-[20px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/92 dark:bg-[#1a1a1d]/92 backdrop-blur";
@@ -2812,7 +2812,7 @@ export const AdminPage: React.FC = () => {
     <div className="min-h-screen bg-stone-50 dark:bg-[#0f0f10] px-4 py-6 md:px-8">
       <div className="max-w-6xl mx-auto space-y-4 md:space-y-6">
         {/* Mobile Navigation */}
-        <div className={`md:hidden ${glassPanelClass}`}>
+        <div className={`md:hidden ${mobileNavPanelClass}`}>
           <div className="p-4">
             <div className="flex items-center gap-2 mb-3">
               <ShieldCheck className="h-5 w-5" style={{ color: accentColor }} />
@@ -2943,8 +2943,7 @@ export const AdminPage: React.FC = () => {
               </Card>
             )}
 
-            <Card className={`${glassPanelClass}`}>
-              <CardContent className="p-6 md:p-8 space-y-6">
+            <section className="space-y-6">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                   <div>
                     <div className="text-2xl font-semibold tracking-tight">
@@ -5775,8 +5774,7 @@ export const AdminPage: React.FC = () => {
                     </CardContent>
                   </Card>
                 )}
-              </CardContent>
-            </Card>
+            </section>
           </div>
         </main>
       </div>
