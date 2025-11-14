@@ -672,7 +672,7 @@ export default function PublicProfilePage() {
             {t('profile.searchUsers.label')}
           </label>
             <div className="relative mt-2">
-              <SearchIcon className="pointer-events-none absolute left-5 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" aria-hidden />
+              <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" aria-hidden />
               <Input
                 id="profile-user-search"
                 value={searchTerm}
@@ -690,7 +690,7 @@ export default function PublicProfilePage() {
                   }
                 }}
                 placeholder={t('profile.searchUsers.placeholder')}
-                className="pl-14 pr-10 rounded-2xl"
+                className="pl-9 md:pl-9 pr-10 rounded-2xl"
               />
               {searchLoading && (
                 <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-stone-400" aria-hidden />
