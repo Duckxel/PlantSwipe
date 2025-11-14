@@ -2434,43 +2434,77 @@ app.options('/api/admin/sync-schema', (_req, res) => {
   res.status(204).end()
 })
 
-const adminApiBaseUrl = process.env.ADMIN_API_BASE_URL || process.env.ADMIN_API_URL || 'http://127.0.0.1:5001'
+async function runSupabaseEdgeDeploy() {
+  const repoRoot = await getRepoRoot()
+  const scriptPath = path.join(repoRoot, 'scripts', 'deploy-supabase-functions.sh')
+  try {
+    await fs.access(scriptPath)
+  } catch {
+    throw new Error(`deploy script not found at ${scriptPath}`)
+  }
+  try { await fs.chmod(scriptPath, 0o755) } catch {}
 
-async function proxyAdminEdgeDeploy(method, headers) {
-  const targetUrl = `${adminApiBaseUrl.replace(/\/+$/, '')}/admin/deploy-edge-functions`
-  const init = {
-    method,
-    headers,
+  const env = {
+    ...process.env,
+    CI: process.env.CI || 'true',
+    PLANTSWIPE_REPO_DIR: repoRoot,
   }
-  if (method !== 'GET') {
-    init.body = '{}'
-  }
-  const resp = await fetch(targetUrl, init)
-  const payload = await resp.json().catch(() => ({}))
-  return { resp, payload }
+
+  return await new Promise((resolve, reject) => {
+    const child = spawnChild(scriptPath, {
+      cwd: repoRoot,
+      env,
+      shell: false,
+    })
+    let stdout = ''
+    let stderr = ''
+    child.stdout?.on('data', (buf) => { stdout += buf.toString() })
+    child.stderr?.on('data', (buf) => { stderr += buf.toString() })
+    child.on('error', (err) => reject(err))
+    child.on('close', (code) => resolve({ code, stdout, stderr }))
+  })
+}
+
+function tailLines(text, limit) {
+  if (!text) return ''
+  const lines = String(text).split(/\r?\n/)
+  return lines.slice(-limit).join('\n')
 }
 
 async function handleDeployEdgeFunctions(req, res) {
   const caller = await ensureAdmin(req, res)
   if (!caller) return
   try {
-    const headers = { Accept: 'application/json', 'Content-Type': 'application/json' }
-    if (adminStaticToken) headers['X-Admin-Token'] = adminStaticToken
-    let initial
-    try {
-      initial = await proxyAdminEdgeDeploy('POST', headers)
-    } catch (err) {
-      initial = null
-    }
-    if (initial?.resp && initial.resp.status !== 405) {
-      res.status(initial.resp.status).json(initial.payload ?? {})
+    const result = await runSupabaseEdgeDeploy()
+    const stdoutTail = tailLines(result.stdout, 200)
+    const stderrTail = tailLines(result.stderr, 100)
+
+    if (result.code !== 0) {
+      console.error('[server] Supabase deployment failed', { code: result.code })
+      res.status(500).json({
+        ok: false,
+        error: 'Supabase deployment failed',
+        returncode: result.code,
+        stdout: stdoutTail,
+        stderr: stderrTail,
+      })
       return
     }
-    const fallback = await proxyAdminEdgeDeploy('GET', headers)
-    res.status(fallback.resp.status).json(fallback.payload ?? {})
+
+    res.json({
+      ok: true,
+      message: 'Supabase Edge Functions deployed successfully',
+      returncode: result.code,
+      stdout: stdoutTail,
+      stderr: stderrTail,
+    })
   } catch (err) {
     console.error('[server] deploy-edge-functions failed', err)
-    res.status(500).json({ error: 'Failed to trigger Supabase deployment', detail: err?.message || String(err) })
+    res.status(500).json({
+      ok: false,
+      error: 'Failed to trigger Supabase deployment',
+      detail: err?.message || String(err),
+    })
   }
 }
 
