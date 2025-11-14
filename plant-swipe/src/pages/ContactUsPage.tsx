@@ -186,18 +186,25 @@ export default function ContactUsPage() {
   }
 
   const inputsDisabled = formStatus === "loading" || formStatus === "success"
+  const glassCard =
+    "rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/85 dark:bg-[#1a1a1d]/85 backdrop-blur shadow-[0_25px_70px_-45px_rgba(15,23,42,0.65)]"
+  const dialogSurface =
+    "rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/95 dark:bg-[#111112]/95 backdrop-blur"
 
-  return (
-    <div className="max-w-4xl mx-auto mt-8 px-4 md:px-0">
-      <div className="mb-6">
-        <h1 className="text-3xl font-semibold flex items-center gap-3">
-          <MessageCircle className="h-6 w-6" />
-          {t('contactUs.title')}
-        </h1>
-        <p className="text-sm opacity-70 mt-2">{t('contactUs.description')}</p>
-      </div>
+    return (
+      <div className="max-w-5xl mx-auto mt-8 px-4 md:px-0 pb-16 space-y-6">
+        <div className="relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50 via-white to-stone-100 dark:from-[#1b1b1f] dark:via-[#131314] dark:to-[#070708] p-6 md:p-10 shadow-[0_35px_60px_-15px_rgba(16,185,129,0.35)] flex flex-col gap-3">
+          <div className="absolute -right-20 top-0 h-40 w-40 rounded-full bg-emerald-200/60 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
+          <div className="absolute -left-16 bottom-0 h-32 w-32 rounded-full bg-emerald-100/70 dark:bg-emerald-500/5 blur-3xl" aria-hidden="true" />
+          <div className="flex items-center gap-3 text-sm font-medium text-emerald-700 dark:text-emerald-400 relative z-10">
+            <MessageCircle className="h-5 w-5" />
+            {t('contactUs.title')}
+          </div>
+          <div className="relative z-10 text-3xl font-semibold tracking-tight">{t('contactUs.heroHeading') || t('contactUs.title')}</div>
+          <p className="relative z-10 text-sm text-stone-600 dark:text-stone-300 max-w-2xl">{t('contactUs.description')}</p>
+        </div>
 
-      <Card className="rounded-3xl mb-6">
+        <Card className={glassCard}>
         <CardHeader>
           <div className="flex items-center gap-3">
             <div className="p-3 rounded-2xl bg-emerald-100 dark:bg-emerald-900/30">
@@ -273,9 +280,9 @@ export default function ContactUsPage() {
         </CardContent>
       </Card>
 
-      {/* Additional Information */}
-      <div className="grid md:grid-cols-2 gap-4">
-        <Card className="rounded-3xl">
+        {/* Additional Information */}
+        <div className="grid md:grid-cols-2 gap-4">
+          <Card className={glassCard}>
           <CardHeader>
             <div className="flex items-center gap-2">
               <Clock className="h-5 w-5 opacity-60" />
@@ -287,7 +294,7 @@ export default function ContactUsPage() {
           </CardContent>
         </Card>
 
-        <Card className="rounded-3xl">
+          <Card className={glassCard}>
           <CardHeader>
             <div className="flex items-center gap-2">
               <HelpCircle className="h-5 w-5 opacity-60" />
@@ -300,8 +307,8 @@ export default function ContactUsPage() {
         </Card>
       </div>
 
-      <Dialog open={formOpen} onOpenChange={handleDialogOpenChange}>
-        <DialogContent className="rounded-2xl">
+        <Dialog open={formOpen} onOpenChange={handleDialogOpenChange}>
+          <DialogContent className={dialogSurface}>
           <DialogHeader>
             <DialogTitle>{t('contactUs.form.title')}</DialogTitle>
             <DialogDescription>{t('contactUs.form.description')}</DialogDescription>

@@ -3030,7 +3030,7 @@ export const AdminPage: React.FC = () => {
                 />
                 <div className="relative z-10 space-y-3">
                   <Badge className="rounded-2xl px-3 py-1 bg-white/80 dark:bg-[#202023]/80 text-stone-700 dark:text-stone-200 w-fit">
-                    {t?.("admin.hero.badge") || "Operations Console"}
+                    Operations Console
                   </Badge>
                   <div className="text-3xl font-semibold tracking-tight">
                     Admin Operations
