@@ -2944,10 +2944,10 @@ export const AdminPage: React.FC = () => {
             )}
 
             <section className="space-y-6">
-              <Card className="relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-900 via-[#111112] to-black shadow-[0_35px_95px_-35px_rgba(16,185,129,0.75)] text-white">
+              <Card className="relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-800 via-[#111] to-[#050505] shadow-[0_35px_95px_-45px_rgba(16,185,129,0.55)] text-white">
                 <div className="absolute inset-0 pointer-events-none">
-                  <div className="absolute -top-6 -right-4 h-40 w-40 rounded-full bg-emerald-500/40 blur-3xl" />
-                  <div className="absolute bottom-0 left-0 h-40 w-40 rounded-full bg-emerald-400/30 blur-3xl" />
+                  <div className="absolute -top-10 -right-6 h-40 w-40 rounded-full bg-emerald-500/25 blur-[120px]" />
+                  <div className="absolute bottom-0 left-0 h-40 w-40 rounded-full bg-emerald-400/20 blur-[150px]" />
                 </div>
                 <CardContent className="relative z-10 p-6 md:p-8 space-y-6">
                   <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
