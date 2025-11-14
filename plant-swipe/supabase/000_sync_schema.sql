@@ -3185,7 +3185,7 @@ $$;
 grant execute on function public.get_friend_email(uuid) to authenticated;
 
 -- Function to search user profiles with friend prioritization and privacy metadata
-create or replace function public.search_user_profiles(_term text, _limit integer default 8)
+create or replace function public.search_user_profiles(_term text, _limit integer default 3)
 returns table (
   id uuid,
   display_name text,
@@ -3196,35 +3196,37 @@ returns table (
   is_friend boolean,
   is_self boolean,
   can_view boolean
-)
-language sql
-security definer
-set search_path = public
-as $$
-  with params as (
-    select
-      trim(coalesce(_term, '')) as term,
-      greatest(1, coalesce(_limit, 8)) as limit_value
-  ),
-  viewer as (
-    select auth.uid() as viewer_id
-  ),
-  base as (
-    select
-      p.id,
-      p.display_name,
-      p.username,
-      p.country,
-      p.avatar_url,
-      coalesce(p.is_private, false) as is_private,
-      params.term,
-      params.limit_value,
-      v.viewer_id
-    from public.profiles p
-    cross join params
-    cross join viewer v
-    where v.viewer_id is not null
-  ),
+  )
+  language sql
+  security definer
+  set search_path = public
+  as $$
+    with params as (
+      select
+        trim(coalesce(_term, '')) as term,
+        least(3, greatest(1, coalesce(_limit, 3))) as limit_value
+    ),
+    viewer as (
+      select auth.uid() as viewer_id
+    ),
+    base as (
+      select
+        p.id,
+        p.display_name,
+        p.username,
+        p.country,
+        p.avatar_url,
+        coalesce(p.is_private, false) as is_private,
+        u.created_at,
+        params.term,
+        params.limit_value,
+        v.viewer_id
+      from public.profiles p
+      left join auth.users u on u.id = p.id
+      cross join params
+      cross join viewer v
+      where v.viewer_id is not null
+    ),
   relation as (
     select
       b.*,
@@ -3240,29 +3242,29 @@ as $$
   filtered as (
     select
       r.*,
-      case
-        when r.term = '' then (r.is_self or r.is_friend)
-        else (
-          lower(coalesce(r.display_name, '')) like '%' || lower(r.term) || '%'
-          or lower(coalesce(r.username, '')) like '%' || lower(r.term) || '%'
-        )
-      end as matches_term
+        case
+          when r.term = '' then (not r.is_private or r.is_self or r.is_friend)
+          else (
+            lower(coalesce(r.display_name, '')) like '%' || lower(r.term) || '%'
+            or lower(coalesce(r.username, '')) like '%' || lower(r.term) || '%'
+          )
+        end as matches_term
     from relation r
   ),
   matched as (
     select
       f.*,
       (not f.is_private) or f.is_self or f.is_friend as can_view,
-      case
-        when f.term = '' then 2
-        when lower(coalesce(f.display_name, '')) = lower(f.term) then 0
-        when lower(coalesce(f.username, '')) = lower(f.term) then 0
-        when lower(coalesce(f.display_name, '')) like lower(f.term) || '%' then 1
-        when lower(coalesce(f.username, '')) like lower(f.term) || '%' then 1
-        when lower(coalesce(f.display_name, '')) like '%' || lower(f.term) || '%' then 2
-        when lower(coalesce(f.username, '')) like '%' || lower(f.term) || '%' then 2
-        else 3
-      end as match_rank,
+        case
+          when f.term = '' then 0
+          when lower(coalesce(f.display_name, '')) = lower(f.term) then 0
+          when lower(coalesce(f.username, '')) = lower(f.term) then 0
+          when lower(coalesce(f.display_name, '')) like lower(f.term) || '%' then 1
+          when lower(coalesce(f.username, '')) like lower(f.term) || '%' then 1
+          when lower(coalesce(f.display_name, '')) like '%' || lower(f.term) || '%' then 2
+          when lower(coalesce(f.username, '')) like '%' || lower(f.term) || '%' then 2
+          else 3
+        end as match_rank,
       lower(coalesce(f.display_name, f.username, '')) as sort_name
     from filtered f
     where f.matches_term
@@ -3282,6 +3284,10 @@ as $$
     case when m.is_self then -1 else 0 end,
     case when m.is_friend then 0 else 1 end,
     m.match_rank,
+      case
+        when m.term = '' and not m.is_friend and not m.is_self then -extract(epoch from coalesce(m.created_at, now()))
+        else 0
+      end,
     m.sort_name asc,
     m.id
   limit (select limit_value from params);
