@@ -263,7 +263,7 @@ PY
   else
     local linked_ref=""
     if grep -q "project_id" "$SUPABASE_CONFIG" 2>/dev/null; then
-      linked_ref="$(grep "project_id" "$SUPABASE_CONFIG" | head -n1 | sed -E 's/.*project_id[[:space:]]*=[[:space:]]*["\'\']?([^"\'\']+)["\'\']?.*/\1/' || echo "")"
+      linked_ref="$(grep -m1 "project_id" "$SUPABASE_CONFIG" | sed -E "s/.*project_id[[:space:]]*=[[:space:]]*[\"']?([^\"']+)[\"']?.*/\1/" || echo "")"
     fi
     if [[ -n "$linked_ref" && "$linked_ref" != "$SUPABASE_PROJECT_REF" ]]; then
       log "[WARN] Linked project ($linked_ref) differs from SUPABASE_PROJECT_REF ($SUPABASE_PROJECT_REF)"
@@ -275,7 +275,11 @@ PY
     fi
   fi
 
-  mapfile -t function_names < <(find "$FUNCTIONS_ROOT" -maxdepth 1 -mindepth 1 -type d -printf '%f\n' | sort)
+  local function_names=()
+  while IFS= read -r fname; do
+    [[ -n "$fname" ]] && function_names+=("$fname")
+  done < <(find "$FUNCTIONS_ROOT" -maxdepth 1 -mindepth 1 -type d -printf '%f\n' | sort)
+
   if ((${#function_names[@]} == 0)); then
     log "[INFO] No Supabase Edge Functions found under $FUNCTIONS_ROOT."
     return 0
