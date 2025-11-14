@@ -172,6 +172,10 @@ PY
     fi
   fi
 
+  local LOG_DIR="$WORK_DIR/.supabase-logs"
+  mkdir -p "$LOG_DIR" 2>/dev/null || LOG_DIR="/tmp"
+  chmod 1777 "$LOG_DIR" 2>/dev/null || true
+
   if [[ -n "$SUPABASE_ACCESS_TOKEN" ]]; then
     log "Authenticating Supabase CLI…"
     local login_output=""
@@ -187,9 +191,9 @@ PY
     log "[INFO] SUPABASE_ACCESS_TOKEN not set; assuming existing CLI session."
   fi
 
-  if ! "${supabase_cmd[@]}" supabase functions list --project-ref "$SUPABASE_PROJECT_REF" >/tmp/supabase-functions-list.log 2>&1; then
+  if ! "${supabase_cmd[@]}" supabase functions list --project-ref "$SUPABASE_PROJECT_REF" >"$LOG_DIR/supabase-functions-list.log" 2>&1; then
     log "[ERROR] Supabase CLI cannot access project $SUPABASE_PROJECT_REF."
-    tail -n 20 /tmp/supabase-functions-list.log 2>/dev/null | while IFS= read -r line; do log "  $line"; done || true
+    tail -n 20 "$LOG_DIR/supabase-functions-list.log" 2>/dev/null | while IFS= read -r line; do log "  $line"; done || true
     return 1
   fi
 
@@ -237,9 +241,9 @@ PY
     log "Linking Supabase project $SUPABASE_PROJECT_REF…"
     mkdir -p "$NODE_DIR/supabase" || true
     local link_args=(supabase link --project-ref "$SUPABASE_PROJECT_REF" --workdir "$NODE_DIR")
-    if ! "${supabase_cmd[@]}" "${link_args[@]}" >/tmp/supabase-link.log 2>&1; then
-      log "[ERROR] Failed to link Supabase project. See /tmp/supabase-link.log"
-      tail -n 20 /tmp/supabase-link.log 2>/dev/null | while IFS= read -r line; do log "  $line"; done || true
+    if ! "${supabase_cmd[@]}" "${link_args[@]}" >"$LOG_DIR/supabase-link.log" 2>&1; then
+      log "[ERROR] Failed to link Supabase project. See "$LOG_DIR/supabase-link.log""
+      tail -n 20 "$LOG_DIR/supabase-link.log" 2>/dev/null | while IFS= read -r line; do log "  $line"; done || true
       return 1
     fi
     log "Supabase project linked successfully."
@@ -251,7 +255,7 @@ PY
     if [[ -n "$linked_ref" && "$linked_ref" != "$SUPABASE_PROJECT_REF" ]]; then
       log "[WARN] Linked project ($linked_ref) differs from SUPABASE_PROJECT_REF ($SUPABASE_PROJECT_REF)"
       local link_args=(supabase link --project-ref "$SUPABASE_PROJECT_REF" --workdir "$NODE_DIR")
-      "${supabase_cmd[@]}" "${link_args[@]}" >/tmp/supabase-relink.log 2>&1 || true
+      "${supabase_cmd[@]}" "${link_args[@]}" >"$LOG_DIR/supabase-relink.log" 2>&1 || true
     else
       log "Supabase project already linked: $SUPABASE_PROJECT_REF"
     fi
