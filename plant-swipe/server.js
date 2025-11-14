@@ -2434,6 +2434,89 @@ app.options('/api/admin/sync-schema', (_req, res) => {
   res.status(204).end()
 })
 
+async function runSupabaseEdgeDeploy() {
+  const repoRoot = await getRepoRoot()
+  const scriptPath = path.join(repoRoot, 'scripts', 'deploy-supabase-functions.sh')
+  try {
+    await fs.access(scriptPath)
+  } catch {
+    throw new Error(`deploy script not found at ${scriptPath}`)
+  }
+  try { await fs.chmod(scriptPath, 0o755) } catch {}
+
+  const env = {
+    ...process.env,
+    CI: process.env.CI || 'true',
+    PLANTSWIPE_REPO_DIR: repoRoot,
+  }
+
+  return await new Promise((resolve, reject) => {
+    const child = spawnChild(scriptPath, {
+      cwd: repoRoot,
+      env,
+      shell: false,
+    })
+    let stdout = ''
+    let stderr = ''
+    child.stdout?.on('data', (buf) => { stdout += buf.toString() })
+    child.stderr?.on('data', (buf) => { stderr += buf.toString() })
+    child.on('error', (err) => reject(err))
+    child.on('close', (code) => resolve({ code, stdout, stderr }))
+  })
+}
+
+function tailLines(text, limit) {
+  if (!text) return ''
+  const lines = String(text).split(/\r?\n/)
+  return lines.slice(-limit).join('\n')
+}
+
+async function handleDeployEdgeFunctions(req, res) {
+  const caller = await ensureAdmin(req, res)
+  if (!caller) return
+  try {
+    const result = await runSupabaseEdgeDeploy()
+    const stdoutTail = tailLines(result.stdout, 200)
+    const stderrTail = tailLines(result.stderr, 100)
+
+    if (result.code !== 0) {
+      console.error('[server] Supabase deployment failed', { code: result.code })
+      res.status(500).json({
+        ok: false,
+        error: 'Supabase deployment failed',
+        returncode: result.code,
+        stdout: stdoutTail,
+        stderr: stderrTail,
+      })
+      return
+    }
+
+    res.json({
+      ok: true,
+      message: 'Supabase Edge Functions deployed successfully',
+      returncode: result.code,
+      stdout: stdoutTail,
+      stderr: stderrTail,
+    })
+  } catch (err) {
+    console.error('[server] deploy-edge-functions failed', err)
+    res.status(500).json({
+      ok: false,
+      error: 'Failed to trigger Supabase deployment',
+      detail: err?.message || String(err),
+    })
+  }
+}
+
+app.post('/api/admin/deploy-edge-functions', handleDeployEdgeFunctions)
+app.get('/api/admin/deploy-edge-functions', handleDeployEdgeFunctions)
+
+app.options('/api/admin/deploy-edge-functions', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
 app.post('/api/admin/plant-translations/ensure-schema', async (req, res) => {
   const caller = await ensureAdmin(req, res)
   if (!caller) return

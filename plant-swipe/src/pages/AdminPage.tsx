@@ -61,7 +61,20 @@ const {
   PieChart,
   Pie,
   Cell,
-} = LazyCharts;
+} = LazyCharts
+import { RefreshCw, Server, Database, Github, ExternalLink, ShieldCheck, ShieldX, UserSearch, AlertTriangle, Gavel, Search, ChevronDown, GitBranch, Trash2, EyeOff, Copy, ArrowUpRight, Info, Plus, LayoutDashboard, Users, FileText, ScrollText, CloudUpload } from "lucide-react"
+import { supabase } from '@/lib/supabaseClient'
+import { CreatePlantPage } from '@/pages/CreatePlantPage'
+import {
+  Dialog,
+  DialogTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from '@/components/ui/dialog'
 type AdminTab = "overview" | "members" | "requests" | "admin_logs";
 
 export const AdminPage: React.FC = () => {
@@ -208,6 +221,9 @@ export const AdminPage: React.FC = () => {
 
   const [syncing, setSyncing] = React.useState(false);
 
+  const [syncing, setSyncing] = React.useState(false)
+  const [deployingEdge, setDeployingEdge] = React.useState(false)
+  
   // Backup disabled for now
 
   const [restarting, setRestarting] = React.useState(false);
@@ -643,6 +659,93 @@ export const AdminPage: React.FC = () => {
       setSyncing(false);
     }
   };
+
+  const deployEdgeFunctions = async () => {
+    if (deployingEdge) return
+    setDeployingEdge(true)
+    try {
+      setConsoleOpen(true)
+      appendConsole('[deploy] Supabase Edge Functions: starting...')
+      const session = (await supabase.auth.getSession()).data.session
+      const token = session?.access_token || null
+      const adminToken = (globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN
+
+      const nodeHeaders: Record<string, string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+      if (token) nodeHeaders['Authorization'] = `Bearer ${token}`
+      if (adminToken) nodeHeaders['X-Admin-Token'] = String(adminToken)
+
+      let resp: Response | null = await fetchWithRetry('/api/admin/deploy-edge-functions', {
+        method: 'POST',
+        headers: nodeHeaders,
+        credentials: 'same-origin',
+        body: '{}',
+      }).catch(() => null)
+
+      if (!resp || !resp.ok) {
+        if (resp) {
+          const nodeBody = await safeJson(resp).catch(() => ({}))
+          appendConsole(`[deploy] Node proxy response: HTTP ${resp.status}${nodeBody?.error ? ` - ${nodeBody.error}` : ''}`)
+        }
+        const adminHeaders: Record<string, string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+        if (adminToken) adminHeaders['X-Admin-Token'] = String(adminToken)
+        appendConsole('[deploy] Falling back to Admin API endpoint…')
+        resp = await fetchWithRetry('/admin/deploy-edge-functions', {
+          method: 'GET',
+          headers: adminHeaders,
+          credentials: 'same-origin',
+        }).catch(() => null)
+
+        if (resp && resp.status === 405) {
+          resp = await fetchWithRetry('/admin/deploy-edge-functions', {
+            method: 'POST',
+            headers: adminHeaders,
+            credentials: 'same-origin',
+            body: '{}',
+          }).catch(() => null)
+        }
+      }
+
+      if (!resp) {
+        throw new Error('Failed to connect to deployment API. Please check your connection and try again.')
+      }
+
+      const body = await safeJson(resp)
+
+      const logTail = (value: unknown, prefix: string, limit = 80) => {
+        if (!value) return
+        const lines = String(value).split('\n').map(line => line.trimEnd()).filter(line => line.length > 0)
+        if (lines.length === 0) return
+        const slice = lines.slice(-limit)
+        slice.forEach(line => appendConsole(`${prefix}${line}`))
+        if (lines.length > slice.length) {
+          appendConsole(`${prefix}… (${lines.length - slice.length} more line${lines.length - slice.length === 1 ? '' : 's'} omitted)`)
+        }
+      }
+
+      if (!resp.ok || body?.ok === false) {
+        const errorMessage = body?.error || `HTTP ${resp.status}`
+        appendConsole(`[deploy] ✗ Deployment failed: ${errorMessage}`)
+        logTail(body?.stdout, '[deploy]   ')
+        logTail(body?.stderr, '[deploy] ✗ ')
+        if (typeof body?.returncode === 'number') {
+          appendConsole(`[deploy] Return code: ${body.returncode}`)
+        }
+        return
+      }
+
+      logTail(body?.stdout, '[deploy]   ')
+      logTail(body?.stderr, '[deploy] ⚠ ')
+      if (typeof body?.returncode === 'number') {
+        appendConsole(`[deploy] Return code: ${body.returncode}`)
+      }
+      appendConsole('[deploy] ✓ Supabase Edge Functions deployment complete.')
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e)
+      appendConsole(`[deploy] ✗ Deployment failed: ${message}`)
+    } finally {
+      setDeployingEdge(false)
+    }
+  }
 
   const restartServer = async () => {
     if (restarting) return;
@@ -2869,6 +2972,42 @@ export const AdminPage: React.FC = () => {
                     </div>
                   </div>
                 </div>
+                <Button
+                  variant="outline"
+                  className="rounded-xl w-full sm:w-auto px-2 sm:px-3"
+                  onClick={() => loadBranches({ initial: false })}
+                  disabled={branchesLoading || branchesRefreshing}
+                  aria-label="Refresh branches"
+                >
+                  <RefreshCw className={`h-4 w-4 ? ${branchesRefreshing ? 'animate-spin' : ''}`} />
+                  <span className="hidden sm:inline">Refresh branches</span>
+                  <span className="sm:hidden inline">Refresh</span>
+                </Button>
+              </div>
+              <div className="text-xs opacity-60 mt-2">
+                Changing branch takes effect when you run Pull & Build.
+              </div>
+
+              {/* Action buttons */}
+              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+                <Button className="rounded-2xl w-full" onClick={restartServer} disabled={restarting}>
+                  <Server className="h-4 w-4" />
+                  <RefreshCw className="h-4 w-4" />
+                  <span>{restarting ? 'Restarting?' : 'Restart Services'}</span>
+                </Button>
+                <Button className="rounded-2xl w-full" variant="secondary" onClick={pullLatest} disabled={pulling}>
+                  <Github className="h-4 w-4" />
+                  <RefreshCw className="h-4 w-4" />
+                  <span>{pulling ? 'Pulling...' : 'Pull & Build'}</span>
+                </Button>
+                <Button className="rounded-2xl w-full" variant="outline" onClick={deployEdgeFunctions} disabled={deployingEdge}>
+                  <CloudUpload className="h-4 w-4" />
+                  <span>{deployingEdge ? 'Deploying...' : 'Deploy Edge Functions'}</span>
+                </Button>
+                <Button className="rounded-2xl w-full" variant="destructive" onClick={runSyncSchema} disabled={syncing}>
+                  <Database className="h-4 w-4" />
+                  <span>{syncing ? 'Syncing...' : 'Sync DB Schema'}</span>
+                </Button>
               </div>
               <nav className="relative z-10 p-4 space-y-2 flex-1 overflow-y-auto">
                 {navItems.map(({ key, label, Icon }) => (
