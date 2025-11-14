@@ -2809,7 +2809,7 @@ export const AdminPage: React.FC = () => {
   }, [activeTab]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-25 via-white to-stone-100 dark:from-[#09090b] dark:via-[#050506] dark:to-[#030304] px-4 py-6 md:px-8">
+    <div className="min-h-screen bg-stone-50 dark:bg-[#0f0f10] px-4 py-6 md:px-8">
       <div className="max-w-6xl mx-auto space-y-4 md:space-y-6">
         {/* Mobile Navigation */}
         <div className={`md:hidden ${glassPanelClass}`}>
@@ -2849,12 +2849,12 @@ export const AdminPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex flex-col gap-6 md:flex-row md:items-start">
+        <div className="flex flex-col gap-6 md:flex-row md:items-stretch md:min-h-[calc(100vh-96px)]">
           {/* Sidebar Navigation - Desktop Only */}
           <aside
-            className="hidden md:flex md:w-64 lg:w-72 flex-shrink-0 md:sticky md:top-6 md:self-start"
+            className="hidden md:flex md:w-64 lg:w-72 flex-shrink-0 md:sticky md:top-6 md:self-stretch"
           >
-            <div className={sidebarHeroClass}>
+            <div className={`${sidebarHeroClass} h-full`}>
               <div className="absolute inset-0 pointer-events-none">
                 <div className="absolute -top-8 -right-6 h-32 w-32 rounded-full bg-emerald-200/60 dark:bg-emerald-500/20 blur-3xl" />
                 <div className="absolute bottom-0 left-0 h-40 w-40 rounded-full bg-emerald-100/70 dark:bg-emerald-500/15 blur-[120px]" />
