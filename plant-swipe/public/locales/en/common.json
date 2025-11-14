@@ -772,51 +772,54 @@
         "nov": "Nov",
         "dec": "Dec"
       }
-    }
-  },
-  "friends": {
-    "title": "Friends",
-    "pleaseLogin": "Please log in to manage friends",
-    "pendingInvitations": "Pending Invitations",
-    "sentRequests": "Sent Requests",
-    "yourFriends": "Your Friends",
-    "addFriend": "Add Friend",
-    "noFriendsYet": "No friends yet. Search for people above to add friends!",
-    "viewProfile": "View profile",
-    "friendOptions": "Friend options",
-    "removeFriend": "Remove friend",
-    "removeFriendConfirm": "Remove",
-    "pending": "Pending",
-    "friends": "Friends",
-    "unknown": "Unknown",
-    "addFriendDialog": {
-      "title": "Add Friend",
-      "description": "Search for users by username or email",
-      "searchPlaceholder": "Search by username or email...",
-      "searching": "Searching...",
-      "noUsersFound": "No users found",
-      "addFriend": "Add Friend"
+      }
     },
-    "errors": {
-      "failedToLoad": "Failed to load friends",
-      "failedToLoadSentRequests": "Failed to load sent pending requests",
-      "failedToLoadRequests": "Failed to load friend requests",
-      "searchFailed": "Search failed",
-      "alreadyFriends": "Already friends with this user",
-      "requestAlreadySent": "Friend request already sent",
-      "failedToSend": "Failed to send friend request",
-      "failedToAccept": "Failed to accept friend request",
-      "failedToReject": "Failed to reject friend request",
-      "failedToRemove": "Failed to remove friend"
-    }
-  },
-  "profile": {
-    "loading": "Loading profile…",
-    "userNotFound": "User not found",
-    "failedToLoad": "Failed to load profile",
-    "backHome": "Back home",
-    "member": "Member",
-    "admin": "Admin",
+    "friends": {
+      "title": "Friends",
+      "pleaseLogin": "Please log in to manage friends",
+      "pendingInvitations": "Pending Invitations",
+      "sentRequests": "Sent Requests",
+      "yourFriends": "Your Friends",
+      "addFriend": "Add Friend",
+      "noFriendsYet": "No friends yet. Search for people above to add friends!",
+      "viewProfile": "View profile",
+      "friendOptions": "Friend options",
+      "removeFriend": "Remove friend",
+      "removeFriendConfirm": "Remove",
+      "pending": "Pending",
+      "friends": "Friends",
+      "unknown": "Unknown",
+      "addFriendDialog": {
+        "title": "Add Friend",
+        "description": "Search for users by username or email",
+        "searchPlaceholder": "Search by username or email...",
+        "searching": "Searching...",
+        "noUsersFound": "No users found",
+        "addFriend": "Add Friend"
+      },
+      "errors": {
+        "failedToLoad": "Failed to load friends",
+        "failedToLoadSentRequests": "Failed to load sent pending requests",
+        "failedToLoadRequests": "Failed to load friend requests",
+        "searchFailed": "Search failed",
+        "alreadyFriends": "Already friends with this user",
+        "requestAlreadySent": "Friend request already sent",
+        "failedToSend": "Failed to send friend request",
+        "failedToAccept": "Failed to accept friend request",
+        "failedToReject": "Failed to reject friend request",
+        "failedToRemove": "Failed to remove friend"
+      }
+    },
+    "profile": {
+      "loading": "Loading profile…",
+      "userNotFound": "User not found",
+      "failedToLoad": "Failed to load profile",
+      "backHome": "Back home",
+      "member": "Member",
+      "admin": "Admin",
+      "heroBadge": "Community spotlight",
+      "title": "Profile overview",
+      "subtitle": "Search members, review stats, and manage privacy at a glance.",
     "currentlyOnline": "Currently online",
     "online": "Online",
     "aLongTimeAgo": "A long time ago",
