@@ -509,6 +509,10 @@ export const AdminPage: React.FC = () => {
       }).catch(() => null)
 
       if (!resp || !resp.ok) {
+        if (resp) {
+          const nodeBody = await safeJson(resp).catch(() => ({}))
+          appendConsole(`[deploy] Node proxy response: HTTP ${resp.status}${nodeBody?.error ? ` - ${nodeBody.error}` : ''}`)
+        }
         const adminHeaders: Record<string, string> = { 'Accept': 'application/json', 'Content-Type': 'application/json' }
         if (adminToken) adminHeaders['X-Admin-Token'] = String(adminToken)
         appendConsole('[deploy] Falling back to Admin API endpoint…')

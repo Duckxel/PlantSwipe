@@ -108,8 +108,8 @@ log "Repo owner: $REPO_OWNER (current user: $CURRENT_USER)"
 deploy_supabase_functions() {
   # Check if Supabase CLI is available
   if ! command -v supabase >/dev/null 2>&1; then
-    log "[INFO] Supabase CLI not found; skipping Edge Function deployment."
-    return 0
+    log "[ERROR] Supabase CLI not found; aborting Edge Function deployment."
+    return 1
   fi
 
   # Load Supabase configuration from env files
@@ -166,8 +166,8 @@ PY
   fi
 
   if [[ -z "$SUPABASE_PROJECT_REF" ]]; then
-    log "[INFO] SUPABASE_PROJECT_REF not set and could not be derived; skipping Edge Function deployment."
-    return 0
+    log "[ERROR] SUPABASE_PROJECT_REF not set and could not be derived; aborting deployment."
+    return 1
   fi
 
   log "Deploying Supabase Edge Functions…"
