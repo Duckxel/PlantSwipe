@@ -105,6 +105,8 @@ export const AdminPage: React.FC = () => {
     "rounded-[24px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/95 dark:bg-[#16161a]/95 backdrop-blur shadow-[0_18px_45px_-25px_rgba(15,23,42,0.45)]";
   const glassCardClass =
     "rounded-[20px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/92 dark:bg-[#1a1a1d]/92 backdrop-blur";
+  const sidebarHeroClass =
+    "relative flex flex-col flex-1 rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50/95 via-white/90 to-stone-100/95 dark:from-[#141418] dark:via-[#0f0f11] dark:to-[#0a0a0c] shadow-[0_35px_95px_-45px_rgba(16,185,129,0.65)]";
   const shortenMiddle = React.useCallback(
     (value: string, maxChars: number = 28): string => {
       try {
@@ -2807,23 +2809,8 @@ export const AdminPage: React.FC = () => {
   }, [activeTab]);
 
   return (
-    <div className="min-h-screen bg-stone-50 dark:bg-[#0f0f10] px-4 py-6 md:px-8">
+    <div className="min-h-screen bg-gradient-to-br from-emerald-25 via-white to-stone-100 dark:from-[#09090b] dark:via-[#050506] dark:to-[#030304] px-4 py-6 md:px-8">
       <div className="max-w-6xl mx-auto space-y-4 md:space-y-6">
-        <div className="relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50 via-white to-stone-100 dark:from-[#1b1b1d] dark:via-[#111112] dark:to-[#060607] p-6 md:p-10 shadow-[0_35px_60px_-15px_rgba(16,185,129,0.35)] flex flex-col gap-3">
-          <div className="absolute -right-16 top-0 h-40 w-40 rounded-full bg-emerald-200/60 dark:bg-emerald-500/15 blur-3xl" aria-hidden />
-          <div className="absolute -left-12 bottom-0 h-32 w-32 rounded-full bg-emerald-100/70 dark:bg-emerald-500/10 blur-3xl" aria-hidden />
-          <div className="relative z-10 space-y-2">
-            <Badge className="rounded-2xl px-3 py-1 bg-white/80 dark:bg-[#1f1f22]/80 text-stone-700 dark:text-stone-200 w-fit">
-              Control Center
-            </Badge>
-            <h1 className="text-3xl font-semibold tracking-tight">
-              Admin Panel
-            </h1>
-            <p className="text-sm text-stone-600 dark:text-stone-300 max-w-2xl">
-              Monitor services, manage members, and handle requests all in one place.
-            </p>
-          </div>
-        </div>
         {/* Mobile Navigation */}
         <div className={`md:hidden ${glassPanelClass}`}>
           <div className="p-4">
@@ -2865,49 +2852,55 @@ export const AdminPage: React.FC = () => {
         <div className="flex flex-col gap-6 md:flex-row md:items-start">
           {/* Sidebar Navigation - Desktop Only */}
           <aside
-            className={`hidden md:flex md:w-64 lg:w-72 flex-shrink-0 flex-col ${glassPanelClass} md:sticky md:top-6 md:self-stretch`}
+            className="hidden md:flex md:w-64 lg:w-72 flex-shrink-0 md:sticky md:top-6 md:self-start"
           >
-            <div className="p-6 border-b border-stone-200/60 dark:border-[#2a2a2e]/60">
-              <div className="flex items-center gap-3">
-                <ShieldCheck className="h-6 w-6" style={{ color: accentColor }} />
-                <div>
-                  <div className="text-lg font-semibold">Admin Panel</div>
-                  <div className="text-xs text-stone-500 dark:text-stone-400">
-                    Control Center
+            <div className={sidebarHeroClass}>
+              <div className="absolute inset-0 pointer-events-none">
+                <div className="absolute -top-8 -right-6 h-32 w-32 rounded-full bg-emerald-200/60 dark:bg-emerald-500/20 blur-3xl" />
+                <div className="absolute bottom-0 left-0 h-40 w-40 rounded-full bg-emerald-100/70 dark:bg-emerald-500/15 blur-[120px]" />
+              </div>
+              <div className="relative z-10 p-6 border-b border-white/30 dark:border-white/10">
+                <div className="flex items-center gap-3">
+                  <ShieldCheck className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+                  <div>
+                    <div className="text-lg font-semibold">Admin Panel</div>
+                    <div className="text-xs text-stone-600 dark:text-stone-300">
+                      Control Center
+                    </div>
                   </div>
                 </div>
               </div>
+              <nav className="relative z-10 p-4 space-y-2 flex-1 overflow-y-auto">
+                {navItems.map(({ key, label, Icon }) => (
+                  <button
+                    key={key}
+                    onClick={() => setActiveTab(key)}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition ${
+                      activeTab === key
+                        ? "bg-white/90 text-black shadow-sm"
+                        : "text-stone-700 dark:text-stone-200 hover:bg-white/60 dark:hover:bg-white/10"
+                    }`}
+                    style={
+                      activeTab === key
+                        ? {
+                            boxShadow: `0 12px 35px -20px ${accentColorWithOpacity}`,
+                          }
+                        : undefined
+                    }
+                  >
+                    <Icon
+                      className={`h-5 w-5 ${activeTab === key ? "" : "opacity-70"}`}
+                    />
+                    <span className="font-medium">{label}</span>
+                    {key === "requests" && uniqueRequestedPlantsCount > 0 && (
+                      <span className="ml-auto px-2 py-0.5 text-xs font-semibold rounded-full bg-stone-200 dark:bg-stone-800 text-stone-700 dark:text-stone-100">
+                        {uniqueRequestedPlantsCount}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </nav>
             </div>
-            <nav className="p-4 space-y-2 flex-1 overflow-y-auto">
-              {navItems.map(({ key, label, Icon }) => (
-                <button
-                  key={key}
-                  onClick={() => setActiveTab(key)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition ${
-                    activeTab === key
-                      ? "bg-white text-black shadow-sm"
-                      : "text-stone-700 dark:text-stone-300 hover:bg-stone-100/60 dark:hover:bg-[#222225]"
-                  }`}
-                  style={
-                    activeTab === key
-                      ? {
-                          boxShadow: `0 6px 20px -15px ${accentColorWithOpacity}`,
-                        }
-                      : undefined
-                  }
-                >
-                  <Icon
-                    className={`h-5 w-5 ${activeTab === key ? "" : "opacity-70"}`}
-                  />
-                  <span className="font-medium">{label}</span>
-                  {key === "requests" && uniqueRequestedPlantsCount > 0 && (
-                    <span className="ml-auto px-2 py-0.5 text-xs font-semibold rounded-full bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-200">
-                      {uniqueRequestedPlantsCount}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </nav>
           </aside>
 
           {/* Main Content Area */}
