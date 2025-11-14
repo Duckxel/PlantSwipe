@@ -43,7 +43,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {plants.map((p) => (
           <Card
             key={p.id}
@@ -54,9 +54,9 @@ export const SearchPage: React.FC<SearchPageProps> = ({
             onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => {
               if (e.key === "Enter") openInfo(p);
             }}
-          >
-            <div className="grid grid-cols-[160px_1fr] items-stretch h-full">
-              <div className="relative w-40 h-40 flex-shrink-0 rounded-l-[28px] overflow-hidden bg-gradient-to-br from-stone-100 via-white to-stone-200 dark:from-[#2d2d30] dark:via-[#2a2a2e] dark:to-[#1f1f1f]">
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-[160px_1fr] items-stretch h-full">
+                <div className="relative w-full h-52 sm:w-40 sm:h-full flex-shrink-0 rounded-t-[28px] sm:rounded-l-[28px] sm:rounded-tr-none overflow-hidden bg-gradient-to-br from-stone-100 via-white to-stone-200 dark:from-[#2d2d30] dark:via-[#2a2a2e] dark:to-[#1f1f1f]">
                 {p.image ? (
                   <img
                     src={p.image}
@@ -64,11 +64,11 @@ export const SearchPage: React.FC<SearchPageProps> = ({
                     loading="lazy"
                     draggable={false}
                     decoding="async"
-                    className="absolute inset-0 h-full w-full object-cover object-center select-none transition-transform duration-300 group-hover:scale-105"
+                      className="absolute inset-0 h-full w-full object-cover object-center select-none transition-transform duration-300 group-hover:scale-105"
                   />
                 ) : null}
               </div>
-              <div className="p-4 space-y-2 flex flex-col">
+                <div className="p-4 space-y-2 flex flex-col">
                 <div className="flex items-center gap-2 flex-wrap">
                   <Badge
                     className={`${rarityTone[p.rarity ?? "Common"]} rounded-xl`}
