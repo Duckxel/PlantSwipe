@@ -2944,23 +2944,29 @@ export const AdminPage: React.FC = () => {
             )}
 
             <section className="space-y-6">
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                  <div>
-                    <div className="text-2xl font-semibold tracking-tight">
-                      Admin Controls
-                    </div>
-                    <div className="text-sm opacity-60 mt-1">
-                      Admin actions: monitor and manage infrastructure.
+              <Card className="relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-900 via-[#111112] to-black shadow-[0_35px_95px_-35px_rgba(16,185,129,0.75)] text-white">
+                <div className="absolute inset-0 pointer-events-none">
+                  <div className="absolute -top-6 -right-4 h-40 w-40 rounded-full bg-emerald-500/40 blur-3xl" />
+                  <div className="absolute bottom-0 left-0 h-40 w-40 rounded-full bg-emerald-400/30 blur-3xl" />
+                </div>
+                <CardContent className="relative z-10 p-6 md:p-8 space-y-6">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div>
+                      <div className="text-2xl font-semibold tracking-tight text-white">
+                        Admin Controls
+                      </div>
+                      <div className="text-sm text-emerald-100/80 mt-1 max-w-2xl">
+                        Monitor services, manage members, and handle requests all in one place.
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {/* Overview Tab */}
-                {activeTab === "overview" && (
-                  <>
-                    {/* Health monitor */}
-                    <Card className={glassCardClass}>
-                      <CardContent className="p-4">
+                  {/* Overview Tab */}
+                  {activeTab === "overview" && (
+                    <>
+                      {/* Health monitor */}
+                      <Card className={glassCardClass}>
+                        <CardContent className="p-4">
                         <div className="flex items-center justify-between">
                           <div>
                             <div className="text-sm font-medium">
@@ -5774,6 +5780,8 @@ export const AdminPage: React.FC = () => {
                     </CardContent>
                   </Card>
                 )}
+                </CardContent>
+              </Card>
             </section>
           </div>
         </main>
