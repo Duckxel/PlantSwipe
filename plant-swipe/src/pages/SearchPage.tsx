@@ -3,7 +3,6 @@ import type { Plant, PlantSeason } from "@/types/plant";
 import { rarityTone, seasonBadge } from "@/constants/badges";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ListFilter } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 interface SearchPageProps {
@@ -23,26 +22,6 @@ export const SearchPage: React.FC<SearchPageProps> = ({
 
   return (
     <div className="max-w-6xl mx-auto mt-8 px-4 md:px-0 pb-16 space-y-6">
-      <div className="relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50 via-white to-stone-100 dark:from-[#252526] dark:via-[#1e1e1e] dark:to-[#171717] p-6 md:p-10 shadow-[0_35px_60px_-15px_rgba(16,185,129,0.35)] flex flex-col gap-3">
-        <div
-          className="absolute -right-24 top-0 h-40 w-40 rounded-full bg-emerald-200/50 dark:bg-emerald-500/10 blur-3xl"
-          aria-hidden="true"
-        />
-        <div
-          className="absolute -left-16 bottom-0 h-32 w-32 rounded-full bg-emerald-100/70 dark:bg-emerald-500/5 blur-3xl"
-          aria-hidden="true"
-        />
-        <div className="flex items-center gap-2 text-sm relative z-10 text-stone-600 dark:text-stone-300">
-          <ListFilter className="h-4 w-4" />
-          <span>{t("plant.refineFilters")}</span>
-        </div>
-        <div className="relative z-10">
-          <p className="text-xs text-stone-500 dark:text-stone-400">
-            {t("plant.searchPlaceholder")}
-          </p>
-        </div>
-      </div>
-
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {plants.map((p) => (
           <Card
