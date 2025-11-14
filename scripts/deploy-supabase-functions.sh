@@ -188,6 +188,12 @@ PY
   mkdir -p "$LOG_DIR" 2>/dev/null || LOG_DIR="/tmp"
   chmod 1777 "$LOG_DIR" 2>/dev/null || true
 
+  if ! ${supabase_cmd[@]} supabase functions list --project-ref "$SUPABASE_PROJECT_REF" >/tmp/supabase-functions-list.log 2>&1; then
+    log "[ERROR] Supabase CLI cannot access project $SUPABASE_PROJECT_REF. Ensure the CLI is installed and logged in (set SUPABASE_ACCESS_TOKEN)."
+    tail -n 20 /tmp/supabase-functions-list.log 2>/dev/null | while IFS= read -r line; do log "  $line"; done || true
+    return 1
+  fi
+
   if [[ -n "$SUPABASE_ACCESS_TOKEN" ]]; then
     log "Authenticating Supabase CLI…"
     local login_output=""
