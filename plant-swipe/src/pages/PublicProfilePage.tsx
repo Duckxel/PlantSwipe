@@ -655,22 +655,12 @@ export default function PublicProfilePage() {
 
   const glassCard =
     "rounded-[24px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#17171a]/90 shadow-[0_25px_70px_-45px_rgba(15,23,42,0.65)]"
+  const profileHeroCard =
+    glassCard +
+    " relative overflow-hidden shadow-[0_35px_95px_-45px_rgba(16,185,129,0.75)]"
 
   return (
     <div className="max-w-5xl mx-auto mt-8 px-4 md:px-0 pb-16 space-y-6">
-      <div className="relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50 via-white to-stone-100 dark:from-[#1a1a1d] dark:via-[#111113] dark:to-[#060607] p-6 md:p-10 shadow-[0_35px_60px_-15px_rgba(16,185,129,0.35)]">
-        <div className="absolute -right-16 top-0 h-48 w-48 rounded-full bg-emerald-200/50 dark:bg-emerald-500/10 blur-3xl" aria-hidden />
-        <div className="absolute -left-12 bottom-0 h-32 w-32 rounded-full bg-emerald-100/60 dark:bg-emerald-500/5 blur-3xl" aria-hidden />
-        <div className="relative z-10 space-y-3">
-          <div className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-800 dark:text-emerald-300">
-            <UserIcon className="h-4 w-4" />
-            {t("profile.heroBadge")}
-          </div>
-          <h1 className="text-3xl font-semibold tracking-tight">{t("profile.title")}</h1>
-          <p className="text-sm text-stone-600 dark:text-stone-300 max-w-2xl">{t("profile.subtitle")}</p>
-        </div>
-      </div>
-
       {user?.id && (
         <div ref={searchContainerRef} className="relative mb-6">
           <label
@@ -775,10 +765,14 @@ export default function PublicProfilePage() {
           </Button>
         </div>
       )}
-      {!loading && !error && pp && (
-        <>
-          <Card className={glassCard}>
-            <CardContent className="p-6 md:p-8 space-y-4">
+        {!loading && !error && pp && (
+          <>
+            <Card className={profileHeroCard}>
+              <div className="absolute inset-0 pointer-events-none">
+                <div className="absolute -top-6 -right-8 h-32 w-32 rounded-full bg-emerald-200/60 dark:bg-emerald-500/15 blur-3xl" />
+                <div className="absolute bottom-0 left-0 h-32 w-32 rounded-full bg-emerald-100/60 dark:bg-emerald-500/10 blur-3xl" />
+              </div>
+              <CardContent className="relative z-10 p-6 md:p-8 space-y-4">
               <div className="flex items-start gap-4">
                 <div className="h-16 w-16 rounded-2xl bg-stone-200 overflow-hidden flex items-center justify-center" aria-hidden>
                   <UserIcon
