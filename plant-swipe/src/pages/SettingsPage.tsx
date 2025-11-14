@@ -37,6 +37,11 @@ export default function SettingsPage() {
   const [deleteConfirmText, setDeleteConfirmText] = React.useState("")
   const [deleting, setDeleting] = React.useState(false)
 
+  const heroCardClass =
+    "relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50 via-white to-stone-100 dark:from-[#1b1b1f] dark:via-[#121214] dark:to-[#050506] p-6 md:p-10 shadow-[0_35px_60px_-15px_rgba(16,185,129,0.35)]"
+  const glassCard =
+    "rounded-[24px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#151517]/90 shadow-[0_25px_70px_-45px_rgba(15,23,42,0.65)]"
+
   // Function to partially censor email
   const censorEmail = (email: string): string => {
     if (!email || email.length === 0) return email
@@ -265,31 +270,37 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto mt-8 px-4 md:px-0">
-      <div className="mb-6">
-        <h1 className="text-3xl font-semibold flex items-center gap-3">
-          <Settings className="h-6 w-6" />
-          {t('settings.title')}
-        </h1>
-        <p className="text-sm opacity-70 mt-2">{t('settings.description')}</p>
+    <div className="max-w-4xl mx-auto mt-8 px-4 md:px-0 pb-16 space-y-6">
+      <div className={heroCardClass}>
+        <div className="absolute -right-12 top-0 h-40 w-40 rounded-full bg-emerald-200/60 dark:bg-emerald-500/10 blur-3xl" aria-hidden />
+        <div className="absolute -left-16 bottom-0 h-32 w-32 rounded-full bg-emerald-100/70 dark:bg-emerald-500/5 blur-3xl" aria-hidden />
+        <div className="relative z-10 space-y-3">
+          <div className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-800 dark:text-emerald-300">
+            <Settings className="h-4 w-4" />
+            {t('settings.title')}
+          </div>
+          <p className="text-sm text-stone-600 dark:text-stone-300 max-w-2xl">
+            {t('settings.description')}
+          </p>
+        </div>
       </div>
 
       {error && (
-        <div className="mb-4 p-4 rounded-2xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 text-red-700 dark:text-red-400 flex items-start gap-2">
+        <div className={`${glassCard} mb-4 text-red-700 dark:text-red-300 flex items-start gap-2`}>
           <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" />
           <div className="flex-1">{error}</div>
         </div>
       )}
 
       {success && (
-        <div className="mb-4 p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50 text-emerald-700 dark:text-emerald-400 flex items-start gap-2">
+        <div className={`${glassCard} mb-4 text-emerald-700 dark:text-emerald-300 flex items-start gap-2`}>
           <Check className="h-5 w-5 mt-0.5 shrink-0" />
           <div className="flex-1">{success}</div>
         </div>
       )}
 
       {/* Account Information */}
-      <Card className="rounded-3xl mb-4">
+      <Card className={`${glassCard} mb-4`}>
         <CardHeader>
           <button
             onClick={() => setEmailExpanded(!emailExpanded)}
@@ -350,7 +361,7 @@ export default function SettingsPage() {
       </Card>
 
       {/* Password */}
-      <Card className="rounded-3xl mb-4">
+      <Card className={`${glassCard} mb-4`}>
         <CardHeader>
           <button
             onClick={() => setPasswordExpanded(!passwordExpanded)}
@@ -423,7 +434,7 @@ export default function SettingsPage() {
       </Card>
 
       {/* Privacy Settings */}
-      <Card className="rounded-3xl mb-4">
+      <Card className={`${glassCard} mb-4`}>
         <CardHeader>
           <CardTitle>{t('settings.privacy.title')}</CardTitle>
           <CardDescription>{t('settings.privacy.description')}</CardDescription>
@@ -469,7 +480,7 @@ export default function SettingsPage() {
       </Card>
 
       {/* Language Settings */}
-      <Card className="rounded-3xl mb-4">
+      <Card className={`${glassCard} mb-4`}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Globe className="h-5 w-5" />
@@ -499,7 +510,7 @@ export default function SettingsPage() {
       </Card>
 
       {/* Theme Settings */}
-      <Card className="rounded-3xl mb-4">
+      <Card className={`${glassCard} mb-4`}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Monitor className="h-5 w-5" />
@@ -534,7 +545,7 @@ export default function SettingsPage() {
       </Card>
 
       {/* Danger Zone */}
-      <Card className="rounded-3xl border-red-200 dark:border-red-800/50 bg-red-50/50 dark:bg-red-900/20">
+      <Card className={`${glassCard} border-red-200 dark:border-red-800/50 bg-red-50/70 dark:bg-red-900/30`}>
         <CardHeader>
           <CardTitle className="text-red-700 dark:text-red-400 flex items-center gap-2">
             <AlertTriangle className="h-5 w-5" />

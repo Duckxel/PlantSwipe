@@ -224,6 +224,93 @@ const NAMED_COLOR_MAP: Record<string, string> = {
   magenta: '#d946ef'
 }
 
+const TEXT_EXTRACTION_KEYS = ['text', 'value', 'defaultValue', 'description', 'label', 'name', 'title'] as const
+
+const resolveTextValue = (value: unknown, depth = 0): string | undefined => {
+  if (value === null || value === undefined) return undefined
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    return trimmed ? trimmed : undefined
+  }
+
+  if (typeof value === 'number' || typeof value === 'bigint') {
+    return String(value)
+  }
+
+  if (typeof value === 'boolean') {
+    return value ? 'true' : 'false'
+  }
+
+  if (Array.isArray(value)) {
+    const results = value
+      .map((entry) => resolveTextValue(entry, depth + 1))
+      .filter((entry): entry is string => Boolean(entry))
+    if (!results.length) return undefined
+    return Array.from(new Set(results)).join(', ')
+  }
+
+  if (typeof value === 'object') {
+    if (React.isValidElement(value as React.ReactNode)) return undefined
+    if (depth > 5) return undefined
+
+    const record = value as Record<string, unknown>
+    if (
+      typeof record.type === 'string' &&
+      !('value' in record) &&
+      !('text' in record) &&
+      !('defaultValue' in record)
+    ) {
+      return undefined
+    }
+
+    for (const key of TEXT_EXTRACTION_KEYS) {
+      if (key in record) {
+        const resolved = resolveTextValue(record[key], depth + 1)
+        if (resolved) return resolved
+      }
+    }
+
+    if ('content' in record) {
+      const content = record.content
+      if (Array.isArray(content)) {
+        const merged = content
+          .map((entry) => resolveTextValue(entry, depth + 1))
+          .filter(Boolean)
+          .join(' ')
+        if (merged.trim()) return merged.trim()
+      } else {
+        const resolved = resolveTextValue(content, depth + 1)
+        if (resolved) return resolved
+      }
+    }
+
+    if ('options' in record && !Array.isArray(record.options)) {
+      const resolved = resolveTextValue(record.options, depth + 1)
+      if (resolved) return resolved
+    }
+
+    if ('message' in record) {
+      const resolved = resolveTextValue(record.message, depth + 1)
+      if (resolved) return resolved
+    }
+  }
+
+  return undefined
+}
+
+const resolveStringList = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return []
+  const results: string[] = []
+  value.forEach((entry) => {
+    const resolved = resolveTextValue(entry)
+    if (resolved) {
+      results.push(resolved)
+    }
+  })
+  return Array.from(new Set(results))
+}
+
 const TIMELINE_COLORS: Record<string, string> = {
   flowering: '#f97316',
   fruiting: '#22c55e',
@@ -735,7 +822,8 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
   const freqAmount = typeof freqAmountRaw === 'number' ? freqAmountRaw : Number(freqAmountRaw || 0)
   const freqPeriod = (plant.waterFreqPeriod || plant.waterFreqUnit) as 'day' | 'week' | 'month' | 'year' | undefined
   const care = plant.care ?? ({} as NonNullable<Plant['care']>)
-  const derivedWater = deriveWaterLevelFromFrequency(freqPeriod, freqAmount) || care.water || 'Low'
+  const rawDerivedWater = deriveWaterLevelFromFrequency(freqPeriod, freqAmount) || care.water || 'Low'
+  const derivedWater = resolveTextValue(rawDerivedWater) ?? 'Low'
   const freqLabel = freqPeriod
     ? `${freqAmount > 0 ? `${freqAmount} ${freqAmount === 1 ? t('plantInfo.time') : t('plantInfo.times')} ` : ''}${t('plantInfo.per')} ${t(`plantInfo.${freqPeriod}`)}`
     : null
@@ -752,9 +840,16 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
   const dimensions = plant.dimensions ?? ({} as NonNullable<Plant['dimensions']>)
   const seasons = Array.isArray(plant.seasons) ? plant.seasons : []
   const colors = Array.isArray(plant.colors) ? plant.colors : []
-  const indoorOutdoorLabel = usage.indoorOutdoor
-    ? t(`plantInfo.values.${usage.indoorOutdoor}`, { defaultValue: usage.indoorOutdoor })
-    : null
+  const meaningText = React.useMemo(() => resolveTextValue(plant.meaning), [plant.meaning])
+  const descriptionText = React.useMemo(() => resolveTextValue(plant.description), [plant.description])
+  const funFactText = React.useMemo(() => resolveTextValue(meta.funFact), [meta.funFact])
+  const authorNotesText = React.useMemo(() => resolveTextValue(meta.authorNotes), [meta.authorNotes])
+  const metaTags = React.useMemo(() => resolveStringList(meta.tags), [meta.tags])
+  const metaSourceReferences = React.useMemo(() => resolveStringList(meta.sourceReferences), [meta.sourceReferences])
+  const indoorOutdoorValue = resolveTextValue(usage.indoorOutdoor)
+  const indoorOutdoorLabel = indoorOutdoorValue
+      ? t(`plantInfo.values.${indoorOutdoorValue}`, { defaultValue: indoorOutdoorValue })
+      : null
 
   const notAvailableLabel = React.useMemo(
     () => t('plantInfo.values.notAvailable', { defaultValue: 'N/A' }),
@@ -770,11 +865,12 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
       .replace(/\b\w/g, (char) => char.toUpperCase())
   }, [])
 
-  const formatStatValue = React.useCallback((value?: string | null) => {
-    if (!value) {
+  const formatStatValue = React.useCallback((value: unknown) => {
+    const text = resolveTextValue(value)
+    if (!text) {
       return notAvailableLabel
     }
-    const trimmed = value.trim()
+    const trimmed = text.trim()
     if (!trimmed) {
       return notAvailableLabel
     }
@@ -786,7 +882,10 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
   }, [humanize, notAvailableLabel, t])
 
   const formatFrequencyLabel = React.useCallback(
-    (label?: string | null) => (label ? humanize(label) : undefined),
+    (label?: string | null) => {
+      const text = resolveTextValue(label)
+      return text ? humanize(text) : undefined
+    },
     [humanize],
   )
 
@@ -795,7 +894,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
     () => formatFrequencyLabel(freqLabel),
     [formatFrequencyLabel, freqLabel]
   )
-  const sunlightLevel = care?.sunlight ?? environment.sunExposure
+  const sunlightLevel = resolveTextValue(care?.sunlight ?? environment.sunExposure)
 
   const quickStats = React.useMemo(() => {
     const stats = [
@@ -1008,10 +1107,10 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
   )
 
   const showMeta = Boolean(
-    (meta?.tags?.length ?? 0) > 0 ||
-    meta?.funFact ||
-    (meta?.sourceReferences?.length ?? 0) > 0 ||
-    meta?.authorNotes
+    metaTags.length > 0 ||
+    funFactText ||
+    metaSourceReferences.length > 0 ||
+    authorNotesText
   )
 
   const hasAnyStructuredData = showIdentifiers || showTraits || showDimensions || showPhenology || showEnvironment || showCare || showPropagation || showUsage || showEcology || showProblems || showPlanting || showMeta
@@ -1027,7 +1126,10 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
 
     if (navigator.share) {
       try {
-        await navigator.share({ url: shareUrl, title: plant.name, text: plant.description })
+        const shareData = descriptionText
+          ? { url: shareUrl, title: plant.name, text: descriptionText }
+          : { url: shareUrl, title: plant.name }
+        await navigator.share(shareData)
         showShareSuccess()
         return
       } catch (err: unknown) {
@@ -1283,24 +1385,24 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
             <h2 className="text-3xl font-bold leading-tight">{plant.name}</h2>
             <p className="italic text-base opacity-80">{plant.scientificName}</p>
           </div>
-          {plant.meaning && (
-            <Card className="rounded-3xl border border-stone-200 dark:border-[#3e3e42]">
-              <CardHeader className="py-4">
-                <CardTitle className="text-base font-semibold flex items-center justify-center gap-2">
-                  <Sparkles className="h-4 w-4" />
-                  {t('plantInfo.meaning')}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm text-center leading-relaxed">
-                <CollapsibleText text={plant.meaning} maxLength={200} />
-              </CardContent>
-            </Card>
-          )}
-          {plant.description && (
-            <div className="rounded-2xl bg-white/85 px-4 py-3 text-sm leading-relaxed text-stone-700 shadow-sm dark:bg-[#1e262f]/80 dark:text-stone-200">
-              <CollapsibleText text={plant.description} maxLength={300} />
-            </div>
-          )}
+            {meaningText && (
+              <Card className="rounded-3xl border border-stone-200 dark:border-[#3e3e42]">
+                <CardHeader className="py-4">
+                  <CardTitle className="text-base font-semibold flex items-center justify-center gap-2">
+                    <Sparkles className="h-4 w-4" />
+                    {t('plantInfo.meaning')}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="text-sm text-center leading-relaxed">
+                  <CollapsibleText text={meaningText} maxLength={200} />
+                </CardContent>
+              </Card>
+            )}
+            {descriptionText && (
+              <div className="rounded-2xl bg-white/85 px-4 py-3 text-sm leading-relaxed text-stone-700 shadow-sm dark:bg-[#1e262f]/80 dark:text-stone-200">
+                <CollapsibleText text={descriptionText} maxLength={300} />
+              </div>
+            )}
           {renderQuickStats(compactStats, 'sm:grid-cols-3')}
           {(colors.length > 0 || seasons.length > 0) && (
             <div className="flex flex-wrap justify-center gap-2">
@@ -1372,19 +1474,19 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
                   </p>
                 )}
               </div>
-              {plant.meaning && (
+                {meaningText && (
                 <div className="flex items-start gap-3 rounded-2xl bg-white/65 px-4 py-3 text-sm leading-relaxed text-emerald-900 shadow-sm backdrop-blur-md dark:bg-slate-900/50 dark:text-emerald-100">
                   <span className="mt-0.5 rounded-full bg-emerald-500/20 p-2 text-emerald-600 dark:text-emerald-200">
                     <Sparkles className="h-4 w-4" />
                   </span>
                   <div className="flex-1">
-                    <CollapsibleText text={plant.meaning} maxLength={200} />
+                      <CollapsibleText text={meaningText} maxLength={200} />
                   </div>
                 </div>
               )}
-              {plant.description && (
+                {descriptionText && (
                 <div className="max-w-2xl text-sm leading-relaxed text-emerald-900/90 md:text-base dark:text-emerald-100/80">
-                  <CollapsibleText text={plant.description} maxLength={300} />
+                    <CollapsibleText text={descriptionText} maxLength={300} />
                 </div>
               )}
               {(seasons.length > 0 || colors.length > 0) && (
@@ -1527,7 +1629,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
                 <Info className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                 <h3 className="text-lg font-semibold tracking-tight">{t('plantInfo.overview')}</h3>
               </header>
-              {plant.meaning && (
+                {meaningText && (
                 <Card className="relative mt-4 rounded-3xl border-stone-200/70 dark:border-[#3e3e42]/70">
                   <CardHeader className="space-y-3">
                     <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
@@ -1539,7 +1641,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
                   </CardHeader>
                   <CardContent>
                     <div className="text-base leading-relaxed text-stone-700 dark:text-stone-300">
-                      <CollapsibleText text={plant.meaning} maxLength={200} />
+                        <CollapsibleText text={meaningText} maxLength={200} />
                     </div>
                   </CardContent>
                 </Card>
@@ -1986,31 +2088,31 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
           )}
 
           {/* Meta Section */}
-            {(meta.tags?.length || meta.funFact || meta.sourceReferences?.length || meta.authorNotes) && (
+            {(metaTags.length || funFactText || metaSourceReferences.length || authorNotesText) && (
               <InfoSection title="Additional Information" icon={<BookOpen className="h-5 w-5" />}>
-                {meta.tags?.length && (
+                  {metaTags.length > 0 && (
                   <InfoItem icon={<Tag className="h-4 w-4" />} label="Tags" value={
                     <div className="flex flex-wrap gap-2">
-                      {meta.tags.map((tag, idx) => (
-                        <Badge key={idx} variant="secondary" className="rounded-xl">{tag}</Badge>
+                        {metaTags.map((tag, idx) => (
+                          <Badge key={`${tag}-${idx}`} variant="secondary" className="rounded-xl">{tag}</Badge>
                       ))}
                     </div>
                   } />
                 )}
-                {meta.funFact && (
-                  <InfoItem icon={<Sparkles className="h-4 w-4" />} label="Fun Fact" value={meta.funFact} />
+                  {funFactText && (
+                    <InfoItem icon={<Sparkles className="h-4 w-4" />} label="Fun Fact" value={funFactText} />
                 )}
-                {meta.sourceReferences?.length && (
+                  {metaSourceReferences.length > 0 && (
                   <InfoItem icon={<BookOpen className="h-4 w-4" />} label="Source References" value={
                     <ul className="list-disc list-inside space-y-1">
-                      {meta.sourceReferences.map((ref, idx) => (
-                        <li key={idx} className="text-sm">{ref}</li>
+                        {metaSourceReferences.map((ref, idx) => (
+                          <li key={`${ref}-${idx}`} className="text-sm">{ref}</li>
                       ))}
                     </ul>
                   } />
                 )}
-                {meta.authorNotes && (
-                  <InfoItem icon={<FileText className="h-4 w-4" />} label="Author Notes" value={meta.authorNotes} />
+                  {authorNotesText && (
+                    <InfoItem icon={<FileText className="h-4 w-4" />} label="Author Notes" value={authorNotesText} />
                 )}
               </InfoSection>
             )}
@@ -2632,6 +2734,31 @@ const InfoItem = ({ icon, label, value }: { icon: React.ReactNode; label: string
   const { t } = useTranslation('common')
   const key = LABEL_KEY_MAP[label]
   const translatedLabel = key ? t(`plantInfo.labels.${key}`, { defaultValue: label }) : label
+
+  const resolvedValue = React.useMemo<React.ReactNode | null>(() => {
+    if (value === null || value === undefined || typeof value === 'boolean') return null
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      return trimmed ? value : null
+    }
+    if (typeof value === 'number') return value
+    if (typeof value === 'bigint') return value.toString()
+    if (React.isValidElement(value)) return value
+    if (Array.isArray(value)) {
+      const parts = value
+        .map((entry) => resolveTextValue(entry))
+        .filter((entry): entry is string => Boolean(entry))
+      if (!parts.length) return null
+      return parts.join(', ')
+    }
+    const text = resolveTextValue(value)
+    return text ?? null
+  }, [value])
+
+  if (resolvedValue === null) {
+    return null
+  }
+
   return (
     <div className="flex items-start gap-3 py-1.5">
       <div className="h-5 w-5 rounded-md border border-stone-200 bg-stone-100 flex items-center justify-center flex-shrink-0 mt-0.5 text-stone-600 dark:border-emerald-900/40 dark:bg-[#0f1f28] dark:text-emerald-200">
@@ -2639,7 +2766,7 @@ const InfoItem = ({ icon, label, value }: { icon: React.ReactNode; label: string
       </div>
       <div className="flex-1 min-w-0">
         <div className="text-xs font-medium text-stone-600 dark:text-stone-400 mb-0.5">{translatedLabel}</div>
-        <div className="text-sm text-stone-900 dark:text-stone-100">{value}</div>
+        <div className="text-sm text-stone-900 dark:text-stone-100">{resolvedValue}</div>
       </div>
     </div>
   )
@@ -2653,13 +2780,18 @@ const formatMonths = (months: number[], t: (key: string, options?: Record<string
     .join(', ')
 }
 
-const CollapsibleText: React.FC<{ text: string; maxLength?: number; className?: string }> = ({ text, maxLength = 300, className = '' }) => {
+const CollapsibleText: React.FC<{ text: unknown; maxLength?: number; className?: string }> = ({ text, maxLength = 300, className = '' }) => {
+  const resolvedText = React.useMemo(() => resolveTextValue(text), [text])
+  const finalText = resolvedText ?? ''
+  if (!finalText) {
+    return null
+  }
   const [isExpanded, setIsExpanded] = React.useState(false)
-  const shouldCollapse = text.length > maxLength
-  const displayText = shouldCollapse && !isExpanded ? text.slice(0, maxLength) + '...' : text
+  const shouldCollapse = finalText.length > maxLength
+  const displayText = shouldCollapse && !isExpanded ? finalText.slice(0, maxLength) + '...' : finalText
 
   if (!shouldCollapse) {
-    return <div className={className}>{text}</div>
+    return <div className={className}>{finalText}</div>
   }
 
   return (
