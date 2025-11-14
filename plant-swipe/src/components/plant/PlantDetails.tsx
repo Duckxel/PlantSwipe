@@ -3,7 +3,6 @@ import { motion } from "framer-motion";
 import {
   AmbientLight,
   BoxGeometry,
-  CylinderGeometry,
   DirectionalLight,
   EdgesGeometry,
   GridHelper,
@@ -355,26 +354,18 @@ const formatDimensionValue = (value: number): string => {
 const parsePositiveNumber = (value: number | null | undefined): number | undefined =>
   typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined
 
-const HUMAN_REFERENCE_HEIGHT_CM = 170
-
 type CubeScale = {
   x: number
   y: number
   z: number
 }
 
-type DimensionCubeProps = {
-  scale: CubeScale
-  humanScale: number
-}
-
-const DimensionCube: React.FC<DimensionCubeProps> = ({ scale, humanScale }) => {
+const DimensionCube: React.FC<{ scale: CubeScale }> = ({ scale }) => {
   const containerRef = React.useRef<HTMLDivElement>(null)
   const rendererRef = React.useRef<WebGLRenderer | null>(null)
   const cubeGroupRef = React.useRef<Group | null>(null)
   const cameraRef = React.useRef<PerspectiveCamera | null>(null)
   const pivotAngleRef = React.useRef(0)
-  const humanGroupRef = React.useRef<Group | null>(null)
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return
@@ -396,7 +387,7 @@ const DimensionCube: React.FC<DimensionCubeProps> = ({ scale, humanScale }) => {
 
     const scene = new Scene()
     const camera = new PerspectiveCamera(38, 1, 0.1, 100)
-    camera.position.set(3.4, 1.8, 3.4)
+    camera.position.set(4.2, 1.8, 4.2)
     camera.lookAt(0, 0.05, 0)
     cameraRef.current = camera
 
@@ -457,56 +448,6 @@ const DimensionCube: React.FC<DimensionCubeProps> = ({ scale, humanScale }) => {
         }
       }
 
-      const humanGroup = new Group()
-      humanGroup.position.set(1.3, 0, 0.8)
-      humanGroupRef.current = humanGroup
-      scene.add(humanGroup)
-
-      const humanClothMaterial = new MeshStandardMaterial({
-        color: 0x2563eb,
-        emissive: 0x1d4ed8,
-        emissiveIntensity: 0.1,
-        roughness: 0.4,
-        metalness: 0.2,
-      })
-      const humanSkinMaterial = new MeshStandardMaterial({
-        color: 0xfcd34d,
-        emissive: 0xb45309,
-        emissiveIntensity: 0.15,
-        roughness: 0.6,
-      })
-      disposables.push(humanClothMaterial, humanSkinMaterial)
-
-      const torsoGeometry = new CylinderGeometry(0.12, 0.14, 0.9, 18)
-      const torso = new Mesh(torsoGeometry, humanClothMaterial)
-      torso.position.y = 0.45
-      humanGroup.add(torso)
-      disposables.push(torsoGeometry)
-
-      const legGeometry = new BoxGeometry(0.08, 0.45, 0.08)
-      const leftLeg = new Mesh(legGeometry, humanClothMaterial)
-      leftLeg.position.set(-0.06, 0.225, 0)
-      const rightLeg = leftLeg.clone()
-      rightLeg.position.x = 0.06
-      humanGroup.add(leftLeg, rightLeg)
-      disposables.push(legGeometry)
-
-      const armGeometry = new CylinderGeometry(0.045, 0.045, 0.6, 12)
-      const leftArm = new Mesh(armGeometry, humanClothMaterial)
-      leftArm.rotation.z = Math.PI / 12
-      leftArm.position.set(-0.25, 0.75, 0)
-      const rightArm = leftArm.clone()
-      rightArm.rotation.z = -Math.PI / 12
-      rightArm.position.x = 0.25
-      humanGroup.add(leftArm, rightArm)
-      disposables.push(armGeometry)
-
-      const headGeometry = new SphereGeometry(0.18, 18, 18)
-      const head = new Mesh(headGeometry, humanSkinMaterial)
-      head.position.y = 1.05
-      humanGroup.add(head)
-      disposables.push(headGeometry)
-
     const grid = new GridHelper(6, 18, 0x34f5c6, 0x0f766e)
     grid.position.y = 0
     const gridMaterials = Array.isArray(grid.material) ? grid.material : [grid.material]
@@ -544,7 +485,7 @@ const DimensionCube: React.FC<DimensionCubeProps> = ({ scale, humanScale }) => {
         pivotAngleRef.current += 0.0012
       }
 
-      const pivotRadius = 3.4
+        const pivotRadius = 4.2
       const refCamera = cameraRef.current
       const activeCamera = refCamera ?? camera
       if (refCamera) {
@@ -566,7 +507,6 @@ const DimensionCube: React.FC<DimensionCubeProps> = ({ scale, humanScale }) => {
       resizeObserver?.disconnect()
       cubeGroupRef.current = null
       rendererRef.current = null
-      humanGroupRef.current = null
       disposables.forEach((item) => {
         try {
           item.dispose()
@@ -587,10 +527,7 @@ const DimensionCube: React.FC<DimensionCubeProps> = ({ scale, humanScale }) => {
       cubeGroupRef.current.scale.set(scale.x * multiplier, scale.y * multiplier, scale.z * multiplier)
       cubeGroupRef.current.position.y = (scale.y * multiplier) / 2
     }
-    if (humanGroupRef.current) {
-      humanGroupRef.current.scale.setScalar(humanScale * multiplier)
-    }
-  }, [scale.x, scale.y, scale.z, humanScale])
+  }, [scale.x, scale.y, scale.z])
 
   return <div ref={containerRef} className="relative h-full w-full min-h-[220px]" />
 }
@@ -630,14 +567,6 @@ const DimensionVisualizer: React.FC<{ dimensions: Partial<PlantDimensions> }> = 
     }),
     [scaleX, scaleY, scaleZ]
   )
-    const humanScale = React.useMemo(() => {
-      const rawScale = clampNumber(
-        0.45 + (HUMAN_REFERENCE_HEIGHT_CM / maxDimension) * 0.55,
-        0.35,
-        1.08
-      )
-      return Number(rawScale.toFixed(3))
-    }, [maxDimension])
 
   const spreadLabel = t('plantInfo.labels.spread', { defaultValue: 'Spread' })
   const spacingLabel = t('plantInfo.labels.spacing', { defaultValue: 'Spacing' })
@@ -666,7 +595,7 @@ const DimensionVisualizer: React.FC<{ dimensions: Partial<PlantDimensions> }> = 
         <div className="flex flex-col items-stretch gap-6 lg:flex-row lg:gap-8">
           <div className="flex-[1.35] max-w-[260px] self-center lg:self-auto">
             <div className="relative aspect-square w-full overflow-hidden rounded-[32px] border border-emerald-500/25 bg-gradient-to-br from-emerald-50/80 via-white/60 to-transparent shadow-[0_18px_50px_rgba(16,185,129,0.2)] dark:border-emerald-500/30 dark:from-emerald-900/30 dark:via-[#0f1f1f]/80 dark:to-transparent">
-                <DimensionCube scale={cubeScale} humanScale={humanScale} />
+                <DimensionCube scale={cubeScale} />
               <div className="pointer-events-none absolute inset-3 rounded-[28px] border border-white/30 dark:border-emerald-500/30" />
               <div className="pointer-events-none absolute inset-x-6 bottom-3 h-14 rounded-full bg-emerald-400/30 blur-3xl" />
             </div>
