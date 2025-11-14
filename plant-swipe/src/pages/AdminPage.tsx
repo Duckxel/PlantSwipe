@@ -11,20 +11,6 @@ import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
 import { getAccentOption } from "@/lib/accent";
 // Re-export for convenience
-const {
-  ResponsiveContainer,
-  ComposedChart,
-  Line,
-  Area,
-  CartesianGrid,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ReferenceLine,
-  PieChart,
-  Pie,
-  Cell,
-} = LazyCharts;
 import {
   RefreshCw,
   Server,
@@ -62,6 +48,21 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
+const {
+  ResponsiveContainer,
+  ComposedChart,
+  Line,
+  Area,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ReferenceLine,
+  PieChart,
+  Pie,
+  Cell,
+} = LazyCharts;
+type AdminTab = "overview" | "members" | "requests" | "admin_logs";
 
 export const AdminPage: React.FC = () => {
   const navigate = useNavigate();
@@ -100,12 +101,10 @@ export const AdminPage: React.FC = () => {
     }
     return `hsl(${accentOption.hsl} / 0.2)`;
   }, [profile]);
-  const layoutBackground =
-    "bg-gradient-to-b from-stone-100 via-white to-stone-200 dark:from-[#111113] dark:via-[#0c0c0e] dark:to-[#050506]";
   const glassPanelClass =
-    "rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/85 dark:bg-[#141416]/85 backdrop-blur shadow-[0_25px_70px_-45px_rgba(15,23,42,0.65)]";
+    "rounded-[24px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/95 dark:bg-[#161619]/95 shadow-[0_18px_45px_-25px_rgba(15,23,42,0.45)]";
   const glassCardClass =
-    "rounded-[24px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#18181b]/80 backdrop-blur";
+    "rounded-[20px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/92 dark:bg-[#1a1a1d]/92";
   const shortenMiddle = React.useCallback(
     (value: string, maxChars: number = 28): string => {
       try {
@@ -2117,9 +2116,18 @@ export const AdminPage: React.FC = () => {
   }, [loadVisitorsStats]);
 
   // ---- Members tab state ----
-  const [activeTab, setActiveTab] = React.useState<
-    "overview" | "members" | "requests" | "admin_logs"
-  >("overview");
+  const navItems: Array<{
+    key: AdminTab;
+    label: string;
+    Icon: React.ComponentType<{ className?: string }>;
+  }> = [
+    { key: "overview", label: "Overview", Icon: LayoutDashboard },
+    { key: "members", label: "Members", Icon: Users },
+    { key: "requests", label: "Requests", Icon: FileText },
+    { key: "admin_logs", label: "Admin Logs", Icon: ScrollText },
+  ];
+
+  const [activeTab, setActiveTab] = React.useState<AdminTab>("overview");
 
   // Load plant requests on mount to show count in menu
   React.useEffect(() => {
@@ -2799,87 +2807,42 @@ export const AdminPage: React.FC = () => {
   }, [activeTab]);
 
   return (
-    <div className={`min-h-screen w-full ${layoutBackground} p-4 md:p-8 pb-16`}>
-      <div className="flex flex-col md:flex-row gap-6">
+    <div className="min-h-screen bg-stone-50 dark:bg-[#0f0f10] px-4 py-6 md:px-8">
+      <div className="flex flex-col gap-4 md:gap-6">
         {/* Mobile Navigation */}
-        <div
-          className={`md:hidden w-full sticky top-0 z-20 ${glassPanelClass}`}
-        >
+        <div className={`md:hidden w-full ${glassPanelClass}`}>
           <div className="p-4">
             <div className="flex items-center gap-2 mb-3">
               <ShieldCheck className="h-5 w-5" style={{ color: accentColor }} />
               <div className="text-sm font-semibold">Admin Panel</div>
             </div>
             <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={() => setActiveTab("overview")}
-                className={`flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-sm transition-all duration-200 ${
-                  activeTab === "overview"
-                    ? "bg-white dark:bg-white text-black dark:text-black shadow-md"
-                    : "text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]"
-                }`}
-                style={
-                  activeTab === "overview"
-                    ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` }
-                    : {}
-                }
-              >
-                <LayoutDashboard className="h-4 w-4" />
-                <span>Overview</span>
-              </button>
-              <button
-                onClick={() => setActiveTab("members")}
-                className={`flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-sm transition-all duration-200 ${
-                  activeTab === "members"
-                    ? "bg-white dark:bg-white text-black dark:text-black shadow-md"
-                    : "text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]"
-                }`}
-                style={
-                  activeTab === "members"
-                    ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` }
-                    : {}
-                }
-              >
-                <Users className="h-4 w-4" />
-                <span>Members</span>
-              </button>
-              <button
-                onClick={() => setActiveTab("requests")}
-                className={`flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-sm transition-all duration-200 ${
-                  activeTab === "requests"
-                    ? "bg-white dark:bg-white text-black dark:text-black shadow-md"
-                    : "text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]"
-                }`}
-                style={
-                  activeTab === "requests"
-                    ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` }
-                    : {}
-                }
-              >
-                <FileText className="h-4 w-4" />
-                <span>Requests</span>
-                {uniqueRequestedPlantsCount > 0 && (
-                  <span className="ml-1 px-1.5 py-0.5 text-xs font-semibold rounded-full bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-300">
-                    {uniqueRequestedPlantsCount}
-                  </span>
-                )}
-              </button>
-              <button
-                onClick={() => setActiveTab("admin_logs")}
-                className={`flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-sm transition-all duration-200 ${
-                  activeTab === "admin_logs"
-                    ? "bg-white dark:bg-white text-black dark:text-black shadow-md"
-                    : "text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]"
-                }`}
-                style={
-                  activeTab === "admin_logs"
-                    ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` }
-                    : {}
-                }
-              >
-                <ScrollText className="h-4 w-4" />
-                <span>Logs</span>
-              </button>
+              {navItems.map(({ key, label, Icon }) => (
+                <button
+                  key={key}
+                  onClick={() => setActiveTab(key)}
+                  className={`flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-sm transition ${
+                    activeTab === key
+                      ? "bg-white text-black shadow-sm"
+                      : "text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-[#2d2d30]"
+                  }`}
+                  style={
+                    activeTab === key
+                      ? {
+                          boxShadow: `0 6px 20px -15px ${accentColorWithOpacity}`,
+                        }
+                      : undefined
+                  }
+                >
+                  <Icon className="h-4 w-4" />
+                  <span>{label}</span>
+                  {key === "requests" && uniqueRequestedPlantsCount > 0 && (
+                    <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-200">
+                      {uniqueRequestedPlantsCount}
+                    </span>
+                  )}
+                </button>
+              ))}
             </div>
           </div>
         </div>
@@ -2888,2268 +2851,2032 @@ export const AdminPage: React.FC = () => {
         <aside
           className={`hidden md:flex w-64 flex-shrink-0 flex-col ${glassPanelClass}`}
         >
-          <div className="p-6 border-b border-stone-200/50 dark:border-[#3e3e42]/50">
+          <div className="p-6 border-b border-stone-200/60 dark:border-[#2a2a2e]/60">
             <div className="flex items-center gap-3">
               <ShieldCheck className="h-6 w-6" style={{ color: accentColor }} />
               <div>
                 <div className="text-lg font-semibold">Admin Panel</div>
-                <div className="text-xs opacity-60">Control Center</div>
+                <div className="text-xs text-stone-500 dark:text-stone-400">
+                  Control Center
+                </div>
               </div>
             </div>
           </div>
           <nav className="p-4 space-y-2 flex-1 overflow-y-auto">
-            <button
-              onClick={() => setActiveTab("overview")}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 ${
-                activeTab === "overview"
-                  ? "bg-white dark:bg-white text-black dark:text-black shadow-md"
-                  : "text-stone-700 dark:text-stone-300 hover:bg-stone-100/50 dark:hover:bg-[#2d2d30]/50"
-              }`}
-              style={
-                activeTab === "overview"
-                  ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` }
-                  : {}
-              }
-            >
-              <LayoutDashboard
-                className={`h-5 w-5 ${activeTab === "overview" ? "" : "opacity-70"}`}
-              />
-              <span className="font-medium">Overview</span>
-            </button>
-            <button
-              onClick={() => setActiveTab("members")}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 ${
-                activeTab === "members"
-                  ? "bg-white dark:bg-white text-black dark:text-black shadow-md"
-                  : "text-stone-700 dark:text-stone-300 hover:bg-stone-100/50 dark:hover:bg-[#2d2d30]/50"
-              }`}
-              style={
-                activeTab === "members"
-                  ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` }
-                  : {}
-              }
-            >
-              <Users
-                className={`h-5 w-5 ${activeTab === "members" ? "" : "opacity-70"}`}
-              />
-              <span className="font-medium">Members</span>
-            </button>
-            <button
-              onClick={() => setActiveTab("requests")}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 ${
-                activeTab === "requests"
-                  ? "bg-white dark:bg-white text-black dark:text-black shadow-md"
-                  : "text-stone-700 dark:text-stone-300 hover:bg-stone-100/50 dark:hover:bg-[#2d2d30]/50"
-              }`}
-              style={
-                activeTab === "requests"
-                  ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` }
-                  : {}
-              }
-            >
-              <FileText
-                className={`h-5 w-5 ${activeTab === "requests" ? "" : "opacity-70"}`}
-              />
-              <span className="font-medium">Requests</span>
-              {uniqueRequestedPlantsCount > 0 && (
-                <span className="ml-auto px-2 py-0.5 text-xs font-semibold rounded-full bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-300">
-                  {uniqueRequestedPlantsCount}
-                </span>
-              )}
-            </button>
-            <button
-              onClick={() => setActiveTab("admin_logs")}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 ${
-                activeTab === "admin_logs"
-                  ? "bg-white dark:bg-white text-black dark:text-black shadow-md"
-                  : "text-stone-700 dark:text-stone-300 hover:bg-stone-100/50 dark:hover:bg-[#2d2d30]/50"
-              }`}
-              style={
-                activeTab === "admin_logs"
-                  ? { boxShadow: `0 2px 8px 0 ${accentColorWithOpacity}` }
-                  : {}
-              }
-            >
-              <ScrollText
-                className={`h-5 w-5 ${activeTab === "admin_logs" ? "" : "opacity-70"}`}
-              />
-              <span className="font-medium">Admin Logs</span>
-            </button>
+            {navItems.map(({ key, label, Icon }) => (
+              <button
+                key={key}
+                onClick={() => setActiveTab(key)}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition ${
+                  activeTab === key
+                    ? "bg-white text-black shadow-sm"
+                    : "text-stone-700 dark:text-stone-300 hover:bg-stone-100/60 dark:hover:bg-[#222225]"
+                }`}
+                style={
+                  activeTab === key
+                    ? {
+                        boxShadow: `0 6px 20px -15px ${accentColorWithOpacity}`,
+                      }
+                    : undefined
+                }
+              >
+                <Icon
+                  className={`h-5 w-5 ${activeTab === key ? "" : "opacity-70"}`}
+                />
+                <span className="font-medium">{label}</span>
+                {key === "requests" && uniqueRequestedPlantsCount > 0 && (
+                  <span className="ml-auto px-2 py-0.5 text-xs font-semibold rounded-full bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-200">
+                    {uniqueRequestedPlantsCount}
+                  </span>
+                )}
+              </button>
+            ))}
           </nav>
         </aside>
 
         {/* Main Content Area */}
         <main className="flex-1 w-full">
-          <div className="flex justify-center w-full">
-            <div className="w-full max-w-5xl mt-4 md:mt-0 px-2 md:px-4 lg:px-8 pb-8 space-y-6">
-              {/* Connection Status Banner - Show when APIs are down */}
-              {(apiProbe.ok === false ||
-                adminProbe.ok === false ||
-                dbProbe.ok === false) && (
-                <Card className="rounded-2xl mb-4 border-red-500 dark:border-red-500 bg-red-50 dark:bg-red-950/20">
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-3">
-                      <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0" />
-                      <div className="flex-1">
-                        <div className="text-sm font-medium text-red-900 dark:text-red-100">
-                          Connection Issues Detected
-                        </div>
-                        <div className="text-xs text-red-700 dark:text-red-300 mt-1">
-                          {!apiProbe.ok && "API "}
-                          {!adminProbe.ok && "Admin API "}
-                          {!dbProbe.ok && "Database "}
-                          {(!apiProbe.ok || !adminProbe.ok || !dbProbe.ok) &&
-                            "may be unavailable. Some features may not work correctly."}
-                        </div>
+          <div className="space-y-6">
+            {/* Connection Status Banner - Show when APIs are down */}
+            {(apiProbe.ok === false ||
+              adminProbe.ok === false ||
+              dbProbe.ok === false) && (
+              <Card className="rounded-2xl mb-4 border-red-500 dark:border-red-500 bg-red-50 dark:bg-red-950/20">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0" />
+                    <div className="flex-1">
+                      <div className="text-sm font-medium text-red-900 dark:text-red-100">
+                        Connection Issues Detected
                       </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="rounded-xl border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30"
-                        onClick={refreshHealth}
-                        disabled={healthRefreshing}
-                      >
-                        <RefreshCw
-                          className={`h-4 w-4 mr-1 ${healthRefreshing ? "animate-spin" : ""}`}
-                        />
-                        Retry
-                      </Button>
+                      <div className="text-xs text-red-700 dark:text-red-300 mt-1">
+                        {!apiProbe.ok && "API "}
+                        {!adminProbe.ok && "Admin API "}
+                        {!dbProbe.ok && "Database "}
+                        {(!apiProbe.ok || !adminProbe.ok || !dbProbe.ok) &&
+                          "may be unavailable. Some features may not work correctly."}
+                      </div>
                     </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              <div className="relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50 via-white to-stone-100 dark:from-[#1f1f1f] dark:via-[#151515] dark:to-[#0c0c0c] p-6 md:p-10 shadow-[0_35px_60px_-20px_rgba(16,185,129,0.35)]">
-                <div
-                  className="absolute -right-24 top-0 h-48 w-48 rounded-full bg-emerald-200/50 dark:bg-emerald-500/10 blur-3xl"
-                  aria-hidden="true"
-                />
-                <div
-                  className="absolute -left-16 bottom-0 h-32 w-32 rounded-full bg-emerald-100/70 dark:bg-emerald-500/5 blur-3xl"
-                  aria-hidden="true"
-                />
-                <div className="relative z-10 space-y-3">
-                  <Badge className="rounded-2xl px-3 py-1 bg-white/80 dark:bg-[#202023]/80 text-stone-700 dark:text-stone-200 w-fit">
-                    Operations Console
-                  </Badge>
-                  <div className="text-3xl font-semibold tracking-tight">
-                    Admin Operations
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="rounded-xl border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30"
+                      onClick={refreshHealth}
+                      disabled={healthRefreshing}
+                    >
+                      <RefreshCw
+                        className={`h-4 w-4 mr-1 ${healthRefreshing ? "animate-spin" : ""}`}
+                      />
+                      Retry
+                    </Button>
                   </div>
-                  <p className="text-sm text-stone-600 dark:text-stone-300 max-w-2xl">
-                    Monitor infrastructure status, manage members, and act on
-                    requests without leaving this dashboard.
-                  </p>
+                </CardContent>
+              </Card>
+            )}
+
+            <Card className={`${glassPanelClass}`}>
+              <CardContent className="p-6 md:p-8 space-y-6">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  <div>
+                    <div className="text-2xl font-semibold tracking-tight">
+                      Admin Controls
+                    </div>
+                    <div className="text-sm opacity-60 mt-1">
+                      Admin actions: monitor and manage infrastructure.
+                    </div>
+                  </div>
                 </div>
-              </div>
 
-              <Card className={`${glassPanelClass}`}>
-                <CardContent className="p-6 md:p-8 space-y-6">
-                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                    <div>
-                      <div className="text-2xl font-semibold tracking-tight">
-                        Admin Controls
-                      </div>
-                      <div className="text-sm opacity-60 mt-1">
-                        Admin actions: monitor and manage infrastructure.
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Overview Tab */}
-                  {activeTab === "overview" && (
-                    <>
-                      {/* Health monitor */}
-                      <Card className={glassCardClass}>
-                        <CardContent className="p-4">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <div className="text-sm font-medium">
-                                Health monitor
-                              </div>
-                              <div className="text-xs opacity-60">
-                                Auto?ping every 60s
-                              </div>
+                {/* Overview Tab */}
+                {activeTab === "overview" && (
+                  <>
+                    {/* Health monitor */}
+                    <Card className={glassCardClass}>
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="text-sm font-medium">
+                              Health monitor
                             </div>
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              aria-label="Refresh health"
-                              onClick={refreshHealth}
-                              disabled={healthRefreshing}
-                              className="h-8 w-8 rounded-xl border bg-white text-black hover:bg-stone-50"
-                            >
-                              <RefreshCw
-                                className={`h-4 w-4 ? ${healthRefreshing ? "animate-spin" : ""}`}
-                              />
-                            </Button>
-                          </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
-                            <div className="flex items-center justify-between rounded-xl border p-3">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <Server className="h-4 w-4 opacity-70" />
-                                <div className="text-sm truncate">API</div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <div className="text-xs tabular-nums opacity-60">
-                                  {apiProbe.latencyMs !== null
-                                    ? `${apiProbe.latencyMs} ms`
-                                    : "-"}
-                                </div>
-                                <StatusDot
-                                  ok={apiProbe.ok}
-                                  title={
-                                    !apiProbe.ok
-                                      ? apiProbe.errorCode || undefined
-                                      : undefined
-                                  }
-                                />
-                                {!apiProbe?.ok && (
-                                  <ErrorBadge code={apiProbe.errorCode} />
-                                )}
-                              </div>
-                            </div>
-                            <div className="flex items-center justify-between rounded-xl border p-3">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <ShieldCheck className="h-4 w-4 opacity-70" />
-                                <div className="text-sm truncate">
-                                  Admin API
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <div className="text-xs tabular-nums opacity-60">
-                                  {adminProbe.latencyMs !== null
-                                    ? `${adminProbe.latencyMs} ms`
-                                    : "-"}
-                                </div>
-                                <StatusDot
-                                  ok={adminProbe.ok}
-                                  title={
-                                    !adminProbe.ok
-                                      ? adminProbe.errorCode || undefined
-                                      : undefined
-                                  }
-                                />
-                                {!adminProbe?.ok && (
-                                  <ErrorBadge code={adminProbe.errorCode} />
-                                )}
-                              </div>
-                            </div>
-                            <div className="flex items-center justify-between rounded-xl border p-3">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <Database className="h-4 w-4 opacity-70" />
-                                <div className="text-sm truncate">Database</div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <div className="text-xs tabular-nums opacity-60">
-                                  {dbProbe.latencyMs !== null
-                                    ? `${dbProbe.latencyMs} ms`
-                                    : "-"}
-                                </div>
-                                <StatusDot
-                                  ok={dbProbe.ok}
-                                  title={
-                                    !dbProbe.ok
-                                      ? dbProbe.errorCode || undefined
-                                      : undefined
-                                  }
-                                />
-                                {!dbProbe?.ok && (
-                                  <ErrorBadge code={dbProbe.errorCode} />
-                                )}
-                              </div>
+                            <div className="text-xs opacity-60">
+                              Auto?ping every 60s
                             </div>
                           </div>
-                        </CardContent>
-                      </Card>
-
-                      {/* Actions */}
-                      <Card className={glassCardClass}>
-                        <CardContent className="p-4">
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="text-sm font-medium truncate">
-                              Actions
-                            </div>
-                          </div>
-
-                          {/* Collapsible: Broadcast message creation */}
-                          <div className="mt-2">
-                            <button
-                              type="button"
-                              className="flex items-center gap-2 text-sm font-medium"
-                              onClick={() => setBroadcastOpen((o) => !o)}
-                              aria-expanded={broadcastOpen}
-                              aria-controls="broadcast-create"
-                            >
-                              <ChevronDown
-                                className={`h-4 w-4 transition-transform ? ${broadcastOpen ? "rotate-180" : ""}`}
-                              />
-                              Broadcast message
-                            </button>
-                            {broadcastOpen && (
-                              <div className="mt-2" id="broadcast-create">
-                                <BroadcastControls
-                                  inline
-                                  onExpired={() => setBroadcastOpen(true)}
-                                  onActive={() => setBroadcastOpen(true)}
-                                />
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Divider between Broadcast and the action controls/buttons */}
-                          <div className="my-4 border-t" />
-
-                          {/* Branch selection */}
-                          <div className="mt-4 flex items-center justify-between gap-3">
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            aria-label="Refresh health"
+                            onClick={refreshHealth}
+                            disabled={healthRefreshing}
+                            className="h-8 w-8 rounded-xl border bg-white text-black hover:bg-stone-50"
+                          >
+                            <RefreshCw
+                              className={`h-4 w-4 ? ${healthRefreshing ? "animate-spin" : ""}`}
+                            />
+                          </Button>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
+                          <div className="flex items-center justify-between rounded-xl border p-3">
                             <div className="flex items-center gap-2 min-w-0">
-                              <GitBranch className="h-4 w-4 opacity-70" />
-                              <div className="text-sm font-medium truncate">
-                                Branch
-                              </div>
+                              <Server className="h-4 w-4 opacity-70" />
+                              <div className="text-sm truncate">API</div>
                             </div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <div className="text-xs opacity-60 hidden sm:block">
-                                Current:
+                            <div className="flex items-center gap-2">
+                              <div className="text-xs tabular-nums opacity-60">
+                                {apiProbe.latencyMs !== null
+                                  ? `${apiProbe.latencyMs} ms`
+                                  : "-"}
                               </div>
-                              <Badge
-                                variant="outline"
-                                className="rounded-full max-w-[360px] truncate"
-                                title={currentBranch || undefined}
-                              >
-                                {branchesLoading
-                                  ? "?"
-                                  : shortenMiddle(
-                                      currentBranch || "unknown",
-                                      branchMaxChars,
-                                    )}
-                              </Badge>
-                              {lastUpdateTime && (
-                                <div
-                                  className="text-xs opacity-50"
-                                  title={lastUpdateTime}
-                                >
-                                  ({formatLastUpdateTime(lastUpdateTime)})
-                                </div>
+                              <StatusDot
+                                ok={apiProbe.ok}
+                                title={
+                                  !apiProbe.ok
+                                    ? apiProbe.errorCode || undefined
+                                    : undefined
+                                }
+                              />
+                              {!apiProbe?.ok && (
+                                <ErrorBadge code={apiProbe.errorCode} />
                               )}
                             </div>
                           </div>
-                          <div className="mt-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                            <div className="flex-1 min-w-0">
-                              <select
-                                className="w-full rounded-xl border border-stone-300 dark:border-[#3e3e42] px-3 py-2 text-sm bg-white dark:bg-[#2d2d30] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
-                                value={selectedBranch}
-                                onChange={(e) =>
-                                  setSelectedBranch(e.target.value)
+                          <div className="flex items-center justify-between rounded-xl border p-3">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <ShieldCheck className="h-4 w-4 opacity-70" />
+                              <div className="text-sm truncate">Admin API</div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="text-xs tabular-nums opacity-60">
+                                {adminProbe.latencyMs !== null
+                                  ? `${adminProbe.latencyMs} ms`
+                                  : "-"}
+                              </div>
+                              <StatusDot
+                                ok={adminProbe.ok}
+                                title={
+                                  !adminProbe.ok
+                                    ? adminProbe.errorCode || undefined
+                                    : undefined
                                 }
-                                disabled={branchesLoading || branchesRefreshing}
-                                aria-label="Select branch"
-                              >
-                                {branchesLoading ? (
-                                  <option value="">Loading...</option>
-                                ) : branchOptions.length === 0 ? (
-                                  <option value="">No branches found</option>
-                                ) : (
-                                  branchOptions.map((b) => (
-                                    <option key={b} value={b} title={b}>
-                                      {shortenMiddle(b, branchMaxChars)}
-                                    </option>
-                                  ))
-                                )}
-                              </select>
-                            </div>
-                            <Button
-                              variant="outline"
-                              className="rounded-xl w-full sm:w-auto px-2 sm:px-3"
-                              onClick={() => loadBranches({ initial: false })}
-                              disabled={branchesLoading || branchesRefreshing}
-                              aria-label="Refresh branches"
-                            >
-                              <RefreshCw
-                                className={`h-4 w-4 ? ${branchesRefreshing ? "animate-spin" : ""}`}
                               />
-                              <span className="hidden sm:inline">
-                                Refresh branches
-                              </span>
-                              <span className="sm:hidden inline">Refresh</span>
-                            </Button>
+                              {!adminProbe?.ok && (
+                                <ErrorBadge code={adminProbe.errorCode} />
+                              )}
+                            </div>
                           </div>
-                          <div className="text-xs opacity-60 mt-2">
-                            Changing branch takes effect when you run Pull &
-                            Build.
-                          </div>
-
-                          {/* Action buttons */}
-                          <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                            <Button
-                              className="rounded-2xl w-full"
-                              onClick={restartServer}
-                              disabled={restarting}
-                            >
-                              <Server className="h-4 w-4" />
-                              <RefreshCw className="h-4 w-4" />
-                              <span>
-                                {restarting
-                                  ? "Restarting?"
-                                  : "Restart Services"}
-                              </span>
-                            </Button>
-                            <Button
-                              className="rounded-2xl w-full"
-                              variant="secondary"
-                              onClick={pullLatest}
-                              disabled={pulling}
-                            >
-                              <Github className="h-4 w-4" />
-                              <RefreshCw className="h-4 w-4" />
-                              <span>
-                                {pulling ? "Pulling..." : "Pull & Build"}
-                              </span>
-                            </Button>
-                            <Button
-                              className="rounded-2xl w-full"
-                              variant="destructive"
-                              onClick={runSyncSchema}
-                              disabled={syncing}
-                            >
-                              <Database className="h-4 w-4" />
-                              <span>
-                                {syncing ? "Syncing..." : "Sync DB Schema"}
-                              </span>
-                            </Button>
-                          </div>
-
-                          {/* Reload notices */}
-                          {preRestartNotice && (
-                            <div className="mb-4 mt-4 rounded-xl border bg-yellow-100 dark:bg-yellow-900/40 border-yellow-300 dark:border-yellow-700 p-3 flex items-center justify-between gap-3">
-                              <div className="text-sm text-yellow-900 dark:text-yellow-100">
-                                New version built. Page info may be outdated. We
-                                will restart services now; the site will stay
-                                up. You can reload anytime.
+                          <div className="flex items-center justify-between rounded-xl border p-3">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <Database className="h-4 w-4 opacity-70" />
+                              <div className="text-sm truncate">Database</div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="text-xs tabular-nums opacity-60">
+                                {dbProbe.latencyMs !== null
+                                  ? `${dbProbe.latencyMs} ms`
+                                  : "-"}
                               </div>
-                              <Button
-                                className="rounded-xl"
-                                variant="outline"
-                                onClick={reloadPage}
-                              >
-                                Reload now
-                              </Button>
+                              <StatusDot
+                                ok={dbProbe.ok}
+                                title={
+                                  !dbProbe.ok
+                                    ? dbProbe.errorCode || undefined
+                                    : undefined
+                                }
+                              />
+                              {!dbProbe?.ok && (
+                                <ErrorBadge code={dbProbe.errorCode} />
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Actions */}
+                    <Card className={glassCardClass}>
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="text-sm font-medium truncate">
+                            Actions
+                          </div>
+                        </div>
+
+                        {/* Collapsible: Broadcast message creation */}
+                        <div className="mt-2">
+                          <button
+                            type="button"
+                            className="flex items-center gap-2 text-sm font-medium"
+                            onClick={() => setBroadcastOpen((o) => !o)}
+                            aria-expanded={broadcastOpen}
+                            aria-controls="broadcast-create"
+                          >
+                            <ChevronDown
+                              className={`h-4 w-4 transition-transform ? ${broadcastOpen ? "rotate-180" : ""}`}
+                            />
+                            Broadcast message
+                          </button>
+                          {broadcastOpen && (
+                            <div className="mt-2" id="broadcast-create">
+                              <BroadcastControls
+                                inline
+                                onExpired={() => setBroadcastOpen(true)}
+                                onActive={() => setBroadcastOpen(true)}
+                              />
                             </div>
                           )}
-                          {reloadReady && (
-                            <div className="mb-4 mt-4 rounded-xl border bg-yellow-100 dark:bg-yellow-900/40 border-yellow-300 dark:border-yellow-700 p-3 flex items-center justify-between gap-3">
-                              <div className="text-sm text-yellow-900 dark:text-yellow-100">
-                                Services restart complete. Reload when
-                                convenient.
-                              </div>
-                              <Button
-                                className="rounded-xl"
-                                onClick={reloadPage}
-                              >
-                                Reload page
-                              </Button>
-                            </div>
-                          )}
+                        </div>
 
-                          {/* Divider before Admin Console */}
-                          <div className="my-4 border-t" />
+                        {/* Divider between Broadcast and the action controls/buttons */}
+                        <div className="my-4 border-t" />
 
-                          {/* Admin Console (moved inside Actions card) */}
-                          <div>
-                            <div className="flex items-center justify-between">
-                              <button
-                                type="button"
-                                className="flex items-center gap-2 text-sm font-medium"
-                                onClick={() => setConsoleOpen((o) => !o)}
-                                aria-expanded={consoleOpen}
-                                aria-controls="admin-console"
-                              >
-                                <ChevronDown
-                                  className={`h-4 w-4 transition-transform ? ${consoleOpen ? "rotate-180" : ""}`}
-                                />
-                                Admin Console
-                                {consoleLines.length > 0 && (
-                                  <span className="text-xs opacity-60">
-                                    ({consoleLines.length} lines)
-                                  </span>
-                                )}
-                              </button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="rounded-xl h-8 px-3"
-                                onClick={softRefreshAdmin}
-                                aria-label="Refresh admin data"
-                                title="Soft reload (won't lose edits)"
-                              >
-                                <RefreshCw className="h-4 w-4" />
-                                Reload
-                              </Button>
+                        {/* Branch selection */}
+                        <div className="mt-4 flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <GitBranch className="h-4 w-4 opacity-70" />
+                            <div className="text-sm font-medium truncate">
+                              Branch
                             </div>
-                            {consoleOpen && (
-                              <div className="mt-2" id="admin-console">
-                                <div
-                                  className={`relative rounded-xl border ? ${hasConsoleError ? "border-4 border-rose-600 ring-8 ring-rose-500/40 shadow-lg shadow-rose-500/30" : ""}`}
-                                >
-                                  <div
-                                    ref={consoleRef}
-                                    className="h-48 overflow-auto bg-black text-white text-xs p-3 pr-8 font-mono whitespace-pre-wrap rounded-xl"
-                                    aria-live="polite"
-                                  >
-                                    {consoleLines.length === 0
-                                      ? "No messages yet."
-                                      : consoleLines.join("\n")}
-                                  </div>
-                                  <div className="pointer-events-none absolute bottom-2 right-3 z-10 flex items-center gap-1">
-                                    <Button
-                                      size="icon"
-                                      variant="ghost"
-                                      className="pointer-events-auto h-7 w-7 rounded-md bg-white/10 text-white hover:bg-white/20"
-                                      onClick={() => setConsoleOpen(false)}
-                                      title="Hide console"
-                                      aria-label="Hide console"
-                                    >
-                                      <EyeOff className="h-4 w-4" />
-                                    </Button>
-                                    <Button
-                                      size="icon"
-                                      variant="ghost"
-                                      className="pointer-events-auto h-7 w-7 rounded-md bg-white/10 text-white hover:bg-white/20"
-                                      onClick={() => {
-                                        setConsoleLines([]);
-                                        setConsoleOpen(true);
-                                      }}
-                                      title="Clear console"
-                                      aria-label="Clear console"
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                    <Button
-                                      size="icon"
-                                      variant="ghost"
-                                      className="pointer-events-auto h-7 w-7 rounded-md bg-white/10 text-white hover:bg-white/20"
-                                      onClick={async () => {
-                                        const ok =
-                                          await copyTextToClipboard(
-                                            getAllLogsText(),
-                                          );
-                                        if (!ok)
-                                          alert(
-                                            "Copy failed. You can still select and copy manually.",
-                                          );
-                                      }}
-                                      title="Copy console"
-                                      aria-label="Copy console"
-                                    >
-                                      <Copy className="h-4 w-4" />
-                                    </Button>
-                                  </div>
-                                </div>
+                          </div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <div className="text-xs opacity-60 hidden sm:block">
+                              Current:
+                            </div>
+                            <Badge
+                              variant="outline"
+                              className="rounded-full max-w-[360px] truncate"
+                              title={currentBranch || undefined}
+                            >
+                              {branchesLoading
+                                ? "?"
+                                : shortenMiddle(
+                                    currentBranch || "unknown",
+                                    branchMaxChars,
+                                  )}
+                            </Badge>
+                            {lastUpdateTime && (
+                              <div
+                                className="text-xs opacity-50"
+                                title={lastUpdateTime}
+                              >
+                                ({formatLastUpdateTime(lastUpdateTime)})
                               </div>
                             )}
                           </div>
-                        </CardContent>
-                      </Card>
-                      <div className="pt-2">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
-                          <Card className="rounded-2xl">
-                            <CardContent className="p-4 space-y-2">
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="min-w-0">
-                                  <div className="text-sm opacity-60">
-                                    Currently online
-                                  </div>
-                                  <div className="text-xs opacity-60">
-                                    {onlineUpdatedAt
-                                      ? `Updated ? ${formatTimeAgo(onlineUpdatedAt)}`
-                                      : "Updated -"}
-                                  </div>
-                                </div>
-                                <Button
-                                  variant="outline"
-                                  size="icon"
-                                  aria-label="Refresh currently online"
-                                  onClick={() => {
-                                    loadOnlineUsers({ initial: false });
-                                    loadOnlineIpsList({ initial: false });
-                                  }}
-                                  disabled={
-                                    onlineLoading ||
-                                    onlineRefreshing ||
-                                    ipsLoading ||
-                                    ipsRefreshing
-                                  }
-                                  className="h-8 w-8 rounded-xl border bg-white text-black hover:bg-stone-50"
-                                >
-                                  <RefreshCw
-                                    className={`h-4 w-4 ? ${onlineLoading || onlineRefreshing || ipsLoading || ipsRefreshing ? "animate-spin" : ""}`}
-                                  />
-                                </Button>
-                              </div>
-                              <div className="text-2xl font-semibold tabular-nums mt-1">
-                                {onlineLoading ? "-" : onlineUsers}
-                              </div>
-                              {/* Collapsible Connected IPs under Currently online */}
-                              <div className="mt-3">
-                                <div className="flex items-center justify-between">
-                                  <button
-                                    type="button"
-                                    className="flex items-center gap-2 text-sm font-medium"
-                                    onClick={() => setIpsOpen((o) => !o)}
-                                    aria-expanded={ipsOpen}
-                                    aria-controls="connected-ips"
-                                  >
-                                    <ChevronDown
-                                      className={`h-4 w-4 transition-transform ? ${ipsOpen ? "rotate-180" : ""}`}
-                                    />
-                                    IPs
-                                  </button>
-                                  <div />
-                                </div>
-                                {ipsOpen && (
-                                  <div className="mt-2" id="connected-ips">
-                                    <div className="rounded-xl border bg-white dark:bg-[#2d2d30] dark:border-[#3e3e42] p-3 max-h-48 overflow-auto">
-                                      {ipsLoading ? (
-                                        <div className="text-sm opacity-60">
-                                          Loading...
-                                        </div>
-                                      ) : ips.length === 0 ? (
-                                        <div className="text-sm opacity-60">
-                                          No IPs.
-                                        </div>
-                                      ) : (
-                                        <div className="flex flex-wrap gap-2">
-                                          {ips.map((ip) => (
-                                            <Badge
-                                              key={ip}
-                                              role="button"
-                                              tabIndex={0}
-                                              onClick={() => jumpToIpLookup(ip)}
-                                              onKeyDown={(e) => {
-                                                if (
-                                                  e.key === "Enter" ||
-                                                  e.key === " "
-                                                ) {
-                                                  e.preventDefault();
-                                                  jumpToIpLookup(ip);
-                                                }
-                                              }}
-                                              title={`Lookup members for ? ${ip}`}
-                                              aria-label={`Lookup members for ? ${ip}`}
-                                              variant="outline"
-                                              className="rounded-full px-2 py-1 text-xs cursor-pointer hover:bg-stone-50 dark:hover:bg-[#3e3e42] focus:outline-none focus:ring-2 focus:ring-ring"
-                                            >
-                                              {ip}
-                                            </Badge>
-                                          ))}
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            </CardContent>
-                          </Card>
-                          <Card className="rounded-2xl">
-                            <CardContent className="p-4">
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="min-w-0">
-                                  <div className="text-sm opacity-60">
-                                    Registered accounts
-                                  </div>
-                                  <div className="text-xs opacity-60">
-                                    {registeredUpdatedAt
-                                      ? `Updated ? ${formatTimeAgo(registeredUpdatedAt)}`
-                                      : "Updated -"}
-                                  </div>
-                                </div>
-                                <Button
-                                  variant="outline"
-                                  size="icon"
-                                  aria-label="Refresh registered accounts"
-                                  onClick={() =>
-                                    loadRegisteredCount({ initial: false })
-                                  }
-                                  disabled={
-                                    registeredLoading || registeredRefreshing
-                                  }
-                                  className="h-8 w-8 rounded-xl border bg-white text-black hover:bg-stone-50"
-                                >
-                                  <RefreshCw
-                                    className={`h-4 w-4 ? ${registeredLoading || registeredRefreshing ? "animate-spin" : ""}`}
-                                  />
-                                </Button>
-                              </div>
-                              <div className="text-2xl font-semibold tabular-nums mt-1">
-                                {registeredLoading
-                                  ? "-"
-                                  : registeredUpdatedAt !== null
-                                    ? (registeredCount ?? "-")
-                                    : "-"}
-                              </div>
-                            </CardContent>
-                          </Card>
                         </div>
-                        <Card className={glassCardClass}>
-                          <CardContent className="p-4">
-                            <div className="flex items-center justify-between gap-2 mb-2">
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <div className="text-sm font-medium">
-                                    Unique visitors - last {visitorsWindowDays}{" "}
-                                    days
-                                  </div>
-                                  <div className="flex items-center gap-1">
-                                    <button
-                                      type="button"
-                                      className={`text-xs px-2 py-1 rounded-lg border ${visitorsWindowDays === 7 ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"}`}
-                                      onClick={() => setVisitorsWindowDays(7)}
-                                      aria-pressed={visitorsWindowDays === 7}
-                                    >
-                                      7d
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className={`text-xs px-2 py-1 rounded-lg border ${visitorsWindowDays === 30 ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"}`}
-                                      onClick={() => setVisitorsWindowDays(30)}
-                                      aria-pressed={visitorsWindowDays === 30}
-                                    >
-                                      30d
-                                    </button>
-                                  </div>
+                        <div className="mt-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                          <div className="flex-1 min-w-0">
+                            <select
+                              className="w-full rounded-xl border border-stone-300 dark:border-[#3e3e42] px-3 py-2 text-sm bg-white dark:bg-[#2d2d30] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
+                              value={selectedBranch}
+                              onChange={(e) =>
+                                setSelectedBranch(e.target.value)
+                              }
+                              disabled={branchesLoading || branchesRefreshing}
+                              aria-label="Select branch"
+                            >
+                              {branchesLoading ? (
+                                <option value="">Loading...</option>
+                              ) : branchOptions.length === 0 ? (
+                                <option value="">No branches found</option>
+                              ) : (
+                                branchOptions.map((b) => (
+                                  <option key={b} value={b} title={b}>
+                                    {shortenMiddle(b, branchMaxChars)}
+                                  </option>
+                                ))
+                              )}
+                            </select>
+                          </div>
+                          <Button
+                            variant="outline"
+                            className="rounded-xl w-full sm:w-auto px-2 sm:px-3"
+                            onClick={() => loadBranches({ initial: false })}
+                            disabled={branchesLoading || branchesRefreshing}
+                            aria-label="Refresh branches"
+                          >
+                            <RefreshCw
+                              className={`h-4 w-4 ? ${branchesRefreshing ? "animate-spin" : ""}`}
+                            />
+                            <span className="hidden sm:inline">
+                              Refresh branches
+                            </span>
+                            <span className="sm:hidden inline">Refresh</span>
+                          </Button>
+                        </div>
+                        <div className="text-xs opacity-60 mt-2">
+                          Changing branch takes effect when you run Pull &
+                          Build.
+                        </div>
+
+                        {/* Action buttons */}
+                        <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <Button
+                            className="rounded-2xl w-full"
+                            onClick={restartServer}
+                            disabled={restarting}
+                          >
+                            <Server className="h-4 w-4" />
+                            <RefreshCw className="h-4 w-4" />
+                            <span>
+                              {restarting ? "Restarting?" : "Restart Services"}
+                            </span>
+                          </Button>
+                          <Button
+                            className="rounded-2xl w-full"
+                            variant="secondary"
+                            onClick={pullLatest}
+                            disabled={pulling}
+                          >
+                            <Github className="h-4 w-4" />
+                            <RefreshCw className="h-4 w-4" />
+                            <span>
+                              {pulling ? "Pulling..." : "Pull & Build"}
+                            </span>
+                          </Button>
+                          <Button
+                            className="rounded-2xl w-full"
+                            variant="destructive"
+                            onClick={runSyncSchema}
+                            disabled={syncing}
+                          >
+                            <Database className="h-4 w-4" />
+                            <span>
+                              {syncing ? "Syncing..." : "Sync DB Schema"}
+                            </span>
+                          </Button>
+                        </div>
+
+                        {/* Reload notices */}
+                        {preRestartNotice && (
+                          <div className="mb-4 mt-4 rounded-xl border bg-yellow-100 dark:bg-yellow-900/40 border-yellow-300 dark:border-yellow-700 p-3 flex items-center justify-between gap-3">
+                            <div className="text-sm text-yellow-900 dark:text-yellow-100">
+                              New version built. Page info may be outdated. We
+                              will restart services now; the site will stay up.
+                              You can reload anytime.
+                            </div>
+                            <Button
+                              className="rounded-xl"
+                              variant="outline"
+                              onClick={reloadPage}
+                            >
+                              Reload now
+                            </Button>
+                          </div>
+                        )}
+                        {reloadReady && (
+                          <div className="mb-4 mt-4 rounded-xl border bg-yellow-100 dark:bg-yellow-900/40 border-yellow-300 dark:border-yellow-700 p-3 flex items-center justify-between gap-3">
+                            <div className="text-sm text-yellow-900 dark:text-yellow-100">
+                              Services restart complete. Reload when convenient.
+                            </div>
+                            <Button className="rounded-xl" onClick={reloadPage}>
+                              Reload page
+                            </Button>
+                          </div>
+                        )}
+
+                        {/* Divider before Admin Console */}
+                        <div className="my-4 border-t" />
+
+                        {/* Admin Console (moved inside Actions card) */}
+                        <div>
+                          <div className="flex items-center justify-between">
+                            <button
+                              type="button"
+                              className="flex items-center gap-2 text-sm font-medium"
+                              onClick={() => setConsoleOpen((o) => !o)}
+                              aria-expanded={consoleOpen}
+                              aria-controls="admin-console"
+                            >
+                              <ChevronDown
+                                className={`h-4 w-4 transition-transform ? ${consoleOpen ? "rotate-180" : ""}`}
+                              />
+                              Admin Console
+                              {consoleLines.length > 0 && (
+                                <span className="text-xs opacity-60">
+                                  ({consoleLines.length} lines)
+                                </span>
+                              )}
+                            </button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="rounded-xl h-8 px-3"
+                              onClick={softRefreshAdmin}
+                              aria-label="Refresh admin data"
+                              title="Soft reload (won't lose edits)"
+                            >
+                              <RefreshCw className="h-4 w-4" />
+                              Reload
+                            </Button>
+                          </div>
+                          {consoleOpen && (
+                            <div className="mt-2" id="admin-console">
+                              <div
+                                className={`relative rounded-xl border ? ${hasConsoleError ? "border-4 border-rose-600 ring-8 ring-rose-500/40 shadow-lg shadow-rose-500/30" : ""}`}
+                              >
+                                <div
+                                  ref={consoleRef}
+                                  className="h-48 overflow-auto bg-black text-white text-xs p-3 pr-8 font-mono whitespace-pre-wrap rounded-xl"
+                                  aria-live="polite"
+                                >
+                                  {consoleLines.length === 0
+                                    ? "No messages yet."
+                                    : consoleLines.join("\n")}
+                                </div>
+                                <div className="pointer-events-none absolute bottom-2 right-3 z-10 flex items-center gap-1">
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="pointer-events-auto h-7 w-7 rounded-md bg-white/10 text-white hover:bg-white/20"
+                                    onClick={() => setConsoleOpen(false)}
+                                    title="Hide console"
+                                    aria-label="Hide console"
+                                  >
+                                    <EyeOff className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="pointer-events-auto h-7 w-7 rounded-md bg-white/10 text-white hover:bg-white/20"
+                                    onClick={() => {
+                                      setConsoleLines([]);
+                                      setConsoleOpen(true);
+                                    }}
+                                    title="Clear console"
+                                    aria-label="Clear console"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="pointer-events-auto h-7 w-7 rounded-md bg-white/10 text-white hover:bg-white/20"
+                                    onClick={async () => {
+                                      const ok =
+                                        await copyTextToClipboard(
+                                          getAllLogsText(),
+                                        );
+                                      if (!ok)
+                                        alert(
+                                          "Copy failed. You can still select and copy manually.",
+                                        );
+                                    }}
+                                    title="Copy console"
+                                    aria-label="Copy console"
+                                  >
+                                    <Copy className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <div className="pt-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                        <Card className="rounded-2xl">
+                          <CardContent className="p-4 space-y-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="text-sm opacity-60">
+                                  Currently online
                                 </div>
                                 <div className="text-xs opacity-60">
-                                  {visitorsUpdatedAt
-                                    ? `Updated ? ${formatTimeAgo(visitorsUpdatedAt)}`
+                                  {onlineUpdatedAt
+                                    ? `Updated ? ${formatTimeAgo(onlineUpdatedAt)}`
                                     : "Updated -"}
                                 </div>
                               </div>
                               <Button
                                 variant="outline"
                                 size="icon"
-                                aria-label="Refresh visitors"
-                                onClick={() =>
-                                  loadVisitorsStats({ initial: false })
+                                aria-label="Refresh currently online"
+                                onClick={() => {
+                                  loadOnlineUsers({ initial: false });
+                                  loadOnlineIpsList({ initial: false });
+                                }}
+                                disabled={
+                                  onlineLoading ||
+                                  onlineRefreshing ||
+                                  ipsLoading ||
+                                  ipsRefreshing
                                 }
-                                disabled={visitorsLoading || visitorsRefreshing}
                                 className="h-8 w-8 rounded-xl border bg-white text-black hover:bg-stone-50"
                               >
                                 <RefreshCw
-                                  className={`h-4 w-4 ? ${visitorsLoading || visitorsRefreshing ? "animate-spin" : ""}`}
+                                  className={`h-4 w-4 ? ${onlineLoading || onlineRefreshing || ipsLoading || ipsRefreshing ? "animate-spin" : ""}`}
                                 />
                               </Button>
                             </div>
-
-                            {visitorsLoading ? (
-                              <div className="text-sm opacity-60">
-                                Loading...
+                            <div className="text-2xl font-semibold tabular-nums mt-1">
+                              {onlineLoading ? "-" : onlineUsers}
+                            </div>
+                            {/* Collapsible Connected IPs under Currently online */}
+                            <div className="mt-3">
+                              <div className="flex items-center justify-between">
+                                <button
+                                  type="button"
+                                  className="flex items-center gap-2 text-sm font-medium"
+                                  onClick={() => setIpsOpen((o) => !o)}
+                                  aria-expanded={ipsOpen}
+                                  aria-controls="connected-ips"
+                                >
+                                  <ChevronDown
+                                    className={`h-4 w-4 transition-transform ? ${ipsOpen ? "rotate-180" : ""}`}
+                                  />
+                                  IPs
+                                </button>
+                                <div />
                               </div>
-                            ) : visitorsSeries.length === 0 ? (
-                              <div className="text-sm opacity-60">
-                                No data yet.
+                              {ipsOpen && (
+                                <div className="mt-2" id="connected-ips">
+                                  <div className="rounded-xl border bg-white dark:bg-[#2d2d30] dark:border-[#3e3e42] p-3 max-h-48 overflow-auto">
+                                    {ipsLoading ? (
+                                      <div className="text-sm opacity-60">
+                                        Loading...
+                                      </div>
+                                    ) : ips.length === 0 ? (
+                                      <div className="text-sm opacity-60">
+                                        No IPs.
+                                      </div>
+                                    ) : (
+                                      <div className="flex flex-wrap gap-2">
+                                        {ips.map((ip) => (
+                                          <Badge
+                                            key={ip}
+                                            role="button"
+                                            tabIndex={0}
+                                            onClick={() => jumpToIpLookup(ip)}
+                                            onKeyDown={(e) => {
+                                              if (
+                                                e.key === "Enter" ||
+                                                e.key === " "
+                                              ) {
+                                                e.preventDefault();
+                                                jumpToIpLookup(ip);
+                                              }
+                                            }}
+                                            title={`Lookup members for ? ${ip}`}
+                                            aria-label={`Lookup members for ? ${ip}`}
+                                            variant="outline"
+                                            className="rounded-full px-2 py-1 text-xs cursor-pointer hover:bg-stone-50 dark:hover:bg-[#3e3e42] focus:outline-none focus:ring-2 focus:ring-ring"
+                                          >
+                                            {ip}
+                                          </Badge>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                        <Card className="rounded-2xl">
+                          <CardContent className="p-4">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="text-sm opacity-60">
+                                  Registered accounts
+                                </div>
+                                <div className="text-xs opacity-60">
+                                  {registeredUpdatedAt
+                                    ? `Updated ? ${formatTimeAgo(registeredUpdatedAt)}`
+                                    : "Updated -"}
+                                </div>
                               </div>
-                            ) : (
-                              (() => {
-                                const values = visitorsSeries.map(
-                                  (d) => d.uniqueVisitors,
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                aria-label="Refresh registered accounts"
+                                onClick={() =>
+                                  loadRegisteredCount({ initial: false })
+                                }
+                                disabled={
+                                  registeredLoading || registeredRefreshing
+                                }
+                                className="h-8 w-8 rounded-xl border bg-white text-black hover:bg-stone-50"
+                              >
+                                <RefreshCw
+                                  className={`h-4 w-4 ? ${registeredLoading || registeredRefreshing ? "animate-spin" : ""}`}
+                                />
+                              </Button>
+                            </div>
+                            <div className="text-2xl font-semibold tabular-nums mt-1">
+                              {registeredLoading
+                                ? "-"
+                                : registeredUpdatedAt !== null
+                                  ? (registeredCount ?? "-")
+                                  : "-"}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </div>
+                      <Card className={glassCardClass}>
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between gap-2 mb-2">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <div className="text-sm font-medium">
+                                  Unique visitors - last {visitorsWindowDays}{" "}
+                                  days
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    className={`text-xs px-2 py-1 rounded-lg border ${visitorsWindowDays === 7 ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"}`}
+                                    onClick={() => setVisitorsWindowDays(7)}
+                                    aria-pressed={visitorsWindowDays === 7}
+                                  >
+                                    7d
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={`text-xs px-2 py-1 rounded-lg border ${visitorsWindowDays === 30 ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"}`}
+                                    onClick={() => setVisitorsWindowDays(30)}
+                                    aria-pressed={visitorsWindowDays === 30}
+                                  >
+                                    30d
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="text-xs opacity-60">
+                                {visitorsUpdatedAt
+                                  ? `Updated ? ${formatTimeAgo(visitorsUpdatedAt)}`
+                                  : "Updated -"}
+                              </div>
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              aria-label="Refresh visitors"
+                              onClick={() =>
+                                loadVisitorsStats({ initial: false })
+                              }
+                              disabled={visitorsLoading || visitorsRefreshing}
+                              className="h-8 w-8 rounded-xl border bg-white text-black hover:bg-stone-50"
+                            >
+                              <RefreshCw
+                                className={`h-4 w-4 ? ${visitorsLoading || visitorsRefreshing ? "animate-spin" : ""}`}
+                              />
+                            </Button>
+                          </div>
+
+                          {visitorsLoading ? (
+                            <div className="text-sm opacity-60">Loading...</div>
+                          ) : visitorsSeries.length === 0 ? (
+                            <div className="text-sm opacity-60">
+                              No data yet.
+                            </div>
+                          ) : (
+                            (() => {
+                              const values = visitorsSeries.map(
+                                (d) => d.uniqueVisitors,
+                              );
+                              const maxVal = Math.max(...values, 1);
+                              // Prefer unique total across the full week from API; fallback to sum
+                              const totalVal =
+                                visitorsTotalUnique7d &&
+                                Number.isFinite(visitorsTotalUnique7d)
+                                  ? visitorsTotalUnique7d
+                                  : values.reduce((acc, val) => acc + val, 0);
+                              const avgVal = Math.round(
+                                totalVal / values.length,
+                              );
+
+                              const formatDow = (isoDate: string) => {
+                                try {
+                                  if (visitorsWindowDays === 30) return "";
+                                  const dt = new Date(isoDate + "T00:00:00Z");
+                                  return [
+                                    "Sun",
+                                    "Mon",
+                                    "Tue",
+                                    "Wed",
+                                    "Thu",
+                                    "Fri",
+                                    "Sat",
+                                  ][dt.getUTCDay()];
+                                } catch {
+                                  return isoDate;
+                                }
+                              };
+
+                              const formatFullDate = (isoDate: string) => {
+                                try {
+                                  const dt = new Date(isoDate + "T00:00:00Z");
+                                  return new Intl.DateTimeFormat(undefined, {
+                                    weekday: "short",
+                                    month: "short",
+                                    day: "numeric",
+                                    year: "numeric",
+                                    timeZone: "UTC",
+                                  }).format(dt);
+                                } catch {
+                                  return isoDate;
+                                }
+                              };
+
+                              const TooltipContent = ({
+                                active,
+                                payload,
+                                label,
+                              }: any) => {
+                                if (!active || !payload || payload.length === 0)
+                                  return null;
+                                const current = payload[0]?.value as number;
+                                const idx = visitorsSeries.findIndex(
+                                  (d) => d.date === label,
                                 );
-                                const maxVal = Math.max(...values, 1);
-                                // Prefer unique total across the full week from API; fallback to sum
-                                const totalVal =
-                                  visitorsTotalUnique7d &&
-                                  Number.isFinite(visitorsTotalUnique7d)
-                                    ? visitorsTotalUnique7d
-                                    : values.reduce((acc, val) => acc + val, 0);
-                                const avgVal = Math.round(
-                                  totalVal / values.length,
-                                );
-
-                                const formatDow = (isoDate: string) => {
-                                  try {
-                                    if (visitorsWindowDays === 30) return "";
-                                    const dt = new Date(isoDate + "T00:00:00Z");
-                                    return [
-                                      "Sun",
-                                      "Mon",
-                                      "Tue",
-                                      "Wed",
-                                      "Thu",
-                                      "Fri",
-                                      "Sat",
-                                    ][dt.getUTCDay()];
-                                  } catch {
-                                    return isoDate;
-                                  }
-                                };
-
-                                const formatFullDate = (isoDate: string) => {
-                                  try {
-                                    const dt = new Date(isoDate + "T00:00:00Z");
-                                    return new Intl.DateTimeFormat(undefined, {
-                                      weekday: "short",
-                                      month: "short",
-                                      day: "numeric",
-                                      year: "numeric",
-                                      timeZone: "UTC",
-                                    }).format(dt);
-                                  } catch {
-                                    return isoDate;
-                                  }
-                                };
-
-                                const TooltipContent = ({
-                                  active,
-                                  payload,
-                                  label,
-                                }: any) => {
-                                  if (
-                                    !active ||
-                                    !payload ||
-                                    payload.length === 0
-                                  )
-                                    return null;
-                                  const current = payload[0]?.value as number;
-                                  const idx = visitorsSeries.findIndex(
-                                    (d) => d.date === label,
-                                  );
-                                  const prev =
-                                    idx > 0
-                                      ? (visitorsSeries[idx - 1]
-                                          ?.uniqueVisitors ?? 0)
-                                      : 0;
-                                  const delta = current - prev;
-                                  const pct =
-                                    prev > 0
-                                      ? Math.round((delta / prev) * 100)
-                                      : null;
-                                  const up = delta > 0;
-                                  const down = delta < 0;
-                                  return (
-                                    <div className="rounded-xl border bg-white/90 dark:bg-[#252526] dark:border-[#3e3e42] backdrop-blur p-3 shadow-lg">
-                                      <div className="text-xs opacity-60 dark:opacity-70">
-                                        {formatFullDate(label)}
-                                      </div>
-                                      <div className="mt-1 text-base font-semibold tabular-nums">
-                                        {current}
-                                      </div>
-                                      <div className="text-xs mt-0.5">
-                                        <span
-                                          className={
-                                            up
-                                              ? "text-emerald-600 dark:text-emerald-400"
-                                              : down
-                                                ? "text-rose-600 dark:text-rose-400"
-                                                : "text-neutral-600 dark:text-neutral-400"
-                                          }
-                                        >
-                                          {delta === 0
-                                            ? "No change"
-                                            : `${up ? "+" : ""}${delta}${pct !== null ? ` (${pct}%)` : ""}`}
-                                        </span>
-                                        <span className="opacity-60 dark:opacity-70">
-                                          {" "}
-                                          vs previous day
-                                        </span>
-                                      </div>
-                                      <div className="text-[11px] opacity-70 dark:opacity-80 mt-1">
-                                        7-day avg:{" "}
-                                        <span className="font-medium">
-                                          {avgVal}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  );
-                                };
-
+                                const prev =
+                                  idx > 0
+                                    ? (visitorsSeries[idx - 1]
+                                        ?.uniqueVisitors ?? 0)
+                                    : 0;
+                                const delta = current - prev;
+                                const pct =
+                                  prev > 0
+                                    ? Math.round((delta / prev) * 100)
+                                    : null;
+                                const up = delta > 0;
+                                const down = delta < 0;
                                 return (
-                                  <div>
-                                    <div className="text-sm font-medium mb-2">
-                                      Total for the whole week:{" "}
-                                      <span className="tabular-nums">
-                                        {totalVal}
-                                      </span>
+                                  <div className="rounded-xl border bg-white/90 dark:bg-[#252526] dark:border-[#3e3e42] backdrop-blur p-3 shadow-lg">
+                                    <div className="text-xs opacity-60 dark:opacity-70">
+                                      {formatFullDate(label)}
                                     </div>
-                                    <div className="h-72 w-full max-w-none mx-0">
-                                      <ChartSuspense
-                                        fallback={
-                                          <div className="h-full w-full flex items-center justify-center text-sm text-gray-400">
-                                            Loading chart...
-                                          </div>
+                                    <div className="mt-1 text-base font-semibold tabular-nums">
+                                      {current}
+                                    </div>
+                                    <div className="text-xs mt-0.5">
+                                      <span
+                                        className={
+                                          up
+                                            ? "text-emerald-600 dark:text-emerald-400"
+                                            : down
+                                              ? "text-rose-600 dark:text-rose-400"
+                                              : "text-neutral-600 dark:text-neutral-400"
                                         }
                                       >
-                                        <ResponsiveContainer
-                                          width="100%"
-                                          height="100%"
-                                        >
-                                          <ComposedChart
-                                            data={visitorsSeries}
-                                            margin={{
-                                              top: 10,
-                                              right: 8,
-                                              bottom: 14,
-                                              left: 8,
-                                            }}
-                                          >
-                                            <defs>
-                                              <linearGradient
-                                                id="visitsLineGrad"
-                                                x1="0"
-                                                y1="0"
-                                                x2="1"
-                                                y2="0"
-                                              >
-                                                <stop
-                                                  offset="0%"
-                                                  stopColor={
-                                                    isDark
-                                                      ? "#60a5fa"
-                                                      : "#111827"
-                                                  }
-                                                />
-                                                <stop
-                                                  offset="100%"
-                                                  stopColor={
-                                                    isDark
-                                                      ? "#a78bfa"
-                                                      : "#6b7280"
-                                                  }
-                                                />
-                                              </linearGradient>
-                                              <linearGradient
-                                                id="visitsAreaGrad"
-                                                x1="0"
-                                                y1="0"
-                                                x2="0"
-                                                y2="1"
-                                              >
-                                                <stop
-                                                  offset="0%"
-                                                  stopColor={
-                                                    isDark
-                                                      ? "#60a5fa"
-                                                      : "#111827"
-                                                  }
-                                                  stopOpacity={
-                                                    isDark ? 0.4 : 0.35
-                                                  }
-                                                />
-                                                <stop
-                                                  offset="100%"
-                                                  stopColor={
-                                                    isDark
-                                                      ? "#60a5fa"
-                                                      : "#111827"
-                                                  }
-                                                  stopOpacity={
-                                                    isDark ? 0.1 : 0.05
-                                                  }
-                                                />
-                                              </linearGradient>
-                                            </defs>
-
-                                            <CartesianGrid
-                                              strokeDasharray="3 3"
-                                              stroke={
-                                                isDark
-                                                  ? "rgba(255,255,255,0.1)"
-                                                  : "rgba(0,0,0,0.06)"
-                                              }
-                                            />
-                                            <XAxis
-                                              dataKey="date"
-                                              tickFormatter={formatDow}
-                                              tick={{
-                                                fontSize: 11,
-                                                fill: isDark
-                                                  ? "#d1d5db"
-                                                  : "#525252",
-                                              }}
-                                              axisLine={false}
-                                              tickLine={false}
-                                              interval={0}
-                                              padding={{ left: 0, right: 0 }}
-                                            />
-                                            <YAxis
-                                              allowDecimals={false}
-                                              domain={[0, Math.max(maxVal, 5)]}
-                                              tick={{
-                                                fontSize: 11,
-                                                fill: isDark
-                                                  ? "#d1d5db"
-                                                  : "#525252",
-                                              }}
-                                              axisLine={false}
-                                              tickLine={false}
-                                              width={28}
-                                            />
-                                            <Tooltip
-                                              content={<TooltipContent />}
-                                              cursor={{
-                                                stroke: isDark
-                                                  ? "rgba(255,255,255,0.2)"
-                                                  : "rgba(0,0,0,0.1)",
-                                              }}
-                                            />
-                                            <ReferenceLine
-                                              y={avgVal}
-                                              stroke={
-                                                isDark ? "#9ca3af" : "#a3a3a3"
-                                              }
-                                              strokeDasharray="4 4"
-                                              ifOverflow="extendDomain"
-                                              label={{
-                                                value: "avg",
-                                                position: "insideRight",
-                                                fill: isDark
-                                                  ? "#d1d5db"
-                                                  : "#737373",
-                                                fontSize: 11,
-                                                dx: -6,
-                                              }}
-                                            />
-
-                                            <Area
-                                              type="monotone"
-                                              dataKey="uniqueVisitors"
-                                              fill="url(#visitsAreaGrad)"
-                                              stroke="none"
-                                              animationDuration={600}
-                                            />
-                                            <Line
-                                              type="monotone"
-                                              dataKey="uniqueVisitors"
-                                              stroke="url(#visitsLineGrad)"
-                                              strokeWidth={3}
-                                              dot={false}
-                                              activeDot={{
-                                                r: 5,
-                                                strokeWidth: 2,
-                                                stroke: isDark
-                                                  ? "#60a5fa"
-                                                  : "#111827",
-                                                fill: isDark
-                                                  ? "#1e1e1e"
-                                                  : "#ffffff",
-                                              }}
-                                              animationDuration={700}
-                                            />
-                                          </ComposedChart>
-                                        </ResponsiveContainer>
-                                      </ChartSuspense>
+                                        {delta === 0
+                                          ? "No change"
+                                          : `${up ? "+" : ""}${delta}${pct !== null ? ` (${pct}%)` : ""}`}
+                                      </span>
+                                      <span className="opacity-60 dark:opacity-70">
+                                        {" "}
+                                        vs previous day
+                                      </span>
                                     </div>
-                                    {/* Sources breakdown */}
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
-                                      <div className="rounded-xl border p-3 md:col-span-2">
-                                        <div className="text-sm font-medium mb-2">
-                                          Top countries
+                                    <div className="text-[11px] opacity-70 dark:opacity-80 mt-1">
+                                      7-day avg:{" "}
+                                      <span className="font-medium">
+                                        {avgVal}
+                                      </span>
+                                    </div>
+                                  </div>
+                                );
+                              };
+
+                              return (
+                                <div>
+                                  <div className="text-sm font-medium mb-2">
+                                    Total for the whole week:{" "}
+                                    <span className="tabular-nums">
+                                      {totalVal}
+                                    </span>
+                                  </div>
+                                  <div className="h-72 w-full max-w-none mx-0">
+                                    <ChartSuspense
+                                      fallback={
+                                        <div className="h-full w-full flex items-center justify-center text-sm text-gray-400">
+                                          Loading chart...
                                         </div>
-                                        {topCountries.length === 0 ? (
-                                          <div className="text-sm opacity-60">
-                                            No data.
-                                          </div>
-                                        ) : (
-                                          <div className="grid grid-cols-1 md:grid-cols-3 gap-1">
-                                            <div className="col-span-2 min-h-[150px]">
-                                              <ChartSuspense
-                                                fallback={
-                                                  <div className="h-[150px] w-full flex items-center justify-center text-sm text-gray-400">
-                                                    Loading chart...
-                                                  </div>
+                                      }
+                                    >
+                                      <ResponsiveContainer
+                                        width="100%"
+                                        height="100%"
+                                      >
+                                        <ComposedChart
+                                          data={visitorsSeries}
+                                          margin={{
+                                            top: 10,
+                                            right: 8,
+                                            bottom: 14,
+                                            left: 8,
+                                          }}
+                                        >
+                                          <defs>
+                                            <linearGradient
+                                              id="visitsLineGrad"
+                                              x1="0"
+                                              y1="0"
+                                              x2="1"
+                                              y2="0"
+                                            >
+                                              <stop
+                                                offset="0%"
+                                                stopColor={
+                                                  isDark ? "#60a5fa" : "#111827"
                                                 }
+                                              />
+                                              <stop
+                                                offset="100%"
+                                                stopColor={
+                                                  isDark ? "#a78bfa" : "#6b7280"
+                                                }
+                                              />
+                                            </linearGradient>
+                                            <linearGradient
+                                              id="visitsAreaGrad"
+                                              x1="0"
+                                              y1="0"
+                                              x2="0"
+                                              y2="1"
+                                            >
+                                              <stop
+                                                offset="0%"
+                                                stopColor={
+                                                  isDark ? "#60a5fa" : "#111827"
+                                                }
+                                                stopOpacity={
+                                                  isDark ? 0.4 : 0.35
+                                                }
+                                              />
+                                              <stop
+                                                offset="100%"
+                                                stopColor={
+                                                  isDark ? "#60a5fa" : "#111827"
+                                                }
+                                                stopOpacity={
+                                                  isDark ? 0.1 : 0.05
+                                                }
+                                              />
+                                            </linearGradient>
+                                          </defs>
+
+                                          <CartesianGrid
+                                            strokeDasharray="3 3"
+                                            stroke={
+                                              isDark
+                                                ? "rgba(255,255,255,0.1)"
+                                                : "rgba(0,0,0,0.06)"
+                                            }
+                                          />
+                                          <XAxis
+                                            dataKey="date"
+                                            tickFormatter={formatDow}
+                                            tick={{
+                                              fontSize: 11,
+                                              fill: isDark
+                                                ? "#d1d5db"
+                                                : "#525252",
+                                            }}
+                                            axisLine={false}
+                                            tickLine={false}
+                                            interval={0}
+                                            padding={{ left: 0, right: 0 }}
+                                          />
+                                          <YAxis
+                                            allowDecimals={false}
+                                            domain={[0, Math.max(maxVal, 5)]}
+                                            tick={{
+                                              fontSize: 11,
+                                              fill: isDark
+                                                ? "#d1d5db"
+                                                : "#525252",
+                                            }}
+                                            axisLine={false}
+                                            tickLine={false}
+                                            width={28}
+                                          />
+                                          <Tooltip
+                                            content={<TooltipContent />}
+                                            cursor={{
+                                              stroke: isDark
+                                                ? "rgba(255,255,255,0.2)"
+                                                : "rgba(0,0,0,0.1)",
+                                            }}
+                                          />
+                                          <ReferenceLine
+                                            y={avgVal}
+                                            stroke={
+                                              isDark ? "#9ca3af" : "#a3a3a3"
+                                            }
+                                            strokeDasharray="4 4"
+                                            ifOverflow="extendDomain"
+                                            label={{
+                                              value: "avg",
+                                              position: "insideRight",
+                                              fill: isDark
+                                                ? "#d1d5db"
+                                                : "#737373",
+                                              fontSize: 11,
+                                              dx: -6,
+                                            }}
+                                          />
+
+                                          <Area
+                                            type="monotone"
+                                            dataKey="uniqueVisitors"
+                                            fill="url(#visitsAreaGrad)"
+                                            stroke="none"
+                                            animationDuration={600}
+                                          />
+                                          <Line
+                                            type="monotone"
+                                            dataKey="uniqueVisitors"
+                                            stroke="url(#visitsLineGrad)"
+                                            strokeWidth={3}
+                                            dot={false}
+                                            activeDot={{
+                                              r: 5,
+                                              strokeWidth: 2,
+                                              stroke: isDark
+                                                ? "#60a5fa"
+                                                : "#111827",
+                                              fill: isDark
+                                                ? "#1e1e1e"
+                                                : "#ffffff",
+                                            }}
+                                            animationDuration={700}
+                                          />
+                                        </ComposedChart>
+                                      </ResponsiveContainer>
+                                    </ChartSuspense>
+                                  </div>
+                                  {/* Sources breakdown */}
+                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
+                                    <div className="rounded-xl border p-3 md:col-span-2">
+                                      <div className="text-sm font-medium mb-2">
+                                        Top countries
+                                      </div>
+                                      {topCountries.length === 0 ? (
+                                        <div className="text-sm opacity-60">
+                                          No data.
+                                        </div>
+                                      ) : (
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-1">
+                                          <div className="col-span-2 min-h-[150px]">
+                                            <ChartSuspense
+                                              fallback={
+                                                <div className="h-[150px] w-full flex items-center justify-center text-sm text-gray-400">
+                                                  Loading chart...
+                                                </div>
+                                              }
+                                            >
+                                              <ResponsiveContainer
+                                                width="100%"
+                                                height={150}
                                               >
-                                                <ResponsiveContainer
-                                                  width="100%"
-                                                  height={150}
+                                                <PieChart
+                                                  margin={{
+                                                    top: 0,
+                                                    right: 0,
+                                                    bottom: 0,
+                                                    left: 0,
+                                                  }}
                                                 >
-                                                  <PieChart
-                                                    margin={{
-                                                      top: 0,
-                                                      right: 0,
-                                                      bottom: 0,
-                                                      left: 0,
-                                                    }}
-                                                  >
-                                                    {(() => {
-                                                      const pieData: Array<{
+                                                  {(() => {
+                                                    const pieData: Array<{
+                                                      country: string;
+                                                      visits: number;
+                                                      pct?: number;
+                                                      isOther?: boolean;
+                                                      fill?: string;
+                                                    }> = topCountries
+                                                      .slice(0, 5)
+                                                      .map((c, idx) => ({
+                                                        ...c,
+                                                        fill: countryColors[
+                                                          idx %
+                                                            countryColors.length
+                                                        ],
+                                                      }));
+                                                    if (
+                                                      otherCountries &&
+                                                      otherCountries.visits > 0
+                                                    ) {
+                                                      pieData.push({
+                                                        country: "Other",
+                                                        visits:
+                                                          otherCountries.visits,
+                                                        pct: otherCountries.pct,
+                                                        isOther: true,
+                                                        fill: countryColors[
+                                                          5 %
+                                                            countryColors.length
+                                                        ],
+                                                      });
+                                                    }
+                                                    const totalVisits =
+                                                      pieData.reduce(
+                                                        (s, x) =>
+                                                          s + (x.visits || 0),
+                                                        0,
+                                                      );
+                                                    const CountryPieTooltip = ({
+                                                      active,
+                                                      payload,
+                                                    }: {
+                                                      active?: boolean;
+                                                      payload?: any[];
+                                                    }) => {
+                                                      if (
+                                                        !active ||
+                                                        !payload ||
+                                                        !payload.length
+                                                      )
+                                                        return null;
+                                                      const d = payload[0]
+                                                        ?.payload as {
                                                         country: string;
                                                         visits: number;
                                                         pct?: number;
                                                         isOther?: boolean;
-                                                        fill?: string;
-                                                      }> = topCountries
-                                                        .slice(0, 5)
-                                                        .map((c, idx) => ({
-                                                          ...c,
-                                                          fill: countryColors[
-                                                            idx %
-                                                              countryColors.length
-                                                          ],
-                                                        }));
-                                                      if (
-                                                        otherCountries &&
-                                                        otherCountries.visits >
-                                                          0
-                                                      ) {
-                                                        pieData.push({
-                                                          country: "Other",
-                                                          visits:
-                                                            otherCountries.visits,
-                                                          pct: otherCountries.pct,
-                                                          isOther: true,
-                                                          fill: countryColors[
-                                                            5 %
-                                                              countryColors.length
-                                                          ],
-                                                        });
-                                                      }
-                                                      const totalVisits =
-                                                        pieData.reduce(
-                                                          (s, x) =>
-                                                            s + (x.visits || 0),
-                                                          0,
-                                                        );
-                                                      const CountryPieTooltip =
-                                                        ({
-                                                          active,
-                                                          payload,
-                                                        }: {
-                                                          active?: boolean;
-                                                          payload?: any[];
-                                                        }) => {
-                                                          if (
-                                                            !active ||
-                                                            !payload ||
-                                                            !payload.length
-                                                          )
-                                                            return null;
-                                                          const d = payload[0]
-                                                            ?.payload as {
-                                                            country: string;
-                                                            visits: number;
-                                                            pct?: number;
-                                                            isOther?: boolean;
-                                                          };
-                                                          if (!d) return null;
-                                                          if (d.isOther) {
-                                                            const items: Array<{
+                                                      };
+                                                      if (!d) return null;
+                                                      if (d.isOther) {
+                                                        const items: Array<{
+                                                          country: string;
+                                                          visits: number;
+                                                        }> = Array.isArray(
+                                                          otherCountries?.items,
+                                                        )
+                                                          ? (otherCountries!
+                                                              .items as Array<{
                                                               country: string;
                                                               visits: number;
-                                                            }> = Array.isArray(
-                                                              otherCountries?.items,
-                                                            )
-                                                              ? (otherCountries!
-                                                                  .items as Array<{
-                                                                  country: string;
-                                                                  visits: number;
-                                                                }>)
-                                                              : [];
-                                                            const otherTotal =
-                                                              Math.max(
-                                                                0,
-                                                                otherCountries?.visits ||
-                                                                  0,
-                                                              );
-                                                            const rows: Array<{
-                                                              name: string;
+                                                            }>)
+                                                          : [];
+                                                        const otherTotal =
+                                                          Math.max(
+                                                            0,
+                                                            otherCountries?.visits ||
+                                                              0,
+                                                          );
+                                                        const rows: Array<{
+                                                          name: string;
+                                                          visits: number;
+                                                          pctTotal: number;
+                                                          pctOther: number;
+                                                        }> = items
+                                                          .map(
+                                                            (it: {
+                                                              country: string;
                                                               visits: number;
-                                                              pctTotal: number;
-                                                              pctOther: number;
-                                                            }> = items
-                                                              .map(
-                                                                (it: {
-                                                                  country: string;
-                                                                  visits: number;
-                                                                }) => ({
-                                                                  name: countryCodeToName(
-                                                                    it.country,
-                                                                  ),
-                                                                  visits:
-                                                                    it.visits,
-                                                                  pctTotal:
-                                                                    totalVisits >
-                                                                    0
-                                                                      ? (it.visits /
-                                                                          totalVisits) *
-                                                                        100
-                                                                      : 0,
-                                                                  pctOther:
-                                                                    otherTotal >
-                                                                    0
-                                                                      ? (it.visits /
-                                                                          otherTotal) *
-                                                                        100
-                                                                      : 0,
-                                                                }),
-                                                              )
-                                                              .sort(
-                                                                (
-                                                                  a: {
-                                                                    visits: number;
-                                                                  },
-                                                                  b: {
-                                                                    visits: number;
-                                                                  },
-                                                                ) =>
-                                                                  (b.visits ||
-                                                                    0) -
-                                                                  (a.visits ||
-                                                                    0),
-                                                              );
-                                                            return (
-                                                              <div className="rounded-xl border bg-white dark:bg-[#252526] dark:border-[#3e3e42] shadow px-3 py-2 max-w-[480px]">
-                                                                <div className="text-xs font-medium mb-1">
-                                                                  Countries in
-                                                                  Other
-                                                                </div>
-                                                                <div className="text-[11px] opacity-80 dark:opacity-70 space-y-0.5">
-                                                                  {rows.map(
-                                                                    (
-                                                                      r: {
-                                                                        name: string;
-                                                                        visits: number;
-                                                                        pctTotal: number;
-                                                                        pctOther: number;
-                                                                      },
-                                                                      idx: number,
-                                                                    ) => (
-                                                                      <div
-                                                                        key={`${r.name}-${idx}`}
-                                                                        className="flex items-center justify-between gap-3"
-                                                                      >
-                                                                        <div className="truncate">
-                                                                          {
-                                                                            r.name
-                                                                          }
-                                                                        </div>
-                                                                        <div className="text-[11px] tabular-nums whitespace-nowrap">
-                                                                          {Math.round(
-                                                                            r.pctOther,
-                                                                          )}
-                                                                          % of
-                                                                          Other
-                                                                          ?{" "}
-                                                                          {Math.round(
-                                                                            r.pctTotal,
-                                                                          )}
-                                                                          % ?{" "}
-                                                                          {
-                                                                            r.visits
-                                                                          }
-                                                                        </div>
-                                                                      </div>
-                                                                    ),
-                                                                  )}
-                                                                </div>
-                                                              </div>
-                                                            );
-                                                          }
-                                                          const name =
-                                                            countryCodeToName(
-                                                              d.country,
-                                                            );
-                                                          const pct =
-                                                            Math.round(
-                                                              d.pct ??
-                                                                (totalVisits > 0
-                                                                  ? (d.visits /
+                                                            }) => ({
+                                                              name: countryCodeToName(
+                                                                it.country,
+                                                              ),
+                                                              visits: it.visits,
+                                                              pctTotal:
+                                                                totalVisits > 0
+                                                                  ? (it.visits /
                                                                       totalVisits) *
                                                                     100
-                                                                  : 0),
-                                                            );
-                                                          return (
-                                                            <div className="rounded-xl border bg-white dark:bg-[#252526] dark:border-[#3e3e42] shadow px-3 py-2">
-                                                              <div className="text-xs font-medium">
-                                                                {name}
-                                                              </div>
-                                                              <div className="text-[11px] opacity-80 dark:opacity-70">
-                                                                {pct}% ?{" "}
-                                                                {d.visits}
-                                                              </div>
-                                                            </div>
-                                                          );
-                                                        };
-                                                      return (
-                                                        <>
-                                                          <Pie
-                                                            data={pieData}
-                                                            dataKey="visits"
-                                                            nameKey="country"
-                                                            innerRadius={36}
-                                                            outerRadius={64}
-                                                            paddingAngle={3}
-                                                            cx="40%"
-                                                            cy="50%"
-                                                            isAnimationActive={
-                                                              false
-                                                            }
-                                                          >
-                                                            {pieData.map(
-                                                              (
-                                                                entry,
-                                                                index,
-                                                              ) => {
-                                                                // Use color index 5 for "Other", otherwise use the index (0-4 for top countries)
-                                                                const colorIndex =
-                                                                  entry.isOther
-                                                                    ? 5
-                                                                    : index;
-                                                                const color =
-                                                                  entry.fill ||
-                                                                  countryColors[
-                                                                    colorIndex %
-                                                                      countryColors.length
-                                                                  ];
-                                                                return (
-                                                                  <Cell
-                                                                    key={`cell-${entry.country}-${index}-${color}`}
-                                                                    fill={color}
-                                                                    stroke={
-                                                                      isDark
-                                                                        ? color
-                                                                        : color
-                                                                    }
-                                                                    strokeWidth={
-                                                                      isDark
-                                                                        ? 0
-                                                                        : 2
-                                                                    }
-                                                                  />
-                                                                );
+                                                                  : 0,
+                                                              pctOther:
+                                                                otherTotal > 0
+                                                                  ? (it.visits /
+                                                                      otherTotal) *
+                                                                    100
+                                                                  : 0,
+                                                            }),
+                                                          )
+                                                          .sort(
+                                                            (
+                                                              a: {
+                                                                visits: number;
                                                               },
-                                                            )}
-                                                          </Pie>
-                                                          <Tooltip
-                                                            content={
-                                                              <CountryPieTooltip />
-                                                            }
-                                                            cursor={{
-                                                              stroke: isDark
-                                                                ? "rgba(255,255,255,0.2)"
-                                                                : "rgba(0,0,0,0.1)",
-                                                            }}
-                                                          />
-                                                        </>
+                                                              b: {
+                                                                visits: number;
+                                                              },
+                                                            ) =>
+                                                              (b.visits || 0) -
+                                                              (a.visits || 0),
+                                                          );
+                                                        return (
+                                                          <div className="rounded-xl border bg-white dark:bg-[#252526] dark:border-[#3e3e42] shadow px-3 py-2 max-w-[480px]">
+                                                            <div className="text-xs font-medium mb-1">
+                                                              Countries in Other
+                                                            </div>
+                                                            <div className="text-[11px] opacity-80 dark:opacity-70 space-y-0.5">
+                                                              {rows.map(
+                                                                (
+                                                                  r: {
+                                                                    name: string;
+                                                                    visits: number;
+                                                                    pctTotal: number;
+                                                                    pctOther: number;
+                                                                  },
+                                                                  idx: number,
+                                                                ) => (
+                                                                  <div
+                                                                    key={`${r.name}-${idx}`}
+                                                                    className="flex items-center justify-between gap-3"
+                                                                  >
+                                                                    <div className="truncate">
+                                                                      {r.name}
+                                                                    </div>
+                                                                    <div className="text-[11px] tabular-nums whitespace-nowrap">
+                                                                      {Math.round(
+                                                                        r.pctOther,
+                                                                      )}
+                                                                      % of Other
+                                                                      ?{" "}
+                                                                      {Math.round(
+                                                                        r.pctTotal,
+                                                                      )}
+                                                                      % ?{" "}
+                                                                      {r.visits}
+                                                                    </div>
+                                                                  </div>
+                                                                ),
+                                                              )}
+                                                            </div>
+                                                          </div>
+                                                        );
+                                                      }
+                                                      const name =
+                                                        countryCodeToName(
+                                                          d.country,
+                                                        );
+                                                      const pct = Math.round(
+                                                        d.pct ??
+                                                          (totalVisits > 0
+                                                            ? (d.visits /
+                                                                totalVisits) *
+                                                              100
+                                                            : 0),
                                                       );
-                                                    })()}
-                                                  </PieChart>
-                                                </ResponsiveContainer>
-                                              </ChartSuspense>
-                                            </div>
-                                            <div className="flex flex-col gap-1">
-                                              {topCountries
-                                                .slice(0, 5)
-                                                .map((c, idx) => (
-                                                  <div
-                                                    key={c.country}
-                                                    className="flex items-center justify-between"
-                                                  >
-                                                    <div className="flex-1 flex items-center gap-1.5 min-w-0">
-                                                      <span
-                                                        className="inline-block h-3 w-3 rounded-full"
-                                                        style={{
-                                                          backgroundColor:
-                                                            countryColors[
-                                                              idx %
-                                                                countryColors.length
-                                                            ],
-                                                        }}
-                                                      />
-                                                      <span className="text-sm truncate">
-                                                        {countryCodeToName(
-                                                          c.country,
-                                                        )}
-                                                      </span>
-                                                    </div>
-                                                    <span className="text-sm tabular-nums">
-                                                      {Math.round(c.pct || 0)}%
-                                                    </span>
-                                                  </div>
-                                                ))}
-                                              {otherCountries &&
-                                                otherCountries.visits > 0 && (
-                                                  <div className="flex items-center justify-between">
-                                                    <div
-                                                      className="flex-1 flex items-center gap-1.5 min-w-0"
-                                                      onMouseEnter={(e) =>
-                                                        showOtherCountriesTooltip(
-                                                          e.currentTarget as HTMLElement,
-                                                        )
-                                                      }
-                                                      onMouseLeave={
-                                                        hideOtherCountriesTooltip
-                                                      }
-                                                      onFocus={(e) =>
-                                                        showOtherCountriesTooltip(
-                                                          e.currentTarget as HTMLElement,
-                                                        )
-                                                      }
-                                                      onBlur={
-                                                        hideOtherCountriesTooltip
-                                                      }
-                                                    >
-                                                      <span
-                                                        className="inline-block h-3 w-3 rounded-full"
-                                                        style={{
-                                                          backgroundColor:
-                                                            countryColors[
-                                                              5 %
-                                                                countryColors.length
-                                                            ],
-                                                        }}
-                                                      />
-                                                      <span className="text-sm truncate">
-                                                        Other (
-                                                        {otherCountries.count})
-                                                      </span>
-                                                    </div>
-                                                    <span className="text-sm tabular-nums">
-                                                      {Math.round(
-                                                        otherCountries?.pct ||
-                                                          0,
-                                                      )}
-                                                      %
-                                                    </span>
-                                                  </div>
-                                                )}
-                                            </div>
+                                                      return (
+                                                        <div className="rounded-xl border bg-white dark:bg-[#252526] dark:border-[#3e3e42] shadow px-3 py-2">
+                                                          <div className="text-xs font-medium">
+                                                            {name}
+                                                          </div>
+                                                          <div className="text-[11px] opacity-80 dark:opacity-70">
+                                                            {pct}% ? {d.visits}
+                                                          </div>
+                                                        </div>
+                                                      );
+                                                    };
+                                                    return (
+                                                      <>
+                                                        <Pie
+                                                          data={pieData}
+                                                          dataKey="visits"
+                                                          nameKey="country"
+                                                          innerRadius={36}
+                                                          outerRadius={64}
+                                                          paddingAngle={3}
+                                                          cx="40%"
+                                                          cy="50%"
+                                                          isAnimationActive={
+                                                            false
+                                                          }
+                                                        >
+                                                          {pieData.map(
+                                                            (entry, index) => {
+                                                              // Use color index 5 for "Other", otherwise use the index (0-4 for top countries)
+                                                              const colorIndex =
+                                                                entry.isOther
+                                                                  ? 5
+                                                                  : index;
+                                                              const color =
+                                                                entry.fill ||
+                                                                countryColors[
+                                                                  colorIndex %
+                                                                    countryColors.length
+                                                                ];
+                                                              return (
+                                                                <Cell
+                                                                  key={`cell-${entry.country}-${index}-${color}`}
+                                                                  fill={color}
+                                                                  stroke={
+                                                                    isDark
+                                                                      ? color
+                                                                      : color
+                                                                  }
+                                                                  strokeWidth={
+                                                                    isDark
+                                                                      ? 0
+                                                                      : 2
+                                                                  }
+                                                                />
+                                                              );
+                                                            },
+                                                          )}
+                                                        </Pie>
+                                                        <Tooltip
+                                                          content={
+                                                            <CountryPieTooltip />
+                                                          }
+                                                          cursor={{
+                                                            stroke: isDark
+                                                              ? "rgba(255,255,255,0.2)"
+                                                              : "rgba(0,0,0,0.1)",
+                                                          }}
+                                                        />
+                                                      </>
+                                                    );
+                                                  })()}
+                                                </PieChart>
+                                              </ResponsiveContainer>
+                                            </ChartSuspense>
                                           </div>
-                                        )}
-                                      </div>
-                                      <div className="rounded-xl border p-3 md:col-span-1">
-                                        <div className="text-sm font-medium mb-2">
-                                          Top referrers
-                                        </div>
-                                        {topReferrers.length === 0 ? (
-                                          <div className="text-sm opacity-60">
-                                            No data.
-                                          </div>
-                                        ) : (
-                                          <div className="flex flex-col gap-2">
-                                            {topReferrers
+                                          <div className="flex flex-col gap-1">
+                                            {topCountries
                                               .slice(0, 5)
-                                              .map((r, idx) => (
+                                              .map((c, idx) => (
                                                 <div
-                                                  key={r.source}
+                                                  key={c.country}
                                                   className="flex items-center justify-between"
                                                 >
-                                                  <div className="flex-1 flex items-center gap-2 min-w-0">
+                                                  <div className="flex-1 flex items-center gap-1.5 min-w-0">
                                                     <span
                                                       className="inline-block h-3 w-3 rounded-full"
                                                       style={{
                                                         backgroundColor:
-                                                          referrerColors[
+                                                          countryColors[
                                                             idx %
-                                                              referrerColors.length
+                                                              countryColors.length
                                                           ],
                                                       }}
                                                     />
                                                     <span className="text-sm truncate">
-                                                      {r.source}
+                                                      {countryCodeToName(
+                                                        c.country,
+                                                      )}
                                                     </span>
                                                   </div>
                                                   <span className="text-sm tabular-nums">
-                                                    {Math.round(r.pct || 0)}%
+                                                    {Math.round(c.pct || 0)}%
                                                   </span>
                                                 </div>
                                               ))}
-                                            {otherReferrers &&
-                                              otherReferrers.visits > 0 && (
+                                            {otherCountries &&
+                                              otherCountries.visits > 0 && (
                                                 <div className="flex items-center justify-between">
-                                                  <div className="flex-1 flex items-center gap-2 min-w-0">
+                                                  <div
+                                                    className="flex-1 flex items-center gap-1.5 min-w-0"
+                                                    onMouseEnter={(e) =>
+                                                      showOtherCountriesTooltip(
+                                                        e.currentTarget as HTMLElement,
+                                                      )
+                                                    }
+                                                    onMouseLeave={
+                                                      hideOtherCountriesTooltip
+                                                    }
+                                                    onFocus={(e) =>
+                                                      showOtherCountriesTooltip(
+                                                        e.currentTarget as HTMLElement,
+                                                      )
+                                                    }
+                                                    onBlur={
+                                                      hideOtherCountriesTooltip
+                                                    }
+                                                  >
                                                     <span
                                                       className="inline-block h-3 w-3 rounded-full"
                                                       style={{
                                                         backgroundColor:
-                                                          referrerColors[
-                                                            4 %
-                                                              referrerColors.length
+                                                          countryColors[
+                                                            5 %
+                                                              countryColors.length
                                                           ],
                                                       }}
                                                     />
                                                     <span className="text-sm truncate">
                                                       Other (
-                                                      {otherReferrers.count})
+                                                      {otherCountries.count})
                                                     </span>
                                                   </div>
                                                   <span className="text-sm tabular-nums">
                                                     {Math.round(
-                                                      otherReferrers.pct || 0,
+                                                      otherCountries?.pct || 0,
                                                     )}
                                                     %
                                                   </span>
                                                 </div>
                                               )}
                                           </div>
-                                        )}
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div className="rounded-xl border p-3 md:col-span-1">
+                                      <div className="text-sm font-medium mb-2">
+                                        Top referrers
                                       </div>
+                                      {topReferrers.length === 0 ? (
+                                        <div className="text-sm opacity-60">
+                                          No data.
+                                        </div>
+                                      ) : (
+                                        <div className="flex flex-col gap-2">
+                                          {topReferrers
+                                            .slice(0, 5)
+                                            .map((r, idx) => (
+                                              <div
+                                                key={r.source}
+                                                className="flex items-center justify-between"
+                                              >
+                                                <div className="flex-1 flex items-center gap-2 min-w-0">
+                                                  <span
+                                                    className="inline-block h-3 w-3 rounded-full"
+                                                    style={{
+                                                      backgroundColor:
+                                                        referrerColors[
+                                                          idx %
+                                                            referrerColors.length
+                                                        ],
+                                                    }}
+                                                  />
+                                                  <span className="text-sm truncate">
+                                                    {r.source}
+                                                  </span>
+                                                </div>
+                                                <span className="text-sm tabular-nums">
+                                                  {Math.round(r.pct || 0)}%
+                                                </span>
+                                              </div>
+                                            ))}
+                                          {otherReferrers &&
+                                            otherReferrers.visits > 0 && (
+                                              <div className="flex items-center justify-between">
+                                                <div className="flex-1 flex items-center gap-2 min-w-0">
+                                                  <span
+                                                    className="inline-block h-3 w-3 rounded-full"
+                                                    style={{
+                                                      backgroundColor:
+                                                        referrerColors[
+                                                          4 %
+                                                            referrerColors.length
+                                                        ],
+                                                    }}
+                                                  />
+                                                  <span className="text-sm truncate">
+                                                    Other (
+                                                    {otherReferrers.count})
+                                                  </span>
+                                                </div>
+                                                <span className="text-sm tabular-nums">
+                                                  {Math.round(
+                                                    otherReferrers.pct || 0,
+                                                  )}
+                                                  %
+                                                </span>
+                                              </div>
+                                            )}
+                                        </div>
+                                      )}
                                     </div>
                                   </div>
-                                );
-                              })()
-                            )}
-                          </CardContent>
-                        </Card>
-                        <div className="text-xs font-medium uppercase tracking-wide opacity-60 mt-6 mb-2">
-                          Quick Links
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            asChild
-                            variant="outline"
-                            className="rounded-2xl"
-                          >
-                            <a
-                              href="https://github.com/Duckxel/PlantSwipe"
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              <Github className="h-4 w-4" />
-                              <span>GitHub</span>
-                              <ExternalLink className="h-3 w-3 opacity-70" />
-                            </a>
-                          </Button>
-                          <Button
-                            asChild
-                            variant="outline"
-                            className="rounded-2xl"
-                          >
-                            <a
-                              href="https://supabase.com/dashboard/project/lxnkcguwewrskqnyzjwi"
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              <span className="inline-block h-3 w-3 rounded-sm bg-emerald-600 dark:bg-emerald-500" />
-                              <span>Supabase</span>
-                              <ExternalLink className="h-3 w-3 opacity-70" />
-                            </a>
-                          </Button>
-                          <Button
-                            asChild
-                            variant="outline"
-                            className="rounded-2xl"
-                          >
-                            <a
-                              href="https://cloud.linode.com/linodes/84813440/metrics"
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              <span className="inline-block h-3 w-3 rounded-sm bg-blue-600 dark:bg-blue-500" />
-                              <span>Linode</span>
-                              <ExternalLink className="h-3 w-3 opacity-70" />
-                            </a>
-                          </Button>
-                        </div>
-                      </div>
-                    </>
-                  )}
-
-                  {/* Requests Tab */}
-                  {activeTab === "requests" && (
-                    <div className="space-y-4">
-                      <Card className="rounded-2xl">
-                        <CardContent className="p-4 space-y-4">
-                          <div className="flex items-center justify-between gap-3">
-                            <div>
-                              <div className="text-sm font-medium">
-                                Pending plant requests
-                              </div>
-                              <div className="text-xs opacity-60">
-                                Sorted by request count and most recent updates.
-                              </div>
-                            </div>
-                            <Button
-                              variant="outline"
-                              className="rounded-xl"
-                              onClick={() =>
-                                loadPlantRequests({ initial: false })
-                              }
-                              disabled={
-                                plantRequestsLoading || plantRequestsRefreshing
-                              }
-                            >
-                              <RefreshCw
-                                className={`h-4 w-4 mr-2 ${plantRequestsLoading || plantRequestsRefreshing ? "animate-spin" : ""}`}
-                              />
-                              <span className="hidden sm:inline">Refresh</span>
-                              <span className="sm:hidden inline">Reload</span>
-                            </Button>
-                          </div>
-
-                          {/* Statistics */}
-                          {!plantRequestsLoading &&
-                            plantRequests.length > 0 && (
-                              <div className="flex flex-wrap gap-4 text-sm">
-                                <div className="flex items-center gap-2">
-                                  <span className="opacity-60">
-                                    Total Requests:
-                                  </span>
-                                  <span className="font-medium">
-                                    {plantRequests.reduce(
-                                      (sum, req) => sum + req.request_count,
-                                      0,
-                                    )}
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="opacity-60">
-                                    Unique Plants:
-                                  </span>
-                                  <span className="font-medium">
-                                    {plantRequests.length}
-                                  </span>
-                                </div>
-                              </div>
-                            )}
-
-                          {/* Search */}
-                          <div className="relative">
-                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 opacity-50 pointer-events-none" />
-                            <Input
-                              placeholder="Search requests by plant name..."
-                              value={requestSearchQuery}
-                              onChange={(e) =>
-                                setRequestSearchQuery(e.target.value)
-                              }
-                              className="rounded-xl pl-10 pr-4"
-                            />
-                          </div>
-
-                          {plantRequestsError && (
-                            <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-900/30 dark:text-red-200">
-                              {plantRequestsError}
-                            </div>
-                          )}
-                          {plantRequestsLoading ? (
-                            <div className="text-sm opacity-60">
-                              Loading requests...
-                            </div>
-                          ) : (
-                            (() => {
-                              const filteredRequests = requestSearchQuery.trim()
-                                ? plantRequests.filter((req) =>
-                                    req.plant_name
-                                      .toLowerCase()
-                                      .includes(
-                                        requestSearchQuery.toLowerCase().trim(),
-                                      ),
-                                  )
-                                : plantRequests;
-
-                              return filteredRequests.length === 0 ? (
-                                <div className="text-sm opacity-60">
-                                  {requestSearchQuery.trim()
-                                    ? "No requests match your search."
-                                    : "No pending requests."}
-                                </div>
-                              ) : (
-                                <div className="flex flex-col gap-3">
-                                  {filteredRequests.map((req) => {
-                                    const updatedSource =
-                                      req.updated_at ?? req.created_at;
-                                    const updatedMs = updatedSource
-                                      ? Date.parse(updatedSource)
-                                      : NaN;
-                                    const hasTimestamp =
-                                      Number.isFinite(updatedMs);
-                                    const timeLabel = hasTimestamp
-                                      ? `Last update ${formatTimeAgo(updatedMs)}`
-                                      : "Last update unknown";
-                                    const updatedTitle = hasTimestamp
-                                      ? new Date(updatedMs).toLocaleString()
-                                      : undefined;
-                                    return (
-                                      <div
-                                        key={req.id}
-                                        className="flex flex-col gap-3 rounded-xl border bg-white p-3 dark:bg-[#252526] dark:border-[#3e3e42] md:flex-row md:items-center md:justify-between"
-                                      >
-                                        <div className="flex items-start gap-2 flex-1">
-                                          <div className="flex-1">
-                                            <div className="text-sm font-medium">
-                                              {req.plant_name}
-                                            </div>
-                                            <div
-                                              className="text-xs opacity-60"
-                                              title={updatedTitle}
-                                            >
-                                              {timeLabel}
-                                            </div>
-                                          </div>
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="rounded-full h-6 w-6 p-0 opacity-60 hover:opacity-100"
-                                            onClick={() =>
-                                              handleOpenInfoDialog(req)
-                                            }
-                                            title="View request details"
-                                          >
-                                            <Info className="h-4 w-4" />
-                                          </Button>
-                                        </div>
-                                        <div className="flex items-center gap-3">
-                                          <Badge
-                                            variant="secondary"
-                                            className="rounded-xl px-2 py-1 text-xs"
-                                          >
-                                            {req.request_count}{" "}
-                                            {req.request_count === 1
-                                              ? "request"
-                                              : "requests"}
-                                          </Badge>
-                                          <Button
-                                            variant="default"
-                                            className="rounded-2xl"
-                                            onClick={() =>
-                                              handleOpenCreatePlantDialog(req)
-                                            }
-                                          >
-                                            <Plus className="h-4 w-4 mr-2" />
-                                            Add Plant
-                                          </Button>
-                                          <Button
-                                            variant="outline"
-                                            className="rounded-2xl"
-                                            onClick={() =>
-                                              completePlantRequest(req.id)
-                                            }
-                                            disabled={
-                                              completingRequestId === req.id
-                                            }
-                                          >
-                                            {completingRequestId === req.id
-                                              ? "Completing..."
-                                              : "Complete"}
-                                          </Button>
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
                                 </div>
                               );
                             })()
                           )}
                         </CardContent>
                       </Card>
-
-                      {/* Info Dialog */}
-                      <Dialog
-                        open={infoDialogOpen}
-                        onOpenChange={setInfoDialogOpen}
-                      >
-                        <DialogContent className="rounded-2xl max-w-md">
-                          <DialogHeader>
-                            <DialogTitle>Request Details</DialogTitle>
-                            <DialogDescription>
-                              Information about this plant request
-                            </DialogDescription>
-                          </DialogHeader>
-                          {selectedRequestInfo && (
-                            <div className="space-y-4 py-4">
-                              <div>
-                                <div className="text-sm font-medium mb-1">
-                                  Plant Name
-                                </div>
-                                <div className="text-base">
-                                  {selectedRequestInfo.plant_name}
-                                </div>
-                              </div>
-                              <div>
-                                <div className="text-sm font-medium mb-2">
-                                  Users who requested this plant
-                                </div>
-                                {requestUsersLoading ? (
-                                  <div className="text-sm opacity-60">
-                                    Loading users...
-                                  </div>
-                                ) : requestUsers.length === 0 ? (
-                                  <div className="text-sm opacity-60">
-                                    No users have requested this plant yet.
-                                  </div>
-                                ) : (
-                                  <div className="space-y-2 max-h-60 overflow-y-auto">
-                                    {requestUsers.map((user) => (
-                                      <div
-                                        key={user.id}
-                                        className="text-sm p-2 rounded-lg bg-neutral-100 dark:bg-[#2d2d30]"
-                                      >
-                                        <div className="font-medium">
-                                          {user.display_name ||
-                                            user.email ||
-                                            `User ${user.id.slice(0, 8)}`}
-                                        </div>
-                                        {user.email && user.display_name && (
-                                          <div className="text-xs opacity-60">
-                                            {user.email}
-                                          </div>
-                                        )}
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                          <DialogFooter>
-                            <Button
-                              variant="secondary"
-                              onClick={() => setInfoDialogOpen(false)}
-                              className="rounded-xl"
-                            >
-                              Close
-                            </Button>
-                          </DialogFooter>
-                        </DialogContent>
-                      </Dialog>
-
-                      {/* Create Plant Dialog */}
-                      <Dialog
-                        open={createPlantDialogOpen}
-                        onOpenChange={setCreatePlantDialogOpen}
-                      >
-                        <DialogContent className="rounded-2xl max-w-4xl max-h-[90vh] overflow-y-auto p-0">
-                          <DialogHeader className="px-6 pt-6 pb-4">
-                            <DialogTitle>Add Plant from Request</DialogTitle>
-                            <DialogDescription>
-                              Create a new plant entry for "{createPlantName}".
-                              The plant name will be pre-filled.
-                            </DialogDescription>
-                          </DialogHeader>
-                          <div className="px-6 pb-6 overflow-y-auto">
-                            <CreatePlantPage
-                              onCancel={() => {
-                                setCreatePlantDialogOpen(false);
-                                setCreatePlantRequestId(null);
-                                setCreatePlantName("");
-                              }}
-                              onSaved={handlePlantCreated}
-                              initialName={createPlantName}
-                            />
-                          </div>
-                        </DialogContent>
-                      </Dialog>
+                      <div className="text-xs font-medium uppercase tracking-wide opacity-60 mt-6 mb-2">
+                        Quick Links
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          asChild
+                          variant="outline"
+                          className="rounded-2xl"
+                        >
+                          <a
+                            href="https://github.com/Duckxel/PlantSwipe"
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <Github className="h-4 w-4" />
+                            <span>GitHub</span>
+                            <ExternalLink className="h-3 w-3 opacity-70" />
+                          </a>
+                        </Button>
+                        <Button
+                          asChild
+                          variant="outline"
+                          className="rounded-2xl"
+                        >
+                          <a
+                            href="https://supabase.com/dashboard/project/lxnkcguwewrskqnyzjwi"
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <span className="inline-block h-3 w-3 rounded-sm bg-emerald-600 dark:bg-emerald-500" />
+                            <span>Supabase</span>
+                            <ExternalLink className="h-3 w-3 opacity-70" />
+                          </a>
+                        </Button>
+                        <Button
+                          asChild
+                          variant="outline"
+                          className="rounded-2xl"
+                        >
+                          <a
+                            href="https://cloud.linode.com/linodes/84813440/metrics"
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <span className="inline-block h-3 w-3 rounded-sm bg-blue-600 dark:bg-blue-500" />
+                            <span>Linode</span>
+                            <ExternalLink className="h-3 w-3 opacity-70" />
+                          </a>
+                        </Button>
+                      </div>
                     </div>
-                  )}
+                  </>
+                )}
 
-                  {/* Admin Logs Tab */}
-                  {activeTab === "admin_logs" && <AdminLogs />}
-
-                  {/* Members Tab */}
-                  {activeTab === "members" && (
-                    <div className="space-y-4" ref={membersContainerRef}>
-                      <Card className="rounded-2xl">
-                        <CardContent className="p-4 space-y-3">
-                          <div className="text-sm font-medium flex items-center gap-2">
-                            <UserSearch className="h-4 w-4" /> Find member by
-                            email or username
+                {/* Requests Tab */}
+                {activeTab === "requests" && (
+                  <div className="space-y-4">
+                    <Card className="rounded-2xl">
+                      <CardContent className="p-4 space-y-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <div className="text-sm font-medium">
+                              Pending plant requests
+                            </div>
+                            <div className="text-xs opacity-60">
+                              Sorted by request count and most recent updates.
+                            </div>
                           </div>
-                          <div className="flex gap-2 relative">
-                            <div className="flex-1 relative">
-                              <Input
-                                id="member-email"
-                                name="member-email"
-                                autoComplete="off"
-                                aria-label="Member email or username"
-                                className="rounded-xl"
-                                placeholder="user@example.com or username"
-                                value={lookupEmail}
-                                onChange={(
-                                  e: React.ChangeEvent<HTMLInputElement>,
-                                ) => setLookupEmail(e.target.value)}
-                                onFocus={() => {
-                                  if (emailSuggestions.length > 0)
-                                    setSuggestionsOpen(true);
-                                }}
-                                onBlur={() =>
-                                  setTimeout(
-                                    () => setSuggestionsOpen(false),
-                                    120,
-                                  )
-                                }
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") {
-                                    if (
-                                      suggestionsOpen &&
-                                      emailSuggestions.length > 0 &&
-                                      highlightIndex >= 0 &&
-                                      highlightIndex < emailSuggestions.length
-                                    ) {
-                                      e.preventDefault();
-                                      const chosen =
-                                        emailSuggestions[highlightIndex];
-                                      const typed = lookupEmail.trim();
-                                      const nextVal = typed.includes("@")
-                                        ? chosen.email ||
-                                          chosen.display_name ||
-                                          ""
-                                        : chosen.display_name ||
-                                          chosen.email ||
-                                          "";
-                                      setLookupEmail(nextVal);
-                                      setSuggestionsOpen(false);
-                                    } else {
-                                      e.preventDefault();
-                                      lookupMember();
-                                    }
-                                    return;
-                                  }
-                                  if (
-                                    !suggestionsOpen ||
-                                    emailSuggestions.length === 0
-                                  )
-                                    return;
-                                  if (e.key === "ArrowDown") {
-                                    e.preventDefault();
-                                    setHighlightIndex(
-                                      (prev) =>
-                                        (prev + 1) % emailSuggestions.length,
-                                    );
-                                  } else if (e.key === "ArrowUp") {
-                                    e.preventDefault();
-                                    setHighlightIndex(
-                                      (prev) =>
-                                        (prev - 1 + emailSuggestions.length) %
-                                        emailSuggestions.length,
-                                    );
-                                  }
-                                }}
-                              />
-                              {suggestionsOpen &&
-                                emailSuggestions.length > 0 && (
-                                  <div
-                                    className="absolute z-10 mt-1 w-full rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526] shadow-md max-h-60 overflow-auto"
-                                    role="listbox"
-                                  >
-                                    {emailSuggestions.map((s, idx) => (
-                                      <button
-                                        key={s.id}
-                                        type="button"
-                                        className={`w-full text-left px-3 py-2 text-sm rounded-xl ${idx === highlightIndex ? "bg-neutral-100 dark:bg-[#2d2d30]" : ""}`}
-                                        role="option"
-                                        aria-selected={idx === highlightIndex}
-                                        onMouseEnter={() =>
-                                          setHighlightIndex(idx)
-                                        }
-                                        onMouseDown={(e) => {
-                                          e.preventDefault();
-                                          const typed = lookupEmail.trim();
-                                          const nextVal = typed.includes("@")
-                                            ? s.email || s.display_name || ""
-                                            : s.display_name || s.email || "";
-                                          setLookupEmail(nextVal);
-                                          setSuggestionsOpen(false);
-                                        }}
-                                      >
-                                        <div className="truncate">
-                                          {s.display_name || s.email || ""}
-                                        </div>
-                                        {s.display_name &&
-                                          s.email &&
-                                          s.display_name !== s.email && (
-                                            <div className="text-xs opacity-60 truncate">
-                                              {s.email}
-                                            </div>
-                                          )}
-                                      </button>
-                                    ))}
-                                    {suggestLoading && (
-                                      <div className="px-3 py-2 text-xs opacity-60">
-                                        Loading...
-                                      </div>
-                                    )}
-                                  </div>
+                          <Button
+                            variant="outline"
+                            className="rounded-xl"
+                            onClick={() =>
+                              loadPlantRequests({ initial: false })
+                            }
+                            disabled={
+                              plantRequestsLoading || plantRequestsRefreshing
+                            }
+                          >
+                            <RefreshCw
+                              className={`h-4 w-4 mr-2 ${plantRequestsLoading || plantRequestsRefreshing ? "animate-spin" : ""}`}
+                            />
+                            <span className="hidden sm:inline">Refresh</span>
+                            <span className="sm:hidden inline">Reload</span>
+                          </Button>
+                        </div>
+
+                        {/* Statistics */}
+                        {!plantRequestsLoading && plantRequests.length > 0 && (
+                          <div className="flex flex-wrap gap-4 text-sm">
+                            <div className="flex items-center gap-2">
+                              <span className="opacity-60">
+                                Total Requests:
+                              </span>
+                              <span className="font-medium">
+                                {plantRequests.reduce(
+                                  (sum, req) => sum + req.request_count,
+                                  0,
                                 )}
+                              </span>
                             </div>
-                            <Button
-                              className="rounded-2xl"
-                              onClick={lookupMember}
-                              disabled={memberLoading || !lookupEmail}
-                            >
-                              <Search className="h-4 w-4" /> Lookup
-                            </Button>
+                            <div className="flex items-center gap-2">
+                              <span className="opacity-60">Unique Plants:</span>
+                              <span className="font-medium">
+                                {plantRequests.length}
+                              </span>
+                            </div>
                           </div>
-                          {memberError && (
-                            <div className="text-sm text-rose-600">
-                              {memberError}
-                            </div>
-                          )}
-                          {memberLoading && (
-                            <div className="space-y-3" aria-live="polite">
-                              <div className="flex items-center gap-3">
-                                <div className="h-12 w-12 rounded-full bg-neutral-200 animate-pulse" />
-                                <div className="flex-1 space-y-2">
-                                  <div className="h-4 bg-neutral-200 rounded w-40 animate-pulse" />
-                                  <div className="h-3 bg-neutral-200 rounded w-60 animate-pulse" />
-                                </div>
+                        )}
+
+                        {/* Search */}
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 opacity-50 pointer-events-none" />
+                          <Input
+                            placeholder="Search requests by plant name..."
+                            value={requestSearchQuery}
+                            onChange={(e) =>
+                              setRequestSearchQuery(e.target.value)
+                            }
+                            className="rounded-xl pl-10 pr-4"
+                          />
+                        </div>
+
+                        {plantRequestsError && (
+                          <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-900/30 dark:text-red-200">
+                            {plantRequestsError}
+                          </div>
+                        )}
+                        {plantRequestsLoading ? (
+                          <div className="text-sm opacity-60">
+                            Loading requests...
+                          </div>
+                        ) : (
+                          (() => {
+                            const filteredRequests = requestSearchQuery.trim()
+                              ? plantRequests.filter((req) =>
+                                  req.plant_name
+                                    .toLowerCase()
+                                    .includes(
+                                      requestSearchQuery.toLowerCase().trim(),
+                                    ),
+                                )
+                              : plantRequests;
+
+                            return filteredRequests.length === 0 ? (
+                              <div className="text-sm opacity-60">
+                                {requestSearchQuery.trim()
+                                  ? "No requests match your search."
+                                  : "No pending requests."}
                               </div>
-                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                                {Array.from({ length: 6 }).map((_, i) => (
-                                  <div
-                                    key={i}
-                                    className="h-16 rounded-xl border bg-white animate-pulse"
-                                  />
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                          {!memberLoading && !memberError && !memberData && (
-                            <div className="text-sm opacity-60">
-                              Search for a member to see details.
-                            </div>
-                          )}
-                          {memberData && (
-                            <div className="space-y-4">
-                              {(() => {
-                                const nameOrEmail = (
-                                  memberData.profile?.display_name ||
-                                  memberData.user?.email ||
-                                  ""
-                                ).trim();
-                                const initial = (
-                                  nameOrEmail[0] || "-"
-                                ).toUpperCase();
-                                return (
-                                  <div className="flex items-start justify-between gap-3">
-                                    <div className="flex items-center gap-3 min-w-0">
-                                      <div className="h-14 w-14 rounded-full bg-emerald-600 dark:bg-emerald-500 text-white flex items-center justify-center font-semibold shadow-inner">
-                                        {initial}
-                                      </div>
-                                      <div className="min-w-0">
-                                        <div className="text-base md:text-lg font-semibold truncate">
-                                          {memberData.profile?.display_name ||
-                                            memberData.user?.email ||
-                                            "-"}
+                            ) : (
+                              <div className="flex flex-col gap-3">
+                                {filteredRequests.map((req) => {
+                                  const updatedSource =
+                                    req.updated_at ?? req.created_at;
+                                  const updatedMs = updatedSource
+                                    ? Date.parse(updatedSource)
+                                    : NaN;
+                                  const hasTimestamp =
+                                    Number.isFinite(updatedMs);
+                                  const timeLabel = hasTimestamp
+                                    ? `Last update ${formatTimeAgo(updatedMs)}`
+                                    : "Last update unknown";
+                                  const updatedTitle = hasTimestamp
+                                    ? new Date(updatedMs).toLocaleString()
+                                    : undefined;
+                                  return (
+                                    <div
+                                      key={req.id}
+                                      className="flex flex-col gap-3 rounded-xl border bg-white p-3 dark:bg-[#252526] dark:border-[#3e3e42] md:flex-row md:items-center md:justify-between"
+                                    >
+                                      <div className="flex items-start gap-2 flex-1">
+                                        <div className="flex-1">
+                                          <div className="text-sm font-medium">
+                                            {req.plant_name}
+                                          </div>
+                                          <div
+                                            className="text-xs opacity-60"
+                                            title={updatedTitle}
+                                          >
+                                            {timeLabel}
+                                          </div>
                                         </div>
-                                        <div className="text-xs opacity-70 truncate">
-                                          {memberData.user?.email || "-"}
-                                          {memberData.user?.id ? (
-                                            <span className="opacity-60">
-                                              {" "}
-                                              ? id {memberData.user.id}
-                                            </span>
-                                          ) : null}
-                                        </div>
-                                        <div className="flex flex-wrap gap-1 mt-1">
-                                          {memberData.profile?.is_admin && (
-                                            <Badge
-                                              variant="outline"
-                                              className="rounded-full px-2 py-0.5 bg-emerald-200 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100 border-emerald-300 dark:border-emerald-700 flex items-center gap-1"
-                                            >
-                                              <ShieldCheck className="h-3 w-3" />{" "}
-                                              Admin
-                                            </Badge>
-                                          )}
-                                          {memberData.isBannedEmail && (
-                                            <Badge
-                                              variant="destructive"
-                                              className="rounded-full px-2 py-0.5"
-                                            >
-                                              Banned
-                                            </Badge>
-                                          )}
-                                          {memberData.lastOnlineAt && (
-                                            <Badge
-                                              variant="outline"
-                                              className="rounded-full px-2 py-0.5"
-                                            >
-                                              Last online{" "}
-                                              {new Date(
-                                                memberData.lastOnlineAt,
-                                              ).toLocaleString()}
-                                            </Badge>
-                                          )}
-                                          {(memberData as any)?.lastCountry && (
-                                            <Badge
-                                              variant="outline"
-                                              className="rounded-full px-2 py-0.5"
-                                            >
-                                              {countryCodeToName(
-                                                (memberData as any).lastCountry,
-                                              )}
-                                            </Badge>
-                                          )}
-                                          {(memberData as any)
-                                            ?.lastReferrer && (
-                                            <Badge
-                                              variant="outline"
-                                              className="rounded-full px-2 py-0.5"
-                                            >
-                                              Referrer{" "}
-                                              {(memberData as any).lastReferrer}
-                                            </Badge>
-                                          )}
-                                          {memberData.user?.created_at && (
-                                            <Badge
-                                              variant="outline"
-                                              className="rounded-full px-2 py-0.5"
-                                            >
-                                              Joined{" "}
-                                              {new Date(
-                                                memberData.user.created_at,
-                                              ).toLocaleDateString()}
-                                            </Badge>
-                                          )}
-                                        </div>
-                                      </div>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      {memberData.profile?.display_name && (
                                         <Button
-                                          variant="secondary"
-                                          size="icon"
-                                          className="rounded-xl"
-                                          title="View profile"
-                                          aria-label="View profile"
+                                          variant="ghost"
+                                          size="sm"
+                                          className="rounded-full h-6 w-6 p-0 opacity-60 hover:opacity-100"
                                           onClick={() =>
-                                            navigate(
-                                              `/u/${encodeURIComponent(memberData.profile.display_name)}`,
-                                            )
+                                            handleOpenInfoDialog(req)
+                                          }
+                                          title="View request details"
+                                        >
+                                          <Info className="h-4 w-4" />
+                                        </Button>
+                                      </div>
+                                      <div className="flex items-center gap-3">
+                                        <Badge
+                                          variant="secondary"
+                                          className="rounded-xl px-2 py-1 text-xs"
+                                        >
+                                          {req.request_count}{" "}
+                                          {req.request_count === 1
+                                            ? "request"
+                                            : "requests"}
+                                        </Badge>
+                                        <Button
+                                          variant="default"
+                                          className="rounded-2xl"
+                                          onClick={() =>
+                                            handleOpenCreatePlantDialog(req)
                                           }
                                         >
-                                          <ArrowUpRight className="h-4 w-4" />
+                                          <Plus className="h-4 w-4 mr-2" />
+                                          Add Plant
                                         </Button>
-                                      )}
-                                      {memberData.profile?.is_admin ? (
-                                        <Dialog
-                                          open={demoteOpen}
-                                          onOpenChange={setDemoteOpen}
+                                        <Button
+                                          variant="outline"
+                                          className="rounded-2xl"
+                                          onClick={() =>
+                                            completePlantRequest(req.id)
+                                          }
+                                          disabled={
+                                            completingRequestId === req.id
+                                          }
                                         >
-                                          <DialogTrigger asChild>
-                                            <Button
-                                              variant="destructive"
-                                              size="icon"
-                                              className="rounded-xl"
-                                              title="Remove admin"
-                                              aria-label="Remove admin"
-                                              disabled={!lookupEmail}
-                                            >
-                                              <ShieldX className="h-4 w-4" />
-                                            </Button>
-                                          </DialogTrigger>
-                                          <DialogContent>
-                                            <DialogHeader>
-                                              <DialogTitle>
-                                                Remove admin from{" "}
-                                                {lookupEmail || "user"}
-                                              </DialogTitle>
-                                              <DialogDescription>
-                                                This will revoke administrative
-                                                privileges and make the user a
-                                                normal member.
-                                              </DialogDescription>
-                                            </DialogHeader>
-                                            <DialogFooter>
-                                              <DialogClose asChild>
-                                                <Button variant="secondary">
-                                                  Cancel
-                                                </Button>
-                                              </DialogClose>
-                                              <Button
-                                                variant="destructive"
-                                                onClick={performDemote}
-                                                disabled={
-                                                  !lookupEmail ||
-                                                  demoteSubmitting
-                                                }
-                                              >
-                                                {demoteSubmitting
-                                                  ? "Removing?"
-                                                  : "Confirm remove"}
-                                              </Button>
-                                            </DialogFooter>
-                                          </DialogContent>
-                                        </Dialog>
-                                      ) : (
-                                        <Dialog
-                                          open={promoteOpen}
-                                          onOpenChange={setPromoteOpen}
-                                        >
-                                          <DialogTrigger asChild>
-                                            <Button
-                                              variant="secondary"
-                                              size="icon"
-                                              className="rounded-xl"
-                                              title="Promote to admin"
-                                              aria-label="Promote to admin"
-                                              disabled={!lookupEmail}
-                                            >
-                                              <ShieldCheck className="h-4 w-4" />
-                                            </Button>
-                                          </DialogTrigger>
-                                          <DialogContent>
-                                            <DialogHeader>
-                                              <DialogTitle>
-                                                Promote {lookupEmail || "user"}{" "}
-                                                to Admin
-                                              </DialogTitle>
-                                              <DialogDescription>
-                                                This grants full administrative
-                                                privileges. Are you sure?
-                                              </DialogDescription>
-                                            </DialogHeader>
-                                            <DialogFooter>
-                                              <DialogClose asChild>
-                                                <Button variant="secondary">
-                                                  Cancel
-                                                </Button>
-                                              </DialogClose>
-                                              <Button
-                                                onClick={performPromote}
-                                                disabled={
-                                                  !lookupEmail ||
-                                                  promoteSubmitting
-                                                }
-                                              >
-                                                {promoteSubmitting
-                                                  ? "Promoting?"
-                                                  : "Confirm promote"}
-                                              </Button>
-                                            </DialogFooter>
-                                          </DialogContent>
-                                        </Dialog>
+                                          {completingRequestId === req.id
+                                            ? "Completing..."
+                                            : "Complete"}
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })()
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    {/* Info Dialog */}
+                    <Dialog
+                      open={infoDialogOpen}
+                      onOpenChange={setInfoDialogOpen}
+                    >
+                      <DialogContent className="rounded-2xl max-w-md">
+                        <DialogHeader>
+                          <DialogTitle>Request Details</DialogTitle>
+                          <DialogDescription>
+                            Information about this plant request
+                          </DialogDescription>
+                        </DialogHeader>
+                        {selectedRequestInfo && (
+                          <div className="space-y-4 py-4">
+                            <div>
+                              <div className="text-sm font-medium mb-1">
+                                Plant Name
+                              </div>
+                              <div className="text-base">
+                                {selectedRequestInfo.plant_name}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-sm font-medium mb-2">
+                                Users who requested this plant
+                              </div>
+                              {requestUsersLoading ? (
+                                <div className="text-sm opacity-60">
+                                  Loading users...
+                                </div>
+                              ) : requestUsers.length === 0 ? (
+                                <div className="text-sm opacity-60">
+                                  No users have requested this plant yet.
+                                </div>
+                              ) : (
+                                <div className="space-y-2 max-h-60 overflow-y-auto">
+                                  {requestUsers.map((user) => (
+                                    <div
+                                      key={user.id}
+                                      className="text-sm p-2 rounded-lg bg-neutral-100 dark:bg-[#2d2d30]"
+                                    >
+                                      <div className="font-medium">
+                                        {user.display_name ||
+                                          user.email ||
+                                          `User ${user.id.slice(0, 8)}`}
+                                      </div>
+                                      {user.email && user.display_name && (
+                                        <div className="text-xs opacity-60">
+                                          {user.email}
+                                        </div>
                                       )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        <DialogFooter>
+                          <Button
+                            variant="secondary"
+                            onClick={() => setInfoDialogOpen(false)}
+                            className="rounded-xl"
+                          >
+                            Close
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+
+                    {/* Create Plant Dialog */}
+                    <Dialog
+                      open={createPlantDialogOpen}
+                      onOpenChange={setCreatePlantDialogOpen}
+                    >
+                      <DialogContent className="rounded-2xl max-w-4xl max-h-[90vh] overflow-y-auto p-0">
+                        <DialogHeader className="px-6 pt-6 pb-4">
+                          <DialogTitle>Add Plant from Request</DialogTitle>
+                          <DialogDescription>
+                            Create a new plant entry for "{createPlantName}".
+                            The plant name will be pre-filled.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="px-6 pb-6 overflow-y-auto">
+                          <CreatePlantPage
+                            onCancel={() => {
+                              setCreatePlantDialogOpen(false);
+                              setCreatePlantRequestId(null);
+                              setCreatePlantName("");
+                            }}
+                            onSaved={handlePlantCreated}
+                            initialName={createPlantName}
+                          />
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
+                )}
+
+                {/* Admin Logs Tab */}
+                {activeTab === "admin_logs" && <AdminLogs />}
+
+                {/* Members Tab */}
+                {activeTab === "members" && (
+                  <div className="space-y-4" ref={membersContainerRef}>
+                    <Card className="rounded-2xl">
+                      <CardContent className="p-4 space-y-3">
+                        <div className="text-sm font-medium flex items-center gap-2">
+                          <UserSearch className="h-4 w-4" /> Find member by
+                          email or username
+                        </div>
+                        <div className="flex gap-2 relative">
+                          <div className="flex-1 relative">
+                            <Input
+                              id="member-email"
+                              name="member-email"
+                              autoComplete="off"
+                              aria-label="Member email or username"
+                              className="rounded-xl"
+                              placeholder="user@example.com or username"
+                              value={lookupEmail}
+                              onChange={(
+                                e: React.ChangeEvent<HTMLInputElement>,
+                              ) => setLookupEmail(e.target.value)}
+                              onFocus={() => {
+                                if (emailSuggestions.length > 0)
+                                  setSuggestionsOpen(true);
+                              }}
+                              onBlur={() =>
+                                setTimeout(() => setSuggestionsOpen(false), 120)
+                              }
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  if (
+                                    suggestionsOpen &&
+                                    emailSuggestions.length > 0 &&
+                                    highlightIndex >= 0 &&
+                                    highlightIndex < emailSuggestions.length
+                                  ) {
+                                    e.preventDefault();
+                                    const chosen =
+                                      emailSuggestions[highlightIndex];
+                                    const typed = lookupEmail.trim();
+                                    const nextVal = typed.includes("@")
+                                      ? chosen.email ||
+                                        chosen.display_name ||
+                                        ""
+                                      : chosen.display_name ||
+                                        chosen.email ||
+                                        "";
+                                    setLookupEmail(nextVal);
+                                    setSuggestionsOpen(false);
+                                  } else {
+                                    e.preventDefault();
+                                    lookupMember();
+                                  }
+                                  return;
+                                }
+                                if (
+                                  !suggestionsOpen ||
+                                  emailSuggestions.length === 0
+                                )
+                                  return;
+                                if (e.key === "ArrowDown") {
+                                  e.preventDefault();
+                                  setHighlightIndex(
+                                    (prev) =>
+                                      (prev + 1) % emailSuggestions.length,
+                                  );
+                                } else if (e.key === "ArrowUp") {
+                                  e.preventDefault();
+                                  setHighlightIndex(
+                                    (prev) =>
+                                      (prev - 1 + emailSuggestions.length) %
+                                      emailSuggestions.length,
+                                  );
+                                }
+                              }}
+                            />
+                            {suggestionsOpen && emailSuggestions.length > 0 && (
+                              <div
+                                className="absolute z-10 mt-1 w-full rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526] shadow-md max-h-60 overflow-auto"
+                                role="listbox"
+                              >
+                                {emailSuggestions.map((s, idx) => (
+                                  <button
+                                    key={s.id}
+                                    type="button"
+                                    className={`w-full text-left px-3 py-2 text-sm rounded-xl ${idx === highlightIndex ? "bg-neutral-100 dark:bg-[#2d2d30]" : ""}`}
+                                    role="option"
+                                    aria-selected={idx === highlightIndex}
+                                    onMouseEnter={() => setHighlightIndex(idx)}
+                                    onMouseDown={(e) => {
+                                      e.preventDefault();
+                                      const typed = lookupEmail.trim();
+                                      const nextVal = typed.includes("@")
+                                        ? s.email || s.display_name || ""
+                                        : s.display_name || s.email || "";
+                                      setLookupEmail(nextVal);
+                                      setSuggestionsOpen(false);
+                                    }}
+                                  >
+                                    <div className="truncate">
+                                      {s.display_name || s.email || ""}
+                                    </div>
+                                    {s.display_name &&
+                                      s.email &&
+                                      s.display_name !== s.email && (
+                                        <div className="text-xs opacity-60 truncate">
+                                          {s.email}
+                                        </div>
+                                      )}
+                                  </button>
+                                ))}
+                                {suggestLoading && (
+                                  <div className="px-3 py-2 text-xs opacity-60">
+                                    Loading...
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          <Button
+                            className="rounded-2xl"
+                            onClick={lookupMember}
+                            disabled={memberLoading || !lookupEmail}
+                          >
+                            <Search className="h-4 w-4" /> Lookup
+                          </Button>
+                        </div>
+                        {memberError && (
+                          <div className="text-sm text-rose-600">
+                            {memberError}
+                          </div>
+                        )}
+                        {memberLoading && (
+                          <div className="space-y-3" aria-live="polite">
+                            <div className="flex items-center gap-3">
+                              <div className="h-12 w-12 rounded-full bg-neutral-200 animate-pulse" />
+                              <div className="flex-1 space-y-2">
+                                <div className="h-4 bg-neutral-200 rounded w-40 animate-pulse" />
+                                <div className="h-3 bg-neutral-200 rounded w-60 animate-pulse" />
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                              {Array.from({ length: 6 }).map((_, i) => (
+                                <div
+                                  key={i}
+                                  className="h-16 rounded-xl border bg-white animate-pulse"
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {!memberLoading && !memberError && !memberData && (
+                          <div className="text-sm opacity-60">
+                            Search for a member to see details.
+                          </div>
+                        )}
+                        {memberData && (
+                          <div className="space-y-4">
+                            {(() => {
+                              const nameOrEmail = (
+                                memberData.profile?.display_name ||
+                                memberData.user?.email ||
+                                ""
+                              ).trim();
+                              const initial = (
+                                nameOrEmail[0] || "-"
+                              ).toUpperCase();
+                              return (
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="flex items-center gap-3 min-w-0">
+                                    <div className="h-14 w-14 rounded-full bg-emerald-600 dark:bg-emerald-500 text-white flex items-center justify-center font-semibold shadow-inner">
+                                      {initial}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <div className="text-base md:text-lg font-semibold truncate">
+                                        {memberData.profile?.display_name ||
+                                          memberData.user?.email ||
+                                          "-"}
+                                      </div>
+                                      <div className="text-xs opacity-70 truncate">
+                                        {memberData.user?.email || "-"}
+                                        {memberData.user?.id ? (
+                                          <span className="opacity-60">
+                                            {" "}
+                                            ? id {memberData.user.id}
+                                          </span>
+                                        ) : null}
+                                      </div>
+                                      <div className="flex flex-wrap gap-1 mt-1">
+                                        {memberData.profile?.is_admin && (
+                                          <Badge
+                                            variant="outline"
+                                            className="rounded-full px-2 py-0.5 bg-emerald-200 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100 border-emerald-300 dark:border-emerald-700 flex items-center gap-1"
+                                          >
+                                            <ShieldCheck className="h-3 w-3" />{" "}
+                                            Admin
+                                          </Badge>
+                                        )}
+                                        {memberData.isBannedEmail && (
+                                          <Badge
+                                            variant="destructive"
+                                            className="rounded-full px-2 py-0.5"
+                                          >
+                                            Banned
+                                          </Badge>
+                                        )}
+                                        {memberData.lastOnlineAt && (
+                                          <Badge
+                                            variant="outline"
+                                            className="rounded-full px-2 py-0.5"
+                                          >
+                                            Last online{" "}
+                                            {new Date(
+                                              memberData.lastOnlineAt,
+                                            ).toLocaleString()}
+                                          </Badge>
+                                        )}
+                                        {(memberData as any)?.lastCountry && (
+                                          <Badge
+                                            variant="outline"
+                                            className="rounded-full px-2 py-0.5"
+                                          >
+                                            {countryCodeToName(
+                                              (memberData as any).lastCountry,
+                                            )}
+                                          </Badge>
+                                        )}
+                                        {(memberData as any)?.lastReferrer && (
+                                          <Badge
+                                            variant="outline"
+                                            className="rounded-full px-2 py-0.5"
+                                          >
+                                            Referrer{" "}
+                                            {(memberData as any).lastReferrer}
+                                          </Badge>
+                                        )}
+                                        {memberData.user?.created_at && (
+                                          <Badge
+                                            variant="outline"
+                                            className="rounded-full px-2 py-0.5"
+                                          >
+                                            Joined{" "}
+                                            {new Date(
+                                              memberData.user.created_at,
+                                            ).toLocaleDateString()}
+                                          </Badge>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    {memberData.profile?.display_name && (
+                                      <Button
+                                        variant="secondary"
+                                        size="icon"
+                                        className="rounded-xl"
+                                        title="View profile"
+                                        aria-label="View profile"
+                                        onClick={() =>
+                                          navigate(
+                                            `/u/${encodeURIComponent(memberData.profile.display_name)}`,
+                                          )
+                                        }
+                                      >
+                                        <ArrowUpRight className="h-4 w-4" />
+                                      </Button>
+                                    )}
+                                    {memberData.profile?.is_admin ? (
                                       <Dialog
-                                        open={banOpen}
-                                        onOpenChange={setBanOpen}
+                                        open={demoteOpen}
+                                        onOpenChange={setDemoteOpen}
                                       >
                                         <DialogTrigger asChild>
                                           <Button
                                             variant="destructive"
                                             size="icon"
                                             className="rounded-xl"
-                                            title="Ban user"
-                                            aria-label="Ban user"
+                                            title="Remove admin"
+                                            aria-label="Remove admin"
                                             disabled={!lookupEmail}
                                           >
-                                            <Gavel className="h-4 w-4" />
+                                            <ShieldX className="h-4 w-4" />
                                           </Button>
                                         </DialogTrigger>
                                         <DialogContent>
                                           <DialogHeader>
                                             <DialogTitle>
-                                              Ban {lookupEmail || "user"}
+                                              Remove admin from{" "}
+                                              {lookupEmail || "user"}
                                             </DialogTitle>
                                             <DialogDescription>
-                                              This will delete the account and
-                                              ban all known IPs for this user.
+                                              This will revoke administrative
+                                              privileges and make the user a
+                                              normal member.
                                             </DialogDescription>
                                           </DialogHeader>
-                                          <div className="grid gap-2 mt-2">
-                                            <label
-                                              htmlFor="ban-reason"
-                                              className="text-xs opacity-60"
-                                            >
-                                              Reason
-                                            </label>
-                                            <Textarea
-                                              id="ban-reason"
-                                              name="ban-reason"
-                                              className="min-h-[100px]"
-                                              placeholder="Reason for ban"
-                                              value={banReason}
-                                              onChange={(e) =>
-                                                setBanReason(e.target.value)
-                                              }
-                                            />
-                                          </div>
                                           <DialogFooter>
                                             <DialogClose asChild>
                                               <Button variant="secondary">
@@ -5158,662 +4885,195 @@ export const AdminPage: React.FC = () => {
                                             </DialogClose>
                                             <Button
                                               variant="destructive"
-                                              onClick={performBan}
+                                              onClick={performDemote}
                                               disabled={
-                                                !lookupEmail || banSubmitting
+                                                !lookupEmail || demoteSubmitting
                                               }
                                             >
-                                              {banSubmitting
-                                                ? "Banning?"
-                                                : "Confirm ban"}
+                                              {demoteSubmitting
+                                                ? "Removing?"
+                                                : "Confirm remove"}
                                             </Button>
                                           </DialogFooter>
                                         </DialogContent>
                                       </Dialog>
-                                    </div>
-                                  </div>
-                                );
-                              })()}
-
-                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                                <div className="rounded-xl border p-3 text-center">
-                                  <div className="text-[11px] opacity-60">
-                                    Visits
-                                  </div>
-                                  <div className="text-base font-semibold tabular-nums">
-                                    {memberData.visitsCount ?? "-"}
-                                  </div>
-                                </div>
-
-                                <div className="rounded-xl border p-3 text-center">
-                                  <div className="text-[11px] opacity-60">
-                                    Total plants
-                                  </div>
-                                  <div className="text-base font-semibold tabular-nums">
-                                    {memberData.plantsTotal ?? "-"}
-                                  </div>
-                                </div>
-                                <div className="rounded-xl border p-3 text-center">
-                                  <div className="text-[11px] opacity-60">
-                                    Last IP
-                                  </div>
-                                  <div
-                                    className="text-base font-semibold tabular-nums truncate"
-                                    title={
-                                      memberData.lastIp ||
-                                      (memberData.ips &&
-                                      memberData.ips.length > 0
-                                        ? memberData.ips[0]
-                                        : undefined) ||
-                                      undefined
-                                    }
-                                  >
-                                    {memberData.lastIp ||
-                                      (memberData.ips &&
-                                      memberData.ips.length > 0
-                                        ? memberData.ips[0]
-                                        : null) ||
-                                      "-"}
-                                  </div>
-                                </div>
-                                <div className="rounded-xl border p-3 text-center">
-                                  <div className="text-[11px] opacity-60">
-                                    Mean RPM (5m)
-                                  </div>
-                                  <div className="text-base font-semibold tabular-nums">
-                                    {typeof memberData.meanRpm5m === "number"
-                                      ? memberData.meanRpm5m.toFixed(2)
-                                      : "-"}
-                                  </div>
-                                </div>
-                                <div className="rounded-xl border p-3">
-                                  <div className="text-[11px] opacity-60 mb-1">
-                                    Top referrers
-                                  </div>
-                                  {!memberData.topReferrers ||
-                                  memberData.topReferrers.length === 0 ? (
-                                    <div className="text-xs opacity-60">?</div>
-                                  ) : (
-                                    <div className="space-y-0.5">
-                                      {memberData.topReferrers
-                                        .slice(0, 1)
-                                        .map((r, idx) => (
-                                          <div
-                                            key={`${r.source}-${idx}`}
-                                            className="flex items-center justify-between text-sm"
-                                          >
-                                            <div className="truncate mr-2">
-                                              {r.source || "direct"}
-                                            </div>
-                                            <div className="tabular-nums">
-                                              {r.visits}
-                                            </div>
-                                          </div>
-                                        ))}
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="rounded-xl border p-3">
-                                  <div className="text-[11px] opacity-60 mb-1">
-                                    Top countries
-                                  </div>
-                                  {!memberData.topCountries ||
-                                  memberData.topCountries.length === 0 ? (
-                                    <div className="text-xs opacity-60">-</div>
-                                  ) : (
-                                    <div className="space-y-0.5">
-                                      {memberData.topCountries
-                                        .slice(0, 1)
-                                        .map((c, idx) => (
-                                          <div
-                                            key={`${c.country}-${idx}`}
-                                            className="flex items-center justify-between text-sm"
-                                          >
-                                            <div className="truncate mr-2">
-                                              {countryCodeToName(c.country)}
-                                            </div>
-                                            <div className="tabular-nums">
-                                              {c.visits}
-                                            </div>
-                                          </div>
-                                        ))}
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="rounded-xl border p-3">
-                                  <div className="text-[11px] opacity-60 mb-1">
-                                    Top devices
-                                  </div>
-                                  {!memberData.topDevices ||
-                                  memberData.topDevices.length === 0 ? (
-                                    <div className="text-xs opacity-60">-</div>
-                                  ) : (
-                                    <div className="space-y-0.5">
-                                      {memberData.topDevices
-                                        .slice(0, 1)
-                                        .map((d, idx) => (
-                                          <div
-                                            key={`${d.device}-${idx}`}
-                                            className="flex items-center justify-between text-sm"
-                                          >
-                                            <div className="truncate mr-2">
-                                              {d.device}
-                                            </div>
-                                            <div className="tabular-nums">
-                                              {d.visits}
-                                            </div>
-                                          </div>
-                                        ))}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-
-                              <div className="space-y-1">
-                                <div className="text-xs font-medium uppercase tracking-wide opacity-60">
-                                  Known IPs
-                                </div>
-                                <div className="text-xs opacity-60">
-                                  Unique IPs:{" "}
-                                  <span className="tabular-nums">
-                                    {memberData.ips.length}
-                                  </span>
-                                </div>
-                                <div className="flex flex-wrap gap-1">
-                                  {memberData.ips.map((ip) => (
-                                    <Badge
-                                      key={ip}
-                                      role="button"
-                                      tabIndex={0}
-                                      onClick={() => jumpToIpLookup(ip)}
-                                      onKeyDown={(e) => {
-                                        if (
-                                          e.key === "Enter" ||
-                                          e.key === " "
-                                        ) {
-                                          e.preventDefault();
-                                          jumpToIpLookup(ip);
-                                        }
-                                      }}
-                                      title={`Lookup members for ? ${ip}`}
-                                      aria-label={`Lookup members for ? ${ip}`}
-                                      variant="outline"
-                                      className="rounded-full cursor-pointer hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-ring"
-                                    >
-                                      {ip}
-                                    </Badge>
-                                  ))}
-                                  {memberData.ips.length === 0 && (
-                                    <div className="text-xs opacity-60">
-                                      No IPs recorded
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-
-                              <Card className={glassCardClass}>
-                                <CardContent className="p-4">
-                                  <div className="flex items-center justify-between gap-2 mb-2">
-                                    <div>
-                                      <div className="text-sm font-medium">
-                                        Visits - last 30 days
-                                      </div>
-                                      <div className="text-xs opacity-60">
-                                        {memberVisitsUpdatedAt
-                                          ? `Updated ? ${formatTimeAgo(memberVisitsUpdatedAt)}`
-                                          : "Updated -"}
-                                      </div>
-                                    </div>
-                                    <Button
-                                      variant="outline"
-                                      size="icon"
-                                      aria-label="Refresh visits"
-                                      onClick={() => {
-                                        if (memberData?.user?.id)
-                                          loadMemberVisitsSeries(
-                                            memberData.user.id,
-                                            { initial: true },
-                                          );
-                                      }}
-                                      disabled={
-                                        memberVisitsLoading ||
-                                        !memberData?.user?.id
-                                      }
-                                      className="h-8 w-8 rounded-xl border bg-white text-black hover:bg-stone-50"
-                                    >
-                                      <RefreshCw
-                                        className={`h-4 w-4 ? ${memberVisitsLoading ? "animate-spin" : ""}`}
-                                      />
-                                    </Button>
-                                  </div>
-
-                                  {memberVisitsLoading ? (
-                                    <div className="text-sm opacity-60">
-                                      Loading...
-                                    </div>
-                                  ) : memberVisitsSeries.length === 0 ? (
-                                    <div className="text-sm opacity-60">
-                                      {memberVisitsWarning
-                                        ? `Data unavailable: ${memberVisitsWarning}`
-                                        : "No data yet."}
-                                    </div>
-                                  ) : (
-                                    (() => {
-                                      const values = memberVisitsSeries.map(
-                                        (d) => d.visits,
-                                      );
-                                      const maxVal = Math.max(...values, 1);
-                                      const avgVal = Math.round(
-                                        values.reduce((a, b) => a + b, 0) /
-                                          values.length,
-                                      );
-                                      const formatShort = (iso: string) => {
-                                        try {
-                                          const dt = new Date(
-                                            iso + "T00:00:00Z",
-                                          );
-                                          return new Intl.DateTimeFormat(
-                                            undefined,
-                                            {
-                                              month: "numeric",
-                                              day: "numeric",
-                                              timeZone: "UTC",
-                                            },
-                                          ).format(dt);
-                                        } catch {
-                                          return iso;
-                                        }
-                                      };
-                                      const formatFull = (iso: string) => {
-                                        try {
-                                          const dt = new Date(
-                                            iso + "T00:00:00Z",
-                                          );
-                                          return new Intl.DateTimeFormat(
-                                            undefined,
-                                            {
-                                              weekday: "short",
-                                              month: "short",
-                                              day: "numeric",
-                                              year: "numeric",
-                                              timeZone: "UTC",
-                                            },
-                                          ).format(dt);
-                                        } catch {
-                                          return iso;
-                                        }
-                                      };
-                                      const TooltipContent = ({
-                                        active,
-                                        payload,
-                                        label,
-                                      }: any) => {
-                                        if (
-                                          !active ||
-                                          !payload ||
-                                          payload.length === 0
-                                        )
-                                          return null;
-                                        const current = payload[0]
-                                          ?.value as number;
-                                        return (
-                                          <div className="rounded-xl border bg-white/90 dark:bg-[#252526] dark:border-[#3e3e42] backdrop-blur p-3 shadow-lg">
-                                            <div className="text-xs opacity-60 dark:opacity-70">
-                                              {formatFull(label)}
-                                            </div>
-                                            <div className="mt-1 text-base font-semibold tabular-nums">
-                                              {current}
-                                            </div>
-                                          </div>
-                                        );
-                                      };
-                                      return (
-                                        <div>
-                                          <div className="text-sm font-medium mb-2">
-                                            Total last 30 days:{" "}
-                                            <span className="tabular-nums">
-                                              {memberVisitsTotal30d}
-                                            </span>
-                                          </div>
-                                          <div className="h-64">
-                                            <ResponsiveContainer
-                                              width="100%"
-                                              height="100%"
-                                            >
-                                              <ComposedChart
-                                                data={memberVisitsSeries}
-                                                margin={{
-                                                  top: 10,
-                                                  right: 16,
-                                                  bottom: 14,
-                                                  left: 16,
-                                                }}
-                                              >
-                                                <defs>
-                                                  <linearGradient
-                                                    id="mVisitsLine"
-                                                    x1="0"
-                                                    y1="0"
-                                                    x2="1"
-                                                    y2="0"
-                                                  >
-                                                    <stop
-                                                      offset="0%"
-                                                      stopColor="#065f46"
-                                                    />
-                                                    <stop
-                                                      offset="100%"
-                                                      stopColor="#10b981"
-                                                    />
-                                                  </linearGradient>
-                                                  <linearGradient
-                                                    id="mVisitsArea"
-                                                    x1="0"
-                                                    y1="0"
-                                                    x2="0"
-                                                    y2="1"
-                                                  >
-                                                    <stop
-                                                      offset="0%"
-                                                      stopColor="#10b981"
-                                                      stopOpacity={0.3}
-                                                    />
-                                                    <stop
-                                                      offset="100%"
-                                                      stopColor="#10b981"
-                                                      stopOpacity={0.06}
-                                                    />
-                                                  </linearGradient>
-                                                </defs>
-                                                <CartesianGrid
-                                                  strokeDasharray="3 3"
-                                                  stroke="rgba(0,0,0,0.06)"
-                                                />
-                                                <XAxis
-                                                  dataKey="date"
-                                                  tickFormatter={formatShort}
-                                                  tick={{
-                                                    fontSize: 11,
-                                                    fill: "#525252",
-                                                  }}
-                                                  axisLine={false}
-                                                  tickLine={false}
-                                                  interval={4}
-                                                  padding={{
-                                                    left: 12,
-                                                    right: 12,
-                                                  }}
-                                                />
-                                                <YAxis
-                                                  allowDecimals={false}
-                                                  domain={[
-                                                    0,
-                                                    Math.max(maxVal, 5),
-                                                  ]}
-                                                  tick={{
-                                                    fontSize: 11,
-                                                    fill: "#525252",
-                                                  }}
-                                                  axisLine={false}
-                                                  tickLine={false}
-                                                />
-                                                <Tooltip
-                                                  content={<TooltipContent />}
-                                                  cursor={{
-                                                    stroke: "rgba(0,0,0,0.1)",
-                                                  }}
-                                                />
-                                                <ReferenceLine
-                                                  y={avgVal}
-                                                  stroke="#a3a3a3"
-                                                  strokeDasharray="4 4"
-                                                  ifOverflow="extendDomain"
-                                                  label={{
-                                                    value: "avg",
-                                                    position: "insideRight",
-                                                    fill: "#737373",
-                                                    fontSize: 11,
-                                                    dx: -6,
-                                                  }}
-                                                />
-                                                <Area
-                                                  type="monotone"
-                                                  dataKey="visits"
-                                                  fill="url(#mVisitsArea)"
-                                                  stroke="none"
-                                                  animationDuration={600}
-                                                />
-                                                <Line
-                                                  type="monotone"
-                                                  dataKey="visits"
-                                                  stroke="url(#mVisitsLine)"
-                                                  strokeWidth={3}
-                                                  dot={false}
-                                                  activeDot={{
-                                                    r: 5,
-                                                    strokeWidth: 2,
-                                                    stroke: "#065f46",
-                                                    fill: "#ffffff",
-                                                  }}
-                                                  animationDuration={700}
-                                                />
-                                              </ComposedChart>
-                                            </ResponsiveContainer>
-                                          </div>
-                                        </div>
-                                      );
-                                    })()
-                                  )}
-                                </CardContent>
-                              </Card>
-
-                              <Card className="rounded-2xl">
-                                <CardContent className="p-4 space-y-2">
-                                  <div className="flex items-start justify-between">
-                                    <div className="text-sm font-medium">
-                                      Admin notes
-                                    </div>
-                                    <AddAdminNote
-                                      profileId={memberData.user?.id || ""}
-                                      onAdded={() => lookupMember()}
-                                    />
-                                  </div>
-                                  <div className="space-y-2">
-                                    {(memberData.adminNotes || []).length ===
-                                    0 ? (
-                                      <div className="text-sm opacity-60">
-                                        No notes yet.
-                                      </div>
                                     ) : (
-                                      (memberData.adminNotes || []).map((n) => (
-                                        <NoteRow
-                                          key={n.id}
-                                          note={n}
-                                          onRemoved={() => lookupMember()}
-                                        />
-                                      ))
-                                    )}
-                                  </div>
-                                </CardContent>
-                              </Card>
-
-                              {(memberData.isBannedEmail ||
-                                (memberData.bannedIps &&
-                                  memberData.bannedIps.length > 0)) && (
-                                <div className="rounded-xl border p-3 bg-rose-100 dark:bg-rose-900/40 border-rose-300 dark:border-rose-800">
-                                  <div className="text-sm font-medium text-rose-800 dark:text-rose-200 flex items-center gap-2">
-                                    <AlertTriangle className="h-4 w-4" /> Banned
-                                    details
-                                  </div>
-                                  {memberData.isBannedEmail && (
-                                    <div className="text-sm mt-1">
-                                      Email banned{" "}
-                                      {memberData.bannedAt
-                                        ? `on ? ${new Date(memberData.bannedAt).toLocaleString()}`
-                                        : ""}
-                                      {memberData.bannedReason
-                                        ? ` ? ? ${memberData.bannedReason}`
-                                        : ""}
-                                    </div>
-                                  )}
-                                  {memberData.bannedIps &&
-                                    memberData.bannedIps.length > 0 && (
-                                      <div className="text-sm mt-1">
-                                        Blocked IPs:
-                                        <div className="mt-1 flex flex-wrap gap-1">
-                                          {memberData.bannedIps.map((ip) => (
-                                            <Badge
-                                              key={ip}
-                                              role="button"
-                                              tabIndex={0}
-                                              onClick={() => jumpToIpLookup(ip)}
-                                              onKeyDown={(e) => {
-                                                if (
-                                                  e.key === "Enter" ||
-                                                  e.key === " "
-                                                ) {
-                                                  e.preventDefault();
-                                                  jumpToIpLookup(ip);
-                                                }
-                                              }}
-                                              title={`Lookup members for ? ${ip}`}
-                                              aria-label={`Lookup members for ? ${ip}`}
-                                              variant="outline"
-                                              className="rounded-full bg-white cursor-pointer hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-ring"
+                                      <Dialog
+                                        open={promoteOpen}
+                                        onOpenChange={setPromoteOpen}
+                                      >
+                                        <DialogTrigger asChild>
+                                          <Button
+                                            variant="secondary"
+                                            size="icon"
+                                            className="rounded-xl"
+                                            title="Promote to admin"
+                                            aria-label="Promote to admin"
+                                            disabled={!lookupEmail}
+                                          >
+                                            <ShieldCheck className="h-4 w-4" />
+                                          </Button>
+                                        </DialogTrigger>
+                                        <DialogContent>
+                                          <DialogHeader>
+                                            <DialogTitle>
+                                              Promote {lookupEmail || "user"} to
+                                              Admin
+                                            </DialogTitle>
+                                            <DialogDescription>
+                                              This grants full administrative
+                                              privileges. Are you sure?
+                                            </DialogDescription>
+                                          </DialogHeader>
+                                          <DialogFooter>
+                                            <DialogClose asChild>
+                                              <Button variant="secondary">
+                                                Cancel
+                                              </Button>
+                                            </DialogClose>
+                                            <Button
+                                              onClick={performPromote}
+                                              disabled={
+                                                !lookupEmail ||
+                                                promoteSubmitting
+                                              }
                                             >
-                                              {ip}
-                                            </Badge>
-                                          ))}
-                                        </div>
-                                      </div>
+                                              {promoteSubmitting
+                                                ? "Promoting?"
+                                                : "Confirm promote"}
+                                            </Button>
+                                          </DialogFooter>
+                                        </DialogContent>
+                                      </Dialog>
                                     )}
+                                    <Dialog
+                                      open={banOpen}
+                                      onOpenChange={setBanOpen}
+                                    >
+                                      <DialogTrigger asChild>
+                                        <Button
+                                          variant="destructive"
+                                          size="icon"
+                                          className="rounded-xl"
+                                          title="Ban user"
+                                          aria-label="Ban user"
+                                          disabled={!lookupEmail}
+                                        >
+                                          <Gavel className="h-4 w-4" />
+                                        </Button>
+                                      </DialogTrigger>
+                                      <DialogContent>
+                                        <DialogHeader>
+                                          <DialogTitle>
+                                            Ban {lookupEmail || "user"}
+                                          </DialogTitle>
+                                          <DialogDescription>
+                                            This will delete the account and ban
+                                            all known IPs for this user.
+                                          </DialogDescription>
+                                        </DialogHeader>
+                                        <div className="grid gap-2 mt-2">
+                                          <label
+                                            htmlFor="ban-reason"
+                                            className="text-xs opacity-60"
+                                          >
+                                            Reason
+                                          </label>
+                                          <Textarea
+                                            id="ban-reason"
+                                            name="ban-reason"
+                                            className="min-h-[100px]"
+                                            placeholder="Reason for ban"
+                                            value={banReason}
+                                            onChange={(e) =>
+                                              setBanReason(e.target.value)
+                                            }
+                                          />
+                                        </div>
+                                        <DialogFooter>
+                                          <DialogClose asChild>
+                                            <Button variant="secondary">
+                                              Cancel
+                                            </Button>
+                                          </DialogClose>
+                                          <Button
+                                            variant="destructive"
+                                            onClick={performBan}
+                                            disabled={
+                                              !lookupEmail || banSubmitting
+                                            }
+                                          >
+                                            {banSubmitting
+                                              ? "Banning?"
+                                              : "Confirm ban"}
+                                          </Button>
+                                        </DialogFooter>
+                                      </DialogContent>
+                                    </Dialog>
+                                  </div>
                                 </div>
-                              )}
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
+                              );
+                            })()}
 
-                      {/* Ban action moved into member card header via hammer button */}
-                    </div>
-                  )}
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                              <div className="rounded-xl border p-3 text-center">
+                                <div className="text-[11px] opacity-60">
+                                  Visits
+                                </div>
+                                <div className="text-base font-semibold tabular-nums">
+                                  {memberData.visitsCount ?? "-"}
+                                </div>
+                              </div>
 
-                  {/* IP Search Card */}
-                  {activeTab === "members" && (
-                    <Card className="rounded-2xl">
-                      <CardContent className="p-4 space-y-3">
-                        <div className="text-sm font-medium flex items-center gap-2">
-                          <UserSearch className="h-4 w-4" /> Find users by IP
-                          address
-                        </div>
-                        <div className="flex gap-2">
-                          <Input
-                            id="member-ip"
-                            name="member-ip"
-                            autoComplete="off"
-                            aria-label="IP address"
-                            className="rounded-xl"
-                            placeholder="e.g. 203.0.113.42"
-                            value={ipLookup}
-                            onChange={(
-                              e: React.ChangeEvent<HTMLInputElement>,
-                            ) => setIpLookup(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") {
-                                e.preventDefault();
-                                lookupByIp();
-                              }
-                            }}
-                            ref={memberIpInputRef}
-                          />
-                          <Button
-                            className="rounded-2xl"
-                            onClick={() => lookupByIp()}
-                            disabled={ipLoading || !ipLookup.trim()}
-                          >
-                            <Search className="h-4 w-4" /> Search IP
-                          </Button>
-                        </div>
-                        {ipError && (
-                          <div className="text-sm text-rose-600">{ipError}</div>
-                        )}
-                        {ipLoading && (
-                          <div className="space-y-2" aria-live="polite">
-                            <div className="h-4 bg-neutral-200 rounded w-52 animate-pulse" />
-                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                              {Array.from({ length: 6 }).map((_, i) => (
-                                <div
-                                  key={i}
-                                  className="h-20 rounded-xl border bg-white animate-pulse"
-                                />
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        {!ipLoading && !ipError && !ipUsed && (
-                          <div className="text-sm opacity-60">
-                            Search for an IP address to see details.
-                          </div>
-                        )}
-                        {!ipLoading && ipUsed && (
-                          <div className="space-y-2">
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                              <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 text-center bg-white dark:bg-[#252526]">
-                                <div className="text-[11px] opacity-60">IP</div>
+                              <div className="rounded-xl border p-3 text-center">
+                                <div className="text-[11px] opacity-60">
+                                  Total plants
+                                </div>
+                                <div className="text-base font-semibold tabular-nums">
+                                  {memberData.plantsTotal ?? "-"}
+                                </div>
+                              </div>
+                              <div className="rounded-xl border p-3 text-center">
+                                <div className="text-[11px] opacity-60">
+                                  Last IP
+                                </div>
                                 <div
                                   className="text-base font-semibold tabular-nums truncate"
-                                  title={ipUsed || undefined}
+                                  title={
+                                    memberData.lastIp ||
+                                    (memberData.ips && memberData.ips.length > 0
+                                      ? memberData.ips[0]
+                                      : undefined) ||
+                                    undefined
+                                  }
                                 >
-                                  {ipUsed || "-"}
+                                  {memberData.lastIp ||
+                                    (memberData.ips && memberData.ips.length > 0
+                                      ? memberData.ips[0]
+                                      : null) ||
+                                    "-"}
                                 </div>
                               </div>
-                              <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 text-center bg-white dark:bg-[#252526]">
-                                <div className="text-[11px] opacity-60">
-                                  Users
-                                </div>
-                                <div className="text-base font-semibold tabular-nums">
-                                  {ipUsersCount ?? ipResults.length}
-                                </div>
-                              </div>
-                              <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 text-center bg-white dark:bg-[#252526]">
-                                <div className="text-[11px] opacity-60">
-                                  Connections
-                                </div>
-                                <div className="text-base font-semibold tabular-nums">
-                                  {ipConnectionsCount ?? "-"}
-                                </div>
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                              <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 text-center bg-white dark:bg-[#252526]">
+                              <div className="rounded-xl border p-3 text-center">
                                 <div className="text-[11px] opacity-60">
                                   Mean RPM (5m)
                                 </div>
                                 <div className="text-base font-semibold tabular-nums">
-                                  {typeof ipMeanRpm5m === "number"
-                                    ? ipMeanRpm5m.toFixed(2)
+                                  {typeof memberData.meanRpm5m === "number"
+                                    ? memberData.meanRpm5m.toFixed(2)
                                     : "-"}
                                 </div>
                               </div>
-                              <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 text-center bg-white dark:bg-[#252526]">
-                                <div className="text-[11px] opacity-60">
-                                  Country
-                                </div>
-                                <div className="text-base font-semibold tabular-nums">
-                                  {ipCountry
-                                    ? countryCodeToName(ipCountry)
-                                    : "-"}
-                                </div>
-                              </div>
-                              <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 bg-white dark:bg-[#252526]">
+                              <div className="rounded-xl border p-3">
                                 <div className="text-[11px] opacity-60 mb-1">
                                   Top referrers
                                 </div>
-                                {ipTopReferrers.length === 0 ? (
-                                  <div className="text-xs opacity-60">-</div>
+                                {!memberData.topReferrers ||
+                                memberData.topReferrers.length === 0 ? (
+                                  <div className="text-xs opacity-60">?</div>
                                 ) : (
                                   <div className="space-y-0.5">
-                                    {ipTopReferrers
+                                    {memberData.topReferrers
                                       .slice(0, 1)
                                       .map((r, idx) => (
                                         <div
@@ -5831,117 +5091,683 @@ export const AdminPage: React.FC = () => {
                                   </div>
                                 )}
                               </div>
-                              {otherCountriesTooltip &&
-                                createPortal(
-                                  <div
-                                    className="fixed z-[70] pointer-events-none"
-                                    style={{
-                                      top: otherCountriesTooltip.top,
-                                      left: otherCountriesTooltip.left,
-                                      transform: "translate(-50%, -100%)",
-                                    }}
-                                  >
-                                    <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526] shadow px-3 py-2 max-w-[280px]">
-                                      <div className="text-xs font-medium mb-1">
-                                        Countries in Other
-                                      </div>
-                                      <div className="text-[11px] opacity-80 space-y-0.5 max-h-48 overflow-auto">
-                                        {otherCountriesTooltip.names.map(
-                                          (n, idx) => (
-                                            <div
-                                              key={`${n}-${idx}`}
-                                              className="truncate"
-                                            >
-                                              {n}
-                                            </div>
-                                          ),
-                                        )}
-                                      </div>
-                                    </div>
-                                  </div>,
-                                  document.body,
-                                )}
-                            </div>
-                            <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 bg-white dark:bg-[#252526]">
-                              <div className="text-[11px] opacity-60 mb-1">
-                                Top devices
-                              </div>
-                              {ipTopDevices.length === 0 ? (
-                                <div className="text-xs opacity-60">-</div>
-                              ) : (
-                                <div className="space-y-0.5">
-                                  {ipTopDevices.slice(0, 1).map((d, idx) => (
-                                    <div
-                                      key={`${d.device}-${idx}`}
-                                      className="flex items-center justify-between text-sm"
-                                    >
-                                      <div className="truncate mr-2">
-                                        {d.device}
-                                      </div>
-                                      <div className="tabular-nums">
-                                        {d.visits}
-                                      </div>
-                                    </div>
-                                  ))}
+                              <div className="rounded-xl border p-3">
+                                <div className="text-[11px] opacity-60 mb-1">
+                                  Top countries
                                 </div>
-                              )}
-                            </div>
-                            <div className="text-xs opacity-60">
-                              Last seen:{" "}
-                              {ipLastSeenAt
-                                ? new Date(ipLastSeenAt).toLocaleString()
-                                : "-"}
-                            </div>
-                            {ipResults.length === 0 ? (
-                              <div className="text-sm opacity-60">
-                                No users found for this IP.
+                                {!memberData.topCountries ||
+                                memberData.topCountries.length === 0 ? (
+                                  <div className="text-xs opacity-60">-</div>
+                                ) : (
+                                  <div className="space-y-0.5">
+                                    {memberData.topCountries
+                                      .slice(0, 1)
+                                      .map((c, idx) => (
+                                        <div
+                                          key={`${c.country}-${idx}`}
+                                          className="flex items-center justify-between text-sm"
+                                        >
+                                          <div className="truncate mr-2">
+                                            {countryCodeToName(c.country)}
+                                          </div>
+                                          <div className="tabular-nums">
+                                            {c.visits}
+                                          </div>
+                                        </div>
+                                      ))}
+                                  </div>
+                                )}
                               </div>
-                            ) : (
-                              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                                {ipResults.map((u) => (
-                                  <button
-                                    key={u.id}
-                                    type="button"
-                                    className="text-left rounded-2xl border border-stone-300 dark:border-[#3e3e42] p-3 bg-white dark:bg-[#252526] hover:bg-stone-50 dark:hover:bg-[#2d2d30]"
-                                    onClick={() => {
-                                      const nextVal = (
-                                        u.email ||
-                                        u.display_name ||
-                                        ""
-                                      ).trim();
-                                      if (!nextVal) return;
-                                      setLookupEmail(nextVal);
-                                      setTimeout(() => {
-                                        lookupMember();
-                                      }, 0);
+                              <div className="rounded-xl border p-3">
+                                <div className="text-[11px] opacity-60 mb-1">
+                                  Top devices
+                                </div>
+                                {!memberData.topDevices ||
+                                memberData.topDevices.length === 0 ? (
+                                  <div className="text-xs opacity-60">-</div>
+                                ) : (
+                                  <div className="space-y-0.5">
+                                    {memberData.topDevices
+                                      .slice(0, 1)
+                                      .map((d, idx) => (
+                                        <div
+                                          key={`${d.device}-${idx}`}
+                                          className="flex items-center justify-between text-sm"
+                                        >
+                                          <div className="truncate mr-2">
+                                            {d.device}
+                                          </div>
+                                          <div className="tabular-nums">
+                                            {d.visits}
+                                          </div>
+                                        </div>
+                                      ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="space-y-1">
+                              <div className="text-xs font-medium uppercase tracking-wide opacity-60">
+                                Known IPs
+                              </div>
+                              <div className="text-xs opacity-60">
+                                Unique IPs:{" "}
+                                <span className="tabular-nums">
+                                  {memberData.ips.length}
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap gap-1">
+                                {memberData.ips.map((ip) => (
+                                  <Badge
+                                    key={ip}
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={() => jumpToIpLookup(ip)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter" || e.key === " ") {
+                                        e.preventDefault();
+                                        jumpToIpLookup(ip);
+                                      }
                                     }}
+                                    title={`Lookup members for ? ${ip}`}
+                                    aria-label={`Lookup members for ? ${ip}`}
+                                    variant="outline"
+                                    className="rounded-full cursor-pointer hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-ring"
                                   >
-                                    <div className="text-sm font-semibold truncate">
-                                      {u.display_name || u.email || "User"}
-                                    </div>
-                                    <div className="text-xs opacity-70 truncate">
-                                      {u.email || "-"}
-                                    </div>
-                                    {u.last_seen_at && (
-                                      <div className="text-[11px] opacity-60 mt-0.5">
-                                        Last seen{" "}
-                                        {new Date(
-                                          u.last_seen_at,
-                                        ).toLocaleString()}
-                                      </div>
-                                    )}
-                                  </button>
+                                    {ip}
+                                  </Badge>
                                 ))}
+                                {memberData.ips.length === 0 && (
+                                  <div className="text-xs opacity-60">
+                                    No IPs recorded
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            <Card className={glassCardClass}>
+                              <CardContent className="p-4">
+                                <div className="flex items-center justify-between gap-2 mb-2">
+                                  <div>
+                                    <div className="text-sm font-medium">
+                                      Visits - last 30 days
+                                    </div>
+                                    <div className="text-xs opacity-60">
+                                      {memberVisitsUpdatedAt
+                                        ? `Updated ? ${formatTimeAgo(memberVisitsUpdatedAt)}`
+                                        : "Updated -"}
+                                    </div>
+                                  </div>
+                                  <Button
+                                    variant="outline"
+                                    size="icon"
+                                    aria-label="Refresh visits"
+                                    onClick={() => {
+                                      if (memberData?.user?.id)
+                                        loadMemberVisitsSeries(
+                                          memberData.user.id,
+                                          { initial: true },
+                                        );
+                                    }}
+                                    disabled={
+                                      memberVisitsLoading ||
+                                      !memberData?.user?.id
+                                    }
+                                    className="h-8 w-8 rounded-xl border bg-white text-black hover:bg-stone-50"
+                                  >
+                                    <RefreshCw
+                                      className={`h-4 w-4 ? ${memberVisitsLoading ? "animate-spin" : ""}`}
+                                    />
+                                  </Button>
+                                </div>
+
+                                {memberVisitsLoading ? (
+                                  <div className="text-sm opacity-60">
+                                    Loading...
+                                  </div>
+                                ) : memberVisitsSeries.length === 0 ? (
+                                  <div className="text-sm opacity-60">
+                                    {memberVisitsWarning
+                                      ? `Data unavailable: ${memberVisitsWarning}`
+                                      : "No data yet."}
+                                  </div>
+                                ) : (
+                                  (() => {
+                                    const values = memberVisitsSeries.map(
+                                      (d) => d.visits,
+                                    );
+                                    const maxVal = Math.max(...values, 1);
+                                    const avgVal = Math.round(
+                                      values.reduce((a, b) => a + b, 0) /
+                                        values.length,
+                                    );
+                                    const formatShort = (iso: string) => {
+                                      try {
+                                        const dt = new Date(iso + "T00:00:00Z");
+                                        return new Intl.DateTimeFormat(
+                                          undefined,
+                                          {
+                                            month: "numeric",
+                                            day: "numeric",
+                                            timeZone: "UTC",
+                                          },
+                                        ).format(dt);
+                                      } catch {
+                                        return iso;
+                                      }
+                                    };
+                                    const formatFull = (iso: string) => {
+                                      try {
+                                        const dt = new Date(iso + "T00:00:00Z");
+                                        return new Intl.DateTimeFormat(
+                                          undefined,
+                                          {
+                                            weekday: "short",
+                                            month: "short",
+                                            day: "numeric",
+                                            year: "numeric",
+                                            timeZone: "UTC",
+                                          },
+                                        ).format(dt);
+                                      } catch {
+                                        return iso;
+                                      }
+                                    };
+                                    const TooltipContent = ({
+                                      active,
+                                      payload,
+                                      label,
+                                    }: any) => {
+                                      if (
+                                        !active ||
+                                        !payload ||
+                                        payload.length === 0
+                                      )
+                                        return null;
+                                      const current = payload[0]
+                                        ?.value as number;
+                                      return (
+                                        <div className="rounded-xl border bg-white/90 dark:bg-[#252526] dark:border-[#3e3e42] backdrop-blur p-3 shadow-lg">
+                                          <div className="text-xs opacity-60 dark:opacity-70">
+                                            {formatFull(label)}
+                                          </div>
+                                          <div className="mt-1 text-base font-semibold tabular-nums">
+                                            {current}
+                                          </div>
+                                        </div>
+                                      );
+                                    };
+                                    return (
+                                      <div>
+                                        <div className="text-sm font-medium mb-2">
+                                          Total last 30 days:{" "}
+                                          <span className="tabular-nums">
+                                            {memberVisitsTotal30d}
+                                          </span>
+                                        </div>
+                                        <div className="h-64">
+                                          <ResponsiveContainer
+                                            width="100%"
+                                            height="100%"
+                                          >
+                                            <ComposedChart
+                                              data={memberVisitsSeries}
+                                              margin={{
+                                                top: 10,
+                                                right: 16,
+                                                bottom: 14,
+                                                left: 16,
+                                              }}
+                                            >
+                                              <defs>
+                                                <linearGradient
+                                                  id="mVisitsLine"
+                                                  x1="0"
+                                                  y1="0"
+                                                  x2="1"
+                                                  y2="0"
+                                                >
+                                                  <stop
+                                                    offset="0%"
+                                                    stopColor="#065f46"
+                                                  />
+                                                  <stop
+                                                    offset="100%"
+                                                    stopColor="#10b981"
+                                                  />
+                                                </linearGradient>
+                                                <linearGradient
+                                                  id="mVisitsArea"
+                                                  x1="0"
+                                                  y1="0"
+                                                  x2="0"
+                                                  y2="1"
+                                                >
+                                                  <stop
+                                                    offset="0%"
+                                                    stopColor="#10b981"
+                                                    stopOpacity={0.3}
+                                                  />
+                                                  <stop
+                                                    offset="100%"
+                                                    stopColor="#10b981"
+                                                    stopOpacity={0.06}
+                                                  />
+                                                </linearGradient>
+                                              </defs>
+                                              <CartesianGrid
+                                                strokeDasharray="3 3"
+                                                stroke="rgba(0,0,0,0.06)"
+                                              />
+                                              <XAxis
+                                                dataKey="date"
+                                                tickFormatter={formatShort}
+                                                tick={{
+                                                  fontSize: 11,
+                                                  fill: "#525252",
+                                                }}
+                                                axisLine={false}
+                                                tickLine={false}
+                                                interval={4}
+                                                padding={{
+                                                  left: 12,
+                                                  right: 12,
+                                                }}
+                                              />
+                                              <YAxis
+                                                allowDecimals={false}
+                                                domain={[
+                                                  0,
+                                                  Math.max(maxVal, 5),
+                                                ]}
+                                                tick={{
+                                                  fontSize: 11,
+                                                  fill: "#525252",
+                                                }}
+                                                axisLine={false}
+                                                tickLine={false}
+                                              />
+                                              <Tooltip
+                                                content={<TooltipContent />}
+                                                cursor={{
+                                                  stroke: "rgba(0,0,0,0.1)",
+                                                }}
+                                              />
+                                              <ReferenceLine
+                                                y={avgVal}
+                                                stroke="#a3a3a3"
+                                                strokeDasharray="4 4"
+                                                ifOverflow="extendDomain"
+                                                label={{
+                                                  value: "avg",
+                                                  position: "insideRight",
+                                                  fill: "#737373",
+                                                  fontSize: 11,
+                                                  dx: -6,
+                                                }}
+                                              />
+                                              <Area
+                                                type="monotone"
+                                                dataKey="visits"
+                                                fill="url(#mVisitsArea)"
+                                                stroke="none"
+                                                animationDuration={600}
+                                              />
+                                              <Line
+                                                type="monotone"
+                                                dataKey="visits"
+                                                stroke="url(#mVisitsLine)"
+                                                strokeWidth={3}
+                                                dot={false}
+                                                activeDot={{
+                                                  r: 5,
+                                                  strokeWidth: 2,
+                                                  stroke: "#065f46",
+                                                  fill: "#ffffff",
+                                                }}
+                                                animationDuration={700}
+                                              />
+                                            </ComposedChart>
+                                          </ResponsiveContainer>
+                                        </div>
+                                      </div>
+                                    );
+                                  })()
+                                )}
+                              </CardContent>
+                            </Card>
+
+                            <Card className="rounded-2xl">
+                              <CardContent className="p-4 space-y-2">
+                                <div className="flex items-start justify-between">
+                                  <div className="text-sm font-medium">
+                                    Admin notes
+                                  </div>
+                                  <AddAdminNote
+                                    profileId={memberData.user?.id || ""}
+                                    onAdded={() => lookupMember()}
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  {(memberData.adminNotes || []).length ===
+                                  0 ? (
+                                    <div className="text-sm opacity-60">
+                                      No notes yet.
+                                    </div>
+                                  ) : (
+                                    (memberData.adminNotes || []).map((n) => (
+                                      <NoteRow
+                                        key={n.id}
+                                        note={n}
+                                        onRemoved={() => lookupMember()}
+                                      />
+                                    ))
+                                  )}
+                                </div>
+                              </CardContent>
+                            </Card>
+
+                            {(memberData.isBannedEmail ||
+                              (memberData.bannedIps &&
+                                memberData.bannedIps.length > 0)) && (
+                              <div className="rounded-xl border p-3 bg-rose-100 dark:bg-rose-900/40 border-rose-300 dark:border-rose-800">
+                                <div className="text-sm font-medium text-rose-800 dark:text-rose-200 flex items-center gap-2">
+                                  <AlertTriangle className="h-4 w-4" /> Banned
+                                  details
+                                </div>
+                                {memberData.isBannedEmail && (
+                                  <div className="text-sm mt-1">
+                                    Email banned{" "}
+                                    {memberData.bannedAt
+                                      ? `on ? ${new Date(memberData.bannedAt).toLocaleString()}`
+                                      : ""}
+                                    {memberData.bannedReason
+                                      ? ` ? ? ${memberData.bannedReason}`
+                                      : ""}
+                                  </div>
+                                )}
+                                {memberData.bannedIps &&
+                                  memberData.bannedIps.length > 0 && (
+                                    <div className="text-sm mt-1">
+                                      Blocked IPs:
+                                      <div className="mt-1 flex flex-wrap gap-1">
+                                        {memberData.bannedIps.map((ip) => (
+                                          <Badge
+                                            key={ip}
+                                            role="button"
+                                            tabIndex={0}
+                                            onClick={() => jumpToIpLookup(ip)}
+                                            onKeyDown={(e) => {
+                                              if (
+                                                e.key === "Enter" ||
+                                                e.key === " "
+                                              ) {
+                                                e.preventDefault();
+                                                jumpToIpLookup(ip);
+                                              }
+                                            }}
+                                            title={`Lookup members for ? ${ip}`}
+                                            aria-label={`Lookup members for ? ${ip}`}
+                                            variant="outline"
+                                            className="rounded-full bg-white cursor-pointer hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-ring"
+                                          >
+                                            {ip}
+                                          </Badge>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
                               </div>
                             )}
                           </div>
                         )}
                       </CardContent>
                     </Card>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
+
+                    {/* Ban action moved into member card header via hammer button */}
+                  </div>
+                )}
+
+                {/* IP Search Card */}
+                {activeTab === "members" && (
+                  <Card className="rounded-2xl">
+                    <CardContent className="p-4 space-y-3">
+                      <div className="text-sm font-medium flex items-center gap-2">
+                        <UserSearch className="h-4 w-4" /> Find users by IP
+                        address
+                      </div>
+                      <div className="flex gap-2">
+                        <Input
+                          id="member-ip"
+                          name="member-ip"
+                          autoComplete="off"
+                          aria-label="IP address"
+                          className="rounded-xl"
+                          placeholder="e.g. 203.0.113.42"
+                          value={ipLookup}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                            setIpLookup(e.target.value)
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              lookupByIp();
+                            }
+                          }}
+                          ref={memberIpInputRef}
+                        />
+                        <Button
+                          className="rounded-2xl"
+                          onClick={() => lookupByIp()}
+                          disabled={ipLoading || !ipLookup.trim()}
+                        >
+                          <Search className="h-4 w-4" /> Search IP
+                        </Button>
+                      </div>
+                      {ipError && (
+                        <div className="text-sm text-rose-600">{ipError}</div>
+                      )}
+                      {ipLoading && (
+                        <div className="space-y-2" aria-live="polite">
+                          <div className="h-4 bg-neutral-200 rounded w-52 animate-pulse" />
+                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                            {Array.from({ length: 6 }).map((_, i) => (
+                              <div
+                                key={i}
+                                className="h-20 rounded-xl border bg-white animate-pulse"
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {!ipLoading && !ipError && !ipUsed && (
+                        <div className="text-sm opacity-60">
+                          Search for an IP address to see details.
+                        </div>
+                      )}
+                      {!ipLoading && ipUsed && (
+                        <div className="space-y-2">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 text-center bg-white dark:bg-[#252526]">
+                              <div className="text-[11px] opacity-60">IP</div>
+                              <div
+                                className="text-base font-semibold tabular-nums truncate"
+                                title={ipUsed || undefined}
+                              >
+                                {ipUsed || "-"}
+                              </div>
+                            </div>
+                            <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 text-center bg-white dark:bg-[#252526]">
+                              <div className="text-[11px] opacity-60">
+                                Users
+                              </div>
+                              <div className="text-base font-semibold tabular-nums">
+                                {ipUsersCount ?? ipResults.length}
+                              </div>
+                            </div>
+                            <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 text-center bg-white dark:bg-[#252526]">
+                              <div className="text-[11px] opacity-60">
+                                Connections
+                              </div>
+                              <div className="text-base font-semibold tabular-nums">
+                                {ipConnectionsCount ?? "-"}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 text-center bg-white dark:bg-[#252526]">
+                              <div className="text-[11px] opacity-60">
+                                Mean RPM (5m)
+                              </div>
+                              <div className="text-base font-semibold tabular-nums">
+                                {typeof ipMeanRpm5m === "number"
+                                  ? ipMeanRpm5m.toFixed(2)
+                                  : "-"}
+                              </div>
+                            </div>
+                            <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 text-center bg-white dark:bg-[#252526]">
+                              <div className="text-[11px] opacity-60">
+                                Country
+                              </div>
+                              <div className="text-base font-semibold tabular-nums">
+                                {ipCountry ? countryCodeToName(ipCountry) : "-"}
+                              </div>
+                            </div>
+                            <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 bg-white dark:bg-[#252526]">
+                              <div className="text-[11px] opacity-60 mb-1">
+                                Top referrers
+                              </div>
+                              {ipTopReferrers.length === 0 ? (
+                                <div className="text-xs opacity-60">-</div>
+                              ) : (
+                                <div className="space-y-0.5">
+                                  {ipTopReferrers.slice(0, 1).map((r, idx) => (
+                                    <div
+                                      key={`${r.source}-${idx}`}
+                                      className="flex items-center justify-between text-sm"
+                                    >
+                                      <div className="truncate mr-2">
+                                        {r.source || "direct"}
+                                      </div>
+                                      <div className="tabular-nums">
+                                        {r.visits}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                            {otherCountriesTooltip &&
+                              createPortal(
+                                <div
+                                  className="fixed z-[70] pointer-events-none"
+                                  style={{
+                                    top: otherCountriesTooltip.top,
+                                    left: otherCountriesTooltip.left,
+                                    transform: "translate(-50%, -100%)",
+                                  }}
+                                >
+                                  <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526] shadow px-3 py-2 max-w-[280px]">
+                                    <div className="text-xs font-medium mb-1">
+                                      Countries in Other
+                                    </div>
+                                    <div className="text-[11px] opacity-80 space-y-0.5 max-h-48 overflow-auto">
+                                      {otherCountriesTooltip.names.map(
+                                        (n, idx) => (
+                                          <div
+                                            key={`${n}-${idx}`}
+                                            className="truncate"
+                                          >
+                                            {n}
+                                          </div>
+                                        ),
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>,
+                                document.body,
+                              )}
+                          </div>
+                          <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 bg-white dark:bg-[#252526]">
+                            <div className="text-[11px] opacity-60 mb-1">
+                              Top devices
+                            </div>
+                            {ipTopDevices.length === 0 ? (
+                              <div className="text-xs opacity-60">-</div>
+                            ) : (
+                              <div className="space-y-0.5">
+                                {ipTopDevices.slice(0, 1).map((d, idx) => (
+                                  <div
+                                    key={`${d.device}-${idx}`}
+                                    className="flex items-center justify-between text-sm"
+                                  >
+                                    <div className="truncate mr-2">
+                                      {d.device}
+                                    </div>
+                                    <div className="tabular-nums">
+                                      {d.visits}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-xs opacity-60">
+                            Last seen:{" "}
+                            {ipLastSeenAt
+                              ? new Date(ipLastSeenAt).toLocaleString()
+                              : "-"}
+                          </div>
+                          {ipResults.length === 0 ? (
+                            <div className="text-sm opacity-60">
+                              No users found for this IP.
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                              {ipResults.map((u) => (
+                                <button
+                                  key={u.id}
+                                  type="button"
+                                  className="text-left rounded-2xl border border-stone-300 dark:border-[#3e3e42] p-3 bg-white dark:bg-[#252526] hover:bg-stone-50 dark:hover:bg-[#2d2d30]"
+                                  onClick={() => {
+                                    const nextVal = (
+                                      u.email ||
+                                      u.display_name ||
+                                      ""
+                                    ).trim();
+                                    if (!nextVal) return;
+                                    setLookupEmail(nextVal);
+                                    setTimeout(() => {
+                                      lookupMember();
+                                    }, 0);
+                                  }}
+                                >
+                                  <div className="text-sm font-semibold truncate">
+                                    {u.display_name || u.email || "User"}
+                                  </div>
+                                  <div className="text-xs opacity-70 truncate">
+                                    {u.email || "-"}
+                                  </div>
+                                  {u.last_seen_at && (
+                                    <div className="text-[11px] opacity-60 mt-0.5">
+                                      Last seen{" "}
+                                      {new Date(
+                                        u.last_seen_at,
+                                      ).toLocaleString()}
+                                    </div>
+                                  )}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+              </CardContent>
+            </Card>
           </div>
         </main>
       </div>
