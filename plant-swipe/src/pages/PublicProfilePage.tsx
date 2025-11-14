@@ -661,8 +661,13 @@ export default function PublicProfilePage() {
     }
   }, [navigate])
 
+  const glassCard =
+    "rounded-[24px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#17171a]/90 shadow-[0_25px_70px_-45px_rgba(15,23,42,0.65)]"
+  const profileHeroCard =
+    "relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50 via-white to-stone-100 dark:from-[#252526] dark:via-[#1e1e1e] dark:to-[#171717] shadow-[0_35px_60px_-15px_rgba(16,185,129,0.35)]"
+
   return (
-    <div className="max-w-5xl mx-auto mt-8 px-4 md:px-0">
+    <div className="max-w-5xl mx-auto mt-8 px-4 md:px-0 pb-16 space-y-6">
       {user?.id && (
         <div ref={searchContainerRef} className="relative mb-6">
           <label
@@ -769,15 +774,21 @@ export default function PublicProfilePage() {
       )}
       {loading && <ProfilePageSkeleton />}
       {error && !loading && (
-        <div className="p-8 text-center">
-          <div className="text-sm text-red-600 mb-2">{error}</div>
-          <Button asChild variant="secondary"><Link to="/">{t('profile.backHome')}</Link></Button>
+        <div className={`${glassCard} p-8 text-center text-sm text-red-600`}>
+          <p className="mb-2">{error}</p>
+          <Button asChild variant="secondary" className="rounded-2xl">
+            <Link to="/">{t("profile.backHome")}</Link>
+          </Button>
         </div>
       )}
-      {!loading && !error && pp && (
-        <>
-          <Card className="rounded-3xl">
-            <CardContent className="p-6 md:p-8 space-y-4">
+        {!loading && !error && pp && (
+          <>
+            <Card className={profileHeroCard}>
+              <div className="absolute inset-0 pointer-events-none">
+                <div className="absolute -top-6 -right-8 h-32 w-32 rounded-full bg-emerald-200/60 dark:bg-emerald-500/15 blur-3xl" />
+                <div className="absolute bottom-0 left-0 h-32 w-32 rounded-full bg-emerald-100/60 dark:bg-emerald-500/10 blur-3xl" />
+              </div>
+              <CardContent className="relative z-10 p-6 md:p-8 space-y-4">
               <div className="flex items-start gap-4">
                 <div className="h-16 w-16 rounded-2xl bg-stone-200 overflow-hidden flex items-center justify-center" aria-hidden>
                   <UserIcon
@@ -888,14 +899,14 @@ export default function PublicProfilePage() {
                 </div>
               )}
             </CardContent>
-          </Card>
+            </Card>
 
-          {canViewProfile && (
-            <>
-              <div className="mt-4">
-                <Card className="rounded-3xl">
-                  <CardContent className="p-6 md:p-8 space-y-4">
-                    <div className="text-lg font-semibold">{t('profile.highlights')}</div>
+            {canViewProfile && (
+              <>
+                <div className="mt-4">
+                  <Card className={glassCard}>
+                    <CardContent className="p-6 md:p-8 space-y-4">
+                      <div className="text-lg font-semibold">{t("profile.highlights")}</div>
                     <div className="flex flex-col md:flex-row items-center justify-center gap-0">
                       {/* Task completion grid - left side */}
                       <div className="flex-1 flex justify-center items-center">
@@ -971,26 +982,26 @@ export default function PublicProfilePage() {
             </>
           )}
 
-          {isOwner && privateInfo && (
-            <div className="mt-4">
-              <Card className="rounded-3xl">
-                <CardContent className="p-6 md:p-8 space-y-2">
-                  <div className="text-lg font-semibold">{t('profile.privateInfo.title')}</div>
-                  <div className="text-sm opacity-60">{t('profile.privateInfo.description')}</div>
-                  <div className="grid sm:grid-cols-2 gap-3 mt-2">
-                    <div className="rounded-xl border p-3">
-                      <div className="text-[11px] opacity-60">{t('profile.privateInfo.userId')}</div>
-                      <div className="text-xs break-all">{privateInfo.id || '-'}</div>
+            {isOwner && privateInfo && (
+              <div className="mt-4">
+                <Card className={glassCard}>
+                  <CardContent className="p-6 md:p-8 space-y-2">
+                    <div className="text-lg font-semibold">{t("profile.privateInfo.title")}</div>
+                    <div className="text-sm opacity-60">{t("profile.privateInfo.description")}</div>
+                    <div className="grid sm:grid-cols-2 gap-3 mt-2">
+                      <div className="rounded-xl border p-3">
+                        <div className="text-[11px] opacity-60">{t("profile.privateInfo.userId")}</div>
+                        <div className="text-xs break-all">{privateInfo.id || "-"}</div>
+                      </div>
+                      <div className="rounded-xl border p-3">
+                        <div className="text-[11px] opacity-60">{t("profile.privateInfo.email")}</div>
+                        <div className="text-sm">{privateInfo.email || (user as any)?.email || "-"}</div>
+                      </div>
                     </div>
-                    <div className="rounded-xl border p-3">
-                      <div className="text-[11px] opacity-60">{t('profile.privateInfo.email')}</div>
-                      <div className="text-sm">{privateInfo.email || (user as any)?.email || '-'}</div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
 
 
           {isOwner && (

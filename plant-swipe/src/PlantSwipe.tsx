@@ -54,7 +54,10 @@ export default function PlantSwipe() {
   const [onlySeeds, setOnlySeeds] = useState(false)
   const [onlyFavorites, setOnlyFavorites] = useState(false)
   const [favoritesFirst, setFavoritesFirst] = useState(false)
-  const [showFilters, setShowFilters] = useState(false)
+  const [showFilters, setShowFilters] = useState(() => {
+    if (typeof window === "undefined") return true
+    return window.innerWidth >= 1024
+  })
   const [requestPlantDialogOpen, setRequestPlantDialogOpen] = useState(false)
 
   const [index, setIndex] = useState(0)
@@ -465,6 +468,96 @@ export default function PlantSwipe() {
     }
   }, [user])
 
+  const FilterControls = () => (
+    <div className="space-y-6">
+      {/* Seasons */}
+      <div>
+        <div className="text-xs font-medium mb-2 uppercase tracking-wide opacity-60">{t("plant.season")}</div>
+        <div className="flex flex-wrap gap-2">
+          {(["Spring", "Summer", "Autumn", "Winter"] as const).map((s) => (
+            <button
+              key={s}
+              onClick={() => setSeasonFilter((cur) => (cur === s ? null : s))}
+              className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
+                seasonFilter === s ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+              }`}
+              aria-pressed={seasonFilter === s}
+            >
+              {t(`plant.${s.toLowerCase()}`)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Colors */}
+      <div>
+        <div className="text-xs font-medium mb-2 uppercase tracking-wide opacity-60">{t("plant.color")}</div>
+        <div className="flex flex-wrap gap-2">
+          {["Red", "Pink", "Yellow", "White", "Purple", "Blue", "Orange", "Green"].map((c) => (
+            <button
+              key={c}
+              onClick={() => setColorFilter((cur) => (cur === c ? null : c))}
+              className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
+                colorFilter === c ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+              }`}
+              aria-pressed={colorFilter === c}
+            >
+              {t(`plant.${c.toLowerCase()}`)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Toggles */}
+      <div className="pt-2 space-y-2">
+        <button
+          onClick={() => setOnlySeeds((v) => !v)}
+          className={`w-full justify-center px-3 py-2 rounded-2xl text-sm shadow-sm border flex items-center gap-2 transition ${
+            onlySeeds ? "bg-emerald-600 dark:bg-emerald-500 text-white" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+          }`}
+          aria-pressed={onlySeeds}
+        >
+          <span className="inline-block h-2 w-2 rounded-full bg-current" /> {t("plant.seedsOnly")}
+        </button>
+        <button
+          onClick={() => setOnlyFavorites((v) => !v)}
+          className={`w-full justify-center px-3 py-2 rounded-2xl text-sm shadow-sm border flex items-center gap-2 transition ${
+            onlyFavorites ? "bg-rose-600 dark:bg-rose-500 text-white" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+          }`}
+          aria-pressed={onlyFavorites}
+        >
+          <span className="inline-block h-2 w-2 rounded-full bg-current" /> {t("plant.favoritesOnly")}
+        </button>
+        <button
+          onClick={() => setFavoritesFirst((v) => !v)}
+          className={`w-full justify-center px-3 py-2 rounded-2xl text-sm shadow-sm border flex items-center gap-2 transition ${
+            favoritesFirst
+              ? "bg-rose-200 dark:bg-rose-800 text-rose-900 dark:text-rose-100 border-rose-400 dark:border-rose-600"
+              : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+          }`}
+          aria-pressed={favoritesFirst}
+        >
+          {t("plant.favoritesFirst")}
+        </button>
+      </div>
+
+      {/* Active filters summary */}
+      <div className="text-xs space-y-1">
+        <div className="font-medium uppercase tracking-wide opacity-60">{t("plant.active")}</div>
+        <div className="flex flex-wrap gap-2">
+          {seasonFilter && <Badge variant="secondary" className="rounded-xl">{t(`plant.${seasonFilter.toLowerCase()}`)}</Badge>}
+          {colorFilter && <Badge variant="secondary" className="rounded-xl">{t(`plant.${colorFilter.toLowerCase()}`)}</Badge>}
+          {onlySeeds && <Badge variant="secondary" className="rounded-xl">{t("plant.seedsOnly")}</Badge>}
+          {onlyFavorites && <Badge variant="secondary" className="rounded-xl">{t("plant.favoritesOnly")}</Badge>}
+          {favoritesFirst && <Badge variant="secondary" className="rounded-xl">{t("plant.favoritesFirst")}</Badge>}
+          {!seasonFilter && !colorFilter && !onlySeeds && !onlyFavorites && !favoritesFirst && (
+            <span className="opacity-50">{t("plant.none")}</span>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+
     return (
       <AuthActionsProvider openLogin={openLogin} openSignup={openSignup}>
         <div className="min-h-screen w-full bg-gradient-to-b from-stone-100 to-stone-200 dark:from-[#252526] dark:to-[#1e1e1e] p-4 pb-24 md:p-8 md:pb-8 overflow-x-hidden">
@@ -502,163 +595,97 @@ export default function PlantSwipe() {
           />
 
           {/* Layout: grid only when search view (to avoid narrow column in other views) */}
-      <div className={`max-w-6xl mx-auto mt-6 ${currentView === 'search' ? 'lg:grid lg:grid-cols-[260px_1fr] lg:gap-10' : ''}`}>
+        <div
+          className={`max-w-6xl mx-auto mt-6 ${
+            currentView === "search"
+              ? showFilters
+                ? "lg:grid lg:grid-cols-[260px_1fr] lg:gap-10"
+                : "lg:grid lg:grid-cols-1"
+              : ""
+          }`}
+        >
         {/* Sidebar / Filters */}
-        {currentView === 'search' && (
-        <>
-          {/* Toggle button for mobile */}
-          <div className="lg:hidden mb-4">
-            <Button
-              onClick={() => setShowFilters(!showFilters)}
-              variant="outline"
-              className="w-full justify-between rounded-2xl"
-              aria-expanded={showFilters}
-            >
-              <span className="flex items-center gap-2">
-                <ListFilter className="h-4 w-4" />
-                <span>{t('plant.refineFilters')}</span>
-              </span>
-              {showFilters ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            </Button>
-          </div>
-          <aside className={`${showFilters ? 'block' : 'hidden'} lg:block mb-8 lg:mb-0 space-y-6 lg:sticky lg:top-4 self-start`} aria-label="Filters">
-          {/* Search */}
-            <div>
-              <Label htmlFor="plant-search" className="sr-only">{t('common.search')}</Label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-60 pointer-events-none" />
-                <Input
-                  id="plant-search"
-                  className="pl-9 md:pl-9"
-                  placeholder={t('plant.searchPlaceholder')}
-                  value={query}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                    setQuery(e.target.value)
-                    setIndex(0)
-                  }}
-                />
-              </div>
-              {user && (
-                <div className="mt-2 space-y-2">
-                  <Button
-                    variant="secondary"
-                    className="w-full rounded-2xl"
-                    onClick={() => setRequestPlantDialogOpen(true)}
-                  >
-                    <MessageSquarePlus className="h-4 w-4 mr-2" />
-                    {t('requestPlant.button') || 'Request Plant'}
-                  </Button>
-                  {profile?.is_admin && (
-                    <Button
-                      variant="default"
-                      className="w-full rounded-2xl"
-                      onClick={() => navigate('/create')}
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      {t('common.addPlant')}
-                    </Button>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Seasons */}
-            <div>
-              <div className="text-xs font-medium mb-2 uppercase tracking-wide opacity-60">{t('plant.season')}</div>
-              <div className="flex flex-wrap gap-2">
-                {(["Spring", "Summer", "Autumn", "Winter"] as const).map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => setSeasonFilter((cur) => (cur === s ? null : s))}
-                    className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${seasonFilter === s ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"}`}
-                    aria-pressed={seasonFilter === s}
-                  >
-                    {t(`plant.${s.toLowerCase()}`)}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Colors */}
-            <div>
-              <div className="text-xs font-medium mb-2 uppercase tracking-wide opacity-60">{t('plant.color')}</div>
-              <div className="flex flex-wrap gap-2">
-                {["Red", "Pink", "Yellow", "White", "Purple", "Blue", "Orange", "Green"].map((c) => (
-                  <button
-                    key={c}
-                    onClick={() => setColorFilter((cur) => (cur === c ? null : c))}
-                    className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${colorFilter === c ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"}`}
-                    aria-pressed={colorFilter === c}
-                  >
-                    {t(`plant.${c.toLowerCase()}`)}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Toggles */}
-            <div className="pt-2">
-              <button
-                onClick={() => setOnlySeeds((v) => !v)}
-                className={`w-full justify-center px-3 py-2 rounded-2xl text-sm shadow-sm border flex items-center gap-2 transition ${
-                  onlySeeds ? "bg-emerald-600 dark:bg-emerald-500 text-white" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
-                }`}
-                aria-pressed={onlySeeds}
+          {currentView === "search" && showFilters && (
+            <>
+              <aside
+                className="hidden lg:block mb-8 lg:mb-0 space-y-6 lg:sticky lg:top-4 self-start"
+                aria-label="Filters"
               >
-                <span className="inline-block h-2 w-2 rounded-full bg-current" /> {t('plant.seedsOnly')}
-              </button>
-              <div className="h-2" />
-              <button
-                onClick={() => setOnlyFavorites((v) => !v)}
-                className={`w-full justify-center px-3 py-2 rounded-2xl text-sm shadow-sm border flex items-center gap-2 transition ${
-                  onlyFavorites ? "bg-rose-600 dark:bg-rose-500 text-white" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
-                }`}
-                aria-pressed={onlyFavorites}
-              >
-                <span className="inline-block h-2 w-2 rounded-full bg-current" /> {t('plant.favoritesOnly')}
-              </button>
-              <div className="h-2" />
-              <button
-                onClick={() => setFavoritesFirst((v) => !v)}
-                className={`w-full justify-center px-3 py-2 rounded-2xl text-sm shadow-sm border flex items-center gap-2 transition ${
-                  favoritesFirst ? "bg-rose-200 dark:bg-rose-800 text-rose-900 dark:text-rose-100 border-rose-400 dark:border-rose-600" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
-                }`}
-                aria-pressed={favoritesFirst}
-              >
-                {t('plant.favoritesFirst')}
-              </button>
-            </div>
+                <FilterControls />
+              </aside>
+            </>
+          )}
 
-            {/* Active filters summary */}
-            <div className="text-xs space-y-1">
-              <div className="font-medium uppercase tracking-wide opacity-60">{t('plant.active')}</div>
-              <div className="flex flex-wrap gap-2">
-                {seasonFilter && (
-                  <Badge variant="secondary" className="rounded-xl">{t(`plant.${seasonFilter.toLowerCase()}`)}</Badge>
-                )}
-                {colorFilter && (
-                  <Badge variant="secondary" className="rounded-xl">{t(`plant.${colorFilter.toLowerCase()}`)}</Badge>
-                )}
-                {onlySeeds && (
-                  <Badge variant="secondary" className="rounded-xl">{t('plant.seedsOnly')}</Badge>
-                )}
-                {onlyFavorites && (
-                  <Badge variant="secondary" className="rounded-xl">{t('plant.favoritesOnly')}</Badge>
-                )}
-                {favoritesFirst && (
-                  <Badge variant="secondary" className="rounded-xl">{t('plant.favoritesFirst')}</Badge>
-                )}
-                {!seasonFilter && !colorFilter && !onlySeeds && (
-                  <span className="opacity-50">{t('plant.none')}</span>
-                )}
+          {/* Main content area */}
+          <main className="min-h-[60vh]" aria-live="polite">
+            {currentView === "search" && (
+              <div className="mb-6 space-y-3">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+                      <div className="flex-1">
+                        <Label htmlFor="plant-search-main" className="sr-only">
+                          {t("common.search")}
+                        </Label>
+                        <div className="relative">
+                          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 opacity-60 pointer-events-none" />
+                          <Input
+                            id="plant-search-main"
+                            className="w-full pl-12 pr-4 rounded-2xl h-12"
+                            placeholder={t("plant.searchPlaceholder")}
+                            value={query}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                              setQuery(e.target.value)
+                              setIndex(0)
+                            }}
+                          />
+                        </div>
+                      </div>
+                    <div className="flex flex-col gap-2 sm:flex-row lg:flex-row lg:items-center lg:gap-2 w-full lg:w-auto">
+                      <Button
+                        variant="outline"
+                        className="rounded-2xl w-full lg:w-auto justify-between lg:justify-center"
+                        onClick={() => setShowFilters((prev) => !prev)}
+                        aria-expanded={showFilters}
+                      >
+                        <span className="flex items-center gap-2">
+                          <ListFilter className="h-4 w-4" />
+                          <span>{t(showFilters ? "plant.hideFilters" : "plant.showFilters")}</span>
+                        </span>
+                        {showFilters ? (
+                          <ChevronUp className="h-4 w-4 lg:hidden" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4 lg:hidden" />
+                        )}
+                      </Button>
+                      {user && (
+                        <>
+                          <Button
+                            variant="secondary"
+                            className="rounded-2xl w-full lg:w-auto"
+                            onClick={() => setRequestPlantDialogOpen(true)}
+                          >
+                            <MessageSquarePlus className="h-4 w-4 mr-2" />
+                            {t("requestPlant.button") || "Request Plant"}
+                          </Button>
+                          {profile?.is_admin && (
+                            <Button
+                              variant="default"
+                              className="rounded-2xl w-full lg:w-auto"
+                              onClick={() => navigate("/create")}
+                            >
+                              <Plus className="h-4 w-4 mr-2" />
+                              {t("common.addPlant")}
+                            </Button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <div className={`lg:hidden ${showFilters ? "space-y-6" : "hidden"}`}>
+                    <FilterControls />
+                  </div>
               </div>
-            </div>
-          </aside>
-        </>
-        )}
+            )}
 
-        {/* Main content area */}
-        <main className="min-h-[60vh]" aria-live="polite">
           {/* Use background location for primary routes so overlays render on top */}
           <Routes location={(backgroundLocation as any) || location}>
                 <Route path="/gardens" element={
