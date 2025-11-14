@@ -2809,7 +2809,7 @@ export const AdminPage: React.FC = () => {
   }, [activeTab]);
 
   return (
-    <div className="min-h-screen bg-stone-50 dark:bg-[#0f0f10] px-4 py-6 md:px-8">
+    <div className="px-4 py-6 md:px-8">
       <div className="max-w-6xl mx-auto space-y-4 md:space-y-6">
         {/* Mobile Navigation */}
         <div className={`md:hidden ${mobileNavPanelClass}`}>
