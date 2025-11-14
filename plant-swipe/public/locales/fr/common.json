@@ -842,6 +842,7 @@
       "searchUsers": {
         "label": "Rechercher des utilisateurs",
         "placeholder": "Recherchez par nom d'affichage ou pseudo...",
+        "typeMore": "Saisissez au moins deux caractères pour lancer la recherche.",
         "noResults": "Aucun utilisateur ne correspond à votre recherche.",
         "error": "Impossible de charger les suggestions. Réessayez bientôt.",
         "privateTooltip": "Profil privé — seuls les amis peuvent voir",

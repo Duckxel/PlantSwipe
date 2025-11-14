@@ -3185,7 +3185,7 @@ $$;
 grant execute on function public.get_friend_email(uuid) to authenticated;
 
 -- Function to search user profiles with friend prioritization and privacy metadata
-create or replace function public.search_user_profiles(_term text, _limit integer default 8)
+create or replace function public.search_user_profiles(_term text, _limit integer default 3)
 returns table (
   id uuid,
   display_name text,
@@ -3196,19 +3196,19 @@ returns table (
   is_friend boolean,
   is_self boolean,
   can_view boolean
-)
-language sql
-security definer
-set search_path = public
-as $$
-  with params as (
-    select
-      trim(coalesce(_term, '')) as term,
-      greatest(1, coalesce(_limit, 8)) as limit_value
-  ),
-  viewer as (
-    select auth.uid() as viewer_id
-  ),
+  )
+  language sql
+  security definer
+  set search_path = public
+  as $$
+    with params as (
+      select
+        trim(coalesce(_term, '')) as term,
+        least(3, greatest(1, coalesce(_limit, 3))) as limit_value
+    ),
+    viewer as (
+      select auth.uid() as viewer_id
+    ),
     base as (
       select
         p.id,
