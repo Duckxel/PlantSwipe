@@ -110,27 +110,34 @@ deploy_supabase_functions() {
   if ! command -v supabase >/dev/null 2>&1; then
     log "[INFO] Supabase CLI not found; skipping Edge Function deployment."
     return 0
-  }
+  fi
 
   # Load Supabase configuration from env files
-  declare -A supabase_env=()
-  _load_supabase_env() {
-    local f="$1"; [[ -f "$f" ]] || return 0
+  local -A supabase_env=()
+  local env_files=("$NODE_DIR/.env" "$NODE_DIR/.env.server" "$WORK_DIR/.env")
+  local line key val
+  for env_file in "${env_files[@]}"; do
+    [[ -f "$env_file" ]] || continue
     while IFS= read -r line || [[ -n "$line" ]]; do
       [[ "$line" =~ ^[[:space:]]*# ]] && continue
       [[ "$line" =~ ^[[:space:]]*$ ]] && continue
-      if [[ "$line" =~ ^[[:space:]]*(SUPABASE_ACCESS_TOKEN|SUPABASE_PROJECT_REF|SUPABASE_URL|VITE_SUPABASE_URL|RESEND_API_KEY|RESEND_FROM|RESEND_FROM_NAME|OPENAI_API_KEY|OPENAI_KEY|ALLOWED_ORIGINS|AI_FILL_ALLOWED_ORIGINS|FILL_PLANT_ALLOWED_ORIGINS)=(.*)$ ]]; then
-        local key="${BASH_REMATCH[1]}"; local val="${BASH_REMATCH[2]}"
+      if [[ "$line" =~ ^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+        key="${BASH_REMATCH[1]}"
+        val="${BASH_REMATCH[2]}"
         val="${val%$'\r'}"
-        if [[ "${val:0:1}" == '"' && "${val: -1}" == '"' ]]; then val="${val:1:${#val}-2}"; fi
-        if [[ "${val:0:1}" == "'" && "${val: -1}" == "'" ]]; then val="${val:1:${#val}-2}"; fi
-        supabase_env["$key"]="$val"
+        if [[ "${val:0:1}" == '"' && "${val: -1}" == '"' ]]; then
+          val="${val:1:${#val}-2}"
+        elif [[ "${val:0:1}" == "'" && "${val: -1}" == "'" ]]; then
+          val="${val:1:${#val}-2}"
+        fi
+        case "$key" in
+          SUPABASE_ACCESS_TOKEN|SUPABASE_PROJECT_REF|SUPABASE_URL|VITE_SUPABASE_URL|RESEND_API_KEY|RESEND_FROM|RESEND_FROM_NAME|OPENAI_API_KEY|OPENAI_KEY|ALLOWED_ORIGINS|AI_FILL_ALLOWED_ORIGINS|FILL_PLANT_ALLOWED_ORIGINS)
+            supabase_env["$key"]="$val"
+            ;;
+        esac
       fi
-    done < "$f"
-  }
-  _load_supabase_env "$NODE_DIR/.env"
-  _load_supabase_env "$NODE_DIR/.env.server"
-  _load_supabase_env "$WORK_DIR/.env"
+    done < "$env_file"
+  done
 
   local SUPABASE_ACCESS_TOKEN="${supabase_env[SUPABASE_ACCESS_TOKEN]:-${SUPABASE_ACCESS_TOKEN:-}}"
   local SUPABASE_PROJECT_REF="${supabase_env[SUPABASE_PROJECT_REF]:-${SUPABASE_PROJECT_REF:-}}"
