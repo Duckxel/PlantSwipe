@@ -105,10 +105,38 @@ log "Repository root: $WORK_DIR"
 log "Node directory: $NODE_DIR"
 log "Repo owner: $REPO_OWNER (current user: $CURRENT_USER)"
 
-deploy_supabase_functions() {
-  # Check if Supabase CLI is available
+ensure_supabase_cli() {
+  if command -v supabase >/dev/null 2>&1; then
+    return 0
+  fi
+  log "[WARN] Supabase CLI not found; attempting installation via npm (requires admin privileges)…"
+  if ! command -v npm >/dev/null 2>&1; then
+    log "[ERROR] npm is not available; cannot install Supabase CLI automatically."
+    return 1
+  fi
+  local install_cmd=(npm install -g supabase)
+  if [[ -n "$SUDO" ]]; then
+    if ! $SUDO "${install_cmd[@]}"; then
+      log "[ERROR] Failed to install Supabase CLI using sudo."
+      return 1
+    fi
+  else
+    if ! "${install_cmd[@]}"; then
+      log "[ERROR] Failed to install Supabase CLI."
+      return 1
+    fi
+  fi
   if ! command -v supabase >/dev/null 2>&1; then
-    log "[ERROR] Supabase CLI not found; aborting Edge Function deployment."
+    log "[ERROR] Supabase CLI installation attempt completed but command still not found."
+    return 1
+  fi
+  log "[INFO] Supabase CLI installed successfully."
+}
+
+deploy_supabase_functions() {
+  # Ensure Supabase CLI is present (install if missing)
+  if ! ensure_supabase_cli; then
+    log "[ERROR] Supabase CLI is required but could not be installed."
     return 1
   fi
 
@@ -250,6 +278,7 @@ PY
         echo "$secret_output" | tail -n 10 | while IFS= read -r line; do
           log "  $line"
         done || true
+          return 1
       fi
     done
   elif [[ "${SKIP_SUPABASE_SECRETS:-}" == "true" ]]; then
@@ -270,13 +299,12 @@ PY
     log "Linking Supabase project $SUPABASE_PROJECT_REF…"
     mkdir -p "$NODE_DIR/supabase" || true
     local link_args=(supabase link --project-ref "$SUPABASE_PROJECT_REF" --workdir "$NODE_DIR")
-    if ! "${supabase_cmd[@]}" "${link_args[@]}" >/tmp/supabase-link.log 2>&1; then
-      log "[WARN] Failed to link Supabase project. See /tmp/supabase-link.log"
-      tail -n 20 /tmp/supabase-link.log 2>/dev/null || true
-      log "[INFO] Continuing with deployment anyway (project may already be linked)…"
-    else
+      if ! "${supabase_cmd[@]}" "${link_args[@]}" >/tmp/supabase-link.log 2>&1; then
+        log "[ERROR] Failed to link Supabase project. See /tmp/supabase-link.log for details."
+        tail -n 20 /tmp/supabase-link.log 2>/dev/null || true
+        return 1
+      fi
       log "Supabase project linked successfully."
-    fi
   else
     local linked_ref=""
     if grep -q "project_id" "$SUPABASE_CONFIG" 2>/dev/null; then
