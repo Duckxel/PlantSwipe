@@ -620,25 +620,25 @@ export default function PlantSwipe() {
           <main className="min-h-[60vh]" aria-live="polite">
             {currentView === "search" && (
               <div className="mb-6 space-y-3">
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-                    <div className="flex-1">
-                      <Label htmlFor="plant-search-main" className="sr-only">
-                        {t("common.search")}
-                      </Label>
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-60 pointer-events-none" />
-                        <Input
-                          id="plant-search-main"
-                          className="pl-9 rounded-2xl h-12"
-                          placeholder={t("plant.searchPlaceholder")}
-                          value={query}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                            setQuery(e.target.value)
-                            setIndex(0)
-                          }}
-                        />
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+                      <div className="flex-1">
+                        <Label htmlFor="plant-search-main" className="sr-only">
+                          {t("common.search")}
+                        </Label>
+                        <div className="relative">
+                          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 opacity-60 pointer-events-none" />
+                          <Input
+                            id="plant-search-main"
+                            className="w-full pl-12 pr-4 rounded-2xl h-12"
+                            placeholder={t("plant.searchPlaceholder")}
+                            value={query}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                              setQuery(e.target.value)
+                              setIndex(0)
+                            }}
+                          />
+                        </div>
                       </div>
-                    </div>
                     <div className="flex flex-col gap-2 sm:flex-row lg:flex-row lg:items-center lg:gap-2 w-full lg:w-auto">
                       <Button
                         variant="outline"
