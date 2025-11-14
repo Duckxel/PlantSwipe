@@ -581,9 +581,9 @@ deploy_supabase_functions() {
   PLANTSWIPE_REPO_DIR="$WORK_DIR" "$helper_script"
 }
 
-# Optionally skip Supabase deployment if requested
-if [[ "${SKIP_SUPABASE_DEPLOY:-}" == "true" ]]; then
-  log "Skipping Supabase Edge Function deployment (requested)"
+# Optionally skip Supabase deployment if requested (default: skip)
+if [[ "${SKIP_SUPABASE_DEPLOY:-true}" == "true" ]]; then
+  log "Skipping Supabase Edge Function deployment (default or requested)"
 else
   deploy_supabase_functions
 fi
