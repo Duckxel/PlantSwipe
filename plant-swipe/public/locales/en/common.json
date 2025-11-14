@@ -310,6 +310,8 @@
       "season": "Season",
       "color": "Color",
       "active": "Active",
+      "showFilters": "Show filters",
+      "hideFilters": "Hide filters",
       "none": "None",
       "spring": "Spring",
       "summer": "Summer",

@@ -310,6 +310,8 @@
       "season": "Saison",
       "color": "Couleur",
       "active": "Actif",
+      "showFilters": "Afficher les filtres",
+      "hideFilters": "Masquer les filtres",
       "none": "Aucun",
       "spring": "Printemps",
       "summer": "Été",
