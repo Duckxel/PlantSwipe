@@ -842,7 +842,6 @@
       "searchUsers": {
         "label": "Search users",
         "placeholder": "Search by display name or username...",
-        "typeMore": "Type at least two characters to search.",
         "noResults": "No users match your search yet.",
         "error": "We couldn't load suggestions. Try again shortly.",
         "privateTooltip": "Private profile — only friends can view",

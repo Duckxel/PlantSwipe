@@ -74,7 +74,7 @@ export default function PublicProfilePage() {
   const searchContainerRef = React.useRef<HTMLDivElement | null>(null)
   const searchRequestRef = React.useRef(0)
   const trimmedSearchTerm = searchTerm.trim()
-  const needsMoreInput = searchOpen && trimmedSearchTerm.length < 2
+  const needsMoreInput = trimmedSearchTerm.length < 2
   
 
   const formatLastSeen = React.useCallback((iso: string | null | undefined) => {
@@ -310,14 +310,14 @@ export default function PublicProfilePage() {
   }, [searchOpen])
 
   React.useEffect(() => {
-    if (!searchOpen || !user?.id) {
+      if (!searchOpen || !user?.id) {
       searchRequestRef.current += 1
       setSearchLoading(false)
       if (!searchOpen) setSearchError(null)
       setSearchResults([])
       return
     }
-    if (trimmedSearchTerm.length < 2) {
+      if (trimmedSearchTerm.length < 2) {
       searchRequestRef.current += 1
       setSearchLoading(false)
       setSearchError(null)
@@ -696,71 +696,63 @@ export default function PublicProfilePage() {
               <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-stone-400" aria-hidden />
             )}
           </div>
-            {searchOpen && (
+            {searchOpen && !needsMoreInput && (
               <div className="absolute z-40 mt-2 w-full overflow-hidden rounded-2xl border border-stone-300 bg-white shadow-xl dark:border-[#3e3e42] dark:bg-[#252526]">
-                {needsMoreInput ? (
-                  <div className="px-3 py-4 text-sm text-stone-500 dark:text-stone-400">
-                    {t('profile.searchUsers.typeMore')}
+                {searchError && (
+                  <div className="px-3 py-2 text-xs text-red-600">
+                    {searchError}
                   </div>
-                ) : (
-                  <>
-                    {searchError && (
-                      <div className="px-3 py-2 text-xs text-red-600">
-                        {searchError}
-                      </div>
-                    )}
-                    {!searchError && searchResults.length === 0 && !searchLoading && (
-                      <div className="px-3 py-4 text-sm text-stone-500 dark:text-stone-400">
-                        {t('profile.searchUsers.noResults')}
-                      </div>
-                    )}
-                    {!searchError && searchResults.length > 0 && (
-                      <ul className="max-h-64 overflow-auto py-1">
-                        {searchResults.map((suggestion) => {
-                          const secondaryText = !suggestion.canView && !suggestion.isSelf
-                            ? t('profile.searchUsers.privateHint')
-                            : suggestion.country || ''
-                          return (
-                            <li key={suggestion.id}>
-                              <button
-                                type="button"
-                                onMouseDown={(event) => {
-                                  event.preventDefault()
-                                  handleSelectSuggestion(suggestion)
-                                }}
-                                className="flex w-full items-center gap-3 px-3 py-2 text-left transition hover:bg-stone-50 focus:bg-stone-50 dark:hover:bg-[#2d2d30] dark:focus:bg-[#2d2d30]"
-                              >
-                                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-stone-100 dark:bg-[#2d2d30]">
-                                  <UserIcon className="h-5 w-5 text-stone-500 dark:text-stone-300" aria-hidden />
+                )}
+                {!searchError && searchResults.length === 0 && !searchLoading && (
+                  <div className="px-3 py-4 text-sm text-stone-500 dark:text-stone-400">
+                    {t('profile.searchUsers.noResults')}
+                  </div>
+                )}
+                {!searchError && searchResults.length > 0 && (
+                  <ul className="max-h-64 overflow-auto py-1">
+                    {searchResults.map((suggestion) => {
+                      const secondaryText = !suggestion.canView && !suggestion.isSelf
+                        ? t('profile.searchUsers.privateHint')
+                        : suggestion.country || ''
+                      return (
+                        <li key={suggestion.id}>
+                          <button
+                            type="button"
+                            onMouseDown={(event) => {
+                              event.preventDefault()
+                              handleSelectSuggestion(suggestion)
+                            }}
+                            className="flex w-full items-center gap-3 px-3 py-2 text-left transition hover:bg-stone-50 focus:bg-stone-50 dark:hover:bg-[#2d2d30] dark:focus:bg-[#2d2d30]"
+                          >
+                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-stone-100 dark:bg-[#2d2d30]">
+                              <UserIcon className="h-5 w-5 text-stone-500 dark:text-stone-300" aria-hidden />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 text-sm font-medium text-stone-900 dark:text-stone-100">
+                                <span className="truncate">
+                                  {suggestion.displayName || suggestion.username || t('profile.member')}
+                                </span>
+                                {!suggestion.isFriend && !suggestion.isSelf && suggestion.isPrivate && (
+                                  <span
+                                    className="inline-flex items-center text-stone-400"
+                                    title={t('profile.searchUsers.privateTooltip')}
+                                    aria-label={t('profile.searchUsers.privateTooltip')}
+                                  >
+                                    <EyeOff className="h-4 w-4" aria-hidden />
+                                  </span>
+                                )}
+                              </div>
+                              {secondaryText && (
+                                <div className="truncate text-xs text-stone-500 dark:text-stone-400">
+                                  {secondaryText}
                                 </div>
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex items-center gap-2 text-sm font-medium text-stone-900 dark:text-stone-100">
-                                    <span className="truncate">
-                                      {suggestion.displayName || suggestion.username || t('profile.member')}
-                                    </span>
-                                    {!suggestion.isFriend && !suggestion.isSelf && suggestion.isPrivate && (
-                                      <span
-                                        className="inline-flex items-center text-stone-400"
-                                        title={t('profile.searchUsers.privateTooltip')}
-                                        aria-label={t('profile.searchUsers.privateTooltip')}
-                                      >
-                                        <EyeOff className="h-4 w-4" aria-hidden />
-                                      </span>
-                                    )}
-                                  </div>
-                                  {secondaryText && (
-                                    <div className="truncate text-xs text-stone-500 dark:text-stone-400">
-                                      {secondaryText}
-                                    </div>
-                                  )}
-                                </div>
-                              </button>
-                            </li>
-                          )
-                        })}
-                      </ul>
-                    )}
-                  </>
+                              )}
+                            </div>
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
                 )}
               </div>
             )}
