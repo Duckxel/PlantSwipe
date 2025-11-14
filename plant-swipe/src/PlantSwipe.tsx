@@ -639,48 +639,50 @@ export default function PlantSwipe() {
                         />
                       </div>
                     </div>
-                    <Button
-                      variant="outline"
-                      className="rounded-2xl w-full lg:w-auto justify-between lg:justify-center"
-                      onClick={() => setShowFilters((prev) => !prev)}
-                      aria-expanded={showFilters}
-                    >
-                      <span className="flex items-center gap-2">
-                        <ListFilter className="h-4 w-4" />
-                        <span>{t(showFilters ? "plant.hideFilters" : "plant.showFilters")}</span>
-                      </span>
-                      {showFilters ? (
-                        <ChevronUp className="h-4 w-4 lg:hidden" />
-                      ) : (
-                        <ChevronDown className="h-4 w-4 lg:hidden" />
-                      )}
-                    </Button>
-                  </div>
-                {user && (
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <Button
-                      variant="secondary"
-                      className="rounded-2xl"
-                      onClick={() => setRequestPlantDialogOpen(true)}
-                    >
-                      <MessageSquarePlus className="h-4 w-4 mr-2" />
-                      {t("requestPlant.button") || "Request Plant"}
-                    </Button>
-                    {profile?.is_admin && (
+                    <div className="flex flex-col gap-2 sm:flex-row lg:flex-row lg:items-center lg:gap-2 w-full lg:w-auto">
                       <Button
-                        variant="default"
-                        className="rounded-2xl"
-                        onClick={() => navigate("/create")}
+                        variant="outline"
+                        className="rounded-2xl w-full lg:w-auto justify-between lg:justify-center"
+                        onClick={() => setShowFilters((prev) => !prev)}
+                        aria-expanded={showFilters}
                       >
-                        <Plus className="h-4 w-4 mr-2" />
-                        {t("common.addPlant")}
+                        <span className="flex items-center gap-2">
+                          <ListFilter className="h-4 w-4" />
+                          <span>{t(showFilters ? "plant.hideFilters" : "plant.showFilters")}</span>
+                        </span>
+                        {showFilters ? (
+                          <ChevronUp className="h-4 w-4 lg:hidden" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4 lg:hidden" />
+                        )}
                       </Button>
-                    )}
+                      {user && (
+                        <>
+                          <Button
+                            variant="secondary"
+                            className="rounded-2xl w-full lg:w-auto"
+                            onClick={() => setRequestPlantDialogOpen(true)}
+                          >
+                            <MessageSquarePlus className="h-4 w-4 mr-2" />
+                            {t("requestPlant.button") || "Request Plant"}
+                          </Button>
+                          {profile?.is_admin && (
+                            <Button
+                              variant="default"
+                              className="rounded-2xl w-full lg:w-auto"
+                              onClick={() => navigate("/create")}
+                            >
+                              <Plus className="h-4 w-4 mr-2" />
+                              {t("common.addPlant")}
+                            </Button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
                   <div className={`lg:hidden ${showFilters ? "space-y-6" : "hidden"}`}>
                     <FilterControls />
                   </div>
-                  </div>
-                )}
               </div>
             )}
 
