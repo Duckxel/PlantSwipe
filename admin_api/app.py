@@ -169,6 +169,10 @@ def _refresh_script_path(repo_root: str) -> str:
     return str(Path(repo_root) / "scripts" / "refresh-plant-swipe.sh")
 
 
+def _supabase_script_path(repo_root: str) -> str:
+    return str(Path(repo_root) / "scripts" / "deploy-supabase-functions.sh")
+
+
 def _ensure_executable(path: str) -> None:
     try:
         os.chmod(path, 0o755)
@@ -376,6 +380,83 @@ def admin_refresh():
     except Exception:
         pass
     return _run_refresh(branch, stream=False)
+
+
+@app.get("/admin/deploy-edge-functions")
+@app.post("/admin/deploy-edge-functions")
+def admin_deploy_edge_functions():
+    _verify_request()
+    repo_root = _get_repo_root()
+    script_path = _supabase_script_path(repo_root)
+    if not os.path.isfile(script_path):
+        detail = {"error": "deploy script not found", "path": script_path}
+        try:
+            _log_admin_action("deploy_edge_functions_failed", detail=detail)
+        except Exception:
+            pass
+        return jsonify({"ok": False, "error": f"deploy script not found at {script_path}"}), 500
+
+    _ensure_executable(script_path)
+    env = os.environ.copy()
+    env.setdefault("CI", os.environ.get("CI", "true"))
+    env["PLANTSWIPE_REPO_DIR"] = repo_root
+
+    try:
+        res = subprocess.run(
+            [script_path],
+            cwd=repo_root,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=900,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        try:
+            _log_admin_action("deploy_edge_functions_failed", detail={"error": "timeout"})
+        except Exception:
+            pass
+        return jsonify({"ok": False, "error": "Supabase deployment timed out"}), 504
+    except Exception as e:
+        try:
+            _log_admin_action("deploy_edge_functions_failed", detail={"error": str(e) or "unexpected failure"})
+        except Exception:
+            pass
+        return jsonify({"ok": False, "error": str(e) or "Failed to run deploy script"}), 500
+
+    stdout = res.stdout or ""
+    stderr = res.stderr or ""
+    stdout_tail = "\n".join(stdout.splitlines()[-200:])
+    stderr_tail = "\n".join(stderr.splitlines()[-100:])
+    detail = {
+        "returncode": res.returncode,
+        "stdoutTail": stdout_tail,
+        "stderrTail": stderr_tail or None,
+    }
+    if res.returncode != 0:
+        try:
+            _log_admin_action("deploy_edge_functions_failed", detail=detail)
+        except Exception:
+            pass
+        return jsonify({
+            "ok": False,
+            "error": "Supabase deployment failed",
+            "returncode": res.returncode,
+            "stdout": stdout_tail,
+            "stderr": stderr_tail,
+        }), 500
+
+    try:
+        _log_admin_action("deploy_edge_functions", detail=detail)
+    except Exception:
+        pass
+    return jsonify({
+        "ok": True,
+        "message": "Supabase Edge Functions deployed successfully",
+        "returncode": res.returncode,
+        "stdout": stdout_tail,
+        "stderr": stderr_tail,
+    })
 
 
 

@@ -2434,6 +2434,33 @@ app.options('/api/admin/sync-schema', (_req, res) => {
   res.status(204).end()
 })
 
+const adminApiBaseUrl = process.env.ADMIN_API_BASE_URL || process.env.ADMIN_API_URL || 'http://127.0.0.1:5001'
+
+app.post('/api/admin/deploy-edge-functions', async (req, res) => {
+  const caller = await ensureAdmin(req, res)
+  if (!caller) return
+  try {
+    const headers = { Accept: 'application/json', 'Content-Type': 'application/json' }
+    if (adminStaticToken) headers['X-Admin-Token'] = adminStaticToken
+    const targetUrl = `${adminApiBaseUrl.replace(/\/+$/, '')}/admin/deploy-edge-functions`
+    const resp = await fetch(targetUrl, {
+      method: 'POST',
+      headers,
+      body: '{}',
+    })
+    const payload = await resp.json().catch(() => ({}))
+    res.status(resp.status).json(payload)
+  } catch (err) {
+    console.error('[server] deploy-edge-functions failed', err)
+    res.status(500).json({ error: 'Failed to trigger Supabase deployment', detail: err?.message || String(err) })
+  }
+})
+app.options('/api/admin/deploy-edge-functions', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
 app.post('/api/admin/plant-translations/ensure-schema', async (req, res) => {
   const caller = await ensureAdmin(req, res)
   if (!caller) return
