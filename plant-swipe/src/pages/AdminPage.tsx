@@ -102,9 +102,9 @@ export const AdminPage: React.FC = () => {
     return `hsl(${accentOption.hsl} / 0.2)`;
   }, [profile]);
   const glassPanelClass =
-    "rounded-[24px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/95 dark:bg-[#161619]/95 shadow-[0_18px_45px_-25px_rgba(15,23,42,0.45)]";
+    "rounded-[24px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white shadow-[0_18px_45px_-25px_rgba(15,23,42,0.25)] dark:bg-[#131315]/95";
   const glassCardClass =
-    "rounded-[20px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/92 dark:bg-[#1a1a1d]/92";
+    "rounded-[20px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#18181b]/92";
   const shortenMiddle = React.useCallback(
     (value: string, maxChars: number = 28): string => {
       try {
@@ -2807,10 +2807,10 @@ export const AdminPage: React.FC = () => {
   }, [activeTab]);
 
   return (
-    <div className="min-h-screen bg-stone-50 dark:bg-[#0f0f10] px-4 py-6 md:px-8">
-      <div className="flex flex-col gap-4 md:gap-6">
+    <div className="min-h-screen px-4 py-6 md:px-8">
+      <div className="max-w-6xl mx-auto space-y-4 md:space-y-6">
         {/* Mobile Navigation */}
-        <div className={`md:hidden w-full ${glassPanelClass}`}>
+        <div className={`md:hidden ${glassPanelClass}`}>
           <div className="p-4">
             <div className="flex items-center gap-2 mb-3">
               <ShieldCheck className="h-5 w-5" style={{ color: accentColor }} />
@@ -2847,56 +2847,57 @@ export const AdminPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Sidebar Navigation - Desktop Only */}
-        <aside
-          className={`hidden md:flex w-64 flex-shrink-0 flex-col ${glassPanelClass}`}
-        >
-          <div className="p-6 border-b border-stone-200/60 dark:border-[#2a2a2e]/60">
-            <div className="flex items-center gap-3">
-              <ShieldCheck className="h-6 w-6" style={{ color: accentColor }} />
-              <div>
-                <div className="text-lg font-semibold">Admin Panel</div>
-                <div className="text-xs text-stone-500 dark:text-stone-400">
-                  Control Center
+        <div className="flex flex-col gap-6 md:flex-row md:items-start">
+          {/* Sidebar Navigation - Desktop Only */}
+          <aside
+            className={`hidden md:flex md:w-64 lg:w-72 flex-shrink-0 flex-col ${glassPanelClass} md:sticky md:top-6 md:self-stretch`}
+          >
+            <div className="p-6 border-b border-stone-200/60 dark:border-[#2a2a2e]/60">
+              <div className="flex items-center gap-3">
+                <ShieldCheck className="h-6 w-6" style={{ color: accentColor }} />
+                <div>
+                  <div className="text-lg font-semibold">Admin Panel</div>
+                  <div className="text-xs text-stone-500 dark:text-stone-400">
+                    Control Center
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-          <nav className="p-4 space-y-2 flex-1 overflow-y-auto">
-            {navItems.map(({ key, label, Icon }) => (
-              <button
-                key={key}
-                onClick={() => setActiveTab(key)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition ${
-                  activeTab === key
-                    ? "bg-white text-black shadow-sm"
-                    : "text-stone-700 dark:text-stone-300 hover:bg-stone-100/60 dark:hover:bg-[#222225]"
-                }`}
-                style={
-                  activeTab === key
-                    ? {
-                        boxShadow: `0 6px 20px -15px ${accentColorWithOpacity}`,
-                      }
-                    : undefined
-                }
-              >
-                <Icon
-                  className={`h-5 w-5 ${activeTab === key ? "" : "opacity-70"}`}
-                />
-                <span className="font-medium">{label}</span>
-                {key === "requests" && uniqueRequestedPlantsCount > 0 && (
-                  <span className="ml-auto px-2 py-0.5 text-xs font-semibold rounded-full bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-200">
-                    {uniqueRequestedPlantsCount}
-                  </span>
-                )}
-              </button>
-            ))}
-          </nav>
-        </aside>
+            <nav className="p-4 space-y-2 flex-1 overflow-y-auto">
+              {navItems.map(({ key, label, Icon }) => (
+                <button
+                  key={key}
+                  onClick={() => setActiveTab(key)}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition ${
+                    activeTab === key
+                      ? "bg-white text-black shadow-sm"
+                      : "text-stone-700 dark:text-stone-300 hover:bg-stone-100/60 dark:hover:bg-[#222225]"
+                  }`}
+                  style={
+                    activeTab === key
+                      ? {
+                          boxShadow: `0 6px 20px -15px ${accentColorWithOpacity}`,
+                        }
+                      : undefined
+                  }
+                >
+                  <Icon
+                    className={`h-5 w-5 ${activeTab === key ? "" : "opacity-70"}`}
+                  />
+                  <span className="font-medium">{label}</span>
+                  {key === "requests" && uniqueRequestedPlantsCount > 0 && (
+                    <span className="ml-auto px-2 py-0.5 text-xs font-semibold rounded-full bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-200">
+                      {uniqueRequestedPlantsCount}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </nav>
+          </aside>
 
-        {/* Main Content Area */}
-        <main className="flex-1 w-full">
-          <div className="space-y-6">
+          {/* Main Content Area */}
+          <main className="flex-1 w-full">
+            <div className="space-y-6">
             {/* Connection Status Banner - Show when APIs are down */}
             {(apiProbe.ok === false ||
               adminProbe.ok === false ||
@@ -5772,7 +5773,8 @@ export const AdminPage: React.FC = () => {
         </main>
       </div>
     </div>
-  );
+  </div>
+);
 };
 
 // --- Broadcast controls (Overview tab) ---
