@@ -461,14 +461,17 @@ const DimensionCube: React.FC<{ scale: CubeScale }> = ({ scale }) => {
     disposables.push(grid.geometry)
     gridMaterials.forEach((material) => disposables.push(material))
 
-    const handleResize = () => {
-      const parentWidth = container.parentElement?.clientWidth ?? 0
-      const width = parentWidth > 0 ? parentWidth : container.clientWidth || 320
-      const height = width
-      renderer.setSize(width, height, false)
-      camera.aspect = width / height
-      camera.updateProjectionMatrix()
-    }
+      const handleResize = () => {
+        const parentWidth = container.parentElement?.clientWidth ?? 0
+        const width = parentWidth > 0 ? parentWidth : container.clientWidth || 320
+        const height = width
+        renderer.setSize(width, height, false)
+        const canvas = renderer.domElement
+        canvas.style.width = `${width}px`
+        canvas.style.height = `${height}px`
+        camera.aspect = width / height
+        camera.updateProjectionMatrix()
+      }
     handleResize()
 
     const resizeObserver =
