@@ -87,6 +87,9 @@ export const FriendsPage: React.FC = () => {
   const anchorRefs = React.useRef<Map<string, HTMLDivElement>>(new Map());
   const glassCard =
     "rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur shadow-[0_25px_70px_-40px_rgba(15,23,42,0.65)]";
+  const friendListCard =
+    glassCard +
+    " relative overflow-hidden shadow-[0_35px_95px_-45px_rgba(16,185,129,0.75)]";
 
   const loadFriends = React.useCallback(async () => {
     if (!user?.id) return;
@@ -599,24 +602,6 @@ export const FriendsPage: React.FC = () => {
   if (!user) {
     return (
       <div className="max-w-6xl mx-auto mt-8 px-4 md:px-0 pb-16 space-y-6">
-        <div className="relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50 via-white to-stone-100 dark:from-[#252526] dark:via-[#1e1e1e] dark:to-[#171717] p-6 md:p-10 shadow-[0_35px_60px_-15px_rgba(16,185,129,0.35)]">
-          <div
-            className="absolute -right-24 top-0 h-40 w-40 rounded-full bg-emerald-200/50 dark:bg-emerald-500/10 blur-3xl"
-            aria-hidden="true"
-          />
-          <div
-            className="absolute -left-16 bottom-0 h-32 w-32 rounded-full bg-emerald-100/70 dark:bg-emerald-500/5 blur-3xl"
-            aria-hidden="true"
-          />
-          <div className="relative z-10 space-y-2">
-            <h1 className="text-3xl font-semibold tracking-tight">
-              {t("friends.title")}
-            </h1>
-            <p className="text-sm text-stone-600 dark:text-stone-300">
-              {t("friends.pleaseLogin")}
-            </p>
-          </div>
-        </div>
         <Card className={glassCard}>
           <CardContent className="p-6 md:p-8 text-center text-sm text-stone-600 dark:text-stone-300">
             {t("friends.pleaseLogin")}
@@ -628,25 +613,6 @@ export const FriendsPage: React.FC = () => {
 
   return (
     <div className="max-w-6xl mx-auto mt-8 px-4 md:px-0 pb-16 space-y-6">
-      <div className="relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50 via-white to-stone-100 dark:from-[#252526] dark:via-[#1e1e1e] dark:to-[#171717] p-6 md:p-10 shadow-[0_35px_60px_-15px_rgba(16,185,129,0.35)] flex flex-col gap-3">
-        <div
-          className="absolute -right-24 top-0 h-40 w-40 rounded-full bg-emerald-200/50 dark:bg-emerald-500/10 blur-3xl"
-          aria-hidden="true"
-        />
-        <div
-          className="absolute -left-16 bottom-0 h-32 w-32 rounded-full bg-emerald-100/70 dark:bg-emerald-500/5 blur-3xl"
-          aria-hidden="true"
-        />
-        <div className="relative z-10 space-y-2">
-          <h1 className="text-3xl font-semibold tracking-tight">
-            {t("friends.title")}
-          </h1>
-          <p className="text-sm text-stone-600 dark:text-stone-300">
-            {t("friends.addFriendDialog.description")}
-          </p>
-        </div>
-      </div>
-
       <div
         className={`flex flex-col lg:grid gap-6 items-stretch ${
           pendingRequests.length > 0 || sentPendingRequests.length > 0
@@ -727,9 +693,13 @@ export const FriendsPage: React.FC = () => {
           </Card>
         )}
 
-        {/* Friends List Card - Middle */}
-        <Card className={`${glassCard} w-full order-2 lg:order-2 h-full`}>
-          <CardContent className="p-6 md:p-8 space-y-6 h-full flex flex-col">
+      {/* Friends List Card - Middle */}
+      <Card className={`${friendListCard} w-full order-2 lg:order-2 h-full`}>
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute -top-6 -right-10 h-32 w-32 rounded-full bg-emerald-200/60 dark:bg-emerald-500/15 blur-3xl" />
+          <div className="absolute bottom-0 left-0 h-32 w-32 rounded-full bg-emerald-100/60 dark:bg-emerald-500/10 blur-3xl" />
+        </div>
+        <CardContent className="relative z-10 p-6 md:p-8 space-y-6 h-full flex flex-col">
             {/* Title and Add Friend Button */}
             <div className="flex items-center justify-between">
               <div className="text-2xl font-semibold text-black dark:text-white">
