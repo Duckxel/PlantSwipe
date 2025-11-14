@@ -513,11 +513,19 @@ export const AdminPage: React.FC = () => {
         if (adminToken) adminHeaders['X-Admin-Token'] = String(adminToken)
         appendConsole('[deploy] Falling back to Admin API endpoint…')
         resp = await fetchWithRetry('/admin/deploy-edge-functions', {
-          method: 'POST',
+          method: 'GET',
           headers: adminHeaders,
           credentials: 'same-origin',
-          body: '{}',
         }).catch(() => null)
+
+        if (resp && resp.status === 405) {
+          resp = await fetchWithRetry('/admin/deploy-edge-functions', {
+            method: 'POST',
+            headers: adminHeaders,
+            credentials: 'same-origin',
+            body: '{}',
+          }).catch(() => null)
+        }
       }
 
       if (!resp) {
