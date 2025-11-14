@@ -102,9 +102,9 @@ export const AdminPage: React.FC = () => {
     return `hsl(${accentOption.hsl} / 0.2)`;
   }, [profile]);
   const glassPanelClass =
-    "rounded-[24px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/95 dark:bg-[#16161a]/95 shadow-[0_18px_45px_-25px_rgba(15,23,42,0.25)]";
+    "rounded-[24px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/95 backdrop-blur shadow-[0_18px_45px_-25px_rgba(15,23,42,0.25)]";
   const glassCardClass =
-    "rounded-[20px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1b1b20]/90";
+    "rounded-[20px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 backdrop-blur";
   const shortenMiddle = React.useCallback(
     (value: string, maxChars: number = 28): string => {
       try {
@@ -2807,10 +2807,11 @@ export const AdminPage: React.FC = () => {
   }, [activeTab]);
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-gradient-to-b from-emerald-50 via-white to-stone-100 dark:from-[#070708] dark:via-[#050506] dark:to-[#030304]">
+    <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-emerald-50 via-white to-stone-100">
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -top-24 -right-10 h-72 w-72 rounded-full bg-emerald-200/50 dark:bg-emerald-500/10 blur-[140px]" />
-        <div className="absolute bottom-[-10%] left-[-5%] h-80 w-80 rounded-full bg-emerald-100/50 dark:bg-emerald-500/5 blur-[160px]" />
+        <div className="absolute -top-32 -right-8 h-80 w-80 rounded-full bg-emerald-200/60 blur-[160px]" />
+        <div className="absolute top-24 left-[-10%] h-72 w-72 rounded-full bg-emerald-100/70 blur-[140px]" />
+        <div className="absolute bottom-[-15%] right-[-5%] h-96 w-96 rounded-full bg-emerald-300/40 blur-[200px]" />
       </div>
       <div className="relative z-10 px-4 py-6 md:px-8">
         <div className="max-w-6xl mx-auto space-y-4 md:space-y-6">
