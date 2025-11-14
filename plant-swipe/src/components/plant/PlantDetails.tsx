@@ -387,8 +387,8 @@ const DimensionCube: React.FC<{ scale: CubeScale }> = ({ scale }) => {
 
     const scene = new Scene()
     const camera = new PerspectiveCamera(38, 1, 0.1, 100)
-    camera.position.set(4.2, 1.8, 4.2)
-    camera.lookAt(0, 0.05, 0)
+    camera.position.set(4.8, 1.8, 4.8)
+    camera.lookAt(0, 0.6, 0)
     cameraRef.current = camera
 
     const ambientLight = new AmbientLight(0xbfffe0, 0.45)
@@ -485,17 +485,18 @@ const DimensionCube: React.FC<{ scale: CubeScale }> = ({ scale }) => {
         pivotAngleRef.current += 0.0012
       }
 
-        const pivotRadius = 4.2
+      const pivotRadius = 4.8
+      const targetY = cubeGroupRef.current?.position.y ?? 0.6
       const refCamera = cameraRef.current
       const activeCamera = refCamera ?? camera
       if (refCamera) {
         const angle = pivotAngleRef.current
         refCamera.position.set(
           Math.cos(angle) * pivotRadius,
-          1.5 + Math.sin(angle * 0.5) * 0.15,
+          targetY + 0.8 + Math.sin(angle * 0.4) * 0.15,
           Math.sin(angle) * pivotRadius
         )
-        refCamera.lookAt(0, 0.05, 0)
+        refCamera.lookAt(0, targetY, 0)
       }
 
       renderer.render(scene, activeCamera)
