@@ -35,6 +35,7 @@ import {
   Users,
   FileText,
   ScrollText,
+  CloudUpload,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { CreatePlantPage } from "@/pages/CreatePlantPage";
@@ -61,20 +62,7 @@ const {
   PieChart,
   Pie,
   Cell,
-} = LazyCharts
-import { RefreshCw, Server, Database, Github, ExternalLink, ShieldCheck, ShieldX, UserSearch, AlertTriangle, Gavel, Search, ChevronDown, GitBranch, Trash2, EyeOff, Copy, ArrowUpRight, Info, Plus, LayoutDashboard, Users, FileText, ScrollText, CloudUpload } from "lucide-react"
-import { supabase } from '@/lib/supabaseClient'
-import { CreatePlantPage } from '@/pages/CreatePlantPage'
-import {
-  Dialog,
-  DialogTrigger,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  DialogClose,
-} from '@/components/ui/dialog'
+} = LazyCharts;
 type AdminTab = "overview" | "members" | "requests" | "admin_logs";
 
 export const AdminPage: React.FC = () => {
@@ -220,10 +208,8 @@ export const AdminPage: React.FC = () => {
   }, []);
 
   const [syncing, setSyncing] = React.useState(false);
+  const [deployingEdge, setDeployingEdge] = React.useState(false);
 
-  const [syncing, setSyncing] = React.useState(false)
-  const [deployingEdge, setDeployingEdge] = React.useState(false)
-  
   // Backup disabled for now
 
   const [restarting, setRestarting] = React.useState(false);
