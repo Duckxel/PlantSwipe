@@ -2944,18 +2944,18 @@ export const AdminPage: React.FC = () => {
             )}
 
             <section className="space-y-6">
-              <Card className="relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-[#0b0b0d] via-[#050505] to-black shadow-[0_35px_95px_-45px_rgba(16,185,129,0.55)] text-white">
+                <Card className="relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50 via-white to-stone-100 dark:from-[#252526] dark:via-[#1e1e1e] dark:to-[#171717] shadow-[0_35px_60px_-20px_rgba(16,185,129,0.35)]">
                 <div className="absolute inset-0 pointer-events-none">
-                  <div className="absolute -top-10 -right-6 h-40 w-40 rounded-full bg-emerald-600/20 blur-[150px]" />
-                  <div className="absolute bottom-0 left-0 h-40 w-40 rounded-full bg-emerald-500/15 blur-[160px]" />
+                    <div className="absolute -top-8 -right-4 h-48 w-48 rounded-full bg-emerald-200/50 dark:bg-emerald-500/10 blur-3xl" />
+                    <div className="absolute bottom-0 left-0 h-48 w-48 rounded-full bg-emerald-100/50 dark:bg-emerald-500/10 blur-3xl" />
                 </div>
-                <CardContent className="relative z-10 p-6 md:p-8 space-y-6">
+                  <CardContent className="relative z-10 p-6 md:p-8 space-y-6">
                   <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                     <div>
-                      <div className="text-2xl font-semibold tracking-tight text-white">
+                        <div className="text-2xl font-semibold tracking-tight">
                         Admin Controls
                       </div>
-                      <div className="text-sm text-emerald-100/80 mt-1 max-w-2xl">
+                        <div className="text-sm text-stone-600 dark:text-stone-300 mt-1 max-w-2xl">
                         Monitor services, manage members, and handle requests all in one place.
                       </div>
                     </div>
