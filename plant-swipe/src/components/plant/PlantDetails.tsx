@@ -1,5 +1,23 @@
 import React from "react";
 import { motion } from "framer-motion";
+import {
+  AmbientLight,
+  BoxGeometry,
+  DirectionalLight,
+  EdgesGeometry,
+  GridHelper,
+  Group,
+  LineBasicMaterial,
+  LineSegments,
+  Mesh,
+  MeshBasicMaterial,
+  MeshStandardMaterial,
+  PerspectiveCamera,
+  PointLight,
+  Scene,
+  SphereGeometry,
+  WebGLRenderer,
+} from "three";
 import { useLanguageNavigate, useLanguage } from "@/lib/i18nRouting";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -212,107 +230,6 @@ const TIMELINE_COLORS: Record<string, string> = {
   sowing: '#6366f1'
 }
 
-const DIMENSION_CUBE_STYLE_ID = 'dimension-cube-styles'
-const DIMENSION_CUBE_STYLES = `
-@keyframes dimensionCubeRotate {
-  0% { transform: rotateX(-32deg) rotateY(28deg) rotateZ(0deg); }
-  25% { transform: rotateX(-20deg) rotateY(115deg) rotateZ(4deg); }
-  50% { transform: rotateX(-38deg) rotateY(205deg) rotateZ(-6deg); }
-  75% { transform: rotateX(-24deg) rotateY(295deg) rotateZ(3deg); }
-  100% { transform: rotateX(-32deg) rotateY(388deg) rotateZ(0deg); }
-}
-.dimension-cube-scene {
-  position: relative;
-  width: 220px;
-  height: 220px;
-  margin: 0 auto;
-  perspective: 1100px;
-}
-.dimension-cube-wrapper {
-  width: 100%;
-  height: 100%;
-  transform-style: preserve-3d;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transform: rotateX(-34deg) rotateY(34deg);
-}
-.dimension-cube-scale {
-  width: 100%;
-  height: 100%;
-  transform-style: preserve-3d;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.dimension-cube {
-  position: relative;
-  width: 160px;
-  height: 160px;
-  transform-style: preserve-3d;
-  animation: dimensionCubeRotate 78s linear infinite;
-  filter: drop-shadow(0 26px 36px rgba(16,185,129,0.28));
-}
-.dimension-cube-face {
-  position: absolute;
-  inset: 0;
-  border: 2px solid rgba(16,185,129,0.92);
-  background: rgba(15,118,110,0.22);
-  box-shadow: inset 0 0 36px rgba(15,118,110,0.58);
-  backdrop-filter: blur(1.1px);
-  backface-visibility: hidden;
-}
-.dimension-cube-face::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border: 1px solid rgba(255,255,255,0.22);
-  mix-blend-mode: screen;
-}
-.dimension-cube-face::before {
-  content: "";
-  position: absolute;
-  inset: 20%;
-  border: 1px dashed rgba(167,243,208,0.58);
-  filter: blur(0.08px);
-}
-.dimension-cube-face--front {
-  transform: translateZ(80px);
-  background: linear-gradient(160deg, rgba(59,130,246,0.38), rgba(6,95,70,0.28));
-}
-.dimension-cube-face--back {
-  transform: rotateY(180deg) translateZ(80px);
-  background: linear-gradient(210deg, rgba(6,95,70,0.44), rgba(34,197,94,0.28));
-}
-.dimension-cube-face--left {
-  transform: rotateY(-90deg) translateZ(80px);
-  background: linear-gradient(180deg, rgba(8,145,178,0.4), rgba(15,118,110,0.24));
-}
-.dimension-cube-face--right {
-  transform: rotateY(90deg) translateZ(80px);
-  background: linear-gradient(175deg, rgba(34,197,94,0.38), rgba(15,118,110,0.24));
-}
-.dimension-cube-face--top {
-  transform: rotateX(90deg) translateZ(80px);
-  background: linear-gradient(160deg, rgba(236,253,245,0.8), rgba(45,212,191,0.35));
-  border-color: rgba(167,243,208,0.95);
-}
-.dimension-cube-face--bottom {
-  transform: rotateX(-90deg) translateZ(80px);
-  background: linear-gradient(200deg, rgba(6,68,59,0.5), rgba(15,118,110,0.3));
-  border-color: rgba(12,74,61,0.94);
-}
-.dimension-cube-glow {
-  position: absolute;
-  inset: 0;
-  transform: translateZ(-68px);
-  background: radial-gradient(circle at center, rgba(16,185,129,0.36), transparent 82%);
-  filter: blur(52px);
-}
-@media (prefers-reduced-motion: reduce) {
-  .dimension-cube { animation: none; transform: rotateX(-34deg) rotateY(34deg); }
-}
-`
 
 const normalizeStringArray = (value: unknown): string[] => {
   if (value === undefined || value === null) return []
@@ -437,17 +354,190 @@ const formatDimensionValue = (value: number): string => {
 const parsePositiveNumber = (value: number | null | undefined): number | undefined =>
   typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined
 
-const DimensionVisualizer: React.FC<{ dimensions: Partial<PlantDimensions> }> = ({ dimensions }) => {
-  const { t } = useTranslation('common')
+type CubeScale = {
+  x: number
+  y: number
+  z: number
+}
+
+const DimensionCube: React.FC<{ scale: CubeScale }> = ({ scale }) => {
+  const containerRef = React.useRef<HTMLDivElement>(null)
+  const rendererRef = React.useRef<WebGLRenderer | null>(null)
+  const cubeGroupRef = React.useRef<Group | null>(null)
+  const cameraRef = React.useRef<PerspectiveCamera | null>(null)
+  const pivotAngleRef = React.useRef(0)
 
   React.useEffect(() => {
-    if (typeof document === 'undefined') return
-    if (document.getElementById(DIMENSION_CUBE_STYLE_ID)) return
-    const style = document.createElement('style')
-    style.id = DIMENSION_CUBE_STYLE_ID
-    style.textContent = DIMENSION_CUBE_STYLES
-    document.head.appendChild(style)
+    if (typeof window === 'undefined') return
+    const container = containerRef.current
+    if (!container) return
+
+    const renderer = new WebGLRenderer({ antialias: true, alpha: true })
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio ?? 1, 2))
+    renderer.setClearColor(0x000000, 0)
+
+    const gl = renderer.getContext()
+    if (!gl) {
+      container.innerText = 'WebGL failed to initialise'
+      return
+    }
+
+    rendererRef.current = renderer
+    container.appendChild(renderer.domElement)
+
+    const scene = new Scene()
+    const camera = new PerspectiveCamera(38, 1, 0.1, 100)
+    camera.position.set(4.8, 1.8, 4.8)
+    camera.lookAt(0, 0.6, 0)
+    cameraRef.current = camera
+
+    const ambientLight = new AmbientLight(0xbfffe0, 0.45)
+    scene.add(ambientLight)
+
+    const keyLight = new DirectionalLight(0xffffff, 0.85)
+    keyLight.position.set(4, 6, 5)
+    scene.add(keyLight)
+
+    const rimLight = new PointLight(0x34d399, 0.8, 18, 2)
+    rimLight.position.set(-3, -2, -6)
+    scene.add(rimLight)
+
+      const cubeGroup = new Group()
+      cubeGroup.rotation.set(0, 0, 0)
+    cubeGroupRef.current = cubeGroup
+    scene.add(cubeGroup)
+
+    const disposables: { dispose: () => void }[] = []
+
+    const geometry = new BoxGeometry(1, 1, 1)
+    disposables.push(geometry)
+
+    const cubeShellMaterial = new MeshStandardMaterial({
+      color: 0x031512,
+      transparent: true,
+      opacity: 0.22,
+      metalness: 0.35,
+      roughness: 0.55,
+      emissive: 0x0d9488,
+      emissiveIntensity: 0.65,
+    })
+    cubeGroup.add(new Mesh(geometry, cubeShellMaterial))
+    disposables.push(cubeShellMaterial)
+
+    const outerWireGeometry = new EdgesGeometry(geometry)
+    const outerWireMaterial = new LineBasicMaterial({ color: 0x34f5c6, transparent: false, linewidth: 1 })
+    cubeGroup.add(new LineSegments(outerWireGeometry, outerWireMaterial))
+    disposables.push(outerWireGeometry, outerWireMaterial)
+
+    const innerGeometry = new BoxGeometry(0.68, 0.68, 0.68)
+    const innerWireGeometry = new EdgesGeometry(innerGeometry)
+    const innerWireMaterial = new LineBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.8 })
+    cubeGroup.add(new LineSegments(innerWireGeometry, innerWireMaterial))
+    disposables.push(innerGeometry, innerWireGeometry, innerWireMaterial)
+      const cornerGeometry = new SphereGeometry(0.05, 16, 16)
+      const cornerMaterial = new MeshBasicMaterial({ color: 0xa7f3d0, transparent: true, opacity: 0.9 })
+      disposables.push(cornerGeometry, cornerMaterial)
+      const cornerPositions = [-0.5, 0.5]
+      for (const x of cornerPositions) {
+        for (const y of cornerPositions) {
+          for (const z of cornerPositions) {
+            const corner = new Mesh(cornerGeometry, cornerMaterial)
+            corner.position.set(x, y, z)
+            cubeGroup.add(corner)
+          }
+        }
+      }
+
+    const grid = new GridHelper(6, 18, 0x34f5c6, 0x0f766e)
+    grid.position.y = 0
+    const gridMaterials = Array.isArray(grid.material) ? grid.material : [grid.material]
+    gridMaterials.forEach((material) => {
+      if (material instanceof LineBasicMaterial) {
+        material.transparent = true
+        material.opacity = 0.25
+      }
+    })
+    scene.add(grid)
+    disposables.push(grid.geometry)
+    gridMaterials.forEach((material) => disposables.push(material))
+
+      const handleResize = () => {
+        const parentWidth = container.parentElement?.clientWidth ?? 0
+        const width = parentWidth > 0 ? parentWidth : container.clientWidth || 320
+        const height = width
+        renderer.setSize(width, height, false)
+        const canvas = renderer.domElement
+        canvas.style.width = `${width}px`
+        canvas.style.height = `${height}px`
+        camera.aspect = width / height
+        camera.updateProjectionMatrix()
+      }
+    handleResize()
+
+    const resizeObserver =
+      typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(() => handleResize())
+        : null
+    resizeObserver?.observe(container)
+
+    let frameId = 0
+    const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const animate = () => {
+      frameId = window.requestAnimationFrame(animate)
+      if (!motionQuery.matches) {
+        pivotAngleRef.current += 0.0012
+      }
+
+      const pivotRadius = 4.8
+      const targetY = cubeGroupRef.current?.position.y ?? 0.6
+      const refCamera = cameraRef.current
+      const activeCamera = refCamera ?? camera
+      if (refCamera) {
+        const angle = pivotAngleRef.current
+        refCamera.position.set(
+          Math.cos(angle) * pivotRadius,
+          targetY + 0.8 + Math.sin(angle * 0.4) * 0.15,
+          Math.sin(angle) * pivotRadius
+        )
+        refCamera.lookAt(0, targetY, 0)
+      }
+
+      renderer.render(scene, activeCamera)
+    }
+    animate()
+
+    return () => {
+      cancelAnimationFrame(frameId)
+      resizeObserver?.disconnect()
+      cubeGroupRef.current = null
+      rendererRef.current = null
+      disposables.forEach((item) => {
+        try {
+          item.dispose()
+        } catch {
+          // ignore
+        }
+      })
+      renderer.dispose()
+      if (container.contains(renderer.domElement)) {
+        container.removeChild(renderer.domElement)
+      }
+    }
   }, [])
+
+  React.useEffect(() => {
+    const multiplier = 1.45
+    if (cubeGroupRef.current) {
+      cubeGroupRef.current.scale.set(scale.x * multiplier, scale.y * multiplier, scale.z * multiplier)
+      cubeGroupRef.current.position.y = (scale.y * multiplier) / 2
+    }
+  }, [scale.x, scale.y, scale.z])
+
+  return <div ref={containerRef} className="relative h-full w-full min-h-[220px]" />
+}
+
+const DimensionVisualizer: React.FC<{ dimensions: Partial<PlantDimensions> }> = ({ dimensions }) => {
+  const { t } = useTranslation('common')
 
   const heightCandidate = parsePositiveNumber(dimensions.height?.maxCm ?? dimensions.height?.minCm)
   const spreadCandidate = parsePositiveNumber(dimensions.spread?.maxCm ?? dimensions.spread?.minCm)
@@ -473,9 +563,14 @@ const DimensionVisualizer: React.FC<{ dimensions: Partial<PlantDimensions> }> = 
   const scaleY = scaleFor(resolvedHeight)
   const scaleZ = scaleFor(resolvedDepth)
 
-  const scaleStyle: React.CSSProperties = {
-    transform: `scale3d(${scaleX.toFixed(3)}, ${scaleY.toFixed(3)}, ${scaleZ.toFixed(3)})`,
-  }
+    const cubeScale = React.useMemo<CubeScale>(
+    () => ({
+      x: Number(scaleX.toFixed(3)),
+      y: Number(scaleY.toFixed(3)),
+      z: Number(scaleZ.toFixed(3)),
+    }),
+    [scaleX, scaleY, scaleZ]
+  )
 
   const spreadLabel = t('plantInfo.labels.spread', { defaultValue: 'Spread' })
   const spacingLabel = t('plantInfo.labels.spacing', { defaultValue: 'Spacing' })
@@ -501,22 +596,14 @@ const DimensionVisualizer: React.FC<{ dimensions: Partial<PlantDimensions> }> = 
 
   return (
       <div className="rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-50/70 via-white/60 to-white/10 p-5 dark:border-emerald-500/30 dark:from-emerald-500/10 dark:via-transparent dark:to-transparent">
-      <div className="flex flex-col items-stretch gap-6 lg:flex-row lg:gap-8">
-        <div className="dimension-cube-scene flex-[1.35] max-w-[260px] self-center lg:self-auto">
-          <div className="dimension-cube-wrapper">
-            <div className="dimension-cube-scale" style={scaleStyle}>
-              <div className="dimension-cube" aria-hidden="true">
-                <div className="dimension-cube-glow" />
-                <div className="dimension-cube-face dimension-cube-face--front" />
-                <div className="dimension-cube-face dimension-cube-face--back" />
-                <div className="dimension-cube-face dimension-cube-face--left" />
-                <div className="dimension-cube-face dimension-cube-face--right" />
-                <div className="dimension-cube-face dimension-cube-face--top" />
-                <div className="dimension-cube-face dimension-cube-face--bottom" />
-              </div>
+        <div className="flex flex-col items-stretch gap-6 lg:flex-row lg:gap-8">
+          <div className="flex-[1.35] max-w-[260px] self-center lg:self-auto">
+            <div className="relative aspect-square w-full overflow-hidden rounded-[32px] border border-emerald-500/25 bg-gradient-to-br from-emerald-50/80 via-white/60 to-transparent shadow-[0_18px_50px_rgba(16,185,129,0.2)] dark:border-emerald-500/30 dark:from-emerald-900/30 dark:via-[#0f1f1f]/80 dark:to-transparent">
+                <DimensionCube scale={cubeScale} />
+              <div className="pointer-events-none absolute inset-3 rounded-[28px] border border-white/30 dark:border-emerald-500/30" />
+              <div className="pointer-events-none absolute inset-x-6 bottom-3 h-14 rounded-full bg-emerald-400/30 blur-3xl" />
             </div>
           </div>
-        </div>
         <div className="flex-1 w-full max-w-lg">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 h-full">
             {legendItems.map((item) => (
@@ -1497,14 +1584,15 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
           </div>
         </div>
 
-      {hasAnyStructuredData && (
-        <motion.section
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.1 }}
-          transition={{ duration: 0.4 }}
-          className="space-y-6"
-        >
+        {hasAnyStructuredData && (
+          <motion.section
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.1 }}
+            transition={{ duration: 0.4 }}
+            className="space-y-6"
+            style={{ transformStyle: 'preserve-3d' }}
+          >
           <div className="flex items-center gap-3">
             <h2 className="text-2xl font-semibold">{t('plantInfo.moreInformation')}</h2>
           </div>
@@ -2521,6 +2609,7 @@ const InfoSection = ({ title, icon, children }: { title: string; icon: React.Rea
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, amount: 0.1 }}
       transition={{ duration: 0.4 }}
+      style={{ transformStyle: 'preserve-3d' }}
     >
       <Card className="rounded-3xl h-full border-stone-200/70 dark:border-[#3e3e42]/70">
         <CardHeader className="space-y-3">
