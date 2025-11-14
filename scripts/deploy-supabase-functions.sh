@@ -79,10 +79,10 @@ if [[ $EUID -ne 0 ]]; then
     # Embed the resolved password directly to avoid env-sanitization issues.
     ASKPASS_HELPER="$(mktemp -t plantswipe-askpass.XXXXXX)"
     chmod 0700 "$ASKPASS_HELPER"
-    cat >"$ASKPASS_HELPER" <<EOF
+    cat >"$ASKPASS_HELPER" <<EOF_SUDO
 #!/usr/bin/env bash
 exec printf "%s" "$(printf %s "${PSSWORD_KEY}")" 2>/dev/null
-EOF
+EOF_SUDO
     export SUDO_ASKPASS="$ASKPASS_HELPER"
     SUDO="sudo -A"
     src_label="$([[ -n "$PSSWORD_KEY_SOURCE" ]] && echo "$PSSWORD_KEY_SOURCE" || echo env)"
@@ -105,72 +105,34 @@ log "Repository root: $WORK_DIR"
 log "Node directory: $NODE_DIR"
 log "Repo owner: $REPO_OWNER (current user: $CURRENT_USER)"
 
-ensure_supabase_cli() {
-  if command -v supabase >/dev/null 2>&1; then
+deploy_supabase_functions() {
+  if ! command -v supabase >/dev/null 2>&1; then
+    log "[INFO] Supabase CLI not found; skipping Edge Function deployment."
     return 0
   fi
-  log "[WARN] Supabase CLI not found; attempting installation via npm (requires admin privileges)…"
-  if ! command -v npm >/dev/null 2>&1; then
-    log "[ERROR] npm is not available; cannot install Supabase CLI automatically."
-    return 1
-  fi
-  local install_cmd=(npm install -g supabase)
-  if [[ -n "$SUDO" ]]; then
-    if ! $SUDO "${install_cmd[@]}"; then
-      log "[ERROR] Failed to install Supabase CLI using sudo."
-      return 1
-    fi
-  else
-    if ! "${install_cmd[@]}"; then
-      log "[ERROR] Failed to install Supabase CLI."
-      return 1
-    fi
-  fi
-  if ! command -v supabase >/dev/null 2>&1; then
-    log "[ERROR] Supabase CLI installation attempt completed but command still not found."
-    return 1
-  fi
-  log "[INFO] Supabase CLI installed successfully."
-}
 
-deploy_supabase_functions() {
-  # Ensure Supabase CLI is present (install if missing)
-  if ! ensure_supabase_cli; then
-    log "[ERROR] Supabase CLI is required but could not be installed."
-    return 1
-  fi
-
-  # Load Supabase configuration from env files
-  local -A supabase_env=()
-  local env_files=("$NODE_DIR/.env" "$NODE_DIR/.env.server" "$WORK_DIR/.env")
-  local line key val
-  for env_file in "${env_files[@]}"; do
-    [[ -f "$env_file" ]] || continue
+  declare -A supabase_env=()
+  _load_supabase_env() {
+    local f="$1"; [[ -f "$f" ]] || return 0
     while IFS= read -r line || [[ -n "$line" ]]; do
       [[ "$line" =~ ^[[:space:]]*# ]] && continue
       [[ "$line" =~ ^[[:space:]]*$ ]] && continue
-      if [[ "$line" =~ ^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
-        key="${BASH_REMATCH[1]}"
-        val="${BASH_REMATCH[2]}"
+      if [[ "$line" =~ ^[[:space:]]*(SUPABASE_ACCESS_TOKEN|SUPABASE_PROJECT_REF|SUPABASE_URL|VITE_SUPABASE_URL|RESEND_API_KEY|RESEND_FROM|RESEND_FROM_NAME|OPENAI_API_KEY|OPENAI_KEY|ALLOWED_ORIGINS|AI_FILL_ALLOWED_ORIGINS|FILL_PLANT_ALLOWED_ORIGINS)=(.*)$ ]]; then
+        local key="${BASH_REMATCH[1]}"; local val="${BASH_REMATCH[2]}"
         val="${val%$'\r'}"
-        if [[ "${val:0:1}" == '"' && "${val: -1}" == '"' ]]; then
-          val="${val:1:${#val}-2}"
-        elif [[ "${val:0:1}" == "'" && "${val: -1}" == "'" ]]; then
-          val="${val:1:${#val}-2}"
-        fi
-        case "$key" in
-          SUPABASE_ACCESS_TOKEN|SUPABASE_PROJECT_REF|SUPABASE_URL|VITE_SUPABASE_URL|RESEND_API_KEY|RESEND_FROM|RESEND_FROM_NAME|OPENAI_API_KEY|OPENAI_KEY|ALLOWED_ORIGINS|AI_FILL_ALLOWED_ORIGINS|FILL_PLANT_ALLOWED_ORIGINS)
-            supabase_env["$key"]="$val"
-            ;;
-        esac
+        if [[ "${val:0:1}" == '"' && "${val: -1}" == '"' ]]; then val="${val:1:${#val}-2}"; fi
+        if [[ "${val:0:1}" == "'" && "${val: -1}" == "'" ]]; then val="${val:1:${#val}-2}"; fi
+        supabase_env["$key"]="$val"
       fi
-    done < "$env_file"
-  done
+    done < "$f"
+  }
+  _load_supabase_env "$NODE_DIR/.env"
+  _load_supabase_env "$NODE_DIR/.env.server"
+  _load_supabase_env "$WORK_DIR/.env"
 
   local SUPABASE_ACCESS_TOKEN="${supabase_env[SUPABASE_ACCESS_TOKEN]:-${SUPABASE_ACCESS_TOKEN:-}}"
   local SUPABASE_PROJECT_REF="${supabase_env[SUPABASE_PROJECT_REF]:-${SUPABASE_PROJECT_REF:-}}"
 
-  # Try to derive project ref from Supabase URL if not explicitly set
   if [[ -z "$SUPABASE_PROJECT_REF" ]]; then
     local SUPA_URL="${supabase_env[SUPABASE_URL]:-}"
     [[ -z "$SUPA_URL" ]] && SUPA_URL="${supabase_env[VITE_SUPABASE_URL]:-}"
@@ -194,13 +156,12 @@ PY
   fi
 
   if [[ -z "$SUPABASE_PROJECT_REF" ]]; then
-    log "[ERROR] SUPABASE_PROJECT_REF not set and could not be derived; aborting deployment."
-    return 1
+    log "[INFO] SUPABASE_PROJECT_REF not set and could not be derived; skipping Edge Function deployment."
+    return 0
   fi
 
   log "Deploying Supabase Edge Functions…"
 
-  # Determine the user to run supabase CLI as (prefer repo owner)
   local SUPABASE_USER="$REPO_OWNER"
   local SUPABASE_HOME=""
   if [[ -n "$SUPABASE_USER" && "$SUPABASE_USER" != "root" ]]; then
@@ -223,16 +184,14 @@ PY
     supabase_cmd=(env HOME="$SUPABASE_HOME" SUPABASE_CONFIG_HOME="$SUPABASE_HOME/.supabase")
   fi
 
-  # Create a writable log directory
   local LOG_DIR="$WORK_DIR/.supabase-logs"
   mkdir -p "$LOG_DIR" 2>/dev/null || LOG_DIR="/tmp"
   chmod 1777 "$LOG_DIR" 2>/dev/null || true
 
-  # Authenticate if access token is provided
   if [[ -n "$SUPABASE_ACCESS_TOKEN" ]]; then
     log "Authenticating Supabase CLI…"
     local login_output=""
-    if login_output="$("${supabase_cmd[@]}" SUPABASE_ACCESS_TOKEN="$SUPABASE_ACCESS_TOKEN" supabase login --token "$SUPABASE_ACCESS_TOKEN" 2>&1)"; then
+    if login_output="$(${supabase_cmd[@]} SUPABASE_ACCESS_TOKEN="$SUPABASE_ACCESS_TOKEN" supabase login --token "$SUPABASE_ACCESS_TOKEN" 2>&1)"; then
       log "Supabase CLI authenticated."
       echo "$login_output" | grep -v "^$" | while IFS= read -r line; do
         log "  $line"
@@ -247,7 +206,6 @@ PY
     log "[INFO] SUPABASE_ACCESS_TOKEN not set; assuming already authenticated or using existing session."
   fi
 
-  # Sync secrets if available
   local RESEND_API_KEY="${supabase_env[RESEND_API_KEY]:-${RESEND_API_KEY:-}}"
   local RESEND_FROM="${supabase_env[RESEND_FROM]:-${RESEND_FROM:-}}"
   local RESEND_FROM_NAME="${supabase_env[RESEND_FROM_NAME]:-${RESEND_FROM_NAME:-}}"
@@ -264,11 +222,11 @@ PY
   [[ -n "$OPENAI_SECRET" ]] && secrets_env+=("OPENAI_API_KEY=$OPENAI_SECRET")
   [[ -n "$ALLOWED_ORIGINS_SECRET" ]] && secrets_env+=("ALLOWED_ORIGINS=$ALLOWED_ORIGINS_SECRET")
 
-  if [[ "${#secrets_env[@]}" -gt 0 && "${SKIP_SUPABASE_SECRETS:-}" != "true" ]]; then
+  if ((${#secrets_env[@]})); then
     log "Syncing Supabase secrets…"
     for kv in "${secrets_env[@]}"; do
       local secret_output=""
-      if secret_output="$("${supabase_cmd[@]}" supabase secrets set --project-ref "$SUPABASE_PROJECT_REF" --workdir "$NODE_DIR" "$kv" 2>&1)"; then
+      if secret_output="$(${supabase_cmd[@]} supabase secrets set --project-ref "$SUPABASE_PROJECT_REF" --workdir "$NODE_DIR" "$kv" 2>&1)"; then
         log "✓ Set secret: ${kv%%=*}"
         echo "$secret_output" | grep -v "^$" | while IFS= read -r line; do
           log "  $line"
@@ -278,11 +236,8 @@ PY
         echo "$secret_output" | tail -n 10 | while IFS= read -r line; do
           log "  $line"
         done || true
-          return 1
       fi
     done
-  elif [[ "${SKIP_SUPABASE_SECRETS:-}" == "true" ]]; then
-    log "[INFO] SKIP_SUPABASE_SECRETS requested; skipping Supabase secret sync."
   else
     log "[INFO] No Supabase secrets to sync for this deployment."
   fi
@@ -293,22 +248,22 @@ PY
     return 0
   fi
 
-  # Check if project is linked (create config.toml if needed)
   local SUPABASE_CONFIG="$NODE_DIR/supabase/config.toml"
   if [[ ! -f "$SUPABASE_CONFIG" ]]; then
     log "Linking Supabase project $SUPABASE_PROJECT_REF…"
     mkdir -p "$NODE_DIR/supabase" || true
     local link_args=(supabase link --project-ref "$SUPABASE_PROJECT_REF" --workdir "$NODE_DIR")
-      if ! "${supabase_cmd[@]}" "${link_args[@]}" >/tmp/supabase-link.log 2>&1; then
-        log "[ERROR] Failed to link Supabase project. See /tmp/supabase-link.log for details."
-        tail -n 20 /tmp/supabase-link.log 2>/dev/null || true
-        return 1
-      fi
+    if ! "${supabase_cmd[@]}" "${link_args[@]}" >/tmp/supabase-link.log 2>&1; then
+      log "[WARN] Failed to link Supabase project. See /tmp/supabase-link.log"
+      tail -n 20 /tmp/supabase-link.log 2>/dev/null || true
+      log "[INFO] Continuing with deployment anyway (project may already be linked)…"
+    else
       log "Supabase project linked successfully."
+    fi
   else
     local linked_ref=""
     if grep -q "project_id" "$SUPABASE_CONFIG" 2>/dev/null; then
-      linked_ref="$(grep "project_id" "$SUPABASE_CONFIG" | head -n1 | sed -E 's/.*project_id[[:space:]]*=[[:space:]]*["'\'']?([^"'\'']+)["'\'']?.*/\1/' || echo "")"
+      linked_ref="$(grep "project_id" "$SUPABASE_CONFIG" | head -n1 | sed -E 's/.*project_id[[:space:]]*=[[:space:]]*["\'\']?([^"\'\']+)["\'\']?.*/\1/' || echo "")"
     fi
     if [[ -n "$linked_ref" && "$linked_ref" != "$SUPABASE_PROJECT_REF" ]]; then
       log "[WARN] Linked project ($linked_ref) differs from SUPABASE_PROJECT_REF ($SUPABASE_PROJECT_REF)"
@@ -326,13 +281,13 @@ PY
     return 0
   fi
 
+  local deploy_failures=0
   local original_pwd="$(pwd)"
   cd "$NODE_DIR" || {
     log "[ERROR] Failed to change to directory: $NODE_DIR"
     return 1
   }
 
-  local deploy_failures=0
   for fname in "${function_names[@]}"; do
     local fpath="$FUNCTIONS_ROOT/$fname"
     if [[ ! -f "$fpath/index.ts" && ! -f "$fpath/index.js" && ! -f "$fpath/index.tsx" ]]; then
@@ -346,7 +301,7 @@ PY
     log "Deploying Supabase function '$fname'…"
     local deploy_output=""
     local deploy_exit_code=0
-    deploy_output="$("${supabase_cmd[@]}" "${deploy_args[@]}" 2>&1)" || deploy_exit_code=$?
+    deploy_output="$(${supabase_cmd[@]} "${deploy_args[@]}" 2>&1)" || deploy_exit_code=$?
 
     log "Deployment output for '$fname':"
     echo "$deploy_output" | while IFS= read -r line; do
@@ -372,7 +327,7 @@ PY
 
   log "Verifying Supabase functions in project $SUPABASE_PROJECT_REF…"
   local verify_output=""
-  if verify_output="$("${supabase_cmd[@]}" supabase functions list --project-ref "$SUPABASE_PROJECT_REF" 2>&1)"; then
+  if verify_output="$(${supabase_cmd[@]} supabase functions list --project-ref "$SUPABASE_PROJECT_REF" 2>&1)"; then
     echo "$verify_output" | while IFS= read -r line; do
       log "  $line"
     done || true
