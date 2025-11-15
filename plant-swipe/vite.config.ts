@@ -1,6 +1,7 @@
 // @ts-nocheck
-import { defineConfig, type Plugin } from 'vite'
+import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { VitePWA } from 'vite-plugin-pwa'
 // Use regular path/url imports (Vite provides Node polytypes via tsconfig.node.json)
 import path from 'path'
 import { fileURLToPath } from 'url'
@@ -12,9 +13,99 @@ import { fileURLToPath } from 'url'
 // @ts-ignore augment import.meta at runtime
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
+const normalizeBasePath = (value?: string) => {
+  if (!value || value.trim() === '' || value === '/') return '/'
+  let next = value.trim()
+  if (!next.startsWith('/')) next = `/${next}`
+  if (!next.endsWith('/')) next = `${next}/`
+  return next.replace(/\/{2,}/g, '/')
+}
+
+const appBase = normalizeBasePath(process.env.VITE_APP_BASE_PATH)
+const scope = appBase === '/' ? '/' : appBase
+
 export default defineConfig({
-  base: '/',
-  plugins: [react()],
+  base: appBase,
+  plugins: [
+    react(),
+    VitePWA({
+      base: appBase,
+      registerType: 'autoUpdate',
+      injectRegister: 'auto',
+      includeAssets: [
+        'env-loader.js',
+        'env.js',
+        'icons/plant-swipe-icon.svg',
+        'icons/icon-192x192.png',
+        'icons/icon-512x512.png',
+        'icons/icon-maskable-512.png',
+        'locales/en/common.json',
+        'locales/fr/common.json',
+        'PLANT-INFO-SCHEMA.json',
+      ],
+      manifest: {
+        id: 'plantswipe',
+        name: 'PlantSwipe',
+        short_name: 'PlantSwipe',
+        description: 'Discover, swipe and manage the perfect plants for every garden.',
+        lang: 'en',
+        theme_color: '#052e16',
+        background_color: '#03120c',
+        display: 'standalone',
+        scope,
+        start_url: scope,
+        orientation: 'portrait-primary',
+        categories: ['productivity', 'lifestyle', 'utilities'],
+        icons: [
+          { src: 'icons/icon-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: 'icons/icon-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: 'icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable any' },
+          { src: 'icons/plant-swipe-icon.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'any' },
+        ],
+        shortcuts: [
+          { name: 'Swipe plants', url: scope === '/' ? '/swipe' : `${scope}swipe`, description: 'Jump directly into swipe mode' },
+          { name: 'My gardens', url: scope === '/' ? '/gardens' : `${scope}gardens`, description: 'Open your garden dashboard' },
+        ],
+      },
+      workbox: {
+        cleanupOutdatedCaches: true,
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,json,txt,woff2}'],
+        navigateFallback: 'index.html',
+        runtimeCaching: [
+          {
+            urlPattern: /\/api\//,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'api-cache',
+              networkTimeoutSeconds: 10,
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            urlPattern: /\/locales\/.*\.json$/i,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'i18n-cache',
+              expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 },
+            },
+          },
+          {
+            urlPattern: ({ request }) => request.destination === 'image',
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'image-cache',
+              expiration: { maxEntries: 60, maxAgeSeconds: 60 * 60 * 24 * 14 },
+            },
+          },
+        ],
+      },
+      devOptions: {
+        enabled: process.env.VITE_ENABLE_PWA === 'true',
+        navigateFallback: 'index.html',
+        suppressWarnings: true,
+      },
+    }),
+  ],
   envPrefix: ['VITE_'],
   resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
   build: {

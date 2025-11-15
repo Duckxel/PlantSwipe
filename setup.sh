@@ -63,6 +63,8 @@ else
   NODE_DIR="$REPO_DIR"
 fi
 
+PWA_BASE_PATH="${PWA_BASE_PATH:-${VITE_APP_BASE_PATH:-/}}"
+
 SERVICE_NODE="plant-swipe-node"
 SERVICE_ADMIN="admin-api"
 SERVICE_NGINX="nginx"
@@ -87,6 +89,7 @@ NGINX_BIN="$(command -v nginx || echo /usr/sbin/nginx)"
 
 log "Repo: $REPO_DIR"
 log "Node app: $NODE_DIR"
+log "PWA base path: $PWA_BASE_PATH"
 
 # Prepare repository permissions for plug-and-play refresh
 prepare_repo_permissions() {
@@ -539,14 +542,14 @@ else
 fi
 
 # Build frontend and API bundle
-log "Installing Node dependencies…"
+log "Installing PlantSwipe client dependencies (PWA ready)…"
 # Ensure a clean install owned by the service user and use a per-repo npm cache
 sudo -u "$SERVICE_USER" -H bash -lc "mkdir -p '$NODE_DIR/.npm-cache'"
 sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && rm -rf node_modules"
 sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && npm_config_cache='$NODE_DIR/.npm-cache' npm ci --no-audit --no-fund"
 
-log "Building Node application…"
-sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && CI=${CI:-true} npm_config_cache='$NODE_DIR/.npm-cache' npm run build"
+log "Building PlantSwipe web client + API bundle (base ${PWA_BASE_PATH})…"
+sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && VITE_APP_BASE_PATH='${PWA_BASE_PATH}' CI=${CI:-true} npm_config_cache='$NODE_DIR/.npm-cache' npm run build"
 
 # Link web root expected by nginx config to the repo copy, unless that would create
 # a self-referential link (e.g., when the repo itself lives at /var/www/PlantSwipe).

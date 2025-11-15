@@ -645,6 +645,23 @@ Ensure production environment variables are set:
 
 </details>
 
+### Progressive Web App
+
+- **Service worker & manifest** are generated automatically via [`vite-plugin-pwa`](https://vite-pwa-org.netlify.app/). The manifest scope/start URL follow `VITE_APP_BASE_PATH` (defaults to `/`).
+- **Runtime behaviour**: offline caching for routes, i18n JSON bundles, static assets, plus `NetworkFirst` for `/api/*` calls to keep data fresh while providing a fallback when offline.
+- **User prompts**: `ServiceWorkerToast` informs users when the app is installable/offline-ready or when a new version is published (with a “Reload now” action).
+- **Local testing**: run `VITE_ENABLE_PWA=true npm run dev` to test the service worker in development. Use the “Application ▸ Manifest” panel in devtools to inspect install assets.
+
+### GitHub Pages Deployments
+
+1. Enable **GitHub Pages** for the repository → *Settings ▸ Pages ▸ Build and deployment ▸ Source: GitHub Actions.*
+2. The workflow at `.github/workflows/deploy-pwa-pages.yml` builds the client inside `plant-swipe/` and publishes the `dist` folder to GitHub Pages using the official `actions/deploy-pages`.
+3. Triggers:
+   - `workflow_dispatch` with an optional `target_ref` input so you can deploy any branch on‑demand (handy for branch-specific previews).
+   - `push` on `main` and any branch that matches `release/**` or `pages/**` for automatic releases.
+4. The workflow exports `VITE_APP_BASE_PATH="/<repo-name>/"`, so the generated service worker + router honour the GitHub Pages sub-path. For custom forks, override the env variable as needed.
+5. After a successful run, the action comments the published URL (format: `https://<github-username>.github.io/<repo-name>/`). Re-run the workflow to push another branch build whenever required.
+
 ---
 
 ## Troubleshooting

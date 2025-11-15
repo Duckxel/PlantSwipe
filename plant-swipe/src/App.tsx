@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, useLocation, useNavigate } from 'react-ro
 import { I18nextProvider } from 'react-i18next'
 import i18n, { DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES } from '@/lib/i18n'
 import { getLanguageFromPath, getSavedLanguagePreference, detectBrowserLanguage, addLanguagePrefix } from '@/lib/i18nRouting'
+import ServiceWorkerToast from '@/components/pwa/ServiceWorkerToast'
 
 function AppShell() {
   const { loading } = useAuth()
@@ -62,12 +63,21 @@ function LanguageRoutes() {
 }
 
 export default function App() {
+  const routerBase = React.useMemo(() => {
+    const baseUrl = import.meta.env.BASE_URL || '/'
+    if (baseUrl === '/') return '/'
+    return baseUrl.replace(/\/+$/, '')
+  }, [])
+
   return (
     <I18nextProvider i18n={i18n}>
       <ThemeProvider>
         <AuthProvider>
-          <BrowserRouter>
-            <LanguageRoutes />
+          <BrowserRouter basename={routerBase}>
+            <>
+              <LanguageRoutes />
+              <ServiceWorkerToast />
+            </>
           </BrowserRouter>
         </AuthProvider>
       </ThemeProvider>
