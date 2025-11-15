@@ -37,8 +37,8 @@
           "eyebrow": "Our story",
           "title": "From art school experiments to Aphylia",
           "description": [
-            "2020—2024 · We met in a Montpellier art school building 3D worlds and speculative installations.",
-            "Five fell deep into systems and computers while Xavier became the neighborhood plant whisperer; we swapped obsessions daily.",
+            "2020—2024 · We met in a Montpellier art school building 3D worlds and beautiful environments.",
+            "Five fell deep into systems and computers while Xavier became the neighborhood plant whisperer; we shared our obsessions daily.",
             "2025 · Motivated to build together, we created Aphylia—Xavier sketches the rituals, Five codes the calm garden OS we wished existed."
           ]
         }
@@ -91,12 +91,14 @@
     }
   },
     "services": {
-      "title": "What’s inside today",
-      "subtitle": "A quick snapshot of live Aphylia features.",
+      "title": "Aphylia's features",
+      "subtitle": "A quick snapshot of live Aphylia capabilities.",
       "items": [
         "Guided plant encyclopedia entries with reminders you can trust",
         "Garden planner that syncs layouts, care notes, and microclimate logs",
-        "Swipe discovery that mixes seeds, swaps, and rituals without the noise"
+        "Swipe discovery that mixes seeds, swaps, and rituals without the noise",
+        "Real-time task nudges that react to weather and microclimate data",
+        "Shareable garden links for friends, family, or community spaces"
       ]
     },
   "community": {

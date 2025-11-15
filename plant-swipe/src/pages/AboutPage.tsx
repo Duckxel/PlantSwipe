@@ -112,18 +112,19 @@ export default function AboutPage() {
             </div>
           </div>
           <div className="grid gap-4 md:grid-cols-2">
-            {pillarCards.map((card, index) => (
-              <Card
-                key={`${card.title}-${index}`}
-                className="rounded-3xl h-full border-stone-200/70 dark:border-[#3e3e42]/70"
-              >
-                <CardHeader className="space-y-3">
-                  {card.eyebrow && (
-                    <Badge variant="secondary" className="rounded-2xl w-fit">
-                      {card.eyebrow}
-                    </Badge>
-                  )}
-                  <CardTitle>{card.title}</CardTitle>
+            <div className="space-y-4">
+              {pillarCards.map((card, index) => (
+                <Card
+                  key={`${card.title}-${index}`}
+                  className="rounded-3xl h-full border-stone-200/70 dark:border-[#3e3e42]/70"
+                >
+                  <CardHeader className="space-y-3">
+                    {card.eyebrow && (
+                      <Badge variant="secondary" className="rounded-2xl w-fit">
+                        {card.eyebrow}
+                      </Badge>
+                    )}
+                    <CardTitle>{card.title}</CardTitle>
                     {Array.isArray(card.description) ? (
                       <div className="space-y-2 text-sm text-stone-600 dark:text-stone-300">
                         {card.description.map((line, lineIndex) => (
@@ -133,18 +134,23 @@ export default function AboutPage() {
                     ) : (
                       <CardDescription>{card.description}</CardDescription>
                     )}
+                  </CardHeader>
+                </Card>
+              ))}
+            </div>
+            {nameOrigin?.description && (
+              <Card className="rounded-3xl h-full border-stone-200/70 dark:border-[#3e3e42]/70">
+                <CardHeader className="space-y-3">
+                  <Badge variant="secondary" className="rounded-2xl w-fit">
+                    {nameOrigin.title}
+                  </Badge>
+                  <CardDescription className="text-sm text-stone-700 dark:text-stone-200">
+                    {nameOrigin.description}
+                  </CardDescription>
                 </CardHeader>
               </Card>
-            ))}
-          </div>
-            {nameOrigin?.description && (
-              <div className="rounded-3xl border border-dashed border-emerald-200 dark:border-emerald-900/40 bg-emerald-50/60 dark:bg-emerald-900/10 px-6 py-5">
-                <span className="text-xs uppercase tracking-wide text-emerald-700 dark:text-emerald-200">
-                  {nameOrigin.title}
-                </span>
-                <p className="mt-2 text-sm text-stone-700 dark:text-stone-200">{nameOrigin.description}</p>
-              </div>
             )}
+          </div>
         </section>
       )}
 
@@ -210,7 +216,7 @@ export default function AboutPage() {
               {meetBadge}
             </Badge>
           </div>
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid gap-2 md:grid-cols-2">
             {meetOrder
               .map((key) => ({ key, member: meetMembers[key] }))
               .filter((entry): entry is { key: string; member: MemberCard } => Boolean(entry.member))
@@ -222,22 +228,22 @@ export default function AboutPage() {
                 return (
                   <Card
                     key={`${member.name}-${index}`}
-                    className="rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 overflow-hidden h-full"
+                    className="rounded-xl border border-stone-200/70 dark:border-[#3e3e42]/70 overflow-hidden h-full text-sm"
                   >
-                    <div className="p-4 pb-0">
+                    <div className="p-3 pb-0">
                       <div className="relative">
-                        <div className="w-full aspect-square rounded-2xl border border-dashed border-stone-300 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#1f1f1f]/60 flex flex-col items-center justify-center text-center px-4">
-                          <span className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                        <div className="w-full aspect-square rounded-lg border border-dashed border-stone-300 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#1f1f1f]/60 flex flex-col items-center justify-center text-center px-3">
+                          <span className="text-[11px] uppercase tracking-wide text-stone-500 dark:text-stone-400">
                             {member.placeholder}
                           </span>
                         </div>
                         {member.adjectives?.length ? (
-                          <div className="absolute top-3 left-3 right-3 flex flex-wrap gap-2 pointer-events-none">
+                          <div className="absolute top-2 left-2 right-2 flex flex-wrap gap-1.5 pointer-events-none">
                             {member.adjectives.map((adj) => (
                               <Badge
                                 key={adj}
                                 variant="secondary"
-                                className="rounded-full px-3 py-0.5 text-[11px] bg-emerald-100/90 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-100 shadow-sm"
+                                className="rounded-full px-2.5 py-0.5 text-[10px] bg-emerald-100/90 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-100 shadow-sm"
                               >
                                 {adj}
                               </Badge>
@@ -246,9 +252,9 @@ export default function AboutPage() {
                         ) : null}
                       </div>
                     </div>
-                    <CardHeader className="px-4 pb-4 pt-3 space-y-1">
-                      <CardTitle className="text-lg">{displayName}</CardTitle>
-                      <CardDescription className="text-sm">{roleLabel}</CardDescription>
+                    <CardHeader className="px-3 pb-3 pt-2 space-y-0.5">
+                      <CardTitle className="text-base">{displayName}</CardTitle>
+                      <CardDescription className="text-xs">{roleLabel}</CardDescription>
                     </CardHeader>
                   </Card>
                 )

@@ -37,8 +37,8 @@
           "eyebrow": "Notre histoire",
           "title": "De l'école d'art à l'OS du jardin",
           "description": [
-            "2020—2024 · On se rencontre dans une école d'art à Montpellier, obsédés par la 3D et les installations.",
-            "Five tombe amoureux des systèmes et du code pendant que Xavier devient l'ami fou des plantes; on mélange nos passions chaque jour.",
+            "2020—2024 · On se rencontre dans une école d'art à Montpellier, obsédés par la 3D et les beaux environnements.",
+            "Five tombe amoureux des systèmes et du code pendant que Xavier devient l'ami fou des plantes; on partage nos obsessions chaque jour.",
             "2025 · On lance Aphylia ensemble : Xavier imagine les rituels et les parcours, Five code l'app calme dont nos jardins avaient besoin."
           ]
         }
@@ -91,12 +91,14 @@
     }
   },
     "services": {
-      "title": "Fonctionnalités disponibles",
-      "subtitle": "Un aperçu rapide de ce qui tourne déjà dans Aphylia.",
+      "title": "Fonctionnalités Aphylia",
+      "subtitle": "Un aperçu rapide de ce qui tourne déjà dans l'app.",
       "items": [
         "Fiches botaniques guidées avec rappels fiables",
         "Planificateur de jardin qui aligne plans, notes et microclimats",
-        "Cartes de découverte qui mixent graines, trocs et rituels sans bruit"
+        "Cartes de découverte qui mixent graines, trocs et rituels sans bruit",
+        "Rappels en temps réel synchronisés avec la météo locale",
+        "Partage simple de jardins avec amis, famille ou voisins"
       ]
     },
   "community": {
