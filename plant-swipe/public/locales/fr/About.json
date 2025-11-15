@@ -1,14 +1,14 @@
 {
-  "hero": {
-    "eyebrow": "Racines montpelliéraines",
-    "title": "L'horticulture urbaine rencontre un logiciel réfléchi",
-    "subtitle": "Aphilia porte le nom de l'Aphyllante et offre aux jardiniers modernes des outils fiables, inspirés de nos années dans le sud de la France.",
-    "ctaPrimary": "Confiez-nous votre rêve végétal",
-    "ctaSecondary": "Retour à la découverte"
-  },
+    "hero": {
+      "eyebrow": "Racines montpelliéraines",
+      "title": "L'horticulture urbaine rencontre un logiciel réfléchi",
+      "subtitle": "Aphylia propose des outils fiables et data-driven pour balcons, toits et jardins partagés en mariant expertise horticole et logiciel robuste.",
+      "ctaPrimary": "Confiez-nous votre rêve végétal",
+      "ctaSecondary": "Retour à la découverte"
+    },
   "story": {
     "badge": "Notre histoire",
-    "title": "De l'Aphyllante à Aphilia",
+    "title": "De l'Aphyllante à Aphylia",
     "subtitle": "Deux amis qui ont toujours pris soin des balcons comme des serveurs.",
     "beats": {
       "spark": {
@@ -26,29 +26,33 @@
     },
     "quote": {
       "text": "L'un plante des lignes de graines, l'autre plante des lignes de chiffres. Ensemble, on plante des excuses pour mieux manger.",
-      "attribution": "Le duo Aphilia"
+      "attribution": "Le duo Aphylia"
     }
   },
-  "pillars": {
-    "title": "Notre façon de construire Aphilia",
-    "subtitle": "Inspirée des jardins analogiques, livrée avec le calme d'un SaaS sur lequel on peut compter.",
-    "cards": {
-      "craft": {
-        "eyebrow": "Savoir-faire",
-        "title": "Des insights faits main, une fiabilité de production",
-        "description": "On note microclimats, rituels et gestes dans nos carnets avant de les transformer en planners, checklists et télémétrie."
+    "pillars": {
+      "title": "Notre façon de construire Aphylia",
+      "subtitle": "Inspirée des jardins analogiques, livrée avec le calme d'un SaaS fiable.",
+      "cards": {
+        "story": {
+          "eyebrow": "Notre histoire",
+          "title": "De l'école d'art à l'OS du jardin",
+          "description": [
+            "2020—2024 · On se rencontre dans une école d'art à Montpellier, obsédés par la 3D et les beaux environnements.",
+            "Five tombe amoureux des systèmes et du code pendant que Xavier devient l'ami fou des plantes; on partage nos obsessions chaque jour.",
+            "2025 · On lance Aphylia ensemble : Xavier imagine les rituels et les parcours, Five code l'app calme dont nos jardins avaient besoin."
+          ]
+        }
       },
-      "care": {
-        "eyebrow": "Soin",
-        "title": "Chaleur humaine, fondations scalables",
-        "description": "Café pour Xavier, Mango Monster pour FIVE, tests et monitoring pour tous—vos jardins restent stables même quand on dort."
-      }
-    }
-  },
+      "nameOrigin": {
+        "title": "Pourquoi ce nom ?",
+        "description": "« Aphylia » fait référence à l'Aphyllante, plante montpelliéraine qui a vu naître le projet."
+      },
+      "nameOriginHeading": "D'où vient Aphylia"
+    },
   "definition": {
     "title": "Racines montpelliéraines, branches dans le navigateur",
     "paragraphs": [
-      "Aphilia est une lettre d'amour à l'Aphyllante, la plante qui bordait nos chemins et nous a appris à prendre la biodiversité au sérieux.",
+      "Aphylia est une lettre d'amour à l'Aphyllante, la plante qui bordait nos chemins et nous a appris à prendre la biodiversité au sérieux.",
       "On crée un terrain de jeu encyclopédique pour quiconque flirte avec le jardinage urbain, la souveraineté alimentaire et le lore botanique, avec des blagues, des rituels et moins de tableurs.",
       "Au-delà des données, on vous donne des plans de jardins, des prévisions d'arrosage et des notes de compatibilité pour que votre balcon soit aussi bien orchestré que vos playlists."
     ],
@@ -68,7 +72,7 @@
       },
       "gardenPlanner": {
         "title": "Créateur de jardins + cerveau d'arrosage",
-        "description": "Composez des jardins avec vos plantes actuelles ou rêvées, Aphilia s'occupe ensuite du calendrier et des routines."
+        "description": "Composez des jardins avec vos plantes actuelles ou rêvées, Aphylia s'occupe ensuite du calendrier et des routines."
       },
       "photoId": {
         "title": "Reconnaissance photo",
@@ -87,18 +91,21 @@
       }
     }
   },
-  "services": {
-    "title": "Services en préparation",
-    "subtitle": "Parce que vente, livraison et logistique méritent leur propre checklist.",
-    "items": [
-      "Vente de graines et plantes avec un packaging qui donne le sourire",
-      "Livraison locale pour que vos pots costauds n'effraient plus le chauffeur"
-    ]
-  },
+    "services": {
+      "title": "Fonctionnalités Aphylia",
+      "subtitle": "Ce que l'app offre aujourd'hui.",
+      "items": [
+        "Découverte ludique par swipe avec gestes like/pass et animations fluides.",
+        "Fiches plantes riches : soins, symbolique, rareté et données saisonnières.",
+        "Recherche et filtres puissants (texte, couleurs, saisons, rareté, graines).",
+        "Outils de jardin pour timelines, tâches, tableaux de bord et espaces collaboratifs.",
+        "Couche sociale + multilingue avec amis, profils publics et support EN/FR via DeepL."
+      ]
+    },
   "community": {
     "badge": "Wishlist",
     "title": "Feature rêvée : l'onglet Communauté",
-    "description": "On veut un espace où les voisins échangent des boutures, postent leurs victoires d'arrosage et organisent des trocs de graines directement dans Aphilia.",
+    "description": "On veut un espace où les voisins échangent des boutures, postent leurs victoires d'arrosage et organisent des trocs de graines directement dans Aphylia.",
     "helper": "Si ça vous parle, faites-nous signe. Chaque « oui » le fait grimper sur la roadmap.",
     "button": "Je veux participer"
   },
