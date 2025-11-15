@@ -2,7 +2,13 @@ import { serve } from "https://deno.land/std@0.224.0/http/server.ts"
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts"
 
 const SUPPORT_EMAIL = "support@aphylia.app"
+const BUSINESS_EMAIL = "contact@aphylia.app"
 const RESEND_ENDPOINT = "https://api.resend.com/emails"
+const RECIPIENT_EMAILS = {
+  support: SUPPORT_EMAIL,
+  business: BUSINESS_EMAIL,
+} as const
+type Audience = keyof typeof RECIPIENT_EMAILS
 
 const contactSchema = z.object({
   name: z.string().trim().min(1).max(120),
@@ -10,6 +16,7 @@ const contactSchema = z.object({
   subject: z.string().trim().min(3).max(150),
   message: z.string().trim().min(10).max(4000),
   submittedAt: z.string().optional(),
+  audience: z.enum(["support", "business"]).optional(),
 })
 
 const corsHeaders: Record<string, string> = {
@@ -86,7 +93,9 @@ serve(async (req) => {
     })
   }
 
-  const { name, email, subject, message, submittedAt } = parsed.data
+  const { name, email, subject, message, submittedAt, audience: parsedAudience } = parsed.data
+  const audience: Audience = parsedAudience ?? "support"
+  const recipientEmail = RECIPIENT_EMAILS[audience]
 
   const resendApiKey = getFirstEnv("RESEND_API_KEY", "SUPABASE_RESEND_API_KEY")
 
@@ -131,23 +140,26 @@ serve(async (req) => {
     <p style="white-space:pre-wrap;">${escapeHtml(message)}</p>
   `
 
-  try {
-    const response = await fetch(RESEND_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${resendApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: fromAddress,
-        to: [SUPPORT_EMAIL],
-        reply_to: email,
-        subject: finalSubject,
-        text: plainBody,
-        html: htmlBody,
-        tags: [{ name: "source", value: "contact-form" }],
-      }),
-    })
+    try {
+      const response = await fetch(RESEND_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${resendApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: fromAddress,
+          to: [recipientEmail],
+          reply_to: email,
+          subject: finalSubject,
+          text: plainBody,
+          html: htmlBody,
+          tags: [
+            { name: "source", value: "contact-form" },
+            { name: "audience", value: audience },
+          ],
+        }),
+      })
 
     if (!response.ok) {
       let errorDetail: unknown = null

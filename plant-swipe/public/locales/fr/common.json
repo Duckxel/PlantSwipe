@@ -40,6 +40,23 @@
     "description": "Nous sommes là pour vous aider ! Contactez notre équipe de support.",
     "supportEmail": "E-mail de support",
     "supportEmailDescription": "Envoyez-nous un e-mail et nous vous répondrons dans les plus brefs délais.",
+        "recipientCardTitle": "Contacter notre équipe",
+        "recipientCardDescription": "Choisissez qui doit recevoir votre message et nous l'acheminerons immédiatement.",
+        "channelSelector": {
+          "label": "Envoyer à",
+          "helper": "Sélectionnez la boîte de réception la plus adaptée à votre demande.",
+          "options": {
+            "support": {
+              "name": "Support",
+              "description": "Questions produit, bugs ou aide sur le compte."
+            },
+            "business": {
+              "name": "Business",
+              "description": "Partenariats, presse ou demandes commerciales."
+            }
+          }
+        },
+        "channelSelectedLabel": "Envoi actuel vers {{channel}}",
     "emailLabel": "Adresse e-mail",
     "sendEmail": "Envoyer un e-mail",
     "copyEmail": "Copier",
