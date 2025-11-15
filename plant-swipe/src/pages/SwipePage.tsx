@@ -1,6 +1,6 @@
 import React from "react"
 import { motion, AnimatePresence, type MotionValue } from "framer-motion"
-import { ChevronLeft, ChevronRight, ChevronUp, Heart, Sparkles, PartyPopper, Palette, Wand2, Flame } from "lucide-react"
+import { ChevronLeft, ChevronRight, ChevronUp, Heart, Sparkles, PartyPopper, Palette, Flame } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
