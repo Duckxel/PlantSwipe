@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
 
-type PillarCard = { eyebrow: string; title: string; description: string }
+type PillarCard = { eyebrow: string; title: string; description: string | string[] }
 type MemberCard = {
   name: string
   role: string
@@ -32,13 +32,18 @@ const memberProfiles: Record<string, { pseudo: string; fullName: string; role: s
 
 export default function AboutPage() {
   const { t } = useTranslation("About")
-  const serviceItems = (t("services.items", { returnObjects: true }) as string[]) ?? []
+  const featureItems = (t("services.items", { returnObjects: true }) as string[]) ?? []
   const pillars = t("pillars", { returnObjects: true }) as {
     title: string
     subtitle: string
     cards?: Record<string, PillarCard>
+    nameOrigin?: {
+      title: string
+      description: string
+    }
   }
-  const pillarCards = Object.values(pillars?.cards ?? {})
+  const pillarCards = Object.values(pillars?.cards ?? {}) as PillarCard[]
+  const nameOrigin = pillars?.nameOrigin
   const meetMembers = (t("meet.members", { returnObjects: true }) as Record<string, MemberCard>) ?? {}
   const meetOrder =
     (t("meet.order", { returnObjects: true }) as string[]) ?? Object.keys(meetMembers)
@@ -119,11 +124,27 @@ export default function AboutPage() {
                     </Badge>
                   )}
                   <CardTitle>{card.title}</CardTitle>
-                  <CardDescription>{card.description}</CardDescription>
+                    {Array.isArray(card.description) ? (
+                      <div className="space-y-2 text-sm text-stone-600 dark:text-stone-300">
+                        {card.description.map((line, lineIndex) => (
+                          <p key={`${card.title}-line-${lineIndex}`}>{line}</p>
+                        ))}
+                      </div>
+                    ) : (
+                      <CardDescription>{card.description}</CardDescription>
+                    )}
                 </CardHeader>
               </Card>
             ))}
           </div>
+            {nameOrigin?.description && (
+              <div className="rounded-3xl border border-dashed border-emerald-200 dark:border-emerald-900/40 bg-emerald-50/60 dark:bg-emerald-900/10 px-6 py-5">
+                <span className="text-xs uppercase tracking-wide text-emerald-700 dark:text-emerald-200">
+                  {nameOrigin.title}
+                </span>
+                <p className="mt-2 text-sm text-stone-700 dark:text-stone-200">{nameOrigin.description}</p>
+              </div>
+            )}
         </section>
       )}
 
@@ -136,7 +157,7 @@ export default function AboutPage() {
             </div>
             <p className="text-sm text-stone-600 dark:text-stone-300">{t("services.subtitle")}</p>
             <ul className="space-y-3">
-              {serviceItems.map((item, index) => (
+              {featureItems.map((item, index) => (
                 <li key={`${item}-${index}`} className="flex items-start gap-3">
                   <Leaf className="h-4 w-4 mt-1 text-emerald-600 dark:text-emerald-400" />
                   <span className="text-sm text-stone-700 dark:text-stone-200">{item}</span>
@@ -189,7 +210,7 @@ export default function AboutPage() {
               {meetBadge}
             </Badge>
           </div>
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-3 md:grid-cols-2">
             {meetOrder
               .map((key) => ({ key, member: meetMembers[key] }))
               .filter((entry): entry is { key: string; member: MemberCard } => Boolean(entry.member))
@@ -201,25 +222,22 @@ export default function AboutPage() {
                 return (
                   <Card
                     key={`${member.name}-${index}`}
-                    className="rounded-[30px] border border-stone-200/80 dark:border-[#3e3e42]/80 overflow-hidden"
+                    className="rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 overflow-hidden h-full"
                   >
-                    <div className="p-6 pb-0">
+                    <div className="p-4 pb-0">
                       <div className="relative">
-                        <div className="h-48 rounded-2xl border border-dashed border-stone-300 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#1f1f1f]/60 flex flex-col items-center justify-center text-center gap-2">
+                        <div className="w-full aspect-square rounded-2xl border border-dashed border-stone-300 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#1f1f1f]/60 flex flex-col items-center justify-center text-center px-4">
                           <span className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
                             {member.placeholder}
                           </span>
-                          <Button variant="outline" size="sm" className="rounded-full">
-                            {member.placeholderCta}
-                          </Button>
                         </div>
                         {member.adjectives?.length ? (
-                          <div className="absolute top-4 left-4 right-4 flex flex-wrap gap-2 pointer-events-none">
+                          <div className="absolute top-3 left-3 right-3 flex flex-wrap gap-2 pointer-events-none">
                             {member.adjectives.map((adj) => (
                               <Badge
                                 key={adj}
                                 variant="secondary"
-                                className="rounded-full px-3 py-0.5 text-xs bg-emerald-100/90 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-100 shadow-sm"
+                                className="rounded-full px-3 py-0.5 text-[11px] bg-emerald-100/90 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-100 shadow-sm"
                               >
                                 {adj}
                               </Badge>
@@ -228,9 +246,9 @@ export default function AboutPage() {
                         ) : null}
                       </div>
                     </div>
-                    <CardHeader className="space-y-1">
-                      <CardTitle>{displayName}</CardTitle>
-                      <CardDescription>{roleLabel}</CardDescription>
+                    <CardHeader className="px-4 pb-4 pt-3 space-y-1">
+                      <CardTitle className="text-lg">{displayName}</CardTitle>
+                      <CardDescription className="text-sm">{roleLabel}</CardDescription>
                     </CardHeader>
                   </Card>
                 )

@@ -1,11 +1,11 @@
 {
-  "hero": {
-    "eyebrow": "Rooted in Montpellier",
-    "title": "Urban horticulture meets thoughtful software",
-    "subtitle": "We grew up among Aphyllante plants in the South of France and built Aphylia to give modern growers calm, reliable tools.",
-    "ctaPrimary": "Tell us your plant dream",
-    "ctaSecondary": "Back to discovery"
-  },
+    "hero": {
+      "eyebrow": "Rooted in Montpellier",
+      "title": "Urban horticulture meets thoughtful software",
+      "subtitle": "Aphylia delivers calm, data-backed tools for balconies, rooftops, and community gardens—pairing horticulture expertise with reliable software.",
+      "ctaPrimary": "Tell us your plant dream",
+      "ctaSecondary": "Back to discovery"
+    },
   "story": {
     "badge": "Our story",
     "title": "From Aphyllante to Aphylia",
@@ -29,22 +29,25 @@
       "attribution": "The Aphylia duo"
     }
   },
-  "pillars": {
-    "title": "How we build Aphylia",
-    "subtitle": "Inspired by analog gardens, delivered with the calm polish of dependable software.",
-    "cards": {
-      "craft": {
-        "eyebrow": "Craft",
-        "title": "Hand-grown insight, production-grade reliability",
-        "description": "We log microclimates, rituals, and care instructions in notebooks before we encode them into planners, checklists, and telemetry."
+    "pillars": {
+      "title": "How we build Aphylia",
+      "subtitle": "Inspired by analog gardens, delivered with the calm polish of dependable software.",
+      "cards": {
+        "story": {
+          "eyebrow": "Our story",
+          "title": "From art school experiments to Aphylia",
+          "description": [
+            "2020—2024 · We met in a Montpellier art school building 3D worlds and speculative installations.",
+            "Five fell deep into systems and computers while Xavier became the neighborhood plant whisperer; we swapped obsessions daily.",
+            "2025 · Motivated to build together, we created Aphylia—Xavier sketches the rituals, Five codes the calm garden OS we wished existed."
+          ]
+        }
       },
-      "care": {
-        "eyebrow": "Care",
-        "title": "Human warmth, scalable foundations",
-        "description": "Coffee for Xavier, Mango Monster for FIVE, tests and monitors for everyone—so your gardens stay steady when we're offline."
+      "nameOrigin": {
+        "title": "Why the name?",
+        "description": "“Aphylia” references Aphyllante, the Mediterranean plant that lines the Montpellier paths where this project sprouted."
       }
-    }
-  },
+    },
   "definition": {
     "title": "Montpellier roots, browser branches",
     "paragraphs": [
@@ -87,14 +90,15 @@
       }
     }
   },
-  "services": {
-    "title": "Services warming up backstage",
-    "subtitle": "Because dreams of selling, delivering, and equipping your garden need their own checklist.",
-    "items": [
-      "Seed and plant sales with playful packaging",
-      "Local delivery logistics so heavy pots stop scaring your ride share driver"
-    ]
-  },
+    "services": {
+      "title": "What’s inside today",
+      "subtitle": "A quick snapshot of live Aphylia features.",
+      "items": [
+        "Guided plant encyclopedia entries with reminders you can trust",
+        "Garden planner that syncs layouts, care notes, and microclimate logs",
+        "Swipe discovery that mixes seeds, swaps, and rituals without the noise"
+      ]
+    },
   "community": {
     "badge": "Wishlist",
     "title": "Dream feature: Community Tab",

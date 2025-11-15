@@ -1,11 +1,11 @@
 {
-  "hero": {
-    "eyebrow": "Racines montpelliéraines",
-    "title": "L'horticulture urbaine rencontre un logiciel réfléchi",
-    "subtitle": "Aphylia porte le nom de l'Aphyllante et offre aux jardiniers modernes des outils fiables, inspirés de nos années dans le sud de la France.",
-    "ctaPrimary": "Confiez-nous votre rêve végétal",
-    "ctaSecondary": "Retour à la découverte"
-  },
+    "hero": {
+      "eyebrow": "Racines montpelliéraines",
+      "title": "L'horticulture urbaine rencontre un logiciel réfléchi",
+      "subtitle": "Aphylia propose des outils fiables et data-driven pour balcons, toits et jardins partagés en mariant expertise horticole et logiciel robuste.",
+      "ctaPrimary": "Confiez-nous votre rêve végétal",
+      "ctaSecondary": "Retour à la découverte"
+    },
   "story": {
     "badge": "Notre histoire",
     "title": "De l'Aphyllante à Aphylia",
@@ -29,22 +29,25 @@
       "attribution": "Le duo Aphylia"
     }
   },
-  "pillars": {
-    "title": "Notre façon de construire Aphylia",
-    "subtitle": "Inspirée des jardins analogiques, livrée avec le calme d'un SaaS sur lequel on peut compter.",
-    "cards": {
-      "craft": {
-        "eyebrow": "Savoir-faire",
-        "title": "Des insights faits main, une fiabilité de production",
-        "description": "On note microclimats, rituels et gestes dans nos carnets avant de les transformer en planners, checklists et télémétrie."
+    "pillars": {
+      "title": "Notre façon de construire Aphylia",
+      "subtitle": "Inspirée des jardins analogiques, livrée avec le calme d'un SaaS fiable.",
+      "cards": {
+        "story": {
+          "eyebrow": "Notre histoire",
+          "title": "De l'école d'art à l'OS du jardin",
+          "description": [
+            "2020—2024 · On se rencontre dans une école d'art à Montpellier, obsédés par la 3D et les installations.",
+            "Five tombe amoureux des systèmes et du code pendant que Xavier devient l'ami fou des plantes; on mélange nos passions chaque jour.",
+            "2025 · On lance Aphylia ensemble : Xavier imagine les rituels et les parcours, Five code l'app calme dont nos jardins avaient besoin."
+          ]
+        }
       },
-      "care": {
-        "eyebrow": "Soin",
-        "title": "Chaleur humaine, fondations scalables",
-        "description": "Café pour Xavier, Mango Monster pour FIVE, tests et monitoring pour tous—vos jardins restent stables même quand on dort."
+      "nameOrigin": {
+        "title": "Pourquoi ce nom ?",
+        "description": "« Aphylia » fait référence à l'Aphyllante, plante montpelliéraine qui a vu naître le projet."
       }
-    }
-  },
+    },
   "definition": {
     "title": "Racines montpelliéraines, branches dans le navigateur",
     "paragraphs": [
@@ -87,14 +90,15 @@
       }
     }
   },
-  "services": {
-    "title": "Services en préparation",
-    "subtitle": "Parce que vente, livraison et logistique méritent leur propre checklist.",
-    "items": [
-      "Vente de graines et plantes avec un packaging qui donne le sourire",
-      "Livraison locale pour que vos pots costauds n'effraient plus le chauffeur"
-    ]
-  },
+    "services": {
+      "title": "Fonctionnalités disponibles",
+      "subtitle": "Un aperçu rapide de ce qui tourne déjà dans Aphylia.",
+      "items": [
+        "Fiches botaniques guidées avec rappels fiables",
+        "Planificateur de jardin qui aligne plans, notes et microclimats",
+        "Cartes de découverte qui mixent graines, trocs et rituels sans bruit"
+      ]
+    },
   "community": {
     "badge": "Wishlist",
     "title": "Feature rêvée : l'onglet Communauté",
