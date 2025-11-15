@@ -772,9 +772,10 @@ export default function PlantSwipe() {
                     element={user ? (profile?.display_name ? <Navigate to={`/u/${encodeURIComponent(profile.display_name)}`} replace /> : <Navigate to="/u/_me" replace />) : <Navigate to="/" replace />}
                   />
                   <Route path="/u/:username" element={<PublicProfilePage />} />
-                  <Route path="/friends" element={user ? <FriendsPage /> : <Navigate to="/" replace />} />
-                  <Route path="/settings" element={user ? <SettingsPage /> : <Navigate to="/" replace />} />
-                    <Route path="/contact" element={<ContactUsPage />} />
+                    <Route path="/friends" element={user ? <FriendsPage /> : <Navigate to="/" replace />} />
+                    <Route path="/settings" element={user ? <SettingsPage /> : <Navigate to="/" replace />} />
+                    <Route path="/contact/business" element={<ContactUsPage defaultChannel="business" />} />
+                    <Route path="/contact" element={<ContactUsPage defaultChannel="support" />} />
                     <Route path="/about" element={<AboutPage />} />
                     <Route path="/download" element={<DownloadPage />} />
                     <Route path="/terms" element={<TermsPage />} />

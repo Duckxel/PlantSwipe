@@ -37,9 +37,27 @@
   },
   "contactUs": {
     "title": "Contact Us",
+      "heroHeading": "We'd love to hear from you",
     "description": "We're here to help! Get in touch with our support team.",
     "supportEmail": "Support Email",
     "supportEmailDescription": "Send us an email and we'll get back to you as soon as possible.",
+      "recipientCardTitle": "Email our team",
+      "recipientCardDescription": "Choose who should receive your message and we'll route it right away.",
+      "channelSelector": {
+        "label": "Send to",
+        "helper": "Pick the inbox that fits your request best.",
+        "options": {
+          "support": {
+            "name": "Support",
+            "description": "Product help, bugs, or general support questions."
+          },
+          "business": {
+            "name": "Business",
+            "description": "Partnerships, press, or other business inquiries."
+          }
+        }
+      },
+      "channelSelectedLabel": "Currently sending to {{channel}}",
     "emailLabel": "Email Address",
     "sendEmail": "Send Email",
     "copyEmail": "Copy",
