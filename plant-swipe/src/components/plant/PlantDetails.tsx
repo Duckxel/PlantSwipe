@@ -1491,53 +1491,53 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
               </button>
             </div>
           </div>
-        </div>
-        <div className="space-y-6">
-          <div className="rounded-2xl overflow-hidden shadow relative">
-            <div
-              className="h-56 bg-cover bg-center select-none"
-              style={{ backgroundImage: `url(${plant.image})`, userSelect: 'none' as any }}
-              aria-label={plant.name}
-            />
-          </div>
-          <div className="space-y-1 text-center">
-            <h2 className="text-3xl font-bold leading-tight">{plant.name}</h2>
-            <p className="italic text-base opacity-80">{plant.scientificName}</p>
-          </div>
-          {renderHighlightBadges("justify-center")}
-            {meaningText && (
-              <Card className="rounded-3xl border border-stone-200 dark:border-[#3e3e42]">
-                <CardHeader className="py-4">
-                  <CardTitle className="text-base font-semibold flex items-center justify-center gap-2">
-                    <Sparkles className="h-4 w-4" />
-                    {t('plantInfo.meaning')}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="text-sm text-center leading-relaxed">
-                  <CollapsibleText text={meaningText} maxLength={200} />
-                </CardContent>
-              </Card>
-            )}
-            {descriptionText && (
-              <div className="rounded-2xl bg-white/85 px-4 py-3 text-sm leading-relaxed text-stone-700 shadow-sm dark:bg-[#1e262f]/80 dark:text-stone-200">
-                <CollapsibleText text={descriptionText} maxLength={300} />
+          <div className="space-y-6">
+            <div className="rounded-2xl overflow-hidden shadow relative">
+              <div
+                className="h-56 bg-cover bg-center select-none"
+                style={{ backgroundImage: `url(${plant.image})`, userSelect: 'none' as any }}
+                aria-label={plant.name}
+              />
+            </div>
+            <div className="space-y-1 text-center">
+              <h2 className="text-3xl font-bold leading-tight">{plant.name}</h2>
+              <p className="italic text-base opacity-80">{plant.scientificName}</p>
+            </div>
+              {renderHighlightBadges("justify-center")}
+                {meaningText && (
+                  <Card className="rounded-3xl border border-stone-200 dark:border-[#3e3e42]">
+                    <CardHeader className="py-4">
+                      <CardTitle className="text-base font-semibold flex items-center justify-center gap-2">
+                        <Sparkles className="h-4 w-4" />
+                        {t('plantInfo.meaning')}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="text-sm text-center leading-relaxed">
+                      <CollapsibleText text={meaningText} maxLength={200} />
+                    </CardContent>
+                  </Card>
+                )}
+                {descriptionText && (
+                  <div className="rounded-2xl bg-white/85 px-4 py-3 text-sm leading-relaxed text-stone-700 shadow-sm dark:bg-[#1e262f]/80 dark:text-stone-200">
+                    <CollapsibleText text={descriptionText} maxLength={300} />
+                  </div>
+                )}
+            {renderQuickStats(compactStats, 'sm:grid-cols-3')}
+            {(colors.length > 0 || seasons.length > 0) && (
+              <div className="flex flex-wrap justify-center gap-2">
+                {colors.map((c) => (
+                  <Badge key={c} variant="secondary" className="rounded-xl">
+                    {c}
+                  </Badge>
+                ))}
+                {seasons.map((s) => (
+                  <span key={s} className={`text-[11px] px-2 py-0.5 rounded-full ${seasonBadge[s] ?? 'bg-stone-200 dark:bg-stone-700 text-stone-900 dark:text-stone-100'}`}>
+                    {s}
+                  </span>
+                ))}
               </div>
             )}
-          {renderQuickStats(compactStats, 'sm:grid-cols-3')}
-          {(colors.length > 0 || seasons.length > 0) && (
-            <div className="flex flex-wrap justify-center gap-2">
-              {colors.map((c) => (
-                <Badge key={c} variant="secondary" className="rounded-xl">
-                  {c}
-                </Badge>
-              ))}
-              {seasons.map((s) => (
-                <span key={s} className={`text-[11px] px-2 py-0.5 rounded-full ${seasonBadge[s] ?? 'bg-stone-200 dark:bg-stone-700 text-stone-900 dark:text-stone-100'}`}>
-                  {s}
-                </span>
-              ))}
-            </div>
-          )}
+          </div>
         </div>
         <div className="flex flex-wrap justify-center gap-3 mt-4">
           <Button variant="secondary" className="rounded-2xl px-6" onClick={handleExpand}>
