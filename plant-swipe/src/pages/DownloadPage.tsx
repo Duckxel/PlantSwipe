@@ -13,9 +13,9 @@ const platformGuides = [
     badge: "Safari",
     icon: Apple,
     steps: [
-      "Open PlantSwipe in Safari on your iPhone or iPad.",
+      "Open Aphylia in Safari on your iPhone or iPad.",
       "Tap the Share icon, then choose “Add to Home Screen”.",
-      "Confirm the name (PlantSwipe) and tap Add. The PWA opens full screen like a native app."
+      "Confirm the name (Aphylia) and tap Add. The PWA opens full screen like a native app."
     ],
     helper: "Requires iOS 16+ for the best offline support."
   },
@@ -25,7 +25,7 @@ const platformGuides = [
     badge: "Chrome / Edge / Brave",
     icon: Smartphone,
     steps: [
-      "Visit PlantSwipe in your preferred Chromium-based browser.",
+      "Visit Aphylia in your preferred Chromium-based browser.",
       "Look for the Install banner or open the ⋮ menu and tap “Add to Home screen”.",
       "Confirm Install. A launcher icon appears alongside your native apps."
     ],
@@ -37,9 +37,9 @@ const platformGuides = [
     badge: "Chrome / Edge",
     icon: MonitorDown,
     steps: [
-      "Open PlantSwipe on your laptop or desktop browser.",
+      "Open Aphylia on your laptop or desktop browser.",
       "Click the Install icon in the address bar (looks like a monitor with a download arrow).",
-      "Accept the prompt. PlantSwipe opens in its own window and can auto-start on login."
+        "Accept the prompt. Aphylia opens in its own window and can auto-start on login."
     ],
     helper: "Perfect for kiosks or internal QA devices."
   }
@@ -98,7 +98,7 @@ export default function DownloadPage() {
             transition={{ delay: 0.1, duration: 0.6 }}
             className="text-3xl md:text-4xl font-semibold tracking-tight"
           >
-            {t("downloadPage.hero.title", { defaultValue: "Download PlantSwipe to every device" })}
+            {t("downloadPage.hero.title", { defaultValue: "Download Aphylia to every device" })}
           </motion.h1>
           <motion.p
             initial={{ opacity: 0, y: 20 }}

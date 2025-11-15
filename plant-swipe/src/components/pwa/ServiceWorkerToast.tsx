@@ -103,7 +103,7 @@ export function ServiceWorkerToast() {
       : 'Offline mode ready'
   const description =
     mode === 'update'
-      ? 'Reload to use the latest PlantSwipe experience.'
+      ? 'Reload to use the latest Aphylia experience.'
       : 'You can keep swiping even without a network connection.'
 
   return (

@@ -7,12 +7,12 @@ const sections = [
   {
     icon: ShieldCheck,
     title: "Your access & responsibilities",
-    description: "PlantSwipe is currently an internal tool. Keep your credentials private, avoid sharing screenshots outside approved channels, and report incidents immediately."
+    description: "Aphylia is currently an internal tool. Keep your credentials private, avoid sharing screenshots outside approved channels, and report incidents immediately."
   },
   {
     icon: Scale,
     title: "Acceptable use",
-    description: "Do not reverse engineer, scrape, or automate PlantSwipe without written permission. Respect other testers by avoiding spammy actions, fake data floods, or attempts to bypass role-based limits."
+    description: "Do not reverse engineer, scrape, or automate Aphylia without written permission. Respect other testers by avoiding spammy actions, fake data floods, or attempts to bypass role-based limits."
   },
   {
     icon: Repeat,
@@ -36,8 +36,8 @@ export default function TermsPage() {
         <Badge className="rounded-2xl px-4 py-1 w-fit bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200">
           {t("termsPage.hero.eyebrow", { defaultValue: "Internal policies" })}
         </Badge>
-        <h1 className="text-3xl font-semibold">
-          {t("termsPage.hero.title", { defaultValue: "PlantSwipe Terms of Services" })}
+          <h1 className="text-3xl font-semibold">
+            {t("termsPage.hero.title", { defaultValue: "Aphylia Terms of Services" })}
         </h1>
         <p className="text-base text-stone-600 dark:text-stone-300 max-w-2xl">
           {t("termsPage.hero.subtitle", { defaultValue: "This summary is intentionally lightweight while we iterate quickly. By using our internal environments you agree to the guidelines below. We will share the full legal document before the public launch." })}
