@@ -123,16 +123,17 @@ export const SearchPage: React.FC<SearchPageProps> = ({
                 <p className="text-sm line-clamp-2 text-stone-600 dark:text-stone-300 flex-1">
                   {p.description}
                 </p>
-                <div className="flex flex-wrap gap-1">
-                  {p.colors.map((c) => (
-                    <Badge
-                      key={c}
-                      variant="secondary"
-                      className="rounded-xl text-[11px]"
-                    >
-                      {c}
-                    </Badge>
-                  ))}
+                  <div className="flex flex-wrap gap-1">
+                    {p.colors.map((c) => (
+                      <Badge
+                        key={c}
+                        variant="secondary"
+                        className="rounded-xl text-[11px]"
+                      >
+                        {c}
+                      </Badge>
+                    ))}
+                  </div>
                 </div>
               </div>
             </Card>
