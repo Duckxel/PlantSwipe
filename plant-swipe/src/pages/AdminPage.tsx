@@ -2552,7 +2552,10 @@ export const AdminPage: React.FC = () => {
                     : null,
             } as ListedMember;
           })
-          .filter((item): item is ListedMember => Boolean(item && item.id));
+          .filter(
+            (item: ListedMember | null): item is ListedMember =>
+              Boolean(item && item.id),
+          );
         setMemberList((prev) => (reset ? normalized : [...prev, ...normalized]));
         const nextOffset =
           typeof data?.nextOffset === "number"
@@ -5050,7 +5053,7 @@ export const AdminPage: React.FC = () => {
                           </div>
                           <Button
                             className="rounded-2xl"
-                            onClick={lookupMember}
+                            onClick={() => lookupMember()}
                             disabled={memberLoading || !lookupEmail}
                           >
                             <Search className="h-4 w-4" /> Lookup
