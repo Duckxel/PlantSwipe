@@ -1,6 +1,6 @@
 import React from "react"
 import { motion, AnimatePresence, type MotionValue } from "framer-motion"
-import { ChevronLeft, ChevronRight, ChevronUp, Heart, Sparkles, PartyPopper, Palette, Wand2, Flame } from "lucide-react"
+import { ChevronLeft, ChevronRight, ChevronUp, Heart, Sparkles, PartyPopper, Palette, Flame } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -143,24 +143,17 @@ export const SwipePage: React.FC<SwipePageProps> = ({
     return badges
   }, [current, t])
 
-  return (
-    <div className="max-w-5xl mx-auto mt-6 px-2 sm:px-4 md:px-0 pb-24 md:pb-16">
+    return (
+      <div className="max-w-5xl mx-auto mt-4 sm:mt-6 px-1 sm:px-4 md:px-0 pb-20 md:pb-16">
       <motion.section
         initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: "easeOut" }}
-        className="relative overflow-visible md:overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-white via-emerald-50/60 to-stone-100 dark:from-[#1e1e1e] dark:via-[#252526] dark:to-[#171717] shadow-[0_30px_80px_-40px_rgba(16,185,129,0.45)]"
+          className="relative overflow-visible md:overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-white via-emerald-50/60 to-stone-100 dark:from-[#1e1e1e] dark:via-[#252526] dark:to-[#171717] shadow-[0_30px_80px_-40px_rgba(16,185,129,0.45)]"
       >
         <div className="absolute inset-x-12 -top-24 h-56 rounded-full bg-emerald-200/40 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
         <div className="absolute inset-x-0 bottom-[-40%] h-72 rounded-full bg-emerald-100/50 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
-        <div className="relative p-4 sm:p-6 md:p-12 space-y-8">
-          <div className="flex flex-wrap items-center justify-end gap-4">
-            <Badge variant="outline" className="rounded-2xl border-dashed">
-              <Wand2 className="h-4 w-4 mr-1" />
-              {t("common.discovery")}
-            </Badge>
-          </div>
-
+          <div className="relative p-2 sm:p-6 md:p-12 space-y-6">
           <div className="relative mx-auto w-full max-w-none md:max-w-3xl min-h-[520px] md:min-h-0" style={isDesktop ? { height: desktopCardHeight } : undefined}>
             <AnimatePresence initial={false} mode="wait">
               {current ? (
@@ -325,7 +318,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
             </AnimatePresence>
           </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-3 pt-4">
+            <div className="flex flex-wrap items-center justify-center gap-3 pt-3 sm:pt-4">
             <Button asChild className="rounded-2xl">
               <Link to="/search">
                 <Sparkles className="h-4 w-4 mr-2" />
