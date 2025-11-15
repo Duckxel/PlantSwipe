@@ -27,10 +27,19 @@ export function ServiceWorkerToast() {
   const [mode, setMode] = React.useState<'ready' | 'update'>('ready')
   const [readyAcknowledged, setReadyAcknowledged] = React.useState(readReadyAck)
   const [refreshDismissed, setRefreshDismissed] = React.useState(false)
+  const [offlineReadyFlag, setOfflineReadyFlag] = React.useState(false)
+  const [needRefreshFlag, setNeedRefreshFlag] = React.useState(false)
   const autoHideTimer = React.useRef<number | null>(null)
 
-  const { offlineReady, needRefresh, updateServiceWorker } = useRegisterSW({
+  const { updateServiceWorker } = useRegisterSW({
     immediate: true,
+    onOfflineReady() {
+      setOfflineReadyFlag(true)
+    },
+    onNeedRefresh() {
+      setNeedRefreshFlag(true)
+      setRefreshDismissed(false)
+    },
     onRegisterError(error) {
       if (import.meta.env.DEV) {
         console.error('[PWA] Service worker registration failed', error)
@@ -39,21 +48,20 @@ export function ServiceWorkerToast() {
   })
 
   React.useEffect(() => {
-    if (offlineReady && !readyAcknowledged) {
+    if (offlineReadyFlag && !readyAcknowledged) {
       setMode('ready')
       setVisible(true)
+    } else if (offlineReadyFlag && readyAcknowledged) {
+      setOfflineReadyFlag(false)
     }
-  }, [offlineReady, readyAcknowledged])
+  }, [offlineReadyFlag, readyAcknowledged])
 
   React.useEffect(() => {
-    if (needRefresh) {
-      setRefreshDismissed(false)
+    if (needRefreshFlag) {
       setMode('update')
       setVisible(true)
-    } else {
-      setRefreshDismissed(false)
     }
-  }, [needRefresh])
+  }, [needRefreshFlag])
 
   React.useEffect(() => {
     if (!visible || mode === 'update') return
@@ -62,6 +70,7 @@ export function ServiceWorkerToast() {
       setVisible(false)
       setReadyAcknowledged(true)
       persistReadyAck()
+      setOfflineReadyFlag(false)
     }, AUTO_HIDE_MS)
     return () => window.clearTimeout(autoHideTimer.current ?? undefined)
   }, [visible, mode])
@@ -71,13 +80,22 @@ export function ServiceWorkerToast() {
     if (mode === 'ready') {
       setReadyAcknowledged(true)
       persistReadyAck()
+      setOfflineReadyFlag(false)
     } else {
       setRefreshDismissed(true)
+      setNeedRefreshFlag(false)
     }
     setVisible(false)
   }
 
-  if (!visible || (mode === 'update' && refreshDismissed)) return null
+  const triggerUpdate = () => {
+    setNeedRefreshFlag(false)
+    setRefreshDismissed(false)
+    updateServiceWorker(true)
+    setVisible(false)
+  }
+
+  if (!visible || (mode === 'update' && (refreshDismissed || !needRefreshFlag))) return null
 
   const title =
     mode === 'update'
@@ -101,7 +119,7 @@ export function ServiceWorkerToast() {
           <>
             <button
               type="button"
-              onClick={() => updateServiceWorker(true)}
+              onClick={triggerUpdate}
               className="rounded-full bg-emerald-400 px-3 py-1 font-semibold text-emerald-950 transition hover:bg-emerald-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-200"
             >
               Reload now
