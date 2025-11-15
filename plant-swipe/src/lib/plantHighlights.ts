@@ -25,9 +25,19 @@ export const isPlantOfTheMonth = (plant?: Plant | null, referenceDate: Date = ne
 }
 
 export const isNewPlant = (plant?: Plant | null, referenceDate: Date = new Date(), windowDays = 7): boolean => {
-  if (!plant?.meta?.createdAt) return false
-  const createdAt = parseDate(plant.meta.createdAt)
+  const createdAtRaw = plant?.meta?.createdAt
+  if (!createdAtRaw) return false
+  const createdAt = parseDate(createdAtRaw)
   if (!createdAt) return false
+
+  const updatedAtRaw = plant?.meta?.updatedAt
+  if (updatedAtRaw) {
+    const updatedAt = parseDate(updatedAtRaw)
+    if (updatedAt && Math.abs(updatedAt.getTime() - createdAt.getTime()) > 60 * 1000) {
+      return false
+    }
+  }
+
   const diff = referenceDate.getTime() - createdAt.getTime()
   return diff >= 0 && diff <= windowDays * DAYS_IN_MS
 }

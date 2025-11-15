@@ -28,7 +28,7 @@ import {
   Info, Flower2, Ruler, Calendar, MapPin, Thermometer, Wind, Sprout,
   Scissors, Droplet, Package, Bug, AlertTriangle, Tag, BookOpen,
   Globe, Shield, AlertCircle, Users, Sparkles, FileText, Home,
-  BarChart3, Palette, Compass, Map as MapIcon, Pencil, Trash2, ChevronDown, ChevronUp
+  BarChart3, Palette, Compass, Map as MapIcon, Pencil, Trash2, ChevronDown, ChevronUp, Flame, PartyPopper, History
 } from "lucide-react";
 import type { Plant, PlantDimensions } from "@/types/plant";
 import { rarityTone, seasonBadge } from "@/constants/badges";
@@ -869,6 +869,25 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
     }
     return badges
   }, [plant, t])
+  const formatMetaDate = React.useCallback(
+    (value?: string | null) => {
+      if (!value) return null
+      const timestamp = Date.parse(value)
+      if (Number.isNaN(timestamp)) return null
+      const locale = currentLang === 'fr' ? 'fr-FR' : 'en-US'
+      try {
+        return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(timestamp))
+      } catch {
+        return new Date(timestamp).toLocaleString()
+      }
+    },
+    [currentLang],
+  )
+  const createdAtDisplay = formatMetaDate(meta.createdAt)
+  const updatedAtDisplay = formatMetaDate(meta.updatedAt)
+  const createdByDisplay = resolveTextValue(meta.createdBy)
+  const updatedByDisplay = resolveTextValue(meta.updatedBy)
+  const metaInfoAvailable = Boolean(createdAtDisplay || updatedAtDisplay || createdByDisplay || updatedByDisplay)
   const renderHighlightBadges = (className?: string) => {
     if (highlightBadges.length === 0) return null
     return (
@@ -1663,6 +1682,39 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
           </div>
           {renderQuickStats(quickStats, 'sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5')}
         </motion.section>
+
+        {metaInfoAvailable && (
+          <motion.section
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.15 }}
+            transition={{ duration: 0.4 }}
+            className="rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 p-6 dark:bg-[#101418]/90"
+          >
+            <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300 mb-4">
+              <History className="h-5 w-5" />
+              <h3 className="text-lg font-semibold">{t('plantInfo.meta.auditTitle')}</h3>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {(createdAtDisplay || createdByDisplay) && (
+                <MetaAuditCard
+                  label={t('plantInfo.meta.createdAt')}
+                  value={createdAtDisplay ?? notAvailableLabel}
+                  authorLabel={createdByDisplay ? t('plantInfo.meta.createdBy') : undefined}
+                  authorValue={createdByDisplay ?? undefined}
+                />
+              )}
+              {(updatedAtDisplay || updatedByDisplay) && (
+                <MetaAuditCard
+                  label={t('plantInfo.meta.updatedAt')}
+                  value={updatedAtDisplay ?? notAvailableLabel}
+                  authorLabel={updatedByDisplay ? t('plantInfo.meta.updatedBy') : undefined}
+                  authorValue={updatedByDisplay ?? undefined}
+                />
+              )}
+            </div>
+          </motion.section>
+        )}
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
           <div className="space-y-6">
@@ -2820,6 +2872,28 @@ const InfoItem = ({ icon, label, value }: { icon: React.ReactNode; label: string
     </div>
   )
 }
+
+const MetaAuditCard = ({
+  label,
+  value,
+  authorLabel,
+  authorValue,
+}: {
+  label: string
+  value: string
+  authorLabel?: string
+  authorValue?: string
+}) => (
+  <div className="rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/85 p-4 shadow-sm dark:bg-[#161a1f]/90">
+    <div className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400 mb-1">{label}</div>
+    <div className="text-base font-semibold text-stone-900 dark:text-stone-100">{value}</div>
+    {authorLabel && authorValue && (
+      <div className="mt-1 text-xs text-stone-500 dark:text-stone-400">
+        {authorLabel}: <span className="font-medium text-stone-800 dark:text-stone-200">{authorValue}</span>
+      </div>
+    )}
+  </div>
+)
 
 const formatMonths = (months: number[], t: (key: string, options?: Record<string, unknown>) => string): string => {
   return months

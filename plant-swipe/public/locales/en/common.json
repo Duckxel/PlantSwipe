@@ -486,6 +486,13 @@
         "outdoor": "Outdoor",
         "both": "Indoor & Outdoor"
       },
+      "meta": {
+        "auditTitle": "Record history",
+        "createdAt": "Created",
+        "updatedAt": "Last updated",
+        "createdBy": "Author",
+        "updatedBy": "Updated by"
+      },
     "sections": {
       "identifiers": "Identifiers",
       "traits": "Traits",

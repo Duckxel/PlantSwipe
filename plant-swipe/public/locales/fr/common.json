@@ -486,6 +486,13 @@
         "outdoor": "Extérieur",
         "both": "Intérieur et extérieur"
       },
+      "meta": {
+        "auditTitle": "Historique",
+        "createdAt": "Créée",
+        "updatedAt": "Dernière mise à jour",
+        "createdBy": "Auteur",
+        "updatedBy": "Mis à jour par"
+      },
     "sections": {
       "identifiers": "Identifiants",
       "traits": "Caractéristiques",
