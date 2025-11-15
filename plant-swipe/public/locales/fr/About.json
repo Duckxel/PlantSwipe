@@ -46,7 +46,8 @@
       "nameOrigin": {
         "title": "Pourquoi ce nom ?",
         "description": "« Aphylia » fait référence à l'Aphyllante, plante montpelliéraine qui a vu naître le projet."
-      }
+      },
+      "nameOriginHeading": "D'où vient Aphylia"
     },
   "definition": {
     "title": "Racines montpelliéraines, branches dans le navigateur",

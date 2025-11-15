@@ -46,7 +46,8 @@
       "nameOrigin": {
         "title": "Why the name?",
         "description": "“Aphylia” references Aphyllante, the Mediterranean plant that lines the Montpellier paths where this project sprouted."
-      }
+      },
+      "nameOriginHeading": "Where Aphylia comes from"
     },
   "definition": {
     "title": "Montpellier roots, browser branches",

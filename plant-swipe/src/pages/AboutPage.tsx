@@ -1,6 +1,6 @@
 import { motion } from "framer-motion"
 import { useTranslation } from "react-i18next"
-import { Sparkles, PartyPopper, Leaf, HeartHandshake, MapPin } from "lucide-react"
+import { Sparkles, PartyPopper, Leaf, HeartHandshake, MapPin, BookOpenCheck, CalendarDays } from "lucide-react"
 import { Link } from "@/components/i18n/Link"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -111,46 +111,73 @@ export default function AboutPage() {
               </p>
             </div>
           </div>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-4">
-              {pillarCards.map((card, index) => (
-                <Card
-                  key={`${card.title}-${index}`}
-                  className="rounded-3xl h-full border-stone-200/70 dark:border-[#3e3e42]/70"
-                >
-                  <CardHeader className="space-y-3">
-                    {card.eyebrow && (
-                      <Badge variant="secondary" className="rounded-2xl w-fit">
-                        {card.eyebrow}
-                      </Badge>
-                    )}
-                    <CardTitle>{card.title}</CardTitle>
+          <Card className="rounded-[32px] border border-stone-200 dark:border-[#3e3e42] overflow-hidden">
+            <div className="grid md:grid-cols-[minmax(0,1.5fr)_minmax(240px,1fr)]">
+              <div className="p-6 md:p-10 space-y-8 border-b md:border-b-0 md:border-r border-stone-200 dark:border-[#3e3e42]">
+                {pillarCards.map((card, index) => (
+                  <div key={`${card.title}-${index}`} className="space-y-5">
+                    <div className="flex items-start gap-3 text-emerald-700 dark:text-emerald-300">
+                      <div className="rounded-2xl bg-emerald-100/60 dark:bg-emerald-900/30 p-2">
+                        <BookOpenCheck className="h-5 w-5" />
+                      </div>
+                      <div>
+                        {card.eyebrow && (
+                          <p className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                            {card.eyebrow}
+                          </p>
+                        )}
+                        <CardTitle className="text-xl">{card.title}</CardTitle>
+                      </div>
+                    </div>
                     {Array.isArray(card.description) ? (
-                      <div className="space-y-2 text-sm text-stone-600 dark:text-stone-300">
+                      <div className="space-y-4">
                         {card.description.map((line, lineIndex) => (
-                          <p key={`${card.title}-line-${lineIndex}`}>{line}</p>
+                          <div key={`${card.title}-line-${lineIndex}`} className="flex items-start gap-3">
+                            <div className="h-8 w-8 rounded-full bg-emerald-100/80 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-200 flex items-center justify-center text-xs font-semibold">
+                              {String(lineIndex + 1).padStart(2, "0")}
+                            </div>
+                            <p className="text-sm text-stone-700 dark:text-stone-200">{line}</p>
+                          </div>
                         ))}
                       </div>
                     ) : (
                       <CardDescription>{card.description}</CardDescription>
                     )}
-                  </CardHeader>
-                </Card>
-              ))}
+                  </div>
+                ))}
+              </div>
+              {nameOrigin?.description && (
+                <div className="p-6 md:p-10 space-y-4 bg-emerald-50/40 dark:bg-[#0f1a14] h-full">
+                  <div className="flex items-start gap-3">
+                    <div className="rounded-2xl bg-white/80 dark:bg-white/10 p-2 shadow-sm">
+                      <Leaf className="h-5 w-5 text-emerald-600 dark:text-emerald-300" />
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-emerald-700 dark:text-emerald-200">
+                        {nameOrigin.title}
+                      </p>
+                      <h3 className="text-lg font-semibold text-stone-900 dark:text-stone-100">
+                        {t("pillars.nameOriginHeading", "Where Aphylia comes from")}
+                      </h3>
+                    </div>
+                  </div>
+                  <p className="text-sm text-stone-700 dark:text-stone-200">{nameOrigin.description}</p>
+                  <div className="flex flex-wrap gap-2 pt-2">
+                    {["Montpellier", "Aphyllante", "Origins"].map((chip) => (
+                      <Badge
+                        key={chip}
+                        variant="secondary"
+                        className="rounded-full bg-white/80 dark:bg-white/5 text-stone-700 dark:text-stone-100 px-3 py-1 text-xs"
+                      >
+                        <CalendarDays className="mr-1 h-3 w-3 text-emerald-600 dark:text-emerald-300" />
+                        {chip}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-            {nameOrigin?.description && (
-              <Card className="rounded-3xl h-full border-stone-200/70 dark:border-[#3e3e42]/70">
-                <CardHeader className="space-y-3">
-                  <Badge variant="secondary" className="rounded-2xl w-fit">
-                    {nameOrigin.title}
-                  </Badge>
-                  <CardDescription className="text-sm text-stone-700 dark:text-stone-200">
-                    {nameOrigin.description}
-                  </CardDescription>
-                </CardHeader>
-              </Card>
-            )}
-          </div>
+          </Card>
         </section>
       )}
 
