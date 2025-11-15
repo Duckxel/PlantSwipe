@@ -1419,7 +1419,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
             `
           }}
         />
-        <div className="space-y-5 select-none">
+        <div className="space-y-6 select-none">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <button
