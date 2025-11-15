@@ -64,44 +64,6 @@ const {
   Cell,
 } = LazyCharts;
 
-const adminStoryBeats = [
-  {
-    title: "Deux potes, deux obsessions",
-    description:
-      "L'un trace des lignes de graines dans la terre, l'autre trace des lignes de chiffres et de lettres. Meme energie, outils differents.",
-  },
-  {
-    title: "La conversation sur un trottoir",
-    description:
-      "Hey salut, faisons une appli pour l'agriculture urbaine afin d'aider les gens a manger mieux. Reponse: chandail de fou, on y va.",
-  },
-  {
-    title: "72 heures plus tard",
-    description:
-      "Base du site deja en ligne, vibe cafeine et intuition claire: Aphilia doit exister, donc on appuie sur Accel.",
-  },
-];
-
-const adminOfferingList = [
-  { label: "Encyclopedie pleine a craquer", status: "Maintenant" },
-  { label: "Interface pour decouvrir chaque mois", status: "Maintenant" },
-  { label: "Createur de jardins + cerveau arrosage", status: "Maintenant" },
-  { label: "Reconnaissance photo des plantes", status: "Maintenant" },
-  { label: "Echanges de plantes entre particuliers", status: "A venir" },
-  { label: "Vente de graines et semis", status: "A venir" },
-];
-
-const adminUpcomingServices = [
-  "Vente + packaging fun",
-  "Livraison douce et logistique maison",
-];
-
-const adminInfoCopy = {
-  summary:
-    "Adresse du siege social a venir: on choisit juste quelle plante gardera l'entree.",
-  collaboration:
-    "Ouverts a toute collaboration qui partage l'info, booste la biodiversite et ajoute des blagues a l'appli.",
-};
 type AdminTab = "overview" | "members" | "requests" | "admin_logs";
 
 export const AdminPage: React.FC = () => {
