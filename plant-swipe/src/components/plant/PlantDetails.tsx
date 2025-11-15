@@ -1547,7 +1547,6 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
             {t('common.close')}
           </Button>
         </div>
-        </div>
       </>
     )
   }
