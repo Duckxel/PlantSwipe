@@ -618,8 +618,8 @@ export default function PlantSwipe() {
   )
 
     return (
-      <AuthActionsProvider openLogin={openLogin} openSignup={openSignup}>
-        <div className="min-h-screen w-full bg-gradient-to-b from-stone-100 to-stone-200 dark:from-[#252526] dark:to-[#1e1e1e] p-4 pb-24 md:p-8 md:pb-8 overflow-x-hidden">
+        <AuthActionsProvider openLogin={openLogin} openSignup={openSignup}>
+          <div className="min-h-screen w-full bg-gradient-to-b from-stone-100 to-stone-200 dark:from-[#252526] dark:to-[#1e1e1e] p-4 pb-24 md:p-8 md:pb-8">
           <TopBar
             openLogin={openLogin}
             openSignup={openSignup}

@@ -75,7 +75,7 @@ export const Footer: React.FC = () => {
               {t(`common.footer.${labelKey}`, { defaultValue: fallback })}
             </Link>
           ))}
-          <div className="relative" ref={moreRef}>
+            <div className="relative" ref={moreRef}>
             <button
               type="button"
               className="flex items-center gap-1 text-stone-600 dark:text-stone-400 hover:text-black dark:hover:text-white transition-colors"
@@ -87,7 +87,7 @@ export const Footer: React.FC = () => {
               <ChevronDown className={`h-4 w-4 transition duration-200 ${moreOpen ? 'rotate-180' : ''}`} />
             </button>
             <div
-              className={`absolute left-0 mt-2 min-w-[180px] rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1f1f1f] shadow-lg shadow-emerald-500/10 p-3 transition-all duration-150 ${
+                className={`absolute right-0 mt-2 min-w-[180px] max-w-[calc(100vw-2rem)] rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1f1f1f] shadow-lg shadow-emerald-500/10 p-3 transition-all duration-150 ${
                 moreOpen ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible -translate-y-1'
               }`}
               role="menu"
