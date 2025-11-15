@@ -33,36 +33,36 @@ export const Footer: React.FC = () => {
   return (
     <footer className="max-w-6xl mx-auto mt-10 pt-8 pb-6 px-2 border-t border-stone-300 dark:border-[#3e3e42]">
       <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-        {/* Social Media Icons */}
-        <div className="flex items-center gap-4">
-          <a
-            href="https://youtube.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-stone-600 dark:text-stone-400 hover:text-red-600 dark:hover:text-red-500 transition-colors"
-            aria-label="YouTube"
-          >
-            <Youtube className="h-5 w-5" />
-          </a>
-          <a
-            href="https://twitter.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-stone-600 dark:text-stone-400 hover:text-black dark:hover:text-white transition-colors"
-            aria-label="X (Twitter)"
-          >
-            <Twitter className="h-5 w-5" />
-          </a>
-          <a
-            href="https://instagram.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-stone-600 dark:text-stone-400 hover:text-pink-600 dark:hover:text-pink-500 transition-colors"
-            aria-label="Instagram"
-          >
-            <Instagram className="h-5 w-5" />
-          </a>
-        </div>
+          {/* Social Media Icons */}
+          <div className="flex items-center gap-4">
+            <a
+              href="https://youtube.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-stone-600 dark:text-stone-400 hover:text-red-600 dark:hover:text-red-500 transition-colors"
+              aria-label="YouTube"
+            >
+              <Youtube className="h-5 w-5" />
+            </a>
+            <a
+              href="https://x.com/aphylia_app"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-stone-600 dark:text-stone-400 hover:text-black dark:hover:text-white transition-colors"
+              aria-label="X (Twitter)"
+            >
+              <Twitter className="h-5 w-5" />
+            </a>
+            <a
+              href="https://www.instagram.com/aphylia_app/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-stone-600 dark:text-stone-400 hover:text-pink-600 dark:hover:text-pink-500 transition-colors"
+              aria-label="Instagram"
+            >
+              <Instagram className="h-5 w-5" />
+            </a>
+          </div>
 
         {/* Footer Links */}
         <nav className="flex flex-wrap items-center justify-center gap-4 text-sm">
