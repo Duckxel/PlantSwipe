@@ -3638,6 +3638,7 @@ app.get('/api/admin/member-list', async (req, res) => {
     }
 
     if (sql) {
+      const visitsTableId = sql.identifier(getVisitsTableIdentifierParts())
       const orderClause =
         sort === 'rpm'
           ? sql`rpm5m desc nulls last, u.created_at desc`
@@ -3656,7 +3657,7 @@ app.get('/api/admin/member-list', async (req, res) => {
         left join public.profiles p on p.id = u.id
         left join lateral (
           select count(*)::int as c
-          from ${VISITS_TABLE_SQL_IDENT} v
+          from ${visitsTableId} v
           where v.user_id = u.id
             and v.occurred_at >= now() - interval '5 minutes'
         ) rpm on true
