@@ -29,6 +29,17 @@ const RECIPIENT_EMAILS = {
 } as const
 type Audience = keyof typeof RECIPIENT_EMAILS
 
+const DEFAULT_FROM_EMAIL = "form@aphylia.app"
+const SUPPORT_FROM_EMAIL =
+  getFirstEnv("RESEND_FROM", "SMTP_FROM", "SUPABASE_SMTP_SENDER") ?? DEFAULT_FROM_EMAIL
+const BUSINESS_FROM_EMAIL =
+  getFirstEnv("RESEND_BUSINESS_FROM", "BUSINESS_SMTP_FROM") ?? SUPPORT_FROM_EMAIL
+
+const SUPPORT_FROM_NAME =
+  getFirstEnv("RESEND_FROM_NAME", "SMTP_FROM_NAME") ?? "Aphylia Support Form"
+const BUSINESS_FROM_NAME =
+  getFirstEnv("RESEND_BUSINESS_FROM_NAME", "BUSINESS_FROM_NAME") ?? "Aphylia Business Form"
+
 const contactSchema = z.object({
   name: z.string().trim().min(1).max(120),
   email: z.string().trim().email().max(254),
@@ -134,13 +145,11 @@ serve(async (req) => {
     })
   }
 
-  const fromAddressRaw =
-    getFirstEnv("RESEND_FROM", "SMTP_FROM", "SUPABASE_SMTP_SENDER") ?? "form@aphylia.app"
-  const fromName = getFirstEnv("RESEND_FROM_NAME", "SMTP_FROM_NAME") ?? "Aphylia Support Form"
-
-  const fromAddress = fromAddressRaw.includes("<")
-    ? fromAddressRaw
-    : `${fromName} <${fromAddressRaw}>`
+    const fromName = audience === "business" ? BUSINESS_FROM_NAME : SUPPORT_FROM_NAME
+    const fromAddressRaw = audience === "business" ? BUSINESS_FROM_EMAIL : SUPPORT_FROM_EMAIL
+    const fromAddress = fromAddressRaw.includes("<")
+      ? fromAddressRaw
+      : `${fromName} <${fromAddressRaw}>`
 
   // Fallback if caller somehow sends an empty/too short subject post-validation:
   const finalSubject = subject || `Contact form message from ${name}`
