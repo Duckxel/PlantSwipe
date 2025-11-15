@@ -3638,14 +3638,15 @@ app.get('/api/admin/member-list', async (req, res) => {
     }
 
     if (sql) {
-      const visitsTableId = sql.identifier(getVisitsTableIdentifierParts())
+      const visitsTableSql = buildVisitsTableIdentifier()
       const orderClause =
         sort === 'rpm'
-          ? sql`rpm5m desc nulls last, u.created_at desc`
+          ? 'rpm5m desc nulls last, u.created_at desc'
           : sort === 'oldest'
-            ? sql`u.created_at asc`
-            : sql`u.created_at desc`
-      const rows = await sql`
+            ? 'u.created_at asc'
+            : 'u.created_at desc'
+      const rows = await sql.unsafe(
+        `
         select
           u.id,
           u.email,
@@ -3657,14 +3658,16 @@ app.get('/api/admin/member-list', async (req, res) => {
         left join public.profiles p on p.id = u.id
         left join lateral (
           select count(*)::int as c
-          from ${visitsTableId} v
+          from ${visitsTableSql} v
           where v.user_id = u.id
             and v.occurred_at >= now() - interval '5 minutes'
         ) rpm on true
         order by ${orderClause}
-        limit ${fetchSize}
-        offset ${offset}
-      `
+        limit $1
+        offset $2
+        `,
+        [fetchSize, offset],
+      )
       const normalized = normalizeRows(rows)
       const hasMore = normalized.length > limit
       const members = hasMore ? normalized.slice(0, limit) : normalized
