@@ -174,6 +174,11 @@
       "position": "{{current}} sur {{total}} en rotation",
       "empty": "Le paquet s'échauffe..."
     },
+    "tags": {
+      "plantOfMonth": "Plante du mois",
+      "new": "Nouveau",
+      "popular": "Populaire"
+    },
     "infoCard": {
       "descriptionLabel": "Description",
       "descriptionFallback": "Description à venir",
@@ -307,6 +312,10 @@
       "seedsOnly": "Graines uniquement",
       "favoritesOnly": "Favoris uniquement",
       "favoritesFirst": "Favoris en premier",
+      "sortLabel": "Trier par",
+      "sortDefault": "Ordre par défaut",
+      "sortNewest": "Les plus récents",
+      "sortPopular": "Les plus populaires",
       "season": "Saison",
       "color": "Couleur",
       "active": "Actif",
@@ -476,6 +485,13 @@
         "indoor": "Intérieur",
         "outdoor": "Extérieur",
         "both": "Intérieur et extérieur"
+      },
+      "meta": {
+        "auditTitle": "Historique",
+        "createdAt": "Créée",
+        "updatedAt": "Dernière mise à jour",
+        "createdBy": "Auteur",
+        "updatedBy": "Mis à jour par"
       },
     "sections": {
       "identifiers": "Identifiants",

@@ -174,6 +174,11 @@
       "position": "{{current}} of {{total}} in rotation",
       "empty": "Deck warming up..."
     },
+    "tags": {
+      "plantOfMonth": "Plant of the Month",
+      "new": "New",
+      "popular": "Popular"
+    },
     "infoCard": {
       "descriptionLabel": "Description",
       "descriptionFallback": "Description coming soon",
@@ -307,6 +312,10 @@
       "seedsOnly": "Seeds only",
       "favoritesOnly": "Favorites only",
       "favoritesFirst": "Favorites first",
+      "sortLabel": "Sort by",
+      "sortDefault": "Default order",
+      "sortNewest": "Newest",
+      "sortPopular": "Most liked",
       "season": "Season",
       "color": "Color",
       "active": "Active",
@@ -476,6 +485,13 @@
         "indoor": "Indoor",
         "outdoor": "Outdoor",
         "both": "Indoor & Outdoor"
+      },
+      "meta": {
+        "auditTitle": "Record history",
+        "createdAt": "Created",
+        "updatedAt": "Last updated",
+        "createdBy": "Author",
+        "updatedBy": "Updated by"
       },
     "sections": {
       "identifiers": "Identifiers",

@@ -121,6 +121,23 @@ do $$ begin
     );
 end $$;
 
+-- Aggregated like counts (security definer to bypass profiles RLS)
+create or replace function public.top_liked_plants(limit_count integer default 5)
+returns table (plant_id text, likes bigint)
+language sql
+security definer
+set search_path = public
+as $$
+  select liked_id as plant_id, count(*)::bigint as likes
+  from public.profiles p
+  cross join lateral unnest(p.liked_plant_ids) as liked_id
+  where coalesce(trim(liked_id), '') <> ''
+  group by liked_id
+  order by count(*) desc, liked_id asc
+  limit greatest(coalesce(limit_count, 5), 0);
+$$;
+grant execute on function public.top_liked_plants(integer) to anon, authenticated;
+
 -- ========== Purge old web_visits (retention) ==========
 -- Keep only the last 35 days of visit data
 do $$ begin
