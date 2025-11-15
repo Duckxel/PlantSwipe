@@ -72,16 +72,23 @@ export default defineConfig({
         cleanupOutdatedCaches: true,
         globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,json,txt,woff2}'],
         navigateFallback: 'index.html',
-        runtimeCaching: [
-          {
-            urlPattern: /\/api\//,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'api-cache',
-              networkTimeoutSeconds: 10,
-              cacheableResponse: { statuses: [0, 200] },
+          runtimeCaching: [
+            {
+              urlPattern: ({ url }) => /\/api\/.+\/stream/.test(url.pathname),
+              handler: 'NetworkOnly',
+              options: {
+                cacheName: 'api-stream-bypass',
+              },
             },
-          },
+            {
+              urlPattern: ({ url }) => url.pathname.startsWith('/api/') && !/\/stream/.test(url.pathname),
+              handler: 'NetworkFirst',
+              options: {
+                cacheName: 'api-cache',
+                networkTimeoutSeconds: 10,
+                cacheableResponse: { statuses: [0, 200] },
+              },
+            },
           {
             urlPattern: /\/locales\/.*\.json$/i,
             handler: 'StaleWhileRevalidate',
