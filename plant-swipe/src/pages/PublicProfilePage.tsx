@@ -372,21 +372,60 @@ export default function PublicProfilePage() {
   }, [trimmedSearchTerm, searchOpen, user?.id, t])
 
   // Load private info for owners
+  const privateInfoDisabledRef = React.useRef(false)
+
   React.useEffect(() => {
     let cancelled = false
     const loadPrivate = async () => {
+      if (!isOwner || !pp?.id || privateInfoDisabledRef.current) {
+        setPrivateInfo(null)
+        return
+      }
+      const targetId = pp.id
+
+      const applyResult = (payload: any) => {
+        const row = payload ? { id: String(payload.id || targetId), email: payload.email || null } : null
+        if (!cancelled) setPrivateInfo(row)
+      }
+
+      const fetchViaApi = async () => {
+        const resp = await fetch(`/api/users/${targetId}/private`, {
+          headers: { Accept: 'application/json' },
+          credentials: 'same-origin',
+        })
+        if (!resp.ok) return null
+        const body = await resp.json().catch(() => null)
+        return body?.user || null
+      }
+
+      const fetchViaRpc = async () => {
+        const { data, error } = await supabase.rpc('get_user_private_info', { _user_id: targetId })
+        if (error) return null
+        return Array.isArray(data) ? data[0] : data
+      }
+
       try {
-        if (!isOwner || !user?.id) { setPrivateInfo(null); return }
-        const { data, error } = await supabase.rpc('get_user_private_info', { _user_id: user.id })
-        if (!error) {
-          const row = Array.isArray(data) ? data[0] : data
-          if (!cancelled) setPrivateInfo(row ? { id: String(row.id), email: row.email || null } : null)
+        const apiResult = await fetchViaApi()
+        if (apiResult) {
+          applyResult(apiResult)
+          return
         }
       } catch {}
+
+      try {
+        const rpcResult = await fetchViaRpc()
+        if (rpcResult) {
+          applyResult(rpcResult)
+          return
+        }
+      } catch {}
+
+      privateInfoDisabledRef.current = true
+      if (!cancelled) setPrivateInfo(null)
     }
     loadPrivate()
     return () => { cancelled = true }
-  }, [isOwner, user?.id])
+  }, [isOwner, pp?.id])
 
   const [menuOpen, setMenuOpen] = React.useState(false)
   const anchorRef = React.useRef<HTMLDivElement | null>(null)

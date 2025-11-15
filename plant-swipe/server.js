@@ -5294,6 +5294,64 @@ app.get('/api/self/memberships/stream', async (req, res) => {
   }
 })
 
+// Private info lookup (self or admin)
+app.get('/api/users/:id/private', async (req, res) => {
+  try {
+    const targetId = String(req.params.id || '').trim()
+    if (!targetId) { res.status(400).json({ ok: false, error: 'user id required' }); return }
+    const viewer = await getUserFromRequest(req)
+    if (!viewer?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
+    let allowed = viewer.id === targetId
+    if (!allowed) {
+      try {
+        allowed = await isAdminFromRequest(req)
+      } catch {}
+    }
+    if (!allowed) { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
+
+    if (sql) {
+      const rows = await sql`
+        select u.id::text as id, u.email
+        from auth.users u
+        where u.id = ${targetId}
+        limit 1
+      `
+      const row = Array.isArray(rows) && rows[0] ? rows[0] : null
+      res.json({
+        ok: true,
+        user: row ? { id: String(row.id || targetId), email: row.email || null } : null,
+      })
+      return
+    }
+
+    if (supabaseUrlEnv && supabaseAnonKey) {
+      try {
+        const headers = { apikey: supabaseAnonKey, Accept: 'application/json', 'Content-Type': 'application/json' }
+        const bearer = getBearerTokenFromRequest(req)
+        if (bearer) headers['Authorization'] = `Bearer ${bearer}`
+        const resp = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_user_private_info`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ _user_id: targetId }),
+        })
+        if (resp.ok) {
+          const body = await resp.json().catch(() => null)
+          const row = Array.isArray(body) ? body[0] : body
+          res.json({
+            ok: true,
+            user: row ? { id: String(row.id || targetId), email: row.email || null } : null,
+          })
+          return
+        }
+      } catch {}
+    }
+
+    res.status(503).json({ ok: false, error: 'Private info lookup unavailable' })
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e?.message || 'Failed to load private info' })
+  }
+})
+
 // User-wide Garden Activity SSE: pushes activity from all gardens the user belongs to
 app.get('/api/self/gardens/activity/stream', async (req, res) => {
   try {

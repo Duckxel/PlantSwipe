@@ -287,25 +287,30 @@ export const AdminPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, []);
+    }, []);
 
-  // Even when collapsed, listen to broadcast SSE and auto-open when a broadcast starts
-  React.useEffect(() => {
-    let es: EventSource | null = null;
-    try {
-      es = new EventSource("/api/broadcast/stream", { withCredentials: true });
-      const onBroadcast = () => {
-        setBroadcastOpen(true);
+    // Even when collapsed, poll for broadcast state to auto-open when a broadcast starts
+    React.useEffect(() => {
+      let cancelled = false;
+      const poll = async () => {
+        try {
+          const r = await fetch("/api/broadcast/active", {
+            headers: { Accept: "application/json" },
+            credentials: "same-origin",
+          });
+          if (!cancelled && r.ok) {
+            const data = await r.json().catch(() => ({}));
+            if (data?.broadcast) setBroadcastOpen(true);
+          }
+        } catch {}
       };
-      es.addEventListener("broadcast", onBroadcast as EventListener);
-      // No need to auto-close on clear; keep user preference
-    } catch {}
-    return () => {
-      try {
-        es?.close();
-      } catch {}
-    };
-  }, []);
+      const id = window.setInterval(poll, 60000);
+      poll();
+      return () => {
+        cancelled = true;
+        clearInterval(id);
+      };
+    }, []);
   const consoleRef = React.useRef<HTMLDivElement | null>(null);
   React.useEffect(() => {
     if (!consoleOpen) return;
