@@ -76,6 +76,12 @@ export default function App() {
     return baseUrl.replace(/\/+$/, '')
   }, [])
 
+  React.useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.title = 'Aphylia'
+    }
+  }, [])
+
   return (
     <I18nextProvider i18n={i18n}>
       <ThemeProvider>
