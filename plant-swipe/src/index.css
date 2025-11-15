@@ -1,3 +1,8 @@
+html,
+body {
+  height: 100%;
+}
+
 :root {
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
@@ -22,12 +27,19 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  overflow: hidden;
   /* Removed flex centering from Vite template so the app can control its own layout */
   -webkit-user-select: none;
   -ms-user-select: none;
   user-select: none;
   /* Prevent horizontal scroll bounce on mobile */
   overflow-x: hidden;
+}
+
+#root {
+  min-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 h1 {
@@ -53,7 +65,7 @@ button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
 }
 
-.has-window-controls-overlay {
+body.has-window-controls-overlay #root {
   padding-top: var(--window-controls-overlay-height, 0px);
 }
 
