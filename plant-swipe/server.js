@@ -3638,12 +3638,6 @@ app.get('/api/admin/member-list', async (req, res) => {
     }
 
     if (sql) {
-      const orderFragment =
-        sort === 'rpm'
-          ? sql`rpm5m desc nulls last, u.created_at desc`
-          : sort === 'oldest'
-            ? sql`u.created_at asc`
-            : sql`u.created_at desc`
       const rows = await sql`
         select
           u.id,
@@ -3660,7 +3654,10 @@ app.get('/api/admin/member-list', async (req, res) => {
           where v.user_id = u.id
             and v.occurred_at >= now() - interval '5 minutes'
         ) rpm on true
-        order by ${orderFragment}
+        order by
+          case when ${sort} = 'oldest' then u.created_at end asc,
+          case when ${sort} = 'rpm' then rpm5m end desc nulls last,
+          u.created_at desc
         limit ${fetchSize}
         offset ${offset}
       `
