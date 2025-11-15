@@ -93,13 +93,13 @@
   },
     "services": {
       "title": "Fonctionnalités Aphylia",
-      "subtitle": "Un aperçu rapide de ce qui tourne déjà dans l'app.",
+      "subtitle": "Ce que l'app offre aujourd'hui.",
       "items": [
-        "Fiches botaniques guidées avec rappels fiables",
-        "Planificateur de jardin qui aligne plans, notes et microclimats",
-        "Cartes de découverte qui mixent graines, trocs et rituels sans bruit",
-        "Rappels en temps réel synchronisés avec la météo locale",
-        "Partage simple de jardins avec amis, famille ou voisins"
+        "Découverte ludique par swipe avec gestes like/pass et animations fluides.",
+        "Fiches plantes riches : soins, symbolique, rareté et données saisonnières.",
+        "Recherche et filtres puissants (texte, couleurs, saisons, rareté, graines).",
+        "Outils de jardin pour timelines, tâches, tableaux de bord et espaces collaboratifs.",
+        "Couche sociale + multilingue avec amis, profils publics et support EN/FR via DeepL."
       ]
     },
   "community": {

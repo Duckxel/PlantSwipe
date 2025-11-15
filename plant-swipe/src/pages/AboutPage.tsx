@@ -255,22 +255,22 @@ export default function AboutPage() {
                 return (
                   <Card
                     key={`${member.name}-${index}`}
-                    className="rounded-xl border border-stone-200/70 dark:border-[#3e3e42]/70 overflow-hidden h-full text-sm"
+                    className="rounded-lg border border-stone-200/70 dark:border-[#3e3e42]/70 overflow-hidden text-xs"
                   >
-                    <div className="p-3 pb-0">
-                      <div className="relative">
-                        <div className="w-full aspect-square rounded-lg border border-dashed border-stone-300 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#1f1f1f]/60 flex flex-col items-center justify-center text-center px-3">
-                          <span className="text-[11px] uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                    <div className="p-3 pb-0 flex justify-center">
+                      <div className="relative w-[96px]">
+                        <div className="w-full aspect-square rounded-md border border-dashed border-stone-300 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#1f1f1f]/60 flex items-center justify-center text-center px-2">
+                          <span className="text-[10px] uppercase tracking-wide text-stone-500 dark:text-stone-400">
                             {member.placeholder}
                           </span>
                         </div>
                         {member.adjectives?.length ? (
-                          <div className="absolute top-2 left-2 right-2 flex flex-wrap gap-1.5 pointer-events-none">
+                          <div className="absolute -top-2 inset-x-0 flex flex-wrap justify-center gap-1.5 pointer-events-none">
                             {member.adjectives.map((adj) => (
                               <Badge
                                 key={adj}
                                 variant="secondary"
-                                className="rounded-full px-2.5 py-0.5 text-[10px] bg-emerald-100/90 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-100 shadow-sm"
+                                className="rounded-full px-2 py-0.5 text-[9px] bg-emerald-100/90 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-100 shadow-sm"
                               >
                                 {adj}
                               </Badge>
@@ -279,9 +279,9 @@ export default function AboutPage() {
                         ) : null}
                       </div>
                     </div>
-                    <CardHeader className="px-3 pb-3 pt-2 space-y-0.5">
-                      <CardTitle className="text-base">{displayName}</CardTitle>
-                      <CardDescription className="text-xs">{roleLabel}</CardDescription>
+                    <CardHeader className="px-3 pb-3 pt-2 space-y-0.5 text-center">
+                      <CardTitle className="text-sm">{displayName}</CardTitle>
+                      <CardDescription className="text-[11px]">{roleLabel}</CardDescription>
                     </CardHeader>
                   </Card>
                 )

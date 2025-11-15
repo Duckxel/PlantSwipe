@@ -93,13 +93,13 @@
   },
     "services": {
       "title": "Aphylia's features",
-      "subtitle": "A quick snapshot of live Aphylia capabilities.",
+      "subtitle": "What the app delivers right now.",
       "items": [
-        "Guided plant encyclopedia entries with reminders you can trust",
-        "Garden planner that syncs layouts, care notes, and microclimate logs",
-        "Swipe discovery that mixes seeds, swaps, and rituals without the noise",
-        "Real-time task nudges that react to weather and microclimate data",
-        "Shareable garden links for friends, family, or community spaces"
+        "Playful swipe discovery with like/pass gestures and smooth motion.",
+        "Rich plant profiles with care, symbolism, rarity, and seasonal data.",
+        "Powerful search & filters across text, colors, seasons, rarity, and seeds.",
+        "Garden tools for timelines, tasks, dashboards, and collaborative spaces.",
+        "Social + multilingual layer with friends, public profiles, and EN/FR DeepL support."
       ]
     },
   "community": {
