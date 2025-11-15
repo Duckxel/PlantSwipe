@@ -33,6 +33,7 @@ import {
 import type { Plant, PlantDimensions } from "@/types/plant";
 import { rarityTone, seasonBadge } from "@/constants/badges";
 import { cn, deriveWaterLevelFromFrequency } from "@/lib/utils";
+import { isNewPlant, isPlantOfTheMonth, isPopularPlant } from "@/lib/plantHighlights";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
@@ -840,6 +841,47 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
   const dimensions = plant.dimensions ?? ({} as NonNullable<Plant['dimensions']>)
   const seasons = Array.isArray(plant.seasons) ? plant.seasons : []
   const colors = Array.isArray(plant.colors) ? plant.colors : []
+  const highlightBadges = React.useMemo(() => {
+    const badges: Array<{ key: string; label: string; className: string; icon: React.ReactNode }> = []
+    if (isPlantOfTheMonth(plant)) {
+      badges.push({
+        key: 'promotion',
+        label: t('discoveryPage.tags.plantOfMonth'),
+        className: 'bg-amber-400/90 text-amber-950',
+        icon: <Sparkles className="h-4 w-4 mr-1" />,
+      })
+    }
+    if (isNewPlant(plant)) {
+      badges.push({
+        key: 'new',
+        label: t('discoveryPage.tags.new'),
+        className: 'bg-emerald-500/90 text-white',
+        icon: <PartyPopper className="h-4 w-4 mr-1" />,
+      })
+    }
+    if (isPopularPlant(plant)) {
+      badges.push({
+        key: 'popular',
+        label: t('discoveryPage.tags.popular'),
+        className: 'bg-rose-600/90 text-white',
+        icon: <Flame className="h-4 w-4 mr-1" />,
+      })
+    }
+    return badges
+  }, [plant, t])
+  const renderHighlightBadges = (className?: string) => {
+    if (highlightBadges.length === 0) return null
+    return (
+      <div className={cn("flex flex-wrap items-center gap-2", className)}>
+        {highlightBadges.map((badge) => (
+          <Badge key={badge.key} className={cn("rounded-2xl px-3 py-1 text-xs font-semibold flex items-center", badge.className)}>
+            {badge.icon}
+            {badge.label}
+          </Badge>
+        ))}
+      </div>
+    )
+  }
   const meaningText = React.useMemo(() => resolveTextValue(plant.meaning), [plant.meaning])
   const descriptionText = React.useMemo(() => resolveTextValue(plant.description), [plant.description])
   const funFactText = React.useMemo(() => resolveTextValue(meta.funFact), [meta.funFact])
@@ -1197,6 +1239,34 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
     }
   }
 
+  const renderEngagementButtons = (className?: string) => (
+    <div className={cn("flex flex-wrap items-center gap-3", className)}>
+      <Button
+        type="button"
+        onClick={(e) => handleShare(e)}
+        variant="outline"
+        className={cn(
+          'rounded-2xl border-emerald-500/30 bg-white/80 px-5 text-sm font-semibold text-emerald-700 shadow-sm backdrop-blur transition hover:-translate-y-0.5 hover:bg-white hover:shadow-md dark:border-emerald-700/40 dark:bg-slate-900/70 dark:text-emerald-100',
+          shareSuccess && 'border-emerald-500/70 bg-emerald-500/90 text-white hover:bg-emerald-500 dark:bg-emerald-500/70'
+        )}
+      >
+        <Share2 className="mr-2 h-4 w-4" />
+        {shareSuccess ? t('plantInfo.shareCopied') : t('plantInfo.share')}
+      </Button>
+      <Button
+        type="button"
+        onClick={() => onToggleLike?.()}
+        className={cn(
+          'rounded-2xl border-rose-500/30 bg-rose-500/10 px-5 text-sm font-semibold text-rose-600 shadow-sm transition hover:-translate-y-0.5 hover:bg-rose-500/20 hover:shadow-md dark:border-rose-500/40 dark:bg-rose-500/20 dark:text-rose-100',
+          liked && 'border-rose-500 bg-rose-500 text-white hover:bg-rose-500'
+        )}
+      >
+        <Heart className={cn('mr-2 h-4 w-4', liked && 'fill-current')} />
+        {liked ? t('plantInfo.unlike') : t('plantInfo.like')}
+      </Button>
+    </div>
+  )
+
   const handleExpand = () => {
     const pathWithoutLang = `/plants/${plant.id}`
     const pathWithLang = currentLang === 'en' ? pathWithoutLang : `/${currentLang}${pathWithoutLang}`
@@ -1385,6 +1455,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
             <h2 className="text-3xl font-bold leading-tight">{plant.name}</h2>
             <p className="italic text-base opacity-80">{plant.scientificName}</p>
           </div>
+          {renderHighlightBadges("justify-center")}
             {meaningText && (
               <Card className="rounded-3xl border border-stone-200 dark:border-[#3e3e42]">
                 <CardHeader className="py-4">
@@ -1418,6 +1489,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
               ))}
             </div>
           )}
+          {renderEngagementButtons("justify-center")}
         </div>
         <div className="flex flex-wrap justify-center gap-2">
           <Button variant="secondary" className="rounded-2xl px-6" onClick={handleExpand}>
@@ -1474,6 +1546,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
                   </p>
                 )}
               </div>
+              {renderHighlightBadges()}
                 {meaningText && (
                 <div className="flex items-start gap-3 rounded-2xl bg-white/65 px-4 py-3 text-sm leading-relaxed text-emerald-900 shadow-sm backdrop-blur-md dark:bg-slate-900/50 dark:text-emerald-100">
                   <span className="mt-0.5 rounded-full bg-emerald-500/20 p-2 text-emerald-600 dark:text-emerald-200">
@@ -1513,31 +1586,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
                   ))}
                 </div>
               )}
-              <div className="flex flex-wrap items-center gap-3">
-                <Button
-                  type="button"
-                  onClick={(e) => handleShare(e)}
-                  variant="outline"
-                  className={cn(
-                    'rounded-2xl border-emerald-500/30 bg-white/80 px-5 text-sm font-semibold text-emerald-700 shadow-sm backdrop-blur transition hover:-translate-y-0.5 hover:bg-white hover:shadow-md dark:border-emerald-700/40 dark:bg-slate-900/70 dark:text-emerald-100',
-                    shareSuccess && 'border-emerald-500/70 bg-emerald-500/90 text-white hover:bg-emerald-500 dark:bg-emerald-500/70'
-                  )}
-                >
-                  <Share2 className="mr-2 h-4 w-4" />
-                  {shareSuccess ? t('plantInfo.shareCopied') : t('plantInfo.share')}
-                </Button>
-                <Button
-                  type="button"
-                  onClick={() => onToggleLike?.()}
-                  className={cn(
-                    'rounded-2xl border-rose-500/30 bg-rose-500/10 px-5 text-sm font-semibold text-rose-600 shadow-sm transition hover:-translate-y-0.5 hover:bg-rose-500/20 hover:shadow-md dark:border-rose-500/40 dark:bg-rose-500/20 dark:text-rose-100',
-                    liked && 'border-rose-500 bg-rose-500 text-white hover:bg-rose-500'
-                  )}
-                >
-                  <Heart className={cn('mr-2 h-4 w-4', liked && 'fill-current')} />
-                  {liked ? t('plantInfo.unlike') : t('plantInfo.like')}
-                </Button>
-              </div>
+              {renderEngagementButtons()}
             </div>
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
