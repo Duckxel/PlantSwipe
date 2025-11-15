@@ -3609,6 +3609,11 @@ app.get('/api/admin/member-list', async (req, res) => {
     const rawOffset = Number(req.query.offset)
     const limit = Number.isFinite(rawLimit) ? Math.min(100, Math.max(1, Math.floor(rawLimit))) : 20
     const offset = Number.isFinite(rawOffset) ? Math.max(0, Math.floor(rawOffset)) : 0
+    const sortRaw = (req.query.sort || 'newest').toString().trim().toLowerCase()
+    const sort = sortRaw.startsWith('old') ? 'oldest'
+      : sortRaw === 'rpm' || sortRaw.startsWith('rpm')
+        ? 'rpm'
+        : 'newest'
     const fetchSize = limit + 1
     const normalizeRows = (rows) => {
       if (!Array.isArray(rows)) return []
@@ -3616,28 +3621,46 @@ app.get('/api/admin/member-list', async (req, res) => {
         .map((r) => {
           const id = r?.id ? String(r.id) : null
           if (!id) return null
+          const rpm =
+            r?.rpm5m !== undefined && r?.rpm5m !== null
+              ? Number(r.rpm5m)
+              : null
           return {
             id,
             email: r?.email || null,
             display_name: r?.display_name || null,
             created_at: r?.created_at || null,
             is_admin: r?.is_admin === true,
+            rpm5m: Number.isFinite(rpm) ? rpm : null,
           }
         })
         .filter((r) => r !== null)
     }
 
     if (sql) {
+      const orderFragment =
+        sort === 'rpm'
+          ? sql`rpm5m desc nulls last, u.created_at desc`
+          : sort === 'oldest'
+            ? sql`u.created_at asc`
+            : sql`u.created_at desc`
       const rows = await sql`
         select
           u.id,
           u.email,
           u.created_at,
           p.display_name,
-          p.is_admin
+          p.is_admin,
+          coalesce(rpm.c, 0)::numeric / 5 as rpm5m
         from auth.users u
         left join public.profiles p on p.id = u.id
-        order by u.created_at desc
+        left join lateral (
+          select count(*)::int as c
+          from ${VISITS_TABLE_SQL_IDENT} v
+          where v.user_id = u.id
+            and v.occurred_at >= now() - interval '5 minutes'
+        ) rpm on true
+        order by ${orderFragment}
         limit ${fetchSize}
         offset ${offset}
       `
@@ -3661,7 +3684,7 @@ app.get('/api/admin/member-list', async (req, res) => {
       const resp = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_recent_members`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ _limit: fetchSize, _offset: offset }),
+        body: JSON.stringify({ _limit: fetchSize, _offset: offset, _sort: sort }),
       })
       if (!resp.ok) {
         const body = await resp.text().catch(() => '')

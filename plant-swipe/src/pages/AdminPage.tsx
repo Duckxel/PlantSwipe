@@ -71,7 +71,10 @@ type ListedMember = {
   displayName: string | null;
   createdAt: string | null;
   isAdmin: boolean;
+  rpm5m: number | null;
 };
+
+type MemberListSort = "newest" | "oldest" | "rpm";
 
 const MEMBER_LIST_PAGE_SIZE = 20;
 
@@ -183,6 +186,13 @@ export const AdminPage: React.FC = () => {
     },
     [],
   );
+
+  const formatRpmValue = React.useCallback((value?: number | null): string => {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value.toFixed(2);
+    }
+    return "0.00";
+  }, []);
 
   // Compute a responsive max character count for branch names based on viewport width
   const computeBranchMaxChars = React.useCallback(
@@ -330,6 +340,16 @@ export const AdminPage: React.FC = () => {
         return false;
       }
     },
+    [],
+  );
+
+  const memberListSortOptions = React.useMemo(
+    () =>
+      [
+        { value: "newest", label: "New" },
+        { value: "oldest", label: "Oldest" },
+        { value: "rpm", label: "RPM (5m)" },
+      ] as Array<{ value: MemberListSort; label: string }>,
     [],
   );
 
@@ -2266,6 +2286,8 @@ export const AdminPage: React.FC = () => {
   const [memberListOffset, setMemberListOffset] = React.useState(0);
   const [memberListInitialized, setMemberListInitialized] =
     React.useState(false);
+  const [memberListSort, setMemberListSort] =
+    React.useState<MemberListSort>("newest");
   const [lookupEmail, setLookupEmail] = React.useState("");
   const [memberLoading, setMemberLoading] = React.useState(false);
   const [memberError, setMemberError] = React.useState<string | null>(null);
@@ -2472,11 +2494,12 @@ export const AdminPage: React.FC = () => {
   );
 
   const loadMemberList = React.useCallback(
-    async (opts?: { reset?: boolean }) => {
+    async (opts?: { reset?: boolean; sort?: MemberListSort }) => {
       if (memberListLoading) return;
       const reset = !!opts?.reset;
       const limit = MEMBER_LIST_PAGE_SIZE;
       const offset = reset ? 0 : memberListOffset;
+      const sortParam: MemberListSort = opts?.sort ?? memberListSort;
       setMemberListLoading(true);
       setMemberListError(null);
       try {
@@ -2490,7 +2513,7 @@ export const AdminPage: React.FC = () => {
           if (adminToken) headers["X-Admin-Token"] = String(adminToken);
         } catch {}
         const resp = await fetch(
-          `/api/admin/member-list?limit=${limit}&offset=${offset}`,
+          `/api/admin/member-list?limit=${limit}&offset=${offset}&sort=${encodeURIComponent(sortParam)}`,
           { headers, credentials: "same-origin" },
         );
         const data = await safeJson(resp);
@@ -2521,6 +2544,12 @@ export const AdminPage: React.FC = () => {
               displayName,
               createdAt,
               isAdmin,
+              rpm5m:
+                typeof m?.rpm5m === "number"
+                  ? m.rpm5m
+                  : typeof m?.rpm5m === "string" && m.rpm5m.length > 0
+                    ? Number(m.rpm5m)
+                    : null,
             } as ListedMember;
           })
           .filter((item): item is ListedMember => Boolean(item && item.id));
@@ -2543,7 +2572,7 @@ export const AdminPage: React.FC = () => {
         setMemberListInitialized(true);
       }
     },
-    [memberListLoading, memberListOffset, safeJson],
+    [memberListLoading, memberListOffset, memberListSort, safeJson],
   );
 
   const lookupMember = React.useCallback(
@@ -2813,6 +2842,22 @@ export const AdminPage: React.FC = () => {
       }, 0);
     },
     [lookupMember],
+  );
+
+  const handleMemberSortChange = React.useCallback(
+    (nextSort: MemberListSort) => {
+      if (nextSort === memberListSort) return;
+      setMemberListSort(nextSort);
+      setMemberList([]);
+      setMemberListOffset(0);
+      setMemberListHasMore(true);
+      setMemberListError(null);
+      loadMemberList({ reset: true, sort: nextSort });
+    },
+    [
+      memberListSort,
+      loadMemberList,
+    ],
   );
 
   // Auto-load visits series when a member is selected
@@ -6068,12 +6113,39 @@ export const AdminPage: React.FC = () => {
                     {membersView === "list" && (
                       <Card className="rounded-2xl">
                         <CardContent className="p-4 space-y-4">
-                          <div className="flex flex-col gap-1">
-                            <div className="text-sm font-semibold flex items-center gap-2">
-                              <Users className="h-4 w-4" /> Latest members
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div className="flex flex-col gap-1">
+                              <div className="text-sm font-semibold flex items-center gap-2">
+                                <Users className="h-4 w-4" /> Members
+                              </div>
+                              <div className="text-xs opacity-60">
+                                View the newest 20 accounts, then load more as
+                                needed.
+                              </div>
                             </div>
-                            <div className="text-xs opacity-60">
-                              Ordered by creation time (newest first)
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-[11px] uppercase tracking-wide opacity-60">
+                                Sort
+                              </span>
+                              <div className="flex flex-wrap gap-1.5">
+                                {memberListSortOptions.map((option) => (
+                                  <Button
+                                    key={option.value}
+                                    size="sm"
+                                    variant={
+                                      memberListSort === option.value
+                                        ? "default"
+                                        : "outline"
+                                    }
+                                    className="rounded-2xl text-xs"
+                                    onClick={() =>
+                                      handleMemberSortChange(option.value)
+                                    }
+                                  >
+                                    {option.label}
+                                  </Button>
+                                ))}
+                              </div>
                             </div>
                           </div>
                           {memberListError && (
@@ -6141,9 +6213,15 @@ export const AdminPage: React.FC = () => {
                                       {member.isAdmin ? "Admin" : "Member"}
                                     </Badge>
                                   </div>
-                                  <div className="text-xs opacity-60 mt-1">
-                                    Joined {formatMemberJoinDate(member.createdAt)}
-                                  </div>
+                                    <div className="text-xs opacity-60 mt-1 flex flex-wrap items-center gap-2">
+                                      <span>
+                                        Joined {formatMemberJoinDate(member.createdAt)}
+                                      </span>
+                                      <span className="hidden sm:inline">•</span>
+                                      <span className="tabular-nums">
+                                        RPM (5m): {formatRpmValue(member.rpm5m)}
+                                      </span>
+                                    </div>
                                 </button>
                               ))}
                             </div>
