@@ -98,6 +98,10 @@ export const GardenDashboardPage: React.FC = () => {
   >([]);
   const [loading, setLoading] = React.useState(true);
   const [heavyLoading, setHeavyLoading] = React.useState(false);
+  const heavyLoadingRef = React.useRef(false);
+  React.useEffect(() => {
+    heavyLoadingRef.current = heavyLoading;
+  }, [heavyLoading]);
   const [error, setError] = React.useState<string | null>(null);
   const [serverToday, setServerToday] = React.useState<string | null>(null);
   const serverTodayRef = React.useRef<string | null>(null);
@@ -637,55 +641,61 @@ export const GardenDashboardPage: React.FC = () => {
   const loadHeavyForCurrentTab = React.useCallback(
     async (
       todayOverride?: string | null,
-      opts?: { suppressError?: boolean },
+      opts?: { suppressError?: boolean; force?: boolean },
     ) => {
       const todayValue = todayOverride ?? serverTodayRef.current ?? serverToday;
       if (!id || !todayValue) return;
 
-      // Skip if already loading or if not needed for current tab
-      if (heavyLoading) return;
+      const needsRoutineData = tab === "routine";
+      const needsPlantsData = tab === "plants";
+      const shouldRun = opts?.force || needsRoutineData || needsPlantsData;
+      if (!shouldRun) return;
 
-      // Only load heavy data for tabs that need it
-      if (tab !== "routine" && tab !== "plants" && tab !== "overview") return;
+      if (heavyLoadingRef.current) return;
 
       setHeavyLoading(true);
       try {
-        const parseUTC = (iso: string) => new Date(`${iso}T00:00:00Z`);
-        const anchorUTC = parseUTC(todayValue);
-        const dayUTC = anchorUTC.getUTCDay();
-        const diffToMonday = (dayUTC + 6) % 7;
-        const mondayUTC = new Date(anchorUTC);
-        mondayUTC.setUTCDate(anchorUTC.getUTCDate() - diffToMonday);
-        const weekDaysIso: string[] = [];
-        for (let i = 0; i < 7; i++) {
-          const d = new Date(mondayUTC);
-          d.setUTCDate(mondayUTC.getUTCDate() + i);
-          weekDaysIso.push(d.toISOString().slice(0, 10));
+        let weekDaysIso: string[] = [];
+        if (needsRoutineData) {
+          const parseUTC = (iso: string) => new Date(`${iso}T00:00:00Z`);
+          const anchorUTC = parseUTC(todayValue);
+          const dayUTC = anchorUTC.getUTCDay();
+          const diffToMonday = (dayUTC + 6) % 7;
+          const mondayUTC = new Date(anchorUTC);
+          mondayUTC.setUTCDate(anchorUTC.getUTCDate() - diffToMonday);
+          for (let i = 0; i < 7; i++) {
+            const d = new Date(mondayUTC);
+            d.setUTCDate(mondayUTC.getUTCDate() + i);
+            weekDaysIso.push(d.toISOString().slice(0, 10));
+          }
+          setWeekDays(weekDaysIso);
         }
-        setWeekDays(weekDaysIso);
         const today = todayValue;
 
-        // Load tasks in parallel with resync for better performance
         const [allTasks] = await Promise.all([
           listGardenTasks(id),
-          // Resync in background - don't block
-          (async () => {
-            const weekStartIso = `${weekDaysIso[0]}T00:00:00.000Z`;
-            const weekEndIso = `${weekDaysIso[6]}T23:59:59.999Z`;
-            // Use requestIdleCallback for resync to avoid blocking
-            const resyncFn = () => {
-              resyncTaskOccurrencesForGarden(
-                id,
-                weekStartIso,
-                weekEndIso,
-              ).catch(() => {});
-            };
-            if ("requestIdleCallback" in window) {
-              window.requestIdleCallback(resyncFn, { timeout: 2000 });
-            } else {
-              setTimeout(resyncFn, 500);
-            }
-          })(),
+          needsRoutineData && weekDaysIso.length === 7
+            ? (async () => {
+                const weekStartIso = `${
+                  weekDaysIso[0] || today
+                }T00:00:00.000Z`;
+                const weekEndIso = `${
+                  weekDaysIso[weekDaysIso.length - 1] || today
+                }T23:59:59.999Z`;
+                const resyncFn = () => {
+                  resyncTaskOccurrencesForGarden(
+                    id,
+                    weekStartIso,
+                    weekEndIso,
+                  ).catch(() => {});
+                };
+                if ("requestIdleCallback" in window) {
+                  window.requestIdleCallback(resyncFn, { timeout: 2000 });
+                } else {
+                  setTimeout(resyncFn, 500);
+                }
+              })()
+            : Promise.resolve(),
         ]);
 
         const skipCache = skipTodayCacheRef.current;
@@ -730,23 +740,25 @@ export const GardenDashboardPage: React.FC = () => {
 
         setTodayTaskOccurrences(occsDetailed as any);
 
-        const taskCountMap: Record<string, number> = {};
-        for (const t of allTasks)
-          taskCountMap[t.gardenPlantId] =
-            (taskCountMap[t.gardenPlantId] || 0) + 1;
-        setTaskCountsByPlant(taskCountMap);
+        if (needsPlantsData || needsRoutineData) {
+          const taskCountMap: Record<string, number> = {};
+          for (const t of allTasks)
+            taskCountMap[t.gardenPlantId] =
+              (taskCountMap[t.gardenPlantId] || 0) + 1;
+          setTaskCountsByPlant(taskCountMap);
 
-        const dueMap: Record<string, number> = {};
-        for (const o of occsDetailed) {
-          const remaining = Math.max(
-            0,
-            (o.requiredCount || 1) - (o.completedCount || 0),
-          );
-          if (remaining > 0)
-            dueMap[o.gardenPlantId] =
-              (dueMap[o.gardenPlantId] || 0) + remaining;
+          const dueMap: Record<string, number> = {};
+          for (const o of occsDetailed) {
+            const remaining = Math.max(
+              0,
+              (o.requiredCount || 1) - (o.completedCount || 0),
+            );
+            if (remaining > 0)
+              dueMap[o.gardenPlantId] =
+                (dueMap[o.gardenPlantId] || 0) + remaining;
+          }
+          setTaskOccDueToday(dueMap);
         }
-        setTaskOccDueToday(dueMap);
 
         setDailyStats((prev) => {
           const reqDone = occsDetailed.reduce(
@@ -768,16 +780,13 @@ export const GardenDashboardPage: React.FC = () => {
           );
         });
 
-        // Only load week data if on routine tab
-        if (tab === "routine") {
-          // Try to load from cache first
+        if (needsRoutineData && weekDaysIso.length === 7) {
           const cachedWeekStats = await getGardenWeeklyStatsCached(
             id,
             weekDaysIso[0],
           ).catch(() => null);
 
           if (cachedWeekStats) {
-            // Use cached weekly stats
             setWeekCountsByType({
               water: cachedWeekStats.waterTasksByDay,
               fertilize: cachedWeekStats.fertilizeTasksByDay,
@@ -787,9 +796,9 @@ export const GardenDashboardPage: React.FC = () => {
             });
             setWeekCounts(cachedWeekStats.totalTasksByDay);
 
-            // Still need to compute dueThisWeekByPlant from occurrences
             const weekStartIso = `${weekDaysIso[0]}T00:00:00.000Z`;
-            const weekEndIso = `${weekDaysIso[6]}T23:59:59.999Z`;
+            const weekEndIso =
+              `${weekDaysIso[weekDaysIso.length - 1]}T23:59:59.999Z`;
             const weekOccs = await listOccurrencesForTasks(
               allTasks.map((t) => t.id),
               weekStartIso,
@@ -818,10 +827,10 @@ export const GardenDashboardPage: React.FC = () => {
               );
             setDueThisWeekByPlant(dueMapNext);
           } else {
-            // Fallback: compute week data
             const loadWeekData = async () => {
               const weekStartIso = `${weekDaysIso[0]}T00:00:00.000Z`;
-              const weekEndIso = `${weekDaysIso[6]}T23:59:59.999Z`;
+              const weekEndIso =
+                `${weekDaysIso[weekDaysIso.length - 1]}T23:59:59.999Z`;
               const weekOccs = await listOccurrencesForTasks(
                 allTasks.map((t) => t.id),
                 weekStartIso,
@@ -887,11 +896,9 @@ export const GardenDashboardPage: React.FC = () => {
                 );
               setDueThisWeekByPlant(dueMapNext);
 
-              // Refresh cache in background
               refreshGardenTaskCache(id, today).catch(() => {});
             };
 
-            // Load week data in background
             if ("requestIdleCallback" in window) {
               window.requestIdleCallback(() => loadWeekData(), {
                 timeout: 1000,
@@ -902,23 +909,25 @@ export const GardenDashboardPage: React.FC = () => {
           }
         }
 
-        const occsForDueToday =
-          cachedOccs && cachedOccs.length > 0
-            ? cachedOccs
-            : await listOccurrencesForTasks(
-                allTasks.map((t) => t.id),
-                `${today}T00:00:00.000Z`,
-                `${today}T23:59:59.999Z`,
-              ).catch(() => []);
-        const dueTodaySet = new Set<string>();
-        for (const o of occsForDueToday || []) {
-          const remaining = Math.max(
-            0,
-            (o.requiredCount || 1) - (o.completedCount || 0),
-          );
-          if (remaining > 0) dueTodaySet.add(o.gardenPlantId);
+        if (needsPlantsData || needsRoutineData) {
+          const occsForDueToday =
+            cachedOccs && cachedOccs.length > 0
+              ? cachedOccs
+              : await listOccurrencesForTasks(
+                  allTasks.map((t) => t.id),
+                  `${today}T00:00:00.000Z`,
+                  `${today}T23:59:59.999Z`,
+                ).catch(() => []);
+          const dueTodaySet = new Set<string>();
+          for (const o of occsForDueToday || []) {
+            const remaining = Math.max(
+              0,
+              (o.requiredCount || 1) - (o.completedCount || 0),
+            );
+            if (remaining > 0) dueTodaySet.add(o.gardenPlantId);
+          }
+          setDueToday(dueTodaySet);
         }
-        setDueToday(dueTodaySet);
       } catch (e: any) {
         if (opts?.suppressError) {
           console.warn("[GardenDashboard] Silent heavy load failed:", e);
@@ -1311,22 +1320,23 @@ export const GardenDashboardPage: React.FC = () => {
     };
   }, []);
 
-  const currentUserId = user?.id || null;
-  const isOwner = React.useMemo(() => {
-    // Admins have full owner-level access across all gardens
-    if (profile?.is_admin) return true;
-    if (!currentUserId) return false;
-    const self = members.find((m) => m.userId === currentUserId);
-    return self?.role === "owner";
-  }, [members, currentUserId, profile?.is_admin]);
+    const currentUserId = user?.id || null;
+    const isOwner = React.useMemo(() => {
+      // Admins have full owner-level access across all gardens
+      if (profile?.is_admin) return true;
+      if (!currentUserId) return false;
+      const self = members.find((m) => m.userId === currentUserId);
+      return self?.role === "owner";
+    }, [members, currentUserId, profile?.is_admin]);
 
-  React.useEffect(() => {
-    load();
-  }, [load]);
+    React.useEffect(() => {
+      load();
+    }, [load]);
 
-  // Load heavy data when tab changes or when garden loads - use requestIdleCallback for better performance
-  React.useEffect(() => {
-    if (!loading && id && serverToday) {
+    // Load heavy data when tab changes or when garden loads - use requestIdleCallback for better performance
+    React.useEffect(() => {
+      if (loading || !id || !serverToday) return;
+      if (tab !== "routine" && tab !== "plants") return;
       // Use requestIdleCallback to defer heavy loading until browser is idle
       const loadFn = () => {
         loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday);
@@ -1341,8 +1351,7 @@ export const GardenDashboardPage: React.FC = () => {
         const timer = setTimeout(loadFn, 100);
         return () => clearTimeout(timer);
       }
-    }
-  }, [tab, loadHeavyForCurrentTab, serverToday, loading, id]);
+    }, [tab, loadHeavyForCurrentTab, serverToday, loading, id]);
 
   // Realtime updates via Supabase (tables: gardens, garden_members, garden_plants, garden_plant_tasks, garden_plant_task_occurrences, plants)
   React.useEffect(() => {
