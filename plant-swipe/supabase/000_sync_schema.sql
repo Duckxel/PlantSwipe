@@ -3907,21 +3907,21 @@ BEGIN
     SELECT DISTINCT gid
     FROM unnest(_garden_ids) AS gid
   ),
-  cache_available AS (
-    SELECT
-      ig.gid AS garden_id,
-      c.due_count,
-      c.completed_count
-    FROM input_gardens ig
-    LEFT JOIN garden_task_daily_cache c
-      ON c.garden_id = ig.gid
-     AND c.cache_date = _cache_date
-  ),
-  gardens_missing_cache AS (
-    SELECT garden_id
-    FROM cache_available
-    WHERE due_count IS NULL AND completed_count IS NULL
-  ),
+    cache_available AS (
+      SELECT
+        ig.gid AS garden_id,
+        c.due_count,
+        c.completed_count
+      FROM input_gardens ig
+      LEFT JOIN garden_task_daily_cache c
+        ON c.garden_id = ig.gid
+       AND c.cache_date = _cache_date
+    ),
+    gardens_missing_cache AS (
+      SELECT ca.garden_id AS missing_garden_id
+      FROM cache_available ca
+      WHERE ca.due_count IS NULL AND ca.completed_count IS NULL
+    ),
   live_totals AS (
     SELECT
       t.garden_id,
@@ -3929,7 +3929,7 @@ BEGIN
       COALESCE(SUM(LEAST(GREATEST(1, occ.required_count), COALESCE(occ.completed_count, 0))), 0)::integer AS completed_total
     FROM garden_plant_task_occurrences occ
     INNER JOIN garden_plant_tasks t ON t.id = occ.task_id
-    WHERE t.garden_id IN (SELECT garden_id FROM gardens_missing_cache)
+      WHERE t.garden_id IN (SELECT gmc.missing_garden_id FROM gardens_missing_cache gmc)
       AND occ.due_at >= _start_iso
       AND occ.due_at <= _end_iso
     GROUP BY t.garden_id
