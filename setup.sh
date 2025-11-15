@@ -1299,11 +1299,17 @@ $SUDO mkdir -p "$ADMIN_DIR"
 $SUDO install -m 0644 -D "$REPO_DIR/admin_api/app.py" "$ADMIN_DIR/app.py"
 $SUDO install -m 0644 -D "$REPO_DIR/admin_api/requirements.txt" "$ADMIN_DIR/requirements.txt"
 
-if [[ ! -d "$ADMIN_VENV" ]]; then
+rebuild_admin_api_venv() {
+  log "Rebuilding Admin API virtualenv at $ADMIN_VENV (ensuring python-dotenv and other deps are installed)…"
+  if [[ -d "$ADMIN_VENV" ]]; then
+    $SUDO rm -rf "$ADMIN_VENV"
+  fi
   $SUDO python3 -m venv "$ADMIN_VENV"
-fi
-$SUDO "$ADMIN_VENV/bin/pip" install --upgrade pip
-$SUDO "$ADMIN_VENV/bin/pip" install -r "$ADMIN_DIR/requirements.txt"
+  $SUDO "$ADMIN_VENV/bin/pip" install --upgrade pip
+  $SUDO "$ADMIN_VENV/bin/pip" install --upgrade --requirement "$ADMIN_DIR/requirements.txt"
+}
+
+rebuild_admin_api_venv
 
 # Admin API environment file (placeholders) — user must update secrets later
 log "Ensuring Admin API env at $ADMIN_ENV_FILE…"
