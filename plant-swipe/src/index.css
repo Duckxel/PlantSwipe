@@ -1,10 +1,4 @@
-html,
-body {
-  height: 100%;
-}
-
-html,
-body {
+html {
   min-height: 100%;
 }
 
@@ -32,6 +26,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  min-height: 100dvh;
   overflow-y: auto;
   /* Removed flex centering from Vite template so the app can control its own layout */
   -webkit-user-select: none;
