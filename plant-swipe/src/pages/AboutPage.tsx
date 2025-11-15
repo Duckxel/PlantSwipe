@@ -243,7 +243,7 @@ export default function AboutPage() {
               {meetBadge}
             </Badge>
           </div>
-          <div className="grid gap-2 md:grid-cols-2">
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
             {meetOrder
               .map((key) => ({ key, member: meetMembers[key] }))
               .filter((entry): entry is { key: string; member: MemberCard } => Boolean(entry.member))
@@ -255,22 +255,22 @@ export default function AboutPage() {
                 return (
                   <Card
                     key={`${member.name}-${index}`}
-                    className="rounded-lg border border-stone-200/70 dark:border-[#3e3e42]/70 overflow-hidden text-xs"
+                    className="rounded-xl border border-stone-200/70 dark:border-[#3e3e42]/70 overflow-hidden text-sm max-w-xs mx-auto"
                   >
-                    <div className="p-3 pb-0 flex justify-center">
-                      <div className="relative w-[96px]">
-                        <div className="w-full aspect-square rounded-md border border-dashed border-stone-300 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#1f1f1f]/60 flex items-center justify-center text-center px-2">
-                          <span className="text-[10px] uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                    <div className="p-4 pb-0 flex justify-center">
+                      <div className="relative w-[288px] max-w-full">
+                        <div className="w-full aspect-square rounded-xl border border-dashed border-stone-300 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#1f1f1f]/60 flex items-center justify-center text-center px-4">
+                          <span className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
                             {member.placeholder}
                           </span>
                         </div>
                         {member.adjectives?.length ? (
-                          <div className="absolute -top-2 inset-x-0 flex flex-wrap justify-center gap-1.5 pointer-events-none">
+                          <div className="absolute -top-3 inset-x-3 flex flex-wrap justify-center gap-2 pointer-events-none">
                             {member.adjectives.map((adj) => (
                               <Badge
                                 key={adj}
                                 variant="secondary"
-                                className="rounded-full px-2 py-0.5 text-[9px] bg-emerald-100/90 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-100 shadow-sm"
+                                className="rounded-full px-3 py-0.5 text-[11px] bg-emerald-100/90 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-100 shadow-sm"
                               >
                                 {adj}
                               </Badge>
@@ -279,9 +279,9 @@ export default function AboutPage() {
                         ) : null}
                       </div>
                     </div>
-                    <CardHeader className="px-3 pb-3 pt-2 space-y-0.5 text-center">
-                      <CardTitle className="text-sm">{displayName}</CardTitle>
-                      <CardDescription className="text-[11px]">{roleLabel}</CardDescription>
+                    <CardHeader className="px-4 pb-4 pt-3 space-y-1 text-center">
+                      <CardTitle className="text-base">{displayName}</CardTitle>
+                      <CardDescription className="text-xs">{roleLabel}</CardDescription>
                     </CardHeader>
                   </Card>
                 )
