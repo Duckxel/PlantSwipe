@@ -17,7 +17,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 
 type StoryBeatKey = "spark" | "dare" | "momentum"
 type OfferingKey = "encyclopedia" | "monthly" | "gardenPlanner" | "photoId" | "swap" | "seeds"
-type ThrowbackItem = { badge: string; title: string; description: string }
+type PillarCard = { eyebrow: string; title: string; description: string }
 type MemberCard = {
   name: string
   role: string
@@ -49,7 +49,12 @@ export default function AboutPage() {
   const { t } = useTranslation("About")
   const definitionParagraphs = (t("definition.paragraphs", { returnObjects: true }) as string[]) ?? []
   const serviceItems = (t("services.items", { returnObjects: true }) as string[]) ?? []
-  const throwbackItems = (t("throwback.items", { returnObjects: true }) as ThrowbackItem[]) ?? []
+  const pillars = t("pillars", { returnObjects: true }) as {
+    title: string
+    subtitle: string
+    cards?: Record<string, PillarCard>
+  }
+  const pillarCards = Object.values(pillars?.cards ?? {})
   const community = t("community", { returnObjects: true }) as CommunityContent
   const feedback = t("feedback", { returnObjects: true }) as FeedbackContent
   const feedbackList = (feedback?.list ?? []) as string[]
@@ -233,31 +238,30 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {throwbackItems.length > 0 && (
+      {pillarCards.length > 0 && (
         <section className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
-              <h2 className="text-2xl font-semibold">{t("throwback.title")}</h2>
+              <h2 className="text-2xl font-semibold">{pillars?.title}</h2>
               <p className="text-sm text-stone-600 dark:text-stone-400 max-w-2xl">
-                {t("throwback.subtitle")}
+                {pillars?.subtitle}
               </p>
             </div>
-            <Badge variant="secondary" className="rounded-2xl bg-white dark:bg-[#252526]">
-              {t("throwback.badge")}
-            </Badge>
           </div>
-          <div className="grid gap-4 md:grid-cols-3">
-            {throwbackItems.map((item, index) => (
+          <div className="grid gap-4 md:grid-cols-2">
+            {pillarCards.map((card, index) => (
               <Card
-                key={`${item.title}-${index}`}
+                key={`${card.title}-${index}`}
                 className="rounded-3xl h-full border-stone-200/70 dark:border-[#3e3e42]/70"
               >
                 <CardHeader className="space-y-3">
-                  <Badge variant="outline" className="rounded-2xl w-fit">
-                    {item.badge}
-                  </Badge>
-                  <CardTitle>{item.title}</CardTitle>
-                  <CardDescription>{item.description}</CardDescription>
+                  {card.eyebrow && (
+                    <Badge variant="secondary" className="rounded-2xl w-fit">
+                      {card.eyebrow}
+                    </Badge>
+                  )}
+                  <CardTitle>{card.title}</CardTitle>
+                  <CardDescription>{card.description}</CardDescription>
                 </CardHeader>
               </Card>
             ))}

@@ -1,32 +1,48 @@
 {
   "hero": {
-    "eyebrow": "Gamins d'Aphyllante",
-    "title": "On code comme s'il était 3 h du matin à Montpellier",
-    "subtitle": "Deux amis, une plante (l'Aphyllante) qui a inspiré le nom, et une passion partagée pour les jardins, les ordis et la manière dont les citadins cultivent leur nourriture.",
+    "eyebrow": "Racines montpelliéraines",
+    "title": "L'horticulture urbaine rencontre un logiciel réfléchi",
+    "subtitle": "Aphilia porte le nom de l'Aphyllante et offre aux jardiniers modernes des outils fiables, inspirés de nos années dans le sud de la France.",
     "ctaPrimary": "Confiez-nous votre rêve végétal",
     "ctaSecondary": "Retour à la découverte"
   },
   "story": {
-    "badge": "Histoire d'origine",
+    "badge": "Notre histoire",
     "title": "De l'Aphyllante à Aphilia",
-    "subtitle": "On a grandi sous le soleil méditerranéen près de Montpellier, on a craqué pour une plante sauvage appelée Aphyllante, et on s'est dit que notre amitié devait fleurir en logiciel.",
+    "subtitle": "Deux amis qui ont toujours pris soin des balcons comme des serveurs.",
     "beats": {
       "spark": {
-        "title": "Deux nerds chez le grainetier",
-        "description": "Xavier aligne les graines, FIVE aligne les lignes de code. On a compris qu'un plan de sol peut se cartographier comme une base de données."
+        "title": "Débuts méditerranéens",
+        "description": "Nos étés d'ado près de Montpellier nous ont appris comment l'Aphyllante résiste à la sécheresse—et combien de design se cache dans un jardin."
       },
       "dare": {
-        "title": "L'époque Mango Monster",
-        "description": "Trois nuits blanches, des nouilles instantanées, des canettes de Mango Monster, une playlist Spotify qui part en vrille… et pourtant, un prototype fonctionnel."
+        "title": "Marathon prototype",
+        "description": "Trois nuits sans dormir pour shipper la V1 : Mango Monster, nouilles instantanées, playlist Spotify incontrôlable… mais un MVP bien réel."
       },
       "momentum": {
-        "title": "Retour aux plantes",
-        "description": "Une fois la poussière retombée, on a littéralement touché de l'herbe, pris soin de nous et continué à itérer pour que chacun puisse cultiver sans chaos."
+        "title": "Le soin plutôt que le chaos",
+        "description": "On a gardé le rituel café + doigts croisés, mais on a troqué les nuits blanches pour des process qui permettent à chacun de jardiner sereinement."
       }
     },
     "quote": {
       "text": "L'un plante des lignes de graines, l'autre plante des lignes de chiffres. Ensemble, on plante des excuses pour mieux manger.",
       "attribution": "Le duo Aphilia"
+    }
+  },
+  "pillars": {
+    "title": "Notre façon de construire Aphilia",
+    "subtitle": "Inspirée des jardins analogiques, livrée avec le calme d'un SaaS sur lequel on peut compter.",
+    "cards": {
+      "craft": {
+        "eyebrow": "Savoir-faire",
+        "title": "Des insights faits main, une fiabilité de production",
+        "description": "On note microclimats, rituels et gestes dans nos carnets avant de les transformer en planners, checklists et télémétrie."
+      },
+      "care": {
+        "eyebrow": "Soin",
+        "title": "Chaleur humaine, fondations scalables",
+        "description": "Café pour Xavier, Mango Monster pour FIVE, tests et monitoring pour tous—vos jardins restent stables même quand on dort."
+      }
     }
   },
   "definition": {
@@ -56,7 +72,8 @@
       },
       "photoId": {
         "title": "Reconnaissance photo",
-        "description": "Prenez une photo et laissez l'app trancher : basilic, menthe ou mauvaise herbe trop confiante."
+        "description": "Prenez une photo et laissez l'app trancher : basilic, menthe ou mauvaise herbe trop confiante.",
+        "status": "À venir"
       },
       "swap": {
         "title": "Échanges entre particuliers",
@@ -76,28 +93,6 @@
     "items": [
       "Vente de graines et plantes avec un packaging qui donne le sourire",
       "Livraison locale pour que vos pots costauds n'effraient plus le chauffeur"
-    ]
-  },
-  "throwback": {
-    "title": "Souvenirs de l'ancien UI",
-    "subtitle": "Vous nous avez dit que les graphes bizarres et les gribouillis vous manquent : on les laisse revenir petit à petit.",
-    "badge": "Mode nostalgie",
-    "items": [
-      {
-        "badge": "Deck legacy",
-        "title": "Timeline à swiper avec des lianes",
-        "description": "Des cartes entourées de tiges dessinées à la main et de textures polaroid. Remaster en cours."
-      },
-      {
-        "badge": "Graphes chaos",
-        "title": "Le dashboard Mango Monster",
-        "description": "Des courbes en temps réel qui tremblaient à 3 h du matin parce que nos mains caféinées vibraient. Retour prévu en version apaisée."
-      },
-      {
-        "badge": "Police du sommeil",
-        "title": "Le pop-up « encore réveillé ? »",
-        "description": "Après 20 swipes, l'UI nous rappelait de nous hydrater. On travaille sur son grand retour."
-      }
     ]
   },
   "community": {
