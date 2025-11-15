@@ -2065,49 +2065,35 @@ returns table(
   is_admin boolean,
   rpm5m numeric
 )
-language plpgsql
+language sql
 security definer
 set search_path = public
 as $$
-declare
-  order_clause text;
-begin
-  order_clause :=
-    case
-      when coalesce(lower(_sort), 'newest') = 'oldest' then 'created_at asc'
-      when coalesce(lower(_sort), 'newest') = 'rpm' then 'rpm5m desc nulls last, created_at desc'
-      else 'created_at desc'
-    end;
-
-  return query
-  execute format($fmt$
-    with base as (
-      select
-        u.id,
-        u.email,
-        p.display_name,
-        u.created_at,
-        coalesce(p.is_admin, false) as is_admin,
-        coalesce(rpm.c, 0)::numeric / 5 as rpm5m
-      from auth.users u
-      left join public.profiles p on p.id = u.id
-      left join lateral (
-        select count(*)::int as c
-        from public.web_visits v
-        where v.user_id = u.id
-          and v.occurred_at >= now() - interval '5 minutes'
-      ) rpm on true
-    )
-    select *
-    from base
-    order by %s
-      limit %s
-      offset %s
-    $fmt$,
-    order_clause,
-    greatest(1, coalesce(_limit, 20)),
-    greatest(0, coalesce(_offset, 0)));
-end;
+  with base as (
+    select
+      u.id,
+      u.email,
+      p.display_name,
+      u.created_at,
+      coalesce(p.is_admin, false) as is_admin,
+      coalesce(rpm.c, 0)::numeric / 5 as rpm5m
+    from auth.users u
+    left join public.profiles p on p.id = u.id
+    left join lateral (
+      select count(*)::int as c
+      from public.web_visits v
+      where v.user_id = u.id
+        and v.occurred_at >= now() - interval '5 minutes'
+    ) rpm on true
+  )
+  select *
+  from base
+  order by
+    case when coalesce(lower(_sort), 'newest') = 'oldest' then created_at end asc,
+    case when coalesce(lower(_sort), 'newest') = 'rpm' then rpm5m end desc nulls last,
+    created_at desc
+  limit greatest(1, coalesce(_limit, 20))
+  offset greatest(0, coalesce(_offset, 0));
 $$;
 
 grant execute on function public.get_recent_members(int, int, text) to anon, authenticated;
