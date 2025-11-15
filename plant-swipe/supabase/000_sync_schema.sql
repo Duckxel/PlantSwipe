@@ -2101,10 +2101,12 @@ begin
     select *
     from base
     order by %s
-    limit greatest(1, coalesce($1, 20))
-    offset greatest(0, coalesce($2, 0))
-  $fmt$, order_clause)
-  using _limit, _offset;
+      limit %s
+      offset %s
+    $fmt$,
+    order_clause,
+    greatest(1, coalesce(_limit, 20)),
+    greatest(0, coalesce(_offset, 0)));
 end;
 $$;
 
