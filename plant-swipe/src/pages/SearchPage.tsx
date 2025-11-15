@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useTranslation } from "react-i18next";
 import { Flame, PartyPopper, Sparkles } from "lucide-react";
-import { formatLikeCount, getPlantLikeCount, isNewPlant, isPlantOfTheMonth, isPopularPlant } from "@/lib/plantHighlights";
+import { isNewPlant, isPlantOfTheMonth, isPopularPlant } from "@/lib/plantHighlights";
 
 interface SearchPageProps {
   plants: Plant[];
@@ -44,12 +44,9 @@ export const SearchPage: React.FC<SearchPageProps> = ({
             })
           }
           if (isPopularPlant(p)) {
-            const likes = getPlantLikeCount(p)
-            const label =
-              likes !== null ? t("discoveryPage.tags.popularWithCount", { likes: formatLikeCount(likes) }) : t("discoveryPage.tags.popular")
             highlightBadges.push({
               key: `${p.id}-popular`,
-              label,
+              label: t("discoveryPage.tags.popular"),
               className: "bg-rose-600/90 text-white",
               icon: <Flame className="h-4 w-4 mr-1" />,
             })
@@ -89,47 +86,29 @@ export const SearchPage: React.FC<SearchPageProps> = ({
                   )}
                 </div>
                 <div className="p-4 space-y-2 flex flex-col">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Badge
-                    className={`${rarityTone[p.rarity ?? "Common"]} rounded-xl`}
-                  >
-                    {p.rarity}
-                  </Badge>
-                  {p.seasons.map((s: PlantSeason) => {
-                    const badgeClass =
-                      seasonBadge[s] ??
-                      "bg-stone-200 dark:bg-stone-700 text-stone-900 dark:text-stone-100";
-                    return (
-                      <span
-                        key={s}
-                        className={`text-[10px] px-2 py-0.5 rounded-full ${badgeClass}`}
-                      >
-                        {s}
-                      </span>
-                    );
-                  })}
-                  {likedIds.includes(p.id) && (
-                    <Badge className="rounded-xl bg-rose-600 dark:bg-rose-500 text-white">
-                      {t("plant.liked")}
-                    </Badge>
-                  )}
-                </div>
-                <div>
-                  <div className="font-semibold truncate text-lg">{p.name}</div>
-                  <div className="text-xs italic opacity-60 truncate">
-                    {p.scientificName}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Badge className={`${rarityTone[p.rarity ?? "Common"]} rounded-xl`}>{p.rarity}</Badge>
+                    {p.seasons.map((s: PlantSeason) => {
+                      const badgeClass =
+                        seasonBadge[s] ?? "bg-stone-200 dark:bg-stone-700 text-stone-900 dark:text-stone-100"
+                      return (
+                        <span key={s} className={`text-[10px] px-2 py-0.5 rounded-full ${badgeClass}`}>
+                          {s}
+                        </span>
+                      )
+                    })}
+                    {likedIds.includes(p.id) && (
+                      <Badge className="rounded-xl bg-rose-600 dark:bg-rose-500 text-white">{t("plant.liked")}</Badge>
+                    )}
                   </div>
-                </div>
-                <p className="text-sm line-clamp-2 text-stone-600 dark:text-stone-300 flex-1">
-                  {p.description}
-                </p>
+                  <div>
+                    <div className="font-semibold truncate text-lg">{p.name}</div>
+                    <div className="text-xs italic opacity-60 truncate">{p.scientificName}</div>
+                  </div>
+                  <p className="text-sm line-clamp-2 text-stone-600 dark:text-stone-300 flex-1">{p.description}</p>
                   <div className="flex flex-wrap gap-1">
                     {p.colors.map((c) => (
-                      <Badge
-                        key={c}
-                        variant="secondary"
-                        className="rounded-xl text-[11px]"
-                      >
+                      <Badge key={c} variant="secondary" className="rounded-xl text-[11px]">
                         {c}
                       </Badge>
                     ))}
