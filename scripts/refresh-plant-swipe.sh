@@ -311,31 +311,35 @@ if ! "${GIT_LOCAL_CMD[@]}" fetch --all --prune; then
       fi
     fi
   else
-    echo "[ERROR] git fetch failed and cannot escalate privileges (RUN_AS_PREFIX not set)." >&2
-    echo "Diagnostics:" >&2
-    echo "- current user: $CURRENT_USER (euid=$EUID)" >&2
-    echo "- repo owner: $REPO_OWNER" >&2
-    echo "- can sudo non-interactively: $CAN_SUDO" >&2
-    echo "- askpass helper present: $([[ -n \"$SUDO_ASKPASS\" ]] && echo yes || echo no)" >&2
-    echo "- PSSWORD_KEY source: ${PSSWORD_KEY_SOURCE:-none}, length: ${#PSSWORD_KEY}" >&2
-    ls -ld "$WORK_DIR" "$WORK_DIR/.git" >&2 || true
-    ls -l "$WORK_DIR/.git/FETCH_HEAD" >&2 || true
-    if ! touch "$WORK_DIR/.git/FETCH_HEAD" 2>/dev/null; then
-      echo "- touch FETCH_HEAD as $CURRENT_USER: FAILED" >&2
-    else
-      echo "- touch FETCH_HEAD as $CURRENT_USER: OK" >&2
+    # Even without RUN_AS_PREFIX we can still try to self-heal permissions via sudo helpers.
+    attempt_git_permission_repair
+    if ! "${GIT_LOCAL_CMD[@]}" fetch --all --prune; then
+      echo "[ERROR] git fetch failed after auto-repair (no alternate git user available)." >&2
+      echo "Diagnostics:" >&2
+      echo "- current user: $CURRENT_USER (euid=$EUID)" >&2
+      echo "- repo owner: $REPO_OWNER" >&2
+      echo "- can sudo non-interactively: $CAN_SUDO" >&2
+      echo "- askpass helper present: $([[ -n \"$SUDO_ASKPASS\" ]] && echo yes || echo no)" >&2
+      echo "- PSSWORD_KEY source: ${PSSWORD_KEY_SOURCE:-none}, length: ${#PSSWORD_KEY}" >&2
+      ls -ld "$WORK_DIR" "$WORK_DIR/.git" >&2 || true
+      ls -l "$WORK_DIR/.git/FETCH_HEAD" >&2 || true
+      if ! touch "$WORK_DIR/.git/FETCH_HEAD" 2>/dev/null; then
+        echo "- touch FETCH_HEAD as $CURRENT_USER: FAILED" >&2
+      else
+        echo "- touch FETCH_HEAD as $CURRENT_USER: OK" >&2
+      fi
+      if command -v findmnt >/dev/null 2>&1; then
+        findmnt -no TARGET,SOURCE,FSTYPE,OPTIONS "$WORK_DIR" >&2 || true
+      fi
+      if command -v getenforce >/dev/null 2>&1; then
+        echo "SELinux: $(getenforce)" >&2
+      fi
+      echo "Remediation suggestions:" >&2
+      echo "- Option A: chown -R $CURRENT_USER:$CURRENT_USER '$WORK_DIR/.git' (preferred)" >&2
+      echo "- Option B: grant NOPASSWD sudo for chown/chmod/systemctl to $CURRENT_USER" >&2
+      echo "- Option C: set correct PSSWORD_KEY in $WORK_DIR/.env or $NODE_DIR/.env" >&2
+      exit 1
     fi
-    if command -v findmnt >/dev/null 2>&1; then
-      findmnt -no TARGET,SOURCE,FSTYPE,OPTIONS "$WORK_DIR" >&2 || true
-    fi
-    if command -v getenforce >/dev/null 2>&1; then
-      echo "SELinux: $(getenforce)" >&2
-    fi
-    echo "Remediation suggestions:" >&2
-    echo "- Option A: chown -R $CURRENT_USER:$CURRENT_USER '$WORK_DIR/.git' (preferred)" >&2
-    echo "- Option B: grant NOPASSWD sudo for chown/chmod/systemctl to $CURRENT_USER" >&2
-    echo "- Option C: set correct PSSWORD_KEY in $WORK_DIR/.env or $NODE_DIR/.env" >&2
-    exit 1
   fi
 fi
 
