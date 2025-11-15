@@ -2948,53 +2948,17 @@ export const AdminPage: React.FC = () => {
                 <div className="absolute -top-8 -right-6 h-32 w-32 rounded-full bg-emerald-200/60 dark:bg-emerald-500/20 blur-3xl" />
                 <div className="absolute bottom-0 left-0 h-40 w-40 rounded-full bg-emerald-100/70 dark:bg-emerald-500/15 blur-[120px]" />
               </div>
-              <div className="relative z-10 p-6 border-b border-white/30 dark:border-white/10">
-                <div className="flex items-center gap-3">
-                  <ShieldCheck className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
-                  <div>
-                    <div className="text-lg font-semibold">Admin Panel</div>
-                    <div className="text-xs text-stone-600 dark:text-stone-300">
-                      Control Center
+                <div className="relative z-10 p-6 border-b border-white/30 dark:border-white/10">
+                  <div className="flex items-center gap-3">
+                    <ShieldCheck className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+                    <div>
+                      <div className="text-lg font-semibold">Admin Panel</div>
+                      <div className="text-xs text-stone-600 dark:text-stone-300">
+                        Control Center
+                      </div>
                     </div>
                   </div>
                 </div>
-                <Button
-                  variant="outline"
-                  className="rounded-xl w-full sm:w-auto px-2 sm:px-3"
-                  onClick={() => loadBranches({ initial: false })}
-                  disabled={branchesLoading || branchesRefreshing}
-                  aria-label="Refresh branches"
-                >
-                  <RefreshCw className={`h-4 w-4 ? ${branchesRefreshing ? 'animate-spin' : ''}`} />
-                  <span className="hidden sm:inline">Refresh branches</span>
-                  <span className="sm:hidden inline">Refresh</span>
-                </Button>
-              </div>
-              <div className="text-xs opacity-60 mt-2">
-                Changing branch takes effect when you run Pull & Build.
-              </div>
-
-              {/* Action buttons */}
-              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-                <Button className="rounded-2xl w-full" onClick={restartServer} disabled={restarting}>
-                  <Server className="h-4 w-4" />
-                  <RefreshCw className="h-4 w-4" />
-                  <span>{restarting ? 'Restarting?' : 'Restart Services'}</span>
-                </Button>
-                <Button className="rounded-2xl w-full" variant="secondary" onClick={pullLatest} disabled={pulling}>
-                  <Github className="h-4 w-4" />
-                  <RefreshCw className="h-4 w-4" />
-                  <span>{pulling ? 'Pulling...' : 'Pull & Build'}</span>
-                </Button>
-                <Button className="rounded-2xl w-full" variant="outline" onClick={deployEdgeFunctions} disabled={deployingEdge}>
-                  <CloudUpload className="h-4 w-4" />
-                  <span>{deployingEdge ? 'Deploying...' : 'Deploy Edge Functions'}</span>
-                </Button>
-                <Button className="rounded-2xl w-full" variant="destructive" onClick={runSyncSchema} disabled={syncing}>
-                  <Database className="h-4 w-4" />
-                  <span>{syncing ? 'Syncing...' : 'Sync DB Schema'}</span>
-                </Button>
-              </div>
               <nav className="relative z-10 p-4 space-y-2 flex-1 overflow-y-auto">
                 {navItems.map(({ key, label, Icon }) => (
                   <button
@@ -3307,8 +3271,8 @@ export const AdminPage: React.FC = () => {
                           Build.
                         </div>
 
-                        {/* Action buttons */}
-                        <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          {/* Action buttons */}
+                          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                           <Button
                             className="rounded-2xl w-full"
                             onClick={restartServer}
@@ -3333,6 +3297,19 @@ export const AdminPage: React.FC = () => {
                             </span>
                           </Button>
                           <Button
+                              className="rounded-2xl w-full"
+                              variant="outline"
+                              onClick={deployEdgeFunctions}
+                              disabled={deployingEdge}
+                            >
+                              <CloudUpload className="h-4 w-4" />
+                              <span>
+                                {deployingEdge
+                                  ? "Deploying..."
+                                  : "Deploy Edge Functions"}
+                              </span>
+                            </Button>
+                            <Button
                             className="rounded-2xl w-full"
                             variant="destructive"
                             onClick={runSyncSchema}
