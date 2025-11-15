@@ -66,6 +66,19 @@ const {
 
 type AdminTab = "overview" | "members" | "requests" | "admin_logs";
 
+type ListedMember = {
+  id: string;
+  email: string | null;
+  displayName: string | null;
+  createdAt: string | null;
+  isAdmin: boolean;
+  rpm5m: number | null;
+};
+
+type MemberListSort = "newest" | "oldest" | "rpm";
+
+const MEMBER_LIST_PAGE_SIZE = 20;
+
 export const AdminPage: React.FC = () => {
   const navigate = useNavigate();
   const { effectiveTheme } = useTheme();
@@ -160,6 +173,27 @@ export const AdminPage: React.FC = () => {
     },
     [],
   );
+
+  const formatMemberJoinDate = React.useCallback(
+    (value?: string | null): string => {
+      if (!value) return "-";
+      try {
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return value;
+        return date.toLocaleString();
+      } catch {
+        return String(value);
+      }
+    },
+    [],
+  );
+
+  const formatRpmValue = React.useCallback((value?: number | null): string => {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value.toFixed(2);
+    }
+    return "0.00";
+  }, []);
 
   // Compute a responsive max character count for branch names based on viewport width
   const computeBranchMaxChars = React.useCallback(
@@ -307,6 +341,16 @@ export const AdminPage: React.FC = () => {
         return false;
       }
     },
+    [],
+  );
+
+  const memberListSortOptions = React.useMemo(
+    () =>
+      [
+        { value: "newest", label: "New" },
+        { value: "oldest", label: "Oldest" },
+        { value: "rpm", label: "RPM (5m)" },
+      ] as Array<{ value: MemberListSort; label: string }>,
     [],
   );
 
@@ -2232,6 +2276,19 @@ export const AdminPage: React.FC = () => {
     if (activeTab !== "requests" || plantRequestsInitialized) return;
     loadPlantRequests({ initial: true });
   }, [activeTab, plantRequestsInitialized, loadPlantRequests]);
+  const [membersView, setMembersView] =
+    React.useState<"search" | "list">("search");
+  const [memberList, setMemberList] = React.useState<ListedMember[]>([]);
+  const [memberListLoading, setMemberListLoading] = React.useState(false);
+  const [memberListError, setMemberListError] = React.useState<string | null>(
+    null,
+  );
+  const [memberListHasMore, setMemberListHasMore] = React.useState(true);
+  const [memberListOffset, setMemberListOffset] = React.useState(0);
+  const [memberListInitialized, setMemberListInitialized] =
+    React.useState(false);
+  const [memberListSort, setMemberListSort] =
+    React.useState<MemberListSort>("newest");
   const [lookupEmail, setLookupEmail] = React.useState("");
   const [memberLoading, setMemberLoading] = React.useState(false);
   const [memberError, setMemberError] = React.useState<string | null>(null);
@@ -2437,116 +2494,213 @@ export const AdminPage: React.FC = () => {
     [safeJson],
   );
 
-  const lookupMember = React.useCallback(async () => {
-    if (!lookupEmail || memberLoading) return;
-    setMemberLoading(true);
-    setMemberError(null);
-    setMemberData(null);
-    try {
-      const session = (await supabase.auth.getSession()).data.session;
-      const token = session?.access_token;
-      const url = `/api/admin/member?q=${encodeURIComponent(lookupEmail)}`;
-      const headers: Record<string, string> = { Accept: "application/json" };
-      if (token) headers["Authorization"] = `Bearer ? ${token}`;
-      try {
-        const adminToken = (globalThis as any)?.__ENV__
-          ?.VITE_ADMIN_STATIC_TOKEN;
-        if (adminToken) headers["X-Admin-Token"] = String(adminToken);
-      } catch {}
-      const resp = await fetch(url, { headers, credentials: "same-origin" });
-      const data = await safeJson(resp);
-      if (!resp.ok) throw new Error(data?.error || `HTTP ? ${resp.status}`);
-      setMemberData({
-        user: data?.user || null,
-        profile: data?.profile || null,
-        ips: Array.isArray(data?.ips) ? data.ips : [],
-        lastOnlineAt: data?.lastOnlineAt ?? null,
-        lastIp: data?.lastIp ?? null,
-        visitsCount:
-          typeof data?.visitsCount === "number" ? data.visitsCount : undefined,
-        uniqueIpsCount:
-          typeof data?.uniqueIpsCount === "number"
-            ? data.uniqueIpsCount
-            : undefined,
-        plantsTotal:
-          typeof data?.plantsTotal === "number" ? data.plantsTotal : undefined,
-        isBannedEmail: !!data?.isBannedEmail,
-        bannedReason: data?.bannedReason ?? null,
-        bannedAt: data?.bannedAt ?? null,
-        bannedIps: Array.isArray(data?.bannedIps) ? data.bannedIps : [],
-        topReferrers: Array.isArray(data?.topReferrers)
-          ? data.topReferrers
-          : [],
-        topCountries: Array.isArray(data?.topCountries)
-          ? data.topCountries
-          : [],
-        topDevices: Array.isArray(data?.topDevices) ? data.topDevices : [],
-        meanRpm5m: typeof data?.meanRpm5m === "number" ? data.meanRpm5m : null,
-        adminNotes: Array.isArray(data?.adminNotes)
-          ? data.adminNotes.map((n: any) => ({
-              id: String(n.id),
-              admin_id: n?.admin_id || null,
-              admin_name: n?.admin_name || null,
-              message: String(n?.message || ""),
-              created_at: n?.created_at || null,
-            }))
-          : [],
-      });
-      // Log lookup success (UI)
-      try {
-        const headers2: Record<string, string> = {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-        };
-        if (token) headers2["Authorization"] = `Bearer ? ${token}`;
-        try {
-          const adminToken = (globalThis as any)?.__ENV__
-            ?.VITE_ADMIN_STATIC_TOKEN;
-          if (adminToken) headers2["X-Admin-Token"] = String(adminToken);
-        } catch {}
-        await fetch("/api/admin/log-action", {
-          method: "POST",
-          headers: headers2,
-          credentials: "same-origin",
-          body: JSON.stringify({
-            action: "admin_lookup",
-            target: lookupEmail,
-            detail: { via: "ui" },
-          }),
-        });
-      } catch {}
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setMemberError(msg || "Lookup failed");
-      // Log failed lookup
+  const loadMemberList = React.useCallback(
+    async (opts?: { reset?: boolean; sort?: MemberListSort }) => {
+      if (memberListLoading) return;
+      const reset = !!opts?.reset;
+      const limit = MEMBER_LIST_PAGE_SIZE;
+      const offset = reset ? 0 : memberListOffset;
+      const sortParam: MemberListSort = opts?.sort ?? memberListSort;
+      setMemberListLoading(true);
+      setMemberListError(null);
       try {
         const session = (await supabase.auth.getSession()).data.session;
         const token = session?.access_token;
-        const headers2: Record<string, string> = {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-        };
-        if (token) headers2["Authorization"] = `Bearer ? ${token}`;
+        const headers: Record<string, string> = { Accept: "application/json" };
+        if (token) headers["Authorization"] = `Bearer ? ${token}`;
         try {
           const adminToken = (globalThis as any)?.__ENV__
             ?.VITE_ADMIN_STATIC_TOKEN;
-          if (adminToken) headers2["X-Admin-Token"] = String(adminToken);
+          if (adminToken) headers["X-Admin-Token"] = String(adminToken);
         } catch {}
-        await fetch("/api/admin/log-action", {
-          method: "POST",
-          headers: headers2,
-          credentials: "same-origin",
-          body: JSON.stringify({
-            action: "admin_lookup_failed",
-            target: lookupEmail,
-            detail: { error: msg },
-          }),
+        const resp = await fetch(
+          `/api/admin/member-list?limit=${limit}&offset=${offset}&sort=${encodeURIComponent(sortParam)}`,
+          { headers, credentials: "same-origin" },
+        );
+        const data = await safeJson(resp);
+        if (!resp.ok) throw new Error(data?.error || `HTTP ? ${resp.status}`);
+        const rawMembers = Array.isArray(data?.members) ? data.members : [];
+        const normalized: ListedMember[] = rawMembers
+          .map((m: any) => {
+            const id = m?.id ? String(m.id) : "";
+            if (!id) return null;
+            const displayName =
+              typeof m?.display_name === "string"
+                ? m.display_name
+                : typeof m?.displayName === "string"
+                  ? m.displayName
+                  : null;
+            const email = typeof m?.email === "string" ? m.email : null;
+            const createdAt =
+              typeof m?.created_at === "string"
+                ? m.created_at
+                : typeof m?.createdAt === "string"
+                  ? m.createdAt
+                  : null;
+            const isAdmin =
+              m?.is_admin === true || m?.isAdmin === true ? true : false;
+            return {
+              id,
+              email,
+              displayName,
+              createdAt,
+              isAdmin,
+              rpm5m:
+                typeof m?.rpm5m === "number"
+                  ? m.rpm5m
+                  : typeof m?.rpm5m === "string" && m.rpm5m.length > 0
+                    ? Number(m.rpm5m)
+                    : null,
+            } as ListedMember;
+          })
+          .filter(
+            (item: ListedMember | null): item is ListedMember =>
+              Boolean(item && item.id),
+          );
+        setMemberList((prev) => (reset ? normalized : [...prev, ...normalized]));
+        const nextOffset =
+          typeof data?.nextOffset === "number"
+            ? data.nextOffset
+            : offset + normalized.length;
+        setMemberListOffset(nextOffset);
+        const hasMore =
+          typeof data?.hasMore === "boolean"
+            ? data.hasMore
+            : normalized.length >= limit;
+        setMemberListHasMore(hasMore);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        setMemberListError(msg || "Failed to load member list");
+      } finally {
+        setMemberListLoading(false);
+        setMemberListInitialized(true);
+      }
+    },
+    [memberListLoading, memberListOffset, memberListSort, safeJson],
+  );
+
+  const lookupMember = React.useCallback(
+    async (override?: string) => {
+      if (memberLoading) return;
+      const raw = typeof override === "string" ? override : lookupEmail;
+      const query = raw.trim();
+      if (!query) return;
+      if (query !== lookupEmail) setLookupEmail(query);
+      setMemberLoading(true);
+      setMemberError(null);
+      setMemberData(null);
+      try {
+        const session = (await supabase.auth.getSession()).data.session;
+        const token = session?.access_token;
+        const url = `/api/admin/member?q=${encodeURIComponent(query)}`;
+        const headers: Record<string, string> = { Accept: "application/json" };
+        if (token) headers["Authorization"] = `Bearer ? ${token}`;
+        try {
+          const adminToken = (globalThis as any)?.__ENV__
+            ?.VITE_ADMIN_STATIC_TOKEN;
+          if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+        } catch {}
+        const resp = await fetch(url, { headers, credentials: "same-origin" });
+        const data = await safeJson(resp);
+        if (!resp.ok) throw new Error(data?.error || `HTTP ? ${resp.status}`);
+        setMemberData({
+          user: data?.user || null,
+          profile: data?.profile || null,
+          ips: Array.isArray(data?.ips) ? data.ips : [],
+          lastOnlineAt: data?.lastOnlineAt ?? null,
+          lastIp: data?.lastIp ?? null,
+          visitsCount:
+            typeof data?.visitsCount === "number"
+              ? data.visitsCount
+              : undefined,
+          uniqueIpsCount:
+            typeof data?.uniqueIpsCount === "number"
+              ? data.uniqueIpsCount
+              : undefined,
+          plantsTotal:
+            typeof data?.plantsTotal === "number"
+              ? data.plantsTotal
+              : undefined,
+          isBannedEmail: !!data?.isBannedEmail,
+          bannedReason: data?.bannedReason ?? null,
+          bannedAt: data?.bannedAt ?? null,
+          bannedIps: Array.isArray(data?.bannedIps) ? data.bannedIps : [],
+          topReferrers: Array.isArray(data?.topReferrers)
+            ? data.topReferrers
+            : [],
+          topCountries: Array.isArray(data?.topCountries)
+            ? data.topCountries
+            : [],
+          topDevices: Array.isArray(data?.topDevices) ? data.topDevices : [],
+          meanRpm5m:
+            typeof data?.meanRpm5m === "number" ? data.meanRpm5m : null,
+          adminNotes: Array.isArray(data?.adminNotes)
+            ? data.adminNotes.map((n: any) => ({
+                id: String(n.id),
+                admin_id: n?.admin_id || null,
+                admin_name: n?.admin_name || null,
+                message: String(n?.message || ""),
+                created_at: n?.created_at || null,
+              }))
+            : [],
         });
-      } catch {}
-    } finally {
-      setMemberLoading(false);
-    }
-  }, [lookupEmail, memberLoading, safeJson]);
+        // Log lookup success (UI)
+        try {
+          const headers2: Record<string, string> = {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          };
+          if (token) headers2["Authorization"] = `Bearer ? ${token}`;
+          try {
+            const adminToken = (globalThis as any)?.__ENV__
+              ?.VITE_ADMIN_STATIC_TOKEN;
+            if (adminToken) headers2["X-Admin-Token"] = String(adminToken);
+          } catch {}
+          await fetch("/api/admin/log-action", {
+            method: "POST",
+            headers: headers2,
+            credentials: "same-origin",
+            body: JSON.stringify({
+              action: "admin_lookup",
+              target: query,
+              detail: { via: "ui" },
+            }),
+          });
+        } catch {}
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        setMemberError(msg || "Lookup failed");
+        // Log failed lookup
+        try {
+          const session = (await supabase.auth.getSession()).data.session;
+          const token = session?.access_token;
+          const headers2: Record<string, string> = {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          };
+          if (token) headers2["Authorization"] = `Bearer ? ${token}`;
+          try {
+            const adminToken = (globalThis as any)?.__ENV__
+              ?.VITE_ADMIN_STATIC_TOKEN;
+            if (adminToken) headers2["X-Admin-Token"] = String(adminToken);
+          } catch {}
+          await fetch("/api/admin/log-action", {
+            method: "POST",
+            headers: headers2,
+            credentials: "same-origin",
+            body: JSON.stringify({
+              action: "admin_lookup_failed",
+              target: query,
+              detail: { error: msg },
+            }),
+          });
+        } catch {}
+      } finally {
+        setMemberLoading(false);
+      }
+    },
+    [lookupEmail, memberLoading, safeJson],
+  );
 
   const lookupByIp = React.useCallback(
     async (overrideIp?: string) => {
@@ -2666,6 +2820,7 @@ export const AdminPage: React.FC = () => {
       const next = String(ip || "").trim();
       if (!next) return;
       setActiveTab("members");
+      setMembersView("search");
       setIpLookup(next);
       setTimeout(() => {
         try {
@@ -2676,6 +2831,37 @@ export const AdminPage: React.FC = () => {
       }, 0);
     },
     [lookupByIp],
+  );
+
+  const handleMemberCardClick = React.useCallback(
+    (entry: ListedMember) => {
+      const value =
+        entry.displayName?.trim() ||
+        entry.email?.trim() ||
+        "";
+      if (!value) return;
+      setMembersView("search");
+      setTimeout(() => {
+        lookupMember(value);
+      }, 0);
+    },
+    [lookupMember],
+  );
+
+  const handleMemberSortChange = React.useCallback(
+    (nextSort: MemberListSort) => {
+      if (nextSort === memberListSort) return;
+      setMemberListSort(nextSort);
+      setMemberList([]);
+      setMemberListOffset(0);
+      setMemberListHasMore(true);
+      setMemberListError(null);
+      loadMemberList({ reset: true, sort: nextSort });
+    },
+    [
+      memberListSort,
+      loadMemberList,
+    ],
   );
 
   // Auto-load visits series when a member is selected
@@ -2690,6 +2876,19 @@ export const AdminPage: React.FC = () => {
       setMemberVisitsWarning(null);
     }
   }, [memberData?.user?.id, loadMemberVisitsSeries]);
+
+  React.useEffect(() => {
+    if (activeTab !== "members") return;
+    if (membersView !== "list") return;
+    if (memberListInitialized || memberListLoading) return;
+    loadMemberList({ reset: true });
+  }, [
+    activeTab,
+    membersView,
+    memberListInitialized,
+    memberListLoading,
+    loadMemberList,
+  ]);
 
   const performBan = React.useCallback(async () => {
     if (!lookupEmail || banSubmitting) return;
@@ -4700,6 +4899,42 @@ export const AdminPage: React.FC = () => {
                 {/* Members Tab */}
                 {activeTab === "members" && (
                   <div className="space-y-4" ref={membersContainerRef}>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 text-sm font-semibold">
+                        <button
+                          type="button"
+                          className={`px-3 py-1.5 rounded-full transition-colors ${membersView === "search" ? "bg-emerald-600 text-white shadow" : "text-stone-600 dark:text-stone-300 hover:text-black dark:hover:text-white"}`}
+                          onClick={() => setMembersView("search")}
+                        >
+                          Search
+                        </button>
+                        <span className="text-xs opacity-50">|</span>
+                        <button
+                          type="button"
+                          className={`px-3 py-1.5 rounded-full transition-colors ${membersView === "list" ? "bg-emerald-600 text-white shadow" : "text-stone-600 dark:text-stone-300 hover:text-black dark:hover:text-white"}`}
+                          onClick={() => setMembersView("list")}
+                        >
+                          List
+                        </button>
+                      </div>
+                      {membersView === "list" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="rounded-2xl"
+                          onClick={() => loadMemberList({ reset: true })}
+                          disabled={memberListLoading}
+                        >
+                          <RefreshCw
+                            className={`h-4 w-4 mr-2 ${memberListLoading ? "animate-spin" : ""}`}
+                          />
+                          Refresh list
+                        </Button>
+                      )}
+                    </div>
+
+                    {membersView === "search" && (
+                      <>
                     <Card className="rounded-2xl">
                       <CardContent className="p-4 space-y-3">
                         <div className="text-sm font-medium flex items-center gap-2">
@@ -4819,7 +5054,7 @@ export const AdminPage: React.FC = () => {
                           </div>
                           <Button
                             className="rounded-2xl"
-                            onClick={lookupMember}
+                            onClick={() => lookupMember()}
                             disabled={memberLoading || !lookupEmail}
                           >
                             <Search className="h-4 w-4" /> Lookup
@@ -5642,247 +5877,379 @@ export const AdminPage: React.FC = () => {
                       </CardContent>
                     </Card>
 
-                    {/* Ban action moved into member card header via hammer button */}
-                  </div>
-                )}
+                      {/* Ban action moved into member card header via hammer button */}
 
-                {/* IP Search Card */}
-                {activeTab === "members" && (
-                  <Card className="rounded-2xl">
-                    <CardContent className="p-4 space-y-3">
-                      <div className="text-sm font-medium flex items-center gap-2">
-                        <UserSearch className="h-4 w-4" /> Find users by IP
-                        address
-                      </div>
-                      <div className="flex gap-2">
-                        <Input
-                          id="member-ip"
-                          name="member-ip"
-                          autoComplete="off"
-                          aria-label="IP address"
-                          className="rounded-xl"
-                          placeholder="e.g. 203.0.113.42"
-                          value={ipLookup}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                            setIpLookup(e.target.value)
-                          }
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              lookupByIp();
-                            }
-                          }}
-                          ref={memberIpInputRef}
-                        />
-                        <Button
-                          className="rounded-2xl"
-                          onClick={() => lookupByIp()}
-                          disabled={ipLoading || !ipLookup.trim()}
-                        >
-                          <Search className="h-4 w-4" /> Search IP
-                        </Button>
-                      </div>
-                      {ipError && (
-                        <div className="text-sm text-rose-600">{ipError}</div>
-                      )}
-                      {ipLoading && (
-                        <div className="space-y-2" aria-live="polite">
-                          <div className="h-4 bg-neutral-200 rounded w-52 animate-pulse" />
-                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                            {Array.from({ length: 6 }).map((_, i) => (
-                              <div
-                                key={i}
-                                className="h-20 rounded-xl border bg-white animate-pulse"
-                              />
-                            ))}
+                      {/* IP Search Card */}
+                      <Card className="rounded-2xl">
+                        <CardContent className="p-4 space-y-3">
+                          <div className="text-sm font-medium flex items-center gap-2">
+                            <UserSearch className="h-4 w-4" /> Find users by IP
+                            address
                           </div>
-                        </div>
-                      )}
-                      {!ipLoading && !ipError && !ipUsed && (
-                        <div className="text-sm opacity-60">
-                          Search for an IP address to see details.
-                        </div>
-                      )}
-                      {!ipLoading && ipUsed && (
-                        <div className="space-y-2">
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                            <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 text-center bg-white dark:bg-[#252526]">
-                              <div className="text-[11px] opacity-60">IP</div>
-                              <div
-                                className="text-base font-semibold tabular-nums truncate"
-                                title={ipUsed || undefined}
-                              >
-                                {ipUsed || "-"}
-                              </div>
-                            </div>
-                            <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 text-center bg-white dark:bg-[#252526]">
-                              <div className="text-[11px] opacity-60">
-                                Users
-                              </div>
-                              <div className="text-base font-semibold tabular-nums">
-                                {ipUsersCount ?? ipResults.length}
-                              </div>
-                            </div>
-                            <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 text-center bg-white dark:bg-[#252526]">
-                              <div className="text-[11px] opacity-60">
-                                Connections
-                              </div>
-                              <div className="text-base font-semibold tabular-nums">
-                                {ipConnectionsCount ?? "-"}
-                              </div>
-                            </div>
+                          <div className="flex gap-2">
+                            <Input
+                              id="member-ip"
+                              name="member-ip"
+                              autoComplete="off"
+                              aria-label="IP address"
+                              className="rounded-xl"
+                              placeholder="e.g. 203.0.113.42"
+                              value={ipLookup}
+                              onChange={(
+                                e: React.ChangeEvent<HTMLInputElement>,
+                              ) => setIpLookup(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  lookupByIp();
+                                }
+                              }}
+                              ref={memberIpInputRef}
+                            />
+                            <Button
+                              className="rounded-2xl"
+                              onClick={() => lookupByIp()}
+                              disabled={ipLoading || !ipLookup.trim()}
+                            >
+                              <Search className="h-4 w-4" /> Search IP
+                            </Button>
                           </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                            <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 text-center bg-white dark:bg-[#252526]">
-                              <div className="text-[11px] opacity-60">
-                                Mean RPM (5m)
+                          {ipError && (
+                            <div className="text-sm text-rose-600">{ipError}</div>
+                          )}
+                          {ipLoading && (
+                            <div className="space-y-2" aria-live="polite">
+                              <div className="h-4 bg-neutral-200 rounded w-52 animate-pulse" />
+                              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                                {Array.from({ length: 6 }).map((_, i) => (
+                                  <div
+                                    key={i}
+                                    className="h-20 rounded-xl border bg-white animate-pulse"
+                                  />
+                                ))}
                               </div>
-                              <div className="text-base font-semibold tabular-nums">
-                                {typeof ipMeanRpm5m === "number"
-                                  ? ipMeanRpm5m.toFixed(2)
+                            </div>
+                          )}
+                          {!ipLoading && !ipError && !ipUsed && (
+                            <div className="text-sm opacity-60">
+                              Search for an IP address to see details.
+                            </div>
+                          )}
+                          {!ipLoading && ipUsed && (
+                            <div className="space-y-2">
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 text-center bg-white dark:bg-[#252526]">
+                                  <div className="text-[11px] opacity-60">IP</div>
+                                  <div
+                                    className="text-base font-semibold tabular-nums truncate"
+                                    title={ipUsed || undefined}
+                                  >
+                                    {ipUsed || "-"}
+                                  </div>
+                                </div>
+                                <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 text-center bg-white dark:bg-[#252526]">
+                                  <div className="text-[11px] opacity-60">
+                                    Users
+                                  </div>
+                                  <div className="text-base font-semibold tabular-nums">
+                                    {ipUsersCount ?? ipResults.length}
+                                  </div>
+                                </div>
+                                <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 text-center bg-white dark:bg-[#252526]">
+                                  <div className="text-[11px] opacity-60">
+                                    Connections
+                                  </div>
+                                  <div className="text-base font-semibold tabular-nums">
+                                    {ipConnectionsCount ?? "-"}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 text-center bg-white dark:bg-[#252526]">
+                                  <div className="text-[11px] opacity-60">
+                                    Mean RPM (5m)
+                                  </div>
+                                  <div className="text-base font-semibold tabular-nums">
+                                    {typeof ipMeanRpm5m === "number"
+                                      ? ipMeanRpm5m.toFixed(2)
+                                      : "-"}
+                                  </div>
+                                </div>
+                                <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 text-center bg-white dark:bg-[#252526]">
+                                  <div className="text-[11px] opacity-60">
+                                    Country
+                                  </div>
+                                  <div className="text-base font-semibold tabular-nums">
+                                    {ipCountry ? countryCodeToName(ipCountry) : "-"}
+                                  </div>
+                                </div>
+                                <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 bg-white dark:bg-[#252526]">
+                                  <div className="text-[11px] opacity-60 mb-1">
+                                    Top referrers
+                                  </div>
+                                  {ipTopReferrers.length === 0 ? (
+                                    <div className="text-xs opacity-60">-</div>
+                                  ) : (
+                                    <div className="space-y-0.5">
+                                      {ipTopReferrers.slice(0, 1).map((r, idx) => (
+                                        <div
+                                          key={`${r.source}-${idx}`}
+                                          className="flex items-center justify-between text-sm"
+                                        >
+                                          <div className="truncate mr-2">
+                                            {r.source || "direct"}
+                                          </div>
+                                          <div className="tabular-nums">
+                                            {r.visits}
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                                {otherCountriesTooltip &&
+                                  createPortal(
+                                    <div
+                                      className="fixed z-[70] pointer-events-none"
+                                      style={{
+                                        top: otherCountriesTooltip.top,
+                                        left: otherCountriesTooltip.left,
+                                        transform: "translate(-50%, -100%)",
+                                      }}
+                                    >
+                                      <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526] shadow px-3 py-2 max-w-[280px]">
+                                        <div className="text-xs font-medium mb-1">
+                                          Countries in Other
+                                        </div>
+                                        <div className="text-[11px] opacity-80 space-y-0.5 max-h-48 overflow-auto">
+                                          {otherCountriesTooltip.names.map(
+                                            (n, idx) => (
+                                              <div
+                                                key={`${n}-${idx}`}
+                                                className="truncate"
+                                              >
+                                                {n}
+                                              </div>
+                                            ),
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>,
+                                    document.body,
+                                  )}
+                              </div>
+                              <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 bg-white dark:bg-[#252526]">
+                                <div className="text-[11px] opacity-60 mb-1">
+                                  Top devices
+                                </div>
+                                {ipTopDevices.length === 0 ? (
+                                  <div className="text-xs opacity-60">-</div>
+                                ) : (
+                                  <div className="space-y-0.5">
+                                    {ipTopDevices.slice(0, 1).map((d, idx) => (
+                                      <div
+                                        key={`${d.device}-${idx}`}
+                                        className="flex items-center justify-between text-sm"
+                                      >
+                                        <div className="truncate mr-2">
+                                          {d.device}
+                                        </div>
+                                        <div className="tabular-nums">
+                                          {d.visits}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="text-xs opacity-60">
+                                Last seen:{" "}
+                                {ipLastSeenAt
+                                  ? new Date(ipLastSeenAt).toLocaleString()
                                   : "-"}
                               </div>
-                            </div>
-                            <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 text-center bg-white dark:bg-[#252526]">
-                              <div className="text-[11px] opacity-60">
-                                Country
-                              </div>
-                              <div className="text-base font-semibold tabular-nums">
-                                {ipCountry ? countryCodeToName(ipCountry) : "-"}
-                              </div>
-                            </div>
-                            <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 bg-white dark:bg-[#252526]">
-                              <div className="text-[11px] opacity-60 mb-1">
-                                Top referrers
-                              </div>
-                              {ipTopReferrers.length === 0 ? (
-                                <div className="text-xs opacity-60">-</div>
+                              {ipResults.length === 0 ? (
+                                <div className="text-sm opacity-60">
+                                  No users found for this IP.
+                                </div>
                               ) : (
-                                <div className="space-y-0.5">
-                                  {ipTopReferrers.slice(0, 1).map((r, idx) => (
-                                    <div
-                                      key={`${r.source}-${idx}`}
-                                      className="flex items-center justify-between text-sm"
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                                  {ipResults.map((u) => (
+                                    <button
+                                      key={u.id}
+                                      type="button"
+                                      className="text-left rounded-2xl border border-stone-300 dark:border-[#3e3e42] p-3 bg-white dark:bg-[#252526] hover:bg-stone-50 dark:hover:bg-[#2d2d30]"
+                                      onClick={() => {
+                                        const nextVal = (
+                                          u.email ||
+                                          u.display_name ||
+                                          ""
+                                        ).trim();
+                                        if (!nextVal) return;
+                                        lookupMember(nextVal);
+                                      }}
                                     >
-                                      <div className="truncate mr-2">
-                                        {r.source || "direct"}
+                                      <div className="text-sm font-semibold truncate">
+                                        {u.display_name || u.email || "User"}
                                       </div>
-                                      <div className="tabular-nums">
-                                        {r.visits}
+                                      <div className="text-xs opacity-70 truncate">
+                                        {u.email || "-"}
                                       </div>
-                                    </div>
+                                      {u.last_seen_at && (
+                                        <div className="text-[11px] opacity-60 mt-0.5">
+                                          Last seen{" "}
+                                          {new Date(
+                                            u.last_seen_at,
+                                          ).toLocaleString()}
+                                        </div>
+                                      )}
+                                    </button>
                                   ))}
                                 </div>
                               )}
                             </div>
-                            {otherCountriesTooltip &&
-                              createPortal(
-                                <div
-                                  className="fixed z-[70] pointer-events-none"
-                                  style={{
-                                    top: otherCountriesTooltip.top,
-                                    left: otherCountriesTooltip.left,
-                                    transform: "translate(-50%, -100%)",
-                                  }}
-                                >
-                                  <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526] shadow px-3 py-2 max-w-[280px]">
-                                    <div className="text-xs font-medium mb-1">
-                                      Countries in Other
-                                    </div>
-                                    <div className="text-[11px] opacity-80 space-y-0.5 max-h-48 overflow-auto">
-                                      {otherCountriesTooltip.names.map(
-                                        (n, idx) => (
-                                          <div
-                                            key={`${n}-${idx}`}
-                                            className="truncate"
-                                          >
-                                            {n}
-                                          </div>
-                                        ),
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>,
-                                document.body,
-                              )}
-                          </div>
-                          <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 bg-white dark:bg-[#252526]">
-                            <div className="text-[11px] opacity-60 mb-1">
-                              Top devices
+                          )}
+                        </CardContent>
+                      </Card>
+                      </>
+                    )}
+
+                    {membersView === "list" && (
+                      <Card className="rounded-2xl">
+                        <CardContent className="p-4 space-y-4">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div className="flex flex-col gap-1">
+                              <div className="text-sm font-semibold flex items-center gap-2">
+                                <Users className="h-4 w-4" /> Members
+                              </div>
+                              <div className="text-xs opacity-60">
+                                Browse members in batches of 20 and load more as
+                                needed.
+                              </div>
                             </div>
-                            {ipTopDevices.length === 0 ? (
-                              <div className="text-xs opacity-60">-</div>
-                            ) : (
-                              <div className="space-y-0.5">
-                                {ipTopDevices.slice(0, 1).map((d, idx) => (
-                                  <div
-                                    key={`${d.device}-${idx}`}
-                                    className="flex items-center justify-between text-sm"
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-[11px] uppercase tracking-wide opacity-60">
+                                Sort
+                              </span>
+                              <div className="flex flex-wrap gap-1.5">
+                                {memberListSortOptions.map((option) => (
+                                  <Button
+                                    key={option.value}
+                                    size="sm"
+                                    variant={
+                                      memberListSort === option.value
+                                        ? "default"
+                                        : "outline"
+                                    }
+                                    className="rounded-2xl text-xs"
+                                    onClick={() =>
+                                      handleMemberSortChange(option.value)
+                                    }
                                   >
-                                    <div className="truncate mr-2">
-                                      {d.device}
-                                    </div>
-                                    <div className="tabular-nums">
-                                      {d.visits}
-                                    </div>
-                                  </div>
+                                    {option.label}
+                                  </Button>
                                 ))}
                               </div>
-                            )}
-                          </div>
-                          <div className="text-xs opacity-60">
-                            Last seen:{" "}
-                            {ipLastSeenAt
-                              ? new Date(ipLastSeenAt).toLocaleString()
-                              : "-"}
-                          </div>
-                          {ipResults.length === 0 ? (
-                            <div className="text-sm opacity-60">
-                              No users found for this IP.
                             </div>
-                          ) : (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                              {ipResults.map((u) => (
+                          </div>
+                          {memberListError && (
+                            <div className="flex flex-wrap items-center gap-3 text-sm text-rose-600">
+                              {memberListError}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="rounded-2xl"
+                                onClick={() =>
+                                  loadMemberList({
+                                    reset: memberList.length === 0,
+                                  })
+                                }
+                                disabled={memberListLoading}
+                              >
+                                Retry
+                              </Button>
+                            </div>
+                          )}
+                          {memberList.length === 0 && memberListLoading && (
+                            <div className="space-y-2">
+                              {Array.from({ length: 3 }).map((_, idx) => (
+                                <div
+                                  key={`member-list-skeleton-${idx}`}
+                                  className="h-20 rounded-2xl border border-dashed animate-pulse"
+                                />
+                              ))}
+                            </div>
+                          )}
+                          {memberList.length === 0 &&
+                            !memberListLoading &&
+                            memberListInitialized &&
+                            !memberListError && (
+                              <div className="text-sm opacity-60">
+                                No members to show yet.
+                              </div>
+                            )}
+                          {memberList.length > 0 && (
+                            <div className="grid gap-2">
+                              {memberList.map((member) => (
                                 <button
-                                  key={u.id}
+                                  key={member.id}
                                   type="button"
-                                  className="text-left rounded-2xl border border-stone-300 dark:border-[#3e3e42] p-3 bg-white dark:bg-[#252526] hover:bg-stone-50 dark:hover:bg-[#2d2d30]"
-                                  onClick={() => {
-                                    const nextVal = (
-                                      u.email ||
-                                      u.display_name ||
-                                      ""
-                                    ).trim();
-                                    if (!nextVal) return;
-                                    setLookupEmail(nextVal);
-                                    setTimeout(() => {
-                                      lookupMember();
-                                    }, 0);
-                                  }}
+                                  className="text-left rounded-2xl border border-stone-200 dark:border-[#3e3e42] p-4 bg-white dark:bg-[#252526] hover:bg-stone-50 dark:hover:bg-[#2d2d30]"
+                                  onClick={() => handleMemberCardClick(member)}
                                 >
-                                  <div className="text-sm font-semibold truncate">
-                                    {u.display_name || u.email || "User"}
-                                  </div>
-                                  <div className="text-xs opacity-70 truncate">
-                                    {u.email || "-"}
-                                  </div>
-                                  {u.last_seen_at && (
-                                    <div className="text-[11px] opacity-60 mt-0.5">
-                                      Last seen{" "}
-                                      {new Date(
-                                        u.last_seen_at,
-                                      ).toLocaleString()}
+                                  <div className="flex items-center justify-between gap-3">
+                                    <div>
+                                      <div className="font-semibold truncate">
+                                        {member.displayName ||
+                                          member.email ||
+                                          `User ${member.id.slice(0, 8)}`}
+                                      </div>
+                                      <div className="text-xs opacity-70 truncate">
+                                        {member.email || "No email"}
+                                      </div>
                                     </div>
-                                  )}
+                                    <Badge
+                                      variant={
+                                        member.isAdmin ? "default" : "outline"
+                                      }
+                                      className={`rounded-full px-3 py-0.5 ${member.isAdmin ? "bg-emerald-600 text-white" : ""}`}
+                                    >
+                                      {member.isAdmin ? "Admin" : "Member"}
+                                    </Badge>
+                                  </div>
+                                    <div className="text-xs opacity-60 mt-1 flex flex-wrap items-center gap-2">
+                                      <span>
+                                        Joined {formatMemberJoinDate(member.createdAt)}
+                                      </span>
+                                      <span className="hidden sm:inline">•</span>
+                                      <span className="tabular-nums">
+                                        RPM (5m): {formatRpmValue(member.rpm5m)}
+                                      </span>
+                                    </div>
                                 </button>
                               ))}
                             </div>
                           )}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
+                          {memberList.length > 0 && (
+                            <Button
+                              variant="secondary"
+                              className="w-full rounded-2xl"
+                              onClick={() => loadMemberList()}
+                              disabled={memberListLoading || !memberListHasMore}
+                            >
+                              {memberListLoading
+                                ? "Loading..."
+                                : memberListHasMore
+                                  ? "Load 20 more"
+                                  : "No more members"}
+                            </Button>
+                          )}
+                        </CardContent>
+                      </Card>
+                    )}
+                  </div>
                 )}
+
                 </CardContent>
               </Card>
             </section>
