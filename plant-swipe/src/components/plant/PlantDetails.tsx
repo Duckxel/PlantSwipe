@@ -1492,7 +1492,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
             </div>
           </div>
         </div>
-        <div className="space-y-4">
+        <div className="space-y-6">
           <div className="rounded-2xl overflow-hidden shadow relative">
             <div
               className="h-56 bg-cover bg-center select-none"
@@ -1539,7 +1539,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
             </div>
           )}
         </div>
-        <div className="flex flex-wrap justify-center gap-2">
+        <div className="flex flex-wrap justify-center gap-3 mt-4">
           <Button variant="secondary" className="rounded-2xl px-6" onClick={handleExpand}>
             {t('plantInfo.viewFullDetails')}
           </Button>
