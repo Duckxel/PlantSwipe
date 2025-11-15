@@ -144,7 +144,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
   }, [current, t])
 
   return (
-    <div className="max-w-5xl mx-auto mt-6 px-4 md:px-0 pb-24 md:pb-16">
+    <div className="max-w-5xl mx-auto mt-6 px-2 sm:px-4 md:px-0 pb-24 md:pb-16">
       <motion.section
         initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
@@ -153,7 +153,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
       >
         <div className="absolute inset-x-12 -top-24 h-56 rounded-full bg-emerald-200/40 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
         <div className="absolute inset-x-0 bottom-[-40%] h-72 rounded-full bg-emerald-100/50 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
-        <div className="relative p-6 md:p-12 space-y-8">
+        <div className="relative p-4 sm:p-6 md:p-12 space-y-8">
           <div className="flex flex-wrap items-center justify-end gap-4">
             <Badge variant="outline" className="rounded-2xl border-dashed">
               <Wand2 className="h-4 w-4 mr-1" />
@@ -161,7 +161,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
             </Badge>
           </div>
 
-          <div className="relative mx-auto w-full max-w-3xl min-h-[520px] md:min-h-0" style={isDesktop ? { height: desktopCardHeight } : undefined}>
+          <div className="relative mx-auto w-full max-w-none md:max-w-3xl min-h-[520px] md:min-h-0" style={isDesktop ? { height: desktopCardHeight } : undefined}>
             <AnimatePresence initial={false} mode="wait">
               {current ? (
                 <motion.div
