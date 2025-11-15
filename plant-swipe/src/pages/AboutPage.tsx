@@ -16,20 +16,6 @@ type MemberCard = {
   placeholder: string
   placeholderCta: string
 }
-type CommunityContent = {
-  badge: string
-  title: string
-  description: string
-  helper: string
-  button: string
-}
-type FeedbackContent = {
-  title: string
-  subtitle: string
-  list: string[]
-  lauCredit: string
-  button: string
-}
 
 export default function AboutPage() {
   const { t } = useTranslation("About")
@@ -40,9 +26,6 @@ export default function AboutPage() {
     cards?: Record<string, PillarCard>
   }
   const pillarCards = Object.values(pillars?.cards ?? {})
-  const community = t("community", { returnObjects: true }) as CommunityContent
-  const feedback = t("feedback", { returnObjects: true }) as FeedbackContent
-  const feedbackList = (feedback?.list ?? []) as string[]
   const meetMembers = (t("meet.members", { returnObjects: true }) as Record<string, MemberCard>) ?? {}
   const meetOrder =
     (t("meet.order", { returnObjects: true }) as string[]) ?? Object.keys(meetMembers)
@@ -177,44 +160,6 @@ export default function AboutPage() {
                 </Link>
               </Button>
             </div>
-          </CardContent>
-        </Card>
-      </section>
-
-      <section className="grid gap-4 md:grid-cols-2">
-        <Card className="rounded-[28px] border border-stone-200 dark:border-[#3e3e42]">
-          <CardContent className="space-y-4 p-6 md:p-8">
-            <Badge variant="secondary" className="w-fit rounded-2xl px-3 py-1">
-              {community?.badge}
-            </Badge>
-            <h2 className="text-xl font-semibold">{community?.title}</h2>
-            <p className="text-sm text-stone-600 dark:text-stone-300">{community?.description}</p>
-            <div className="rounded-2xl border border-dashed border-emerald-200 dark:border-emerald-900/40 bg-emerald-50/50 dark:bg-emerald-900/10 px-4 py-3 text-sm text-emerald-900 dark:text-emerald-200">
-              {community?.helper}
-            </div>
-            <Button asChild className="rounded-2xl">
-              <Link to="/contact">{community?.button}</Link>
-            </Button>
-          </CardContent>
-        </Card>
-        <Card className="rounded-[28px] border border-stone-200 dark:border-[#3e3e42]">
-          <CardContent className="space-y-4 p-6 md:p-8">
-            <div className="space-y-1">
-              <h2 className="text-xl font-semibold">{feedback?.title}</h2>
-              <p className="text-sm text-stone-600 dark:text-stone-300">{feedback?.subtitle}</p>
-            </div>
-            <ul className="space-y-2">
-              {feedbackList.map((item, index) => (
-                <li key={`${item}-${index}`} className="flex items-start gap-2 text-sm text-stone-700 dark:text-stone-200">
-                  <span className="text-emerald-600 dark:text-emerald-400 mt-0.5">•</span>
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
-            <p className="text-xs text-stone-500 dark:text-stone-400 italic">{feedback?.lauCredit}</p>
-            <Button asChild variant="outline" className="rounded-2xl">
-              <Link to="/contact">{feedback?.button}</Link>
-            </Button>
           </CardContent>
         </Card>
       </section>
