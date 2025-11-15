@@ -2,10 +2,31 @@ import React from 'react'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 
 const AUTO_HIDE_MS = 8000
+const READY_ACK_KEY = 'plantswipe.offlineReadyAck'
+
+const readReadyAck = () => {
+  if (typeof window === 'undefined') return false
+  try {
+    return window.localStorage.getItem(READY_ACK_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+const persistReadyAck = () => {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(READY_ACK_KEY, '1')
+  } catch {
+    // ignore
+  }
+}
 
 export function ServiceWorkerToast() {
   const [visible, setVisible] = React.useState(false)
   const [mode, setMode] = React.useState<'ready' | 'update'>('ready')
+  const [readyAcknowledged, setReadyAcknowledged] = React.useState(readReadyAck)
+  const [refreshDismissed, setRefreshDismissed] = React.useState(false)
   const autoHideTimer = React.useRef<number | null>(null)
 
   const { offlineReady, needRefresh, updateServiceWorker } = useRegisterSW({
@@ -18,16 +39,19 @@ export function ServiceWorkerToast() {
   })
 
   React.useEffect(() => {
-    if (offlineReady) {
+    if (offlineReady && !readyAcknowledged) {
       setMode('ready')
       setVisible(true)
     }
-  }, [offlineReady])
+  }, [offlineReady, readyAcknowledged])
 
   React.useEffect(() => {
     if (needRefresh) {
+      setRefreshDismissed(false)
       setMode('update')
       setVisible(true)
+    } else {
+      setRefreshDismissed(false)
     }
   }, [needRefresh])
 
@@ -36,16 +60,24 @@ export function ServiceWorkerToast() {
     window.clearTimeout(autoHideTimer.current ?? undefined)
     autoHideTimer.current = window.setTimeout(() => {
       setVisible(false)
+      setReadyAcknowledged(true)
+      persistReadyAck()
     }, AUTO_HIDE_MS)
     return () => window.clearTimeout(autoHideTimer.current ?? undefined)
   }, [visible, mode])
 
   const dismiss = () => {
     window.clearTimeout(autoHideTimer.current ?? undefined)
+    if (mode === 'ready') {
+      setReadyAcknowledged(true)
+      persistReadyAck()
+    } else {
+      setRefreshDismissed(true)
+    }
     setVisible(false)
   }
 
-  if (!visible) return null
+  if (!visible || (mode === 'update' && refreshDismissed)) return null
 
   const title =
     mode === 'update'
