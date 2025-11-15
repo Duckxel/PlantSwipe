@@ -20,6 +20,14 @@ function AppShell() {
     }
   }, [location.pathname])
   
+  // Scroll to top on route changes
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: 'smooth' })
+    })
+  }, [location.pathname, location.search, location.hash])
+  
   // Handle initial redirect to preferred language
   React.useEffect(() => {
     // Only redirect if we're at root path and language is not default
