@@ -8,6 +8,7 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  --window-controls-overlay-height: 0px;
 }
 
 a {
@@ -50,6 +51,20 @@ button:hover {
 button:focus,
 button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
+}
+
+.has-window-controls-overlay {
+  padding-top: var(--window-controls-overlay-height, 0px);
+}
+
+.desktop-drag-region {
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.desktop-drag-region :is(button, a, input, textarea, select, [role="button"], [role="menu"], [role="menuitem"], [role="option"]) {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 /* Remove Vite default color overrides; theme colors are set via Tailwind variables */

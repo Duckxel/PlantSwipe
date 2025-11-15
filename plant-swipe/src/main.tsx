@@ -4,6 +4,24 @@ import './lib/i18n' // Initialize i18n before App
 import App from './App.tsx'
 import { initAccentFromStorage } from '@/lib/accent'
 
+const initWindowControlsOverlay = () => {
+  if (typeof navigator === 'undefined') return
+  const overlay = (navigator as any).windowControlsOverlay
+  if (!overlay || typeof overlay.getTitlebarAreaRect !== 'function') return
+
+  const applyGeometry = () => {
+    const rect = overlay.getTitlebarAreaRect?.()
+    const height = rect?.height ?? 0
+    document.documentElement.style.setProperty('--window-controls-overlay-height', `${height}px`)
+    if (document.body) {
+      document.body.classList.toggle('has-window-controls-overlay', overlay.visible && height > 0)
+    }
+  }
+
+  overlay.addEventListener?.('geometrychange', applyGeometry)
+  applyGeometry()
+}
+
 // Apply saved accent before rendering to avoid flash
 try { initAccentFromStorage() } catch {}
 
@@ -20,6 +38,8 @@ try {
     document.documentElement.classList.remove('dark')
   }
 } catch {}
+
+try { initWindowControlsOverlay() } catch {}
 
 createRoot(document.getElementById('root')!).render(
   <App />,

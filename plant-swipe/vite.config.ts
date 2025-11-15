@@ -32,7 +32,7 @@ export default defineConfig({
       base: appBase,
       registerType: 'autoUpdate',
       injectRegister: 'auto',
-      includeAssets: [
+        includeAssets: [
         'env-loader.js',
         'env.js',
         'icons/plant-swipe-icon.svg',
@@ -43,15 +43,16 @@ export default defineConfig({
         'locales/fr/common.json',
         'PLANT-INFO-SCHEMA.json',
       ],
-      manifest: {
-        id: 'plantswipe',
-        name: 'PlantSwipe',
-        short_name: 'PlantSwipe',
-        description: 'Discover, swipe and manage the perfect plants for every garden.',
+        manifest: {
+          id: 'aphylia',
+          name: 'Aphylia',
+          short_name: 'Aphylia',
+          description: 'Discover, swipe and manage the perfect plants for every garden.',
         lang: 'en',
         theme_color: '#052e16',
         background_color: '#03120c',
-        display: 'standalone',
+          display: 'standalone',
+          display_override: ['window-controls-overlay', 'standalone'],
         scope,
         start_url: scope,
         orientation: 'portrait-primary',
