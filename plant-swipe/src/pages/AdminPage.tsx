@@ -1734,59 +1734,102 @@ export const AdminPage: React.FC = () => {
       } else if (currentBranch) {
         appendConsole(`[pull] Staying on branch: ? ${currentBranch}`);
       }
-      setReloadReady(false);
-      const session = (await supabase.auth.getSession()).data.session;
-      const token = session?.access_token;
-      const headers: Record<string, string> = {};
-      if (token) headers["Authorization"] = `Bearer ? ${token}`;
-      try {
-        const adminToken = (globalThis as any)?.__ENV__
-          ?.VITE_ADMIN_STATIC_TOKEN;
-        if (adminToken) headers["X-Admin-Token"] = String(adminToken);
-      } catch {}
+        setReloadReady(false);
+        const baselineUpdateTime = lastUpdateTime || null;
+        const session = (await supabase.auth.getSession()).data.session;
+        const token = session?.access_token;
+        let adminToken: string | null = null;
+        try {
+          adminToken =
+            ((globalThis as any)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN as
+              | string
+              | undefined
+              | null) || null;
+        } catch {
+          adminToken = null;
+        }
+        const authHeaders: Record<string, string> = {};
+        if (token) authHeaders["Authorization"] = `Bearer ? ${token}`;
+        if (adminToken) authHeaders["X-Admin-Token"] = String(adminToken);
+        const sseHeaders = { ...authHeaders };
+        const nodeJsonHeaders = { ...authHeaders, Accept: "application/json" };
+        const adminSseHeaders: Record<string, string> = {};
+        if (adminToken) adminSseHeaders["X-Admin-Token"] = String(adminToken);
+        const adminJsonHeaders = {
+          ...adminSseHeaders,
+          Accept: "application/json",
+        };
+        const adminJsonPostHeaders = {
+          ...adminJsonHeaders,
+          "Content-Type": "application/json",
+        };
+
+        const fetchLastUpdateTimestamp = async (): Promise<string | null> => {
+          try {
+            const respNode = await fetchWithRetry("/api/admin/branches", {
+              headers: nodeJsonHeaders,
+              credentials: "same-origin",
+            }).catch(() => null);
+            if (respNode && respNode.ok) {
+              const data = await safeJson(respNode);
+              if (data?.lastUpdateTime) return String(data.lastUpdateTime);
+            }
+          } catch {}
+          try {
+            const respAdmin = await fetchWithRetry("/admin/branches", {
+              headers: adminJsonHeaders,
+              credentials: "same-origin",
+            }).catch(() => null);
+            if (respAdmin && respAdmin.ok) {
+              const data = await safeJson(respAdmin);
+              if (data?.lastUpdateTime) return String(data.lastUpdateTime);
+            }
+          } catch {}
+          return null;
+        };
+
+        const waitForBackgroundCompletion = async (): Promise<boolean> => {
+          const timeoutMs = 4 * 60 * 1000;
+          const pollMs = 4000;
+          const started = Date.now();
+          while (Date.now() - started < timeoutMs) {
+            const ts = await fetchLastUpdateTimestamp();
+            if (ts && ts !== baselineUpdateTime) {
+              setLastUpdateTime(ts);
+              return true;
+            }
+            await new Promise((resolve) => setTimeout(resolve, pollMs));
+          }
+          return false;
+        };
       const branchParam =
         selectedBranch && selectedBranch !== currentBranch
           ? `?branch=${encodeURIComponent(selectedBranch)}`
           : "";
       let resp: Response | null = null;
       // Try Node server SSE first
-      try {
-        resp = await fetch(`/api/admin/pull-code/stream${branchParam}`, {
-          method: "GET",
-          headers,
-          credentials: "same-origin",
-        });
-      } catch {}
+        try {
+          resp = await fetch(`/api/admin/pull-code/stream${branchParam}`, {
+            method: "GET",
+            headers: sseHeaders,
+            credentials: "same-origin",
+          });
+        } catch {}
       // Fallback to Admin API SSE if Node is down or forbidden
       if (!resp || !resp.ok || !resp.body) {
-        const adminHeaders: Record<string, string> = {};
-        try {
-          const adminToken = (globalThis as any)?.__ENV__
-            ?.VITE_ADMIN_STATIC_TOKEN;
-          if (adminToken) adminHeaders["X-Admin-Token"] = String(adminToken);
-        } catch {}
         try {
           resp = await fetch(`/admin/pull-code/stream${branchParam}`, {
             method: "GET",
-            headers: adminHeaders,
+              headers: adminSseHeaders,
             credentials: "same-origin",
           });
         } catch {}
       }
       if (!resp || !resp.ok || !resp.body) {
         // Last resort: fire-and-forget refresh via Admin API without stream
-        const adminHeadersBg: Record<string, string> = {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        };
-        try {
-          const adminToken = (globalThis as any)?.__ENV__
-            ?.VITE_ADMIN_STATIC_TOKEN;
-          if (adminToken) adminHeadersBg["X-Admin-Token"] = String(adminToken);
-        } catch {}
         const bg = await fetch(`/admin/pull-code${branchParam}`, {
           method: "POST",
-          headers: adminHeadersBg,
+            headers: adminJsonPostHeaders,
           credentials: "same-origin",
           body: "{}",
         });
@@ -1836,40 +1879,49 @@ export const AdminPage: React.FC = () => {
             }
           }
         }
-        const success = sawDoneEvent && buildOk;
-        if (!success) {
-          if (!sawDoneEvent)
+          let success = sawDoneEvent && buildOk;
+          if (!success) {
+            if (sawDoneEvent && !buildOk) {
+              appendConsole(
+                "[pull] Build or validation failed. Website remains on the previous version; not restarting services.",
+              );
+              return;
+            }
             appendConsole(
-              "[pull] Stream finished without a terminal result; not restarting automatically.",
+              "[pull] Stream finished without a terminal result; waiting for background completion…",
             );
-          if (sawDoneEvent && !buildOk)
+            const backgroundOk = await waitForBackgroundCompletion();
+            if (!backgroundOk) {
+              appendConsole(
+                "[pull] Could not confirm background build completion. Please retry once logs are available.",
+              );
+              return;
+            }
             appendConsole(
-              "[pull] Build or validation failed. Website remains on the previous version; not restarting services.",
+              "[pull] Background build finished. Proceeding to restart services.",
             );
-          return;
-        }
+            success = true;
+          }
       }
 
       // Show a non-blocking orange notice just before restarts
       setPreRestartNotice(true);
 
       // Ensure both Admin API and Node API are restarted after successful build
-      try {
-        const adminToken = (globalThis as any)?.__ENV__
-          ?.VITE_ADMIN_STATIC_TOKEN;
-        if (adminToken) {
-          await fetch("/admin/restart-app", {
-            method: "POST",
-            headers: {
-              "X-Admin-Token": String(adminToken),
-              "Content-Type": "application/json",
-              Accept: "application/json",
-            },
-            credentials: "same-origin",
-            body: JSON.stringify({ service: "admin-api" }),
-          }).catch(() => {});
-        }
-      } catch {}
+        try {
+          if (adminToken) {
+            await fetch("/admin/restart-app", {
+              method: "POST",
+              headers: {
+                "X-Admin-Token": String(adminToken),
+                "Content-Type": "application/json",
+                Accept: "application/json",
+              },
+              credentials: "same-origin",
+              body: JSON.stringify({ service: "admin-api" }),
+            }).catch(() => {});
+          }
+        } catch {}
       // Then restart the Node service via our API (includes health poll)
       try {
         await restartServer();

@@ -2029,6 +2029,32 @@ app.options('/api/admin/restart-server', (_req, res) => {
   res.status(204).end()
 })
 
+function scheduleRestartAllServices(trigger = 'manual') {
+  const serviceNode = process.env.NODE_SYSTEMD_SERVICE || process.env.SELF_SYSTEMD_SERVICE || 'plant-swipe-node'
+  const serviceAdmin = process.env.ADMIN_SYSTEMD_SERVICE || 'admin-api'
+  const serviceNginx = process.env.NGINX_SYSTEMD_SERVICE || 'nginx'
+  const label = trigger || 'manual'
+  setTimeout(() => {
+    console.log(`[restart] Scheduling service restart (trigger=${label})`)
+    ;(async () => {
+      try { await exec('sudo -n nginx -t', { timeout: 15000 }) } catch {}
+      try { await exec(`sudo -n systemctl reload ${serviceNginx}`, { timeout: 20000 }) } catch {}
+      try {
+        const admin = spawnChild('sudo', ['-n', 'systemctl', 'restart', serviceAdmin], { detached: true, stdio: 'ignore' })
+        try { admin.unref() } catch {}
+      } catch {}
+      try {
+        const node = spawnChild('sudo', ['-n', 'systemctl', 'restart', serviceNode], { detached: true, stdio: 'ignore' })
+        try { node.unref() } catch {}
+      } catch {}
+    })()
+      .catch(() => {})
+      .finally(() => {
+        try { process.exit(0) } catch {}
+      })
+  }, 150)
+}
+
 // Admin: reload nginx and restart admin + node services in sequence, then exit self
 app.post('/api/admin/restart-all', async (req, res) => {
   try {
@@ -2071,22 +2097,7 @@ app.post('/api/admin/restart-all', async (req, res) => {
     } catch {}
     res.json({ ok: true, message: 'Reloading nginx and restarting services' })
 
-    setTimeout(async () => {
-      const serviceNode = process.env.NODE_SYSTEMD_SERVICE || process.env.SELF_SYSTEMD_SERVICE || 'plant-swipe-node'
-      const serviceAdmin = process.env.ADMIN_SYSTEMD_SERVICE || 'admin-api'
-      const serviceNginx = process.env.NGINX_SYSTEMD_SERVICE || 'nginx'
-      try { await exec('sudo -n nginx -t', { timeout: 15000 }) } catch {}
-      try { await exec(`sudo -n systemctl reload ${serviceNginx}`, { timeout: 20000 }) } catch {}
-      try {
-        const a = spawnChild('sudo', ['-n', 'systemctl', 'restart', serviceAdmin], { detached: true, stdio: 'ignore' })
-        try { a.unref() } catch {}
-      } catch {}
-      try {
-        const n = spawnChild('sudo', ['-n', 'systemctl', 'restart', serviceNode], { detached: true, stdio: 'ignore' })
-        try { n.unref() } catch {}
-      } catch {}
-      try { process.exit(0) } catch {}
-    }, 150)
+      scheduleRestartAllServices('api_endpoint')
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to restart all services' })
   }
@@ -4573,36 +4584,55 @@ app.get('/api/admin/pull-code/stream', async (req, res) => {
       childEnv.PLANTSWIPE_TARGET_BRANCH = branch
       send('log', `[pull] Target branch requested: ${branch}`)
     }
-    const child = spawnChild(scriptPath, [], {
-      cwd: repoRoot,
-      env: childEnv,
-      shell: false,
-    })
+      const child = spawnChild(scriptPath, [], {
+        cwd: repoRoot,
+        env: childEnv,
+        shell: false,
+      })
 
-    // Stream stdout/stderr
-    child.stdout?.on('data', (buf) => {
-      const text = buf.toString()
-      send('log', text)
-    })
-    child.stderr?.on('data', (buf) => {
-      const text = buf.toString()
-      send('log', text)
-    })
-    child.on('error', (err) => {
-      send('error', { error: err?.message || 'spawn failed' })
-    })
-    child.on('close', (code) => {
-      if (code === 0) {
-        send('done', { ok: true, code })
-      } else {
-        send('done', { ok: false, code })
-      }
-      try { res.end() } catch {}
-    })
+      // Heartbeat to keep the connection alive behind proxies
+      const heartbeatId = setInterval(() => { try { res.write(': ping\n\n') } catch {} }, 15000)
+      let clientDisconnected = false
+      let streamClosedGracefully = false
+      let autoRestartScheduled = false
 
-    // Heartbeat to keep the connection alive behind proxies
-    const id = setInterval(() => { try { res.write(': ping\n\n') } catch {} }, 15000)
-    req.on('close', () => { try { clearInterval(id) } catch {}; try { child.kill('SIGTERM') } catch {} })
+      // Stream stdout/stderr
+      child.stdout?.on('data', (buf) => {
+        const text = buf.toString()
+        send('log', text)
+      })
+      child.stderr?.on('data', (buf) => {
+        const text = buf.toString()
+        send('log', text)
+      })
+      child.on('error', (err) => {
+        send('error', { error: err?.message || 'spawn failed' })
+      })
+      child.on('close', (code) => {
+        const ok = code === 0
+        if (!streamClosedGracefully) {
+          if (ok) {
+            send('done', { ok: true, code })
+          } else {
+            send('done', { ok: false, code })
+          }
+        }
+        streamClosedGracefully = true
+        try { clearInterval(heartbeatId) } catch {}
+        try { res.end() } catch {}
+        if (ok && clientDisconnected && !autoRestartScheduled) {
+          autoRestartScheduled = true
+          console.log('[pull-code] Build finished after client disconnect; scheduling service restart.')
+          scheduleRestartAllServices('pull_code_stream_auto')
+        }
+      })
+
+      req.on('close', () => {
+        if (streamClosedGracefully) return
+        clientDisconnected = true
+        try { clearInterval(heartbeatId) } catch {}
+        console.warn('[pull-code] SSE client disconnected early; continuing refresh in background.')
+      })
   } catch (e) {
     try { res.status(500).json({ error: e?.message || 'stream failed' }) } catch {}
   }
