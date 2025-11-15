@@ -37,6 +37,7 @@
   },
   "contactUs": {
     "title": "Nous contacter",
+      "heroHeading": "Nous serions ravis d'échanger avec vous",
     "description": "Nous sommes là pour vous aider ! Contactez notre équipe de support.",
     "supportEmail": "E-mail de support",
     "supportEmailDescription": "Envoyez-nous un e-mail et nous vous répondrons dans les plus brefs délais.",
