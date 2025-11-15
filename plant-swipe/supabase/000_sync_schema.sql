@@ -2052,6 +2052,28 @@ as $$
   limit greatest(1, coalesce(_limit, 5));
 $$;
 
+-- Recent members listing (ordered by creation time desc) for admin UI
+create or replace function public.get_recent_members(_limit int default 20, _offset int default 0)
+returns table(id uuid, email text, display_name text, created_at timestamptz, is_admin boolean)
+language sql
+security definer
+set search_path = public
+as $$
+  select
+    u.id,
+    u.email,
+    p.display_name,
+    u.created_at,
+    coalesce(p.is_admin, false) as is_admin
+  from auth.users u
+  left join public.profiles p on p.id = u.id
+  order by u.created_at desc
+  limit greatest(1, coalesce(_limit, 20))
+  offset greatest(0, coalesce(_offset, 0));
+$$;
+
+grant execute on function public.get_recent_members(int, int) to anon, authenticated;
+
 -- Count helpers for Admin API fallbacks via Supabase REST RPC
 create or replace function public.count_profiles_total()
 returns integer
