@@ -108,6 +108,18 @@ async function getTopLevelIfRepo(dir) {
 
 const exec = promisify(execCb)
 
+function parseEmailTargets(raw, fallback) {
+  const source = (typeof raw === 'string' && raw.trim().length > 0) ? raw : (fallback || '')
+  if (!source) return []
+  return source
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)
+}
+
+const DEFAULT_SUPPORT_EMAIL = 'support@aphylia.app'
+const DEFAULT_BUSINESS_EMAIL = 'contact@aphylia.app'
+
 // Utility: wrap a promise with a timeout that rejects when exceeded
 function withTimeout(promise, ms, label = 'TIMEOUT') {
   return new Promise((resolve, reject) => {
@@ -140,9 +152,19 @@ if (openaiApiKey) {
   console.warn('[server] OPENAI_KEY not configured — AI plant fill endpoint disabled')
 }
 
-const supportEmailTargetsRaw = process.env.SUPPORT_EMAIL_TO || process.env.SUPPORT_EMAIL || 'support@aphylia.app'
-const supportEmailTargets = supportEmailTargetsRaw.split(',').map(s => s.trim()).filter(Boolean)
-const supportEmailFrom = process.env.SUPPORT_EMAIL_FROM || process.env.RESEND_FROM || (supportEmailTargets[0] ? `Plant Swipe <${supportEmailTargets[0]}>` : 'Plant Swipe <support@aphylia.app>')
+const supportEmailTargets = parseEmailTargets(process.env.SUPPORT_EMAIL_TO || process.env.SUPPORT_EMAIL, DEFAULT_SUPPORT_EMAIL)
+const supportEmailFrom =
+  process.env.SUPPORT_EMAIL_FROM
+  || process.env.RESEND_FROM
+  || (supportEmailTargets[0] ? `Plant Swipe <${supportEmailTargets[0]}>` : `Plant Swipe <${DEFAULT_SUPPORT_EMAIL}>`)
+const businessEmailTargets = parseEmailTargets(
+  process.env.BUSINESS_EMAIL_TO || process.env.BUSINESS_EMAIL || process.env.CONTACT_EMAIL_TO,
+  DEFAULT_BUSINESS_EMAIL,
+)
+const businessEmailFrom =
+  process.env.BUSINESS_EMAIL_FROM
+  || process.env.RESEND_BUSINESS_FROM
+  || (businessEmailTargets[0] ? `Plant Swipe Partnerships <${businessEmailTargets[0]}>` : supportEmailFrom)
 const resendApiKey = process.env.RESEND_API_KEY || process.env.RESEND_KEY || ''
 const supportEmailWebhook = process.env.SUPPORT_EMAIL_WEBHOOK_URL || process.env.CONTACT_WEBHOOK_URL || ''
 const contactRateLimitStore = new Map()
@@ -1528,30 +1550,46 @@ function isContactRateLimited(key) {
   return false
 }
 
-async function dispatchSupportEmail({ name, email, subject, message }) {
-  const targets = supportEmailTargets.length ? supportEmailTargets : ['support@aphylia.app']
+const CONTACT_AUDIENCES = new Set(['support', 'business'])
+
+function normalizeContactAudience(value) {
+  if (typeof value !== 'string') return 'support'
+  const normalized = value.trim().toLowerCase()
+  return CONTACT_AUDIENCES.has(normalized) ? normalized : 'support'
+}
+
+async function dispatchSupportEmail({ name, email, subject, message, audience = 'support' }) {
+  const normalizedAudience = normalizeContactAudience(audience)
+  const targets = normalizedAudience === 'business'
+    ? (businessEmailTargets.length ? businessEmailTargets : [DEFAULT_BUSINESS_EMAIL])
+    : (supportEmailTargets.length ? supportEmailTargets : [DEFAULT_SUPPORT_EMAIL])
+  const fromAddress = normalizedAudience === 'business' ? businessEmailFrom : supportEmailFrom
   const safeName = name ? name.slice(0, 200) : ''
   const safeSubject = subject && subject.trim() ? subject.trim().slice(0, 180) : null
   const sanitizedMessage = (message || '').replace(/\r\n/g, '\n').slice(0, 5000)
   const plainText = [
-    'New contact form submission',
+    `New ${normalizedAudience} contact form submission`,
     '',
     `Name: ${safeName || 'N/A'}`,
     `Email: ${email || 'N/A'}`,
+    `Audience: ${normalizedAudience}`,
+    `Delivered to: ${targets.join(', ')}`,
     '',
     sanitizedMessage || 'No additional message provided.',
   ].join('\n')
   const htmlBody = [
-    '<h2 style="font-family:system-ui,sans-serif;margin:0 0 12px;">New contact form submission</h2>',
+    `<h2 style="font-family:system-ui,sans-serif;margin:0 0 12px;">New ${normalizedAudience} contact form submission</h2>`,
     `<p style="font-family:system-ui,sans-serif;margin:0 0 8px;"><strong>Name:</strong> ${escapeHtml(safeName) || 'N/A'}</p>`,
     `<p style="font-family:system-ui,sans-serif;margin:0 0 16px;"><strong>Email:</strong> ${escapeHtml(email || '') || 'N/A'}</p>`,
+    `<p style="font-family:system-ui,sans-serif;margin:0 0 8px;"><strong>Audience:</strong> ${escapeHtml(normalizedAudience)}</p>`,
+    `<p style="font-family:system-ui,sans-serif;margin:0 0 16px;"><strong>Delivered to:</strong> ${escapeHtml(targets.join(', '))}</p>`,
     `<p style="font-family:system-ui,sans-serif;margin:0;">${escapeHtml(sanitizedMessage || 'No additional message provided.').replace(/\n/g, '<br />')}</p>`,
   ].join('')
   const finalSubject = safeSubject || `Contact form message from ${safeName || email || 'Plant Swipe user'}`
 
   if (resendApiKey) {
     const payload = {
-      from: supportEmailFrom,
+      from: fromAddress,
       to: targets,
       subject: finalSubject,
       text: plainText,
@@ -1583,6 +1621,7 @@ async function dispatchSupportEmail({ name, email, subject, message }) {
         text: plainText,
         html: htmlBody,
         replyTo: email || null,
+        audience: normalizedAudience,
       }),
     })
     if (!resp.ok) {
@@ -4152,6 +4191,10 @@ app.post('/api/contact', async (req, res) => {
     const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
     const subject = typeof body.subject === 'string' ? body.subject.trim().slice(0, 180) : ''
     const message = typeof body.message === 'string' ? body.message.trim().slice(0, 5000) : ''
+    const audienceInput =
+      typeof body.audience === 'string' ? body.audience :
+      (typeof body.channel === 'string' ? body.channel : '')
+    const audience = normalizeContactAudience(audienceInput)
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       res.status(400).json({ error: 'A valid email address is required.' })
@@ -4168,8 +4211,8 @@ app.post('/api/contact', async (req, res) => {
       return
     }
 
-    await dispatchSupportEmail({ name, email, subject, message })
-    res.json({ ok: true })
+    await dispatchSupportEmail({ name, email, subject, message, audience })
+    res.json({ ok: true, audience })
   } catch (error) {
     console.error('[contact] failed to send support email:', error)
     res.status(500).json({ error: 'Failed to send message. Please try again later.' })

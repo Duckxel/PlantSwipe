@@ -1,12 +1,31 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts"
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts"
 
-const SUPPORT_EMAIL = "support@aphylia.app"
-const BUSINESS_EMAIL = "contact@aphylia.app"
+const DEFAULT_SUPPORT_EMAIL = "support@aphylia.app"
+const DEFAULT_BUSINESS_EMAIL = "contact@aphylia.app"
 const RESEND_ENDPOINT = "https://api.resend.com/emails"
+
+const parseEmailList = (raw: string | undefined, fallback: string): string[] => {
+  if (!raw) return [fallback]
+  return raw
+    .split(",")
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0)
+    .slice(0, 10) // keep payloads bounded
+}
+
+const SUPPORT_EMAILS = parseEmailList(
+  getFirstEnv("CONTACT_SUPPORT_EMAIL", "SUPPORT_EMAIL_TO", "SUPPORT_EMAIL"),
+  DEFAULT_SUPPORT_EMAIL,
+)
+const BUSINESS_EMAILS = parseEmailList(
+  getFirstEnv("CONTACT_BUSINESS_EMAIL", "BUSINESS_EMAIL_TO", "BUSINESS_EMAIL", "CONTACT_EMAIL_TO"),
+  DEFAULT_BUSINESS_EMAIL,
+)
+
 const RECIPIENT_EMAILS = {
-  support: SUPPORT_EMAIL,
-  business: BUSINESS_EMAIL,
+  support: SUPPORT_EMAILS,
+  business: BUSINESS_EMAILS,
 } as const
 type Audience = keyof typeof RECIPIENT_EMAILS
 
@@ -93,9 +112,17 @@ serve(async (req) => {
     })
   }
 
-  const { name, email, subject, message, submittedAt, audience: parsedAudience } = parsed.data
-  const audience: Audience = parsedAudience ?? "support"
-  const recipientEmail = RECIPIENT_EMAILS[audience]
+    const { name, email, subject, message, submittedAt, audience: parsedAudience } = parsed.data
+    const audience: Audience = parsedAudience ?? "support"
+    const recipientEmails = RECIPIENT_EMAILS[audience]
+
+    if (!recipientEmails || recipientEmails.length === 0) {
+      console.error("contact-support: no recipients configured for audience", audience)
+      return jsonResponse(500, {
+        error: "recipient_not_configured",
+        message: "No recipients configured for the selected audience.",
+      })
+    }
 
   const resendApiKey = getFirstEnv("RESEND_API_KEY", "SUPABASE_RESEND_API_KEY")
 
@@ -118,12 +145,14 @@ serve(async (req) => {
   // Fallback if caller somehow sends an empty/too short subject post-validation:
   const finalSubject = subject || `Contact form message from ${name}`
 
-  const plainBody = [
-    `New contact form submission:`,
+    const plainBody = [
+      `New ${audience} contact form submission:`,
     ``,
     `Subject: ${finalSubject}`,
     `Name: ${name}`,
     `Email: ${email}`,
+      `Audience: ${audience}`,
+      `Delivered to: ${recipientEmails.join(", ")}`,
     submittedAt ? `Submitted at: ${submittedAt}` : undefined,
     ``,
     `Message:`,
@@ -133,8 +162,10 @@ serve(async (req) => {
   const htmlBody = `
     <h2 style="margin-bottom:12px;">New contact form submission</h2>
     <p><strong>Subject:</strong> ${escapeHtml(finalSubject)}</p>
-    <p><strong>Name:</strong> ${escapeHtml(name)}</p>
+      <p><strong>Name:</strong> ${escapeHtml(name)}</p>
     <p><strong>Email:</strong> <a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a></p>
+      <p><strong>Audience:</strong> ${escapeHtml(audience)}</p>
+      <p><strong>Delivered to:</strong> ${escapeHtml(recipientEmails.join(", "))}</p>
     ${submittedAt ? `<p><strong>Submitted at:</strong> ${escapeHtml(submittedAt)}</p>` : ""}
     <hr style="margin:16px 0;" />
     <p style="white-space:pre-wrap;">${escapeHtml(message)}</p>
@@ -149,7 +180,7 @@ serve(async (req) => {
         },
         body: JSON.stringify({
           from: fromAddress,
-          to: [recipientEmail],
+            to: recipientEmails,
           reply_to: email,
           subject: finalSubject,
           text: plainBody,
@@ -176,7 +207,7 @@ serve(async (req) => {
       })
     }
 
-    return jsonResponse(200, { success: true })
+      return jsonResponse(200, { success: true, audience })
   } catch (error) {
     console.error("contact-support: failed to call Resend API", error)
     return jsonResponse(500, {
