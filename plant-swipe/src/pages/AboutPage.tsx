@@ -89,7 +89,7 @@ export default function AboutPage() {
             className="flex flex-wrap gap-3 pt-2"
           >
             <Button asChild className="rounded-2xl">
-              <Link to="/contact">
+              <Link to="/contact/business">
                 <Sparkles className="h-4 w-4 mr-2" />
                 {t("hero.ctaPrimary")}
               </Link>
@@ -223,7 +223,7 @@ export default function AboutPage() {
                 {t("collaboration.description")}
               </p>
               <Button asChild className="rounded-2xl w-full sm:w-auto">
-                <Link to="/contact">
+                <Link to="/contact/business">
                   {t("collaboration.cta")}
                 </Link>
               </Button>
