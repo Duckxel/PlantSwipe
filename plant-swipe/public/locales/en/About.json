@@ -1,0 +1,97 @@
+{
+  "hero": {
+    "eyebrow": "Team Aphilia",
+    "title": "Two friends, one keyboard, one watering can",
+    "subtitle": "We merged lines of code with rows of seedlings so urban gardeners can spend less time scrolling and more time harvesting.",
+    "ctaPrimary": "Say bonjour",
+    "ctaSecondary": "Back to discovery"
+  },
+  "story": {
+    "badge": "Origin story",
+    "title": "When soil met source control",
+    "subtitle": "One friend draws furrows in the dirt, the other pushes commits faster than basil grows. Here's how that escalated.",
+    "beats": {
+      "spark": {
+        "title": "Two nerds walk into a garden center",
+        "description": "One loves lining up seeds in real soil, the other loves lining up numbers, brackets, and semi‑colons. Chemistry happened faster than compost."
+      },
+      "dare": {
+        "title": "The dare",
+        "description": "\"Hey, let's build an app that helps people launch urban gardens, grow joyful food, and stop feeling lost with seed packets.\" Reply: \"That hoodie is fire, I'm in.\""
+      },
+      "momentum": {
+        "title": "Three days later",
+        "description": "We already had a site skeleton, a caffeine hangover, and the feeling that Aphilia had to exist. So we sprinted forward."
+      }
+    },
+    "quote": {
+      "text": "One plants rows of seedlings, the other plants rows of digits. Together we plant excuses for people to eat better.",
+      "attribution": "The Aphilia duo"
+    }
+  },
+  "definition": {
+    "title": "So... what is Aphilia?",
+    "paragraphs": [
+      "Imagine wanting flowers in the yard, a tiny orchard for future pies, and a balcony vegetable patch—all while juggling watering schedules, soil types, and compatibility charts. That's the headache we signed up to solve.",
+      "Aphilia is our encyclopedic playground for plant lovers, biodiversity geeks, and anyone flirting with homegrown meals. It's packed with practical knowledge, seasonal surprises, and the friendly tone you'd get from a neighbor who actually reads gardening books.",
+      "Beyond the data, we obsess over care methods, let you sketch out gardens, log the plants you already own, schedule watering automatically, and cross-check which species vibe together so you can craft micro-ecosystems that treat the planet kindly."
+    ],
+    "helper": "TL;DR: we translate gardening chaos into approachable, nerd-approved guidance."
+  },
+  "offerings": {
+    "title": "What we offer right now",
+    "subtitle": "Bits of the platform already delighting testers (with plenty more sprouting soon).",
+    "items": {
+      "encyclopedia": {
+        "title": "A plant encyclopedia that actually answers questions",
+        "description": "We stuff each entry with as much actionable info as possible so you can go from curiosity to care plan in a single card."
+      },
+      "monthly": {
+        "title": "A comfy discovery interface",
+        "description": "Each month we spotlight fresh plants, drop lore, and keep the swipe deck feeling like a botanical playlist."
+      },
+      "gardenPlanner": {
+        "title": "Garden builder + watering brain",
+        "description": "Create gardens with plants you own or dream about, then let Aphilia plot watering days and care routines."
+      },
+      "photoId": {
+        "title": "Photo recognition",
+        "description": "Snap, upload, and let the app help you figure out if that's basil, mint, or a very confident weed."
+      },
+      "swap": {
+        "title": "Plant swaps between neighbors",
+        "description": "We want you to trade cuttings, stories, and surplus tomatoes without a marketplace headache.",
+        "status": "Coming soon"
+      },
+      "seeds": {
+        "title": "Seed shop with heart",
+        "description": "Curated seeds and starter kits delivered with zero gatekeeping energy.",
+        "status": "Coming soon"
+      }
+    }
+  },
+  "services": {
+    "title": "Services warming up backstage",
+    "subtitle": "Because dreams of selling, delivering, and equipping your garden need their own checklist.",
+    "items": [
+      "Seed and plant sales with playful packaging",
+      "Local delivery logistics so heavy pots stop scaring your Uber driver"
+    ]
+  },
+  "practical": {
+    "title": "Practical info",
+    "description": "HQ address reveal is on the way—we're busy choosing which plant guards the entrance.",
+    "status": "Stay tuned",
+    "address": "Official address: dropping soon (the lease ink is drying)."
+  },
+  "collaboration": {
+    "title": "Collaboration welcome",
+    "description": "We're all ears for partnerships that spread knowledge, boost biodiversity awareness, or simply add more jokes to the onboarding screens.",
+    "cta": "Pitch a collaboration"
+  },
+  "cta": {
+    "title": "Ready to plant something legendary?",
+    "subtitle": "Browse the encyclopedia, plan your dream garden, or tell us what feature to ship next.",
+    "button": "Explore the plant encyclopedia"
+  }
+}

@@ -1,0 +1,97 @@
+{
+  "hero": {
+    "eyebrow": "Équipe Aphilia",
+    "title": "Deux amis : un clavier, un arrosoir",
+    "subtitle": "On a mélangé des lignes de code et des lignes de semis pour que les jardiniers urbains passent moins de temps à scroller et plus de temps à croquer des tomates maison.",
+    "ctaPrimary": "Venez dire bonjour",
+    "ctaSecondary": "Retour à la découverte"
+  },
+  "story": {
+    "badge": "Histoire d'origine",
+    "title": "Quand la terre rencontre le dépôt Git",
+    "subtitle": "L'un trace des sillons dans la terre, l'autre empile des commits plus vite qu'un basilic ne pousse. Voilà comment tout a dérapé.",
+    "beats": {
+      "spark": {
+        "title": "Deux nerds chez le grainetier",
+        "description": "L'un aime aligner des graines dans le sol, l'autre aime aligner chiffres, parenthèses et lettres. L'alchimie a pris plus vite que le compost."
+      },
+      "dare": {
+        "title": "Le pari",
+        "description": "« Hé salut, ce serait cool de faire une appli pour aider les gens à lancer leur jardin urbain et manger de bons fruits et légumes. » Réponse : « Chandail de fou. J'arrive. »"
+      },
+      "momentum": {
+        "title": "Trois jours plus tard",
+        "description": "On avait déjà une base de site, un léger manque de sommeil et la conviction qu'Aphilia devait exister. Alors on s'est lancé plein gaz."
+      }
+    },
+    "quote": {
+      "text": "L'un plante des lignes de graines, l'autre plante des lignes de chiffres. Ensemble, on plante des excuses pour mieux manger.",
+      "attribution": "Le duo Aphilia"
+    }
+  },
+  "definition": {
+    "title": "Aphilia, c'est quoi ?",
+    "paragraphs": [
+      "Imaginez avoir envie de fleurs, d'un petit potager et même de quelques arbres fruitiers… tout en gérant les calendriers d'arrosage, les types de sols et les compatibilités entre plantes. C'est ce casse-tête qu'on a décidé d'apaiser.",
+      "Aphilia est notre terrain de jeu encyclopédique pour les passionnés de plantes, les fans de biodiversité et tous ceux qui rêvent de manger différemment grâce à leur propre récolte. On y glisse des infos pratiques, des surprises saisonnières et le ton complice d'un voisin qui lit vraiment les étiquettes de graines.",
+      "Au-delà des fiches, on partage nos meilleures méthodes d'entretien, on vous laisse créer vos jardins, enregistrer les plantes que vous possédez déjà, planifier l'arrosage automatiquement et vérifier quelles espèces cohabitent bien pour bâtir des écosystèmes qui respectent l'environnement."
+    ],
+    "helper": "En bref : on transforme le chaos du jardinage en conseils abordables et geek-friendly."
+  },
+  "offerings": {
+    "title": "Ce qu'on propose déjà",
+    "subtitle": "Les briques qui font déjà sourire nos premiers testeurs (et la suite germe en coulisse).",
+    "items": {
+      "encyclopedia": {
+        "title": "Une encyclopédie végétale vraiment utile",
+        "description": "Chaque fiche concentre un maximum d'infos concrètes pour passer de la curiosité au plan d'action sans changer d'écran."
+      },
+      "monthly": {
+        "title": "Une interface de découverte cosy",
+        "description": "Tous les mois on met en avant de nouvelles plantes, on glisse des anecdotes et on garde le deck comme une playlist botanique."
+      },
+      "gardenPlanner": {
+        "title": "Créateur de jardins + cerveau d'arrosage",
+        "description": "Composez des jardins avec vos plantes actuelles ou rêvées, Aphilia s'occupe ensuite du calendrier d'arrosage et des routines."
+      },
+      "photoId": {
+        "title": "Reconnaissance photo",
+        "description": "Prenez une photo et laissez l'app vous dire si c'est du basilic, de la menthe ou une mauvaise herbe trop confiante."
+      },
+      "swap": {
+        "title": "Échanges entre particuliers",
+        "description": "On veut que vous échangiez boutures, histoires et surplus de tomates sans prise de tête.",
+        "status": "À venir"
+      },
+      "seeds": {
+        "title": "Boutique de graines avec du cœur",
+        "description": "Des graines et kits sélectionnés avec soin, livrés sans snobisme.",
+        "status": "À venir"
+      }
+    }
+  },
+  "services": {
+    "title": "Services en préparation",
+    "subtitle": "Parce que vente, livraison et logistique méritent leur propre liste de contrôle.",
+    "items": [
+      "Vente de graines et plantes avec un packaging qui donne le sourire",
+      "Livraison locale pour que vos pots costauds arrêtent d'effrayer le chauffeur"
+    ]
+  },
+  "practical": {
+    "title": "Information pratique",
+    "description": "Adresse du siège social à venir… on choisit juste quelle plante gardera l'entrée.",
+    "status": "Bientôt révélé",
+    "address": "Adresse officielle : on signe les papiers et on vous dit tout."
+  },
+  "collaboration": {
+    "title": "Ouverts aux collaborations",
+    "description": "On adore les idées qui enrichissent l'application, facilitent le partage d'informations ou sensibilisent à la biodiversité.",
+    "cta": "Proposer une collaboration"
+  },
+  "cta": {
+    "title": "Prêt·e à cultiver quelque chose de légendaire ?",
+    "subtitle": "Parcourez l'encyclopédie, planifiez votre jardin de rêve ou dites-nous quelle fonctionnalité on ajoute.",
+    "button": "Explorer l'encyclopédie"
+  }
+}
