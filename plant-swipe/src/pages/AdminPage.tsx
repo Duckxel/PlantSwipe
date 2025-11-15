@@ -63,6 +63,7 @@ const {
   Pie,
   Cell,
 } = LazyCharts;
+
 type AdminTab = "overview" | "members" | "requests" | "admin_logs";
 
 export const AdminPage: React.FC = () => {
