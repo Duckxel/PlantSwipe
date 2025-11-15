@@ -245,7 +245,7 @@ export default function AboutPage() {
               {meetBadge}
             </Badge>
           </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 sm:gap-y-6 gap-x-0 max-w-4xl mx-auto">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 sm:gap-y-6 gap-x-3 max-w-4xl mx-auto justify-items-center">
             {meetOrder
               .map((key) => ({ key, member: meetMembers[key] }))
               .filter((entry): entry is { key: string; member: MemberCard } => Boolean(entry.member))
@@ -258,10 +258,10 @@ export default function AboutPage() {
                 return (
                   <Card
                     key={`${member.name}-${index}`}
-                    className="rounded-xl border border-stone-200/70 dark:border-[#3e3e42]/70 overflow-hidden text-sm w-full"
+                    className="rounded-xl border border-stone-200/70 dark:border-[#3e3e42]/70 overflow-hidden text-sm w-fit"
                   >
-                    <div className="p-4 pb-0 flex justify-center">
-                      <div className="relative w-[288px] max-w-full">
+                    <div className="p-3 pb-0 flex justify-center">
+                      <div className="relative w-[260px] max-w-full">
                         <div className="w-full aspect-square rounded-xl border border-dashed border-stone-300 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#1f1f1f]/60 flex items-center justify-center text-center px-4">
                           <span className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
                             {member.placeholder}
