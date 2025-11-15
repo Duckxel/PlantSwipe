@@ -1420,47 +1420,77 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
           }}
         />
         <div className="space-y-5 select-none">
-          <div className="flex items-center justify-end gap-2">
-          {isAdmin && (
-            <>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
               <button
-                onClick={handleEdit}
+                onClick={(e) => handleShare(e)}
                 type="button"
-                aria-label={t('common.edit')}
-                title={t('common.edit')}
-                className="h-9 w-9 rounded-full flex items-center justify-center border border-emerald-500/30 bg-white/90 text-emerald-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-white dark:border-emerald-600/30 dark:bg-[#1c2a34] dark:text-emerald-100 dark:hover:bg-[#23323f]"
+                aria-label={shareSuccess ? t('plantInfo.shareCopied') : t('plantInfo.share')}
+                title={shareSuccess ? t('plantInfo.shareCopied') : t('plantInfo.share')}
+                className={cn(
+                  'h-9 w-9 rounded-full flex items-center justify-center border border-emerald-500/30 bg-white/90 text-emerald-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-white dark:border-emerald-600/30 dark:bg-[#1c2a34] dark:text-emerald-100',
+                  shareSuccess && 'border-emerald-500 bg-emerald-500 text-white'
+                )}
               >
-                <Pencil className="h-4 w-4" />
+                <Share2 className="h-4 w-4" />
               </button>
               <button
-                onClick={handleDelete}
+                onClick={() => onToggleLike?.()}
                 type="button"
-                aria-label={t('common.delete')}
-                title={t('common.delete')}
-                className="h-9 w-9 rounded-full flex items-center justify-center border border-rose-500/30 bg-white/90 text-rose-600 shadow-sm transition hover:-translate-y-0.5 hover:bg-white dark:border-rose-500/30 dark:bg-[#2c1c24] dark:text-rose-200 dark:hover:bg-[#351f2b]"
+                aria-pressed={liked}
+                aria-label={liked ? t('plantInfo.unlike') : t('plantInfo.like')}
+                title={liked ? t('plantInfo.unlike') : t('plantInfo.like')}
+                className={cn(
+                  'h-9 w-9 rounded-full flex items-center justify-center border border-rose-500/30 bg-white/90 text-rose-600 shadow-sm transition hover:-translate-y-0.5 hover:bg-white dark:border-rose-500/30 dark:bg-[#2c1c24] dark:text-rose-200',
+                  liked && 'border-rose-500 bg-rose-500 text-white'
+                )}
               >
-                <Trash2 className="h-4 w-4" />
+                <Heart className={cn('h-4 w-4', liked && 'fill-current')} />
               </button>
-            </>
-          )}
-          <button
-            onClick={handleExpand}
-            type="button"
-            aria-label="Expand to full page"
-            className="h-9 w-9 rounded-full flex items-center justify-center border bg-white/90 dark:bg-[#2d2d30] dark:border-[#3e3e42] text-black dark:text-white hover:bg-white dark:hover:bg-[#3e3e42] transition shadow-sm hover:-translate-y-0.5"
-            title="Expand to full page"
-          >
-            <Maximize2 className="h-4 w-4" />
-          </button>
-          <button
-            onClick={onClose}
-            type="button"
-            aria-label={t('common.close')}
-            title={t('common.close')}
-            className="h-9 w-9 rounded-full flex items-center justify-center border border-stone-300/30 bg-white/90 text-stone-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-white dark:border-stone-600/30 dark:bg-[#2d2d30] dark:text-stone-300 dark:hover:bg-[#3e3e42]"
-          >
-            <X className="h-4 w-4" />
-          </button>
+            </div>
+            <div className="flex items-center gap-2">
+            {isAdmin && (
+              <>
+                <button
+                  onClick={handleEdit}
+                  type="button"
+                  aria-label={t('common.edit')}
+                  title={t('common.edit')}
+                  className="h-9 w-9 rounded-full flex items-center justify-center border border-emerald-500/30 bg-white/90 text-emerald-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-white dark:border-emerald-600/30 dark:bg-[#1c2a34] dark:text-emerald-100 dark:hover:bg-[#23323f]"
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={handleDelete}
+                  type="button"
+                  aria-label={t('common.delete')}
+                  title={t('common.delete')}
+                  className="h-9 w-9 rounded-full flex items-center justify-center border border-rose-500/30 bg-white/90 text-rose-600 shadow-sm transition hover:-translate-y-0.5 hover:bg-white dark:border-rose-500/30 dark:bg-[#2c1c24] dark:text-rose-200 dark:hover:bg-[#351f2b]"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </>
+            )}
+              <button
+                onClick={handleExpand}
+                type="button"
+                aria-label="Expand to full page"
+                className="h-9 w-9 rounded-full flex items-center justify-center border bg-white/90 dark:bg-[#2d2d30] dark:border-[#3e3e42] text-black dark:text-white hover:bg-white dark:hover:bg-[#3e3e42] transition shadow-sm hover:-translate-y-0.5"
+                title="Expand to full page"
+              >
+                <Maximize2 className="h-4 w-4" />
+              </button>
+              <button
+                onClick={onClose}
+                type="button"
+                aria-label={t('common.close')}
+                title={t('common.close')}
+                className="h-9 w-9 rounded-full flex items-center justify-center border border-stone-300/30 bg-white/90 text-stone-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-white dark:border-stone-600/30 dark:bg-[#2d2d30] dark:text-stone-300 dark:hover:bg-[#3e3e42]"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
         </div>
         <div className="space-y-4">
           <div className="rounded-2xl overflow-hidden shadow relative">
@@ -1508,7 +1538,6 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
               ))}
             </div>
           )}
-          {renderEngagementButtons("justify-center")}
         </div>
         <div className="flex flex-wrap justify-center gap-2">
           <Button variant="secondary" className="rounded-2xl px-6" onClick={handleExpand}>
@@ -1682,39 +1711,6 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
           </div>
           {renderQuickStats(quickStats, 'sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5')}
         </motion.section>
-
-        {metaInfoAvailable && (
-          <motion.section
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.15 }}
-            transition={{ duration: 0.4 }}
-            className="rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 p-6 dark:bg-[#101418]/90"
-          >
-            <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300 mb-4">
-              <History className="h-5 w-5" />
-              <h3 className="text-lg font-semibold">{t('plantInfo.meta.auditTitle')}</h3>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              {(createdAtDisplay || createdByDisplay) && (
-                <MetaAuditCard
-                  label={t('plantInfo.meta.createdAt')}
-                  value={createdAtDisplay ?? notAvailableLabel}
-                  authorLabel={createdByDisplay ? t('plantInfo.meta.createdBy') : undefined}
-                  authorValue={createdByDisplay ?? undefined}
-                />
-              )}
-              {(updatedAtDisplay || updatedByDisplay) && (
-                <MetaAuditCard
-                  label={t('plantInfo.meta.updatedAt')}
-                  value={updatedAtDisplay ?? notAvailableLabel}
-                  authorLabel={updatedByDisplay ? t('plantInfo.meta.updatedBy') : undefined}
-                  authorValue={updatedByDisplay ?? undefined}
-                />
-              )}
-            </div>
-          </motion.section>
-        )}
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
           <div className="space-y-6">
@@ -2266,6 +2262,39 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
         </div>
       </div>
     </motion.div>
+
+        {metaInfoAvailable && (
+          <motion.section
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.15 }}
+            transition={{ duration: 0.4 }}
+            className="rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 p-6 dark:bg-[#101418]/90"
+          >
+            <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300 mb-4">
+              <History className="h-5 w-5" />
+              <h3 className="text-lg font-semibold">{t('plantInfo.meta.auditTitle')}</h3>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {(createdAtDisplay || createdByDisplay) && (
+                <MetaAuditCard
+                  label={t('plantInfo.meta.createdAt')}
+                  value={createdAtDisplay ?? notAvailableLabel}
+                  authorLabel={createdByDisplay ? t('plantInfo.meta.createdBy') : undefined}
+                  authorValue={createdByDisplay ?? undefined}
+                />
+              )}
+              {(updatedAtDisplay || updatedByDisplay) && (
+                <MetaAuditCard
+                  label={t('plantInfo.meta.updatedAt')}
+                  value={updatedAtDisplay ?? notAvailableLabel}
+                  authorLabel={updatedByDisplay ? t('plantInfo.meta.updatedBy') : undefined}
+                  authorValue={updatedByDisplay ?? undefined}
+                />
+              )}
+            </div>
+          </motion.section>
+        )}
 
         {/* Full-screen image viewer - only show when not in overlay mode */}
         {!isOverlayMode && (
