@@ -121,6 +121,23 @@ do $$ begin
     );
 end $$;
 
+-- Aggregated like counts (security definer to bypass profiles RLS)
+create or replace function public.top_liked_plants(limit_count integer default 5)
+returns table (plant_id text, likes bigint)
+language sql
+security definer
+set search_path = public
+as $$
+  select liked_id as plant_id, count(*)::bigint as likes
+  from public.profiles p
+  cross join lateral unnest(p.liked_plant_ids) as liked_id
+  where coalesce(trim(liked_id), '') <> ''
+  group by liked_id
+  order by count(*) desc, liked_id asc
+  limit greatest(coalesce(limit_count, 5), 0);
+$$;
+grant execute on function public.top_liked_plants(integer) to anon, authenticated;
+
 -- ========== Purge old web_visits (retention) ==========
 -- Keep only the last 35 days of visit data
 do $$ begin
@@ -2051,6 +2068,52 @@ as $$
   order by u.created_at desc
   limit greatest(1, coalesce(_limit, 5));
 $$;
+
+create or replace function public.get_recent_members(
+  _limit int default 20,
+  _offset int default 0,
+  _sort text default 'newest'
+)
+returns table(
+  id uuid,
+  email text,
+  display_name text,
+  created_at timestamptz,
+  is_admin boolean,
+  rpm5m numeric
+)
+language sql
+security definer
+set search_path = public
+as $$
+  with base as (
+    select
+      u.id,
+      u.email,
+      p.display_name,
+      u.created_at,
+      coalesce(p.is_admin, false) as is_admin,
+      coalesce(rpm.c, 0)::numeric / 5 as rpm5m
+    from auth.users u
+    left join public.profiles p on p.id = u.id
+    left join lateral (
+      select count(*)::int as c
+      from public.web_visits v
+      where v.user_id = u.id
+        and v.occurred_at >= now() - interval '5 minutes'
+    ) rpm on true
+  )
+  select *
+  from base
+  order by
+    case when coalesce(lower(_sort), 'newest') = 'oldest' then created_at end asc,
+    case when coalesce(lower(_sort), 'newest') = 'rpm' then rpm5m end desc nulls last,
+    created_at desc
+  limit greatest(1, coalesce(_limit, 20))
+  offset greatest(0, coalesce(_offset, 0));
+$$;
+
+grant execute on function public.get_recent_members(int, int, text) to anon, authenticated;
 
 -- Count helpers for Admin API fallbacks via Supabase REST RPC
 create or replace function public.count_profiles_total()

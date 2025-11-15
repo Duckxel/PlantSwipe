@@ -255,19 +255,21 @@ export function mergePlantWithTranslation(
         sitePrep: translationPlanting?.sitePrep || planting?.sitePrep || undefined,
         companionPlants: translationPlanting?.companionPlants || planting?.companionPlants || undefined,
         avoidNear: translationPlanting?.avoidNear || planting?.avoidNear || undefined,
-      },
-      meta: {
-        ...meta,
-        ...translationMeta,
-        rarity: meta?.rarity || (basePlant.rarity === 'Common' ? 'common'
-          : basePlant.rarity === 'Uncommon' ? 'uncommon'
-          : basePlant.rarity === 'Rare' ? 'rare'
-          : basePlant.rarity === 'Legendary' ? 'very rare'
-          : undefined),
-        authorNotes: translationMeta?.authorNotes || meta?.authorNotes || basePlant.author_notes || undefined,
-        funFact: translationMeta?.funFact || meta?.funFact || basePlant.meaning || undefined,
-      },
-      // Legacy fields for backward compatibility
+        },
+        meta: {
+          ...meta,
+          ...translationMeta,
+          rarity: meta?.rarity || (basePlant.rarity === 'Common' ? 'common'
+            : basePlant.rarity === 'Uncommon' ? 'uncommon'
+            : basePlant.rarity === 'Rare' ? 'rare'
+            : basePlant.rarity === 'Legendary' ? 'very rare'
+            : undefined),
+          authorNotes: translationMeta?.authorNotes || meta?.authorNotes || basePlant.author_notes || undefined,
+          funFact: translationMeta?.funFact || meta?.funFact || basePlant.meaning || undefined,
+          createdAt: translationMeta?.createdAt || meta?.createdAt || basePlant.created_at || undefined,
+          updatedAt: translationMeta?.updatedAt || meta?.updatedAt || basePlant.updated_at || undefined,
+        },
+        // Legacy fields for backward compatibility
       scientificName: translation?.scientific_name || basePlant.scientific_name || identifiers?.scientificName || '',
       colors: Array.isArray(basePlant.colors) ? basePlant.colors.map((c: unknown) => String(c)) : [],
       seasons: Array.isArray(basePlant.seasons) ? (basePlant.seasons as unknown[]).map((s) => String(s)) as Plant['seasons'] : [],
@@ -300,15 +302,38 @@ export function mergePlantWithTranslation(
  */
 export async function loadPlantsWithTranslations(language: SupportedLanguage): Promise<Plant[]> {
   try {
-    // Load base plants with all JSONB fields
-    const { data: plants, error } = await supabase
-      .from('plants')
-      .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount, identifiers, traits, dimensions, phenology, environment, care, propagation, usage, ecology, commerce, problems, planting, meta')
-      .order('name', { ascending: true })
-    
+    const TOP_LIKED_LIMIT = 5
+    const [plantsResponse, topLikedResponse] = await Promise.all([
+      supabase
+        .from('plants')
+        .select(
+          'id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount, identifiers, traits, dimensions, phenology, environment, care, propagation, usage, ecology, commerce, problems, planting, meta, created_at, updated_at'
+        )
+        .order('name', { ascending: true }),
+      supabase.rpc('top_liked_plants', { limit_count: TOP_LIKED_LIMIT }),
+    ])
+    const { data: plants, error } = plantsResponse
+    const { data: topLiked, error: topLikedError } = topLikedResponse
+
     if (error) throw error
     if (!plants || plants.length === 0) return []
-    
+
+    if (topLikedError) {
+      console.warn('Failed to load top liked plants', topLikedError)
+    }
+
+    const popularityMap = new Map<string, { likes: number; rank: number }>()
+    if (Array.isArray(topLiked)) {
+      topLiked.forEach((entry, index) => {
+        if (!entry || !entry.plant_id) return
+        const likesNumber = typeof entry.likes === 'number' ? entry.likes : Number(entry.likes ?? 0)
+        popularityMap.set(String(entry.plant_id), {
+          likes: likesNumber,
+          rank: index + 1,
+        })
+      })
+    }
+
     // Always load translations for the specified language (including English)
     // This ensures plants created in one language display correctly in another
     const plantIds = plants.map(p => p.id)
@@ -328,9 +353,21 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
     
     // Merge translations with base plants
     // If a translation exists, it will override the base plant data
-    return plants.map(plant => {
+    return plants.map((plant) => {
       const translation = translationMap.get(plant.id)
-      return mergePlantWithTranslation(plant, translation)
+      const merged = mergePlantWithTranslation(plant, translation)
+      const popularity = popularityMap.get(String(plant.id))
+      if (!popularity) {
+        return merged
+      }
+      return {
+        ...merged,
+        popularity: {
+          likes: popularity.likes,
+          rank: popularity.rank,
+          isTopPick: popularity.rank <= TOP_LIKED_LIMIT,
+        },
+      }
     })
   } catch (error) {
     console.error('Failed to load plants with translations:', error)

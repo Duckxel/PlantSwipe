@@ -28,11 +28,12 @@ import {
   Info, Flower2, Ruler, Calendar, MapPin, Thermometer, Wind, Sprout,
   Scissors, Droplet, Package, Bug, AlertTriangle, Tag, BookOpen,
   Globe, Shield, AlertCircle, Users, Sparkles, FileText, Home,
-  BarChart3, Palette, Compass, Map as MapIcon, Pencil, Trash2, ChevronDown, ChevronUp
+  BarChart3, Palette, Compass, Map as MapIcon, Pencil, Trash2, ChevronDown, ChevronUp, Flame, PartyPopper, History
 } from "lucide-react";
 import type { Plant, PlantDimensions } from "@/types/plant";
 import { rarityTone, seasonBadge } from "@/constants/badges";
 import { cn, deriveWaterLevelFromFrequency } from "@/lib/utils";
+import { isNewPlant, isPlantOfTheMonth, isPopularPlant } from "@/lib/plantHighlights";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
@@ -840,6 +841,66 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
   const dimensions = plant.dimensions ?? ({} as NonNullable<Plant['dimensions']>)
   const seasons = Array.isArray(plant.seasons) ? plant.seasons : []
   const colors = Array.isArray(plant.colors) ? plant.colors : []
+  const highlightBadges = React.useMemo(() => {
+    const badges: Array<{ key: string; label: string; className: string; icon: React.ReactNode }> = []
+    if (isPlantOfTheMonth(plant)) {
+      badges.push({
+        key: 'promotion',
+        label: t('discoveryPage.tags.plantOfMonth'),
+        className: 'bg-amber-400/90 text-amber-950',
+        icon: <Sparkles className="h-4 w-4 mr-1" />,
+      })
+    }
+    if (isNewPlant(plant)) {
+      badges.push({
+        key: 'new',
+        label: t('discoveryPage.tags.new'),
+        className: 'bg-emerald-500/90 text-white',
+        icon: <PartyPopper className="h-4 w-4 mr-1" />,
+      })
+    }
+    if (isPopularPlant(plant)) {
+      badges.push({
+        key: 'popular',
+        label: t('discoveryPage.tags.popular'),
+        className: 'bg-rose-600/90 text-white',
+        icon: <Flame className="h-4 w-4 mr-1" />,
+      })
+    }
+    return badges
+  }, [plant, t])
+  const formatMetaDate = React.useCallback(
+    (value?: string | null) => {
+      if (!value) return null
+      const timestamp = Date.parse(value)
+      if (Number.isNaN(timestamp)) return null
+      const locale = currentLang === 'fr' ? 'fr-FR' : 'en-US'
+      try {
+        return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(timestamp))
+      } catch {
+        return new Date(timestamp).toLocaleString()
+      }
+    },
+    [currentLang],
+  )
+  const createdAtDisplay = formatMetaDate(meta.createdAt)
+  const updatedAtDisplay = formatMetaDate(meta.updatedAt)
+  const createdByDisplay = resolveTextValue(meta.createdBy)
+  const updatedByDisplay = resolveTextValue(meta.updatedBy)
+  const metaInfoAvailable = Boolean(createdAtDisplay || updatedAtDisplay || createdByDisplay || updatedByDisplay)
+  const renderHighlightBadges = (className?: string) => {
+    if (highlightBadges.length === 0) return null
+    return (
+      <div className={cn("flex flex-wrap items-center gap-2", className)}>
+        {highlightBadges.map((badge) => (
+          <Badge key={badge.key} className={cn("rounded-2xl px-3 py-1 text-xs font-semibold flex items-center", badge.className)}>
+            {badge.icon}
+            {badge.label}
+          </Badge>
+        ))}
+      </div>
+    )
+  }
   const meaningText = React.useMemo(() => resolveTextValue(plant.meaning), [plant.meaning])
   const descriptionText = React.useMemo(() => resolveTextValue(plant.description), [plant.description])
   const funFactText = React.useMemo(() => resolveTextValue(meta.funFact), [meta.funFact])
@@ -1197,6 +1258,34 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
     }
   }
 
+  const renderEngagementButtons = (className?: string) => (
+    <div className={cn("flex flex-wrap items-center gap-3", className)}>
+      <Button
+        type="button"
+        onClick={(e) => handleShare(e)}
+        variant="outline"
+        className={cn(
+          'rounded-2xl border-emerald-500/30 bg-white/80 px-5 text-sm font-semibold text-emerald-700 shadow-sm backdrop-blur transition hover:-translate-y-0.5 hover:bg-white hover:shadow-md dark:border-emerald-700/40 dark:bg-slate-900/70 dark:text-emerald-100',
+          shareSuccess && 'border-emerald-500/70 bg-emerald-500/90 text-white hover:bg-emerald-500 dark:bg-emerald-500/70'
+        )}
+      >
+        <Share2 className="mr-2 h-4 w-4" />
+        {shareSuccess ? t('plantInfo.shareCopied') : t('plantInfo.share')}
+      </Button>
+      <Button
+        type="button"
+        onClick={() => onToggleLike?.()}
+        className={cn(
+          'rounded-2xl border-rose-500/30 bg-rose-500/10 px-5 text-sm font-semibold text-rose-600 shadow-sm transition hover:-translate-y-0.5 hover:bg-rose-500/20 hover:shadow-md dark:border-rose-500/40 dark:bg-rose-500/20 dark:text-rose-100',
+          liked && 'border-rose-500 bg-rose-500 text-white hover:bg-rose-500'
+        )}
+      >
+        <Heart className={cn('mr-2 h-4 w-4', liked && 'fill-current')} />
+        {liked ? t('plantInfo.unlike') : t('plantInfo.like')}
+      </Button>
+    </div>
+  )
+
   const handleExpand = () => {
     const pathWithoutLang = `/plants/${plant.id}`
     const pathWithLang = currentLang === 'en' ? pathWithoutLang : `/${currentLang}${pathWithoutLang}`
@@ -1330,103 +1419,133 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
             `
           }}
         />
-        <div className="space-y-5 select-none">
-          <div className="flex items-center justify-end gap-2">
-          {isAdmin && (
-            <>
+        <div className="space-y-8 select-none">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
               <button
-                onClick={handleEdit}
+                onClick={(e) => handleShare(e)}
                 type="button"
-                aria-label={t('common.edit')}
-                title={t('common.edit')}
-                className="h-9 w-9 rounded-full flex items-center justify-center border border-emerald-500/30 bg-white/90 text-emerald-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-white dark:border-emerald-600/30 dark:bg-[#1c2a34] dark:text-emerald-100 dark:hover:bg-[#23323f]"
+                aria-label={shareSuccess ? t('plantInfo.shareCopied') : t('plantInfo.share')}
+                title={shareSuccess ? t('plantInfo.shareCopied') : t('plantInfo.share')}
+                className={cn(
+                  'h-9 w-9 rounded-full flex items-center justify-center border border-emerald-500/30 bg-white/90 text-emerald-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-white dark:border-emerald-600/30 dark:bg-[#1c2a34] dark:text-emerald-100',
+                  shareSuccess && 'border-emerald-500 bg-emerald-500 text-white'
+                )}
               >
-                <Pencil className="h-4 w-4" />
+                <Share2 className="h-4 w-4" />
               </button>
               <button
-                onClick={handleDelete}
+                onClick={() => onToggleLike?.()}
                 type="button"
-                aria-label={t('common.delete')}
-                title={t('common.delete')}
-                className="h-9 w-9 rounded-full flex items-center justify-center border border-rose-500/30 bg-white/90 text-rose-600 shadow-sm transition hover:-translate-y-0.5 hover:bg-white dark:border-rose-500/30 dark:bg-[#2c1c24] dark:text-rose-200 dark:hover:bg-[#351f2b]"
+                aria-pressed={liked}
+                aria-label={liked ? t('plantInfo.unlike') : t('plantInfo.like')}
+                title={liked ? t('plantInfo.unlike') : t('plantInfo.like')}
+                className={cn(
+                  'h-9 w-9 rounded-full flex items-center justify-center border border-rose-500/30 bg-white/90 text-rose-600 shadow-sm transition hover:-translate-y-0.5 hover:bg-white dark:border-rose-500/30 dark:bg-[#2c1c24] dark:text-rose-200',
+                  liked && 'border-rose-500 bg-rose-500 text-white'
+                )}
               >
-                <Trash2 className="h-4 w-4" />
+                <Heart className={cn('h-4 w-4', liked && 'fill-current')} />
               </button>
-            </>
-          )}
-          <button
-            onClick={handleExpand}
-            type="button"
-            aria-label="Expand to full page"
-            className="h-9 w-9 rounded-full flex items-center justify-center border bg-white/90 dark:bg-[#2d2d30] dark:border-[#3e3e42] text-black dark:text-white hover:bg-white dark:hover:bg-[#3e3e42] transition shadow-sm hover:-translate-y-0.5"
-            title="Expand to full page"
-          >
-            <Maximize2 className="h-4 w-4" />
-          </button>
-          <button
-            onClick={onClose}
-            type="button"
-            aria-label={t('common.close')}
-            title={t('common.close')}
-            className="h-9 w-9 rounded-full flex items-center justify-center border border-stone-300/30 bg-white/90 text-stone-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-white dark:border-stone-600/30 dark:bg-[#2d2d30] dark:text-stone-300 dark:hover:bg-[#3e3e42]"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="space-y-4">
-          <div className="rounded-2xl overflow-hidden shadow relative">
-            <div
-              className="h-56 bg-cover bg-center select-none"
-              style={{ backgroundImage: `url(${plant.image})`, userSelect: 'none' as any }}
-              aria-label={plant.name}
-            />
-          </div>
-          <div className="space-y-1 text-center">
-            <h2 className="text-3xl font-bold leading-tight">{plant.name}</h2>
-            <p className="italic text-base opacity-80">{plant.scientificName}</p>
-          </div>
-            {meaningText && (
-              <Card className="rounded-3xl border border-stone-200 dark:border-[#3e3e42]">
-                <CardHeader className="py-4">
-                  <CardTitle className="text-base font-semibold flex items-center justify-center gap-2">
-                    <Sparkles className="h-4 w-4" />
-                    {t('plantInfo.meaning')}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="text-sm text-center leading-relaxed">
-                  <CollapsibleText text={meaningText} maxLength={200} />
-                </CardContent>
-              </Card>
+            </div>
+            <div className="flex items-center gap-2">
+            {isAdmin && (
+              <>
+                <button
+                  onClick={handleEdit}
+                  type="button"
+                  aria-label={t('common.edit')}
+                  title={t('common.edit')}
+                  className="h-9 w-9 rounded-full flex items-center justify-center border border-emerald-500/30 bg-white/90 text-emerald-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-white dark:border-emerald-600/30 dark:bg-[#1c2a34] dark:text-emerald-100 dark:hover:bg-[#23323f]"
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={handleDelete}
+                  type="button"
+                  aria-label={t('common.delete')}
+                  title={t('common.delete')}
+                  className="h-9 w-9 rounded-full flex items-center justify-center border border-rose-500/30 bg-white/90 text-rose-600 shadow-sm transition hover:-translate-y-0.5 hover:bg-white dark:border-rose-500/30 dark:bg-[#2c1c24] dark:text-rose-200 dark:hover:bg-[#351f2b]"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </>
             )}
-            {descriptionText && (
-              <div className="rounded-2xl bg-white/85 px-4 py-3 text-sm leading-relaxed text-stone-700 shadow-sm dark:bg-[#1e262f]/80 dark:text-stone-200">
-                <CollapsibleText text={descriptionText} maxLength={300} />
+              <button
+                onClick={handleExpand}
+                type="button"
+                aria-label="Expand to full page"
+                className="h-9 w-9 rounded-full flex items-center justify-center border bg-white/90 dark:bg-[#2d2d30] dark:border-[#3e3e42] text-black dark:text-white hover:bg-white dark:hover:bg-[#3e3e42] transition shadow-sm hover:-translate-y-0.5"
+                title="Expand to full page"
+              >
+                <Maximize2 className="h-4 w-4" />
+              </button>
+              <button
+                onClick={onClose}
+                type="button"
+                aria-label={t('common.close')}
+                title={t('common.close')}
+                className="h-9 w-9 rounded-full flex items-center justify-center border border-stone-300/30 bg-white/90 text-stone-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-white dark:border-stone-600/30 dark:bg-[#2d2d30] dark:text-stone-300 dark:hover:bg-[#3e3e42]"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+          <div className="space-y-6">
+            <div className="rounded-2xl overflow-hidden shadow relative">
+              <div
+                className="h-56 bg-cover bg-center select-none"
+                style={{ backgroundImage: `url(${plant.image})`, userSelect: 'none' as any }}
+                aria-label={plant.name}
+              />
+            </div>
+            <div className="space-y-1 text-center">
+              <h2 className="text-3xl font-bold leading-tight">{plant.name}</h2>
+              <p className="italic text-base opacity-80">{plant.scientificName}</p>
+            </div>
+              {renderHighlightBadges("justify-center")}
+                {meaningText && (
+                  <Card className="rounded-3xl border border-stone-200 dark:border-[#3e3e42]">
+                    <CardHeader className="py-4">
+                      <CardTitle className="text-base font-semibold flex items-center justify-center gap-2">
+                        <Sparkles className="h-4 w-4" />
+                        {t('plantInfo.meaning')}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="text-sm text-center leading-relaxed">
+                      <CollapsibleText text={meaningText} maxLength={200} />
+                    </CardContent>
+                  </Card>
+                )}
+                {descriptionText && (
+                  <div className="rounded-2xl bg-white/85 px-4 py-3 text-sm leading-relaxed text-stone-700 shadow-sm dark:bg-[#1e262f]/80 dark:text-stone-200">
+                    <CollapsibleText text={descriptionText} maxLength={300} />
+                  </div>
+                )}
+            {renderQuickStats(compactStats, 'sm:grid-cols-3')}
+            {(colors.length > 0 || seasons.length > 0) && (
+              <div className="flex flex-wrap justify-center gap-2">
+                {colors.map((c) => (
+                  <Badge key={c} variant="secondary" className="rounded-xl">
+                    {c}
+                  </Badge>
+                ))}
+                {seasons.map((s) => (
+                  <span key={s} className={`text-[11px] px-2 py-0.5 rounded-full ${seasonBadge[s] ?? 'bg-stone-200 dark:bg-stone-700 text-stone-900 dark:text-stone-100'}`}>
+                    {s}
+                  </span>
+                ))}
               </div>
             )}
-          {renderQuickStats(compactStats, 'sm:grid-cols-3')}
-          {(colors.length > 0 || seasons.length > 0) && (
-            <div className="flex flex-wrap justify-center gap-2">
-              {colors.map((c) => (
-                <Badge key={c} variant="secondary" className="rounded-xl">
-                  {c}
-                </Badge>
-              ))}
-              {seasons.map((s) => (
-                <span key={s} className={`text-[11px] px-2 py-0.5 rounded-full ${seasonBadge[s] ?? 'bg-stone-200 dark:bg-stone-700 text-stone-900 dark:text-stone-100'}`}>
-                  {s}
-                </span>
-              ))}
-            </div>
-          )}
+          </div>
         </div>
-        <div className="flex flex-wrap justify-center gap-2">
+        <div className="flex flex-wrap justify-center gap-3 mt-4">
           <Button variant="secondary" className="rounded-2xl px-6" onClick={handleExpand}>
             {t('plantInfo.viewFullDetails')}
           </Button>
           <Button className="rounded-2xl px-6" onClick={onClose}>
             {t('common.close')}
           </Button>
-        </div>
         </div>
       </>
     )
@@ -1474,6 +1593,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
                   </p>
                 )}
               </div>
+              {renderHighlightBadges()}
                 {meaningText && (
                 <div className="flex items-start gap-3 rounded-2xl bg-white/65 px-4 py-3 text-sm leading-relaxed text-emerald-900 shadow-sm backdrop-blur-md dark:bg-slate-900/50 dark:text-emerald-100">
                   <span className="mt-0.5 rounded-full bg-emerald-500/20 p-2 text-emerald-600 dark:text-emerald-200">
@@ -1513,31 +1633,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
                   ))}
                 </div>
               )}
-              <div className="flex flex-wrap items-center gap-3">
-                <Button
-                  type="button"
-                  onClick={(e) => handleShare(e)}
-                  variant="outline"
-                  className={cn(
-                    'rounded-2xl border-emerald-500/30 bg-white/80 px-5 text-sm font-semibold text-emerald-700 shadow-sm backdrop-blur transition hover:-translate-y-0.5 hover:bg-white hover:shadow-md dark:border-emerald-700/40 dark:bg-slate-900/70 dark:text-emerald-100',
-                    shareSuccess && 'border-emerald-500/70 bg-emerald-500/90 text-white hover:bg-emerald-500 dark:bg-emerald-500/70'
-                  )}
-                >
-                  <Share2 className="mr-2 h-4 w-4" />
-                  {shareSuccess ? t('plantInfo.shareCopied') : t('plantInfo.share')}
-                </Button>
-                <Button
-                  type="button"
-                  onClick={() => onToggleLike?.()}
-                  className={cn(
-                    'rounded-2xl border-rose-500/30 bg-rose-500/10 px-5 text-sm font-semibold text-rose-600 shadow-sm transition hover:-translate-y-0.5 hover:bg-rose-500/20 hover:shadow-md dark:border-rose-500/40 dark:bg-rose-500/20 dark:text-rose-100',
-                    liked && 'border-rose-500 bg-rose-500 text-white hover:bg-rose-500'
-                  )}
-                >
-                  <Heart className={cn('mr-2 h-4 w-4', liked && 'fill-current')} />
-                  {liked ? t('plantInfo.unlike') : t('plantInfo.like')}
-                </Button>
-              </div>
+              {renderEngagementButtons()}
             </div>
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
@@ -2166,6 +2262,39 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
       </div>
     </motion.div>
 
+        {metaInfoAvailable && (
+          <motion.section
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.15 }}
+            transition={{ duration: 0.4 }}
+            className="rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 p-6 dark:bg-[#101418]/90"
+          >
+            <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300 mb-4">
+              <History className="h-5 w-5" />
+              <h3 className="text-lg font-semibold">{t('plantInfo.meta.auditTitle')}</h3>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {(createdAtDisplay || createdByDisplay) && (
+                <MetaAuditCard
+                  label={t('plantInfo.meta.createdAt')}
+                  value={createdAtDisplay ?? notAvailableLabel}
+                  authorLabel={createdByDisplay ? t('plantInfo.meta.createdBy') : undefined}
+                  authorValue={createdByDisplay ?? undefined}
+                />
+              )}
+              {(updatedAtDisplay || updatedByDisplay) && (
+                <MetaAuditCard
+                  label={t('plantInfo.meta.updatedAt')}
+                  value={updatedAtDisplay ?? notAvailableLabel}
+                  authorLabel={updatedByDisplay ? t('plantInfo.meta.updatedBy') : undefined}
+                  authorValue={updatedByDisplay ?? undefined}
+                />
+              )}
+            </div>
+          </motion.section>
+        )}
+
         {/* Full-screen image viewer - only show when not in overlay mode */}
         {!isOverlayMode && (
           <Dialog open={isImageFullScreen} onOpenChange={setIsImageFullScreen}>
@@ -2771,6 +2900,28 @@ const InfoItem = ({ icon, label, value }: { icon: React.ReactNode; label: string
     </div>
   )
 }
+
+const MetaAuditCard = ({
+  label,
+  value,
+  authorLabel,
+  authorValue,
+}: {
+  label: string
+  value: string
+  authorLabel?: string
+  authorValue?: string
+}) => (
+  <div className="rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/85 p-4 shadow-sm dark:bg-[#161a1f]/90">
+    <div className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400 mb-1">{label}</div>
+    <div className="text-base font-semibold text-stone-900 dark:text-stone-100">{value}</div>
+    {authorLabel && authorValue && (
+      <div className="mt-1 text-xs text-stone-500 dark:text-stone-400">
+        {authorLabel}: <span className="font-medium text-stone-800 dark:text-stone-200">{authorValue}</span>
+      </div>
+    )}
+  </div>
+)
 
 const formatMonths = (months: number[], t: (key: string, options?: Record<string, unknown>) => string): string => {
   return months

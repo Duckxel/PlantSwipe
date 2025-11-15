@@ -176,6 +176,8 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
   const [problems, setProblems] = React.useState<Partial<PlantProblems>>({})
   const [planting, setPlanting] = React.useState<Partial<PlantPlanting>>({})
   const [meta, setMeta] = React.useState<Partial<PlantMeta>>({})
+  const initialCreatedAtRef = React.useRef<string | null>(null)
+  const initialCreatedByRef = React.useRef<string | null>(null)
 
   const funFact = React.useMemo(() => (meta?.funFact ?? meaning ?? '').trim(), [meta?.funFact, meaning])
 
@@ -687,7 +689,7 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
         // Load base plant data with JSONB fields
         const { data, error: qerr } = await supabase
           .from('plants')
-          .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_soil, care_difficulty, seeds_available, water_freq_period, water_freq_amount, water_freq_unit, water_freq_value, identifiers, traits, dimensions, phenology, environment, care, propagation, usage, ecology, commerce, problems, planting, meta')
+          .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_soil, care_difficulty, seeds_available, water_freq_period, water_freq_amount, water_freq_unit, water_freq_value, identifiers, traits, dimensions, phenology, environment, care, propagation, usage, ecology, commerce, problems, planting, meta, created_at')
           .eq('id', id)
           .maybeSingle()
         if (qerr) throw new Error(qerr.message)
@@ -711,6 +713,20 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
         const parsedProblems = typeof data.problems === 'string' ? JSON.parse(data.problems) : data.problems
         const parsedPlanting = typeof data.planting === 'string' ? JSON.parse(data.planting) : data.planting
         const parsedMeta = typeof data.meta === 'string' ? JSON.parse(data.meta) : data.meta
+        if (!initialCreatedAtRef.current) {
+          const trimmedMetaCreatedAt = typeof parsedMeta?.createdAt === 'string' ? parsedMeta.createdAt.trim() : ''
+          if (trimmedMetaCreatedAt) {
+            initialCreatedAtRef.current = trimmedMetaCreatedAt
+          } else if (typeof data.created_at === 'string') {
+            initialCreatedAtRef.current = data.created_at
+          }
+        }
+        if (!initialCreatedByRef.current) {
+          const trimmedMetaCreatedBy = typeof parsedMeta?.createdBy === 'string' ? parsedMeta.createdBy.trim() : ''
+          if (trimmedMetaCreatedBy) {
+            initialCreatedByRef.current = trimmedMetaCreatedBy
+          }
+        }
         
         // Parse translation JSONB fields
         const translationIdentifiers = translation?.identifiers ? (typeof translation.identifiers === 'string' ? JSON.parse(translation.identifiers) : translation.identifiers) : null
@@ -951,12 +967,16 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
         setError(`Fun fact must contain between 1 and 3 sentences (currently ${sentenceCount}).`)
         return
       }
-      const createdAtValue = typeof metaBase.createdAt === 'string' && metaBase.createdAt.trim().length > 0
-        ? metaBase.createdAt.trim()
-        : nowIso
-      const createdByValue = typeof metaBase.createdBy === 'string' && metaBase.createdBy.trim().length > 0
-        ? metaBase.createdBy.trim()
-        : actorLabel
+      const metaCreatedAt = typeof metaBase.createdAt === 'string' ? metaBase.createdAt.trim() : ''
+      const createdAtValue = metaCreatedAt || initialCreatedAtRef.current || nowIso
+      if (!initialCreatedAtRef.current) {
+        initialCreatedAtRef.current = createdAtValue
+      }
+      const metaCreatedBy = typeof metaBase.createdBy === 'string' ? metaBase.createdBy.trim() : ''
+      const createdByValue = metaCreatedBy || initialCreatedByRef.current || actorLabel
+      if (!initialCreatedByRef.current) {
+        initialCreatedByRef.current = createdByValue
+      }
       const metaForUpdate: Partial<PlantMeta> = {
         ...metaBase,
         funFact: funFactText || undefined,

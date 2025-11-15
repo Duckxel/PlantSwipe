@@ -98,70 +98,6 @@
       "rateLimitedMessage": "Please wait a little before sending another message."
     }
   },
-  "aboutPage": {
-    "hero": {
-      "eyebrow": "Work in progress",
-      "title": "About Aphylia (almost ready to bloom)",
-      "subtitle": "We're still writing the full origin story. Consider this page the stylish scaffolding for the magic to come.",
-      "ctaPrimary": "Ping the team",
-      "ctaSecondary": "Return to Discovery"
-    },
-    "highlights": {
-      "title": "Core blocks, awaiting juicy lore",
-      "subtitle": "Think of these as placeholders with impeccable posture.",
-      "badge": "Blueprint mode",
-      "cards": {
-        "origin": {
-          "tagline": "Chapter zero",
-          "title": "Origins incoming",
-          "description": "We're collecting the best anecdotes before committing them to the internet forever."
-        },
-        "impact": {
-          "tagline": "Garden gossip",
-          "title": "Impact in draft",
-          "description": "Stats, milestones, and bragging rights will sprout right here soon."
-        },
-        "culture": {
-          "tagline": "Vibes only",
-          "title": "Culture loading",
-          "description": "Expect team values, rituals, and maybe a playlist once we choose the perfect songs."
-        }
-      }
-    },
-    "timeline": {
-      "title": "Loose roadmap",
-      "subtitle": "A playful timeline so the layout has something to hold onto.",
-      "status": "Storyboarding",
-      "items": {
-        "chapterZero": {
-          "title": "Seed planted",
-          "caption": "This is where the founding myth will flourish. Picture cinematic flashbacks."
-        },
-        "chapterOne": {
-          "title": "Beta blossoms",
-          "caption": "User love notes and first wins will live here once we tidy the receipts."
-        },
-        "chapterTwo": {
-          "title": "Next adventures",
-          "caption": "We're drafting future ambitions while resisting the urge to spoil surprises."
-        }
-      }
-    },
-    "team": {
-      "title": "Future team gallery",
-      "subtitle": "Imagine smiling faces, dramatic bios, and perhaps one plant pun per profile.",
-      "badge": "Casting soon",
-      "cardTitle": "Placeholder",
-      "cardHeading": "Name TBD",
-      "cardDescription": "Snapshot pending approval from future selves.",
-      "cardPlaceholder": "Real humans will replace this placeholder once we finish the photoshoot."
-    },
-    "cta": {
-      "title": "Want the real story sooner?",
-      "subtitle": "Let us know you're curious and we'll nudge this page up the roadmap.",
-      "button": "Explore the plant encyclopedia"
-    }
-  },
   "discoveryPage": {
     "hero": {
       "eyebrow": "Curated deck, refreshed often",
@@ -173,6 +109,11 @@
     "status": {
       "position": "{{current}} of {{total}} in rotation",
       "empty": "Deck warming up..."
+    },
+    "tags": {
+      "plantOfMonth": "Plant of the Month",
+      "new": "New",
+      "popular": "Popular"
     },
     "infoCard": {
       "descriptionLabel": "Description",
@@ -307,6 +248,10 @@
       "seedsOnly": "Seeds only",
       "favoritesOnly": "Favorites only",
       "favoritesFirst": "Favorites first",
+      "sortLabel": "Sort by",
+      "sortDefault": "Default order",
+      "sortNewest": "Newest",
+      "sortPopular": "Most liked",
       "season": "Season",
       "color": "Color",
       "active": "Active",
@@ -476,6 +421,13 @@
         "indoor": "Indoor",
         "outdoor": "Outdoor",
         "both": "Indoor & Outdoor"
+      },
+      "meta": {
+        "auditTitle": "Record history",
+        "createdAt": "Created",
+        "updatedAt": "Last updated",
+        "createdBy": "Author",
+        "updatedBy": "Updated by"
       },
     "sections": {
       "identifiers": "Identifiers",

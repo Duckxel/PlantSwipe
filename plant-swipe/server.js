@@ -3600,6 +3600,121 @@ app.get('/api/admin/member-visits-series', async (req, res) => {
   }
 })
 
+// Admin: paginated member list (newest first, 20 per page by default)
+app.get('/api/admin/member-list', async (req, res) => {
+  try {
+    const caller = await ensureAdmin(req, res)
+    if (!caller) return
+    const rawLimit = Number(req.query.limit)
+    const rawOffset = Number(req.query.offset)
+    const limit = Number.isFinite(rawLimit) ? Math.min(100, Math.max(1, Math.floor(rawLimit))) : 20
+    const offset = Number.isFinite(rawOffset) ? Math.max(0, Math.floor(rawOffset)) : 0
+    const sortRaw = (req.query.sort || 'newest').toString().trim().toLowerCase()
+    const sort = sortRaw.startsWith('old') ? 'oldest'
+      : sortRaw === 'rpm' || sortRaw.startsWith('rpm')
+        ? 'rpm'
+        : 'newest'
+    const fetchSize = limit + 1
+    const normalizeRows = (rows) => {
+      if (!Array.isArray(rows)) return []
+      return rows
+        .map((r) => {
+          const id = r?.id ? String(r.id) : null
+          if (!id) return null
+          const rpm =
+            r?.rpm5m !== undefined && r?.rpm5m !== null
+              ? Number(r.rpm5m)
+              : null
+          return {
+            id,
+            email: r?.email || null,
+            display_name: r?.display_name || null,
+            created_at: r?.created_at || null,
+            is_admin: r?.is_admin === true,
+            rpm5m: Number.isFinite(rpm) ? rpm : null,
+          }
+        })
+        .filter((r) => r !== null)
+    }
+
+    if (sql) {
+      const visitsTableSql = buildVisitsTableIdentifier()
+      const orderClause =
+        sort === 'rpm'
+          ? 'rpm5m desc nulls last, u.created_at desc'
+          : sort === 'oldest'
+            ? 'u.created_at asc'
+            : 'u.created_at desc'
+      const rows = await sql.unsafe(
+        `
+        select
+          u.id,
+          u.email,
+          u.created_at,
+          p.display_name,
+          p.is_admin,
+          coalesce(rpm.c, 0)::numeric / 5 as rpm5m
+        from auth.users u
+        left join public.profiles p on p.id = u.id
+        left join lateral (
+          select count(*)::int as c
+          from ${visitsTableSql} v
+          where v.user_id = u.id
+            and v.occurred_at >= now() - interval '5 minutes'
+        ) rpm on true
+        order by ${orderClause}
+        limit $1
+        offset $2
+        `,
+        [fetchSize, offset],
+      )
+      const normalized = normalizeRows(rows)
+      const hasMore = normalized.length > limit
+      const members = hasMore ? normalized.slice(0, limit) : normalized
+      res.json({
+        ok: true,
+        members,
+        hasMore,
+        nextOffset: offset + members.length,
+        via: 'database',
+      })
+      return
+    }
+
+    if (supabaseUrlEnv && supabaseAnonKey) {
+      const headers = { apikey: supabaseAnonKey, Accept: 'application/json', 'Content-Type': 'application/json' }
+      const token = getBearerTokenFromRequest(req)
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      const resp = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_recent_members`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ _limit: fetchSize, _offset: offset, _sort: sort }),
+      })
+      if (!resp.ok) {
+        const body = await resp.text().catch(() => '')
+        res.status(resp.status).json({ error: body || 'Failed to load member list' })
+        return
+      }
+      const arr = await resp.json().catch(() => [])
+      const normalized = normalizeRows(arr)
+      const hasMore = normalized.length > limit
+      const members = hasMore ? normalized.slice(0, limit) : normalized
+      res.json({
+        ok: true,
+        members,
+        hasMore,
+        nextOffset: offset + members.length,
+        via: 'supabase',
+      })
+      return
+    }
+
+    res.status(500).json({ error: 'Database not configured' })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to load member list' })
+  }
+})
+
 // Admin: suggest emails by prefix for autocomplete (top 3)
 app.get('/api/admin/member-suggest', async (req, res) => {
   try {

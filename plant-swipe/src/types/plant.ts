@@ -201,6 +201,12 @@ export interface PlantMeta {
   updatedBy?: string
 }
 
+export interface PlantPopularity {
+  likes?: number
+  rank?: number
+  isTopPick?: boolean
+}
+
 export interface Plant {
   id: string
   // Legacy name field for backward compatibility
@@ -232,4 +238,5 @@ export interface Plant {
   waterFreqValue?: number | null
   waterFreqPeriod?: 'week' | 'month' | 'year'
   waterFreqAmount?: number | null
+  popularity?: PlantPopularity
 }
