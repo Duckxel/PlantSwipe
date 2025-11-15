@@ -53,7 +53,7 @@ const jsonResponse = (status: number, body: unknown) =>
     headers: corsHeaders,
   })
 
-const getFirstEnv = (...keys: string[]): string | undefined => {
+function getFirstEnv(...keys: string[]): string | undefined {
   for (const key of keys) {
     const value = Deno.env.get(key)
     if (value && value.length > 0) {
