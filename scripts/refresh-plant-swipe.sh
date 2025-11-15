@@ -3,17 +3,62 @@ set -euo pipefail
 
 # Refresh PlantSwipe deployment: git pull -> npm ci -> build -> reload nginx -> restart services
 
+SCRIPT_PATH="${BASH_SOURCE[0]:-$0}"
+SCRIPT_DIR="$(cd -- "$(dirname "$SCRIPT_PATH")" >/dev/null 2>&1 && pwd -P)"
+DEFAULT_REPO_DIR="$(cd "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd -P)"
+
 trap 'echo "[ERROR] Command failed at line $LINENO" >&2' ERR
 
-# Determine working directories based on where the command is RUN (caller cwd)
-# Allow explicit override via PLANTSWIPE_REPO_DIR when provided by the caller
-WORK_DIR="${PLANTSWIPE_REPO_DIR:-$(pwd -P)}"
-# Prefer nested plant-swipe app if present; otherwise use current dir as Node app
+log() { printf "[%s] %s\n" "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*"; }
+
+resolve_repo_root() {
+  local requested="${PLANTSWIPE_REPO_DIR:-}"
+  if [[ -n "$requested" ]]; then
+    local requested_real
+    requested_real="$(cd "$requested" 2>/dev/null && pwd -P || true)"
+    if [[ -n "$requested_real" ]] && git -C "$requested_real" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      git -C "$requested_real" rev-parse --show-toplevel 2>/dev/null && return 0
+      echo "$requested_real"
+      return 0
+    fi
+    log "[WARN] Ignoring PLANTSWIPE_REPO_DIR=$requested (not a git repository)"
+  fi
+
+  local candidates=()
+  candidates+=("$(pwd -P)")
+  candidates+=("$SCRIPT_DIR")
+  candidates+=("$DEFAULT_REPO_DIR")
+
+  for dir in "${candidates[@]}"; do
+    [[ -z "$dir" ]] && continue
+    if git -C "$dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      git -C "$dir" rev-parse --show-toplevel 2>/dev/null && return 0
+      echo "$(cd "$dir" && pwd -P)"
+      return 0
+    fi
+    if [[ -d "$dir/.git" ]]; then
+      echo "$(cd "$dir" && pwd -P)"
+      return 0
+    fi
+  done
+
+  echo "$DEFAULT_REPO_DIR"
+}
+
+WORK_DIR="$(resolve_repo_root)"
+
+# Prefer nested plant-swipe app if present; otherwise use repo root as Node app
 if [[ -f "$WORK_DIR/plant-swipe/package.json" ]]; then
   NODE_DIR="$WORK_DIR/plant-swipe"
 else
   NODE_DIR="$WORK_DIR"
 fi
+if [[ ! -f "$NODE_DIR/package.json" ]]; then
+  echo "[ERROR] Could not locate plant-swipe/package.json under detected repo root ($WORK_DIR)." >&2
+  echo "        Override with PLANTSWIPE_REPO_DIR or run the script from the repository checkout." >&2
+  exit 1
+fi
+NODE_DIR="$(cd "$NODE_DIR" >/dev/null 2>&1 && pwd -P)"
 
 # Use per-invocation Git config to avoid "dubious ownership" errors when
 # the repo directory is owned by a different user than the process (e.g., www-data)
@@ -23,8 +68,6 @@ GIT_SAFE_DIR="$WORK_DIR"
 SERVICE_NODE="plant-swipe-node"
 SERVICE_ADMIN="admin-api"
 SERVICE_NGINX="nginx"
-
-log() { printf "[%s] %s\n" "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*"; }
 
 # Configure sudo usage. When not running as root, prefer a non-interactive
 # askpass helper backed by PSSWORD_KEY loaded from common env files.

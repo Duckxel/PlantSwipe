@@ -651,6 +651,7 @@ Ensure production environment variables are set:
 - **Runtime behaviour**: offline caching for routes, i18n JSON bundles, static assets, plus `NetworkFirst` for `/api/*` calls to keep data fresh while providing a fallback when offline.
 - **User prompts**: `ServiceWorkerToast` informs users when the app is installable/offline-ready or when a new version is published (with a “Reload now” action).
 - **Local testing**: run `VITE_ENABLE_PWA=true npm run dev` to test the service worker in development. Use the “Application ▸ Manifest” panel in devtools to inspect install assets.
+- **Disable caching during QA**: add `VITE_DISABLE_PWA=true` to `plant-swipe/.env` (or the deployment env) before running `scripts/refresh-plant-swipe.sh`. The build will skip generating the service worker, and existing clients automatically unregister on next load, so a normal refresh always pulls the latest assets.
 
 ### Local Deployments
 

@@ -3,6 +3,8 @@ import { useRegisterSW } from 'virtual:pwa-register/react'
 
 const AUTO_HIDE_MS = 8000
 const READY_ACK_KEY = 'plantswipe.offlineReadyAck'
+const disablePwaFlag = String(import.meta.env.VITE_DISABLE_PWA ?? '').trim().toLowerCase()
+const PWA_DISABLED = disablePwaFlag === 'true' || disablePwaFlag === '1' || disablePwaFlag === 'yes' || disablePwaFlag === 'on' || disablePwaFlag === 'disable' || disablePwaFlag === 'disabled'
 
 const readReadyAck = () => {
   if (typeof window === 'undefined') return false
@@ -31,21 +33,50 @@ export function ServiceWorkerToast() {
   const [needRefreshFlag, setNeedRefreshFlag] = React.useState(false)
   const autoHideTimer = React.useRef<number | null>(null)
 
-  const { updateServiceWorker } = useRegisterSW({
-    immediate: true,
-    onOfflineReady() {
-      setOfflineReadyFlag(true)
-    },
-    onNeedRefresh() {
-      setNeedRefreshFlag(true)
-      setRefreshDismissed(false)
-    },
-    onRegisterError(error) {
-      if (import.meta.env.DEV) {
-        console.error('[PWA] Service worker registration failed', error)
-      }
-    },
-  })
+  React.useEffect(() => {
+    if (!PWA_DISABLED) return
+    if (typeof navigator === 'undefined' || !navigator.serviceWorker?.getRegistrations) return
+    navigator.serviceWorker
+      .getRegistrations()
+      .then((regs) => Promise.all(regs.map((reg) => reg.unregister().catch(() => {}))))
+      .catch(() => {})
+
+    if (typeof window !== 'undefined' && 'caches' in window && window.caches?.keys) {
+      window.caches
+        .keys()
+        .then((keys) => Promise.all(keys.map((key) => window.caches.delete(key).catch(() => false))))
+        .catch(() => {})
+    }
+  }, [PWA_DISABLED])
+
+  const { updateServiceWorker } = useRegisterSW(
+    PWA_DISABLED
+      ? {
+          immediate: false,
+          onRegisteredSW: (_swUrl, registration) => {
+            registration?.unregister().catch(() => {})
+          },
+        }
+      : {
+          immediate: true,
+          onOfflineReady() {
+            setOfflineReadyFlag(true)
+          },
+          onNeedRefresh() {
+            setNeedRefreshFlag(true)
+            setRefreshDismissed(false)
+          },
+          onRegisterError(error) {
+            if (import.meta.env.DEV) {
+              console.error('[PWA] Service worker registration failed', error)
+            }
+          },
+        }
+  )
+
+  if (PWA_DISABLED) {
+    return null
+  }
 
   React.useEffect(() => {
     if (offlineReadyFlag && !readyAcknowledged) {
