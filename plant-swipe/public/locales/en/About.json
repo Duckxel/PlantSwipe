@@ -2,13 +2,13 @@
   "hero": {
     "eyebrow": "Rooted in Montpellier",
     "title": "Urban horticulture meets thoughtful software",
-    "subtitle": "We grew up among Aphyllante plants in the South of France and built Aphilia to give modern growers calm, reliable tools.",
+    "subtitle": "We grew up among Aphyllante plants in the South of France and built Aphylia to give modern growers calm, reliable tools.",
     "ctaPrimary": "Tell us your plant dream",
     "ctaSecondary": "Back to discovery"
   },
   "story": {
     "badge": "Our story",
-    "title": "From Aphyllante to Aphilia",
+    "title": "From Aphyllante to Aphylia",
     "subtitle": "Two friends who cared for balconies and servers in equal measure.",
     "beats": {
       "spark": {
@@ -26,11 +26,11 @@
     },
     "quote": {
       "text": "One plants rows of seedlings, the other plants rows of digits. Together we plant excuses for people to eat better.",
-      "attribution": "The Aphilia duo"
+      "attribution": "The Aphylia duo"
     }
   },
   "pillars": {
-    "title": "How we build Aphilia",
+    "title": "How we build Aphylia",
     "subtitle": "Inspired by analog gardens, delivered with the calm polish of dependable software.",
     "cards": {
       "craft": {
@@ -48,7 +48,7 @@
   "definition": {
     "title": "Montpellier roots, browser branches",
     "paragraphs": [
-      "Aphilia is the love letter to Aphyllante, the plant that lined the paths of our hometown and basically dared us to care harder about biodiversity.",
+      "Aphylia is the love letter to Aphyllante, the plant that lined the paths of our hometown and basically dared us to care harder about biodiversity.",
       "We make an encyclopedic playground for anyone flirting with urban gardens, food sovereignty, and nerdy plant lore—complete with jokes, rituals, and fewer spreadsheets.",
       "Beyond data, we give you garden planners, watering forecasts, and compatibility notes so your balcony ecosystem is as well-orchestrated as your playlists."
     ],
@@ -68,7 +68,7 @@
       },
       "gardenPlanner": {
         "title": "Garden builder + watering brain",
-        "description": "Sketch gardens with plants you own or dream about, then let Aphilia schedule watering and care."
+        "description": "Sketch gardens with plants you own or dream about, then let Aphylia schedule watering and care."
       },
       "photoId": {
         "title": "Photo recognition",
@@ -98,7 +98,7 @@
   "community": {
     "badge": "Wishlist",
     "title": "Dream feature: Community Tab",
-    "description": "We want a space where neighbours swap cuttings, post watering wins, and organise seed drives—right inside Aphilia.",
+    "description": "We want a space where neighbours swap cuttings, post watering wins, and organise seed drives—right inside Aphylia.",
     "helper": "If that lights you up, ping us. Every \"yes\" nudges it higher on the roadmap.",
     "button": "Count me in"
   },

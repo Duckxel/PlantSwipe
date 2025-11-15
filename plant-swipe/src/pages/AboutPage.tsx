@@ -17,6 +17,19 @@ type MemberCard = {
   placeholderCta: string
 }
 
+const memberProfiles: Record<string, { pseudo: string; fullName: string; role: string }> = {
+  xavier: {
+    pseudo: "Psykokwak",
+    fullName: "Xaver Sabar",
+    role: "CCO / CEO / Founder",
+  },
+  five: {
+    pseudo: "FIVE",
+    fullName: "Chan AH-HONG",
+    role: "CTO / Co-Founder",
+  },
+}
+
 export default function AboutPage() {
   const { t } = useTranslation("About")
   const serviceItems = (t("services.items", { returnObjects: true }) as string[]) ?? []
@@ -179,49 +192,50 @@ export default function AboutPage() {
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             {meetOrder
-              .map((key) => meetMembers[key])
-              .filter(Boolean)
-              .map((member, index) => (
-                <Card
-                  key={`${member!.name}-${index}`}
-                  className="rounded-[30px] border border-stone-200/80 dark:border-[#3e3e42]/80 overflow-hidden"
-                >
-                  <div className="p-6 pb-0">
-                    <div className="h-48 rounded-2xl border border-dashed border-stone-300 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#1f1f1f]/60 flex flex-col items-center justify-center text-center gap-2">
-                      <span className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
-                        {member!.placeholder}
-                      </span>
-                      <Button variant="outline" size="sm" className="rounded-full">
-                        {member!.placeholderCta}
-                      </Button>
+              .map((key) => ({ key, member: meetMembers[key] }))
+              .filter((entry): entry is { key: string; member: MemberCard } => Boolean(entry.member))
+              .map(({ key, member }, index) => {
+                const profile = memberProfiles[key]
+                const displayName = profile ? `${profile.pseudo} - ${profile.fullName}` : member.name
+                const roleLabel = profile?.role ?? member.role
+
+                return (
+                  <Card
+                    key={`${member.name}-${index}`}
+                    className="rounded-[30px] border border-stone-200/80 dark:border-[#3e3e42]/80 overflow-hidden"
+                  >
+                    <div className="p-6 pb-0">
+                      <div className="relative">
+                        <div className="h-48 rounded-2xl border border-dashed border-stone-300 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#1f1f1f]/60 flex flex-col items-center justify-center text-center gap-2">
+                          <span className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                            {member.placeholder}
+                          </span>
+                          <Button variant="outline" size="sm" className="rounded-full">
+                            {member.placeholderCta}
+                          </Button>
+                        </div>
+                        {member.adjectives?.length ? (
+                          <div className="absolute top-4 left-4 right-4 flex flex-wrap gap-2 pointer-events-none">
+                            {member.adjectives.map((adj) => (
+                              <Badge
+                                key={adj}
+                                variant="secondary"
+                                className="rounded-full px-3 py-0.5 text-xs bg-emerald-100/90 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-100 shadow-sm"
+                              >
+                                {adj}
+                              </Badge>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
-                  </div>
-                  <CardHeader className="space-y-3">
-                    <div className="flex flex-wrap gap-2">
-                      {member!.adjectives?.map((adj) => (
-                        <Badge
-                          key={adj}
-                          variant="secondary"
-                          className="rounded-full px-3 py-0.5 text-xs bg-emerald-100/80 text-emerald-700 dark:bg-emerald-900/25 dark:text-emerald-200"
-                        >
-                          {adj}
-                        </Badge>
-                      ))}
-                    </div>
-                    <CardTitle>{member!.name}</CardTitle>
-                    <CardDescription>{member!.role}</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <p className="text-sm text-stone-700 dark:text-stone-200">{member!.description}</p>
-                    <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42]/80 bg-stone-50 dark:bg-[#1f1f1f] px-4 py-3 space-y-1">
-                      <span className="text-[11px] uppercase tracking-wide text-stone-500 dark:text-stone-400">
-                        {ritualLabel}
-                      </span>
-                      <p className="text-sm text-stone-700 dark:text-stone-200">{member!.ritual}</p>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                    <CardHeader className="space-y-1">
+                      <CardTitle>{displayName}</CardTitle>
+                      <CardDescription>{roleLabel}</CardDescription>
+                    </CardHeader>
+                  </Card>
+                )
+              })}
           </div>
         </section>
       )}
