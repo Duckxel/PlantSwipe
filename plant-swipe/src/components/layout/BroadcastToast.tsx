@@ -127,22 +127,22 @@ const BroadcastToast: React.FC = () => {
   }, [refreshBroadcast])
 
   // SSE stream for live updates with polling fallback
-  React.useEffect(() => {
-    let es: EventSource | null = null
-    let pollId: ReturnType<typeof setInterval> | null = null
+    React.useEffect(() => {
+      let es: EventSource | null = null
+      let pollId: number | null = null
 
     const startPolling = () => {
       if (pollId) return
-      const tick = () => { refreshBroadcast().catch(() => {}) }
-      pollId = window.setInterval(tick, 60000)
+        const tick = () => { void refreshBroadcast().catch(() => {}) }
+        pollId = window.setInterval(tick, 60000)
       tick()
     }
 
     const stopPolling = () => {
-      if (pollId) {
-        clearInterval(pollId)
-        pollId = null
-      }
+        if (pollId !== null) {
+          window.clearInterval(pollId)
+          pollId = null
+        }
     }
 
     const handleBroadcast = (ev: MessageEvent) => {
