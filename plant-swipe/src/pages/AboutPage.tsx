@@ -17,6 +17,30 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 
 type StoryBeatKey = "spark" | "dare" | "momentum"
 type OfferingKey = "encyclopedia" | "monthly" | "gardenPlanner" | "photoId" | "swap" | "seeds"
+type ThrowbackItem = { badge: string; title: string; description: string }
+type MemberCard = {
+  name: string
+  role: string
+  adjectives: string[]
+  description: string
+  ritual: string
+  placeholder: string
+  placeholderCta: string
+}
+type CommunityContent = {
+  badge: string
+  title: string
+  description: string
+  helper: string
+  button: string
+}
+type FeedbackContent = {
+  title: string
+  subtitle: string
+  list: string[]
+  lauCredit: string
+  button: string
+}
 
 const storyBeatKeys: StoryBeatKey[] = ["spark", "dare", "momentum"]
 const offeringKeys: OfferingKey[] = ["encyclopedia", "monthly", "gardenPlanner", "photoId", "swap", "seeds"]
@@ -25,6 +49,15 @@ export default function AboutPage() {
   const { t } = useTranslation("About")
   const definitionParagraphs = (t("definition.paragraphs", { returnObjects: true }) as string[]) ?? []
   const serviceItems = (t("services.items", { returnObjects: true }) as string[]) ?? []
+  const throwbackItems = (t("throwback.items", { returnObjects: true }) as ThrowbackItem[]) ?? []
+  const community = t("community", { returnObjects: true }) as CommunityContent
+  const feedback = t("feedback", { returnObjects: true }) as FeedbackContent
+  const feedbackList = (feedback?.list ?? []) as string[]
+  const meetMembers = (t("meet.members", { returnObjects: true }) as Record<string, MemberCard>) ?? {}
+  const meetOrder =
+    (t("meet.order", { returnObjects: true }) as string[]) ?? Object.keys(meetMembers)
+  const ritualLabel = t("meet.ritualLabel")
+  const meetBadge = t("meet.badge")
 
   return (
     <div className="max-w-5xl mx-auto mt-8 px-4 md:px-0 pb-16 space-y-12">
@@ -200,6 +233,38 @@ export default function AboutPage() {
         </div>
       </section>
 
+      {throwbackItems.length > 0 && (
+        <section className="space-y-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h2 className="text-2xl font-semibold">{t("throwback.title")}</h2>
+              <p className="text-sm text-stone-600 dark:text-stone-400 max-w-2xl">
+                {t("throwback.subtitle")}
+              </p>
+            </div>
+            <Badge variant="secondary" className="rounded-2xl bg-white dark:bg-[#252526]">
+              {t("throwback.badge")}
+            </Badge>
+          </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            {throwbackItems.map((item, index) => (
+              <Card
+                key={`${item.title}-${index}`}
+                className="rounded-3xl h-full border-stone-200/70 dark:border-[#3e3e42]/70"
+              >
+                <CardHeader className="space-y-3">
+                  <Badge variant="outline" className="rounded-2xl w-fit">
+                    {item.badge}
+                  </Badge>
+                  <CardTitle>{item.title}</CardTitle>
+                  <CardDescription>{item.description}</CardDescription>
+                </CardHeader>
+              </Card>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section className="grid gap-4 md:grid-cols-2">
         <Card className="rounded-[28px] border border-stone-200 dark:border-[#3e3e42]">
           <CardContent className="space-y-4 p-6 md:p-8">
@@ -248,6 +313,106 @@ export default function AboutPage() {
           </CardContent>
         </Card>
       </section>
+
+      <section className="grid gap-4 md:grid-cols-2">
+        <Card className="rounded-[28px] border border-stone-200 dark:border-[#3e3e42]">
+          <CardContent className="space-y-4 p-6 md:p-8">
+            <Badge variant="secondary" className="w-fit rounded-2xl px-3 py-1">
+              {community?.badge}
+            </Badge>
+            <h2 className="text-xl font-semibold">{community?.title}</h2>
+            <p className="text-sm text-stone-600 dark:text-stone-300">{community?.description}</p>
+            <div className="rounded-2xl border border-dashed border-emerald-200 dark:border-emerald-900/40 bg-emerald-50/50 dark:bg-emerald-900/10 px-4 py-3 text-sm text-emerald-900 dark:text-emerald-200">
+              {community?.helper}
+            </div>
+            <Button asChild className="rounded-2xl">
+              <Link to="/contact">{community?.button}</Link>
+            </Button>
+          </CardContent>
+        </Card>
+        <Card className="rounded-[28px] border border-stone-200 dark:border-[#3e3e42]">
+          <CardContent className="space-y-4 p-6 md:p-8">
+            <div className="space-y-1">
+              <h2 className="text-xl font-semibold">{feedback?.title}</h2>
+              <p className="text-sm text-stone-600 dark:text-stone-300">{feedback?.subtitle}</p>
+            </div>
+            <ul className="space-y-2">
+              {feedbackList.map((item, index) => (
+                <li key={`${item}-${index}`} className="flex items-start gap-2 text-sm text-stone-700 dark:text-stone-200">
+                  <span className="text-emerald-600 dark:text-emerald-400 mt-0.5">•</span>
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-stone-500 dark:text-stone-400 italic">{feedback?.lauCredit}</p>
+            <Button asChild variant="outline" className="rounded-2xl">
+              <Link to="/contact">{feedback?.button}</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </section>
+
+      {meetOrder.length > 0 && (
+        <section className="space-y-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h2 className="text-2xl font-semibold">{t("meet.title")}</h2>
+              <p className="text-sm text-stone-600 dark:text-stone-400 max-w-2xl">
+                {t("meet.subtitle")}
+              </p>
+            </div>
+            <Badge variant="secondary" className="rounded-2xl bg-white dark:bg-[#252526]">
+              {meetBadge}
+            </Badge>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            {meetOrder
+              .map((key) => meetMembers[key])
+              .filter(Boolean)
+              .map((member, index) => (
+                <Card
+                  key={`${member!.name}-${index}`}
+                  className="rounded-[30px] border border-stone-200/80 dark:border-[#3e3e42]/80 overflow-hidden"
+                >
+                  <div className="p-6 pb-0">
+                    <div className="h-48 rounded-2xl border border-dashed border-stone-300 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#1f1f1f]/60 flex flex-col items-center justify-center text-center gap-2">
+                      <span className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                        {member!.placeholder}
+                      </span>
+                      <Button variant="outline" size="sm" className="rounded-full">
+                        {member!.placeholderCta}
+                      </Button>
+                    </div>
+                  </div>
+                  <CardHeader className="space-y-3">
+                    <div className="flex flex-wrap gap-2">
+                      {member!.adjectives?.map((adj) => (
+                        <Badge
+                          key={adj}
+                          variant="secondary"
+                          className="rounded-full px-3 py-0.5 text-xs bg-emerald-100/80 text-emerald-700 dark:bg-emerald-900/25 dark:text-emerald-200"
+                        >
+                          {adj}
+                        </Badge>
+                      ))}
+                    </div>
+                    <CardTitle>{member!.name}</CardTitle>
+                    <CardDescription>{member!.role}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <p className="text-sm text-stone-700 dark:text-stone-200">{member!.description}</p>
+                    <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42]/80 bg-stone-50 dark:bg-[#1f1f1f] px-4 py-3 space-y-1">
+                      <span className="text-[11px] uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                        {ritualLabel}
+                      </span>
+                      <p className="text-sm text-stone-700 dark:text-stone-200">{member!.ritual}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+          </div>
+        </section>
+      )}
 
       <section className="relative overflow-hidden rounded-[28px] border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1f1f1f] px-8 py-10 md:px-12 md:py-12">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,_129,_0.12),_transparent_55%)] dark:bg-[radial-gradient(circle_at_top,_rgba(16,_185,_129,_0.18),_transparent_60%)]" aria-hidden="true" />

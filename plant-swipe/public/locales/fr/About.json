@@ -1,27 +1,27 @@
 {
   "hero": {
-    "eyebrow": "Équipe Aphilia",
-    "title": "Deux amis : un clavier, un arrosoir",
-    "subtitle": "On a mélangé des lignes de code et des lignes de semis pour que les jardiniers urbains passent moins de temps à scroller et plus de temps à croquer des tomates maison.",
-    "ctaPrimary": "Venez dire bonjour",
+    "eyebrow": "Gamins d'Aphyllante",
+    "title": "On code comme s'il était 3 h du matin à Montpellier",
+    "subtitle": "Deux amis, une plante (l'Aphyllante) qui a inspiré le nom, et une passion partagée pour les jardins, les ordis et la manière dont les citadins cultivent leur nourriture.",
+    "ctaPrimary": "Confiez-nous votre rêve végétal",
     "ctaSecondary": "Retour à la découverte"
   },
   "story": {
     "badge": "Histoire d'origine",
-    "title": "Quand la terre rencontre le dépôt Git",
-    "subtitle": "L'un trace des sillons dans la terre, l'autre empile des commits plus vite qu'un basilic ne pousse. Voilà comment tout a dérapé.",
+    "title": "De l'Aphyllante à Aphilia",
+    "subtitle": "On a grandi sous le soleil méditerranéen près de Montpellier, on a craqué pour une plante sauvage appelée Aphyllante, et on s'est dit que notre amitié devait fleurir en logiciel.",
     "beats": {
       "spark": {
         "title": "Deux nerds chez le grainetier",
-        "description": "L'un aime aligner des graines dans le sol, l'autre aime aligner chiffres, parenthèses et lettres. L'alchimie a pris plus vite que le compost."
+        "description": "Xavier aligne les graines, FIVE aligne les lignes de code. On a compris qu'un plan de sol peut se cartographier comme une base de données."
       },
       "dare": {
-        "title": "Le pari",
-        "description": "« Hé salut, ce serait cool de faire une appli pour aider les gens à lancer leur jardin urbain et manger de bons fruits et légumes. » Réponse : « Chandail de fou. J'arrive. »"
+        "title": "L'époque Mango Monster",
+        "description": "Trois nuits blanches, des nouilles instantanées, des canettes de Mango Monster, une playlist Spotify qui part en vrille… et pourtant, un prototype fonctionnel."
       },
       "momentum": {
-        "title": "Trois jours plus tard",
-        "description": "On avait déjà une base de site, un léger manque de sommeil et la conviction qu'Aphilia devait exister. Alors on s'est lancé plein gaz."
+        "title": "Retour aux plantes",
+        "description": "Une fois la poussière retombée, on a littéralement touché de l'herbe, pris soin de nous et continué à itérer pour que chacun puisse cultiver sans chaos."
       }
     },
     "quote": {
@@ -30,11 +30,11 @@
     }
   },
   "definition": {
-    "title": "Aphilia, c'est quoi ?",
+    "title": "Racines montpelliéraines, branches dans le navigateur",
     "paragraphs": [
-      "Imaginez avoir envie de fleurs, d'un petit potager et même de quelques arbres fruitiers… tout en gérant les calendriers d'arrosage, les types de sols et les compatibilités entre plantes. C'est ce casse-tête qu'on a décidé d'apaiser.",
-      "Aphilia est notre terrain de jeu encyclopédique pour les passionnés de plantes, les fans de biodiversité et tous ceux qui rêvent de manger différemment grâce à leur propre récolte. On y glisse des infos pratiques, des surprises saisonnières et le ton complice d'un voisin qui lit vraiment les étiquettes de graines.",
-      "Au-delà des fiches, on partage nos meilleures méthodes d'entretien, on vous laisse créer vos jardins, enregistrer les plantes que vous possédez déjà, planifier l'arrosage automatiquement et vérifier quelles espèces cohabitent bien pour bâtir des écosystèmes qui respectent l'environnement."
+      "Aphilia est une lettre d'amour à l'Aphyllante, la plante qui bordait nos chemins et nous a appris à prendre la biodiversité au sérieux.",
+      "On crée un terrain de jeu encyclopédique pour quiconque flirte avec le jardinage urbain, la souveraineté alimentaire et le lore botanique, avec des blagues, des rituels et moins de tableurs.",
+      "Au-delà des données, on vous donne des plans de jardins, des prévisions d'arrosage et des notes de compatibilité pour que votre balcon soit aussi bien orchestré que vos playlists."
     ],
     "helper": "En bref : on transforme le chaos du jardinage en conseils abordables et geek-friendly."
   },
@@ -44,23 +44,23 @@
     "items": {
       "encyclopedia": {
         "title": "Une encyclopédie végétale vraiment utile",
-        "description": "Chaque fiche concentre un maximum d'infos concrètes pour passer de la curiosité au plan d'action sans changer d'écran."
+        "description": "Chaque fiche ressemble à un mentor qui vous répond avec des actions concrètes, pas du lorem ipsum."
       },
       "monthly": {
         "title": "Une interface de découverte cosy",
-        "description": "Tous les mois on met en avant de nouvelles plantes, on glisse des anecdotes et on garde le deck comme une playlist botanique."
+        "description": "Des spotlight mensuels, des anecdotes et des cartes à swiper qui rappellent l'ancien UI que vous réclamez."
       },
       "gardenPlanner": {
         "title": "Créateur de jardins + cerveau d'arrosage",
-        "description": "Composez des jardins avec vos plantes actuelles ou rêvées, Aphilia s'occupe ensuite du calendrier d'arrosage et des routines."
+        "description": "Composez des jardins avec vos plantes actuelles ou rêvées, Aphilia s'occupe ensuite du calendrier et des routines."
       },
       "photoId": {
         "title": "Reconnaissance photo",
-        "description": "Prenez une photo et laissez l'app vous dire si c'est du basilic, de la menthe ou une mauvaise herbe trop confiante."
+        "description": "Prenez une photo et laissez l'app trancher : basilic, menthe ou mauvaise herbe trop confiante."
       },
       "swap": {
         "title": "Échanges entre particuliers",
-        "description": "On veut que vous échangiez boutures, histoires et surplus de tomates sans prise de tête.",
+        "description": "Échangez boutures, tomates en rab et histoires sans passer par une marketplace lourde.",
         "status": "À venir"
       },
       "seeds": {
@@ -72,11 +72,78 @@
   },
   "services": {
     "title": "Services en préparation",
-    "subtitle": "Parce que vente, livraison et logistique méritent leur propre liste de contrôle.",
+    "subtitle": "Parce que vente, livraison et logistique méritent leur propre checklist.",
     "items": [
       "Vente de graines et plantes avec un packaging qui donne le sourire",
-      "Livraison locale pour que vos pots costauds arrêtent d'effrayer le chauffeur"
+      "Livraison locale pour que vos pots costauds n'effraient plus le chauffeur"
     ]
+  },
+  "throwback": {
+    "title": "Souvenirs de l'ancien UI",
+    "subtitle": "Vous nous avez dit que les graphes bizarres et les gribouillis vous manquent : on les laisse revenir petit à petit.",
+    "badge": "Mode nostalgie",
+    "items": [
+      {
+        "badge": "Deck legacy",
+        "title": "Timeline à swiper avec des lianes",
+        "description": "Des cartes entourées de tiges dessinées à la main et de textures polaroid. Remaster en cours."
+      },
+      {
+        "badge": "Graphes chaos",
+        "title": "Le dashboard Mango Monster",
+        "description": "Des courbes en temps réel qui tremblaient à 3 h du matin parce que nos mains caféinées vibraient. Retour prévu en version apaisée."
+      },
+      {
+        "badge": "Police du sommeil",
+        "title": "Le pop-up « encore réveillé ? »",
+        "description": "Après 20 swipes, l'UI nous rappelait de nous hydrater. On travaille sur son grand retour."
+      }
+    ]
+  },
+  "community": {
+    "badge": "Wishlist",
+    "title": "Feature rêvée : l'onglet Communauté",
+    "description": "On veut un espace où les voisins échangent des boutures, postent leurs victoires d'arrosage et organisent des trocs de graines directement dans Aphilia.",
+    "helper": "Si ça vous parle, faites-nous signe. Chaque « oui » le fait grimper sur la roadmap.",
+    "button": "Je veux participer"
+  },
+  "feedback": {
+    "title": "Construit avec vos messages",
+    "subtitle": "On adore vos vocaux, croquis et pavés « écoutez-moi bien ». ",
+    "list": [
+      "Les demandes de fonctionnalités reçoivent une réponse plus vite que nos plantes ne boivent l'eau espresso.",
+      "On capture les retours beta et on les scotche au-dessus du bureau tant que ce n'est pas livré.",
+      "Lau (la partenaire de FIVE) a inspiré la moitié de l'onboarding lors de brainstorms nocturnes."
+    ],
+    "lauCredit": "Une idée ? Lau nous a appris à écouter avant de coder.",
+    "button": "Envoyer une idée de fonctionnalité"
+  },
+  "meet": {
+    "title": "Rencontrez l'équipe",
+    "subtitle": "Deux amis, un bracelet d'amitié en forme d'Aphyllante.",
+    "badge": "Aphyllante squad",
+    "ritualLabel": "Rituel de lancement",
+    "order": ["xavier", "five"],
+    "members": {
+      "xavier": {
+        "name": "Xavier",
+        "role": "Créatif chaotique · Amoureux des plantes",
+        "adjectives": ["Créatif chaotique", "Chasseur de soleil"],
+        "description": "Tient un carnet des microclimats de balcon, peint les idées UI à l'aquarelle et voyage toujours avec un sécateur.",
+        "ritual": "Café dans une main, cigarette dans l'autre, il murmure aux semis avant chaque déploiement.",
+        "placeholder": "Espace photo — Xavier dans la jungle de balcon",
+        "placeholderCta": "Photo à venir"
+      },
+      "five": {
+        "name": "FIVE",
+        "role": "Optimiste insomniaque · Amoureux du code",
+        "adjectives": ["Insomniaque réfléchi", "Bricoleur de pixels"],
+        "description": "Écrit des migrations à minuit, étiquette chaque plante en latin et peut déboguer tout en arrosant un basilic.",
+        "ritual": "Mango Monster, prière chuchotée, doigts croisés pendant que la build bar avance.",
+        "placeholder": "Espace photo — FIVE face au terminal",
+        "placeholderCta": "Photo à venir"
+      }
+    }
   },
   "practical": {
     "title": "Information pratique",
