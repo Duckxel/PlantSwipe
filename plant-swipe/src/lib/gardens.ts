@@ -525,6 +525,36 @@ export async function upsertGardenTask(params: { gardenId: string; day: string; 
 }
 
 export async function getGardenTasks(gardenId: string, startDay: string, endDay: string): Promise<GardenTaskRow[]> {
+  try {
+    const params = new URLSearchParams({ start: startDay, end: endDay })
+    const { data: sessionData } = await supabase.auth.getSession()
+    const token = sessionData?.session?.access_token
+    const headers: Record<string, string> = { Accept: 'application/json' }
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+      params.set('token', token)
+    }
+    const resp = await fetch(`/api/garden/${encodeURIComponent(gardenId)}/tasks?${params.toString()}`, {
+      credentials: 'same-origin',
+      headers,
+    })
+    if (resp.ok) {
+      const body = await resp.json().catch(() => null)
+      if (body && body.ok !== false && Array.isArray(body.tasks)) {
+        return body.tasks.map((r: any) => ({
+          id: String(r.id),
+          gardenId: String(r.gardenId ?? r.garden_id ?? gardenId),
+          day: String(r.day || '').slice(0, 10),
+          taskType: String(r.taskType || r.task_type || 'watering'),
+          gardenPlantIds: Array.isArray(r.gardenPlantIds ?? r.garden_plant_ids)
+            ? (r.gardenPlantIds ?? r.garden_plant_ids)
+            : [],
+          success: Boolean(r.success),
+        }))
+      }
+    }
+  } catch {}
+
   const { data, error } = await supabase
     .from('garden_tasks')
     .select('id, garden_id, day, task_type, garden_plant_ids, success')
@@ -536,7 +566,7 @@ export async function getGardenTasks(gardenId: string, startDay: string, endDay:
   return (data || []).map((r: any) => ({
     id: String(r.id),
     gardenId: String(r.garden_id),
-    day: (r.day instanceof Date ? (r.day as Date).toISOString().slice(0,10) : String(r.day).slice(0,10)),
+    day: (r.day instanceof Date ? (r.day as Date).toISOString().slice(0, 10) : String(r.day).slice(0, 10)),
     taskType: 'watering',
     gardenPlantIds: Array.isArray(r.garden_plant_ids) ? r.garden_plant_ids : [],
     success: Boolean(r.success),
@@ -2629,13 +2659,16 @@ export async function listGardenActivityToday(gardenId: string, todayIso?: strin
   const start = `${today}T00:00:00.000Z`
   const end = `${today}T23:59:59.999Z`
   // Attempt server-assisted fetch first to support environments without direct Supabase access
-  try {
-    const params = new URLSearchParams({ day: today })
-    const { data: sessionData } = await supabase.auth.getSession()
-    const token = sessionData?.session?.access_token
-    const headers: Record<string, string> = { Accept: 'application/json' }
-    if (token) headers['Authorization'] = `Bearer ${token}`
-    const resp = await fetch(`/api/garden/${encodeURIComponent(gardenId)}/activity?${params.toString()}`, {
+    try {
+      const params = new URLSearchParams({ day: today })
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData?.session?.access_token
+      const headers: Record<string, string> = { Accept: 'application/json' }
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+        params.set('token', token)
+      }
+      const resp = await fetch(`/api/garden/${encodeURIComponent(gardenId)}/activity?${params.toString()}`, {
       credentials: 'same-origin',
       headers,
     })

@@ -237,6 +237,30 @@ async function getUserFromRequest(req) {
   }
 }
 
+function getTokenFromQuery(req) {
+  try {
+    const qToken = req.query?.token || req.query?.access_token
+    return qToken ? String(qToken) : null
+  } catch {
+    return null
+  }
+}
+
+async function getUserFromRequestOrToken(req) {
+  const direct = await getUserFromRequest(req)
+  if (direct?.id) return direct
+  const qToken = getTokenFromQuery(req)
+  if (qToken && supabaseServer) {
+    try {
+      const { data, error } = await supabaseServer.auth.getUser(qToken)
+      if (!error && data?.user?.id) {
+        return { id: data.user.id, email: data.user.email || null }
+      }
+    } catch {}
+  }
+  return null
+}
+
 // Determine whether a user (from Authorization) has admin privileges. Checks
 // profiles.is_admin when DB is configured, and falls back to Supabase REST and environment allowlists.
 function getBearerTokenFromRequest(req) {
@@ -249,6 +273,10 @@ function getBearerTokenFromRequest(req) {
     const token = header.slice(prefix.length).trim()
     return token || null
   } catch { return null }
+}
+
+function getAuthTokenFromRequest(req) {
+  return getBearerTokenFromRequest(req) || getTokenFromQuery(req)
 }
 async function isAdminFromRequest(req) {
   try {
@@ -5499,7 +5527,7 @@ app.get('/api/garden/:id/activity', async (req, res) => {
   try {
     const gardenId = String(req.params.id || '').trim()
     if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
-    const user = await getUserFromRequest(req)
+    const user = await getUserFromRequestOrToken(req)
     if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
     const member = await isGardenMember(req, gardenId, user.id)
     if (!member) { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
@@ -5531,7 +5559,7 @@ app.get('/api/garden/:id/activity', async (req, res) => {
       `
     } else if (supabaseUrlEnv && supabaseAnonKey) {
       const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
-      const bearer = getBearerTokenFromRequest(req)
+      const bearer = getAuthTokenFromRequest(req)
       if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
       const url = `${supabaseUrlEnv}/rest/v1/garden_activity_logs?garden_id=eq.${encodeURIComponent(gardenId)}&occurred_at=gte.${encodeURIComponent(start)}&select=id,garden_id,actor_id,actor_name,actor_color,kind,message,plant_name,task_name,occurred_at&order=occurred_at.desc&limit=200`
       const resp = await fetch(url, { headers })
@@ -5570,9 +5598,81 @@ app.get('/api/garden/:id/activity', async (req, res) => {
       }
     }
 
-    res.json({ ok: true, activity })
+      res.json({ ok: true, activity })
+    } catch (e) {
+      try { res.status(500).json({ ok: false, error: e?.message || 'failed to load activity' }) } catch {}
+    }
+  })
+
+app.get('/api/garden/:id/tasks', async (req, res) => {
+  try {
+    const gardenId = String(req.params.id || '').trim()
+    if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
+    const startDay = typeof req.query.start === 'string' ? req.query.start : ''
+    const endDay = typeof req.query.end === 'string' ? req.query.end : ''
+    const dayPattern = /^\d{4}-\d{2}-\d{2}$/
+    if (!dayPattern.test(startDay) || !dayPattern.test(endDay)) {
+      res.status(400).json({ ok: false, error: 'start and end must be YYYY-MM-DD' })
+      return
+    }
+    const user = await getUserFromRequestOrToken(req)
+    if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
+    const member = await isGardenMember(req, gardenId, user.id)
+    if (!member) { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
+
+    let rows = []
+    if (sql) {
+      rows = await sql`
+        select
+          id::text as id,
+          garden_id::text as garden_id,
+          day,
+          task_type,
+          garden_plant_ids,
+          success
+        from public.garden_tasks
+        where garden_id = ${gardenId}
+          and day >= ${startDay}
+          and day <= ${endDay}
+        order by day asc
+      `
+    } else if (supabaseUrlEnv && supabaseAnonKey) {
+      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+      const bearer = getAuthTokenFromRequest(req)
+      if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
+      const query = [
+        'select=id,garden_id,day,task_type,garden_plant_ids,success',
+        `garden_id=eq.${encodeURIComponent(gardenId)}`,
+        `day=gte.${encodeURIComponent(startDay)}`,
+        `day=lte.${encodeURIComponent(endDay)}`,
+        'order=day.asc',
+      ].join('&')
+      const resp = await fetch(`${supabaseUrlEnv}/rest/v1/garden_tasks?${query}`, { headers })
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => '')
+        res.status(resp.status).json({ ok: false, error: text || 'failed to load tasks' })
+        return
+      }
+      rows = await resp.json().catch(() => [])
+    } else {
+      res.status(503).json({ ok: false, error: 'Database not configured' })
+      return
+    }
+
+    const tasks = (rows || []).map((r) => ({
+      id: String(r.id),
+      gardenId: String(r.garden_id),
+      day: (() => {
+        if (r.day instanceof Date) return r.day.toISOString().slice(0, 10)
+        return String(r.day || '').slice(0, 10)
+      })(),
+      taskType: String(r.task_type || 'watering'),
+      gardenPlantIds: Array.isArray(r.garden_plant_ids) ? r.garden_plant_ids : [],
+      success: Boolean(r.success),
+    }))
+    res.json({ ok: true, tasks })
   } catch (e) {
-    try { res.status(500).json({ ok: false, error: e?.message || 'failed to load activity' }) } catch {}
+    res.status(500).json({ ok: false, error: e?.message || 'failed to load tasks' })
   }
 })
 
@@ -5854,16 +5954,7 @@ app.get('/api/garden/:id/stream', async (req, res) => {
   try {
     const gardenId = String(req.params.id || '').trim()
     if (!gardenId) { res.status(400).json({ error: 'garden id required' }); return }
-    // Support token via query param for EventSource which cannot set headers
-    let user = null
-    try {
-      const qToken = (req.query?.token || req.query?.access_token)
-      if (qToken && supabaseServer) {
-        const { data, error } = await supabaseServer.auth.getUser(String(qToken))
-        if (!error && data?.user?.id) user = { id: data.user.id, email: data.user.email || null }
-      }
-    } catch {}
-    if (!user) user = await getUserFromRequest(req)
+    const user = await getUserFromRequestOrToken(req)
     if (!user?.id) { res.status(401).json({ error: 'Unauthorized' }); return }
     const member = await isGardenMember(req, gardenId, user.id)
     if (!member) { res.status(403).json({ error: 'Forbidden' }); return }
@@ -5900,7 +5991,7 @@ app.get('/api/garden/:id/stream', async (req, res) => {
         } else if (supabaseUrlEnv && supabaseAnonKey) {
           const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
           // Include Authorization from bearer header or token query param (EventSource)
-          const bearer = getBearerTokenFromRequest(req) || (req.query?.token ? String(req.query.token) : (req.query?.access_token ? String(req.query.access_token) : null))
+      const bearer = getAuthTokenFromRequest(req)
           if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
           const url = `${supabaseUrlEnv}/rest/v1/garden_activity_logs?garden_id=eq.${encodeURIComponent(gardenId)}&occurred_at=gt.${encodeURIComponent(lastSeen)}&select=id,garden_id,actor_id,actor_name,actor_color,kind,message,plant_name,task_name,occurred_at&order=occurred_at.asc&limit=500`
           const r = await fetch(url, { headers })
