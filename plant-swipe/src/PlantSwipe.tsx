@@ -33,6 +33,8 @@ import { FriendsPage } from "@/pages/FriendsPage";
 import SettingsPage from "@/pages/SettingsPage";
 import ContactUsPage from "@/pages/ContactUsPage";
 import AboutPage from "@/pages/AboutPage";
+import DownloadPage from "@/pages/DownloadPage";
+import TermsPage from "@/pages/TermsPage";
 import { supabase } from "@/lib/supabaseClient";
 import { useLanguage } from "@/lib/i18nRouting";
 import { loadPlantsWithTranslations } from "@/lib/plantTranslationLoader";
@@ -715,8 +717,10 @@ export default function PlantSwipe() {
                   <Route path="/u/:username" element={<PublicProfilePage />} />
                   <Route path="/friends" element={user ? <FriendsPage /> : <Navigate to="/" replace />} />
                   <Route path="/settings" element={user ? <SettingsPage /> : <Navigate to="/" replace />} />
-                  <Route path="/contact" element={<ContactUsPage />} />
-                  <Route path="/about" element={<AboutPage />} />
+                    <Route path="/contact" element={<ContactUsPage />} />
+                    <Route path="/about" element={<AboutPage />} />
+                    <Route path="/download" element={<DownloadPage />} />
+                    <Route path="/terms" element={<TermsPage />} />
                 <Route path="/admin" element={
                   <RequireAdmin>
                     <Suspense fallback={<div className="p-8 text-center text-sm opacity-60">Loading admin panel...</div>}>
