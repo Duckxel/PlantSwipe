@@ -8,7 +8,7 @@ import type { Plant, PlantSeason } from "@/types/plant"
 import { rarityTone, seasonBadge } from "@/constants/badges"
 import { useTranslation } from "react-i18next"
 import { Link } from "@/components/i18n/Link"
-import { formatLikeCount, getPlantLikeCount, isNewPlant, isPlantOfTheMonth, isPopularPlant } from "@/lib/plantHighlights"
+import { isNewPlant, isPlantOfTheMonth, isPopularPlant } from "@/lib/plantHighlights"
 
 const colorTokenMap: Record<string, string> = {
   red: "#ef4444",
@@ -120,16 +120,14 @@ export const SwipePage: React.FC<SwipePageProps> = ({
         icon: <PartyPopper className="h-4 w-4 mr-1" />,
       })
     }
-    if (isPopularPlant(current)) {
-      const likes = getPlantLikeCount(current)
-      const label = likes !== null ? t("discoveryPage.tags.popularWithCount", { likes: formatLikeCount(likes) }) : t("discoveryPage.tags.popular")
-      badges.push({
-        key: "popular",
-        label,
-        className: "bg-rose-600/90 text-white",
-        icon: <Flame className="h-4 w-4 mr-1" />,
-      })
-    }
+      if (isPopularPlant(current)) {
+        badges.push({
+          key: "popular",
+          label: t("discoveryPage.tags.popular"),
+          className: "bg-rose-600/90 text-white",
+          icon: <Flame className="h-4 w-4 mr-1" />,
+        })
+      }
     return badges
   }, [current, t])
 

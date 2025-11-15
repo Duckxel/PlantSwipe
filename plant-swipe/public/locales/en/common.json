@@ -177,8 +177,7 @@
     "tags": {
       "plantOfMonth": "Plant of the Month",
       "new": "New",
-      "popular": "Popular",
-      "popularWithCount": "Popular • {{likes}} likes"
+      "popular": "Popular"
     },
     "infoCard": {
       "descriptionLabel": "Description",

@@ -34,16 +34,3 @@ export const isNewPlant = (plant?: Plant | null, referenceDate: Date = new Date(
 
 export const isPopularPlant = (plant?: Plant | null): boolean => Boolean(plant?.popularity?.isTopPick)
 
-export const getPlantLikeCount = (plant?: Plant | null): number | null => {
-  if (!plant?.popularity || typeof plant.popularity.likes !== "number") return null
-  return plant.popularity.likes
-}
-
-export const formatLikeCount = (likes: number, locale?: string): string => {
-  if (!Number.isFinite(likes)) return "0"
-  const formatter = new Intl.NumberFormat(locale ?? undefined, {
-    notation: likes >= 1000 ? "compact" : "standard",
-    maximumFractionDigits: likes >= 1000 ? 1 : 0,
-  })
-  return formatter.format(likes)
-}
