@@ -652,15 +652,12 @@ Ensure production environment variables are set:
 - **User prompts**: `ServiceWorkerToast` informs users when the app is installable/offline-ready or when a new version is published (with a “Reload now” action).
 - **Local testing**: run `VITE_ENABLE_PWA=true npm run dev` to test the service worker in development. Use the “Application ▸ Manifest” panel in devtools to inspect install assets.
 
-### GitHub Pages Deployments
+### Local Deployments
 
-1. Enable **GitHub Pages** for the repository → *Settings ▸ Pages ▸ Build and deployment ▸ Source: GitHub Actions.*
-2. The workflow at `.github/workflows/deploy-pwa-pages.yml` builds the client inside `plant-swipe/` and publishes the `dist` folder to GitHub Pages using the official `actions/deploy-pages`.
-3. Triggers:
-   - `workflow_dispatch` with an optional `target_ref` input so you can deploy any branch on‑demand (handy for branch-specific previews).
-   - `push` on `main` and any branch that matches `release/**` or `pages/**` for automatic releases.
-4. The workflow exports `VITE_APP_BASE_PATH="/<repo-name>/"`, so the generated service worker + router honour the GitHub Pages sub-path. For custom forks, override the env variable as needed.
-5. After a successful run, the action comments the published URL (format: `https://<github-username>.github.io/<repo-name>/`). Re-run the workflow to push another branch build whenever required.
+1. **First-time server provisioning**: `sudo ./setup.sh`. This installs system packages, node dependencies, builds the PWA (`npm run build`), provisions nginx/systemd, and links `/var/www/PlantSwipe/plant-swipe` to the repo. Use `PWA_BASE_PATH=/custom/ sudo ./setup.sh` if you serve the UI from a sub-path.
+2. **Subsequent updates**: `sudo bash scripts/refresh-plant-swipe.sh`. The helper pulls the desired branch, re-runs `npm ci && npm run build`, syncs the `/dist` output, runs database migrations (if any), and restarts the `plant-swipe-node`/`admin-api` services. Trigger it manually or wire it to your internal “Refresh” button.
+3. **When to redeploy**: any time you change frontend code, assets, translations, Tailwind styles, or server logic that lives in this repo. Because the PWA precaches the latest build, users will see an in-app “New release available” prompt the moment the refresh script finishes and nginx serves the new `sw.js`.
+4. **Testing multiple versions**: run separate branches or directories on the same host by cloning into `/var/www/PlantSwipe/<branch>` and pointing distinct nginx server blocks (or subdomains) at each clone. Each copy can run `setup.sh`/`refresh-plant-swipe.sh` independently so QA teams can vet builds before promoting them to production.
 
 ---
 
