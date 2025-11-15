@@ -2631,9 +2631,13 @@ export async function listGardenActivityToday(gardenId: string, todayIso?: strin
   // Attempt server-assisted fetch first to support environments without direct Supabase access
   try {
     const params = new URLSearchParams({ day: today })
+    const { data: sessionData } = await supabase.auth.getSession()
+    const token = sessionData?.session?.access_token
+    const headers: Record<string, string> = { Accept: 'application/json' }
+    if (token) headers['Authorization'] = `Bearer ${token}`
     const resp = await fetch(`/api/garden/${encodeURIComponent(gardenId)}/activity?${params.toString()}`, {
       credentials: 'same-origin',
-      headers: { Accept: 'application/json' },
+      headers,
     })
     if (resp.ok) {
       const body = await resp.json().catch(() => null)
