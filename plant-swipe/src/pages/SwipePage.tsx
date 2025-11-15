@@ -49,7 +49,6 @@ interface SwipePageProps {
   handlePrevious: () => void
   liked?: boolean
   onToggleLike?: () => void
-  total: number
 }
 
 export const SwipePage: React.FC<SwipePageProps> = ({
@@ -64,7 +63,6 @@ export const SwipePage: React.FC<SwipePageProps> = ({
   handlePrevious,
   liked = false,
   onToggleLike,
-  total,
 }) => {
   const { t } = useTranslation("common")
 

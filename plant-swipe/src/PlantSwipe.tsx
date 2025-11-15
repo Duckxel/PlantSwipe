@@ -771,7 +771,6 @@ export default function PlantSwipe() {
                         handlePrevious={handlePrevious}
                         liked={current ? likedIds.includes(current.id) : false}
                         onToggleLike={() => { if (current) toggleLiked(current.id) }}
-                        total={swipeList.length}
                       />
                     ) : (
                     <>
