@@ -42,7 +42,6 @@ export default function AboutPage() {
   const meetMembers = (t("meet.members", { returnObjects: true }) as Record<string, MemberCard>) ?? {}
   const meetOrder =
     (t("meet.order", { returnObjects: true }) as string[]) ?? Object.keys(meetMembers)
-  const ritualLabel = t("meet.ritualLabel")
   const meetBadge = t("meet.badge")
 
   return (
