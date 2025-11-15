@@ -6122,7 +6122,7 @@ export const AdminPage: React.FC = () => {
                                 <Users className="h-4 w-4" /> Members
                               </div>
                               <div className="text-xs opacity-60">
-                                View the newest 20 accounts, then load more as
+                                Browse members in batches of 20 and load more as
                                 needed.
                               </div>
                             </div>
