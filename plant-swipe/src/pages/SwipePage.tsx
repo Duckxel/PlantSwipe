@@ -1,6 +1,6 @@
 import React from "react"
 import { motion, AnimatePresence, type MotionValue } from "framer-motion"
-import { ChevronLeft, ChevronRight, ChevronUp, Heart, Sparkles, PartyPopper, Palette, Wand2 } from "lucide-react"
+import { ChevronLeft, ChevronRight, ChevronUp, Heart, Sparkles, PartyPopper, Palette, Wand2, Flame } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -8,6 +8,7 @@ import type { Plant, PlantSeason } from "@/types/plant"
 import { rarityTone, seasonBadge } from "@/constants/badges"
 import { useTranslation } from "react-i18next"
 import { Link } from "@/components/i18n/Link"
+import { formatLikeCount, getPlantLikeCount, isNewPlant, isPlantOfTheMonth, isPopularPlant } from "@/lib/plantHighlights"
 
 const colorTokenMap: Record<string, string> = {
   red: "#ef4444",
@@ -95,8 +96,6 @@ export const SwipePage: React.FC<SwipePageProps> = ({
     }
   }, [handleInfo, handlePass, handlePrevious])
 
-  const position = total > 0 ? ((index % total) + total) % total + 1 : null
-  const statusLabel = position ? t("discoveryPage.status.position", { current: position, total }) : t("discoveryPage.status.empty")
   const description = current?.description?.trim()
   const colorChips = current?.colors?.slice(0, 6) ?? []
   const seedsCopy = current?.seedsAvailable ? t("discoveryPage.infoCard.seedsAvailable") : t("discoveryPage.infoCard.seedsUnavailable")
@@ -104,6 +103,37 @@ export const SwipePage: React.FC<SwipePageProps> = ({
 
   const rarityKey = current?.rarity && rarityTone[current.rarity] ? current.rarity : "Common"
   const seasons = (current?.seasons ?? []) as PlantSeason[]
+  const highlightBadges = React.useMemo(() => {
+    if (!current) return []
+    const badges: Array<{ key: string; label: string; icon: React.ReactNode; className: string }> = []
+    if (isPlantOfTheMonth(current)) {
+      badges.push({
+        key: "promotion",
+        label: t("discoveryPage.tags.plantOfMonth"),
+        className: "bg-amber-400/90 text-amber-950",
+        icon: <Sparkles className="h-4 w-4 mr-1" />,
+      })
+    }
+    if (isNewPlant(current)) {
+      badges.push({
+        key: "new",
+        label: t("discoveryPage.tags.new"),
+        className: "bg-emerald-500/90 text-white",
+        icon: <PartyPopper className="h-4 w-4 mr-1" />,
+      })
+    }
+    if (isPopularPlant(current)) {
+      const likes = getPlantLikeCount(current)
+      const label = likes !== null ? t("discoveryPage.tags.popularWithCount", { likes: formatLikeCount(likes) }) : t("discoveryPage.tags.popular")
+      badges.push({
+        key: "popular",
+        label,
+        className: "bg-rose-600/90 text-white",
+        icon: <Flame className="h-4 w-4 mr-1" />,
+      })
+    }
+    return badges
+  }, [current, t])
 
     return (
       <div className="max-w-5xl mx-auto mt-8 px-4 md:px-0 pb-16">
@@ -148,14 +178,16 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                           <div className="absolute inset-0 bg-gradient-to-br from-emerald-200 via-emerald-100 to-white" />
                         )}
                         <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-transparent" />
-                        <div className="absolute top-4 left-4 z-20">
-                          {position && (
-                            <Badge className="rounded-2xl px-3 py-1 bg-black/60 text-white backdrop-blur">
-                              <PartyPopper className="h-4 w-4 mr-1" />
-                              {statusLabel}
-                            </Badge>
+                          {highlightBadges.length > 0 && (
+                            <div className="absolute top-4 left-4 z-20 flex flex-col gap-2">
+                              {highlightBadges.map((badge) => (
+                                <Badge key={badge.key} className={`rounded-2xl px-3 py-1 text-xs font-semibold flex items-center backdrop-blur ${badge.className}`}>
+                                  {badge.icon}
+                                  {badge.label}
+                                </Badge>
+                              ))}
+                            </div>
                           )}
-                        </div>
                         <div className="absolute top-4 right-4 z-20">
                           <button
                             onClick={(e: React.MouseEvent<HTMLButtonElement>) => {

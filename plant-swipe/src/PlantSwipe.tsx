@@ -36,6 +36,7 @@ import AboutPage from "@/pages/AboutPage";
 import { supabase } from "@/lib/supabaseClient";
 import { useLanguage } from "@/lib/i18nRouting";
 import { loadPlantsWithTranslations } from "@/lib/plantTranslationLoader";
+import { isPlantOfTheMonth } from "@/lib/plantHighlights";
 import { useTranslation } from "react-i18next";
 
 // Lazy load heavy pages for code splitting
@@ -277,15 +278,29 @@ export default function PlantSwipe() {
   // Swiping-only randomized order with continuous wrap-around
   const [shuffleEpoch, setShuffleEpoch] = useState(0)
   const swipeList = useMemo(() => {
-    const arr = filtered.slice()
-    // Fisher-Yates shuffle
-    for (let i = arr.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1))
-      const tmp = arr[i]
-      arr[i] = arr[j]
-      arr[j] = tmp
+    if (filtered.length === 0) return []
+    const shuffleList = (list: Plant[]) => {
+      const arr = list.slice()
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1))
+        ;[arr[i], arr[j]] = [arr[j], arr[i]]
+      }
+      return arr
     }
-    return arr
+    const now = new Date()
+    const promoted: Plant[] = []
+    const regular: Plant[] = []
+    filtered.forEach((plant) => {
+      if (isPlantOfTheMonth(plant, now)) {
+        promoted.push(plant)
+      } else {
+        regular.push(plant)
+      }
+    })
+    if (promoted.length === 0) {
+      return shuffleList(filtered)
+    }
+    return [...shuffleList(promoted), ...shuffleList(regular)]
   }, [filtered, shuffleEpoch])
 
   const current = swipeList.length > 0 ? swipeList[index % swipeList.length] : undefined
