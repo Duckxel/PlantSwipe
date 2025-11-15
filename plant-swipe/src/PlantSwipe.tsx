@@ -44,6 +44,8 @@ const AdminPage = lazy(() => import("@/pages/AdminPage").then(module => ({ defau
 const GardenDashboardPage = lazy(() => import("@/pages/GardenDashboardPage").then(module => ({ default: module.GardenDashboardPage })));
 const GardenListPage = lazy(() => import("@/pages/GardenListPage").then(module => ({ default: module.GardenListPage })));
 
+type SearchSortMode = "default" | "newest" | "popular"
+
 // --- Main Component ---
 export default function PlantSwipe() {
   const { user, signIn, signUp, signOut, profile, refreshProfile } = useAuth()
@@ -60,6 +62,7 @@ export default function PlantSwipe() {
     return window.innerWidth >= 1024
   })
   const [requestPlantDialogOpen, setRequestPlantDialogOpen] = useState(false)
+  const [searchSort, setSearchSort] = useState<SearchSortMode>("default")
 
   const [index, setIndex] = useState(0)
   const [likedIds, setLikedIds] = useState<string[]>([])
@@ -302,6 +305,31 @@ export default function PlantSwipe() {
     }
     return [...shuffleList(promoted), ...shuffleList(regular)]
   }, [filtered, shuffleEpoch])
+
+  const sortedSearchResults = useMemo(() => {
+    if (searchSort === "default") return filtered
+    const arr = filtered.slice()
+    if (searchSort === "newest") {
+      const getCreatedAtValue = (plant: Plant) => {
+        const value = plant.meta?.createdAt
+        if (!value) return 0
+        const ts = Date.parse(value)
+        return Number.isNaN(ts) ? 0 : ts
+      }
+      arr.sort((a, b) => {
+        const diff = getCreatedAtValue(b) - getCreatedAtValue(a)
+        if (diff !== 0) return diff
+        return a.name.localeCompare(b.name)
+      })
+    } else if (searchSort === "popular") {
+      arr.sort((a, b) => {
+        const diff = (b.popularity?.likes ?? 0) - (a.popularity?.likes ?? 0)
+        if (diff !== 0) return diff
+        return a.name.localeCompare(b.name)
+      })
+    }
+    return arr
+  }, [filtered, searchSort])
 
   const current = swipeList.length > 0 ? swipeList[index % swipeList.length] : undefined
 
@@ -654,7 +682,22 @@ export default function PlantSwipe() {
                           />
                         </div>
                       </div>
-                    <div className="flex flex-col gap-2 sm:flex-row lg:flex-row lg:items-center lg:gap-2 w-full lg:w-auto">
+                      <div className="flex flex-col gap-2 sm:flex-row lg:flex-row lg:items-end lg:gap-2 w-full lg:w-auto">
+                        <div className="flex flex-col w-full sm:w-auto">
+                          <Label htmlFor="plant-search-sort" className="text-xs font-medium uppercase tracking-wide opacity-60">
+                            {t("plant.sortLabel")}
+                          </Label>
+                          <select
+                            id="plant-search-sort"
+                            value={searchSort}
+                            onChange={(e) => setSearchSort(e.target.value as SearchSortMode)}
+                            className="mt-1 rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-white"
+                          >
+                            <option value="default">{t("plant.sortDefault")}</option>
+                            <option value="newest">{t("plant.sortNewest")}</option>
+                            <option value="popular">{t("plant.sortPopular")}</option>
+                          </select>
+                        </div>
                       <Button
                         variant="outline"
                         className="rounded-2xl w-full lg:w-auto justify-between lg:justify-center"
@@ -715,13 +758,13 @@ export default function PlantSwipe() {
                 } />
                 <Route
                   path="/search"
-                  element={
-                    <SearchPage
-                      plants={filtered}
-                      openInfo={(p) => navigate(`/plants/${p.id}`, { state: { backgroundLocation: location } })}
-                      likedIds={likedIds}
-                    />
-                    }
+                    element={
+                      <SearchPage
+                        plants={sortedSearchResults}
+                        openInfo={(p) => navigate(`/plants/${p.id}`, { state: { backgroundLocation: location } })}
+                        likedIds={likedIds}
+                      />
+                      }
                   />
                   <Route
                     path="/profile"
