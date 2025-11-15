@@ -17,16 +17,18 @@ type MemberCard = {
   placeholderCta: string
 }
 
-const memberProfiles: Record<string, { pseudo: string; fullName: string; role: string }> = {
+const memberProfiles: Record<string, { pseudo: string; fullName: string; role: string; tag: string }> = {
   xavier: {
     pseudo: "Psykokwak",
-    fullName: "Xaver Sabar",
+    fullName: "Xavier Sabar",
     role: "CCO / CEO / Founder",
+    tag: "Chaotic Creative",
   },
   five: {
     pseudo: "FIVE",
     fullName: "Chan AH-HONG",
     role: "CTO / Co-Founder",
+    tag: "Sleepless Overthinker",
   },
 }
 
@@ -243,7 +245,7 @@ export default function AboutPage() {
               {meetBadge}
             </Badge>
           </div>
-          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 justify-center max-w-5xl mx-auto">
             {meetOrder
               .map((key) => ({ key, member: meetMembers[key] }))
               .filter((entry): entry is { key: string; member: MemberCard } => Boolean(entry.member))
@@ -251,6 +253,7 @@ export default function AboutPage() {
                 const profile = memberProfiles[key]
                 const displayName = profile ? `${profile.pseudo} - ${profile.fullName}` : member.name
                 const roleLabel = profile?.role ?? member.role
+                const tagLabel = profile?.tag
 
                 return (
                   <Card
@@ -264,17 +267,14 @@ export default function AboutPage() {
                             {member.placeholder}
                           </span>
                         </div>
-                        {member.adjectives?.length ? (
-                          <div className="absolute -top-3 inset-x-3 flex flex-wrap justify-center gap-2 pointer-events-none">
-                            {member.adjectives.map((adj) => (
-                              <Badge
-                                key={adj}
-                                variant="secondary"
-                                className="rounded-full px-3 py-0.5 text-[11px] bg-emerald-100/90 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-100 shadow-sm"
-                              >
-                                {adj}
-                              </Badge>
-                            ))}
+                        {tagLabel ? (
+                          <div className="absolute inset-x-3 bottom-3 flex justify-center pointer-events-none">
+                            <Badge
+                              variant="secondary"
+                              className="rounded-full px-3 py-0.5 text-[11px] bg-emerald-100/90 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-100 shadow-sm"
+                            >
+                              {tagLabel}
+                            </Badge>
                           </div>
                         ) : null}
                       </div>
