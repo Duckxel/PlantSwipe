@@ -160,6 +160,8 @@ export const AdminMediaPanel: React.FC = () => {
                   entry.metadata?.originalName ||
                   entry.path.split("/").filter(Boolean).pop() ||
                   entry.path
+                const displayLink =
+                  entry.url || `supabase://${entry.bucket}/${entry.path}`
                 return (
                   <div
                     key={entry.id}
@@ -215,7 +217,7 @@ export const AdminMediaPanel: React.FC = () => {
                       <div className="flex flex-col gap-2 md:items-end">
                         <Input
                           readOnly
-                          value={entry.path}
+                          value={displayLink}
                           onFocus={(e) => e.currentTarget.select()}
                           className="rounded-2xl font-mono text-xs"
                         />
