@@ -1,0 +1,44 @@
+name: Build PlantSwipe
+
+on:
+  push:
+    paths:
+      - 'plant-swipe/**'
+      - '.github/workflows/build.yml'
+      - 'Dockerfile'
+      - '.dockerignore'
+  pull_request:
+    paths:
+      - 'plant-swipe/**'
+      - 'Dockerfile'
+      - '.dockerignore'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: plant-swipe
+    env:
+      VITE_SUPABASE_URL: https://demo.supabase.co
+      VITE_SUPABASE_ANON_KEY: supa-public-anon-key
+      SUPABASE_URL: https://demo.supabase.co
+      SUPABASE_ANON_KEY: supa-public-anon-key
+      DATABASE_URL: postgres://demo:demo@db.demo.supabase.co:5432/postgres
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: plant-swipe/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build

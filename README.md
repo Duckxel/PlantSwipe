@@ -290,6 +290,41 @@ sudo systemctl reload nginx
 
 ---
 
+## ☁️ Deploying to Railway
+
+Railway can now build and run PlantSwipe out-of-the-box via the repo’s root `Dockerfile`. The resulting container installs dependencies, compiles the Vite bundle, and serves the `server.js` Express API on port `3000` (Railway injects `PORT`, and the image defaults `HOST=0.0.0.0` so traffic reaches the container).
+
+### Quick Steps
+
+1. **Create a Railway project** and choose “Deploy from GitHub”, pointing it to this repository/branch.
+2. Railway automatically detects the Dockerfile and builds the multi-stage image.
+3. Add the environment variables listed below.
+4. Hit “Deploy” — every subsequent push to the tracked branch will re-trigger the build.
+
+> ℹ️ `setup.sh` is still available for bare-metal servers, but it requires root/systemd and is **not** executed inside Railway. The container already performs the necessary `npm ci && npm run build` pipeline.
+
+### Minimum Environment Variables
+
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `VITE_SUPABASE_URL` | ✅ | Supabase project URL used by the client bundle |
+| `VITE_SUPABASE_ANON_KEY` | ✅ | Supabase anon key exposed to the browser |
+| `SUPABASE_URL` | ✅ | Server-side Supabase base URL (usually same as VITE value) |
+| `SUPABASE_ANON_KEY` | ✅ | Server-side anon key for Supabase REST fallbacks |
+| `DATABASE_URL` **or** `SUPABASE_DB_PASSWORD` + host vars | ✅ | PostgreSQL connection for the Express API |
+| `RESEND_API_KEY`, `RESEND_FROM` | ⛔ optional | Needed only if email delivery via Resend is used |
+| `OPENAI_KEY` | ⛔ optional | Enables AI-assisted plant fill endpoints |
+| `DEEPL_API_KEY` | ⛔ optional | Enables DeepL translations server-side |
+| `ADMIN_STATIC_TOKEN` | ⛔ optional | Allows headless admin actions (used by Admin console) |
+
+Railway automatically injects a `PORT`; you do **not** need to set it yourself. If you want to expose additional configuration (e.g., `SUPPORT_EMAIL_TO`, `BUSINESS_EMAIL_TO`, feature flags), add them through the Railway dashboard — `server.js` already normalizes most aliases.
+
+### GitHub Auto Builds
+
+The workflow `.github/workflows/build.yml` runs `npm ci` + `npm run build` against Node 22 for every push/PR touching `plant-swipe` or the deployment assets. Use it as your “gate” to ensure Railway builds succeed before they ever reach the platform. If you connect Railway to GitHub, every successful push on the tracked branch automatically rebuilds the Docker image described above.
+
+---
+
 ## 🌟 Who it's for
 
 | Audience | Use Case |
