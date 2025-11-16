@@ -716,7 +716,11 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
         const { data: translation } = await getPlantTranslation(id, editLanguage)
         
         // Parse JSONB fields
-          const parsedClassification = typeof data.classification === 'string' ? JSON.parse(data.classification) : data.classification
+        const parsedClassification = typeof data.classification === 'string' ? JSON.parse(data.classification) : data.classification
+        const resolvedClassificationType =
+          parsedClassification && typeof (parsedClassification as any).type === 'string'
+            ? (parsedClassification as any).type
+            : ''
           const parsedIdentifiers = typeof data.identifiers === 'string' ? JSON.parse(data.identifiers) : data.identifiers
         const parsedTraits = typeof data.traits === 'string' ? JSON.parse(data.traits) : data.traits
         const parsedDimensions = typeof data.dimensions === 'string' ? JSON.parse(data.dimensions) : data.dimensions
@@ -818,12 +822,13 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
         setWaterFreqPeriod(period)
           setWaterFreqAmount(amount)
 
-          finalizeAiStatuses({
+        finalizeAiStatuses({
             scientificName: englishScientificName || resolvedScientificName,
             colors: resolvedColorsString,
             seasons: resolvedSeasons,
             description: englishDescription || resolvedDescription,
             funFact: resolvedFunFact,
+          classificationType: resolvedClassificationType || '',
           })
       } catch (e: any) {
         setError(e?.message || 'Failed to load plant')

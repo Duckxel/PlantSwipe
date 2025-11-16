@@ -1,7 +1,7 @@
 // @ts-nocheck
 import React from 'react'
 import { createPortal } from 'react-dom'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import type { GardenPlantTask } from '@/types/garden'
 import { listPlantTasks, deletePlantTask, updatePatternTask, resyncTaskOccurrencesForGarden, logGardenActivity, refreshGardenTaskCache } from '@/lib/gardens'
@@ -182,16 +182,20 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="rounded-2xl"
-        onOpenAutoFocus={(e) => { e.preventDefault() }}
+        <DialogContent
+          className="rounded-2xl"
+          onOpenAutoFocus={(e) => { e.preventDefault() }}
         // Allow outside pointer events so absolutely positioned menu stays interactive
-        onPointerDownOutside={(e) => { /* allow */ }}
-        onInteractOutside={(e) => { /* allow */ }}
-        onCloseAutoFocus={(e) => { /* allow */ }}
+          onPointerDownOutside={(e) => { /* allow */ }}
+          onInteractOutside={(e) => { /* allow */ }}
+          onCloseAutoFocus={(e) => { /* allow */ }}
+          aria-describedby={undefined}
       >
         <DialogHeader>
           <DialogTitle>{t('gardenDashboard.taskDialog.tasks')}</DialogTitle>
+            <DialogDescription className="sr-only">
+              {t('gardenDashboard.taskDialog.existingTasks')}
+            </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="flex items-center justify-between">

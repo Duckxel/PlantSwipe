@@ -97,29 +97,6 @@ const ArrayInputField: React.FC<{
     )
   }
 
-  return (
-    <div className="space-y-4">
-        <div className="flex flex-wrap gap-2 rounded-2xl border border-stone-200/70 bg-white/80 p-2 dark:border-[#3e3e42]/70 dark:bg-[#1e1e1e]">
-          {tabOptions.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-              onClick={() => setActiveTab(tab.id)}
-            className={`px-3 py-1.5 rounded-2xl text-sm font-medium transition ${
-              activeTab === tab.id
-                ? 'bg-emerald-600 text-white shadow'
-                : 'bg-transparent text-stone-600 dark:text-stone-300 hover:bg-stone-100/70 dark:hover:bg-[#2d2d30]'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-      {activeTab === 'classification' ? classificationSection : detailSections}
-    </div>
-  )
-}
-
 // Helper for multi-select buttons
 const MultiSelectButtons: React.FC<{
   label: string
@@ -1149,6 +1126,28 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
           </div>
         </div>
       </CollapsibleSection>
+    </>
+  )
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-2 rounded-2xl border border-stone-200/70 bg-white/80 p-2 dark:border-[#3e3e42]/70 dark:bg-[#1e1e1e]">
+        {tabOptions.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setActiveTab(tab.id)}
+            className={`px-3 py-1.5 rounded-2xl text-sm font-medium transition ${
+              activeTab === tab.id
+                ? "bg-emerald-600 text-white shadow"
+                : "bg-transparent text-stone-600 dark:text-stone-300 hover:bg-stone-100/70 dark:hover:bg-[#2d2d30]"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+      {activeTab === "classification" ? classificationSection : detailSections}
     </div>
   )
 }

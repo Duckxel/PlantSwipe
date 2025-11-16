@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -2704,11 +2705,17 @@ export const GardenDashboardPage: React.FC = () => {
 
           {/* Add Plant Dialog */}
           <Dialog open={addOpen} onOpenChange={setAddOpen}>
-            <DialogContent className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur">
+              <DialogContent
+                className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur"
+                aria-describedby={undefined}
+              >
               <DialogHeader>
                 <DialogTitle>
                   {t("gardenDashboard.plantsSection.addPlantToGarden")}
                 </DialogTitle>
+                  <DialogDescription className="sr-only">
+                    {t("gardenDashboard.plantsSection.searchPlants")}
+                  </DialogDescription>
               </DialogHeader>
               <div className="space-y-3">
                 <Input
@@ -2761,11 +2768,17 @@ export const GardenDashboardPage: React.FC = () => {
 
           {/* Add Plant Details Dialog */}
           <Dialog open={addDetailsOpen} onOpenChange={setAddDetailsOpen}>
-            <DialogContent className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur">
+              <DialogContent
+                className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur"
+                aria-describedby={undefined}
+              >
               <DialogHeader>
                 <DialogTitle>
                   {t("gardenDashboard.plantsSection.addDetails")}
                 </DialogTitle>
+                  <DialogDescription className="sr-only">
+                    {t("gardenDashboard.plantsSection.customName")}
+                  </DialogDescription>
               </DialogHeader>
               <div className="space-y-3">
                 <div>
@@ -2853,11 +2866,19 @@ export const GardenDashboardPage: React.FC = () => {
 
           {/* Invite Dialog */}
           <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
-            <DialogContent className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur">
+              <DialogContent
+                className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur"
+                aria-describedby={undefined}
+              >
               <DialogHeader>
                 <DialogTitle>
                   {t("gardenDashboard.settingsSection.addMemberTitle")}
                 </DialogTitle>
+                  <DialogDescription className="sr-only">
+                    {t(
+                      "gardenDashboard.settingsSection.enterDisplayNameOrEmail",
+                    )}
+                  </DialogDescription>
               </DialogHeader>
               <div className="space-y-3">
                 <div className="relative">
