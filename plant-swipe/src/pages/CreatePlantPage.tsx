@@ -345,12 +345,38 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
           description: 'Seasons when the plant is most active or in bloom (Spring, Summer, Autumn, Winter).',
         }
       }
-      if (!('description' in schemaWithMandatory)) {
-        schemaWithMandatory.description = {
-          type: 'string',
-          description: 'A concise botanical overview covering appearance, notable traits, and growth habits.',
+        if (!('description' in schemaWithMandatory)) {
+          schemaWithMandatory.description = {
+            type: 'string',
+            description: 'A concise botanical overview covering appearance, notable traits, and growth habits.',
+          }
         }
-      }
+        if (!('classification' in schemaWithMandatory)) {
+          const classificationSchema = (schema as any)?.classification ?? {
+            type: 'object',
+            description: 'Structured plant classification. Provide at least the primary type such as plant, shrub, tree, etc.',
+            properties: {
+              type: {
+                type: 'string',
+                description: 'Primary plant type, e.g., plant, shrub, tree, bambu, other',
+              },
+              subclass: {
+                type: 'string',
+                description: 'Optional subclass when type is plant (flower, vegetable, cereal, spice)',
+              },
+              subSubclass: {
+                type: 'string',
+                description: 'Optional extra subclass for vegetables (fruit, seed, root, leaf, flower)',
+              },
+              activities: {
+                type: 'array',
+                items: 'string',
+                description: 'Optional list of activities/uses such as ornemental, comestible, aromatic, medicinal.',
+              },
+            },
+          }
+          schemaWithMandatory.classification = classificationSchema
+        }
 
         let latestClassification: Partial<PlantClassification> = { ...(classification ?? {}) }
         let latestIdentifiers: Partial<PlantIdentifiers> = { ...(identifiers ?? {}) }
