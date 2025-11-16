@@ -860,6 +860,9 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
     const renderClassificationCard = React.useCallback(
       (compact = false) => {
         if (!classificationSummary.length) return null
+        const hierarchyKeys = new Set(['type', 'subclass', 'subSubclass'])
+        const hierarchyEntries = classificationSummary.filter((entry) => hierarchyKeys.has(entry.key))
+        const supportingEntries = classificationSummary.filter((entry) => !hierarchyKeys.has(entry.key))
         return (
           <motion.section
             initial={{ opacity: 0, y: 12 }}
@@ -867,34 +870,69 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
             viewport={{ once: true, amount: 0.1 }}
             transition={{ duration: 0.35 }}
             className={cn(
-              'rounded-3xl border border-emerald-200/60 bg-white/90 p-5 shadow-sm backdrop-blur dark:border-emerald-900/50 dark:bg-[#0e1b1c]/70',
-              compact ? 'sm:p-4' : 'sm:p-6'
+              'rounded-3xl border border-emerald-200/60 bg-white/95 shadow-sm backdrop-blur dark:border-emerald-900/50 dark:bg-[#071111]/85',
+              compact ? 'p-4 space-y-4' : 'p-6 space-y-6'
             )}
           >
-            <header className="mb-4 flex items-center gap-2 text-emerald-700 dark:text-emerald-100">
+            <header className="flex items-center gap-2 text-emerald-700 dark:text-emerald-100">
               <Leaf className="h-4 w-4" />
               <h3 className="text-sm font-semibold tracking-wide">
                 {t('plantInfo.classification.title', { defaultValue: 'Classification' })}
               </h3>
             </header>
-            <div className="grid gap-4 sm:grid-cols-2">
-              {classificationSummary.map((entry) => (
-                <div key={entry.key} className="space-y-2">
-                  <div className="text-[11px] uppercase tracking-widest text-emerald-600/70 dark:text-emerald-200/70">
-                    {entry.label}
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {entry.values.map((value) => (
-                      <Badge
-                        key={`${entry.key}-${value}`}
-                        className="rounded-2xl border-none bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-900 dark:bg-emerald-500/25 dark:text-emerald-50"
-                      >
-                        {value}
-                      </Badge>
+            <div className="space-y-5">
+              {hierarchyEntries.length > 0 && (
+                <div
+                  className={cn(
+                    'relative overflow-hidden rounded-2xl border border-emerald-200/70 bg-gradient-to-r from-emerald-50 via-teal-50 to-cyan-50 dark:border-emerald-900/40 dark:from-emerald-900/30 dark:via-teal-900/20 dark:to-cyan-900/10 shadow-inner',
+                    compact ? 'px-4 py-4' : 'px-6 py-5'
+                  )}
+                >
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-stretch sm:justify-between">
+                    {hierarchyEntries.map((entry, idx) => (
+                      <React.Fragment key={entry.key}>
+                        <div className="flex-1 min-w-[140px]">
+                          <div className="text-[11px] uppercase tracking-[0.3em] text-emerald-700/70 dark:text-emerald-100/70">
+                            {entry.label}
+                          </div>
+                          <div className="mt-1 text-base font-semibold text-emerald-950 dark:text-emerald-50">
+                            {entry.values[0]}
+                          </div>
+                        </div>
+                        {idx < hierarchyEntries.length - 1 && (
+                          <div className="hidden sm:flex sm:flex-col sm:items-center sm:justify-center">
+                            <div className="h-10 w-px bg-emerald-200/80 dark:bg-emerald-500/40" />
+                          </div>
+                        )}
+                      </React.Fragment>
                     ))}
                   </div>
                 </div>
-              ))}
+              )}
+              {supportingEntries.length > 0 && (
+                <div className={cn('grid gap-4', compact ? 'grid-cols-1' : 'sm:grid-cols-2')}>
+                  {supportingEntries.map((entry) => (
+                    <div
+                      key={entry.key}
+                      className="rounded-2xl border border-emerald-100/80 bg-white/90 p-4 dark:border-emerald-900/40 dark:bg-[#0c1416]"
+                    >
+                      <div className="text-[11px] uppercase tracking-[0.35em] text-emerald-600/70 dark:text-emerald-200/70">
+                        {entry.label}
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {entry.values.map((value) => (
+                          <Badge
+                            key={`${entry.key}-${value}`}
+                            className="rounded-2xl border-none bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-900 dark:bg-emerald-500/25 dark:text-emerald-50"
+                          >
+                            {value}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </motion.section>
         )
@@ -961,9 +999,24 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
       </div>
     )
   }
-  const meaningText = React.useMemo(() => resolveTextValue(plant.meaning), [plant.meaning])
-  const descriptionText = React.useMemo(() => resolveTextValue(plant.description), [plant.description])
-  const funFactText = React.useMemo(() => resolveTextValue(meta.funFact), [meta.funFact])
+    const meaningText = React.useMemo(() => resolveTextValue(plant.meaning), [plant.meaning])
+    const descriptionText = React.useMemo(() => resolveTextValue(plant.description), [plant.description])
+    const funFactText = React.useMemo(() => resolveTextValue(meta.funFact), [meta.funFact])
+    const symbolismLabel = React.useMemo(
+      () => t('plantInfo.symbolism', { defaultValue: 'Symbolism across cultures' }),
+      [t],
+    )
+    const symbolismHelper = React.useMemo(
+      () => t('plantInfo.symbolismHelper', { defaultValue: 'Meaning of the flower in culture' }),
+      [t],
+    )
+    const hasDistinctFunFact = React.useMemo(() => {
+      const normalizedFunFact = (funFactText || '').trim()
+      if (!normalizedFunFact) return false
+      const normalizedMeaning = (meaningText || '').trim()
+      if (!normalizedMeaning) return true
+      return normalizedFunFact.toLocaleLowerCase() !== normalizedMeaning.toLocaleLowerCase()
+    }, [funFactText, meaningText])
   const authorNotesText = React.useMemo(() => resolveTextValue(meta.authorNotes), [meta.authorNotes])
   const metaTags = React.useMemo(() => resolveStringList(meta.tags), [meta.tags])
   const metaSourceReferences = React.useMemo(() => resolveStringList(meta.sourceReferences), [meta.sourceReferences])
@@ -1250,12 +1303,12 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
     (planting?.avoidNear?.length ?? 0) > 0
   )
 
-  const showMeta = Boolean(
-    metaTags.length > 0 ||
-    funFactText ||
-    metaSourceReferences.length > 0 ||
-    authorNotesText
-  )
+    const showMeta = Boolean(
+      metaTags.length > 0 ||
+      (hasDistinctFunFact && funFactText) ||
+      metaSourceReferences.length > 0 ||
+      authorNotesText
+    )
 
   const hasAnyStructuredData = showIdentifiers || showTraits || showDimensions || showPhenology || showEnvironment || showCare || showPropagation || showUsage || showEcology || showProblems || showPlanting || showMeta
 
@@ -1590,9 +1643,14 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
                 {meaningText && (
                   <Card className="rounded-3xl border border-stone-200 dark:border-[#3e3e42]">
                     <CardHeader className="py-4">
-                      <CardTitle className="text-base font-semibold flex items-center justify-center gap-2">
-                        <Sparkles className="h-4 w-4" />
-                        {t('plantInfo.meaning')}
+                      <CardTitle className="text-base font-semibold flex flex-col items-center gap-1 text-center">
+                        <span className="flex items-center gap-2">
+                          <Sparkles className="h-4 w-4" />
+                          {symbolismLabel}
+                        </span>
+                        <span className="text-[11px] uppercase tracking-[0.35em] text-emerald-600/70 dark:text-emerald-300/70">
+                          {symbolismHelper}
+                        </span>
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="text-sm text-center leading-relaxed">
@@ -1827,27 +1885,30 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
               className="relative overflow-hidden rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-6"
             >
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,_129,_0.12),_transparent_55%)] dark:bg-[radial-gradient(circle_at_top,_rgba(16,_185,_129,_0.18),_transparent_60%)]" aria-hidden="true" />
-              <header className="relative mb-4 flex items-center gap-3">
-                <Info className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                <h3 className="text-lg font-semibold tracking-tight">{t('plantInfo.overview')}</h3>
-              </header>
-                {meaningText && (
-                <Card className="relative mt-4 rounded-3xl border-stone-200/70 dark:border-[#3e3e42]/70">
-                  <CardHeader className="space-y-3">
-                    <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
-                      <Sparkles className="h-4 w-4" />
-                      <span className="text-xs uppercase tracking-wide">
-                        {t('plantInfo.symbolism', { defaultValue: 'Meaning & Symbolism' })}
-                      </span>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-base leading-relaxed text-stone-700 dark:text-stone-300">
-                        <CollapsibleText text={meaningText} maxLength={200} />
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
+                <header className="relative mb-4 flex items-center gap-3">
+                  <Info className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                  <h3 className="text-lg font-semibold tracking-tight">{t('plantInfo.overview')}</h3>
+                </header>
+                  {meaningText && (
+                  <Card className="relative mt-4 rounded-3xl border-stone-200/70 dark:border-[#3e3e42]/70">
+                    <CardHeader className="space-y-2">
+                      <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+                        <Sparkles className="h-4 w-4" />
+                        <span className="text-sm font-semibold tracking-tight">
+                          {symbolismLabel}
+                        </span>
+                      </div>
+                      <p className="text-xs uppercase tracking-[0.35em] text-emerald-700/70 dark:text-emerald-300/80">
+                        {symbolismHelper}
+                      </p>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-base leading-relaxed text-stone-700 dark:text-stone-300">
+                          <CollapsibleText text={meaningText} maxLength={200} />
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
               <div className="relative mt-5 flex flex-wrap gap-2">
                 <Badge className={cn('rounded-2xl border-none bg-stone-100 dark:bg-[#2d2d30]', rarityTone[plant.rarity || 'Common'] ?? '')}>
                   {plant.rarity || t('common.unknown')}
@@ -2289,8 +2350,8 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
             </InfoSection>
           )}
 
-          {/* Meta Section */}
-            {(metaTags.length || funFactText || metaSourceReferences.length || authorNotesText) && (
+            {/* Meta Section */}
+              {(metaTags.length || (hasDistinctFunFact && funFactText) || metaSourceReferences.length || authorNotesText) && (
               <InfoSection title="Additional Information" icon={<BookOpen className="h-5 w-5" />}>
                   {metaTags.length > 0 && (
                   <InfoItem icon={<Tag className="h-4 w-4" />} label="Tags" value={
@@ -2301,9 +2362,9 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
                     </div>
                   } />
                 )}
-                  {funFactText && (
-                    <InfoItem icon={<Sparkles className="h-4 w-4" />} label="Fun Fact" value={funFactText} />
-                )}
+                    {hasDistinctFunFact && (
+                      <InfoItem icon={<Sparkles className="h-4 w-4" />} label="Fun Fact" value={(funFactText || '').trim()} />
+                  )}
                   {metaSourceReferences.length > 0 && (
                   <InfoItem icon={<BookOpen className="h-4 w-4" />} label="Source References" value={
                     <ul className="list-disc list-inside space-y-1">

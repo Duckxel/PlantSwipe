@@ -1115,10 +1115,17 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
             </select>
           </div>
           <ArrayInputField label="Tags" values={meta?.tags || []} onChange={(tags) => setMeta({ ...meta, tags })} />
-          <div className="grid gap-2">
-            <Label>Fun Fact</Label>
-            <Textarea value={meta?.funFact || ''} onChange={(e) => setMeta({ ...meta, funFact: e.target.value || undefined })} placeholder="Interesting trivia about the plant" />
-          </div>
+            <div className="grid gap-2">
+              <Label>Fun Fact</Label>
+              <Textarea
+                value={meta?.funFact || ''}
+                onChange={(e) => setMeta({ ...meta, funFact: e.target.value || undefined })}
+                placeholder="Share an unexpected detail most people don't know about this plant"
+              />
+              <p className="text-xs text-muted-foreground">
+                Think rare anecdotes, record-breaking traits, or surprising botanical lore.
+              </p>
+            </div>
           <ArrayInputField label="Source References" values={meta?.sourceReferences || []} onChange={(sourceReferences) => setMeta({ ...meta, sourceReferences })} />
           <div className="grid gap-2">
             <Label>Author Notes</Label>

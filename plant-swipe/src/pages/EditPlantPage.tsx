@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom"
 import { Card, CardContent } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { supabase } from "@/lib/supabaseClient"
 import { fetchAiPlantFill, fetchAiPlantFillField } from "@/lib/aiPlantFill"
@@ -195,7 +196,7 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
   const initialCreatedAtRef = React.useRef<string | null>(null)
   const initialCreatedByRef = React.useRef<string | null>(null)
 
-  const funFact = React.useMemo(() => (meta?.funFact ?? meaning ?? '').trim(), [meta?.funFact, meaning])
+  const funFact = React.useMemo(() => (meta?.funFact ?? '').trim(), [meta?.funFact])
   const handlePhotosChange = React.useCallback((next: PlantPhoto[]) => {
     setPhotos(ensureAtLeastOnePhoto(next))
   }, [])
@@ -357,10 +358,10 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
       let latestScientificName = scientificName
       let latestColors = colors
       let latestSeasons = [...seasons]
-      let latestDescription = description
-      let latestMeaning = meaning
-      let latestMeta: Partial<PlantMeta> = { ...(meta ?? {}) }
-        let latestFunFact = (latestMeta?.funFact ?? latestMeaning ?? '').trim()
+        let latestDescription = description
+        let latestMeaning = meaning
+        let latestMeta: Partial<PlantMeta> = { ...(meta ?? {}) }
+        let latestFunFact = (latestMeta?.funFact ?? '').trim()
         let latestPhotos: PlantPhoto[] = [...photos]
 
       let latestTraits: Partial<PlantTraits> = { ...(traits ?? {}) }
@@ -382,9 +383,9 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
       let latestWaterFreqPeriod = waterFreqPeriod
       let latestWaterFreqAmount = waterFreqAmount
 
-      const updateFunFactSnapshot = () => {
-        latestFunFact = (latestMeta?.funFact ?? latestMeaning ?? '').trim()
-      }
+        const updateFunFactSnapshot = () => {
+          latestFunFact = (latestMeta?.funFact ?? '').trim()
+        }
 
         const applyAiResult = (aiData: any) => {
         if (!aiData || typeof aiData !== 'object') return
@@ -440,6 +441,11 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
         if (typeof (aiData as any).description === 'string' && (aiData as any).description.trim()) {
           latestDescription = (aiData as any).description.trim()
           setDescription(latestDescription)
+        }
+
+        if (typeof (aiData as any).meaning === 'string' && (aiData as any).meaning.trim()) {
+          latestMeaning = (aiData as any).meaning.trim()
+          setMeaning(latestMeaning)
         }
 
         if (aiData.phenology) {
@@ -552,14 +558,6 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
           }
           latestMeta = mergedMeta
           setMeta(mergedMeta)
-
-          const aiFunFact = typeof mergedMeta.funFact === 'string' ? mergedMeta.funFact.trim() : ''
-          if (aiFunFact) {
-            if (!latestMeaning.trim()) {
-              latestMeaning = aiFunFact
-              setMeaning(aiFunFact)
-            }
-          }
           if (mergedMeta.rarity) {
             const rarityMap: Record<string, Plant['rarity']> = {
               'common': 'Common',
@@ -638,12 +636,13 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
           planting: { ...(latestPlanting ?? {}) },
           meta: {
             ...(latestMeta ?? {}),
-            ...(latestMeaning.trim() ? { funFact: latestMeaning.trim() } : {}),
+            ...(latestFunFact ? { funFact: latestFunFact } : {}),
           },
           photos: sanitizedPhotos.length > 0 ? sanitizedPhotos : undefined,
           colors: normalizedColors.length > 0 ? normalizedColors : undefined,
           seasons: latestSeasons.length > 0 ? latestSeasons : undefined,
           description: latestDescription.trim() || undefined,
+          meaning: latestMeaning.trim() || undefined,
         }
       }
 
@@ -808,9 +807,9 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
         // Use translation data if available, otherwise use base data
           const resolvedName = String(translation?.name || data.name || '')
           const resolvedScientificName = String(translation?.scientific_name || data.scientific_name || parsedIdentifiers?.scientificName || '')
-          const resolvedMeaning = String(translation?.meaning || data.meaning || translationMeta?.funFact || parsedMeta?.funFact || '')
+          const resolvedMeaning = String(translation?.meaning || data.meaning || '')
         const resolvedDescription = String(translation?.description || data.description || '')
-        const resolvedFunFact = String(translationMeta?.funFact || parsedMeta?.funFact || data.meaning || '')
+        const resolvedFunFact = String(translationMeta?.funFact || parsedMeta?.funFact || '')
           const englishScientificName = String(data.scientific_name || parsedIdentifiers?.scientificName || '')
           const englishDescription = String(data.description || '')
           const resolvedColorsArray = Array.isArray(data.colors) ? (data.colors as string[]) : []
@@ -854,7 +853,7 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
         setMeta({
           ...parsedMeta,
           ...translationMeta,
-          funFact: translationMeta?.funFact || parsedMeta?.funFact || data.meaning || undefined,
+          funFact: translationMeta?.funFact || parsedMeta?.funFact || undefined,
           authorNotes: translationMeta?.authorNotes || parsedMeta?.authorNotes || undefined,
           sourceReferences: translationMeta?.sourceReferences || parsedMeta?.sourceReferences || undefined,
         })
@@ -926,7 +925,8 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
           return { pests, diseases, hazards }
         })()
         
-      const funFactForTranslation = (meta?.funFact ?? meaning.trim()).trim()
+      const funFactForTranslation = (meta?.funFact ?? '').trim()
+      const meaningForTranslation = meaning.trim()
       const authorNotesRaw = meta?.authorNotes
       const authorNotesForTranslation =
         typeof authorNotesRaw === 'string' ? authorNotesRaw.trim() : undefined
@@ -950,10 +950,10 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
       })()
         
       // Get current fields
-      const fields = {
+        const fields = {
         name: name.trim() || undefined,
         scientificName: scientificName.trim() || identifiers?.scientificName || undefined,
-        meaning: funFactForTranslation || undefined,
+          meaning: meaningForTranslation || undefined,
         description: description.trim() || undefined,
         careSoil: environment?.soil?.texture?.join(', ') || careSoil.trim() || undefined,
         identifiers: identifiers ? {
@@ -978,7 +978,7 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
       const allTranslations = await translatePlantToAllLanguages(fields, editLanguage)
       
       // Save all translations
-      const translationsToSave = Object.entries(allTranslations).map(([lang, translated]) => ({
+        const translationsToSave = Object.entries(allTranslations).map(([lang, translated]) => ({
         plant_id: id,
         language: lang as SupportedLanguage,
         name: translated.name || name.trim(),
@@ -991,7 +991,7 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
           planting: translated.planting || undefined,
           problems: translated.problems || undefined,
         scientific_name: translated.scientificName || scientificName.trim() || identifiers?.scientificName || null,
-        meaning: translated.meta?.funFact || translated.meaning || null,
+          meaning: translated.meaning || null,
         description: translated.description || null,
         care_soil: translated.careSoil || null,
       }))
@@ -1064,9 +1064,10 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
     try {
       const actorLabel = profile?.display_name?.trim() || user?.email?.trim() || user?.id || 'Unknown admin'
       const nowIso = new Date().toISOString()
-      const metaBase = meta ?? {}
-      const baseFunFact = typeof metaBase.funFact === 'string' ? metaBase.funFact.trim() : ''
-        const funFactText = baseFunFact || meaning.trim()
+        const metaBase = meta ?? {}
+        const meaningValue = meaning.trim()
+        const baseFunFact = typeof metaBase.funFact === 'string' ? metaBase.funFact.trim() : ''
+        const funFactText = baseFunFact
         if (funFactText && !isFunFactValid(funFactText)) {
         const sentenceCount = countSentences(funFactText)
         setError(`Fun fact must contain between 1 and 3 sentences (currently ${sentenceCount}).`)
@@ -1123,7 +1124,7 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
           colors: normalizedColors,
           seasons,
           rarity: metaForUpdate?.rarity === 'common' ? 'Common' : metaForUpdate?.rarity === 'uncommon' ? 'Uncommon' : metaForUpdate?.rarity === 'rare' ? 'Rare' : metaForUpdate?.rarity === 'very rare' ? 'Legendary' : rarity,
-          meaning: metaForUpdate?.funFact || meaning || null,
+            meaning: meaningValue || null,
           description: description || null,
             image_url: primaryImageUrl || null,
           care_sunlight: environment?.sunExposure === 'full sun' ? 'High' : environment?.sunExposure === 'partial sun' ? 'Medium' : environment?.sunExposure === 'partial shade' ? 'Low' : careSunlight,
@@ -1196,7 +1197,7 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
           problems: translationProblems,
         // Legacy fields for backward compatibility
           scientific_name: trimmedScientificName || identifiers?.scientificName || null,
-          meaning: metaForUpdate?.funFact || meaning || null,
+          meaning: meaningValue || null,
         description: description || null,
         care_soil: environment?.soil?.texture?.join(', ') || careSoil.trim() || null,
       }
@@ -1364,10 +1365,19 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
                   ))}
                 </select>
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="plant-meaning">Meaning</Label>
-                <Input id="plant-meaning" autoComplete="off" value={meaning} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMeaning(e.target.value)} />
-              </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="plant-meaning">{t('createPlant.meaning')}</Label>
+                  <Textarea
+                    id="plant-meaning"
+                    autoComplete="off"
+                    value={meaning}
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setMeaning(e.target.value)}
+                    placeholder={t('createPlant.meaningPlaceholder', 'Describe what this plant represents in rituals, folklore, or symbolism.')}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t('createPlant.meaningHelper', 'Highlight cultural symbolism across regions or traditions.')}
+                  </p>
+                </div>
               <div className="grid gap-2">
                 <Label htmlFor="plant-description">Overview</Label>
                 <Input id="plant-description" autoComplete="off" value={description} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDescription(e.target.value)} />

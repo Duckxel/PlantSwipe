@@ -215,7 +215,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
   const [waterFreqPeriod] = React.useState<'week' | 'month' | 'year'>('week')
   const [waterFreqAmount] = React.useState<number>(1)
 
-  const funFact = React.useMemo(() => (meta?.funFact ?? meaning ?? '').trim(), [meta?.funFact, meaning])
+  const funFact = React.useMemo(() => (meta?.funFact ?? '').trim(), [meta?.funFact])
 
   const handlePhotosChange = React.useCallback((next: PlantPhoto[]) => {
     setPhotos(ensureAtLeastOnePhoto(next))
@@ -383,15 +383,15 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
       let latestScientificName = scientificName
         let latestColors = colors
       let latestSeasons = [...seasons]
-      let latestDescription = description
-      let latestMeaning = meaning
-      let latestMeta: Partial<PlantMeta> = { ...(meta ?? {}) }
-        let latestFunFact = (latestMeta?.funFact ?? latestMeaning ?? '').trim()
+        let latestDescription = description
+        let latestMeaning = meaning
+        let latestMeta: Partial<PlantMeta> = { ...(meta ?? {}) }
+        let latestFunFact = (latestMeta?.funFact ?? '').trim()
         let latestPhotos: PlantPhoto[] = [...photos]
 
-      const updateFunFactSnapshot = () => {
-        latestFunFact = (latestMeta?.funFact ?? latestMeaning ?? '').trim()
-      }
+        const updateFunFactSnapshot = () => {
+          latestFunFact = (latestMeta?.funFact ?? '').trim()
+        }
 
         const applyAiResult = (aiData: any) => {
         if (!aiData || typeof aiData !== 'object') return
@@ -443,6 +443,11 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
           setDescription(latestDescription)
         }
 
+        if (typeof (aiData as any).meaning === 'string' && (aiData as any).meaning.trim()) {
+          latestMeaning = (aiData as any).meaning.trim()
+          setMeaning(latestMeaning)
+        }
+
         if (aiData.phenology) {
           setPhenology(aiData.phenology)
           if (normalizeColorList(latestColors).length === 0) {
@@ -480,14 +485,6 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
           }
           latestMeta = mergedMeta
           setMeta(mergedMeta)
-
-          const aiFunFact = typeof mergedMeta.funFact === 'string' ? mergedMeta.funFact.trim() : ''
-          if (aiFunFact) {
-            if (!latestMeaning.trim()) {
-              latestMeaning = aiFunFact
-              setMeaning(aiFunFact)
-            }
-          }
           if (mergedMeta.rarity) {
             const rarityMap: Record<string, Plant['rarity']> = {
               'common': 'Common',
@@ -537,14 +534,15 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
           commerce: { ...(commerce ?? {}) },
           problems: { ...(problems ?? {}) },
           planting: { ...(planting ?? {}) },
-          meta: {
+            meta: {
             ...(latestMeta ?? {}),
-            ...(latestMeaning.trim() ? { funFact: latestMeaning.trim() } : {}),
+              ...(latestFunFact ? { funFact: latestFunFact } : {}),
           },
             photos: sanitizedPhotos.length > 0 ? sanitizedPhotos : undefined,
           colors: normalizedColors.length > 0 ? normalizedColors : undefined,
           seasons: latestSeasons.length > 0 ? latestSeasons : undefined,
           description: latestDescription.trim() || undefined,
+            meaning: latestMeaning.trim() || undefined,
         }
       }
 
@@ -720,9 +718,10 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
     const sciNorm = trimmedScientificName
     const actorLabel = profile?.display_name?.trim() || user?.email?.trim() || user?.id || 'Unknown admin'
     const nowIso = new Date().toISOString()
-    const metaBase = meta ?? {}
-      const baseFunFact = typeof metaBase.funFact === 'string' ? metaBase.funFact.trim() : ''
-      const funFactText = baseFunFact || meaning.trim()
+        const metaBase = meta ?? {}
+        const meaningValue = meaning.trim()
+        const baseFunFact = typeof metaBase.funFact === 'string' ? metaBase.funFact.trim() : ''
+        const funFactText = baseFunFact
       if (funFactText && !isFunFactValid(funFactText)) {
         const sentenceCount = countSentences(funFactText)
         setError(`Fun fact must contain between 1 and 3 sentences (currently ${sentenceCount}).`)
@@ -781,9 +780,9 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
         // Legacy fields for backward compatibility
         scientific_name: sciNorm || identifiers?.scientificName || null,
           colors: normalizedColors,
-        seasons,
+          seasons,
           rarity: metaForInsert?.rarity === 'common' ? 'Common' : metaForInsert?.rarity === 'uncommon' ? 'Uncommon' : metaForInsert?.rarity === 'rare' ? 'Rare' : metaForInsert?.rarity === 'very rare' ? 'Legendary' : rarity,
-          meaning: metaForInsert?.funFact || meaning || null,
+            meaning: meaningValue || null,
         image_url: primaryImageUrl || null,
         care_sunlight: careSunlightValue,
         care_water: 'Low',
@@ -838,7 +837,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
           scientificName: identifiers.scientificName || sciNorm || undefined,
           commonNames: identifiers.commonNames || undefined,
         } : undefined,
-        ecology: includeAdvanced && ecology ? ecology : undefined,
+          ecology: includeAdvanced && ecology ? ecology : undefined,
         usage: includeAdvanced && usage ? {
           culinaryUses: usage.culinaryUses,
           medicinalUses: usage.medicinalUses,
@@ -853,8 +852,8 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
           planting: includeAdvanced ? translationPlanting : undefined,
           problems: includeAdvanced ? translationProblems : undefined,
         // Legacy fields for backward compatibility
-        scientific_name: sciNorm || identifiers?.scientificName || null,
-          meaning: metaForInsert?.funFact || meaning || null,
+            scientific_name: sciNorm || identifiers?.scientificName || null,
+            meaning: meaningValue || null,
         description: description || null,
         care_soil: environment?.soil?.texture?.join(', ') || careSoil || null,
       }
@@ -871,7 +870,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
           const allTranslations = await translatePlantToAllLanguages({
             name: nameNorm,
             scientificName: sciNorm || identifiers?.scientificName || undefined,
-              meaning: metaForInsert?.funFact || meaning || undefined,
+            meaning: meaningValue || undefined,
             description: description || undefined,
             careSoil: environment?.soil?.texture?.join(', ') || careSoil || undefined,
             identifiers: includeAdvanced && identifiers ? {
@@ -912,7 +911,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
                   planting: translated.planting || undefined,
                   problems: translated.problems || undefined,
                 scientific_name: translated.scientificName || sciNorm || identifiers?.scientificName || null,
-                meaning: translated.meta?.funFact || translated.meaning || null,
+                  meaning: translated.meaning || null,
                 description: translated.description || null,
                 care_soil: translated.careSoil || null,
               })
@@ -1079,6 +1078,19 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
                     ))}
                   </div>
                 </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="plant-meaning">{t('createPlant.meaning')}</Label>
+                    <Textarea
+                      id="plant-meaning"
+                      autoComplete="off"
+                      placeholder={t('createPlant.meaningPlaceholder', 'Describe what this plant represents in rituals, folklore, or symbolism.')}
+                      value={meaning}
+                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setMeaning(e.target.value)}
+                    />
+                    <p className="text-xs opacity-70">
+                      {t('createPlant.meaningHelper', 'Highlight cultural symbolism across regions or traditions.')}
+                    </p>
+                  </div>
                 <div className="grid gap-2">
                   <Label htmlFor="plant-description">{t('createPlant.description')}</Label>
                   <Textarea id="plant-description" autoComplete="off" placeholder={t('createPlant.descriptionPlaceholder')} value={description} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDescription(e.target.value)} />

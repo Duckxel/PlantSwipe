@@ -35,7 +35,7 @@ export const REQUIRED_FIELD_CONFIG: Array<{
   },
   {
     id: 'funFact',
-    label: 'Meaning / Symbolism',
+      label: 'Fun Fact',
     sourceKeys: ['meta'],
   },
     {
