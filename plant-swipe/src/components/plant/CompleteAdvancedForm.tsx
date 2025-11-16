@@ -681,6 +681,24 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
               {['none', 'light', 'moderate', 'strong'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
             </select>
           </div>
+        <div className="flex flex-wrap gap-4">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={traits?.dogFriendly || false}
+              onChange={(e) => setTraits({ ...traits, dogFriendly: e.target.checked || undefined })}
+            />
+            Dog friendly
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={traits?.catFriendly || false}
+              onChange={(e) => setTraits({ ...traits, catFriendly: e.target.checked || undefined })}
+            />
+            Cat friendly
+          </label>
+        </div>
           <div className="grid gap-2">
             <Label>Toxicity</Label>
             <div className="grid grid-cols-2 gap-2">

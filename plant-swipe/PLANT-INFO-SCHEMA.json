@@ -78,7 +78,9 @@
     "toxicity": {
       "toHumans": { "type": "string", "options": ["non-toxic","mild","moderate","severe"] },
       "toPets": { "type": "string", "options": ["non-toxic","mild","moderate","severe"] }
-    },
+      },
+      "dogFriendly": { "type": "boolean", "description": "True if generally safe for dogs" },
+      "catFriendly": { "type": "boolean", "description": "True if generally safe for cats" },
     "allergenicity": { "type": "string", "options": ["low","medium","high"] },
     "invasiveness": {
       "status": { "type": "string", "options": ["not invasive","regional risk","invasive"] },

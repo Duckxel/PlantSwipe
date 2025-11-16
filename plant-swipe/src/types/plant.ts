@@ -36,6 +36,8 @@ export interface PlantTraits {
     toHumans?: "non-toxic" | "mild" | "moderate" | "severe"
     toPets?: "non-toxic" | "mild" | "moderate" | "severe"
   }
+  dogFriendly?: boolean
+  catFriendly?: boolean
   allergenicity?: "low" | "medium" | "high"
   invasiveness?: {
     status?: "not invasive" | "regional risk" | "invasive"
