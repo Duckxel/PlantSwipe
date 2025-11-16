@@ -1,5 +1,13 @@
 import React from "react"
-import { ExternalLink, RefreshCw, ImageIcon, Loader2, Trash2 } from "lucide-react"
+import {
+  ExternalLink,
+  RefreshCw,
+  ImageIcon,
+  Loader2,
+  Trash2,
+  Copy,
+  Check,
+} from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -71,6 +79,7 @@ export const AdminMediaPanel: React.FC = () => {
   const [refreshing, setRefreshing] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [deletingId, setDeletingId] = React.useState<string | null>(null)
+  const [copiedId, setCopiedId] = React.useState<string | null>(null)
   const runtimeEnv = (globalThis as typeof globalThis & RuntimeEnv).__ENV__
   const adminToken =
     import.meta.env?.VITE_ADMIN_STATIC_TOKEN ?? runtimeEnv?.VITE_ADMIN_STATIC_TOKEN
@@ -160,6 +169,20 @@ export const AdminMediaPanel: React.FC = () => {
     },
     [adminToken],
   )
+
+  const handleCopy = React.useCallback((entryId: string, value: string) => {
+    try {
+      navigator.clipboard.writeText(value).then(
+        () => {
+          setCopiedId(entryId)
+          setTimeout(() => setCopiedId(null), 1800)
+        },
+        () => setError("Unable to copy link. Please copy manually."),
+      )
+    } catch {
+      setError("Unable to copy link. Please copy manually.")
+    }
+  }, [])
 
   return (
     <div className="space-y-6">
@@ -268,7 +291,28 @@ export const AdminMediaPanel: React.FC = () => {
                           onFocus={(e) => e.currentTarget.select()}
                           className="rounded-2xl font-mono text-xs"
                         />
-                        {entry.url && (
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            className="rounded-2xl"
+                            onClick={() => handleCopy(entry.id, displayLink)}
+                            disabled={copiedId === entry.id}
+                          >
+                            {copiedId === entry.id ? (
+                              <>
+                                <Check className="mr-2 h-4 w-4" />
+                                Copied
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="mr-2 h-4 w-4" />
+                                Copy link
+                              </>
+                            )}
+                          </Button>
+                          {entry.url && (
                           <Button
                             type="button"
                             variant="secondary"
@@ -281,7 +325,8 @@ export const AdminMediaPanel: React.FC = () => {
                               Open
                             </a>
                           </Button>
-                        )}
+                          )}
+                        </div>
                         <Button
                           type="button"
                           variant="destructive"
