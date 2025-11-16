@@ -193,7 +193,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                           ))}
                         </div>
                       )}
-                      <div className="absolute top-4 right-4 z-20">
+                        <div className="absolute top-4 right-4 z-20">
                         <button
                           onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
                             e.stopPropagation()
@@ -211,8 +211,13 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                           <Heart className={`h-5 w-5 ${liked ? "fill-current" : ""}`} />
                         </button>
                       </div>
-                        <PlantMetaRail plant={current} />
+                        {isDesktop && <PlantMetaRail plant={current} variant="sidebar" />}
                       <div className="absolute bottom-0 left-0 right-0 z-20 p-6 pb-8 text-white">
+                          {!isDesktop && (
+                            <div className="mb-3 -mx-1">
+                              <PlantMetaRail plant={current} variant="inline" />
+                            </div>
+                          )}
                         <div className="mb-3 flex flex-wrap items-center gap-2">
                           <Badge className={`${rarityTone[rarityKey]} backdrop-blur bg-opacity-90`}>{current?.rarity ?? "Common"}</Badge>
                           {seasons.map((s) => {
@@ -343,16 +348,26 @@ const EmptyState = ({ onReset }: { onReset: () => void }) => {
   )
 }
 
-const PlantMetaRail: React.FC<{ plant: Plant }> = ({ plant }) => {
+const PlantMetaRail: React.FC<{ plant: Plant; variant: "sidebar" | "inline" }> = ({ plant, variant }) => {
   const { t } = useTranslation("common")
   const [activeKey, setActiveKey] = React.useState<string | null>(null)
   const items = React.useMemo(() => buildIndicatorItems(plant, t), [plant, t])
 
   React.useEffect(() => {
     setActiveKey(null)
-  }, [plant.id])
+  }, [plant.id, variant])
 
   if (!items.length) return null
+
+  if (variant === "inline") {
+    return (
+      <div className="flex flex-wrap gap-2">
+        {items.map((item) => (
+          <InlineIndicatorCard key={item.key} item={item} />
+        ))}
+      </div>
+    )
+  }
 
   return (
     <div className="absolute inset-y-6 right-3 z-30 flex flex-col items-end justify-center gap-3 md:gap-4">
@@ -392,6 +407,59 @@ interface IndicatorPillProps {
   active: boolean
   onActivate: () => void
   onDeactivate: () => void
+}
+
+const InlineIndicatorCard: React.FC<{ item: IndicatorItem }> = ({ item }) => {
+  const isColorVariant = item.variant === "color" && (item.colors?.length ?? 0) > 0
+
+  return (
+    <div className="flex min-w-[160px] flex-1 basis-[calc(50%-0.25rem)] items-start gap-3 rounded-2xl border border-white/15 bg-black/65 px-3 py-2 text-white shadow-lg shadow-black/15 backdrop-blur">
+      <span
+        className={cn(
+          "flex h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-black/40",
+          item.accentClass,
+          isColorVariant && "p-0",
+        )}
+        aria-hidden="true"
+      >
+        {isColorVariant ? (
+          <div className="flex items-center gap-1">
+            {item.colors!.slice(0, 3).map((color) => (
+              <span
+                key={color.id}
+                className="h-3.5 w-3.5 rounded-full border border-white/40"
+                style={{ backgroundColor: color.tone }}
+              />
+            ))}
+          </div>
+        ) : (
+          item.icon
+        )}
+      </span>
+      <div className="flex-1 space-y-1 text-left">
+        {item.description && (
+          <p className="text-[9px] uppercase tracking-[0.25em] text-white/55">{item.description}</p>
+        )}
+        <p className="text-sm font-semibold leading-tight">{item.label}</p>
+        {item.detailList?.length ? (
+          <p className="text-[11px] leading-tight text-white/80">{item.detailList.join(", ")}</p>
+        ) : null}
+        {isColorVariant && (
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {item.colors!.map((color) => (
+              <span
+                key={color.id}
+                className="h-3.5 w-3.5 rounded-full border border-white/35"
+                style={{ backgroundColor: color.tone }}
+                aria-label={color.label}
+                title={color.label}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }
 
 const IndicatorPill: React.FC<IndicatorPillProps> = ({ item, active, onActivate, onDeactivate }) => {
