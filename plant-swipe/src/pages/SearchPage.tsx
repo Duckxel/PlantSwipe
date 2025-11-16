@@ -54,7 +54,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({
           return (
               <Card
                 key={p.id}
-                className={`${cardSurface} h-full min-h-[360px]`}
+                className={`${cardSurface} h-full min-h-[200px]`}
               onClick={() => openInfo(p)}
               role="button"
               tabIndex={0}
