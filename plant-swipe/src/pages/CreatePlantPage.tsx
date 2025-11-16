@@ -22,6 +22,7 @@ import type {
   PlantPlanting,
   PlantMeta,
   PlantClassification,
+  PlantPhoto,
 } from "@/types/plant"
 import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE, type SupportedLanguage } from "@/lib/i18n"
 import { translatePlantToAllLanguages } from "@/lib/deepl"
@@ -29,6 +30,7 @@ import { savePlantTranslations, type PlantTranslation } from "@/lib/plantTransla
 import { Languages, Sparkles, Loader2, CheckCircle2, AlertCircle, Circle } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { CompleteAdvancedForm } from "@/components/plant/CompleteAdvancedForm"
+import { PlantPhotoListEditor } from "@/components/plant/PlantPhotoListEditor"
 import { useAuth } from "@/context/AuthContext"
 import {
   REQUIRED_FIELD_CONFIG,
@@ -48,6 +50,14 @@ import {
   type AiFieldStateSnapshot,
 } from "@/lib/aiFieldProgress"
 import { hasClassificationData } from "@/constants/classification"
+import {
+  createEmptyPhoto,
+  ensureAtLeastOnePhoto,
+  getPrimaryPhotoUrl,
+  normalizePlantPhotos,
+  sanitizePlantPhotos,
+  upsertPrimaryPhoto,
+} from "@/lib/photos"
 
 const AI_STATUS_STYLES: Record<AiFieldStatus, { text: string }> = {
   pending: { text: "text-muted-foreground" },
@@ -198,7 +208,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
   const [rarity, setRarity] = React.useState<Plant["rarity"]>("Common")
   const [meaning, setMeaning] = React.useState("")
   const [description, setDescription] = React.useState("")
-  const [imageUrl, setImageUrl] = React.useState("")
+  const [photos, setPhotos] = React.useState<PlantPhoto[]>([createEmptyPhoto(true)])
   const [careSoil] = React.useState("")
   const [careDifficulty] = React.useState<NonNullable<Plant["care"]>["difficulty"]>("Easy")
   const [seedsAvailable] = React.useState(false)
@@ -206,6 +216,10 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
   const [waterFreqAmount] = React.useState<number>(1)
 
   const funFact = React.useMemo(() => (meta?.funFact ?? meaning ?? '').trim(), [meta?.funFact, meaning])
+
+  const handlePhotosChange = React.useCallback((next: PlantPhoto[]) => {
+    setPhotos(ensureAtLeastOnePhoto(next))
+  }, [])
 
   React.useEffect(() => {
     if (aiFilling) return
@@ -341,12 +355,13 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
         let latestClassification: Partial<PlantClassification> = { ...(classification ?? {}) }
         let latestIdentifiers: Partial<PlantIdentifiers> = { ...(identifiers ?? {}) }
       let latestScientificName = scientificName
-      let latestColors = colors
+        let latestColors = colors
       let latestSeasons = [...seasons]
       let latestDescription = description
       let latestMeaning = meaning
       let latestMeta: Partial<PlantMeta> = { ...(meta ?? {}) }
-      let latestFunFact = (latestMeta?.funFact ?? latestMeaning ?? '').trim()
+        let latestFunFact = (latestMeta?.funFact ?? latestMeaning ?? '').trim()
+        let latestPhotos: PlantPhoto[] = [...photos]
 
       const updateFunFactSnapshot = () => {
         latestFunFact = (latestMeta?.funFact ?? latestMeaning ?? '').trim()
@@ -463,8 +478,14 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
           }
         }
 
-        if (aiData.image && !imageUrl) {
-          setImageUrl(aiData.image)
+        if (Array.isArray(aiData.photos)) {
+          latestPhotos = ensureAtLeastOnePhoto(
+            normalizePlantPhotos(aiData.photos, getPrimaryPhotoUrl(latestPhotos)),
+          )
+          setPhotos(latestPhotos)
+        } else if (typeof aiData.image === 'string' && aiData.image.trim()) {
+          latestPhotos = ensureAtLeastOnePhoto(upsertPrimaryPhoto(latestPhotos, aiData.image))
+          setPhotos(latestPhotos)
         }
 
         updateFunFactSnapshot()
@@ -472,6 +493,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
 
       const buildExistingData = () => {
           const normalizedColors = normalizeColorList(latestColors)
+          const sanitizedPhotos = sanitizePlantPhotos(latestPhotos)
           return {
           identifiers: {
             ...(latestIdentifiers ?? {}),
@@ -493,6 +515,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
             ...(latestMeta ?? {}),
             ...(latestMeaning.trim() ? { funFact: latestMeaning.trim() } : {}),
           },
+            photos: sanitizedPhotos.length > 0 ? sanitizedPhotos : undefined,
           colors: normalizedColors.length > 0 ? normalizedColors : undefined,
           seasons: latestSeasons.length > 0 ? latestSeasons : undefined,
           description: latestDescription.trim() || undefined,
@@ -639,6 +662,13 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
       setError(`Overview must be between 100 and 400 words (currently ${descriptionWordCount}).`)
       return
     }
+    const sanitizedPhotos = sanitizePlantPhotos(photos)
+    if (sanitizedPhotos.length === 0) {
+      setError("Please add at least one photo URL.")
+      return
+    }
+    const primaryImageUrl = getPrimaryPhotoUrl(sanitizedPhotos)
+    setPhotos(ensureAtLeastOnePhoto(sanitizedPhotos))
       if (!ensureClassificationValid()) return
     // Validate frequency constraints
     const periodMax: Record<'week'|'month'|'year', number> = { week: 7, month: 4, year: 12 }
@@ -703,7 +733,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
       if (byName.error) { setError(byName.error.message); return }
       if (byName.data?.id) { setError('A plant with the same name already exists'); return }
 
-      const { error: insErr } = await supabase.from('plants').insert({
+        const { error: insErr } = await supabase.from('plants').insert({
         id,
         name: nameNorm,
           // New JSONB structure
@@ -719,15 +749,16 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
         ecology: includeAdvanced && Object.keys(ecology).length > 0 ? ecology : null,
         commerce: includeAdvanced && Object.keys(commerce).length > 0 ? commerce : null,
         problems: includeAdvanced && Object.keys(problems).length > 0 ? problems : null,
-        planting: includeAdvanced && Object.keys(planting).length > 0 ? planting : null,
-          meta: shouldPersistMeta ? metaForInsert : null,
+          planting: includeAdvanced && Object.keys(planting).length > 0 ? planting : null,
+            meta: shouldPersistMeta ? metaForInsert : null,
+          photos: sanitizedPhotos,
         // Legacy fields for backward compatibility
         scientific_name: sciNorm || identifiers?.scientificName || null,
           colors: normalizedColors,
         seasons,
           rarity: metaForInsert?.rarity === 'common' ? 'Common' : metaForInsert?.rarity === 'uncommon' ? 'Uncommon' : metaForInsert?.rarity === 'rare' ? 'Rare' : metaForInsert?.rarity === 'very rare' ? 'Legendary' : rarity,
           meaning: metaForInsert?.funFact || meaning || null,
-        image_url: imageUrl || null,
+        image_url: primaryImageUrl || null,
         care_sunlight: careSunlightValue,
         care_water: 'Low',
         care_soil: environment?.soil?.texture?.join(', ') || careSoil || null,
@@ -929,10 +960,19 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
               <Input id="plant-name" autoComplete="off" placeholder={t('createPlant.namePlaceholder')} value={name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} required />
               <div className="text-xs opacity-60">{t('createPlant.nameRequired')}</div>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="plant-image">{t('createPlant.imageUrl')}</Label>
-              <Input id="plant-image" autoComplete="off" value={imageUrl} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setImageUrl(e.target.value)} placeholder="https://example.com/image.jpg" />
-            </div>
+                <PlantPhotoListEditor
+                  photos={photos}
+                  onChange={handlePhotosChange}
+                  label={
+                    <>
+                      {t('createPlant.imageUrl')} <span className="text-red-500">*</span>
+                    </>
+                  }
+                  helperText={t(
+                    'createPlant.photosHelper',
+                    'Add at least one image URL. Mark one as primary for cards and flag vertical-friendly shots for portrait layouts.'
+                  )}
+                />
             {advanced && (
               <>
                 <div className="flex items-center justify-between mb-4 p-4 rounded-xl border bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-950/20 dark:to-blue-950/20 dark:border-purple-800/30">

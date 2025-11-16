@@ -4166,9 +4166,9 @@ app.post('/api/admin/ban', async (req, res) => {
 async function loadPlantsViaSupabase() {
   if (!supabaseServer) return null
   try {
-    const { data, error } = await supabaseServer
-      .from('plants')
-      .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount')
+      const { data, error } = await supabaseServer
+        .from('plants')
+        .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, photos, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount')
       .order('name', { ascending: true })
     if (error) return null
     return (Array.isArray(data) ? data : []).map((r) => ({
@@ -4180,6 +4180,7 @@ async function loadPlantsViaSupabase() {
       rarity: r.rarity,
       meaning: r.meaning ?? '',
       description: r.description ?? '',
+        photos: Array.isArray(r.photos) ? r.photos : undefined,
       image: r.image_url ?? '',
       care: {
         sunlight: r.care_sunlight,
@@ -4305,6 +4306,7 @@ app.get('/api/plants', async (_req, res) => {
           rarity: r.rarity,
           meaning: r.meaning ?? '',
           description: r.description ?? '',
+            photos: Array.isArray(r.photos) ? r.photos : undefined,
           image: r.image_url ?? '',
           care: {
             sunlight: r.care_sunlight,
@@ -5823,7 +5825,7 @@ app.get('/api/garden/:id/overview', async (req, res) => {
       garden = Array.isArray(gRows) && gRows[0] ? gRows[0] : null
 
       const gpRows = await sql`
-        select
+          select
           gp.id::text as id,
           gp.garden_id::text as garden_id,
           gp.plant_id::text as plant_id,
@@ -5844,6 +5846,7 @@ app.get('/api/garden/:id/overview', async (req, res) => {
           p.meaning as p_meaning,
           p.description as p_description,
           p.image_url as p_image_url,
+          p.photos as p_photos,
           p.care_sunlight as p_care_sunlight,
           p.care_water as p_care_water,
           p.care_soil as p_care_soil,
@@ -5879,6 +5882,7 @@ app.get('/api/garden/:id/overview', async (req, res) => {
           rarity: r.p_rarity,
           meaning: r.p_meaning || '',
           description: r.p_description || '',
+          photos: Array.isArray(r.p_photos) ? r.p_photos : undefined,
           image: r.p_image_url || '',
           care: { sunlight: r.p_care_sunlight || 'Low', water: r.p_care_water || 'Low', soil: r.p_care_soil || '', difficulty: r.p_care_difficulty || 'Easy' },
           seedsAvailable: Boolean(r.p_seeds_available ?? false),
@@ -5930,7 +5934,7 @@ app.get('/api/garden/:id/overview', async (req, res) => {
       let plantsMap = {}
       if (plantIds.length > 0) {
         const inParam = plantIds.map((id) => encodeURIComponent(String(id))).join(',')
-        const pUrl = `${supabaseUrlEnv}/rest/v1/plants?id=in.(${inParam})&select=id,name,scientific_name,colors,seasons,rarity,meaning,description,image_url,care_sunlight,care_water,care_soil,care_difficulty,seeds_available,water_freq_unit,water_freq_value,water_freq_period,water_freq_amount`
+      const pUrl = `${supabaseUrlEnv}/rest/v1/plants?id=in.(${inParam})&select=id,name,scientific_name,colors,seasons,rarity,meaning,description,image_url,photos,care_sunlight,care_water,care_soil,care_difficulty,seeds_available,water_freq_unit,water_freq_value,water_freq_period,water_freq_amount`
         const pResp = await fetch(pUrl, { headers })
         const pRows = pResp.ok ? (await pResp.json().catch(() => [])) : []
         for (const p of pRows) {
@@ -5943,6 +5947,7 @@ app.get('/api/garden/:id/overview', async (req, res) => {
             rarity: p.rarity,
             meaning: p.meaning || '',
             description: p.description || '',
+              photos: Array.isArray(p.photos) ? p.photos : undefined,
             image: p.image_url || '',
             care: { sunlight: p.care_sunlight || 'Low', water: p.care_water || 'Low', soil: p.care_soil || '', difficulty: p.care_difficulty || 'Easy' },
             seedsAvailable: Boolean(p.seeds_available ?? false),

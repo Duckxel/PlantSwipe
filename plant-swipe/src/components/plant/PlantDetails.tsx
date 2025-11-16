@@ -38,6 +38,7 @@ import { isNewPlant, isPlantOfTheMonth, isPopularPlant } from "@/lib/plantHighli
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
+import { getPrimaryPhotoUrl } from "@/lib/photos";
 import { useTranslation } from "react-i18next";
 import {
   ResponsiveContainer,
@@ -1042,7 +1043,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
     [humanize],
   )
 
-  const heroImage = plant.image || (plant as any)?.image_url || ''
+  const heroImage = getPrimaryPhotoUrl(plant.photos ?? []) || plant.image || (plant as any)?.image_url || ''
   const friendlyFrequency = React.useMemo(
     () => formatFrequencyLabel(freqLabel),
     [formatFrequencyLabel, freqLabel]

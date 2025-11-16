@@ -22,12 +22,14 @@ import type {
   PlantPlanting,
   PlantMeta,
   PlantClassification,
+  PlantPhoto,
 } from "@/types/plant"
 import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE, type SupportedLanguage } from "@/lib/i18n"
 import { translatePlantToAllLanguages } from "@/lib/deepl"
 import { savePlantTranslations, getPlantTranslation } from "@/lib/plantTranslations"
 import { Languages, Sparkles, Loader2, CheckCircle2, AlertCircle, Circle } from "lucide-react"
 import { CompleteAdvancedForm } from "@/components/plant/CompleteAdvancedForm"
+import { PlantPhotoListEditor } from "@/components/plant/PlantPhotoListEditor"
 import { useAuth } from "@/context/AuthContext"
 import {
   REQUIRED_FIELD_CONFIG,
@@ -47,6 +49,14 @@ import {
   type AiFieldStateSnapshot,
 } from "@/lib/aiFieldProgress"
 import { hasClassificationData } from "@/constants/classification"
+import {
+  createEmptyPhoto,
+  ensureAtLeastOnePhoto,
+  getPrimaryPhotoUrl,
+  normalizePlantPhotos,
+  sanitizePlantPhotos,
+  upsertPrimaryPhoto,
+} from "@/lib/photos"
 
 const AI_STATUS_STYLES: Record<AiFieldStatus, { text: string }> = {
   pending: { text: "text-muted-foreground" },
@@ -77,7 +87,7 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
   const [rarity, setRarity] = React.useState<Plant["rarity"]>("Common")
   const [meaning, setMeaning] = React.useState("")
   const [description, setDescription] = React.useState("")
-  const [imageUrl, setImageUrl] = React.useState("")
+  const [photos, setPhotos] = React.useState<PlantPhoto[]>([createEmptyPhoto(true)])
   const [careSunlight, setCareSunlight] = React.useState<NonNullable<Plant["care"]>["sunlight"]>("Low")
   const [careSoil, setCareSoil] = React.useState("")
   const [careDifficulty, setCareDifficulty] = React.useState<NonNullable<Plant["care"]>["difficulty"]>("Easy")
@@ -184,6 +194,9 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
   const initialCreatedByRef = React.useRef<string | null>(null)
 
   const funFact = React.useMemo(() => (meta?.funFact ?? meaning ?? '').trim(), [meta?.funFact, meaning])
+  const handlePhotosChange = React.useCallback((next: PlantPhoto[]) => {
+    setPhotos(ensureAtLeastOnePhoto(next))
+  }, [])
 
   React.useEffect(() => {
     if (aiFilling) return
@@ -319,7 +332,8 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
       let latestDescription = description
       let latestMeaning = meaning
       let latestMeta: Partial<PlantMeta> = { ...(meta ?? {}) }
-      let latestFunFact = (latestMeta?.funFact ?? latestMeaning ?? '').trim()
+        let latestFunFact = (latestMeta?.funFact ?? latestMeaning ?? '').trim()
+        let latestPhotos: PlantPhoto[] = [...photos]
 
       let latestTraits: Partial<PlantTraits> = { ...(traits ?? {}) }
       let latestDimensions: Partial<PlantDimensions> = { ...(dimensions ?? {}) }
@@ -538,8 +552,14 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
           }
         }
 
-        if (aiData.image && !imageUrl.trim()) {
-          setImageUrl(aiData.image)
+        if (Array.isArray(aiData.photos)) {
+          latestPhotos = ensureAtLeastOnePhoto(
+            normalizePlantPhotos(aiData.photos, getPrimaryPhotoUrl(latestPhotos)),
+          )
+          setPhotos(latestPhotos)
+        } else if (typeof aiData.image === 'string' && aiData.image.trim()) {
+          latestPhotos = ensureAtLeastOnePhoto(upsertPrimaryPhoto(latestPhotos, aiData.image))
+          setPhotos(latestPhotos)
         }
 
         updateFunFactSnapshot()
@@ -547,6 +567,7 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
 
       const buildExistingData = () => {
         const normalizedColors = normalizeColorList(latestColors)
+        const sanitizedPhotos = sanitizePlantPhotos(latestPhotos)
         const carePayload: any = {
           ...(latestCare ?? {}),
         }
@@ -591,6 +612,7 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
             ...(latestMeta ?? {}),
             ...(latestMeaning.trim() ? { funFact: latestMeaning.trim() } : {}),
           },
+          photos: sanitizedPhotos.length > 0 ? sanitizedPhotos : undefined,
           colors: normalizedColors.length > 0 ? normalizedColors : undefined,
           seasons: latestSeasons.length > 0 ? latestSeasons : undefined,
           description: latestDescription.trim() || undefined,
@@ -703,9 +725,9 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
       setError(null)
       try {
         // Load base plant data with JSONB fields
-          const { data, error: qerr } = await supabase
-            .from('plants')
-            .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_soil, care_difficulty, seeds_available, water_freq_period, water_freq_amount, water_freq_unit, water_freq_value, classification, identifiers, traits, dimensions, phenology, environment, care, propagation, usage, ecology, commerce, problems, planting, meta, created_at')
+        const { data, error: qerr } = await supabase
+          .from('plants')
+          .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, photos, care_sunlight, care_soil, care_difficulty, seeds_available, water_freq_period, water_freq_amount, water_freq_unit, water_freq_value, classification, identifiers, traits, dimensions, phenology, environment, care, propagation, usage, ecology, commerce, problems, planting, meta, created_at')
           .eq('id', id)
           .maybeSingle()
         if (qerr) throw new Error(qerr.message)
@@ -810,7 +832,8 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
           setColors(resolvedColorsString)
           setSeasons(resolvedSeasons)
         setRarity((data.rarity || 'Common') as Plant['rarity'])
-        setImageUrl(String(data.image_url || ''))
+        const normalizedPhotos = normalizePlantPhotos(data.photos, data.image_url)
+        setPhotos(ensureAtLeastOnePhoto(normalizedPhotos.length > 0 ? normalizedPhotos : [createEmptyPhoto(true)]))
         setCareSunlight((data.care_sunlight || 'Low') as NonNullable<Plant['care']>['sunlight'])
         setCareDifficulty((data.care_difficulty || 'Easy') as NonNullable<Plant['care']>['difficulty'])
         setSeedsAvailable(Boolean(data.seeds_available ?? parsedCommerce?.seedsAvailable ?? false))
@@ -994,6 +1017,13 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
       setError(`Overview must be between 100 and 400 words (currently ${descriptionWordCount}).`)
       return
     }
+    const sanitizedPhotos = sanitizePlantPhotos(photos)
+    if (sanitizedPhotos.length === 0) {
+      setError("Please add at least one photo URL.")
+      return
+    }
+    const primaryImageUrl = getPrimaryPhotoUrl(sanitizedPhotos)
+    setPhotos(ensureAtLeastOnePhoto(sanitizedPhotos))
       if (!ensureClassificationValid()) return
     // Validate frequency constraints
     const periodMax: Record<'week'|'month'|'year', number> = { week: 7, month: 4, year: 12 }
@@ -1056,6 +1086,7 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
           problems: Object.keys(problems).length > 0 ? problems : null,
           planting: Object.keys(planting).length > 0 ? planting : null,
           meta: shouldPersistMeta ? metaForUpdate : null,
+            photos: sanitizedPhotos,
           // Legacy fields for backward compatibility
           scientific_name: trimmedScientificName || identifiers?.scientificName || null,
           colors: normalizedColors,
@@ -1063,7 +1094,7 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
           rarity: metaForUpdate?.rarity === 'common' ? 'Common' : metaForUpdate?.rarity === 'uncommon' ? 'Uncommon' : metaForUpdate?.rarity === 'rare' ? 'Rare' : metaForUpdate?.rarity === 'very rare' ? 'Legendary' : rarity,
           meaning: metaForUpdate?.funFact || meaning || null,
           description: description || null,
-          image_url: imageUrl || null,
+            image_url: primaryImageUrl || null,
           care_sunlight: environment?.sunExposure === 'full sun' ? 'High' : environment?.sunExposure === 'partial sun' ? 'Medium' : environment?.sunExposure === 'partial shade' ? 'Low' : careSunlight,
           care_soil: environment?.soil?.texture?.join(', ') || careSoil.trim() || null,
           care_difficulty: care?.difficulty === 'easy' ? 'Easy' : care?.difficulty === 'moderate' ? 'Moderate' : care?.difficulty === 'advanced' ? 'Hard' : careDifficulty,
@@ -1199,10 +1230,7 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
                 <Label htmlFor="plant-name">Name <span className="text-red-500">*</span></Label>
                 <Input id="plant-name" autoComplete="off" value={name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} required />
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="plant-image">Image URL</Label>
-                <Input id="plant-image" autoComplete="off" value={imageUrl} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setImageUrl(e.target.value)} placeholder="https://example.com/image.jpg" />
-              </div>
+                <PlantPhotoListEditor photos={photos} onChange={handlePhotosChange} />
                 {editLanguage === 'en' && (
                   <>
                     <div className="flex items-center justify-between mb-4 p-4 rounded-xl border bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-950/20 dark:to-blue-950/20 dark:border-purple-800/30">

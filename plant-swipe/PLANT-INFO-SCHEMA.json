@@ -1,6 +1,18 @@
 {
   "id": { "type": "string", "description": "Stable UUID v4 for this plant record" },
   "image": { "type": "string", "description": "URL to plant image" },
+  "photos": {
+    "type": "array",
+    "description": "List of plant photos for galleries or alternate orientations",
+    "items": {
+      "type": "object",
+      "properties": {
+        "url": { "type": "string", "description": "Absolute URL to the photo asset" },
+        "isPrimary": { "type": "boolean", "description": "Marks the image as the default cover" },
+        "isVertical": { "type": "boolean", "description": "True when the photo is composed for vertical layouts" }
+      }
+    }
+  },
 
   "identifiers": {
     "scientificName": { "type": "string", "description": "Botanical binomial (Genus species, optionally author)" },

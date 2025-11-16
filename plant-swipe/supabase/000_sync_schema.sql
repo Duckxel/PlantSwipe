@@ -175,6 +175,7 @@ end $$;
     problems jsonb,
     planting jsonb,
     meta jsonb,
+    photos jsonb,
     classification jsonb,
   -- Legacy fields for backward compatibility (will be migrated to JSONB)
   scientific_name text,
@@ -209,7 +210,8 @@ alter table if exists public.plants add column if not exists usage jsonb;
   alter table if exists public.plants add column if not exists commerce jsonb;
   alter table if exists public.plants add column if not exists problems jsonb;
   alter table if exists public.plants add column if not exists planting jsonb;
-  alter table if exists public.plants add column if not exists meta jsonb;
+alter table if exists public.plants add column if not exists meta jsonb;
+alter table if exists public.plants add column if not exists photos jsonb;
   alter table if exists public.plants add column if not exists classification jsonb;
 -- Ensure columns present for legacy/compat fields
 alter table if exists public.plants add column if not exists colors text[] not null default '{}';

@@ -1556,7 +1556,7 @@ export const GardenDashboardPage: React.FC = () => {
       const { data: basePlants, error: baseError } = await supabase
         .from("plants")
         .select(
-          "id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount",
+          "id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, photos, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount",
         )
         .ilike("name", `%${queryLower}%`)
         .limit(20);
@@ -1593,7 +1593,7 @@ export const GardenDashboardPage: React.FC = () => {
       const { data: fullPlants, error: fullError } = await supabase
         .from("plants")
         .select(
-          "id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount",
+          "id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, photos, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount",
         )
         .in("id", Array.from(allPlantIds))
         .limit(20);
