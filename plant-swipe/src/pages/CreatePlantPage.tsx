@@ -21,6 +21,7 @@ import type {
   PlantProblems,
   PlantPlanting,
   PlantMeta,
+  PlantClassification,
 } from "@/types/plant"
 import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE, type SupportedLanguage } from "@/lib/i18n"
 import { translatePlantToAllLanguages } from "@/lib/deepl"
@@ -46,6 +47,7 @@ import {
   type RequiredFieldId,
   type AiFieldStateSnapshot,
 } from "@/lib/aiFieldProgress"
+import { hasClassificationData } from "@/constants/classification"
 
 const AI_STATUS_STYLES: Record<AiFieldStatus, { text: string }> = {
   pending: { text: "text-muted-foreground" },
@@ -172,7 +174,8 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
         return <Circle className="h-4 w-4 text-muted-foreground" />
     }
   }
-  // New JSONB structure state
+    // New JSONB structure state
+    const [classification, setClassification] = React.useState<Partial<PlantClassification>>({})
   const [identifiers, setIdentifiers] = React.useState<Partial<PlantIdentifiers>>({})
   const [traits, setTraits] = React.useState<Partial<PlantTraits>>({})
   const [dimensions, setDimensions] = React.useState<Partial<PlantDimensions>>({})
@@ -333,7 +336,8 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
         }
       }
 
-      let latestIdentifiers: Partial<PlantIdentifiers> = { ...(identifiers ?? {}) }
+        let latestClassification: Partial<PlantClassification> = { ...(classification ?? {}) }
+        let latestIdentifiers: Partial<PlantIdentifiers> = { ...(identifiers ?? {}) }
       let latestScientificName = scientificName
       let latestColors = colors
       let latestSeasons = [...seasons]
@@ -346,8 +350,16 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
         latestFunFact = (latestMeta?.funFact ?? latestMeaning ?? '').trim()
       }
 
-      const applyAiResult = (aiData: any) => {
+        const applyAiResult = (aiData: any) => {
         if (!aiData || typeof aiData !== 'object') return
+
+          if (aiData.classification && typeof aiData.classification === 'object') {
+            latestClassification = {
+              ...(latestClassification ?? {}),
+              ...aiData.classification,
+            }
+            setClassification(latestClassification)
+          }
 
         if (aiData.identifiers) {
           const { externalIds: _ignoredExternalIds, ...restIdentifiers } = aiData.identifiers
@@ -457,12 +469,13 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
       }
 
       const buildExistingData = () => {
-        const normalizedColors = normalizeColorList(latestColors)
-        return {
+          const normalizedColors = normalizeColorList(latestColors)
+          return {
           identifiers: {
             ...(latestIdentifiers ?? {}),
             ...(latestScientificName.trim() ? { scientificName: latestScientificName.trim() } : {}),
           },
+            classification: hasClassificationData(latestClassification) ? latestClassification : undefined,
           traits: { ...(traits ?? {}) },
           dimensions: { ...(dimensions ?? {}) },
           phenology: { ...(phenology ?? {}) },
@@ -634,7 +647,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
     const createdByValue = typeof metaBase.createdBy === 'string' && metaBase.createdBy.trim().length > 0
       ? metaBase.createdBy.trim()
       : actorLabel
-    const metaForInsert: Partial<PlantMeta> = {
+      const metaForInsert: Partial<PlantMeta> = {
       ...metaBase,
       funFact: funFactText || undefined,
       createdAt: createdAtValue,
@@ -649,6 +662,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
       if (Array.isArray(value)) return value.length > 0
       return true
     })
+      const shouldPersistClassification = hasClassificationData(classification)
       // If the user has ever switched to Advanced, keep those values even
       // when saving from Simplified so they persist across toggles.
       const includeAdvanced = advanced || everAdvanced
@@ -662,6 +676,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
         id,
         name: nameNorm,
         // New JSONB structure
+          classification: includeAdvanced && shouldPersistClassification ? classification : null,
         identifiers: includeAdvanced && Object.keys(identifiers).length > 0 ? identifiers : null,
         traits: includeAdvanced && Object.keys(traits).length > 0 ? traits : null,
         dimensions: includeAdvanced && Object.keys(dimensions).length > 0 ? dimensions : null,
@@ -971,7 +986,9 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
                   <Label htmlFor="plant-description">{t('createPlant.description')}</Label>
                   <Textarea id="plant-description" autoComplete="off" placeholder={t('createPlant.descriptionPlaceholder')} value={description} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDescription(e.target.value)} />
                 </div>
-                <CompleteAdvancedForm
+                  <CompleteAdvancedForm
+                    classification={classification}
+                    setClassification={setClassification}
                   identifiers={identifiers}
                   setIdentifiers={setIdentifiers}
                   traits={traits}

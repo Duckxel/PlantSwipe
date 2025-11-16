@@ -156,25 +156,26 @@ do $$ begin
   end;
 end $$;
 
--- ========== Plants (catalog) ==========
-create table if not exists public.plants (
-  id text primary key,
-  -- Legacy name field for backward compatibility and easy querying
-  name text not null,
-  -- New structured format using JSONB
-  identifiers jsonb,
-  traits jsonb,
-  dimensions jsonb,
-  phenology jsonb,
-  environment jsonb,
-  care jsonb,
-  propagation jsonb,
-  usage jsonb,
-  ecology jsonb,
-  commerce jsonb,
-  problems jsonb,
-  planting jsonb,
-  meta jsonb,
+  -- ========== Plants (catalog) ==========
+  create table if not exists public.plants (
+    id text primary key,
+    -- Legacy name field for backward compatibility and easy querying
+    name text not null,
+    -- New structured format using JSONB
+    identifiers jsonb,
+    traits jsonb,
+    dimensions jsonb,
+    phenology jsonb,
+    environment jsonb,
+    care jsonb,
+    propagation jsonb,
+    usage jsonb,
+    ecology jsonb,
+    commerce jsonb,
+    problems jsonb,
+    planting jsonb,
+    meta jsonb,
+    classification jsonb,
   -- Legacy fields for backward compatibility (will be migrated to JSONB)
   scientific_name text,
   colors text[] not null default '{}',
@@ -204,11 +205,12 @@ alter table if exists public.plants add column if not exists environment jsonb;
 alter table if exists public.plants add column if not exists care jsonb;
 alter table if exists public.plants add column if not exists propagation jsonb;
 alter table if exists public.plants add column if not exists usage jsonb;
-alter table if exists public.plants add column if not exists ecology jsonb;
-alter table if exists public.plants add column if not exists commerce jsonb;
-alter table if exists public.plants add column if not exists problems jsonb;
-alter table if exists public.plants add column if not exists planting jsonb;
-alter table if exists public.plants add column if not exists meta jsonb;
+  alter table if exists public.plants add column if not exists ecology jsonb;
+  alter table if exists public.plants add column if not exists commerce jsonb;
+  alter table if exists public.plants add column if not exists problems jsonb;
+  alter table if exists public.plants add column if not exists planting jsonb;
+  alter table if exists public.plants add column if not exists meta jsonb;
+  alter table if exists public.plants add column if not exists classification jsonb;
 -- Ensure columns present for legacy/compat fields
 alter table if exists public.plants add column if not exists colors text[] not null default '{}';
 alter table if exists public.plants add column if not exists seasons text[] not null default '{}';

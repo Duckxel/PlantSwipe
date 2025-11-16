@@ -105,9 +105,12 @@ export function mergePlantWithTranslation(
   const planting = typeof basePlant.planting === 'string' 
     ? JSON.parse(basePlant.planting) 
     : basePlant.planting
-  const meta = typeof basePlant.meta === 'string' 
-    ? JSON.parse(basePlant.meta) 
-    : basePlant.meta
+    const meta = typeof basePlant.meta === 'string' 
+      ? JSON.parse(basePlant.meta) 
+      : basePlant.meta
+    const classification = typeof basePlant.classification === 'string'
+      ? JSON.parse(basePlant.classification)
+      : basePlant.classification
 
     // Parse translation JSONB if present
     const translationIdentifiers = translation?.identifiers
@@ -135,7 +138,7 @@ export function mergePlantWithTranslation(
       ? (typeof translation.problems === 'string' ? JSON.parse(translation.problems) : translation.problems)
       : null
 
-    const mergedPlant: Plant = {
+      const mergedPlant: Plant = {
       id: String(basePlant.id),
       name: translation?.name || basePlant.name || '',
       // New structured format - merge with translations where applicable
@@ -243,7 +246,7 @@ export function mergePlantWithTranslation(
         diseases: translationProblems?.diseases || problems?.diseases || undefined,
         hazards: translationProblems?.hazards || problems?.hazards || undefined,
       },
-      planting: {
+        planting: {
         ...planting,
         ...translationPlanting,
         calendar: {
@@ -281,7 +284,8 @@ export function mergePlantWithTranslation(
       waterFreqUnit: basePlant.water_freq_unit || basePlant.waterFreqUnit || undefined,
       waterFreqValue: basePlant.water_freq_value ?? basePlant.waterFreqValue ?? null,
       waterFreqPeriod: basePlant.water_freq_period || basePlant.waterFreqPeriod || undefined,
-      waterFreqAmount: basePlant.water_freq_amount ?? basePlant.waterFreqAmount ?? null,
+        waterFreqAmount: basePlant.water_freq_amount ?? basePlant.waterFreqAmount ?? null,
+        classification: classification || undefined,
     }
 
     const sanitizedPlant = sanitizeDeep(mergedPlant) as Plant
@@ -304,11 +308,11 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
   try {
     const TOP_LIKED_LIMIT = 5
     const [plantsResponse, topLikedResponse] = await Promise.all([
-      supabase
-        .from('plants')
-        .select(
-          'id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount, identifiers, traits, dimensions, phenology, environment, care, propagation, usage, ecology, commerce, problems, planting, meta, created_at, updated_at'
-        )
+        supabase
+          .from('plants')
+          .select(
+            'id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount, classification, identifiers, traits, dimensions, phenology, environment, care, propagation, usage, ecology, commerce, problems, planting, meta, created_at, updated_at'
+          )
         .order('name', { ascending: true }),
       supabase.rpc('top_liked_plants', { limit_count: TOP_LIKED_LIMIT }),
     ])

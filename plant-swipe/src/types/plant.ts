@@ -201,6 +201,20 @@ export interface PlantMeta {
   updatedBy?: string
 }
 
+export type PlantTypeValue = "plant" | "bambu" | "shrub" | "tree" | "other"
+export type PlantSubclassValue = "flower" | "vegetable" | "cereal" | "spice"
+export type PlantSubSubclassValue = "fruit" | "seed" | "root" | "leaf" | "flower"
+export type PlantActivityValue = "ornemental" | "comestible" | "aromatic" | "medicinal"
+export type PlantSubActivityValue = "climbing" | "hedge" | "massif" | "ground cover" | "seed" | "hull" | "core"
+
+export interface PlantClassification {
+  type?: PlantTypeValue
+  subclass?: PlantSubclassValue
+  subSubclass?: PlantSubSubclassValue
+  activities?: PlantActivityValue[]
+  subActivities?: Partial<Record<PlantActivityValue, PlantSubActivityValue[]>>
+}
+
 export interface PlantPopularity {
   likes?: number
   rank?: number
@@ -226,6 +240,7 @@ export interface Plant {
   problems?: PlantProblems
   planting?: PlantPlanting
   meta?: PlantMeta
+  classification?: PlantClassification
   // Legacy fields for backward compatibility
   scientificName?: string
   colors: string[]

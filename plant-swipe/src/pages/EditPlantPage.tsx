@@ -21,6 +21,7 @@ import type {
   PlantProblems,
   PlantPlanting,
   PlantMeta,
+  PlantClassification,
 } from "@/types/plant"
 import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE, type SupportedLanguage } from "@/lib/i18n"
 import { translatePlantToAllLanguages } from "@/lib/deepl"
@@ -45,6 +46,7 @@ import {
   type RequiredFieldId,
   type AiFieldStateSnapshot,
 } from "@/lib/aiFieldProgress"
+import { hasClassificationData } from "@/constants/classification"
 
 const AI_STATUS_STYLES: Record<AiFieldStatus, { text: string }> = {
   pending: { text: "text-muted-foreground" },
@@ -162,7 +164,8 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
         return <Circle className="h-4 w-4 text-muted-foreground" />
     }
   }
-  // New JSONB structure state
+    // New JSONB structure state
+    const [classification, setClassification] = React.useState<Partial<PlantClassification>>({})
   const [identifiers, setIdentifiers] = React.useState<Partial<PlantIdentifiers>>({})
   const [traits, setTraits] = React.useState<Partial<PlantTraits>>({})
   const [dimensions, setDimensions] = React.useState<Partial<PlantDimensions>>({})
@@ -306,7 +309,8 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
         }
       }
 
-      let latestIdentifiers: Partial<PlantIdentifiers> = { ...(identifiers ?? {}) }
+        let latestClassification: Partial<PlantClassification> = { ...(classification ?? {}) }
+        let latestIdentifiers: Partial<PlantIdentifiers> = { ...(identifiers ?? {}) }
       let latestScientificName = scientificName
       let latestColors = colors
       let latestSeasons = [...seasons]
@@ -338,8 +342,16 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
         latestFunFact = (latestMeta?.funFact ?? latestMeaning ?? '').trim()
       }
 
-      const applyAiResult = (aiData: any) => {
+        const applyAiResult = (aiData: any) => {
         if (!aiData || typeof aiData !== 'object') return
+
+          if (aiData.classification && typeof aiData.classification === 'object') {
+            latestClassification = {
+              ...(latestClassification ?? {}),
+              ...aiData.classification,
+            }
+            setClassification(latestClassification)
+          }
 
         if (aiData.identifiers) {
           const { externalIds: _ignoredExternalIds, ...restIdentifiers } = aiData.identifiers
@@ -558,6 +570,7 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
             ...(latestIdentifiers ?? {}),
             ...(latestScientificName.trim() ? { scientificName: latestScientificName.trim() } : {}),
           },
+          classification: hasClassificationData(latestClassification) ? latestClassification : undefined,
           traits: { ...(latestTraits ?? {}) },
           dimensions: { ...(latestDimensions ?? {}) },
           phenology: { ...(latestPhenology ?? {}) },
@@ -687,9 +700,9 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
       setError(null)
       try {
         // Load base plant data with JSONB fields
-        const { data, error: qerr } = await supabase
-          .from('plants')
-          .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_soil, care_difficulty, seeds_available, water_freq_period, water_freq_amount, water_freq_unit, water_freq_value, identifiers, traits, dimensions, phenology, environment, care, propagation, usage, ecology, commerce, problems, planting, meta, created_at')
+          const { data, error: qerr } = await supabase
+            .from('plants')
+            .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_soil, care_difficulty, seeds_available, water_freq_period, water_freq_amount, water_freq_unit, water_freq_value, classification, identifiers, traits, dimensions, phenology, environment, care, propagation, usage, ecology, commerce, problems, planting, meta, created_at')
           .eq('id', id)
           .maybeSingle()
         if (qerr) throw new Error(qerr.message)
@@ -700,7 +713,8 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
         const { data: translation } = await getPlantTranslation(id, editLanguage)
         
         // Parse JSONB fields
-        const parsedIdentifiers = typeof data.identifiers === 'string' ? JSON.parse(data.identifiers) : data.identifiers
+          const parsedClassification = typeof data.classification === 'string' ? JSON.parse(data.classification) : data.classification
+          const parsedIdentifiers = typeof data.identifiers === 'string' ? JSON.parse(data.identifiers) : data.identifiers
         const parsedTraits = typeof data.traits === 'string' ? JSON.parse(data.traits) : data.traits
         const parsedDimensions = typeof data.dimensions === 'string' ? JSON.parse(data.dimensions) : data.dimensions
         const parsedPhenology = typeof data.phenology === 'string' ? JSON.parse(data.phenology) : data.phenology
@@ -753,7 +767,8 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
           setCareSoil(String(translation?.care_soil || data.care_soil || ''))
         
         // Set JSONB structures - merge translations with base data
-        setIdentifiers({
+          setClassification(parsedClassification || {})
+          setIdentifiers({
           ...parsedIdentifiers,
           ...translationIdentifiers,
           scientificName: translationIdentifiers?.scientificName || parsedIdentifiers?.scientificName || data.scientific_name || undefined,
@@ -986,17 +1001,19 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
         updatedBy: actorLabel,
       }
       setMeta(metaForUpdate)
-      const shouldPersistMeta = Object.values(metaForUpdate).some((value) => {
+        const shouldPersistMeta = Object.values(metaForUpdate).some((value) => {
         if (value === undefined || value === null) return false
         if (typeof value === 'string') return value.trim().length > 0
         if (Array.isArray(value)) return value.length > 0
         return true
       })
+        const shouldPersistClassification = hasClassificationData(classification)
       const { error: uerr } = await supabase
         .from('plants')
         .update({
           name: name.trim(),
           // New JSONB structure
+            classification: shouldPersistClassification ? classification : null,
           identifiers: Object.keys(identifiers).length > 0 ? identifiers : null,
           traits: Object.keys(traits).length > 0 ? traits : null,
           dimensions: Object.keys(dimensions).length > 0 ? dimensions : null,
@@ -1256,6 +1273,8 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
                 <Input id="plant-description" autoComplete="off" value={description} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDescription(e.target.value)} />
               </div>
                 <CompleteAdvancedForm
+                  classification={classification}
+                  setClassification={setClassification}
                   identifiers={identifiers}
                   setIdentifiers={setIdentifiers}
                   traits={traits}

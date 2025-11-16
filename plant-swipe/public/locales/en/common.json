@@ -435,6 +435,14 @@
       "overview": "Overview",
       "meaning": "Meaning",
       "careGuide": "Care Guide",
+      "classification": {
+        "title": "Classification",
+        "type": "Type",
+        "subclass": "Subclass",
+        "subSubclass": "Sub-subclass",
+        "activities": "Activities",
+        "subActivities": "{{activity}} focus"
+      },
       "sunlightLabel": "Sunlight:",
       "waterLabel": "Water:",
       "waterFrequency": "Water frequency:",

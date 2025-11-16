@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import type { Plant, PlantDimensions } from "@/types/plant";
 import { rarityTone, seasonBadge } from "@/constants/badges";
+import { formatClassificationLabel } from "@/constants/classification";
 import { cn, deriveWaterLevelFromFrequency } from "@/lib/utils";
 import { isNewPlant, isPlantOfTheMonth, isPopularPlant } from "@/lib/plantHighlights";
 import { supabase } from "@/lib/supabaseClient";
@@ -836,11 +837,102 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
   const problems = plant.problems ?? ({} as NonNullable<Plant['problems']>)
   const planting = plant.planting ?? ({} as NonNullable<Plant['planting']>)
   const meta = plant.meta ?? ({} as NonNullable<Plant['meta']>)
-  const identifiers = plant.identifiers ?? ({} as NonNullable<Plant['identifiers']>)
-  const traits = plant.traits ?? ({} as NonNullable<Plant['traits']>)
-  const dimensions = plant.dimensions ?? ({} as NonNullable<Plant['dimensions']>)
-  const seasons = Array.isArray(plant.seasons) ? plant.seasons : []
-  const colors = Array.isArray(plant.colors) ? plant.colors : []
+    const identifiers = plant.identifiers ?? ({} as NonNullable<Plant['identifiers']>)
+    const traits = plant.traits ?? ({} as NonNullable<Plant['traits']>)
+    const dimensions = plant.dimensions ?? ({} as NonNullable<Plant['dimensions']>)
+    const seasons = Array.isArray(plant.seasons) ? plant.seasons : []
+    const colors = Array.isArray(plant.colors) ? plant.colors : []
+    const classificationSummary = React.useMemo(() => {
+      const data = plant.classification
+      if (!data) return []
+      const entries: Array<{ key: string; label: string; values: string[] }> = []
+      if (data.type) {
+        entries.push({
+          key: 'type',
+          label: t('plantInfo.classification.type', { defaultValue: 'Type' }),
+          values: [formatClassificationLabel(data.type)],
+        })
+      }
+      if (data.subclass) {
+        entries.push({
+          key: 'subclass',
+          label: t('plantInfo.classification.subclass', { defaultValue: 'Subclass' }),
+          values: [formatClassificationLabel(data.subclass)],
+        })
+      }
+      if (data.subSubclass) {
+        entries.push({
+          key: 'subSubclass',
+          label: t('plantInfo.classification.subSubclass', { defaultValue: 'Sub-subclass' }),
+          values: [formatClassificationLabel(data.subSubclass)],
+        })
+      }
+      if (Array.isArray(data.activities) && data.activities.length > 0) {
+        entries.push({
+          key: 'activities',
+          label: t('plantInfo.classification.activities', { defaultValue: 'Activities' }),
+          values: data.activities.map((activity) => formatClassificationLabel(activity)),
+        })
+      }
+      if (data.subActivities) {
+        Object.entries(data.subActivities).forEach(([activity, list]) => {
+          if (!Array.isArray(list) || list.length === 0) return
+          entries.push({
+            key: `sub-${activity}`,
+            label: t('plantInfo.classification.subActivities', {
+              activity: formatClassificationLabel(activity),
+              defaultValue: `${formatClassificationLabel(activity)} focus`,
+            }),
+            values: list.map((value) => formatClassificationLabel(value)),
+          })
+        })
+      }
+      return entries.filter((entry) => entry.values.length > 0)
+    }, [plant.classification, t])
+    const renderClassificationCard = React.useCallback(
+      (compact = false) => {
+        if (!classificationSummary.length) return null
+        return (
+          <motion.section
+            initial={{ opacity: 0, y: 12 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.1 }}
+            transition={{ duration: 0.35 }}
+            className={cn(
+              'rounded-3xl border border-emerald-200/60 bg-white/90 p-5 shadow-sm backdrop-blur dark:border-emerald-900/50 dark:bg-[#0e1b1c]/70',
+              compact ? 'sm:p-4' : 'sm:p-6'
+            )}
+          >
+            <header className="mb-4 flex items-center gap-2 text-emerald-700 dark:text-emerald-100">
+              <Leaf className="h-4 w-4" />
+              <h3 className="text-sm font-semibold tracking-wide">
+                {t('plantInfo.classification.title', { defaultValue: 'Classification' })}
+              </h3>
+            </header>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {classificationSummary.map((entry) => (
+                <div key={entry.key} className="space-y-2">
+                  <div className="text-[11px] uppercase tracking-widest text-emerald-600/70 dark:text-emerald-200/70">
+                    {entry.label}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {entry.values.map((value) => (
+                      <Badge
+                        key={`${entry.key}-${value}`}
+                        className="rounded-2xl border-none bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-900 dark:bg-emerald-500/25 dark:text-emerald-50"
+                      >
+                        {value}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </motion.section>
+        )
+      },
+      [classificationSummary, t]
+    )
   const highlightBadges = React.useMemo(() => {
     const badges: Array<{ key: string; label: string; className: string; icon: React.ReactNode }> = []
     if (isPlantOfTheMonth(plant)) {
@@ -1523,6 +1615,7 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
                   </div>
                 )}
             {renderQuickStats(compactStats, 'sm:grid-cols-3')}
+            {renderClassificationCard(true)}
             {(colors.length > 0 || seasons.length > 0) && (
               <div className="flex flex-wrap justify-center gap-2">
                 {colors.map((c) => (
@@ -1708,7 +1801,8 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
           <div className="flex items-center gap-3">
             <h2 className="text-2xl font-semibold">{t('plantInfo.overview')} - {t('plantInfo.careGuide')}</h2>
           </div>
-          {renderQuickStats(quickStats, 'sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5')}
+            {renderQuickStats(quickStats, 'sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5')}
+            {renderClassificationCard()}
         </motion.section>
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
