@@ -435,6 +435,14 @@
       "overview": "Aperçu",
       "meaning": "Signification",
       "careGuide": "Guide d'entretien",
+      "classification": {
+        "title": "Classification",
+        "type": "Type",
+        "subclass": "Sous-classe",
+        "subSubclass": "Sous-sous-classe",
+        "activities": "Activités",
+        "subActivities": "Sous-activité {{activity}}"
+      },
       "sunlightLabel": "Ensoleillement :",
       "waterLabel": "Eau :",
       "waterFrequency": "Fréquence d'arrosage :",

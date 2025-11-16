@@ -21,6 +21,7 @@ import type {
   PlantProblems,
   PlantPlanting,
   PlantMeta,
+  PlantClassification,
 } from "@/types/plant"
 import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE, type SupportedLanguage } from "@/lib/i18n"
 import { translatePlantToAllLanguages } from "@/lib/deepl"
@@ -46,6 +47,7 @@ import {
   type RequiredFieldId,
   type AiFieldStateSnapshot,
 } from "@/lib/aiFieldProgress"
+import { hasClassificationData } from "@/constants/classification"
 
 const AI_STATUS_STYLES: Record<AiFieldStatus, { text: string }> = {
   pending: { text: "text-muted-foreground" },
@@ -91,7 +93,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [ok, setOk] = React.useState<string | null>(null)
-  const [advanced, setAdvanced] = React.useState(false)
+    const [advanced, setAdvanced] = React.useState(false)
   const [everAdvanced, setEverAdvanced] = React.useState(false)
   // Language selection (only in Advanced mode, defaults to English)
   const [inputLanguage, setInputLanguage] = React.useState<SupportedLanguage>(DEFAULT_LANGUAGE)
@@ -172,7 +174,9 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
         return <Circle className="h-4 w-4 text-muted-foreground" />
     }
   }
-  // New JSONB structure state
+    // New JSONB structure state
+    const [classification, setClassification] = React.useState<Partial<PlantClassification>>({})
+    const [classificationTabSignal, setClassificationTabSignal] = React.useState(0)
   const [identifiers, setIdentifiers] = React.useState<Partial<PlantIdentifiers>>({})
   const [traits, setTraits] = React.useState<Partial<PlantTraits>>({})
   const [dimensions, setDimensions] = React.useState<Partial<PlantDimensions>>({})
@@ -207,13 +211,14 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
     if (aiFilling) return
     const hasStarted = Object.values(aiFieldStatuses).some((status) => status !== 'pending')
     if (!hasStarted) return
-    const snapshot: AiFieldStateSnapshot = {
-      scientificName,
-      colors,
-      seasons,
-      description,
-      funFact,
-    }
+      const snapshot: AiFieldStateSnapshot = {
+        scientificName,
+        colors,
+        seasons,
+        description,
+        funFact,
+        classificationType: classification?.type ?? '',
+      }
     const nextStatuses: Record<RequiredFieldId, AiFieldStatus> = { ...aiFieldStatuses }
     let statusChanged = false
     const missing: RequiredFieldId[] = []
@@ -235,7 +240,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
       }
       return missing
     })
-  }, [aiFilling, aiFieldStatuses, scientificName, colors, seasons, description, funFact])
+    }, [aiFilling, aiFieldStatuses, scientificName, colors, seasons, description, funFact, classification?.type])
 
   const toggleSeason = (s: Plant["seasons"][number]) => {
     setSeasons((cur: string[]) => (cur.includes(s) ? cur.filter((x: string) => x !== s) : [...cur, s]))
@@ -333,7 +338,8 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
         }
       }
 
-      let latestIdentifiers: Partial<PlantIdentifiers> = { ...(identifiers ?? {}) }
+        let latestClassification: Partial<PlantClassification> = { ...(classification ?? {}) }
+        let latestIdentifiers: Partial<PlantIdentifiers> = { ...(identifiers ?? {}) }
       let latestScientificName = scientificName
       let latestColors = colors
       let latestSeasons = [...seasons]
@@ -346,8 +352,16 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
         latestFunFact = (latestMeta?.funFact ?? latestMeaning ?? '').trim()
       }
 
-      const applyAiResult = (aiData: any) => {
+        const applyAiResult = (aiData: any) => {
         if (!aiData || typeof aiData !== 'object') return
+
+          if (aiData.classification && typeof aiData.classification === 'object') {
+            latestClassification = {
+              ...(latestClassification ?? {}),
+              ...aiData.classification,
+            }
+            setClassification(latestClassification)
+          }
 
         if (aiData.identifiers) {
           const { externalIds: _ignoredExternalIds, ...restIdentifiers } = aiData.identifiers
@@ -457,12 +471,13 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
       }
 
       const buildExistingData = () => {
-        const normalizedColors = normalizeColorList(latestColors)
-        return {
+          const normalizedColors = normalizeColorList(latestColors)
+          return {
           identifiers: {
             ...(latestIdentifiers ?? {}),
             ...(latestScientificName.trim() ? { scientificName: latestScientificName.trim() } : {}),
           },
+            classification: hasClassificationData(latestClassification) ? latestClassification : undefined,
           traits: { ...(traits ?? {}) },
           dimensions: { ...(dimensions ?? {}) },
           phenology: { ...(phenology ?? {}) },
@@ -484,13 +499,14 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
         }
       }
 
-      const finalizeSnapshot = (): AiFieldStateSnapshot => ({
-        scientificName: latestScientificName,
-        colors: latestColors,
-        seasons: latestSeasons,
-        description: latestDescription,
-        funFact: latestFunFact,
-      })
+        const finalizeSnapshot = (): AiFieldStateSnapshot => ({
+          scientificName: latestScientificName,
+          colors: latestColors,
+          seasons: latestSeasons,
+          description: latestDescription,
+          funFact: latestFunFact,
+          classificationType: latestClassification?.type ?? '',
+        })
 
       const runFullFill = async () => {
         const aiData = await fetchAiPlantFill({
@@ -581,7 +597,34 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
     }
   }
 
-  const save = async () => {
+    const focusClassificationTab = React.useCallback(() => {
+      setClassificationTabSignal((prev) => prev + 1)
+      if (!advanced) {
+        setAdvanced(true)
+      }
+      setEverAdvanced(true)
+    }, [advanced])
+
+    const ensureClassificationValid = () => {
+      if (!classification?.type) {
+        setError("Please choose a plant type in the Classification tab.")
+        focusClassificationTab()
+        return false
+      }
+      if (classification.type === 'plant' && !classification.subclass) {
+        setError("Please select a subclass for plant type in the Classification tab.")
+        focusClassificationTab()
+        return false
+      }
+      if (classification.subclass === 'vegetable' && !classification.subSubclass) {
+        setError("Please select a sub-subclass when subclass is Vegetable.")
+        focusClassificationTab()
+        return false
+      }
+      return true
+    }
+
+    const save = async () => {
     setError(null)
     setOk(null)
     if (!name.trim()) { setError("Name is required"); return }
@@ -592,10 +635,11 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
     if (seasons.length === 0) { setError("Select at least one season"); return }
     if (!description.trim()) { setError("Overview is required"); return }
     const descriptionWordCount = countWords(description)
-    if (descriptionWordCount < 100 || descriptionWordCount > 400) {
+      if (descriptionWordCount < 100 || descriptionWordCount > 400) {
       setError(`Overview must be between 100 and 400 words (currently ${descriptionWordCount}).`)
       return
     }
+      if (!ensureClassificationValid()) return
     // Validate frequency constraints
     const periodMax: Record<'week'|'month'|'year', number> = { week: 7, month: 4, year: 12 }
     const maxAllowed = periodMax[waterFreqPeriod]
@@ -634,7 +678,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
     const createdByValue = typeof metaBase.createdBy === 'string' && metaBase.createdBy.trim().length > 0
       ? metaBase.createdBy.trim()
       : actorLabel
-    const metaForInsert: Partial<PlantMeta> = {
+      const metaForInsert: Partial<PlantMeta> = {
       ...metaBase,
       funFact: funFactText || undefined,
       createdAt: createdAtValue,
@@ -649,6 +693,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
       if (Array.isArray(value)) return value.length > 0
       return true
     })
+        const shouldPersistClassification = hasClassificationData(classification)
       // If the user has ever switched to Advanced, keep those values even
       // when saving from Simplified so they persist across toggles.
       const includeAdvanced = advanced || everAdvanced
@@ -661,7 +706,8 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
       const { error: insErr } = await supabase.from('plants').insert({
         id,
         name: nameNorm,
-        // New JSONB structure
+          // New JSONB structure
+          classification: shouldPersistClassification ? classification : null,
         identifiers: includeAdvanced && Object.keys(identifiers).length > 0 ? identifiers : null,
         traits: includeAdvanced && Object.keys(traits).length > 0 ? traits : null,
         dimensions: includeAdvanced && Object.keys(dimensions).length > 0 ? dimensions : null,
@@ -971,7 +1017,10 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
                   <Label htmlFor="plant-description">{t('createPlant.description')}</Label>
                   <Textarea id="plant-description" autoComplete="off" placeholder={t('createPlant.descriptionPlaceholder')} value={description} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDescription(e.target.value)} />
                 </div>
-                <CompleteAdvancedForm
+                  <CompleteAdvancedForm
+                    classification={classification}
+                    setClassification={setClassification}
+                    focusClassificationTabSignal={classificationTabSignal}
                   identifiers={identifiers}
                   setIdentifiers={setIdentifiers}
                   traits={traits}

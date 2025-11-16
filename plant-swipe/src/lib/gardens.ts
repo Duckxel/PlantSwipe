@@ -319,9 +319,9 @@ export async function getGardenPlants(gardenId: string, language?: SupportedLang
   const rows = (data || []) as any[]
   if (rows.length === 0) return []
   const plantIds = Array.from(new Set(rows.map(r => r.plant_id)))
-  const { data: plantRows } = await supabase
-    .from('plants')
-    .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount')
+    const { data: plantRows } = await supabase
+      .from('plants')
+      .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount, classification, identifiers, traits, dimensions, phenology, environment, care, propagation, usage, ecology, commerce, problems, planting, meta')
     .in('id', plantIds)
   
   // Always load translations for the specified language (including English)
@@ -879,7 +879,7 @@ export async function getGardenInventory(gardenId: string): Promise<Array<{ plan
   const plantIds = rows.map(r => String(r.plant_id))
   const { data: plantRows } = await supabase
     .from('plants')
-    .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available')
+    .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, classification')
     .in('id', plantIds)
   const idToPlant: Record<string, Plant> = {}
   for (const p of plantRows || []) {
@@ -895,6 +895,7 @@ export async function getGardenInventory(gardenId: string): Promise<Array<{ plan
       image: p.image_url || '',
       care: { sunlight: p.care_sunlight || 'Low', water: p.care_water || 'Low', soil: p.care_soil || '', difficulty: p.care_difficulty || 'Easy' },
       seedsAvailable: Boolean(p.seeds_available ?? false),
+      classification: typeof p.classification === 'string' ? JSON.parse(p.classification) : p.classification || undefined,
     }
   }
   return rows.map(r => ({

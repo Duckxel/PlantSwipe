@@ -23,6 +23,51 @@
     }
   },
 
+  "classification": {
+    "type": "object",
+    "description": "Structured categorical information that controls downstream subclass and activity choices.",
+    "properties": {
+      "type": {
+        "type": "string",
+        "options": ["plant","bambu","shrub","tree","other"],
+        "description": "Primary plant type. Exactly one value is allowed."
+      },
+      "subclass": {
+        "type": "string",
+        "options": ["flower","vegetable","cereal","spice"],
+        "description": "Secondary class that is only meaningful when type = plant. Leave blank for other types."
+      },
+      "subSubclass": {
+        "type": "string",
+        "options": ["fruit","seed","root","leaf","flower"],
+        "description": "Additional level under subclass = vegetable. Leave blank otherwise."
+      },
+      "activities": {
+        "type": "array",
+        "items": "string",
+        "options": ["ornemental","comestible","aromatic","medicinal"],
+        "description": "Intended activities/uses. Multiple selections are allowed."
+      },
+      "subActivities": {
+        "type": "object",
+        "description": "Optional subactivity selections keyed by activity. Only valid when the matching activity is listed in activities.",
+        "properties": {
+          "ornemental": {
+            "type": "array",
+            "items": "string",
+            "options": ["climbing","hedge","massif","ground cover"]
+          },
+          "comestible": {
+            "type": "array",
+            "items": "string",
+            "options": ["seed","hull","core"]
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+
   "traits": {
     "lifeCycle": { "type": "string", "options": ["annual","biennial","perennial"] },
     "habit": { "type": "array", "items": "string", "options": ["tree","shrub","vine","climber","herbaceous","succulent","grass","fern","aquatic"] },
@@ -33,7 +78,9 @@
     "toxicity": {
       "toHumans": { "type": "string", "options": ["non-toxic","mild","moderate","severe"] },
       "toPets": { "type": "string", "options": ["non-toxic","mild","moderate","severe"] }
-    },
+      },
+      "dogFriendly": { "type": "boolean", "description": "True if generally safe for dogs" },
+      "catFriendly": { "type": "boolean", "description": "True if generally safe for cats" },
     "allergenicity": { "type": "string", "options": ["low","medium","high"] },
     "invasiveness": {
       "status": { "type": "string", "options": ["not invasive","regional risk","invasive"] },
