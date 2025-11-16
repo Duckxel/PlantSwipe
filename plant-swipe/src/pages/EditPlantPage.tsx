@@ -1063,8 +1063,8 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
       const nowIso = new Date().toISOString()
       const metaBase = meta ?? {}
       const baseFunFact = typeof metaBase.funFact === 'string' ? metaBase.funFact.trim() : ''
-      const funFactText = baseFunFact || meaning.trim()
-      if (!isFunFactValid(funFactText)) {
+        const funFactText = baseFunFact || meaning.trim()
+        if (funFactText && !isFunFactValid(funFactText)) {
         const sentenceCount = countSentences(funFactText)
         setError(`Fun fact must contain between 1 and 3 sentences (currently ${sentenceCount}).`)
         return
