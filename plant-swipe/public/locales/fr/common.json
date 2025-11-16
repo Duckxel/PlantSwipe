@@ -35,6 +35,37 @@
       "termsOfServices": "Conditions d'utilisation"
     }
   },
+  "errorPage": {
+    "codeLabel": "Code d'erreur",
+    "tipsTitle": "Que faire ?",
+    "actions": {
+      "home": "Retour à l'accueil",
+      "contact": "Contacter le support"
+    },
+    "tips": {
+      "checkUrl": "Vérifiez que l'adresse saisie ne contient pas de faute.",
+      "refresh": "Actualisez la page pour voir si le problème persiste.",
+      "contact": "Contactez-nous si vous pensez qu'il s'agit d'une erreur."
+    },
+    "codes": {
+      "403": {
+        "title": "Cette porte est verrouillée",
+        "description": "Vous n'avez pas encore l'autorisation d'accéder à cette page."
+      },
+      "404": {
+        "title": "Nous avons perdu cette page",
+        "description": "Le chemin que vous suivez n'existe plus ou a été déplacé."
+      },
+      "500": {
+        "title": "Nous entretenons le jardin",
+        "description": "Un problème est survenu de notre côté. Réessayez bientôt."
+      },
+      "default": {
+        "title": "Détour inattendu",
+        "description": "Quelque chose s'est mal passé. Revenons sur la bonne piste."
+      }
+    }
+  },
   "contactUs": {
     "title": "Nous contacter",
       "heroHeading": "Nous serions ravis d'échanger avec vous",

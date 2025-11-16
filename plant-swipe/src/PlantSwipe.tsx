@@ -34,6 +34,7 @@ import ContactUsPage from "@/pages/ContactUsPage";
 import AboutPage from "@/pages/AboutPage";
 import DownloadPage from "@/pages/DownloadPage";
 import TermsPage from "@/pages/TermsPage";
+import { ErrorPage } from "@/pages/ErrorPage";
 import { supabase } from "@/lib/supabaseClient";
 import { useLanguage } from "@/lib/i18nRouting";
 import { loadPlantsWithTranslations } from "@/lib/plantTranslationLoader";
@@ -787,7 +788,7 @@ export default function PlantSwipe() {
                 )} />
                   <Route path="/plants/:id" element={<PlantInfoPage />} />
                   <Route
-                    path="/*"
+                    path="/"
                     element={plants.length > 0 ? (
                       <SwipePage
                         current={current}
@@ -818,6 +819,8 @@ export default function PlantSwipe() {
                     </>
                   )}
                 />
+                  <Route path="/error/:code" element={<ErrorPage />} />
+                  <Route path="*" element={<ErrorPage code="404" />} />
               </Routes>
               {/* When a background location is set, also render the overlay route on top */}
               {backgroundLocation && (
