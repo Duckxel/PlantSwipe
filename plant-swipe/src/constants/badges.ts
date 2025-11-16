@@ -1,13 +1,15 @@
+import type { PlantSeason } from "@/types/plant"
+
 export const rarityTone: Record<string, string> = {
-  Common: 'bg-emerald-100 text-emerald-800',
-  Uncommon: 'bg-cyan-100 text-cyan-800',
-  Rare: 'bg-violet-100 text-violet-800',
-  Legendary: 'bg-amber-100 text-amber-900'
+  Common: 'bg-emerald-200 dark:bg-emerald-700 text-emerald-900 dark:text-emerald-100',
+  Uncommon: 'bg-cyan-200 dark:bg-cyan-700 text-cyan-900 dark:text-cyan-100',
+  Rare: 'bg-violet-200 dark:bg-violet-700 text-violet-900 dark:text-violet-100',
+  Legendary: 'bg-amber-200 dark:bg-amber-700 text-amber-900 dark:text-amber-100'
 }
 
-export const seasonBadge: Record<string, string> = {
-  Spring: 'bg-green-100 text-green-800',
-  Summer: 'bg-yellow-100 text-yellow-800',
-  Autumn: 'bg-orange-100 text-orange-800',
-  Winter: 'bg-blue-100 text-blue-800'
+export const seasonBadge: Record<PlantSeason, string> = {
+  Spring: 'bg-green-200 dark:bg-green-700 text-green-900 dark:text-green-100',
+  Summer: 'bg-yellow-200 dark:bg-yellow-700 text-yellow-900 dark:text-yellow-100',
+  Autumn: 'bg-orange-200 dark:bg-orange-700 text-orange-900 dark:text-orange-100',
+  Winter: 'bg-blue-200 dark:bg-blue-700 text-blue-900 dark:text-blue-100'
 }

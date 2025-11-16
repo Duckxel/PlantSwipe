@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" aria-labelledby="title desc" role="img">
+  <title id="title">Aphylia Icon</title>
+  <desc id="desc">Rounded square with a sprouting leaf to symbolize gardening</desc>
+  <defs>
+    <linearGradient id="bg-gradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#14532d" />
+      <stop offset="100%" stop-color="#052e16" />
+    </linearGradient>
+    <linearGradient id="leaf-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#d1fae5" />
+      <stop offset="100%" stop-color="#6ee7b7" />
+    </linearGradient>
+  </defs>
+  <rect x="32" y="32" width="448" height="448" rx="120" fill="url(#bg-gradient)" />
+  <path
+    d="M256 120c70 0 126 56 126 126 0 10-1 20-3 30-38 6-69-1-94-21-25-21-37-52-46-92-2-10-2-20-2-30 6-1 12-2 19-3z"
+    fill="url(#leaf-gradient)"
+  />
+  <path
+    d="M256 120c-70 0-126 56-126 126 0 11 1 22 4 32 38 5 69-2 94-22 25-20 37-52 46-91 2-11 2-22 2-32-6-1-12-2-20-3z"
+    fill="#bbf7d0"
+    opacity="0.85"
+  />
+  <rect x="238" y="228" width="36" height="180" rx="18" fill="#a7f3d0" />
+  <circle cx="256" cy="390" r="28" fill="#f0fdf4" opacity="0.6" />
+</svg>

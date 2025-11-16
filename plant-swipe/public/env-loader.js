@@ -5,13 +5,54 @@
   - Avoids executing HTML accidentally returned by SPA fallbacks.
   - Guarantees window.__ENV__ exists before app module runs.
 */
-(function loadRuntimeEnv() {
+;(function loadRuntimeEnv() {
   try {
     if (typeof window !== 'object') return
     if (window.__ENV__ && typeof window.__ENV__ === 'object') return
 
-    var candidates = ['/api/env.js', '/env.js']
-    var loaded = false
+    function normalizeBase(path) {
+      if (typeof path !== 'string' || !path.length) return '/'
+      if (!path.startsWith('/')) path = '/' + path
+      if (!path.endsWith('/')) path += '/'
+      return path.replace(/\/{2,}/g, '/')
+    }
+
+    var baseFromScript = '/'
+    var currentScript = document.currentScript
+    if (currentScript && currentScript.getAttribute('data-base')) {
+      baseFromScript = normalizeBase(currentScript.getAttribute('data-base'))
+    } else if (currentScript && currentScript.src) {
+      try {
+        var srcUrl = new URL(currentScript.src, window.location.origin)
+        baseFromScript = normalizeBase(srcUrl.pathname.replace(/env-loader\.js(?:\?.*)?$/, ''))
+      } catch (_) {
+        baseFromScript = '/'
+      }
+    }
+    var basePath = normalizeBase((window.__PLANTSWIPE_BASE_PATH__ || baseFromScript || '/'))
+    window.__PLANTSWIPE_BASE_PATH__ = basePath
+
+    function join(base, resource) {
+      if (/^(https?:)?\/\//.test(resource)) return resource
+      var cleanBase = normalizeBase(base)
+      var cleanResource = resource.replace(/^\//, '')
+      if (!cleanResource) return cleanBase
+      if (cleanBase === '/') return '/' + cleanResource
+      return (cleanBase + cleanResource).replace(/\/{2,}/g, '/')
+    }
+
+    var candidates = []
+    function pushCandidate(url) {
+      if (!url) return
+      if (candidates.indexOf(url) === -1) {
+        candidates.push(url)
+      }
+    }
+
+    pushCandidate(join(basePath, 'api/env.js'))
+    pushCandidate('/api/env.js')
+    pushCandidate(join(basePath, 'env.js'))
+    pushCandidate('/env.js')
 
     function isProbablyHtml(text) {
       if (!text) return false
@@ -41,12 +82,7 @@
               if (isProbablyHtml(txt) || (ct && ct.includes('text/html'))) {
                 throw new Error('html response for ' + url)
               }
-              if (!/window\.__ENV__\s*=\s*\{/.test(txt)) {
-                // Allow bare object assignment or module export format fallback if present
-                // but primary expected pattern is window.__ENV__ = {...}
-              }
               injectInline(txt)
-              // small delay to allow execution
               setTimeout(function () {
                 onDone(window.__ENV__ && typeof window.__ENV__ === 'object')
               }, 0)
@@ -56,14 +92,13 @@
       } catch (e) { onDone(false) }
     }
 
-    (function tryNext(i) {
+    ;(function tryNext(i) {
       if (i >= candidates.length) {
         setEmptyEnv()
         return
       }
       loadFrom(candidates[i], function (ok) {
         if (ok) {
-          loaded = true
           return
         }
         tryNext(i + 1)

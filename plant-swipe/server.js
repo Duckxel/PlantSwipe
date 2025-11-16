@@ -14,6 +14,9 @@ import zlib from 'zlib'
 import crypto from 'crypto'
 import { pipeline as streamPipeline } from 'stream'
 import net from 'net'
+import OpenAI from 'openai'
+import { z } from 'zod'
+import { zodResponseFormat } from 'openai/helpers/zod'
 
 
 dotenv.config()
@@ -105,6 +108,18 @@ async function getTopLevelIfRepo(dir) {
 
 const exec = promisify(execCb)
 
+function parseEmailTargets(raw, fallback) {
+  const source = (typeof raw === 'string' && raw.trim().length > 0) ? raw : (fallback || '')
+  if (!source) return []
+  return source
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)
+}
+
+const DEFAULT_SUPPORT_EMAIL = 'support@aphylia.app'
+const DEFAULT_BUSINESS_EMAIL = 'contact@aphylia.app'
+
 // Utility: wrap a promise with a timeout that rejects when exceeded
 function withTimeout(promise, ms, label = 'TIMEOUT') {
   return new Promise((resolve, reject) => {
@@ -122,6 +137,37 @@ const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABA
 const supabaseServer = (supabaseUrlEnv && supabaseAnonKey)
   ? createSupabaseClient(supabaseUrlEnv, supabaseAnonKey, { auth: { persistSession: false, autoRefreshToken: false } })
   : null
+
+const openaiApiKey = process.env.OPENAI_KEY || process.env.OPENAI_API_KEY || ''
+const openaiModel = process.env.OPENAI_MODEL || 'gpt-5-nano'
+let openaiClient = null
+if (openaiApiKey) {
+  try {
+    openaiClient = new OpenAI({ apiKey: openaiApiKey })
+  } catch (err) {
+    console.error('[server] Failed to initialize OpenAI client:', err)
+    openaiClient = null
+  }
+} else {
+  console.warn('[server] OPENAI_KEY not configured — AI plant fill endpoint disabled')
+}
+
+const supportEmailTargets = parseEmailTargets(process.env.SUPPORT_EMAIL_TO || process.env.SUPPORT_EMAIL, DEFAULT_SUPPORT_EMAIL)
+const supportEmailFrom =
+  process.env.SUPPORT_EMAIL_FROM
+  || process.env.RESEND_FROM
+  || (supportEmailTargets[0] ? `Plant Swipe <${supportEmailTargets[0]}>` : `Plant Swipe <${DEFAULT_SUPPORT_EMAIL}>`)
+const businessEmailTargets = parseEmailTargets(
+  process.env.BUSINESS_EMAIL_TO || process.env.BUSINESS_EMAIL || process.env.CONTACT_EMAIL_TO,
+  DEFAULT_BUSINESS_EMAIL,
+)
+const businessEmailFrom =
+  process.env.BUSINESS_EMAIL_FROM
+  || process.env.RESEND_BUSINESS_FROM
+  || (businessEmailTargets[0] ? `Plant Swipe Partnerships <${businessEmailTargets[0]}>` : supportEmailFrom)
+const resendApiKey = process.env.RESEND_API_KEY || process.env.RESEND_KEY || ''
+const supportEmailWebhook = process.env.SUPPORT_EMAIL_WEBHOOK_URL || process.env.CONTACT_WEBHOOK_URL || ''
+const contactRateLimitStore = new Map()
 
 // Admin bypass configuration
 // Support both server-only and Vite-style env variable names
@@ -213,6 +259,30 @@ async function getUserFromRequest(req) {
   }
 }
 
+function getTokenFromQuery(req) {
+  try {
+    const qToken = req.query?.token || req.query?.access_token
+    return qToken ? String(qToken) : null
+  } catch {
+    return null
+  }
+}
+
+async function getUserFromRequestOrToken(req) {
+  const direct = await getUserFromRequest(req)
+  if (direct?.id) return direct
+  const qToken = getTokenFromQuery(req)
+  if (qToken && supabaseServer) {
+    try {
+      const { data, error } = await supabaseServer.auth.getUser(qToken)
+      if (!error && data?.user?.id) {
+        return { id: data.user.id, email: data.user.email || null }
+      }
+    } catch {}
+  }
+  return null
+}
+
 // Determine whether a user (from Authorization) has admin privileges. Checks
 // profiles.is_admin when DB is configured, and falls back to Supabase REST and environment allowlists.
 function getBearerTokenFromRequest(req) {
@@ -225,6 +295,10 @@ function getBearerTokenFromRequest(req) {
     const token = header.slice(prefix.length).trim()
     return token || null
   } catch { return null }
+}
+
+function getAuthTokenFromRequest(req) {
+  return getBearerTokenFromRequest(req) || getTokenFromQuery(req)
 }
 async function isAdminFromRequest(req) {
   try {
@@ -316,6 +390,512 @@ async function ensureAdmin(req, res) {
     return null
   }
 }
+
+const disallowedImageKeys = new Set(['image', 'imageurl', 'image_url', 'imageURL', 'thumbnail', 'photo', 'picture'])
+const disallowedFieldKeys = new Set(['externalids'])
+const metadataKeys = new Set(['type', 'description', 'options', 'items', 'additionalProperties', 'examples', 'format'])
+
+function pickPrimaryPhotoUrlFromArray(photos, fallback) {
+  if (Array.isArray(photos)) {
+    const normalized = []
+    for (const entry of photos) {
+      if (!entry || typeof entry !== 'object') continue
+      const url = typeof entry.url === 'string' ? entry.url.trim() : ''
+      if (!url) continue
+      normalized.push({ url, isPrimary: entry.isPrimary === true })
+    }
+    if (normalized.length > 0) {
+      const primary = normalized.find((photo) => photo.isPrimary && photo.url)
+      if (primary && primary.url) return primary.url
+      return normalized[0].url
+    }
+  }
+  return typeof fallback === 'string' && fallback ? fallback : ''
+}
+
+const JsonValueSchema = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.array(JsonValueSchema),
+    z.object({}).catchall(JsonValueSchema)
+  ])
+)
+const PlantFillSchema = z.object({}).catchall(JsonValueSchema)
+
+function sanitizeTemplate(node, path = []) {
+  if (Array.isArray(node)) {
+    return node.map((item) => sanitizeTemplate(item, path))
+  }
+  if (node && typeof node === 'object') {
+    const result = {}
+    for (const [key, value] of Object.entries(node)) {
+      const lowerKey = key.toLowerCase()
+      if (disallowedImageKeys.has(lowerKey)) continue
+      if (disallowedFieldKeys.has(lowerKey)) continue
+      if (lowerKey === 'name' && path.length === 0) continue
+      result[key] = sanitizeTemplate(value, [...path, key])
+    }
+    return result
+  }
+  return node
+}
+
+function ensureStructure(template, target) {
+  if (Array.isArray(template)) {
+    return Array.isArray(target) ? target : []
+  }
+  if (template && typeof template === 'object' && !Array.isArray(template)) {
+    const result =
+      target && typeof target === 'object' && !Array.isArray(target)
+        ? { ...target }
+        : {}
+    for (const [key, templateValue] of Object.entries(template)) {
+      if (!(key in result)) {
+        if (Array.isArray(templateValue)) {
+          result[key] = []
+        } else if (templateValue && typeof templateValue === 'object') {
+          result[key] = ensureStructure(templateValue, {})
+        } else {
+          result[key] = null
+        }
+      } else if (templateValue && typeof templateValue === 'object') {
+        result[key] = ensureStructure(templateValue, result[key])
+      }
+    }
+    return result
+  }
+  return target !== undefined ? target : null
+}
+
+function stripDisallowedKeys(node, path = []) {
+  if (Array.isArray(node)) {
+    return node.map((item) => stripDisallowedKeys(item, path))
+  }
+  if (node && typeof node === 'object') {
+    const result = {}
+    for (const [key, value] of Object.entries(node)) {
+      const lowerKey = key.toLowerCase()
+      if (disallowedImageKeys.has(lowerKey)) continue
+      if (disallowedFieldKeys.has(lowerKey)) continue
+      if (lowerKey === 'name' && path.length === 0) continue
+      result[key] = stripDisallowedKeys(value, [...path, key])
+    }
+    return result
+  }
+  return node
+}
+
+function schemaToBlueprint(node) {
+  if (Array.isArray(node)) {
+    if (node.length === 0) return []
+    return node.map((item) => schemaToBlueprint(item))
+  }
+  if (!node || typeof node !== 'object') {
+    return null
+  }
+  const obj = node
+  if (typeof obj.type === 'string') {
+    const typeValue = obj.type.toLowerCase()
+    if (typeValue === 'array') {
+      const items = obj.items
+      if (!items) return []
+      const blueprintItem = schemaToBlueprint(items)
+      return Array.isArray(blueprintItem) ? blueprintItem : [blueprintItem]
+    }
+    if (typeValue === 'object') {
+      const result = {}
+      const source =
+        typeof obj.properties === 'object' && obj.properties !== null && !Array.isArray(obj.properties)
+          ? obj.properties
+          : Object.fromEntries(
+              Object.entries(obj).filter(([key]) => !metadataKeys.has(key))
+            )
+      for (const [key, value] of Object.entries(source)) {
+        result[key] = schemaToBlueprint(value)
+      }
+      return result
+    }
+    return null
+  }
+
+  const result = {}
+  for (const [key, value] of Object.entries(obj)) {
+    if (metadataKeys.has(key)) continue
+    result[key] = schemaToBlueprint(value)
+  }
+  return result
+}
+
+function pruneEmpty(node) {
+  if (Array.isArray(node)) {
+    const pruned = node
+      .map((item) => pruneEmpty(item))
+      .filter((item) => item !== undefined)
+    return pruned.length > 0 ? pruned : undefined
+  }
+  if (node && typeof node === 'object') {
+    const result = {}
+    for (const [key, value] of Object.entries(node)) {
+      const prunedValue = pruneEmpty(value)
+      if (prunedValue !== undefined) result[key] = prunedValue
+    }
+    return Object.keys(result).length > 0 ? result : undefined
+  }
+  if (node === null || node === undefined) return undefined
+  if (typeof node === 'string') {
+    return node.trim().length > 0 ? node : undefined
+  }
+  return node
+}
+
+function mergePreferExisting(aiValue, existingValue) {
+  if (existingValue === undefined) return aiValue
+  if (existingValue === null) return aiValue
+  if (Array.isArray(existingValue)) {
+    if (existingValue.length === 0) {
+      return Array.isArray(aiValue) ? aiValue : []
+    }
+    return existingValue
+  }
+  if (existingValue && typeof existingValue === 'object') {
+    const aiObj = aiValue && typeof aiValue === 'object' && !Array.isArray(aiValue) ? aiValue : {}
+    const result = { ...aiObj }
+    for (const [key, existingChild] of Object.entries(existingValue)) {
+      result[key] = mergePreferExisting(aiObj[key], existingChild)
+    }
+    return result
+  }
+  if (typeof existingValue === 'string') {
+    const trimmed = existingValue.trim()
+    if (trimmed.length > 0) return existingValue
+    if (typeof aiValue === 'string') return aiValue
+    return trimmed
+  }
+  return existingValue
+}
+
+function removeNullValues(node) {
+  if (node === null || node === undefined) {
+    return undefined
+  }
+  if (Array.isArray(node)) {
+    const cleaned = node
+      .map((item) => removeNullValues(item))
+      .filter((item) => item !== undefined)
+    return cleaned
+  }
+  if (node && typeof node === 'object') {
+    const result = {}
+    for (const [key, value] of Object.entries(node)) {
+      const cleanedValue = removeNullValues(value)
+      if (cleanedValue !== undefined) {
+        result[key] = cleanedValue
+      }
+    }
+    return Object.keys(result).length > 0 ? result : undefined
+  }
+  return node
+}
+
+function collectFieldHints(node, path, hints = new Set()) {
+  if (!node || typeof node !== 'object') {
+    return hints
+  }
+
+  const type = typeof node.type === 'string' ? node.type.toLowerCase() : null
+  if (Array.isArray(node.options) && node.options.length > 0) {
+    hints.add(`${path}: choose only from [${node.options.join(', ')}]`)
+  }
+  if (type === 'number' || type === 'integer') {
+    hints.add(`${path}: answer with numbers only.`)
+  }
+  if (type === 'boolean') {
+    hints.add(`${path}: answer with "true" or "false".`)
+  }
+  if (type === 'array') {
+    const items = node.items
+    if (typeof items === 'string') {
+      const itemType = items.toLowerCase()
+      if (itemType === 'number' || itemType === 'integer') {
+        hints.add(`${path}: provide an array of numbers.`)
+      } else if (itemType === 'boolean') {
+        hints.add(`${path}: provide an array of true/false values.`)
+      }
+    } else if (items && typeof items === 'object') {
+      collectFieldHints(items, `${path}[]`, hints)
+    }
+  }
+  if (node.additionalProperties && typeof node.additionalProperties === 'object') {
+    collectFieldHints(node.additionalProperties, `${path}.*`, hints)
+  }
+
+  const skipKeys = new Set([
+    'type',
+    'description',
+    'options',
+    'items',
+    'additionalProperties',
+    'min',
+    'max',
+    'minCm',
+    'maxCm',
+    'rowCm',
+    'plantCm',
+    'minF',
+    'maxF',
+    'minC',
+    'maxC',
+    'units',
+    'unit',
+    'example',
+    'default',
+  ])
+
+  for (const [key, value] of Object.entries(node)) {
+    if (skipKeys.has(key)) continue
+    if (value && typeof value === 'object') {
+      collectFieldHints(value, `${path}.${key}`, hints)
+    }
+  }
+
+  return hints
+}
+
+function inferExpectedKind(node) {
+  if (Array.isArray(node)) return 'array'
+  if (!node || typeof node !== 'object') {
+    return typeof node
+  }
+  if (typeof node.type === 'string') {
+    return node.type.toLowerCase()
+  }
+  return 'object'
+}
+
+function inferArrayItemKind(node) {
+  if (!node || typeof node !== 'object') return 'unknown'
+  const items = node.items
+  if (typeof items === 'string') {
+    return items.toLowerCase()
+  }
+  if (items && typeof items === 'object') {
+    if (typeof items.type === 'string') {
+      return items.type.toLowerCase()
+    }
+    return 'object'
+  }
+  return 'unknown'
+}
+
+function coerceValueForSchema(schemaNode, value, existingValue) {
+  const kind = inferExpectedKind(schemaNode)
+  if (value === undefined || value === null) {
+    return value
+  }
+
+  if (kind === 'number' || kind === 'integer') {
+    if (typeof value === 'number') {
+      return kind === 'integer' ? Math.round(value) : value
+    }
+    if (typeof value === 'string') {
+      const numericText = value.trim().match(/[-+]?\d+(\.\d+)?/g)
+      if (numericText && numericText.length > 0) {
+        const num = Number(numericText[0])
+        if (!Number.isNaN(num)) {
+          return kind === 'integer' ? Math.round(num) : num
+        }
+      }
+    }
+    return existingValue !== undefined ? existingValue : undefined
+  }
+
+  if (kind === 'boolean') {
+    if (typeof value === 'boolean') return value
+    if (typeof value === 'string') {
+      const lowered = value.trim().toLowerCase()
+      if (lowered === 'true') return true
+      if (lowered === 'false') return false
+    }
+    return existingValue !== undefined ? existingValue : undefined
+  }
+
+  if (kind === 'array') {
+    if (Array.isArray(value)) {
+      return value
+    }
+    if (typeof value === 'string') {
+      const itemKind = inferArrayItemKind(schemaNode)
+      const parts = value
+        .split(/[,;\n]+/)
+        .map((part) => part.trim())
+        .filter((part) => part.length > 0)
+      if (itemKind === 'number' || itemKind === 'integer') {
+        const numbers = parts
+          .map((part) => Number(part))
+          .filter((num) => !Number.isNaN(num))
+        return numbers
+      }
+      if (itemKind === 'boolean') {
+        const bools = parts
+          .map((part) => {
+            const lowered = part.toLowerCase()
+            if (lowered === 'true') return true
+            if (lowered === 'false') return false
+            return null
+          })
+          .filter((item) => item !== null)
+        return bools
+      }
+      return parts
+    }
+    return existingValue !== undefined ? existingValue : []
+  }
+
+  if (kind === 'object') {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      return value
+    }
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value)
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          return parsed
+        }
+      } catch {}
+    }
+    if (existingValue && typeof existingValue === 'object') {
+      return existingValue
+    }
+    return {}
+  }
+
+  if (kind === 'string') {
+    if (typeof value === 'string') {
+      return value
+    }
+    if (value != null) {
+      return String(value)
+    }
+    return existingValue !== undefined ? existingValue : ''
+  }
+
+  return value
+}
+
+async function generateFieldData(options) {
+  const { plantName, fieldKey, fieldSchema, existingField } = options || {}
+  if (!openaiClient) {
+    throw new Error('OpenAI client not configured')
+  }
+
+  const hintList = Array.from(collectFieldHints(fieldSchema, fieldKey)).slice(0, 50)
+  const commonInstructions = [
+    'You fill plant data for individual fields.',
+    'Respond only with valid JSON containing the requested field.',
+    'Never include explanations, markdown, or extra prose.',
+    'Never output null; use empty strings, empty arrays, or omit keys instead.',
+    'Reuse any existing data when it is already suitable.',
+  ].join('\n')
+
+  const promptSections = [
+    `Plant name: ${plantName}`,
+    `Field key: ${fieldKey}`,
+    `Field definition (for reference):\n${JSON.stringify(fieldSchema, null, 2)}`,
+  ]
+
+  if (fieldKey === 'description') {
+    promptSections.push(
+      'Write a cohesive botanical description between 100 and 400 words. Use complete sentences and paragraph-style prose, highlight appearance, growth habit, seasonal interest, and growing requirements. Do not use bullet lists, headings, or markdown. Stay factual and avoid repetition.'
+    )
+  }
+
+  if (fieldKey === 'meta') {
+    promptSections.push(
+      'When filling meta.funFact, write one or two concise sentences (under 40 words total) that share a distinct trivia, historical note, or surprising usage. Do not repeat symbolism information covered in the meaning field. Avoid lists, markdown, or restating care guidance.'
+    )
+  }
+
+  if (fieldKey === 'meaning') {
+    promptSections.push(
+      'Return a single string under 50 words that concentrates on the plant’s symbolism—highlight key themes such as emotions, rites, or values (e.g., love, marriage, protection). Mention cultural or historical contexts only when they reinforce the symbolism. Do not include care advice, botanical traits, bullet characters, or markdown.'
+    )
+  }
+
+  if (hintList.length > 0) {
+    promptSections.push(`Constraints:\n- ${hintList.join('\n- ')}`)
+  }
+
+  if (existingField !== undefined) {
+    promptSections.push(`Existing data (prefer and expand when correct):\n${JSON.stringify(existingField, null, 2)}`)
+  }
+
+  promptSections.push(
+    `Respond with JSON shaped exactly like:\n{"${fieldKey}": ...}\nDo not include any other keys or commentary.`
+  )
+
+  const response = await openaiClient.responses.create(
+    {
+      model: openaiModel,
+      reasoning: { effort: 'low' },
+      instructions: commonInstructions,
+      input: promptSections.join('\n\n'),
+    },
+    { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 180000) }
+  )
+
+  const outputText = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
+  if (!outputText) {
+    throw new Error(`AI returned empty output for "${fieldKey}"`)
+  }
+
+  let parsedField
+  try {
+    parsedField = JSON.parse(outputText)
+  } catch (parseError) {
+    const jsonMatch = outputText.match(/\{[\s\S]*\}/)
+    if (jsonMatch) {
+      try {
+        parsedField = JSON.parse(jsonMatch[0])
+      } catch (innerError) {
+        console.error('[server] Failed to parse extracted AI field response:', innerError, outputText)
+      }
+    } else {
+      console.error('[server] Failed to parse AI field response:', parseError, outputText)
+    }
+  }
+
+  const rawValue =
+    parsedField && typeof parsedField === 'object' && !Array.isArray(parsedField) && fieldKey in parsedField
+      ? parsedField[fieldKey]
+      : parsedField && typeof parsedField === 'object' && !Array.isArray(parsedField)
+        ? parsedField
+        : outputText
+  const coercedValue = coerceValueForSchema(
+    fieldSchema,
+    typeof rawValue === 'string' ? rawValue.trim() : rawValue,
+    existingField
+  )
+
+  const cleanedValue = removeNullValues(coercedValue)
+  return cleanedValue !== undefined ? cleanedValue : undefined
+}
+
+function removeExternalIds(node) {
+  if (!node || typeof node !== 'object') return node
+  if (Array.isArray(node)) {
+    return node.map((item) => removeExternalIds(item))
+  }
+  const result = {}
+  for (const [key, value] of Object.entries(node)) {
+    if (key.toLowerCase() === 'externalids') continue
+    result[key] = removeExternalIds(value)
+  }
+  return result
+}
+
 
 function buildConnectionString() {
   let cs = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.POSTGRES_PRISMA_URL || process.env.SUPABASE_DB_URL
@@ -561,6 +1141,180 @@ app.get('/api/admin/admin-logs', async (req, res) => {
   }
 })
 
+// Admin: AI-assisted plant data fill
+app.post('/api/admin/ai/plant-fill', async (req, res) => {
+  try {
+    const caller = await ensureAdmin(req, res)
+    if (!caller) return
+    if (!openaiClient) {
+      res.status(503).json({ error: 'AI plant fill is not configured' })
+      return
+    }
+
+    const body = req.body || {}
+    const plantName = typeof body.plantName === 'string' ? body.plantName.trim() : ''
+    if (!plantName) {
+      res.status(400).json({ error: 'Plant name is required' })
+      return
+    }
+
+    const schema = body.schema
+    if (!schema || typeof schema !== 'object' || Array.isArray(schema)) {
+      res.status(400).json({ error: 'Valid schema object is required' })
+      return
+    }
+
+    const sanitizedSchemaRaw = sanitizeTemplate(schema)
+    if (!sanitizedSchemaRaw || Array.isArray(sanitizedSchemaRaw) || typeof sanitizedSchemaRaw !== 'object') {
+      res.status(400).json({ error: 'Invalid schema provided' })
+      return
+    }
+    const sanitizedSchema = sanitizedSchemaRaw
+    const schemaBlueprint = schemaToBlueprint(sanitizedSchema)
+
+    const canUseExisting = body.existingData && typeof body.existingData === 'object' && !Array.isArray(body.existingData)
+    const existingDataRaw = canUseExisting ? stripDisallowedKeys(body.existingData) || {} : {}
+
+    const aggregated = {}
+
+    for (const fieldKey of Object.keys(schemaBlueprint)) {
+      const fieldSchema = sanitizedSchema[fieldKey]
+      if (!fieldSchema) {
+        continue
+      }
+
+      const existingFieldRaw =
+        existingDataRaw && typeof existingDataRaw === 'object'
+          ? existingDataRaw[fieldKey]
+          : undefined
+      const existingFieldClean =
+        existingFieldRaw !== undefined ? removeNullValues(existingFieldRaw) : undefined
+
+      const fieldValue = await generateFieldData({
+        plantName,
+        fieldKey,
+        fieldSchema,
+        existingField: existingFieldClean,
+      })
+
+      const cleanedField =
+        fieldValue !== undefined ? removeNullValues(fieldValue) : undefined
+    if (cleanedField !== undefined) {
+      aggregated[fieldKey] = removeExternalIds(cleanedField)
+    } else {
+      delete aggregated[fieldKey]
+    }
+    }
+
+    let plantData = ensureStructure(schemaBlueprint, aggregated)
+    plantData = stripDisallowedKeys(plantData)
+    plantData = mergePreferExisting(plantData, existingDataRaw)
+    plantData = ensureStructure(schemaBlueprint, plantData)
+    plantData = stripDisallowedKeys(plantData)
+    const cleanedPlantData = removeNullValues(plantData)
+    if (cleanedPlantData && typeof cleanedPlantData === 'object' && !Array.isArray(cleanedPlantData)) {
+      plantData = cleanedPlantData
+    }
+
+    if (!plantData || typeof plantData !== 'object' || Array.isArray(plantData)) {
+      throw new Error('AI output could not be transformed into a plant record')
+    }
+
+    const plantObject = removeExternalIds(plantData)
+    if (!('meta' in plantObject) || typeof plantObject.meta !== 'object' || plantObject.meta === null || Array.isArray(plantObject.meta)) {
+      plantObject.meta = {}
+    }
+    const metaObject = plantObject.meta
+    if (!metaObject.funFact || (typeof metaObject.funFact === 'string' && metaObject.funFact.trim().length === 0)) {
+      metaObject.funFact = `Symbolic meaning information for ${plantName} is currently not well documented; please supplement this entry with future research.`
+    }
+
+    res.json({ success: true, data: plantObject, model: openaiModel })
+  } catch (err) {
+    console.error('[server] AI plant fill failed:', err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: err?.message || 'Failed to fill plant data' })
+    }
+  }
+})
+app.options('/api/admin/ai/plant-fill', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+app.options('/api/admin/ai/plant-fill/field', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+app.post('/api/admin/ai/plant-fill/field', async (req, res) => {
+  try {
+    const caller = await ensureAdmin(req, res)
+    if (!caller) return
+    if (!openaiClient) {
+      res.status(503).json({ error: 'AI plant fill is not configured' })
+      return
+    }
+
+    const body = req.body || {}
+    const plantName = typeof body.plantName === 'string' ? body.plantName.trim() : ''
+    const fieldKey = typeof body.fieldKey === 'string' ? body.fieldKey.trim() : ''
+    if (!plantName || !fieldKey) {
+      res.status(400).json({ error: 'Plant name and field key are required' })
+      return
+    }
+
+    const schema = body.schema
+    if (!schema || typeof schema !== 'object' || Array.isArray(schema)) {
+      res.status(400).json({ error: 'Valid schema object is required' })
+      return
+    }
+
+    const sanitizedSchemaRaw = sanitizeTemplate(schema)
+    if (!sanitizedSchemaRaw || Array.isArray(sanitizedSchemaRaw) || typeof sanitizedSchemaRaw !== 'object') {
+      res.status(400).json({ error: 'Invalid schema provided' })
+      return
+    }
+
+    const sanitizedSchema = sanitizedSchemaRaw
+    const fieldSchema = sanitizedSchema[fieldKey]
+    if (!fieldSchema) {
+      res.status(400).json({ error: `Schema for field "${fieldKey}" not found` })
+      return
+    }
+
+    const existingFieldRaw = body.existingField
+    let existingField = existingFieldRaw
+    if (existingFieldRaw && typeof existingFieldRaw === 'object') {
+      existingField = stripDisallowedKeys({ [fieldKey]: existingFieldRaw })?.[fieldKey]
+    }
+    const existingFieldClean =
+      existingField !== undefined ? removeNullValues(existingField) : undefined
+
+    const fieldValue = await generateFieldData({
+      plantName,
+      fieldKey,
+      fieldSchema,
+      existingField: existingFieldClean,
+    })
+
+    const cleanedValue = fieldValue !== undefined ? removeNullValues(fieldValue) : undefined
+    const sanitizedValue = cleanedValue !== undefined ? removeExternalIds(cleanedValue) : undefined
+
+    res.json({
+      success: true,
+      field: fieldKey,
+      data: sanitizedValue ?? null,
+    })
+  } catch (err) {
+    console.error('[server] AI plant field fill failed:', err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: err?.message || 'Failed to fill field' })
+    }
+  }
+})
+
 // Admin: generic log endpoint to record an action from admin_api or UI
 app.post('/api/admin/log-action', async (req, res) => {
   try {
@@ -678,11 +1432,13 @@ app.get('/api/health/db', async (_req, res) => {
 // Some static hosts might hijack /env.js and serve index.html; prefer /api/env.js in index.html.
 app.get(['/api/env.js', '/env.js'], (_req, res) => {
   try {
+    const disablePwaEnv = String(process.env.VITE_DISABLE_PWA || process.env.DISABLE_PWA || process.env.PWA_DISABLED || '').trim()
     const env = {
       VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '',
       VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY || process.env.REACT_APP_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '',
       VITE_ADMIN_STATIC_TOKEN: process.env.VITE_ADMIN_STATIC_TOKEN || process.env.ADMIN_STATIC_TOKEN || '',
       VITE_ADMIN_PUBLIC_MODE: String(process.env.VITE_ADMIN_PUBLIC_MODE || process.env.ADMIN_PUBLIC_MODE || '').toLowerCase() === 'true',
+      VITE_DISABLE_PWA: disablePwaEnv,
     }
     const js = `window.__ENV__ = ${JSON.stringify(env).replace(/</g, '\\u003c')};\n`
     res.setHeader('Content-Type', 'application/javascript; charset=utf-8')
@@ -782,6 +1538,118 @@ function getClientIp(req) {
   const real = (h['x-real-ip'] || h['X-Real-IP'] || '').toString()
   if (real) return normalizeIp(real)
   return normalizeIp(req.ip || req.connection?.remoteAddress || '')
+}
+
+const htmlEscapeMap = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+}
+
+function escapeHtml(value) {
+  if (value === null || value === undefined) return ''
+  return String(value).replace(/[&<>"']/g, (ch) => htmlEscapeMap[ch] || ch)
+}
+
+function isContactRateLimited(key) {
+  const now = Date.now()
+  const windowMs = Number(process.env.CONTACT_FORM_WINDOW_MS || 5 * 60 * 1000)
+  const limit = Number(process.env.CONTACT_FORM_MAX_ATTEMPTS || 5)
+  const history = contactRateLimitStore.get(key) || []
+  const recent = history.filter((ts) => now - ts < windowMs)
+  if (recent.length >= limit) {
+    contactRateLimitStore.set(key, recent)
+    return true
+  }
+  recent.push(now)
+  contactRateLimitStore.set(key, recent)
+  return false
+}
+
+const CONTACT_AUDIENCES = new Set(['support', 'business'])
+
+function normalizeContactAudience(value) {
+  if (typeof value !== 'string') return 'support'
+  const normalized = value.trim().toLowerCase()
+  return CONTACT_AUDIENCES.has(normalized) ? normalized : 'support'
+}
+
+async function dispatchSupportEmail({ name, email, subject, message, audience = 'support' }) {
+  const normalizedAudience = normalizeContactAudience(audience)
+  const targets = normalizedAudience === 'business'
+    ? (businessEmailTargets.length ? businessEmailTargets : [DEFAULT_BUSINESS_EMAIL])
+    : (supportEmailTargets.length ? supportEmailTargets : [DEFAULT_SUPPORT_EMAIL])
+  const fromAddress = normalizedAudience === 'business' ? businessEmailFrom : supportEmailFrom
+  const safeName = name ? name.slice(0, 200) : ''
+  const safeSubject = subject && subject.trim() ? subject.trim().slice(0, 180) : null
+  const sanitizedMessage = (message || '').replace(/\r\n/g, '\n').slice(0, 5000)
+  const plainText = [
+    `New ${normalizedAudience} contact form submission`,
+    '',
+    `Name: ${safeName || 'N/A'}`,
+    `Email: ${email || 'N/A'}`,
+    `Audience: ${normalizedAudience}`,
+    `Delivered to: ${targets.join(', ')}`,
+    '',
+    sanitizedMessage || 'No additional message provided.',
+  ].join('\n')
+  const htmlBody = [
+    `<h2 style="font-family:system-ui,sans-serif;margin:0 0 12px;">New ${normalizedAudience} contact form submission</h2>`,
+    `<p style="font-family:system-ui,sans-serif;margin:0 0 8px;"><strong>Name:</strong> ${escapeHtml(safeName) || 'N/A'}</p>`,
+    `<p style="font-family:system-ui,sans-serif;margin:0 0 16px;"><strong>Email:</strong> ${escapeHtml(email || '') || 'N/A'}</p>`,
+    `<p style="font-family:system-ui,sans-serif;margin:0 0 8px;"><strong>Audience:</strong> ${escapeHtml(normalizedAudience)}</p>`,
+    `<p style="font-family:system-ui,sans-serif;margin:0 0 16px;"><strong>Delivered to:</strong> ${escapeHtml(targets.join(', '))}</p>`,
+    `<p style="font-family:system-ui,sans-serif;margin:0;">${escapeHtml(sanitizedMessage || 'No additional message provided.').replace(/\n/g, '<br />')}</p>`,
+  ].join('')
+  const finalSubject = safeSubject || `Contact form message from ${safeName || email || 'Plant Swipe user'}`
+
+  if (resendApiKey) {
+    const payload = {
+      from: fromAddress,
+      to: targets,
+      subject: finalSubject,
+      text: plainText,
+      html: htmlBody,
+    }
+    if (email) payload.reply_to = email
+    const resp = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${resendApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    })
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => '')
+      throw new Error(text || `Resend API error (${resp.status})`)
+    }
+    return
+  }
+
+  if (supportEmailWebhook) {
+    const resp = await fetch(supportEmailWebhook, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to: targets,
+        subject: finalSubject,
+        text: plainText,
+        html: htmlBody,
+        replyTo: email || null,
+        audience: normalizedAudience,
+      }),
+    })
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => '')
+      throw new Error(text || `Webhook delivery failed (${resp.status})`)
+    }
+    return
+  }
+
+  throw new Error('Email delivery not configured')
 }
 
 function getGeoFromHeaders(req) {
@@ -1248,6 +2116,32 @@ app.options('/api/admin/restart-server', (_req, res) => {
   res.status(204).end()
 })
 
+function scheduleRestartAllServices(trigger = 'manual') {
+  const serviceNode = process.env.NODE_SYSTEMD_SERVICE || process.env.SELF_SYSTEMD_SERVICE || 'plant-swipe-node'
+  const serviceAdmin = process.env.ADMIN_SYSTEMD_SERVICE || 'admin-api'
+  const serviceNginx = process.env.NGINX_SYSTEMD_SERVICE || 'nginx'
+  const label = trigger || 'manual'
+  setTimeout(() => {
+    console.log(`[restart] Scheduling service restart (trigger=${label})`)
+    ;(async () => {
+      try { await exec('sudo -n nginx -t', { timeout: 15000 }) } catch {}
+      try { await exec(`sudo -n systemctl reload ${serviceNginx}`, { timeout: 20000 }) } catch {}
+      try {
+        const admin = spawnChild('sudo', ['-n', 'systemctl', 'restart', serviceAdmin], { detached: true, stdio: 'ignore' })
+        try { admin.unref() } catch {}
+      } catch {}
+      try {
+        const node = spawnChild('sudo', ['-n', 'systemctl', 'restart', serviceNode], { detached: true, stdio: 'ignore' })
+        try { node.unref() } catch {}
+      } catch {}
+    })()
+      .catch(() => {})
+      .finally(() => {
+        try { process.exit(0) } catch {}
+      })
+  }, 150)
+}
+
 // Admin: reload nginx and restart admin + node services in sequence, then exit self
 app.post('/api/admin/restart-all', async (req, res) => {
   try {
@@ -1290,22 +2184,7 @@ app.post('/api/admin/restart-all', async (req, res) => {
     } catch {}
     res.json({ ok: true, message: 'Reloading nginx and restarting services' })
 
-    setTimeout(async () => {
-      const serviceNode = process.env.NODE_SYSTEMD_SERVICE || process.env.SELF_SYSTEMD_SERVICE || 'plant-swipe-node'
-      const serviceAdmin = process.env.ADMIN_SYSTEMD_SERVICE || 'admin-api'
-      const serviceNginx = process.env.NGINX_SYSTEMD_SERVICE || 'nginx'
-      try { await exec('sudo -n nginx -t', { timeout: 15000 }) } catch {}
-      try { await exec(`sudo -n systemctl reload ${serviceNginx}`, { timeout: 20000 }) } catch {}
-      try {
-        const a = spawnChild('sudo', ['-n', 'systemctl', 'restart', serviceAdmin], { detached: true, stdio: 'ignore' })
-        try { a.unref() } catch {}
-      } catch {}
-      try {
-        const n = spawnChild('sudo', ['-n', 'systemctl', 'restart', serviceNode], { detached: true, stdio: 'ignore' })
-        try { n.unref() } catch {}
-      } catch {}
-      try { process.exit(0) } catch {}
-    }, 150)
+      scheduleRestartAllServices('api_endpoint')
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to restart all services' })
   }
@@ -1383,6 +2262,155 @@ async function ensureBroadcastTable() {
   } catch {}
 }
 
+async function ensureRequestedPlantsSchema() {
+  if (!sql) return
+  const ddl = `
+create table if not exists public.requested_plants (
+  id uuid primary key default gen_random_uuid(),
+  plant_name text not null,
+  plant_name_normalized text not null,
+  requested_by uuid not null references auth.users(id) on delete cascade,
+  request_count integer not null default 1 check (request_count > 0),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  completed_at timestamptz,
+  completed_by uuid references auth.users(id) on delete set null
+);
+
+alter table if exists public.requested_plants add column if not exists plant_name text;
+alter table if exists public.requested_plants add column if not exists plant_name_normalized text;
+alter table if exists public.requested_plants add column if not exists requested_by uuid references auth.users(id) on delete cascade;
+alter table if exists public.requested_plants add column if not exists request_count integer not null default 1;
+alter table if exists public.requested_plants add column if not exists created_at timestamptz not null default now();
+alter table if exists public.requested_plants add column if not exists updated_at timestamptz not null default now();
+alter table if exists public.requested_plants add column if not exists completed_at timestamptz;
+alter table if exists public.requested_plants add column if not exists completed_by uuid;
+
+do $do$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'requested_plants_request_count_check') then
+    alter table public.requested_plants add constraint requested_plants_request_count_check check (request_count > 0);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'requested_plants_requested_by_fkey') then
+    alter table public.requested_plants add constraint requested_plants_requested_by_fkey
+      foreign key (requested_by) references auth.users(id) on delete cascade;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'requested_plants_completed_by_fkey') then
+    alter table public.requested_plants add constraint requested_plants_completed_by_fkey
+      foreign key (completed_by) references auth.users(id) on delete set null;
+  end if;
+end
+$do$;
+
+create index if not exists requested_plants_plant_name_normalized_idx on public.requested_plants(plant_name_normalized);
+create unique index if not exists requested_plants_active_name_unique_idx on public.requested_plants(plant_name_normalized) where completed_at is null;
+create index if not exists requested_plants_completed_at_idx on public.requested_plants(completed_at);
+create index if not exists requested_plants_requested_by_idx on public.requested_plants(requested_by);
+create index if not exists requested_plants_created_at_idx on public.requested_plants(created_at desc);
+`
+  try {
+    await sql.unsafe(ddl, [], { simple: true })
+    await sql`update public.requested_plants set plant_name_normalized = lower(trim(plant_name)) where plant_name_normalized is null and plant_name is not null`
+    await sql`alter table public.requested_plants alter column plant_name_normalized set not null`
+  } catch (err) {
+    console.error('[sync] failed to ensure requested_plants schema', err)
+  }
+}
+
+async function ensurePlantTranslationsSchema() {
+  if (!sql) return
+  const ddl = `
+create table if not exists public.plant_translations (
+  id uuid primary key default gen_random_uuid(),
+  plant_id text not null references public.plants(id) on delete cascade,
+  language text not null check (language in ('en', 'fr')),
+  name text not null,
+  identifiers jsonb,
+  ecology jsonb,
+  usage jsonb,
+  meta jsonb,
+  phenology jsonb,
+  care jsonb,
+  planting jsonb,
+  problems jsonb,
+  scientific_name text,
+  meaning text,
+  description text,
+  care_soil text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique(plant_id, language)
+);
+
+create index if not exists plant_translations_plant_id_idx on public.plant_translations(plant_id);
+create index if not exists plant_translations_language_idx on public.plant_translations(language);
+
+alter table if exists public.plant_translations add column if not exists identifiers jsonb;
+alter table if exists public.plant_translations add column if not exists ecology jsonb;
+alter table if exists public.plant_translations add column if not exists usage jsonb;
+alter table if exists public.plant_translations add column if not exists meta jsonb;
+alter table if exists public.plant_translations add column if not exists phenology jsonb;
+alter table if exists public.plant_translations add column if not exists care jsonb;
+alter table if exists public.plant_translations add column if not exists planting jsonb;
+alter table if exists public.plant_translations add column if not exists problems jsonb;
+
+alter table public.plant_translations enable row level security;
+
+do $do$ begin
+  if exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'plant_translations'
+      and policyname = 'plant_translations_select_all'
+  ) then
+    drop policy plant_translations_select_all on public.plant_translations;
+  end if;
+  create policy plant_translations_select_all on public.plant_translations for select to authenticated, anon using (true);
+end $do$;
+
+do $do$ begin
+  if exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'plant_translations'
+      and policyname = 'plant_translations_insert'
+  ) then
+    drop policy plant_translations_insert on public.plant_translations;
+  end if;
+  create policy plant_translations_insert on public.plant_translations for insert to authenticated with check (true);
+end $do$;
+
+do $do$ begin
+  if exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'plant_translations'
+      and policyname = 'plant_translations_update'
+  ) then
+    drop policy plant_translations_update on public.plant_translations;
+  end if;
+  create policy plant_translations_update on public.plant_translations for update to authenticated using (true) with check (true);
+end $do$;
+
+do $do$ begin
+  if exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'plant_translations'
+      and policyname = 'plant_translations_delete'
+  ) then
+    drop policy plant_translations_delete on public.plant_translations;
+  end if;
+  create policy plant_translations_delete on public.plant_translations for delete to authenticated using (true);
+end $do$;
+`
+  try {
+    await sql.unsafe(ddl, [], { simple: true })
+  } catch (err) {
+    console.error('[sync] failed to ensure plant_translations schema', err)
+  }
+}
+
 // Helper: verify key schema objects exist after sync for operator assurance
 async function verifySchemaAfterSync() {
   if (!sql) return null
@@ -1396,6 +2424,7 @@ async function verifySchemaAfterSync() {
     'garden_task_user_completions',
     'garden_watering_schedule',
     'web_visits',
+    'requested_plants',
   ]
   const requiredFunctions = [
     'get_profile_public_by_display_name',
@@ -1450,6 +2479,10 @@ async function handleSyncSchema(req, res) {
     // Execute allowing multiple statements
     await sql.unsafe(sqlText, [], { simple: true })
 
+    // Ensure critical tables that power new features exist even if the SQL script was partially applied.
+    await ensureRequestedPlantsSchema()
+    await ensurePlantTranslationsSchema()
+
     // Verify important objects exist after sync
     let summary = null
     try { summary = await verifySchemaAfterSync() } catch {}
@@ -1499,13 +2532,114 @@ app.options('/api/admin/sync-schema', (_req, res) => {
   res.status(204).end()
 })
 
-// Admin: global stats (bypass RLS via server connection)
-app.get('/api/admin/stats', async (req, res) => {
+async function runSupabaseEdgeDeploy() {
+  const repoRoot = await getRepoRoot()
+  const scriptPath = path.join(repoRoot, 'scripts', 'deploy-supabase-functions.sh')
+  try {
+    await fs.access(scriptPath)
+  } catch {
+    throw new Error(`deploy script not found at ${scriptPath}`)
+  }
+  try { await fs.chmod(scriptPath, 0o755) } catch {}
+
+  const env = {
+    ...process.env,
+    CI: process.env.CI || 'true',
+    PLANTSWIPE_REPO_DIR: repoRoot,
+  }
+
+  return await new Promise((resolve, reject) => {
+    const child = spawnChild(scriptPath, {
+      cwd: repoRoot,
+      env,
+      shell: false,
+    })
+    let stdout = ''
+    let stderr = ''
+    child.stdout?.on('data', (buf) => { stdout += buf.toString() })
+    child.stderr?.on('data', (buf) => { stderr += buf.toString() })
+    child.on('error', (err) => reject(err))
+    child.on('close', (code) => resolve({ code, stdout, stderr }))
+  })
+}
+
+function tailLines(text, limit) {
+  if (!text) return ''
+  const lines = String(text).split(/\r?\n/)
+  return lines.slice(-limit).join('\n')
+}
+
+async function handleDeployEdgeFunctions(req, res) {
+  const caller = await ensureAdmin(req, res)
+  if (!caller) return
+  try {
+    const result = await runSupabaseEdgeDeploy()
+    const stdoutTail = tailLines(result.stdout, 200)
+    const stderrTail = tailLines(result.stderr, 100)
+
+    if (result.code !== 0) {
+      console.error('[server] Supabase deployment failed', { code: result.code })
+      res.status(500).json({
+        ok: false,
+        error: 'Supabase deployment failed',
+        returncode: result.code,
+        stdout: stdoutTail,
+        stderr: stderrTail,
+      })
+      return
+    }
+
+    res.json({
+      ok: true,
+      message: 'Supabase Edge Functions deployed successfully',
+      returncode: result.code,
+      stdout: stdoutTail,
+      stderr: stderrTail,
+    })
+  } catch (err) {
+    console.error('[server] deploy-edge-functions failed', err)
+    res.status(500).json({
+      ok: false,
+      error: 'Failed to trigger Supabase deployment',
+      detail: err?.message || String(err),
+    })
+  }
+}
+
+app.post('/api/admin/deploy-edge-functions', handleDeployEdgeFunctions)
+app.get('/api/admin/deploy-edge-functions', handleDeployEdgeFunctions)
+
+app.options('/api/admin/deploy-edge-functions', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+app.post('/api/admin/plant-translations/ensure-schema', async (req, res) => {
+  const caller = await ensureAdmin(req, res)
+  if (!caller) return
+  try {
+    await ensurePlantTranslationsSchema()
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[server] ensure plant_translations schema failed', err)
+    res.status(500).json({ error: err?.message || 'Failed to ensure plant translation schema' })
+  }
+})
+app.options('/api/admin/plant-translations/ensure-schema', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+  // Admin: global stats (bypass RLS via server connection)
+  app.get('/api/admin/stats', async (req, res) => {
   const uid = "public"
   if (!uid) return
   try {
     let profilesCount = 0
     let authUsersCount = null
+      let plantsCount = null
 
     if (sql) {
       try {
@@ -1515,7 +2649,11 @@ app.get('/api/admin/stats', async (req, res) => {
       try {
         const authRows = await sql`select count(*)::int as count from auth.users`
         authUsersCount = Array.isArray(authRows) && authRows[0] ? Number(authRows[0].count) : null
-      } catch {}
+        } catch {}
+        try {
+          const plantsRows = await sql`select count(*)::int as count from public.plants`
+          plantsCount = Array.isArray(plantsRows) && plantsRows[0] ? Number(plantsRows[0].count) : 0
+        } catch {}
     }
 
     // Fallback via Supabase REST RPC if DB connection not available
@@ -1542,12 +2680,22 @@ app.get('/api/admin/stats', async (req, res) => {
           const val = await ar.json().catch(() => null)
           if (typeof val === 'number' && Number.isFinite(val)) authUsersCount = val
         }
-      } catch {}
+        } catch {}
+        try {
+          const pr = await fetch(`${supabaseUrlEnv}/rest/v1/plants?select=id`, {
+            headers: { ...baseHeaders, 'Prefer': 'count=exact', 'Range': '0-0' },
+          })
+          if (pr.ok) {
+            const contentRange = pr.headers.get('content-range') || ''
+            const match = contentRange.match(/\/(\d+)$/)
+            if (match) plantsCount = Number(match[1])
+          }
+        } catch {}
     }
 
-    res.json({ ok: true, profilesCount, authUsersCount })
+      res.json({ ok: true, profilesCount, authUsersCount, plantsCount })
   } catch (e) {
-    res.status(200).json({ ok: true, profilesCount: 0, authUsersCount: null, error: e?.message || 'Failed to load stats', errorCode: 'ADMIN_STATS_ERROR' })
+      res.status(200).json({ ok: true, profilesCount: 0, authUsersCount: null, plantsCount: null, error: e?.message || 'Failed to load stats', errorCode: 'ADMIN_STATS_ERROR' })
   }
 })
 
@@ -1671,6 +2819,10 @@ app.get('/api/admin/member', async (req, res) => {
           ips = Array.isArray(arr) ? arr.map((r) => String(r.ip).replace(/\/[0-9]{1,3}$/, '')).filter(Boolean) : []
         }
       } catch {}
+      // Fallback: if lastIp is null but we have IPs, use the first one from distinct IPs list
+      if (!lastIp && Array.isArray(ips) && ips.length > 0) {
+        lastIp = ips[0]
+      }
 
       // Counts (best-effort via headers; requires Authorization)
       let visitsCount = undefined
@@ -1912,6 +3064,10 @@ app.get('/api/admin/member', async (req, res) => {
         lastReferrer = domain || (ref ? String(ref) : 'direct')
       }
     } catch {}
+    // Fallback: if lastIp is null but we have IPs, use the first one from distinct IPs list
+    if (!lastIp && Array.isArray(ips) && ips.length > 0) {
+      lastIp = ips[0]
+    }
     try {
       const [vcRows, uipRows] = await Promise.all([
         sql.unsafe(`select count(*)::int as c from ${VISITS_TABLE_SQL_IDENT} where user_id = $1`, [user.id]),
@@ -2419,32 +3575,40 @@ app.get('/api/admin/member-visits-series', async (req, res) => {
       return
     }
 
-    // SQL (preferred)
+    // SQL (preferred) - use same pattern as global visits graph
     if (sql) {
       try {
-        const rows = await sql`
+        const rows = await sql.unsafe(`
           with days as (
             select generate_series(((now() at time zone 'utc')::date - interval '29 days'), (now() at time zone 'utc')::date, interval '1 day')::date as d
           )
-          select d as day,
-                 coalesce((select count(*) from ${VISITS_TABLE_SQL_IDENT} v where v.user_id = ${targetUserId} and (timezone('utc', v.occurred_at))::date = d), 0)::int as visits
+          select to_char(d, 'YYYY-MM-DD') as date,
+                 coalesce((
+                   select count(*)::int
+                   from ${VISITS_TABLE_SQL_IDENT} v
+                   where v.user_id = $1
+                     and (timezone('utc', v.occurred_at))::date = d
+                 ), 0)::int as visits
           from days
           order by d asc
-        `
-        const series30d = (rows || []).map(r => ({ date: new Date(r.day).toISOString().slice(0,10), visits: Number(r.visits || 0) }))
+        `, [targetUserId])
+        const series30d = (rows || []).map(r => ({ date: String(r.date), visits: Number(r.visits || 0) }))
         const total30d = series30d.reduce((a, b) => a + (b.visits || 0), 0)
         res.json({ ok: true, userId: targetUserId, series30d, total30d, via: 'database' })
         return
       } catch (e) {
+        console.error('SQL query failed for member visits series:', e)
         // fall through to REST
       }
     }
 
-    // Supabase REST fallback using security-definer RPC
+    // Supabase REST fallback - try RPC first, then direct query
     if (supabaseUrlEnv && supabaseAnonKey) {
       const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
       const token = getBearerTokenFromRequest(req)
       if (token) Object.assign(headers, { 'Authorization': `Bearer ${token}` })
+      
+      // Try RPC function first (if available)
       try {
         const resp = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_user_visits_series_days`, {
           method: 'POST', headers, body: JSON.stringify({ _user_id: targetUserId, _days: 30 })
@@ -2453,15 +3617,214 @@ app.get('/api/admin/member-visits-series', async (req, res) => {
           const arr = await resp.json().catch(() => [])
           const series30d = (Array.isArray(arr) ? arr : []).map((r) => ({ date: String(r.date), visits: Number(r.visits || 0) }))
           const total30d = series30d.reduce((a, b) => a + (b.visits || 0), 0)
-          res.json({ ok: true, userId: targetUserId, series30d, total30d, via: 'supabase' })
+          res.json({ ok: true, userId: targetUserId, series30d, total30d, via: 'supabase-rpc' })
           return
         }
-      } catch {}
+      } catch (e) {
+        // RPC might not exist, try direct query
+      }
+      
+      // Fallback: Query visits table directly via REST
+      try {
+        const tablePath = (process.env.VISITS_TABLE_REST || VISITS_TABLE_ENV || 'web_visits')
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+        
+        // Fetch visits with pagination support (limit 1000 per page)
+        let allVisits = []
+        let offset = 0
+        const limit = 1000
+        
+        while (true) {
+          const visitsResp = await fetch(
+            `${supabaseUrlEnv}/rest/v1/${tablePath}?user_id=eq.${encodeURIComponent(targetUserId)}&occurred_at=gte.${thirtyDaysAgo}&select=occurred_at&order=occurred_at.asc&limit=${limit}&offset=${offset}`,
+            { headers: { ...headers, 'Prefer': 'count=exact' } }
+          )
+          
+          if (!visitsResp.ok) {
+            const errorText = await visitsResp.text().catch(() => 'Unknown error')
+            console.error(`REST direct query failed for user ${targetUserId}: ${visitsResp.status} ${errorText}`)
+            break
+          }
+          
+          const visits = await visitsResp.json().catch(() => [])
+          if (!Array.isArray(visits) || visits.length === 0) break
+          
+          allVisits = allVisits.concat(visits)
+          
+          // Check if we got all results (if less than limit, we're done)
+          if (visits.length < limit) break
+          
+          offset += limit
+          
+          // Safety limit: don't fetch more than 10k visits
+          if (offset >= 10000) break
+        }
+        
+        // Generate series for last 30 days
+        const series30d = []
+        const today = new Date()
+        today.setUTCHours(0, 0, 0, 0)
+        
+        // Group visits by date
+        const visitsByDate = new Map()
+        if (Array.isArray(allVisits)) {
+          for (const visit of allVisits) {
+            if (visit.occurred_at) {
+              const date = new Date(visit.occurred_at)
+              date.setUTCHours(0, 0, 0, 0)
+              const dateStr = date.toISOString().split('T')[0]
+              visitsByDate.set(dateStr, (visitsByDate.get(dateStr) || 0) + 1)
+            }
+          }
+        }
+        
+        // Generate 30 days of data
+        for (let i = 29; i >= 0; i--) {
+          const date = new Date(today)
+          date.setUTCDate(date.getUTCDate() - i)
+          const dateStr = date.toISOString().split('T')[0]
+          series30d.push({
+            date: dateStr,
+            visits: visitsByDate.get(dateStr) || 0
+          })
+        }
+        
+        const total30d = series30d.reduce((a, b) => a + (b.visits || 0), 0)
+        res.json({ ok: true, userId: targetUserId, series30d, total30d, via: 'supabase-rest' })
+        return
+      } catch (e) {
+        console.error('REST direct query exception:', e)
+      }
+    }
+
+    // If we get here, both SQL and REST failed
+    // Return empty data instead of error so the graph can still render (empty)
+    console.warn(`Could not load visits series for user ${targetUserId}: SQL and REST both failed`)
+    res.json({ 
+      ok: true, 
+      userId: targetUserId, 
+      series30d: [], 
+      total30d: 0, 
+      via: 'fallback',
+      warning: 'Could not load visits data from database'
+    })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Failed to load member visits series' })
+  }
+})
+
+// Admin: paginated member list (newest first, 20 per page by default)
+app.get('/api/admin/member-list', async (req, res) => {
+  try {
+    const caller = await ensureAdmin(req, res)
+    if (!caller) return
+    const rawLimit = Number(req.query.limit)
+    const rawOffset = Number(req.query.offset)
+    const limit = Number.isFinite(rawLimit) ? Math.min(100, Math.max(1, Math.floor(rawLimit))) : 20
+    const offset = Number.isFinite(rawOffset) ? Math.max(0, Math.floor(rawOffset)) : 0
+    const sortRaw = (req.query.sort || 'newest').toString().trim().toLowerCase()
+    const sort = sortRaw.startsWith('old') ? 'oldest'
+      : sortRaw === 'rpm' || sortRaw.startsWith('rpm')
+        ? 'rpm'
+        : 'newest'
+    const fetchSize = limit + 1
+    const normalizeRows = (rows) => {
+      if (!Array.isArray(rows)) return []
+      return rows
+        .map((r) => {
+          const id = r?.id ? String(r.id) : null
+          if (!id) return null
+          const rpm =
+            r?.rpm5m !== undefined && r?.rpm5m !== null
+              ? Number(r.rpm5m)
+              : null
+          return {
+            id,
+            email: r?.email || null,
+            display_name: r?.display_name || null,
+            created_at: r?.created_at || null,
+            is_admin: r?.is_admin === true,
+            rpm5m: Number.isFinite(rpm) ? rpm : null,
+          }
+        })
+        .filter((r) => r !== null)
+    }
+
+    if (sql) {
+      const visitsTableSql = buildVisitsTableIdentifier()
+      const orderClause =
+        sort === 'rpm'
+          ? 'rpm5m desc nulls last, u.created_at desc'
+          : sort === 'oldest'
+            ? 'u.created_at asc'
+            : 'u.created_at desc'
+      const rows = await sql.unsafe(
+        `
+        select
+          u.id,
+          u.email,
+          u.created_at,
+          p.display_name,
+          p.is_admin,
+          coalesce(rpm.c, 0)::numeric / 5 as rpm5m
+        from auth.users u
+        left join public.profiles p on p.id = u.id
+        left join lateral (
+          select count(*)::int as c
+          from ${visitsTableSql} v
+          where v.user_id = u.id
+            and v.occurred_at >= now() - interval '5 minutes'
+        ) rpm on true
+        order by ${orderClause}
+        limit $1
+        offset $2
+        `,
+        [fetchSize, offset],
+      )
+      const normalized = normalizeRows(rows)
+      const hasMore = normalized.length > limit
+      const members = hasMore ? normalized.slice(0, limit) : normalized
+      res.json({
+        ok: true,
+        members,
+        hasMore,
+        nextOffset: offset + members.length,
+        via: 'database',
+      })
+      return
+    }
+
+    if (supabaseUrlEnv && supabaseAnonKey) {
+      const headers = { apikey: supabaseAnonKey, Accept: 'application/json', 'Content-Type': 'application/json' }
+      const token = getBearerTokenFromRequest(req)
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      const resp = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_recent_members`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ _limit: fetchSize, _offset: offset, _sort: sort }),
+      })
+      if (!resp.ok) {
+        const body = await resp.text().catch(() => '')
+        res.status(resp.status).json({ error: body || 'Failed to load member list' })
+        return
+      }
+      const arr = await resp.json().catch(() => [])
+      const normalized = normalizeRows(arr)
+      const hasMore = normalized.length > limit
+      const members = hasMore ? normalized.slice(0, limit) : normalized
+      res.json({
+        ok: true,
+        members,
+        hasMore,
+        nextOffset: offset + members.length,
+        via: 'supabase',
+      })
+      return
     }
 
     res.status(500).json({ error: 'Database not configured' })
   } catch (e) {
-    res.status(500).json({ error: e?.message || 'Failed to load member visits series' })
+    res.status(500).json({ error: e?.message || 'Failed to load member list' })
   }
 })
 
@@ -2821,45 +4184,14 @@ app.post('/api/admin/ban', async (req, res) => {
 async function loadPlantsViaSupabase() {
   if (!supabaseServer) return null
   try {
-    const { data, error } = await supabaseServer
-      .from('plants')
-      .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount')
+      const { data, error } = await supabaseServer
+        .from('plants')
+        .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, photos, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount')
       .order('name', { ascending: true })
     if (error) return null
-    return (Array.isArray(data) ? data : []).map((r) => ({
-      id: r.id,
-      name: r.name,
-      scientificName: r.scientific_name,
-      colors: r.colors ?? [],
-      seasons: r.seasons ?? [],
-      rarity: r.rarity,
-      meaning: r.meaning ?? '',
-      description: r.description ?? '',
-      image: r.image_url ?? '',
-      care: {
-        sunlight: r.care_sunlight,
-        water: r.care_water,
-        soil: r.care_soil,
-        difficulty: r.care_difficulty,
-      },
-      seedsAvailable: r.seeds_available === true,
-      // Optional frequency fields (tolerated by client)
-      waterFreqUnit: r.water_freq_unit ?? undefined,
-      waterFreqValue: r.water_freq_value ?? null,
-      waterFreqPeriod: r.water_freq_period ?? undefined,
-      waterFreqAmount: r.water_freq_amount ?? null,
-    }))
-  } catch {
-    return null
-  }
-}
-
-app.get('/api/plants', async (_req, res) => {
-  try {
-    if (sql) {
-      try {
-        const rows = await sql`select * from plants order by name asc`
-        const mapped = rows.map(r => ({
+      return (Array.isArray(data) ? data : []).map((r) => {
+        const photos = Array.isArray(r.photos) ? r.photos : undefined
+        return {
           id: r.id,
           name: r.name,
           scientificName: r.scientific_name,
@@ -2868,7 +4200,8 @@ app.get('/api/plants', async (_req, res) => {
           rarity: r.rarity,
           meaning: r.meaning ?? '',
           description: r.description ?? '',
-          image: r.image_url ?? '',
+          photos,
+          image: pickPrimaryPhotoUrlFromArray(photos, r.image_url ?? ''),
           care: {
             sunlight: r.care_sunlight,
             water: r.care_water,
@@ -2876,7 +4209,137 @@ app.get('/api/plants', async (_req, res) => {
             difficulty: r.care_difficulty,
           },
           seedsAvailable: r.seeds_available === true,
-        }))
+          // Optional frequency fields (tolerated by client)
+          waterFreqUnit: r.water_freq_unit ?? undefined,
+          waterFreqValue: r.water_freq_value ?? null,
+          waterFreqPeriod: r.water_freq_period ?? undefined,
+          waterFreqAmount: r.water_freq_amount ?? null,
+        }
+      })
+  } catch {
+    return null
+  }
+}
+
+app.post('/api/contact', async (req, res) => {
+  try {
+    const body = req.body || {}
+    const name = typeof body.name === 'string' ? body.name.trim().slice(0, 200) : ''
+    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
+    const subject = typeof body.subject === 'string' ? body.subject.trim().slice(0, 180) : ''
+    const message = typeof body.message === 'string' ? body.message.trim().slice(0, 5000) : ''
+    const audienceInput =
+      typeof body.audience === 'string' ? body.audience :
+      (typeof body.channel === 'string' ? body.channel : '')
+    const audience = normalizeContactAudience(audienceInput)
+
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      res.status(400).json({ error: 'A valid email address is required.' })
+      return
+    }
+    if (!message) {
+      res.status(400).json({ error: 'Message is required.' })
+      return
+    }
+
+    const ip = getClientIp(req) || 'unknown'
+    if (isContactRateLimited(ip)) {
+      res.status(429).json({ error: 'Too many messages in a short period. Please try again later.' })
+      return
+    }
+
+    await dispatchSupportEmail({ name, email, subject, message, audience })
+    res.json({ ok: true, audience })
+  } catch (error) {
+    console.error('[contact] failed to send support email:', error)
+    res.status(500).json({ error: 'Failed to send message. Please try again later.' })
+  }
+})
+
+// DeepL Translation API endpoint
+app.post('/api/translate', async (req, res) => {
+  try {
+    const { text, source_lang, target_lang } = req.body
+    
+    if (!text || typeof text !== 'string') {
+      return res.status(400).json({ error: 'Missing or invalid text field' })
+    }
+    
+    if (!source_lang || !target_lang) {
+      return res.status(400).json({ error: 'Missing source_lang or target_lang' })
+    }
+    
+    // Skip translation if source and target are the same
+    if (source_lang.toUpperCase() === target_lang.toUpperCase()) {
+      return res.json({ translatedText: text })
+    }
+    
+    // Get DeepL API key from environment
+    const deeplApiKey = process.env.DEEPL_API_KEY
+    if (!deeplApiKey) {
+      console.error('[translate] DeepL API key not configured')
+      return res.status(500).json({ error: 'Translation service not configured' })
+    }
+    
+    // Use DeepL API (free tier: https://api-free.deepl.com)
+    const deeplUrl = process.env.DEEPL_API_URL || 'https://api-free.deepl.com/v2/translate'
+    
+    const response = await fetch(deeplUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `DeepL-Auth-Key ${deeplApiKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        text: text,
+        source_lang: source_lang.toUpperCase(),
+        target_lang: target_lang.toUpperCase(),
+      }),
+    })
+    
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('[translate] DeepL API error:', response.status, errorText)
+      return res.status(response.status).json({ error: 'Translation failed: ' + (errorText || response.statusText) })
+    }
+    
+    const data = await response.json()
+    const translatedText = data.translations?.[0]?.text || text
+    
+    res.json({ translatedText })
+  } catch (error) {
+    console.error('[translate] Translation error:', error)
+    res.status(500).json({ error: 'Translation service error: ' + (error?.message || 'Unknown error') })
+  }
+})
+
+app.get('/api/plants', async (_req, res) => {
+  try {
+    if (sql) {
+      try {
+          const rows = await sql`select * from plants order by name asc`
+          const mapped = rows.map(r => {
+            const photos = Array.isArray(r.photos) ? r.photos : undefined
+            return {
+              id: r.id,
+              name: r.name,
+              scientificName: r.scientific_name,
+              colors: r.colors ?? [],
+              seasons: r.seasons ?? [],
+              rarity: r.rarity,
+              meaning: r.meaning ?? '',
+              description: r.description ?? '',
+              photos,
+              image: pickPrimaryPhotoUrlFromArray(photos, r.image_url ?? ''),
+              care: {
+                sunlight: r.care_sunlight,
+                water: r.care_water,
+                soil: r.care_soil,
+                difficulty: r.care_difficulty,
+              },
+              seedsAvailable: r.seeds_available === true,
+            }
+          })
         res.json(mapped)
         return
       } catch (e) {
@@ -3235,36 +4698,55 @@ app.get('/api/admin/pull-code/stream', async (req, res) => {
       childEnv.PLANTSWIPE_TARGET_BRANCH = branch
       send('log', `[pull] Target branch requested: ${branch}`)
     }
-    const child = spawnChild(scriptPath, [], {
-      cwd: repoRoot,
-      env: childEnv,
-      shell: false,
-    })
+      const child = spawnChild(scriptPath, [], {
+        cwd: repoRoot,
+        env: childEnv,
+        shell: false,
+      })
 
-    // Stream stdout/stderr
-    child.stdout?.on('data', (buf) => {
-      const text = buf.toString()
-      send('log', text)
-    })
-    child.stderr?.on('data', (buf) => {
-      const text = buf.toString()
-      send('log', text)
-    })
-    child.on('error', (err) => {
-      send('error', { error: err?.message || 'spawn failed' })
-    })
-    child.on('close', (code) => {
-      if (code === 0) {
-        send('done', { ok: true, code })
-      } else {
-        send('done', { ok: false, code })
-      }
-      try { res.end() } catch {}
-    })
+      // Heartbeat to keep the connection alive behind proxies
+      const heartbeatId = setInterval(() => { try { res.write(': ping\n\n') } catch {} }, 15000)
+      let clientDisconnected = false
+      let streamClosedGracefully = false
+      let autoRestartScheduled = false
 
-    // Heartbeat to keep the connection alive behind proxies
-    const id = setInterval(() => { try { res.write(': ping\n\n') } catch {} }, 15000)
-    req.on('close', () => { try { clearInterval(id) } catch {}; try { child.kill('SIGTERM') } catch {} })
+      // Stream stdout/stderr
+      child.stdout?.on('data', (buf) => {
+        const text = buf.toString()
+        send('log', text)
+      })
+      child.stderr?.on('data', (buf) => {
+        const text = buf.toString()
+        send('log', text)
+      })
+      child.on('error', (err) => {
+        send('error', { error: err?.message || 'spawn failed' })
+      })
+      child.on('close', (code) => {
+        const ok = code === 0
+        if (!streamClosedGracefully) {
+          if (ok) {
+            send('done', { ok: true, code })
+          } else {
+            send('done', { ok: false, code })
+          }
+        }
+        streamClosedGracefully = true
+        try { clearInterval(heartbeatId) } catch {}
+        try { res.end() } catch {}
+        if (ok && clientDisconnected && !autoRestartScheduled) {
+          autoRestartScheduled = true
+          console.log('[pull-code] Build finished after client disconnect; scheduling service restart.')
+          scheduleRestartAllServices('pull_code_stream_auto')
+        }
+      })
+
+      req.on('close', () => {
+        if (streamClosedGracefully) return
+        clientDisconnected = true
+        try { clearInterval(heartbeatId) } catch {}
+        console.warn('[pull-code] SSE client disconnected early; continuing refresh in background.')
+      })
   } catch (e) {
     try { res.status(500).json({ error: e?.message || 'stream failed' }) } catch {}
   }
@@ -3926,6 +5408,64 @@ app.get('/api/self/memberships/stream', async (req, res) => {
   }
 })
 
+// Private info lookup (self or admin)
+app.get('/api/users/:id/private', async (req, res) => {
+  try {
+    const targetId = String(req.params.id || '').trim()
+    if (!targetId) { res.status(400).json({ ok: false, error: 'user id required' }); return }
+    const viewer = await getUserFromRequest(req)
+    if (!viewer?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
+    let allowed = viewer.id === targetId
+    if (!allowed) {
+      try {
+        allowed = await isAdminFromRequest(req)
+      } catch {}
+    }
+    if (!allowed) { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
+
+    if (sql) {
+      const rows = await sql`
+        select u.id::text as id, u.email
+        from auth.users u
+        where u.id = ${targetId}
+        limit 1
+      `
+      const row = Array.isArray(rows) && rows[0] ? rows[0] : null
+      res.json({
+        ok: true,
+        user: row ? { id: String(row.id || targetId), email: row.email || null } : null,
+      })
+      return
+    }
+
+    if (supabaseUrlEnv && supabaseAnonKey) {
+      try {
+        const headers = { apikey: supabaseAnonKey, Accept: 'application/json', 'Content-Type': 'application/json' }
+        const bearer = getBearerTokenFromRequest(req)
+        if (bearer) headers['Authorization'] = `Bearer ${bearer}`
+        const resp = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_user_private_info`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ _user_id: targetId }),
+        })
+        if (resp.ok) {
+          const body = await resp.json().catch(() => null)
+          const row = Array.isArray(body) ? body[0] : body
+          res.json({
+            ok: true,
+            user: row ? { id: String(row.id || targetId), email: row.email || null } : null,
+          })
+          return
+        }
+      } catch {}
+    }
+
+    res.status(503).json({ ok: false, error: 'Private info lookup unavailable' })
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e?.message || 'Failed to load private info' })
+  }
+})
+
 // User-wide Garden Activity SSE: pushes activity from all gardens the user belongs to
 app.get('/api/self/gardens/activity/stream', async (req, res) => {
   try {
@@ -4069,6 +5609,223 @@ async function isGardenMember(req, gardenId, userIdOverride = null) {
   }
 }
 
+app.get('/api/garden/:id/activity', async (req, res) => {
+  try {
+    const gardenId = String(req.params.id || '').trim()
+    if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
+    const user = await getUserFromRequestOrToken(req)
+    if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
+    const member = await isGardenMember(req, gardenId, user.id)
+    if (!member) { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
+
+    const dayParam = typeof req.query.day === 'string' ? req.query.day : ''
+    const dayIso = /^\d{4}-\d{2}-\d{2}$/.test(dayParam) ? dayParam : new Date().toISOString().slice(0,10)
+    const start = new Date(`${dayIso}T00:00:00.000Z`).toISOString()
+    const endExclusive = new Date(new Date(`${dayIso}T00:00:00.000Z`).getTime() + 24 * 3600 * 1000).toISOString()
+
+    let rows = []
+    if (sql) {
+      rows = await sql`
+        select
+          id::text as id,
+          garden_id::text as garden_id,
+          actor_id::text as actor_id,
+          actor_name,
+          actor_color,
+          kind,
+          message,
+          plant_name,
+          task_name,
+          occurred_at
+        from public.garden_activity_logs
+        where garden_id = ${gardenId}
+          and occurred_at >= ${start}
+          and occurred_at < ${endExclusive}
+        order by occurred_at desc
+      `
+    } else if (supabaseUrlEnv && supabaseAnonKey) {
+      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+      const bearer = getAuthTokenFromRequest(req)
+      if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
+      const url = `${supabaseUrlEnv}/rest/v1/garden_activity_logs?garden_id=eq.${encodeURIComponent(gardenId)}&occurred_at=gte.${encodeURIComponent(start)}&select=id,garden_id,actor_id,actor_name,actor_color,kind,message,plant_name,task_name,occurred_at&order=occurred_at.desc&limit=200`
+      const resp = await fetch(url, { headers })
+      if (resp.ok) {
+        const arr = await resp.json().catch(() => [])
+        rows = Array.isArray(arr) ? arr.filter((r) => {
+          try {
+            const ts = new Date(r.occurred_at).toISOString()
+            return ts >= start && ts < endExclusive
+          } catch {
+            return false
+          }
+        }) : []
+      }
+    }
+
+    const activity = []
+    if (Array.isArray(rows)) {
+      for (const row of rows) {
+        const occurredAtRaw = row?.occurred_at instanceof Date
+          ? row.occurred_at.toISOString()
+          : (row?.occurred_at ? String(row.occurred_at) : null)
+        if (occurredAtRaw == null || occurredAtRaw === '') continue
+        activity.push({
+          id: String(row.id),
+          gardenId: String(row.garden_id ?? row.gardenId ?? gardenId),
+          actorId: row.actor_id ? String(row.actor_id) : row.actorId ? String(row.actorId) : null,
+          actorName: row.actor_name ?? row.actorName ?? null,
+          actorColor: row.actor_color ?? row.actorColor ?? null,
+          kind: row.kind,
+          message: row.message,
+          plantName: row.plant_name ?? row.plantName ?? null,
+          taskName: row.task_name ?? row.taskName ?? null,
+          occurredAt: occurredAtRaw,
+        })
+      }
+    }
+
+      res.json({ ok: true, activity })
+    } catch (e) {
+      try { res.status(500).json({ ok: false, error: e?.message || 'failed to load activity' }) } catch {}
+    }
+  })
+
+app.get('/api/garden/:id/tasks', async (req, res) => {
+  try {
+    const gardenId = String(req.params.id || '').trim()
+    if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
+    const startDay = typeof req.query.start === 'string' ? req.query.start : ''
+    const endDay = typeof req.query.end === 'string' ? req.query.end : ''
+    const dayPattern = /^\d{4}-\d{2}-\d{2}$/
+    if (!dayPattern.test(startDay) || !dayPattern.test(endDay)) {
+      res.status(400).json({ ok: false, error: 'start and end must be YYYY-MM-DD' })
+      return
+    }
+    const user = await getUserFromRequestOrToken(req)
+    if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
+    const member = await isGardenMember(req, gardenId, user.id)
+    if (!member) { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
+
+    let rows = []
+    if (sql) {
+      rows = await sql`
+        select
+          id::text as id,
+          garden_id::text as garden_id,
+          day,
+          task_type,
+          garden_plant_ids,
+          success
+        from public.garden_tasks
+        where garden_id = ${gardenId}
+          and day >= ${startDay}
+          and day <= ${endDay}
+        order by day asc
+      `
+    } else if (supabaseUrlEnv && supabaseAnonKey) {
+      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+      const bearer = getAuthTokenFromRequest(req)
+      if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
+      const query = [
+        'select=id,garden_id,day,task_type,garden_plant_ids,success',
+        `garden_id=eq.${encodeURIComponent(gardenId)}`,
+        `day=gte.${encodeURIComponent(startDay)}`,
+        `day=lte.${encodeURIComponent(endDay)}`,
+        'order=day.asc',
+      ].join('&')
+      const resp = await fetch(`${supabaseUrlEnv}/rest/v1/garden_tasks?${query}`, { headers })
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => '')
+        res.status(resp.status).json({ ok: false, error: text || 'failed to load tasks' })
+        return
+      }
+      rows = await resp.json().catch(() => [])
+    } else {
+      res.status(503).json({ ok: false, error: 'Database not configured' })
+      return
+    }
+
+    const tasks = (rows || []).map((r) => ({
+      id: String(r.id),
+      gardenId: String(r.garden_id),
+      day: (() => {
+        if (r.day instanceof Date) return r.day.toISOString().slice(0, 10)
+        return String(r.day || '').slice(0, 10)
+      })(),
+      taskType: String(r.task_type || 'watering'),
+      gardenPlantIds: Array.isArray(r.garden_plant_ids) ? r.garden_plant_ids : [],
+      success: Boolean(r.success),
+    }))
+    res.json({ ok: true, tasks })
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e?.message || 'failed to load tasks' })
+  }
+})
+
+app.post('/api/garden/:id/activity', async (req, res) => {
+  try {
+    const gardenId = String(req.params.id || '').trim()
+    if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
+    const user = await getUserFromRequest(req)
+    if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
+    const member = await isGardenMember(req, gardenId, user.id)
+    if (!member) { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
+
+    const body = req.body || {}
+    const kindRaw = typeof body.kind === 'string' ? body.kind.trim() : ''
+    const messageRaw = typeof body.message === 'string' ? body.message.trim() : ''
+    if (!kindRaw || !messageRaw) { res.status(400).json({ ok: false, error: 'kind and message required' }); return }
+    const plantName = typeof body.plantName === 'string' ? body.plantName : null
+    const taskName = typeof body.taskName === 'string' ? body.taskName : null
+    const actorColor = typeof body.actorColor === 'string' ? body.actorColor : null
+
+    if (sql) {
+      let actorName = null
+      try {
+        const nameRows = await sql`select coalesce(display_name, email, '') as name from public.profiles where id = ${user.id} limit 1`
+        if (Array.isArray(nameRows) && nameRows[0]) actorName = nameRows[0].name || null
+      } catch {}
+      const nowIso = new Date().toISOString()
+      await sql`
+        insert into public.garden_activity_logs (garden_id, actor_id, actor_name, actor_color, kind, message, plant_name, task_name, occurred_at)
+        values (${gardenId}, ${user.id}, ${actorName}, ${actorColor || null}, ${kindRaw}, ${messageRaw}, ${plantName || null}, ${taskName || null}, ${nowIso})
+      `
+      res.json({ ok: true })
+      return
+    }
+
+    if (supabaseUrlEnv && supabaseAnonKey) {
+      const headers = { apikey: supabaseAnonKey, Accept: 'application/json', 'Content-Type': 'application/json' }
+      const bearer = getBearerTokenFromRequest(req)
+      if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
+      const payload = {
+        _garden_id: gardenId,
+        _kind: kindRaw,
+        _message: messageRaw,
+        _plant_name: plantName,
+        _task_name: taskName,
+        _actor_color: actorColor,
+      }
+      const resp = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/log_garden_activity`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      })
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => '')
+        res.status(resp.status).json({ ok: false, error: text || 'failed to log activity' })
+        return
+      }
+      res.json({ ok: true })
+      return
+    }
+
+    res.status(503).json({ ok: false, error: 'activity logging unavailable' })
+  } catch (e) {
+    try { res.status(500).json({ ok: false, error: e?.message || 'failed to log activity' }) } catch {}
+  }
+})
+
 // Batched initial load for a garden
 app.get('/api/garden/:id/overview', async (req, res) => {
   try {
@@ -4092,7 +5849,7 @@ app.get('/api/garden/:id/overview', async (req, res) => {
       garden = Array.isArray(gRows) && gRows[0] ? gRows[0] : null
 
       const gpRows = await sql`
-        select
+          select
           gp.id::text as id,
           gp.garden_id::text as garden_id,
           gp.plant_id::text as plant_id,
@@ -4113,6 +5870,7 @@ app.get('/api/garden/:id/overview', async (req, res) => {
           p.meaning as p_meaning,
           p.description as p_description,
           p.image_url as p_image_url,
+          p.photos as p_photos,
           p.care_sunlight as p_care_sunlight,
           p.care_water as p_care_water,
           p.care_soil as p_care_soil,
@@ -4127,36 +5885,41 @@ app.get('/api/garden/:id/overview', async (req, res) => {
         where gp.garden_id = ${gardenId}
         order by gp.sort_index asc nulls last
       `
-      plants = (gpRows || []).map((r) => ({
-        id: String(r.id),
-        gardenId: String(r.garden_id),
-        plantId: String(r.plant_id),
-        nickname: r.nickname,
-        seedsPlanted: Number(r.seeds_planted || 0),
-        plantedAt: r.planted_at || null,
-        expectedBloomDate: r.expected_bloom_date || null,
-        overrideWaterFreqUnit: r.override_water_freq_unit || null,
-        overrideWaterFreqValue: (r.override_water_freq_value ?? null),
-        plantsOnHand: Number(r.plants_on_hand || 0),
-        sortIndex: (r.sort_index ?? null),
-        plant: r.p_id ? {
-          id: String(r.p_id),
-          name: String(r.p_name || ''),
-          scientificName: String(r.p_scientific_name || ''),
-          colors: Array.isArray(r.p_colors) ? r.p_colors.map(String) : [],
-          seasons: Array.isArray(r.p_seasons) ? r.p_seasons.map(String) : [],
-          rarity: r.p_rarity,
-          meaning: r.p_meaning || '',
-          description: r.p_description || '',
-          image: r.p_image_url || '',
-          care: { sunlight: r.p_care_sunlight || 'Low', water: r.p_care_water || 'Low', soil: r.p_care_soil || '', difficulty: r.p_care_difficulty || 'Easy' },
-          seedsAvailable: Boolean(r.p_seeds_available ?? false),
-          waterFreqUnit: r.p_water_freq_unit || undefined,
-          waterFreqValue: r.p_water_freq_value ?? null,
-          waterFreqPeriod: r.p_water_freq_period || undefined,
-          waterFreqAmount: r.p_water_freq_amount ?? null,
-        } : null,
-      }))
+        plants = (gpRows || []).map((r) => {
+          const plantPhotos = Array.isArray(r.p_photos) ? r.p_photos : undefined
+          const plantImage = pickPrimaryPhotoUrlFromArray(plantPhotos, r.p_image_url || '')
+          return {
+            id: String(r.id),
+            gardenId: String(r.garden_id),
+            plantId: String(r.plant_id),
+            nickname: r.nickname,
+            seedsPlanted: Number(r.seeds_planted || 0),
+            plantedAt: r.planted_at || null,
+            expectedBloomDate: r.expected_bloom_date || null,
+            overrideWaterFreqUnit: r.override_water_freq_unit || null,
+            overrideWaterFreqValue: (r.override_water_freq_value ?? null),
+            plantsOnHand: Number(r.plants_on_hand || 0),
+            sortIndex: (r.sort_index ?? null),
+            plant: r.p_id ? {
+              id: String(r.p_id),
+              name: String(r.p_name || ''),
+              scientificName: String(r.p_scientific_name || ''),
+              colors: Array.isArray(r.p_colors) ? r.p_colors.map(String) : [],
+              seasons: Array.isArray(r.p_seasons) ? r.p_seasons.map(String) : [],
+              rarity: r.p_rarity,
+              meaning: r.p_meaning || '',
+              description: r.p_description || '',
+              photos: plantPhotos,
+              image: plantImage,
+              care: { sunlight: r.p_care_sunlight || 'Low', water: r.p_care_water || 'Low', soil: r.p_care_soil || '', difficulty: r.p_care_difficulty || 'Easy' },
+              seedsAvailable: Boolean(r.p_seeds_available ?? false),
+              waterFreqUnit: r.p_water_freq_unit || undefined,
+              waterFreqValue: r.p_water_freq_value ?? null,
+              waterFreqPeriod: r.p_water_freq_period || undefined,
+              waterFreqAmount: r.p_water_freq_amount ?? null,
+            } : null,
+          }
+        })
 
       const mRows = await sql`
         select gm.garden_id::text as garden_id, gm.user_id::text as user_id, gm.role, gm.joined_at,
@@ -4199,10 +5962,11 @@ app.get('/api/garden/:id/overview', async (req, res) => {
       let plantsMap = {}
       if (plantIds.length > 0) {
         const inParam = plantIds.map((id) => encodeURIComponent(String(id))).join(',')
-        const pUrl = `${supabaseUrlEnv}/rest/v1/plants?id=in.(${inParam})&select=id,name,scientific_name,colors,seasons,rarity,meaning,description,image_url,care_sunlight,care_water,care_soil,care_difficulty,seeds_available,water_freq_unit,water_freq_value,water_freq_period,water_freq_amount`
+      const pUrl = `${supabaseUrlEnv}/rest/v1/plants?id=in.(${inParam})&select=id,name,scientific_name,colors,seasons,rarity,meaning,description,image_url,photos,care_sunlight,care_water,care_soil,care_difficulty,seeds_available,water_freq_unit,water_freq_value,water_freq_period,water_freq_amount`
         const pResp = await fetch(pUrl, { headers })
         const pRows = pResp.ok ? (await pResp.json().catch(() => [])) : []
         for (const p of pRows) {
+            const plantPhotos = Array.isArray(p.photos) ? p.photos : undefined
           plantsMap[String(p.id)] = {
             id: String(p.id),
             name: String(p.name || ''),
@@ -4212,7 +5976,8 @@ app.get('/api/garden/:id/overview', async (req, res) => {
             rarity: p.rarity,
             meaning: p.meaning || '',
             description: p.description || '',
-            image: p.image_url || '',
+              photos: plantPhotos,
+              image: pickPrimaryPhotoUrlFromArray(plantPhotos, p.image_url || ''),
             care: { sunlight: p.care_sunlight || 'Low', water: p.care_water || 'Low', soil: p.care_soil || '', difficulty: p.care_difficulty || 'Easy' },
             seedsAvailable: Boolean(p.seeds_available ?? false),
             waterFreqUnit: p.water_freq_unit || undefined,
@@ -4283,16 +6048,7 @@ app.get('/api/garden/:id/stream', async (req, res) => {
   try {
     const gardenId = String(req.params.id || '').trim()
     if (!gardenId) { res.status(400).json({ error: 'garden id required' }); return }
-    // Support token via query param for EventSource which cannot set headers
-    let user = null
-    try {
-      const qToken = (req.query?.token || req.query?.access_token)
-      if (qToken && supabaseServer) {
-        const { data, error } = await supabaseServer.auth.getUser(String(qToken))
-        if (!error && data?.user?.id) user = { id: data.user.id, email: data.user.email || null }
-      }
-    } catch {}
-    if (!user) user = await getUserFromRequest(req)
+    const user = await getUserFromRequestOrToken(req)
     if (!user?.id) { res.status(401).json({ error: 'Unauthorized' }); return }
     const member = await isGardenMember(req, gardenId, user.id)
     if (!member) { res.status(403).json({ error: 'Forbidden' }); return }
@@ -4329,7 +6085,7 @@ app.get('/api/garden/:id/stream', async (req, res) => {
         } else if (supabaseUrlEnv && supabaseAnonKey) {
           const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
           // Include Authorization from bearer header or token query param (EventSource)
-          const bearer = getBearerTokenFromRequest(req) || (req.query?.token ? String(req.query.token) : (req.query?.access_token ? String(req.query.access_token) : null))
+      const bearer = getAuthTokenFromRequest(req)
           if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
           const url = `${supabaseUrlEnv}/rest/v1/garden_activity_logs?garden_id=eq.${encodeURIComponent(gardenId)}&occurred_at=gt.${encodeURIComponent(lastSeen)}&select=id,garden_id,actor_id,actor_name,actor_color,kind,message,plant_name,task_name,occurred_at&order=occurred_at.asc&limit=500`
           const r = await fetch(url, { headers })
@@ -4658,8 +6414,9 @@ app.get('*', (req, res) => {
 const shouldListen = String(process.env.DISABLE_LISTEN || 'false').toLowerCase() !== 'true'
 if (shouldListen) {
   const port = process.env.PORT || 3000
-  app.listen(port, () => {
-    console.log(`[server] listening on http://localhost:${port}`)
+  const host = process.env.HOST || '127.0.0.1' // Bind to localhost only for security
+  app.listen(port, host, () => {
+    console.log(`[server] listening on http://${host}:${port}`)
     // Best-effort ensure ban tables are present at startup
     ensureBanTables().catch(() => {})
     ensureBroadcastTable().catch(() => {})

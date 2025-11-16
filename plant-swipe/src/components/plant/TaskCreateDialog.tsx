@@ -4,9 +4,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import type { TaskType } from '@/types/garden'
-import { createPatternTask, logGardenActivity, resyncTaskOccurrencesForGarden } from '@/lib/gardens'
+import { createPatternTask, logGardenActivity, resyncTaskOccurrencesForGarden, refreshGardenTaskCache } from '@/lib/gardens'
 import { broadcastGardenUpdate } from '@/lib/realtime'
 import { useAuth } from '@/context/AuthContext'
+import { useTranslation } from 'react-i18next'
 
 type Period = 'week' | 'month' | 'year'
 
@@ -24,6 +25,7 @@ export function TaskCreateDialog({
   onCreated?: () => Promise<void> | void
 }) {
   const { user } = useAuth()
+  const { t } = useTranslation('common')
   const [type, setType] = React.useState<TaskType>('water')
   const [customName, setCustomName] = React.useState('')
   const [emoji, setEmoji] = React.useState<string>('')
@@ -53,7 +55,7 @@ export function TaskCreateDialog({
     }
   }, [open])
 
-  const maxForPeriod = (p: Period) => (p === 'week' ? 7 : p === 'month' ? 4 : 12)
+  const maxForPeriod = (p: Period) => (p === 'week' ? 7 : p === 'month' ? 12 : 52)
   const countSelected = period === 'week' ? weeklyDays.length : period === 'month' ? monthlyNthWeekdays.length : yearlyDays.length
   const remaining = Math.max(0, amount - countSelected)
   const disabledMore = remaining === 0
@@ -72,13 +74,13 @@ export function TaskCreateDialog({
     if (!gardenId || !gardenPlantId || saving) return
     setError(null)
     if (countSelected !== amount) {
-      setError(
-        `Select exactly ${amount} ${period === 'week' ? 'day(s) per week' : period === 'month' ? 'day(s) per month' : 'time(s) per year'}`
-      )
+      const unit = period === 'week' ? t('gardenDashboard.taskDialog.daysPerWeek') : period === 'month' ? t('gardenDashboard.taskDialog.daysPerMonth') : t('gardenDashboard.taskDialog.timesPerYear')
+      setError(t('gardenDashboard.taskDialog.selectExactly', { amount, period: unit }))
       return
     }
     setSaving(true)
     try {
+      // Create task - this is the critical operation
       await createPatternTask({
         gardenId,
         gardenPlantId,
@@ -92,26 +94,46 @@ export function TaskCreateDialog({
         yearlyDays: period === 'year' ? [...yearlyDays].sort() : null,
         monthlyNthWeekdays: period === 'month' ? [...monthlyNthWeekdays].sort() : null,
       })
-      try {
+      
+      // Close dialog immediately for better UX
+      onOpenChange(false)
+      
+      // Fire and forget - don't block UI
+      const taskTypeLabel = type === 'custom' ? (customName || t('garden.taskTypes.custom')) : t(`garden.taskTypes.${type}`)
+      
+      // Broadcast immediately (non-blocking)
+      broadcastGardenUpdate({ gardenId, kind: 'tasks', metadata: { action: 'create', gardenPlantId }, actorId: user?.id ?? null }).catch((err) => {
+        console.warn('[TaskCreateDialog] Failed to broadcast task update:', err)
+      })
+      
+      // Resync, refresh cache, and log activity in background using requestIdleCallback
+      const backgroundTasks = () => {
+        // Resync in background - don't block
         const now = new Date()
         const startIso = new Date(now.getTime() - 7 * 24 * 3600 * 1000).toISOString()
         const endIso = new Date(now.getTime() + 60 * 24 * 3600 * 1000).toISOString()
-        await resyncTaskOccurrencesForGarden(gardenId, startIso, endIso)
-      } catch {}
-      // Log activity so other clients' SSE streams trigger reloads
-      try {
-        const label = (type === 'custom' ? (customName || 'CUSTOM') : String(type || '').toUpperCase())
-        await logGardenActivity({ gardenId, kind: 'note' as any, message: `added "${label}" Task`, taskName: label, actorColor: null })
-      } catch {}
-      // Broadcast update BEFORE onCreated callback to ensure other clients receive it
-      await broadcastGardenUpdate({ gardenId, kind: 'tasks', metadata: { action: 'create', gardenPlantId }, actorId: user?.id ?? null }).catch((err) => {
-        console.warn('[TaskCreateDialog] Failed to broadcast task update:', err)
-      })
-      if (onCreated) await onCreated()
-      onOpenChange(false)
+        resyncTaskOccurrencesForGarden(gardenId, startIso, endIso).then(() => {
+          // Refresh cache after resync
+          refreshGardenTaskCache(gardenId).catch(() => {})
+        }).catch(() => {})
+        
+        // Log activity (non-blocking)
+        logGardenActivity({ gardenId, kind: 'note' as any, message: t('gardenDashboard.taskDialog.addedTask', { taskName: taskTypeLabel }), taskName: taskTypeLabel, actorColor: null }).catch(() => {})
+        
+        // Call onCreated callback
+        if (onCreated) {
+          Promise.resolve(onCreated()).catch(() => {})
+        }
+      }
+      
+      // Use requestIdleCallback to avoid blocking UI
+      if ('requestIdleCallback' in window) {
+        window.requestIdleCallback(backgroundTasks, { timeout: 1000 })
+      } else {
+        setTimeout(backgroundTasks, 100)
+      }
     } catch (e: any) {
-      setError(e?.message || 'Failed to create task')
-    } finally {
+      setError(e?.message || t('gardenDashboard.taskDialog.failedToCreate'))
       setSaving(false)
     }
   }
@@ -125,19 +147,19 @@ export function TaskCreateDialog({
         onInteractOutside={(e) => { e.preventDefault() }}
       >
         <DialogHeader>
-          <DialogTitle>Create task</DialogTitle>
-          <DialogDescription>All tasks repeat. Choose frequency and calendar.</DialogDescription>
+          <DialogTitle>{t('gardenDashboard.taskDialog.createTask')}</DialogTitle>
+          <DialogDescription>{t('gardenDashboard.taskDialog.createTaskDescription')}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-2">
             <select
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm md:text-sm capitalize"
+              className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-base shadow-sm md:text-sm capitalize text-black dark:text-white"
               value={type}
               onChange={(e: any) => setType(e.target.value)}
             >
               {(['water','fertilize','harvest','cut','custom'] as TaskType[]).map(v => (
-                <option key={v} value={v} className="capitalize">{v}</option>
+                <option key={v} value={v} className="capitalize">{t(`garden.taskTypes.${v}`)}</option>
               ))}
             </select>
             <div className="grid grid-cols-2 gap-2">
@@ -148,7 +170,7 @@ export function TaskCreateDialog({
                 onChange={(e: any) => handleAmountChange(Number(e.target.value || '1'))}
               />
               <select
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm md:text-sm capitalize"
+                className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-base shadow-sm md:text-sm capitalize text-black dark:text-white"
                 value={period}
                 onChange={(e: any) => {
                   const p = e.target.value as Period
@@ -161,7 +183,7 @@ export function TaskCreateDialog({
                 }}
               >
                 {(['week','month','year'] as Period[]).map(p => (
-                  <option key={p} value={p} className="capitalize">{p}</option>
+                  <option key={p} value={p} className="capitalize">{t(`gardenDashboard.taskDialog.${p}`)}</option>
                 ))}
               </select>
             </div>
@@ -169,21 +191,21 @@ export function TaskCreateDialog({
 
           {type === 'custom' && (
             <div className="grid gap-2">
-              <label className="text-sm font-medium">Custom task name</label>
-              <Input value={customName} onChange={(e: any) => setCustomName(e.target.value)} placeholder="e.g., Prune roses" />
+              <label className="text-sm font-medium">{t('gardenDashboard.taskDialog.customTaskName')}</label>
+              <Input value={customName} onChange={(e: any) => setCustomName(e.target.value)} placeholder={t('gardenDashboard.taskDialog.customTaskNamePlaceholder')} />
             </div>
           )}
 
           {type === 'custom' && (
             <div className="grid gap-2">
-              <label className="text-sm font-medium">Emoji</label>
+              <label className="text-sm font-medium">{t('gardenDashboard.taskDialog.emoji')}</label>
               <div className="flex items-center gap-2">
-                <Input value={emoji} onChange={(e: any) => setEmoji(e.target.value)} placeholder="Pick an emoji (e.g., ✂️, 🍽️)" maxLength={4} />
-                <div className="text-sm opacity-60">Optional</div>
+                <Input value={emoji} onChange={(e: any) => setEmoji(e.target.value)} placeholder={t('gardenDashboard.taskDialog.emojiPlaceholder')} maxLength={4} />
+                <div className="text-sm opacity-60">{t('gardenDashboard.taskDialog.optional')}</div>
               </div>
               <div className="flex gap-2 flex-wrap">
                 {['💧','🍽️','🌾','✂️','🧴','🧪','🧹','🪴','📌','✅'].map(em => (
-                  <button key={em} type="button" onClick={() => setEmoji(em)} className={`h-9 w-9 rounded-xl border bg-white hover:bg-stone-50 ${emoji === em ? 'ring-2 ring-black' : ''}`}>{em}</button>
+                  <button key={em} type="button" onClick={() => setEmoji(em)} className={`h-9 w-9 rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42] ${emoji === em ? 'ring-2 ring-black dark:ring-white' : ''}`}>{em}</button>
                 ))}
               </div>
             </div>
@@ -192,9 +214,9 @@ export function TaskCreateDialog({
           
 
           <div className="text-sm opacity-60">
-            {period === 'week' && 'Pick days Monday–Sunday'}
-            {period === 'month' && 'Pick 1st–4th weekdays (e.g., 1st Mon)'}
-            {period === 'year' && 'Pick 1st–4th weekdays per month (e.g., Jan 1st Mon)'}
+            {period === 'week' && t('gardenDashboard.taskDialog.pickDaysWeek')}
+            {period === 'month' && t('gardenDashboard.taskDialog.pickDaysMonth')}
+            {period === 'year' && t('gardenDashboard.taskDialog.pickDaysYear')}
           </div>
 
           {period === 'week' && (
@@ -215,7 +237,7 @@ export function TaskCreateDialog({
           )}
           {period === 'month' && (
             <>
-              <div className="text-xs opacity-70">Pick weeks (1–4) and weekdays. Example: 1st Mon.</div>
+              <div className="text-xs opacity-70">{t('gardenDashboard.taskDialog.pickWeeksExample')}</div>
               <MonthNthWeekdayPicker
                 selected={monthlyNthWeekdays}
                 onToggle={(weekIndex, uiIndex) => {
@@ -290,8 +312,8 @@ export function TaskCreateDialog({
           {error && <div className="text-sm text-red-600">{error}</div>}
 
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="secondary" className="rounded-2xl" onClick={() => onOpenChange(false)} disabled={saving}>Cancel</Button>
-            <Button className="rounded-2xl" onClick={save} disabled={saving || countSelected !== amount}>{saving ? 'Creating…' : 'Create task'}</Button>
+            <Button variant="secondary" className="rounded-2xl" onClick={() => onOpenChange(false)} disabled={saving}>{t('gardenDashboard.taskDialog.close')}</Button>
+            <Button className="rounded-2xl" onClick={save} disabled={saving || countSelected !== amount}>{saving ? t('gardenDashboard.taskDialog.creating') : t('gardenDashboard.taskDialog.createTaskButton')}</Button>
           </div>
         </div>
       </DialogContent>
@@ -300,14 +322,15 @@ export function TaskCreateDialog({
 }
 
 function WeekPicker({ selectedNumbers, onToggleNumber, disabledMore }: { selectedNumbers: number[]; onToggleNumber: (uiIndex: number) => void; disabledMore: boolean }) {
+  const { t } = useTranslation('common')
   const display = [
-    { label: 'Mon', uiIndex: 0 },
-    { label: 'Tue', uiIndex: 1 },
-    { label: 'Wed', uiIndex: 2 },
-    { label: 'Thu', uiIndex: 3 },
-    { label: 'Fri', uiIndex: 4 },
-    { label: 'Sat', uiIndex: 5 },
-    { label: 'Sun', uiIndex: 6 },
+    { label: t('gardenDashboard.taskDialog.dayLabels.mon'), uiIndex: 0 },
+    { label: t('gardenDashboard.taskDialog.dayLabels.tue'), uiIndex: 1 },
+    { label: t('gardenDashboard.taskDialog.dayLabels.wed'), uiIndex: 2 },
+    { label: t('gardenDashboard.taskDialog.dayLabels.thu'), uiIndex: 3 },
+    { label: t('gardenDashboard.taskDialog.dayLabels.fri'), uiIndex: 4 },
+    { label: t('gardenDashboard.taskDialog.dayLabels.sat'), uiIndex: 5 },
+    { label: t('gardenDashboard.taskDialog.dayLabels.sun'), uiIndex: 6 },
   ]
   const mondayFirstMap = [1,2,3,4,5,6,0]
   return (
@@ -320,7 +343,7 @@ function WeekPicker({ selectedNumbers, onToggleNumber, disabledMore }: { selecte
             key={uiIndex}
             type="button"
             onClick={() => onToggleNumber(uiIndex)}
-            className={`h-12 rounded-xl border text-sm ${isOn ? 'bg-black text-white' : 'bg-white hover:bg-stone-50'} ${!isOn && disabledMore ? 'opacity-60 cursor-not-allowed' : ''}`}
+            className={`h-12 rounded-xl border border-stone-300 dark:border-[#3e3e42] text-sm ${isOn ? 'bg-black dark:bg-white text-white dark:text-black' : 'bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42] text-black dark:text-white'} ${!isOn && disabledMore ? 'opacity-60 cursor-not-allowed' : ''}`}
             disabled={!isOn && disabledMore}
           >
             {label}
@@ -332,17 +355,26 @@ function WeekPicker({ selectedNumbers, onToggleNumber, disabledMore }: { selecte
 }
 
 function MonthNthWeekdayPicker({ selected, onToggle, onToggleHeader, disabledMore }: { selected: string[]; onToggle: (weekIndex: number, uiIndex: number) => void; onToggleHeader: (uiIndex: number) => void; disabledMore: boolean }) {
-  const labels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+  const { t } = useTranslation('common')
+  const labels = [
+    t('gardenDashboard.taskDialog.dayLabels.mon'),
+    t('gardenDashboard.taskDialog.dayLabels.tue'),
+    t('gardenDashboard.taskDialog.dayLabels.wed'),
+    t('gardenDashboard.taskDialog.dayLabels.thu'),
+    t('gardenDashboard.taskDialog.dayLabels.fri'),
+    t('gardenDashboard.taskDialog.dayLabels.sat'),
+    t('gardenDashboard.taskDialog.dayLabels.sun')
+  ]
   return (
     <div className="space-y-2">
       <div className="grid grid-cols-[60px_repeat(7,minmax(0,1fr))] gap-2 items-center">
-        <div className="text-xs opacity-70 text-center">WEEK</div>
+        <div className="text-xs opacity-70 text-center">{t('gardenDashboard.taskDialog.weekLabel')}</div>
         {labels.map((l, uiIndex) => (
           <button
             key={l}
             type="button"
             onClick={() => onToggleHeader(uiIndex)}
-            className={`h-8 rounded-lg border text-[11px] ${'bg-white hover:bg-stone-50'}`}
+            className={`h-8 rounded-lg border border-stone-300 dark:border-[#3e3e42] text-[11px] bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42] text-black dark:text-white`}
           >
             {l}
           </button>
@@ -360,7 +392,7 @@ function MonthNthWeekdayPicker({ selected, onToggle, onToggleHeader, disabledMor
                 key={uiIndex}
                 type="button"
                 onClick={() => onToggle(rowIdx + 1, uiIndex)}
-                className={`h-10 rounded-xl border text-sm ${isOn ? 'bg-black text-white' : 'bg-white hover:bg-stone-50'} ${!isOn && disabledMore ? 'opacity-60 cursor-not-allowed' : ''}`}
+                className={`h-10 rounded-xl border border-stone-300 dark:border-[#3e3e42] text-sm ${isOn ? 'bg-black dark:bg-white text-white dark:text-black' : 'bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42] text-black dark:text-white'} ${!isOn && disabledMore ? 'opacity-60 cursor-not-allowed' : ''}`}
                 disabled={!isOn && disabledMore}
                 aria-label={`${wk} ${labels[uiIndex]}`}
               />
@@ -373,26 +405,46 @@ function MonthNthWeekdayPicker({ selected, onToggle, onToggleHeader, disabledMor
 }
 
 function YearMonthNthWeekdayPicker({ selected, onToggle, onToggleHeader, disabledMore }: { selected: string[]; onToggle: (monthIdx: number, weekIndex: number, uiIndex: number) => void; onToggleHeader: (monthIdx: number, uiIndex: number) => void; disabledMore: boolean }) {
+  const { t } = useTranslation('common')
   const months = [
-    'Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'
+    t('gardenDashboard.taskDialog.monthNames.jan'),
+    t('gardenDashboard.taskDialog.monthNames.feb'),
+    t('gardenDashboard.taskDialog.monthNames.mar'),
+    t('gardenDashboard.taskDialog.monthNames.apr'),
+    t('gardenDashboard.taskDialog.monthNames.may'),
+    t('gardenDashboard.taskDialog.monthNames.jun'),
+    t('gardenDashboard.taskDialog.monthNames.jul'),
+    t('gardenDashboard.taskDialog.monthNames.aug'),
+    t('gardenDashboard.taskDialog.monthNames.sep'),
+    t('gardenDashboard.taskDialog.monthNames.oct'),
+    t('gardenDashboard.taskDialog.monthNames.nov'),
+    t('gardenDashboard.taskDialog.monthNames.dec')
   ]
-  const labels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+  const labels = [
+    t('gardenDashboard.taskDialog.dayLabels.mon'),
+    t('gardenDashboard.taskDialog.dayLabels.tue'),
+    t('gardenDashboard.taskDialog.dayLabels.wed'),
+    t('gardenDashboard.taskDialog.dayLabels.thu'),
+    t('gardenDashboard.taskDialog.dayLabels.fri'),
+    t('gardenDashboard.taskDialog.dayLabels.sat'),
+    t('gardenDashboard.taskDialog.dayLabels.sun')
+  ]
   const weekNames = ['1st','2nd','3rd','4th']
   const mondayFirstMap = [1,2,3,4,5,6,0]
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 max-h-[60vh] overflow-auto pr-1">
       {months.map((label, monthIdx) => (
-        <div key={label} className="rounded-xl border p-2">
+        <div key={label} className="rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526] p-2">
           <div className="text-xs opacity-70 mb-2">{label}</div>
           <div className="space-y-2">
             <div className="grid grid-cols-[60px_repeat(7,minmax(0,1fr))] gap-2 items-center">
-              <div className="text-xs opacity-70 text-center">WEEK</div>
+              <div className="text-xs opacity-70 text-center">{t('gardenDashboard.taskDialog.weekLabel')}</div>
               {labels.map((l, uiIndex) => (
                 <button
                   key={l}
                   type="button"
                   onClick={() => onToggleHeader(monthIdx, uiIndex)}
-                  className={`h-8 rounded-lg border text-[11px] ${'bg-white hover:bg-stone-50'}`}
+                  className={`h-8 rounded-lg border border-stone-300 dark:border-[#3e3e42] text-[11px] bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42] text-black dark:text-white`}
                 >
                   {l}
                 </button>
@@ -411,7 +463,7 @@ function YearMonthNthWeekdayPicker({ selected, onToggle, onToggleHeader, disable
                       key={uiIndex}
                       type="button"
                       onClick={() => onToggle(monthIdx, rowIdx + 1, uiIndex)}
-                      className={`h-10 rounded-xl border text-sm ${isOn ? 'bg-black text-white' : 'bg-white hover:bg-stone-50'} ${!isOn && disabledMore ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      className={`h-10 rounded-xl border border-stone-300 dark:border-[#3e3e42] text-sm ${isOn ? 'bg-black dark:bg-white text-white dark:text-black' : 'bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42] text-black dark:text-white'} ${!isOn && disabledMore ? 'opacity-60 cursor-not-allowed' : ''}`}
                       disabled={!isOn && disabledMore}
                       aria-label={`${label} ${wn} ${labels[uiIndex]}`}
                     />

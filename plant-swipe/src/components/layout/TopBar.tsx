@@ -1,8 +1,9 @@
 import React from "react"
 import { createPortal } from "react-dom"
-import { useNavigate, Link, useLocation } from "react-router-dom"
-import { Leaf, Sprout, Sparkles, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Plus, Shield, HeartHandshake } from "lucide-react"
+import { Link } from "@/components/i18n/Link"
+import { Leaf, Sprout, Sparkles, Search, LogIn, UserPlus, User, LogOut, ChevronDown, Shield, HeartHandshake, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { useTranslation } from "react-i18next"
 
 interface TopBarProps {
   openLogin: () => void
@@ -14,30 +15,19 @@ interface TopBarProps {
 }
 
 import { useAuth } from "@/context/AuthContext"
-import { userHasUnfinishedTasksToday } from "@/lib/gardens"
-import { addGardenBroadcastListener } from "@/lib/realtime"
-import { supabase } from "@/lib/supabaseClient"
+import { useTaskNotification } from "@/hooks/useTaskNotification"
+import { usePathWithoutLanguage, useLanguageNavigate } from "@/lib/i18nRouting"
 
 export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, displayName, onProfile, onLogout }) => {
-  const navigate = useNavigate()
-  const location = useLocation()
+  const navigate = useLanguageNavigate()
+  const pathWithoutLang = usePathWithoutLanguage()
   const { profile } = useAuth()
+  const { t } = useTranslation('common')
   const [menuOpen, setMenuOpen] = React.useState(false)
   const anchorRef = React.useRef<HTMLDivElement | null>(null)
   const menuRef = React.useRef<HTMLDivElement | null>(null)
   const [menuPosition, setMenuPosition] = React.useState<{ top: number; right: number } | null>(null)
-  const [hasUnfinished, setHasUnfinished] = React.useState(false)
-  
-  // Refresh notification state
-  const refreshNotification = React.useCallback(async () => {
-    try {
-      if (!user?.id) { setHasUnfinished(false); return }
-      const has = await userHasUnfinishedTasksToday(user.id)
-      setHasUnfinished(has)
-    } catch {
-      setHasUnfinished(false)
-    }
-  }, [user?.id])
+  const { hasUnfinished } = useTaskNotification(user?.id ?? null, { channelKey: "topbar" })
 
   const recomputeMenuPosition = React.useCallback(() => {
     const anchor = anchorRef.current
@@ -74,99 +64,32 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
     }
   }, [menuOpen, recomputeMenuPosition])
 
-  // Initial load
-  React.useEffect(() => {
-    refreshNotification()
-  }, [refreshNotification])
-
-  // Listen to local events (for when user is on garden page)
-  React.useEffect(() => {
-    const handler = () => { refreshNotification() }
-    try { window.addEventListener('garden:tasks_changed', handler as EventListener) } catch {}
-    return () => { try { window.removeEventListener('garden:tasks_changed', handler as EventListener) } catch {} }
-  }, [refreshNotification])
-
-  // Listen to realtime broadcasts (works from any page)
-  React.useEffect(() => {
-    if (!user?.id) return
-    let active = true
-    let teardown: (() => Promise<void>) | null = null
-
-    addGardenBroadcastListener((message) => {
-      if (!active) return
-      // Refresh notification when tasks change in any garden
-      if (message.kind === 'tasks' || message.kind === 'general') {
-        refreshNotification()
-      }
-    })
-      .then((unsubscribe) => {
-        if (!active) {
-          unsubscribe().catch(() => {})
-        } else {
-          teardown = unsubscribe
-        }
-      })
-      .catch(() => {})
-
-    return () => {
-      active = false
-      if (teardown) teardown().catch(() => {})
-    }
-  }, [user?.id, refreshNotification])
-
-  // Also listen to postgres changes for task occurrences (direct fallback)
-  React.useEffect(() => {
-    if (!user?.id) return
-    let active = true
-    
-    const channel = supabase.channel('rt-navbar-tasks')
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'garden_plant_task_occurrences' 
-      }, () => {
-        if (active) refreshNotification()
-      })
-    
-    const subscription = channel.subscribe()
-    if (subscription instanceof Promise) subscription.catch(() => {})
-
-    return () => {
-      active = false
-      try { supabase.removeChannel(channel) } catch {}
-    }
-  }, [user?.id, refreshNotification])
-  const label = displayName && displayName.trim().length > 0 ? displayName : 'Profile'
-  return (
-    <header className="max-w-6xl mx-auto w-full flex items-center gap-3 px-2 overflow-x-hidden">
-      <div className="h-10 w-10 rounded-2xl bg-green-200 flex items-center justify-center shadow">
-        <Leaf className="h-5 w-5" />
+  const label = displayName && displayName.trim().length > 0 ? displayName : t('common.profile')
+    return (
+      <header className="hidden md:flex max-w-6xl mx-auto w-full items-center gap-3 px-2 overflow-x-hidden desktop-drag-region">
+      <div className="h-10 w-10 rounded-2xl bg-green-200 dark:bg-green-800 flex items-center justify-center shadow">
+        <Leaf className="h-5 w-5 text-green-800 dark:text-green-200" />
       </div>
       <Link
         to="/"
-        className="text-2xl md:text-3xl font-semibold tracking-tight no-underline text-black hover:text-black visited:text-black active:text-black focus:text-black focus-visible:outline-none outline-none hover:opacity-90"
+        className="font-brand text-[1.925rem] md:text-[2.625rem] leading-none font-semibold tracking-tight no-underline text-black dark:text-white hover:text-black dark:hover:text-white visited:text-black dark:visited:text-white active:text-black dark:active:text-white focus:text-black dark:focus:text-white focus-visible:outline-none outline-none hover:opacity-90 whitespace-nowrap shrink-0"
         style={{ WebkitTapHighlightColor: 'transparent' }}
       >
-        PLANT SWIPE
+        {t('common.appName')}
       </Link>
       <nav className="ml-4 hidden md:flex gap-2">
-        <NavPill to="/" isActive={location.pathname === '/'} icon={<Sparkles className="h-4 w-4" />} label="Discovery" />
-        <NavPill to="/gardens" isActive={location.pathname.startsWith('/gardens') || location.pathname.startsWith('/garden/')} icon={<Sprout className="h-4 w-4" />} label="Garden" showDot={hasUnfinished} />
-        <NavPill to="/search" isActive={location.pathname.startsWith('/search')} icon={<Search className="h-4 w-4" />} label="Encyclopedia" />
+        <NavPill to="/" isActive={pathWithoutLang === '/'} icon={<Sparkles className="h-4 w-4" />} label={t('common.discovery')} />
+        <NavPill to="/gardens" isActive={pathWithoutLang.startsWith('/gardens') || pathWithoutLang.startsWith('/garden/')} icon={<Sprout className="h-4 w-4" />} label={t('common.garden')} showDot={hasUnfinished} />
+        <NavPill to="/search" isActive={pathWithoutLang.startsWith('/search')} icon={<Search className="h-4 w-4" />} label={t('common.encyclopedia')} />
       </nav>
   <div className="ml-auto flex items-center gap-2 flex-wrap sm:flex-nowrap min-w-0 justify-end">
-        {user && (
-          <Button className="rounded-2xl" variant="default" onClick={() => navigate('/create')}>
-            <Plus className="h-4 w-4 sm:mr-2" /> <span className="hidden sm:inline">Add Plant</span>
-          </Button>
-        )}
         {!user ? (
           <>
             <Button className="rounded-2xl" variant="secondary" onClick={openSignup}>
-              <UserPlus className="h-4 w-4 mr-2" /> Sign up
+              <UserPlus className="h-4 w-4 mr-2" /> {t('common.signup')}
             </Button>
             <Button className="rounded-2xl" variant="default" onClick={openLogin}>
-              <LogIn className="h-4 w-4 mr-2" /> Login
+              <LogIn className="h-4 w-4 mr-2" /> {t('common.login')}
             </Button>
           </>
         ) : (
@@ -179,23 +102,26 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
             {menuOpen && menuPosition && createPortal(
               <div
                 ref={menuRef}
-                className="w-40 rounded-xl border bg-white shadow z-[60] p-1"
+                className="w-40 rounded-xl border bg-white dark:bg-[#252526] dark:border-[#3e3e42] shadow z-[60] p-1"
                 style={{ position: 'fixed', top: menuPosition.top, right: menuPosition.right }}
                 role="menu"
               >
                 {profile?.is_admin && (
-                  <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/admin') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 flex items-center gap-2" role="menuitem">
-                    <Shield className="h-4 w-4" /> Admin
+                  <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/admin') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
+                    <Shield className="h-4 w-4" /> {t('common.admin')}
                   </button>
                 )}
-                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); (onProfile ? onProfile : () => navigate('/profile'))() }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 flex items-center gap-2" role="menuitem">
-                  <User className="h-4 w-4" /> Profile
+                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); (onProfile ? onProfile : () => navigate('/profile'))() }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
+                  <User className="h-4 w-4" /> {t('common.profile')}
                 </button>
-                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/friends') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 flex items-center gap-2" role="menuitem">
-                  <HeartHandshake className="h-4 w-4" /> Friends
+                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/friends') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
+                  <HeartHandshake className="h-4 w-4" /> {t('common.friends')}
                 </button>
-                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); if (onLogout) { onLogout() } }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 text-red-600 flex items-center gap-2" role="menuitem">
-                  <LogOut className="h-4 w-4" /> Logout
+                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/settings') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
+                  <Settings className="h-4 w-4" /> {t('common.settings')}
+                </button>
+                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); if (onLogout) { onLogout() } }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-red-600 dark:text-red-400 flex items-center gap-2" role="menuitem">
+                  <LogOut className="h-4 w-4" /> {t('common.logout')}
                 </button>
               </div>,
               document.body
@@ -213,7 +139,7 @@ function NavPill({ to, isActive, icon, label, showDot }: { to: string; isActive:
       <Button
         asChild
         variant={'secondary'}
-        className={isActive ? "rounded-2xl bg-black text-white hover:bg-black/90 hover:text-white" : "rounded-2xl bg-white text-black hover:bg-stone-100 hover:text-black"}
+        className={isActive ? "rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90 hover:text-white dark:hover:text-black" : "rounded-2xl bg-white dark:bg-[#252526] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#2d2d30] hover:text-black dark:hover:text-white"}
       >
         <Link to={to} className="no-underline">
           <span className="inline-flex items-center gap-2">
@@ -224,7 +150,7 @@ function NavPill({ to, isActive, icon, label, showDot }: { to: string; isActive:
       </Button>
       {showDot && (
         <span
-          className="pointer-events-none absolute -top-[2px] -right-[2px] z-20 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white"
+          className="pointer-events-none absolute -top-[2px] -right-[2px] z-20 h-2.5 w-2.5 rounded-full bg-red-600 dark:bg-red-500 ring-2 ring-white dark:ring-[#252526]"
           aria-hidden="true"
         />
       )}

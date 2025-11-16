@@ -1,0 +1,211 @@
+{
+  "id": { "type": "string", "description": "Stable UUID v4 for this plant record" },
+  "image": { "type": "string", "description": "URL to plant image" },
+  "photos": {
+    "type": "array",
+    "description": "List of plant photos for galleries or alternate orientations",
+    "items": {
+      "type": "object",
+      "properties": {
+        "url": { "type": "string", "description": "Absolute URL to the photo asset" },
+        "isPrimary": { "type": "boolean", "description": "Marks the image as the default cover" },
+        "isVertical": { "type": "boolean", "description": "True when the photo is composed for vertical layouts" }
+      }
+    }
+  },
+
+  "identifiers": {
+    "scientificName": { "type": "string", "description": "Botanical binomial (Genus species, optionally author)" },
+    "canonicalName": { "type": "string", "description": "Normalized scientific name without authorship" },
+    "synonyms": { "type": "array", "items": "string", "description": "Known scientific synonyms" },
+    "commonNames": { "type": "array", "items": "string", "description": "Common names in default locale" },
+    "taxonRank": { "type": "string", "options": ["species","subspecies","variety","form","cultivar","hybrid"] },
+    "cultivarGroup": { "type": "string" },
+    "cultivar": { "type": "string" },
+    "family": { "type": "string" },
+    "genus": { "type": "string" },
+    "externalIds": {
+      "gbif": { "type": "string" },
+      "powo": { "type": "string" },
+      "ipni": { "type": "string" },
+      "itis": { "type": "string" },
+      "wiki": { "type": "string" },
+      "kindwise": { "type": "string" },
+      "other": { "type": "object", "additionalProperties": "string" }
+    }
+  },
+
+  "classification": {
+    "type": "object",
+    "description": "Structured categorical information that controls downstream subclass and activity choices.",
+    "properties": {
+      "type": {
+        "type": "string",
+        "options": ["plant","bambu","shrub","tree","other"],
+        "description": "Primary plant type. Exactly one value is allowed."
+      },
+      "subclass": {
+        "type": "string",
+        "options": ["flower","vegetable","cereal","spice"],
+        "description": "Secondary class that is only meaningful when type = plant. Leave blank for other types."
+      },
+      "subSubclass": {
+        "type": "string",
+        "options": ["fruit","seed","root","leaf","flower"],
+        "description": "Additional level under subclass = vegetable. Leave blank otherwise."
+      },
+      "activities": {
+        "type": "array",
+        "items": "string",
+        "options": ["ornemental","comestible","aromatic","medicinal"],
+        "description": "Intended activities/uses. Multiple selections are allowed."
+      },
+      "subActivities": {
+        "type": "object",
+        "description": "Optional subactivity selections keyed by activity. Only valid when the matching activity is listed in activities.",
+        "properties": {
+          "ornemental": {
+            "type": "array",
+            "items": "string",
+            "options": ["climbing","hedge","massif","ground cover"]
+          },
+          "comestible": {
+            "type": "array",
+            "items": "string",
+            "options": ["seed","hull","core"]
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+
+  "traits": {
+    "lifeCycle": { "type": "string", "options": ["annual","biennial","perennial"] },
+    "habit": { "type": "array", "items": "string", "options": ["tree","shrub","vine","climber","herbaceous","succulent","grass","fern","aquatic"] },
+    "deciduousEvergreen": { "type": "string", "options": ["deciduous","evergreen","semi-evergreen"] },
+    "growthRate": { "type": "string", "options": ["slow","moderate","fast"] },
+    "thornsSpines": { "type": "boolean" },
+    "fragrance": { "type": "string", "options": ["none","light","moderate","strong"] },
+    "toxicity": {
+      "toHumans": { "type": "string", "options": ["non-toxic","mild","moderate","severe"] },
+      "toPets": { "type": "string", "options": ["non-toxic","mild","moderate","severe"] }
+      },
+      "dogFriendly": { "type": "boolean", "description": "True if generally safe for dogs" },
+      "catFriendly": { "type": "boolean", "description": "True if generally safe for cats" },
+    "allergenicity": { "type": "string", "options": ["low","medium","high"] },
+    "invasiveness": {
+      "status": { "type": "string", "options": ["not invasive","regional risk","invasive"] },
+      "regions": { "type": "array", "items": "string" }
+    }
+  },
+
+  "dimensions": {
+    "height": { "minCm": { "type": "number" }, "maxCm": { "type": "number" } },
+    "spread": { "minCm": { "type": "number" }, "maxCm": { "type": "number" } },
+    "spacing": { "rowCm": { "type": "number" }, "plantCm": { "type": "number" } },
+    "containerFriendly": { "type": "boolean" }
+  },
+
+  "phenology": {
+    "flowerColors": { "type": "array", "items": { "name": { "type": "string" }, "hex": { "type": "string" } } },
+    "leafColors": { "type": "array", "items": { "name": { "type": "string" }, "hex": { "type": "string" } } },
+    "floweringMonths": { "type": "array", "items": "integer" },
+    "fruitingMonths": { "type": "array", "items": "integer" },
+    "scentNotes": { "type": "array", "items": "string" }
+  },
+
+  "environment": {
+    "sunExposure": { "type": "string", "options": ["full sun","partial sun","partial shade","full shade"] },
+    "lightIntensity": { "type": "string", "options": ["very high","high","medium","low"] },
+    "hardiness": { "usdaZones": { "type": "array", "items": "integer" }, "rhsH": { "type": "string" } },
+    "climatePref": { "type": "array", "items": "string", "options": ["tropical","subtropical","temperate","Mediterranean","arid","continental","oceanic"] },
+    "temperature": { "minC": { "type": "number" }, "maxC": { "type": "number" } },
+    "humidityPref": { "type": "string", "options": ["low","moderate","high"] },
+    "windTolerance": { "type": "string", "options": ["low","moderate","high"] },
+    "soil": {
+      "texture": { "type": "array", "items": "string", "options": ["sandy","loamy","silty","clayey"] },
+      "drainage": { "type": "string", "options": ["free-draining","moderate","poor"] },
+      "fertility": { "type": "string", "options": ["low","medium","high"] },
+      "pH": { "min": { "type": "number" }, "max": { "type": "number" } }
+    }
+  },
+
+  "care": {
+    "difficulty": { "type": "string", "options": ["easy","moderate","advanced"] },
+    "maintenanceLevel": { "type": "string", "options": ["low","medium","high"] },
+    "watering": {
+      "frequency": { "winter": "string", "spring": "string", "summer": "string", "autumn": "string" },
+      "method": { "type": "string", "options": ["at soil","bottom water","soak and dry","drip","none (aquatic)"] },
+      "depthCm": { "type": "number" }
+    },
+    "fertilizing": {
+      "type": { "type": "string", "options": ["balanced NPK","high K","organic compost","slow-release","foliar"] },
+      "schedule": { "type": "string" }
+    },
+    "pruning": {
+      "bestMonths": { "type": "array", "items": "integer" },
+      "method": { "type": "string", "options": ["light trim","hard prune","deadheading","thinning","renewal"] }
+    },
+    "mulching": { "recommended": { "type": "boolean" }, "material": { "type": "string" } },
+    "stakingSupport": { "type": "boolean" },
+    "repottingIntervalYears": { "type": "number" }
+  },
+
+  "propagation": {
+    "methods": { "type": "array", "items": "string", "options": ["seed","cuttings","division","layering","grafting","tissue culture"] },
+    "seed": {
+      "stratification": { "type": "string", "options": ["none","cold-moist","warm","scarification"] },
+      "germinationDays": { "min": "number", "max": "number" }
+    }
+  },
+
+  "usage": {
+    "gardenUses": { "type": "array", "items": "string", "options": ["border","mass planting","hedge","groundcover","specimen","container","climber","wildlife garden","cut flower","fragrance"] },
+    "indoorOutdoor": { "type": "string", "options": ["outdoor","indoor","both"] },
+    "edibleParts": { "type": "array", "items": "string", "options": ["none","leaf","flower","fruit","seed","root","stem"] },
+    "culinaryUses": { "type": "array", "items": "string" },
+    "medicinalUses": { "type": "array", "items": "string" }
+  },
+
+  "ecology": {
+    "nativeRange": { "type": "array", "items": "string" },
+    "pollinators": { "type": "array", "items": "string" },
+    "wildlifeValue": { "type": "array", "items": "string" },
+    "conservationStatus": { "type": "string", "options": ["NE","DD","LC","NT","VU","EN","CR","EW","EX"] }
+  },
+
+  "commerce": {
+    "seedsAvailable": { "type": "boolean" }
+  },
+
+  "problems": {
+    "pests": { "type": "array", "items": "string" },
+    "diseases": { "type": "array", "items": "string" },
+    "hazards": { "type": "array", "items": "string" }
+  },
+
+  "planting": {
+    "calendar": {
+      "hemisphere": { "type": "string", "options": ["north","south","equatorial"] },
+      "sowingMonths": { "type": "array", "items": "integer" },
+      "plantingOutMonths": { "type": "array", "items": "integer" },
+      "promotionMonth": { "type": "integer", "description": "Month (1–12) when the plant should be featured or promoted" }
+    },
+    "sitePrep": { "type": "array", "items": "string" },
+    "companionPlants": { "type": "array", "items": "string" },
+    "avoidNear": { "type": "array", "items": "string" }
+  },
+
+  "meta": {
+    "rarity": { "type": "string", "options": ["common","uncommon","rare","very rare"] },
+    "tags": { "type": "array", "items": "string" },
+    "funFact": { "type": "string", "description": "A surprising or entertaining trivia fact about the plant" },
+    "sourceReferences": { "type": "array", "items": "string" },
+    "authorNotes": { "type": "string" },
+    "createdAt": { "type": "string" },
+    "updatedAt": { "type": "string" },
+    "createdBy": { "type": "string" },
+    "updatedBy": { "type": "string" }
+  }
+}

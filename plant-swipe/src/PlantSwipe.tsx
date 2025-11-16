@@ -1,45 +1,75 @@
 import React, { useMemo, useState, lazy, Suspense } from "react";
-import { Routes, Route, useLocation, useNavigate, Navigate } from "react-router-dom";
+import { Routes, Route, useLocation } from "react-router-dom";
+import { useLanguageNavigate, usePathWithoutLanguage } from "@/lib/i18nRouting";
+import { Navigate } from "@/components/i18n/Navigate";
 import { useMotionValue, animate } from "framer-motion";
-import { Search } from "lucide-react";
+import { Search, ChevronDown, ChevronUp, ListFilter, MessageSquarePlus, Plus } from "lucide-react";
 // Sheet is used for plant info overlay
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { TopBar } from "@/components/layout/TopBar";
-import { BottomBar } from "@/components/layout/BottomBar";
+import { Footer } from "@/components/layout/Footer";
 import BroadcastToast from "@/components/layout/BroadcastToast";
 import MobileNavBar from "@/components/layout/MobileNavBar";
-import { SwipePage } from "@/pages/SwipePage";
-import { GardenListPage } from "@/pages/GardenListPage";
-import { GardenDashboardPage } from "@/pages/GardenDashboardPage";
+import { RequestPlantDialog } from "@/components/plant/RequestPlantDialog";
+// GardenListPage and GardenDashboardPage are lazy loaded below
 import { SearchPage } from "@/pages/SearchPage";
+import { SwipePage } from "@/pages/SwipePage";
 import { CreatePlantPage } from "@/pages/CreatePlantPage";
 import { EditPlantPage } from "@/pages/EditPlantPage";
 import type { Plant } from "@/types/plant";
 // PlantDetails imported in PlantInfoPage route component
 import PlantInfoPage from "@/pages/PlantInfoPage";
 import { useAuth } from "@/context/AuthContext";
+import { AuthActionsProvider } from "@/context/AuthActionsContext";
 import PublicProfilePage from "@/pages/PublicProfilePage";
 import RequireAdmin from "@/pages/RequireAdmin";
 import { FriendsPage } from "@/pages/FriendsPage";
+import SettingsPage from "@/pages/SettingsPage";
+import ContactUsPage from "@/pages/ContactUsPage";
+import AboutPage from "@/pages/AboutPage";
+import DownloadPage from "@/pages/DownloadPage";
+import TermsPage from "@/pages/TermsPage";
+import { ErrorPage } from "@/pages/ErrorPage";
 import { supabase } from "@/lib/supabaseClient";
+import { useLanguage } from "@/lib/i18nRouting";
+import { loadPlantsWithTranslations } from "@/lib/plantTranslationLoader";
+import { isPlantOfTheMonth } from "@/lib/plantHighlights";
+import { formatClassificationLabel } from "@/constants/classification";
+import { useTranslation } from "react-i18next";
 
 // Lazy load heavy pages for code splitting
 const AdminPage = lazy(() => import("@/pages/AdminPage").then(module => ({ default: module.AdminPage })));
+const GardenDashboardPage = lazy(() => import("@/pages/GardenDashboardPage").then(module => ({ default: module.GardenDashboardPage })));
+const GardenListPage = lazy(() => import("@/pages/GardenListPage").then(module => ({ default: module.GardenListPage })));
+
+type SearchSortMode = "default" | "newest" | "popular" | "favorites"
 
 // --- Main Component ---
 export default function PlantSwipe() {
   const { user, signIn, signUp, signOut, profile, refreshProfile } = useAuth()
+  const currentLang = useLanguage()
+  const { t } = useTranslation('common')
   const [query, setQuery] = useState("")
   const [seasonFilter, setSeasonFilter] = useState<string | null>(null)
   const [colorFilter, setColorFilter] = useState<string | null>(null)
   const [onlySeeds, setOnlySeeds] = useState(false)
   const [onlyFavorites, setOnlyFavorites] = useState(false)
-  const [favoritesFirst, setFavoritesFirst] = useState(false)
+  const [typeFilter, setTypeFilter] = useState<string | null>(null)
+  const [usageFilters, setUsageFilters] = useState<string[]>([])
+  const [seasonSectionOpen, setSeasonSectionOpen] = useState(true)
+  const [colorSectionOpen, setColorSectionOpen] = useState(true)
+  const [classificationSectionOpen, setClassificationSectionOpen] = useState(true)
+  const [showFilters, setShowFilters] = useState(() => {
+    if (typeof window === "undefined") return true
+    return window.innerWidth >= 1024
+  })
+  const [requestPlantDialogOpen, setRequestPlantDialogOpen] = useState(false)
+  const [searchSort, setSearchSort] = useState<SearchSortMode>("default")
 
   const [index, setIndex] = useState(0)
   const [likedIds, setLikedIds] = useState<string[]>([])
@@ -47,13 +77,14 @@ export default function PlantSwipe() {
   const location = useLocation()
   const state = location.state as { backgroundLocation?: any } | null
   const backgroundLocation = state?.backgroundLocation
-  const navigate = useNavigate()
+  const navigate = useLanguageNavigate()
+  const pathWithoutLang = usePathWithoutLanguage()
   const currentView: "discovery" | "gardens" | "search" | "profile" | "create" =
-    location.pathname === "/" ? "discovery" :
-    location.pathname.startsWith("/gardens") || location.pathname.startsWith('/garden/') ? "gardens" :
-    location.pathname.startsWith("/search") ? "search" :
-    location.pathname.startsWith("/profile") ? "profile" :
-    location.pathname.startsWith("/create") ? "create" : "discovery"
+    pathWithoutLang === "/" ? "discovery" :
+    pathWithoutLang.startsWith("/gardens") || pathWithoutLang.startsWith('/garden/') ? "gardens" :
+    pathWithoutLang.startsWith("/search") ? "search" :
+    pathWithoutLang.startsWith("/profile") ? "profile" :
+    pathWithoutLang.startsWith("/create") ? "create" : "discovery"
   const [authOpen, setAuthOpen] = useState(false)
   const [authMode, setAuthMode] = useState<"login" | "signup">("login")
   const [authError, setAuthError] = useState<string | null>(null)
@@ -67,6 +98,22 @@ export default function PlantSwipe() {
   const [plants, setPlants] = useState<Plant[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const typeOptions = useMemo(() => {
+    const labels = new Set<string>()
+    plants.forEach((plant) => {
+      const label = getPlantTypeLabel(plant.classification)
+      if (label) labels.add(label)
+    })
+    return Array.from(labels).sort((a, b) => a.localeCompare(b))
+  }, [plants])
+  const usageOptions = useMemo(() => {
+    const labels = new Set<string>()
+    plants.forEach((plant) => {
+      getPlantUsageLabels(plant.classification).forEach((label) => labels.add(label))
+    })
+    return Array.from(labels).sort((a, b) => a.localeCompare(b))
+  }, [plants])
+  const likedSet = React.useMemo(() => new Set(likedIds), [likedIds])
 
   // Hydrate liked ids from profile when available
   React.useEffect(() => {
@@ -79,105 +126,20 @@ export default function PlantSwipe() {
     setLoadError(null)
     let ok = false
     try {
-      // Prefer public API first to ensure anonymous browsing works even without Supabase
-      const resp = await fetch('/api/plants', {
-        credentials: 'same-origin',
-        headers: { 'Accept': 'application/json' },
-      })
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-      const ct = (resp.headers.get('content-type') || '').toLowerCase()
-      const text = await resp.text()
-      if (ct.includes('application/json') || /^[\s\n]*[\[{]/.test(text)) {
-        let arr: unknown = []
-        try { arr = JSON.parse(text) } catch { arr = [] }
-        const parsedFromApi: Plant[] = (Array.isArray(arr) ? arr : []).map((p: any) => ({
-          id: String(p.id),
-          name: String(p.name),
-          scientificName: String(p.scientificName || p.scientific_name || ''),
-          colors: Array.isArray(p.colors) ? p.colors.map((c: unknown) => String(c)) : [],
-          seasons: Array.isArray(p.seasons) ? (p.seasons as unknown[]).map((s) => String(s)) as Plant['seasons'] : [],
-          rarity: (p.rarity || 'Common') as Plant['rarity'],
-          meaning: p.meaning ? String(p.meaning) : '',
-          description: p.description ? String(p.description) : '',
-          image: String(p.image || p.image_url || ''),
-          care: {
-            sunlight: ((p.care && p.care.sunlight) || p.care_sunlight || 'Low') as Plant['care']['sunlight'],
-            water: ((p.care && p.care.water) || p.care_water || 'Low') as Plant['care']['water'],
-            soil: String((p.care && p.care.soil) || p.care_soil || ''),
-            difficulty: ((p.care && p.care.difficulty) || p.care_difficulty || 'Easy') as Plant['care']['difficulty']
-          },
-          seedsAvailable: Boolean((p.seedsAvailable ?? p.seeds_available) ?? false),
-          waterFreqUnit: (p.waterFreqUnit || p.water_freq_unit) || undefined,
-          waterFreqValue: (p.waterFreqValue ?? p.water_freq_value) ?? null,
-          waterFreqPeriod: (p.waterFreqPeriod || p.water_freq_period) || undefined,
-          waterFreqAmount: (p.waterFreqAmount ?? p.water_freq_amount) ?? null
-        }))
-        setPlants(parsedFromApi)
-        ok = true
-      } else {
-        throw new Error('Non-JSON response from /api/plants')
-      }
-    } catch (_apiErr: unknown) {
-      // Fallback to Supabase client if API unavailable
-      try {
-        const { data, error } = await supabase
-          .from('plants')
-          .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount')
-          .order('name', { ascending: true })
-        if (error) throw error
-        type PlantRow = {
-          id: string | number
-          name: string
-          scientific_name?: string | null
-          colors?: unknown
-          seasons?: unknown
-          rarity: Plant['rarity']
-          meaning?: string | null
-          description?: string | null
-          image_url?: string | null
-          care_sunlight?: Plant['care']['sunlight'] | null
-          care_water?: Plant['care']['water'] | null
-          care_soil?: string | null
-          care_difficulty?: Plant['care']['difficulty'] | null
-          seeds_available?: boolean | null
-          water_freq_unit?: Plant['waterFreqUnit'] | null
-          water_freq_value?: number | null
-          water_freq_period?: Plant['waterFreqPeriod'] | null
-          water_freq_amount?: number | null
-        }
-        const parsed: Plant[] = (Array.isArray(data) ? data : []).map((p: PlantRow) => ({
-          id: String(p.id),
-          name: String(p.name),
-          scientificName: String(p.scientific_name || ''),
-          colors: Array.isArray(p.colors as string[] | unknown[]) ? (p.colors as unknown[]).map((c) => String(c)) : [],
-          seasons: Array.isArray(p.seasons as string[] | unknown[]) ? (p.seasons as unknown[]).map((s) => String(s)) as Plant['seasons'] : [],
-          rarity: p.rarity as Plant['rarity'],
-          meaning: p.meaning ? String(p.meaning) : '',
-          description: p.description ? String(p.description) : '',
-          image: p.image_url || '',
-          care: {
-            sunlight: (p.care_sunlight || 'Low') as Plant['care']['sunlight'],
-            water: (p.care_water || 'Low') as Plant['care']['water'],
-            soil: String(p.care_soil || ''),
-            difficulty: (p.care_difficulty || 'Easy') as Plant['care']['difficulty']
-          },
-          seedsAvailable: Boolean(p.seeds_available ?? false),
-          waterFreqUnit: p.water_freq_unit || undefined,
-          waterFreqValue: p.water_freq_value ?? null,
-          waterFreqPeriod: p.water_freq_period || undefined,
-          waterFreqAmount: p.water_freq_amount ?? null
-        }))
-        setPlants(parsed)
-        ok = true
-      } catch (e2: unknown) {
-        const msg = e2 && typeof e2 === 'object' && 'message' in e2 ? String((e2 as { message?: unknown }).message || '') : ''
-        setLoadError(msg || 'Failed to load plants')
-      }
+      // Always use Supabase with translations to ensure plants created in one language
+      // display correctly when viewed in another language
+      // This ensures translations are properly loaded for all languages, including English
+      const plantsWithTranslations = await loadPlantsWithTranslations(currentLang)
+      setPlants(plantsWithTranslations)
+      ok = true
+    } catch (e: unknown) {
+      const msg = e && typeof e === 'object' && 'message' in e ? String((e as { message?: unknown }).message || '') : ''
+      setLoadError(msg || 'Failed to load plants')
     } finally {
       setLoading(false)
     }
     return ok
-  }, [])
+  }, [currentLang])
 
   React.useEffect(() => {
     loadPlants()
@@ -313,42 +275,88 @@ export default function PlantSwipe() {
   }, [user?.id, profile?.display_name])
 
   const filtered = useMemo(() => {
-    const likedSet = new Set(likedIds)
-    const base = plants.filter((p: Plant) => {
-      const matchesQ = `${p.name} ${p.scientificName} ${p.meaning} ${p.colors.join(" ")}`
+    const lowerQuery = query.toLowerCase()
+    const normalizedType = typeFilter?.toLowerCase() ?? null
+    const normalizedUsage = usageFilters.map((u) => u.toLowerCase())
+    return plants.filter((p: Plant) => {
+      const colors = Array.isArray(p.colors) ? p.colors : []
+      const seasons = Array.isArray(p.seasons) ? p.seasons : []
+      const matchesQ = `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")}`
         .toLowerCase()
-        .includes(query.toLowerCase())
-      const matchesSeason = seasonFilter ? p.seasons.includes(seasonFilter as Plant['seasons'][number]) : true
-      const matchesColor = colorFilter ? p.colors.map((c: string) => c.toLowerCase()).includes(colorFilter.toLowerCase()) : true
-      const matchesSeeds = onlySeeds ? p.seedsAvailable : true
+        .includes(lowerQuery)
+      const matchesSeason = seasonFilter ? seasons.includes(seasonFilter as Plant['seasons'][number]) : true
+      const matchesColor = colorFilter ? colors.map((c: string) => c.toLowerCase()).includes(colorFilter.toLowerCase()) : true
+      const matchesSeeds = onlySeeds ? Boolean(p.seedsAvailable) : true
       const matchesFav = onlyFavorites ? likedSet.has(p.id) : true
-      return matchesQ && matchesSeason && matchesColor && matchesSeeds && matchesFav
+      const typeLabel = getPlantTypeLabel(p.classification)?.toLowerCase() ?? null
+      const matchesType = normalizedType ? typeLabel === normalizedType : true
+      const plantUsageLabels = getPlantUsageLabels(p.classification).map((label) => label.toLowerCase())
+      const matchesUsage = normalizedUsage.length
+        ? normalizedUsage.every((usage) => plantUsageLabels.includes(usage))
+        : true
+      return matchesQ && matchesSeason && matchesColor && matchesSeeds && matchesFav && matchesType && matchesUsage
     })
-    if (favoritesFirst) {
-      return base.slice().sort((a, b) => {
-        const la = likedSet.has(a.id) ? 1 : 0
-        const lb = likedSet.has(b.id) ? 1 : 0
-        if (la !== lb) return lb - la
-        // fallback: by name asc to keep deterministic
-        return a.name.localeCompare(b.name)
-      })
-    }
-    return base
-  }, [plants, query, seasonFilter, colorFilter, onlySeeds, onlyFavorites, favoritesFirst, likedIds])
+  }, [plants, query, seasonFilter, colorFilter, onlySeeds, onlyFavorites, typeFilter, usageFilters, likedSet])
 
   // Swiping-only randomized order with continuous wrap-around
   const [shuffleEpoch, setShuffleEpoch] = useState(0)
   const swipeList = useMemo(() => {
+    if (filtered.length === 0) return []
+    const shuffleList = (list: Plant[]) => {
+      const arr = list.slice()
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1))
+        ;[arr[i], arr[j]] = [arr[j], arr[i]]
+      }
+      return arr
+    }
+    const now = new Date()
+    const promoted: Plant[] = []
+    const regular: Plant[] = []
+    filtered.forEach((plant) => {
+      if (isPlantOfTheMonth(plant, now)) {
+        promoted.push(plant)
+      } else {
+        regular.push(plant)
+      }
+    })
+    if (promoted.length === 0) {
+      return shuffleList(filtered)
+    }
+    return [...shuffleList(promoted), ...shuffleList(regular)]
+  }, [filtered, shuffleEpoch])
+
+  const sortedSearchResults = useMemo(() => {
+    if (searchSort === "default") return filtered
     const arr = filtered.slice()
-    // Fisher-Yates shuffle
-    for (let i = arr.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1))
-      const tmp = arr[i]
-      arr[i] = arr[j]
-      arr[j] = tmp
+    if (searchSort === "newest") {
+      const getCreatedAtValue = (plant: Plant) => {
+        const value = plant.meta?.createdAt
+        if (!value) return 0
+        const ts = Date.parse(value)
+        return Number.isNaN(ts) ? 0 : ts
+      }
+      arr.sort((a, b) => {
+        const diff = getCreatedAtValue(b) - getCreatedAtValue(a)
+        if (diff !== 0) return diff
+        return a.name.localeCompare(b.name)
+      })
+    } else if (searchSort === "favorites") {
+      arr.sort((a, b) => {
+        const la = likedSet.has(a.id) ? 1 : 0
+        const lb = likedSet.has(b.id) ? 1 : 0
+        if (la !== lb) return lb - la
+        return a.name.localeCompare(b.name)
+      })
+    } else if (searchSort === "popular") {
+      arr.sort((a, b) => {
+        const diff = (b.popularity?.likes ?? 0) - (a.popularity?.likes ?? 0)
+        if (diff !== 0) return diff
+        return a.name.localeCompare(b.name)
+      })
     }
     return arr
-  }, [filtered, shuffleEpoch])
+  }, [filtered, searchSort, likedSet])
 
   const current = swipeList.length > 0 ? swipeList[index % swipeList.length] : undefined
 
@@ -480,8 +488,8 @@ export default function PlantSwipe() {
     })
   }
 
-  const openLogin = () => { setAuthMode("login"); setAuthOpen(true) }
-  const openSignup = () => { setAuthMode("signup"); setAuthOpen(true) }
+  const openLogin = React.useCallback(() => { setAuthMode("login"); setAuthOpen(true) }, [])
+  const openSignup = React.useCallback(() => { setAuthMode("signup"); setAuthOpen(true) }, [])
 
   const submitAuth = async () => {
     if (authSubmitting) return
@@ -530,185 +538,351 @@ export default function PlantSwipe() {
     }
   }, [user])
 
-  return (
-    <div className="min-h-screen w-full bg-gradient-to-b from-stone-50 to-stone-100 p-4 pb-24 md:p-8 md:pb-8 overflow-x-hidden">
-  <TopBar
-    openLogin={openLogin}
-    openSignup={openSignup}
-    user={user}
-    displayName={profile?.display_name || null}
-    onProfile={() => navigate('/profile')}
-    onLogout={async () => { await signOut(); navigate('/') }}
-  />
+  const FilterSectionHeader: React.FC<{ label: string; isOpen: boolean; onToggle: () => void }> = ({
+    label,
+    isOpen,
+    onToggle,
+  }) => (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="flex w-full items-center justify-between text-xs font-medium uppercase tracking-wide text-stone-500 dark:text-stone-300"
+      aria-expanded={isOpen}
+    >
+      <span>{label}</span>
+      {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+    </button>
+  )
 
-      {/* Mobile bottom nav (hide Create on phones) */}
-      <MobileNavBar canCreate={false} />
+  const FilterControls = () => (
+    <div className="space-y-6">
+      {/* Sort */}
+      <div>
+        <div className="text-xs font-medium mb-2 uppercase tracking-wide opacity-60">{t("plant.sortLabel")}</div>
+        <select
+          value={searchSort}
+          onChange={(e) => setSearchSort(e.target.value as SearchSortMode)}
+          className="w-full rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-white"
+        >
+          <option value="default">{t("plant.sortDefault")}</option>
+          <option value="newest">{t("plant.sortNewest")}</option>
+          <option value="popular">{t("plant.sortPopular")}</option>
+          <option value="favorites">{t("plant.sortFavorites")}</option>
+        </select>
+      </div>
 
-      {/* Layout: grid only when search view (to avoid narrow column in other views) */}
-      <div className={`max-w-6xl mx-auto mt-6 ${currentView === 'search' ? 'lg:grid lg:grid-cols-[260px_1fr] lg:gap-10' : ''}`}>
+      {/* Classification */}
+      <div>
+        <FilterSectionHeader
+          label={t("plant.classification")}
+          isOpen={classificationSectionOpen}
+          onToggle={() => setClassificationSectionOpen((prev) => !prev)}
+        />
+        {classificationSectionOpen && (
+          <div className="mt-3 space-y-4">
+            <div>
+              <div className="text-[11px] uppercase tracking-[0.35em] text-stone-500 dark:text-stone-300">
+                {t("plantInfo.classification.type", { defaultValue: "Type" })}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {typeOptions.length > 0 ? (
+                  typeOptions.map((option) => (
+                    <button
+                      key={option}
+                      onClick={() => setTypeFilter((current) => (current === option ? null : option))}
+                      className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
+                        typeFilter === option
+                          ? "bg-black dark:bg-white text-white dark:text-black"
+                          : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                      }`}
+                      aria-pressed={typeFilter === option}
+                    >
+                      {option}
+                    </button>
+                  ))
+                ) : (
+                  <p className="text-xs opacity-60">
+                    {t("plantInfo.values.notAvailable", { defaultValue: "N/A" })}
+                  </p>
+                )}
+              </div>
+            </div>
+            <div>
+              <div className="text-[11px] uppercase tracking-[0.35em] text-stone-500 dark:text-stone-300">
+                {t("plantInfo.sections.usage", { defaultValue: "Usage" })}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {usageOptions.length > 0 ? (
+                  usageOptions.map((option) => {
+                    const isSelected = usageFilters.includes(option)
+                    return (
+                      <button
+                        key={option}
+                        onClick={() =>
+                          setUsageFilters((current) =>
+                            isSelected ? current.filter((value) => value !== option) : [...current, option]
+                          )
+                        }
+                        className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
+                          isSelected
+                            ? "bg-emerald-600 dark:bg-emerald-500 text-white"
+                            : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                        }`}
+                        aria-pressed={isSelected}
+                      >
+                        {option}
+                      </button>
+                    )
+                  })
+                ) : (
+                  <p className="text-xs opacity-60">
+                    {t("plantInfo.values.notAvailable", { defaultValue: "N/A" })}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Seasons */}
+      <div>
+        <FilterSectionHeader
+          label={t("plant.season")}
+          isOpen={seasonSectionOpen}
+          onToggle={() => setSeasonSectionOpen((prev) => !prev)}
+        />
+        {seasonSectionOpen && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {(["Spring", "Summer", "Autumn", "Winter"] as const).map((s) => (
+              <button
+                key={s}
+                onClick={() => setSeasonFilter((cur) => (cur === s ? null : s))}
+                className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
+                  seasonFilter === s ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                }`}
+                aria-pressed={seasonFilter === s}
+              >
+                {t(`plant.${s.toLowerCase()}`)}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Colors */}
+      <div>
+        <FilterSectionHeader
+          label={t("plant.color")}
+          isOpen={colorSectionOpen}
+          onToggle={() => setColorSectionOpen((prev) => !prev)}
+        />
+        {colorSectionOpen && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {["Red", "Pink", "Yellow", "White", "Purple", "Blue", "Orange", "Green"].map((c) => (
+              <button
+                key={c}
+                onClick={() => setColorFilter((cur) => (cur === c ? null : c))}
+                className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
+                  colorFilter === c ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                }`}
+                aria-pressed={colorFilter === c}
+              >
+                {t(`plant.${c.toLowerCase()}`)}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Toggles */}
+      <div className="pt-2 space-y-2">
+        <button
+          onClick={() => setOnlySeeds((v) => !v)}
+          className={`w-full justify-center px-3 py-2 rounded-2xl text-sm shadow-sm border flex items-center gap-2 transition ${
+            onlySeeds ? "bg-emerald-600 dark:bg-emerald-500 text-white" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+          }`}
+          aria-pressed={onlySeeds}
+        >
+          <span className="inline-block h-2 w-2 rounded-full bg-current" /> {t("plant.seedsOnly")}
+        </button>
+        <button
+          onClick={() => setOnlyFavorites((v) => !v)}
+          className={`w-full justify-center px-3 py-2 rounded-2xl text-sm shadow-sm border flex items-center gap-2 transition ${
+            onlyFavorites ? "bg-rose-600 dark:bg-rose-500 text-white" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+          }`}
+          aria-pressed={onlyFavorites}
+        >
+          <span className="inline-block h-2 w-2 rounded-full bg-current" /> {t("plant.favoritesOnly")}
+        </button>
+      </div>
+
+      {/* Active filters summary */}
+      <div className="text-xs space-y-1">
+        <div className="font-medium uppercase tracking-wide opacity-60">{t("plant.active")}</div>
+        <div className="flex flex-wrap gap-2">
+          {seasonFilter && <Badge variant="secondary" className="rounded-xl">{t(`plant.${seasonFilter.toLowerCase()}`)}</Badge>}
+          {colorFilter && <Badge variant="secondary" className="rounded-xl">{t(`plant.${colorFilter.toLowerCase()}`)}</Badge>}
+          {typeFilter && <Badge variant="secondary" className="rounded-xl">{typeFilter}</Badge>}
+          {usageFilters.map((usage) => (
+            <Badge key={usage} variant="secondary" className="rounded-xl">{usage}</Badge>
+          ))}
+          {onlySeeds && <Badge variant="secondary" className="rounded-xl">{t("plant.seedsOnly")}</Badge>}
+          {onlyFavorites && <Badge variant="secondary" className="rounded-xl">{t("plant.favoritesOnly")}</Badge>}
+          {!seasonFilter && !colorFilter && !typeFilter && usageFilters.length === 0 && !onlySeeds && !onlyFavorites && (
+            <span className="opacity-50">{t("plant.none")}</span>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+
+    return (
+        <AuthActionsProvider openLogin={openLogin} openSignup={openSignup}>
+          <div className="min-h-screen w-full bg-gradient-to-b from-stone-100 to-stone-200 dark:from-[#252526] dark:to-[#1e1e1e] p-4 pb-24 md:p-8 md:pb-8">
+          <TopBar
+            openLogin={openLogin}
+            openSignup={openSignup}
+            user={user}
+            displayName={profile?.display_name || null}
+            onProfile={() => navigate('/profile')}
+            onLogout={async () => { await signOut(); navigate('/') }}
+          />
+
+          {/* Mobile bottom nav (hide Create on phones) */}
+          <MobileNavBar 
+            canCreate={false} 
+            onProfile={() => navigate('/profile')}
+            onLogout={async () => { await signOut(); navigate('/') }}
+            onLogin={openLogin}
+          />
+
+          {/* Layout: grid only when search view (to avoid narrow column in other views) */}
+        <div
+          className={`max-w-6xl mx-auto mt-6 ${
+            currentView === "search"
+              ? showFilters
+                ? "lg:grid lg:grid-cols-[260px_1fr] lg:gap-10"
+                : "lg:grid lg:grid-cols-1"
+              : ""
+          }`}
+        >
         {/* Sidebar / Filters */}
-        {currentView === 'search' && (
-        <aside className="mb-8 lg:mb-0 space-y-6 lg:sticky lg:top-4 self-start" aria-label="Filters">
-          {/* Search */}
-            <div>
-              <Label htmlFor="plant-search" className="sr-only">Search plants</Label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-60 pointer-events-none" />
-                <Input
-                  id="plant-search"
-                  className="pl-9 md:pl-9"
-                  placeholder="Search name, meaning, color?"
-                  value={query}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                    setQuery(e.target.value)
-                    setIndex(0)
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Seasons */}
-            <div>
-              <div className="text-xs font-medium mb-2 uppercase tracking-wide opacity-60">Season</div>
-              <div className="flex flex-wrap gap-2">
-                {(["Spring", "Summer", "Autumn", "Winter"] as const).map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => setSeasonFilter((cur) => (cur === s ? null : s))}
-                    className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${seasonFilter === s ? "bg-black text-white" : "bg-white hover:bg-stone-50"}`}
-                    aria-pressed={seasonFilter === s}
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Colors */}
-            <div>
-              <div className="text-xs font-medium mb-2 uppercase tracking-wide opacity-60">Color</div>
-              <div className="flex flex-wrap gap-2">
-                {["Red", "Pink", "Yellow", "White", "Purple", "Blue", "Orange", "Green"].map((c) => (
-                  <button
-                    key={c}
-                    onClick={() => setColorFilter((cur) => (cur === c ? null : c))}
-                    className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${colorFilter === c ? "bg-black text-white" : "bg-white hover:bg-stone-50"}`}
-                    aria-pressed={colorFilter === c}
-                  >
-                    {c}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Toggles */}
-            <div className="pt-2">
-              <button
-                onClick={() => setOnlySeeds((v) => !v)}
-                className={`w-full justify-center px-3 py-2 rounded-2xl text-sm shadow-sm border flex items-center gap-2 transition ${
-                  onlySeeds ? "bg-emerald-600 text-white" : "bg-white hover:bg-stone-50"
-                }`}
-                aria-pressed={onlySeeds}
-              >
-                <span className="inline-block h-2 w-2 rounded-full bg-current" /> Seeds only
-              </button>
-              <div className="h-2" />
-              <button
-                onClick={() => setOnlyFavorites((v) => !v)}
-                className={`w-full justify-center px-3 py-2 rounded-2xl text-sm shadow-sm border flex items-center gap-2 transition ${
-                  onlyFavorites ? "bg-rose-600 text-white" : "bg-white hover:bg-stone-50"
-                }`}
-                aria-pressed={onlyFavorites}
-              >
-                <span className="inline-block h-2 w-2 rounded-full bg-current" /> Favorites only
-              </button>
-              <div className="h-2" />
-              <button
-                onClick={() => setFavoritesFirst((v) => !v)}
-                className={`w-full justify-center px-3 py-2 rounded-2xl text-sm shadow-sm border flex items-center gap-2 transition ${
-                  favoritesFirst ? "bg-rose-100 text-rose-900 border-rose-300" : "bg-white hover:bg-stone-50"
-                }`}
-                aria-pressed={favoritesFirst}
-              >
-                Favorites first
-              </button>
-            </div>
-
-            {/* Active filters summary */}
-            <div className="text-xs space-y-1">
-              <div className="font-medium uppercase tracking-wide opacity-60">Active</div>
-              <div className="flex flex-wrap gap-2">
-                {seasonFilter && (
-                  <Badge variant="secondary" className="rounded-xl">{seasonFilter}</Badge>
-                )}
-                {colorFilter && (
-                  <Badge variant="secondary" className="rounded-xl">{colorFilter}</Badge>
-                )}
-                {onlySeeds && (
-                  <Badge variant="secondary" className="rounded-xl">Seeds</Badge>
-                )}
-                {onlyFavorites && (
-                  <Badge variant="secondary" className="rounded-xl">Favorites</Badge>
-                )}
-                {favoritesFirst && (
-                  <Badge variant="secondary" className="rounded-xl">Favs first</Badge>
-                )}
-                {!seasonFilter && !colorFilter && !onlySeeds && (
-                  <span className="opacity-50">None</span>
-                )}
-              </div>
-            </div>
-  </aside>
-  )}
-
-        {/* Main content area */}
-        <main className="min-h-[60vh]" aria-live="polite">
-          {loading && <div className="p-8 text-center text-sm opacity-60">Loading from Supabase...</div>}
-          {loadError && <div className="p-8 text-center text-sm text-red-600">Supabase error: {loadError}</div>}
-          {!loading && !loadError && (
+          {currentView === "search" && showFilters && (
             <>
-              {plants.length === 0 && !query && !loadError && !loading && (
-                <div className="p-8 text-center text-sm opacity-60">
-                  No plants found. Insert rows into table "plants" (columns: id, name, scientific_name, colors[], seasons[], rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available) then refresh.
-                </div>
-              )}
-              {/* Use background location for primary routes so overlays render on top */}
-              <Routes location={(backgroundLocation as any) || location}>
-                <Route
-                  path="/"
-                  element={plants.length > 0 ? (
-                    <SwipePage
-                      current={current}
-                      index={index}
-                      setIndex={setIndex}
-                      x={x}
-                      y={y}
-                      onDragEnd={onDragEnd}
-                      handleInfo={handleInfo}
-                      handlePass={handlePass}
-                      handlePrevious={handlePrevious}
-                      liked={current ? likedIds.includes(current.id) : false}
-                      onToggleLike={() => { if (current) toggleLiked(current.id) }}
-                    />
-                  ) : (
-                    <></>
-                  )}
-                />
-                <Route path="/gardens" element={<GardenListPage />} />
-                <Route path="/garden/:id/*" element={<GardenDashboardPage />} />
+              <aside
+                className="hidden lg:block mb-8 lg:mb-0 space-y-6 lg:sticky lg:top-4 self-start"
+                aria-label="Filters"
+              >
+                <FilterControls />
+              </aside>
+            </>
+          )}
+
+          {/* Main content area */}
+          <main className="min-h-[60vh]" aria-live="polite">
+            {currentView === "search" && (
+              <div className="mb-6 space-y-3">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+                      <div className="flex-1">
+                        <Label htmlFor="plant-search-main" className="sr-only">
+                          {t("common.search")}
+                        </Label>
+                        <div className="relative">
+                          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
+                          <Input
+                            id="plant-search-main"
+                            className="w-full pl-10 pr-4 rounded-2xl h-12"
+                            placeholder={t("plant.searchPlaceholder")}
+                            value={query}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                              setQuery(e.target.value)
+                              setIndex(0)
+                            }}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-2 sm:flex-row lg:flex-row lg:items-end lg:gap-2 w-full lg:w-auto">
+                      <Button
+                        variant="outline"
+                        className="rounded-2xl w-full lg:w-auto justify-between lg:justify-center"
+                        onClick={() => setShowFilters((prev) => !prev)}
+                        aria-expanded={showFilters}
+                      >
+                        <span className="flex items-center gap-2">
+                          <ListFilter className="h-4 w-4" />
+                          <span>{t(showFilters ? "plant.hideFilters" : "plant.showFilters")}</span>
+                        </span>
+                        {showFilters ? (
+                          <ChevronUp className="h-4 w-4 lg:hidden" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4 lg:hidden" />
+                        )}
+                      </Button>
+                      {user && (
+                        <>
+                          <Button
+                            variant="secondary"
+                            className="rounded-2xl w-full lg:w-auto"
+                            onClick={() => setRequestPlantDialogOpen(true)}
+                          >
+                            <MessageSquarePlus className="h-4 w-4 mr-2" />
+                            {t("requestPlant.button") || "Request Plant"}
+                          </Button>
+                          {profile?.is_admin && (
+                            <Button
+                              variant="default"
+                              className="rounded-2xl w-full lg:w-auto"
+                              onClick={() => navigate("/create")}
+                            >
+                              <Plus className="h-4 w-4 mr-2" />
+                              {t("common.addPlant")}
+                            </Button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <div className={`lg:hidden ${showFilters ? "space-y-6" : "hidden"}`}>
+                    <FilterControls />
+                  </div>
+              </div>
+            )}
+
+          {/* Use background location for primary routes so overlays render on top */}
+          <Routes location={(backgroundLocation as any) || location}>
+                <Route path="/gardens" element={
+                  <Suspense fallback={<div className="p-8 text-center text-sm opacity-60">{t('common.loading')}</div>}>
+                    <GardenListPage />
+                  </Suspense>
+                } />
+                <Route path="/garden/:id/*" element={
+                  <Suspense fallback={<div className="p-8 text-center text-sm opacity-60">{t('common.loading')}</div>}>
+                    <GardenDashboardPage />
+                  </Suspense>
+                } />
                 <Route
                   path="/search"
-                  element={
-                    <SearchPage
-                      plants={filtered}
-                      openInfo={(p) => navigate(`/plants/${p.id}`, { state: { backgroundLocation: location } })}
-                      likedIds={likedIds}
-                    />
-                  }
-                />
-                <Route path="/profile" element={user ? (profile?.display_name ? <Navigate to={`/u/${encodeURIComponent(profile.display_name)}`} replace /> : <Navigate to="/u/_me" replace />) : <Navigate to="/" replace />} />
-                <Route path="/u/:username" element={<PublicProfilePage />} />
-                <Route path="/friends" element={user ? <FriendsPage /> : <Navigate to="/" replace />} />
+                    element={
+                      <SearchPage
+                        plants={sortedSearchResults}
+                        openInfo={(p) => navigate(`/plants/${p.id}`, { state: { backgroundLocation: location } })}
+                        likedIds={likedIds}
+                      />
+                      }
+                  />
+                  <Route
+                    path="/profile"
+                    element={user ? (profile?.display_name ? <Navigate to={`/u/${encodeURIComponent(profile.display_name)}`} replace /> : <Navigate to="/u/_me" replace />) : <Navigate to="/" replace />}
+                  />
+                  <Route path="/u/:username" element={<PublicProfilePage />} />
+                    <Route path="/friends" element={user ? <FriendsPage /> : <Navigate to="/" replace />} />
+                    <Route path="/settings" element={user ? <SettingsPage /> : <Navigate to="/" replace />} />
+                    <Route path="/contact/business" element={<ContactUsPage defaultChannel="business" />} />
+                    <Route path="/contact" element={<ContactUsPage defaultChannel="support" />} />
+                    <Route path="/about" element={<AboutPage />} />
+                    <Route path="/download" element={<DownloadPage />} />
+                    <Route path="/terms" element={<TermsPage />} />
                 <Route path="/admin" element={
                   <RequireAdmin>
                     <Suspense fallback={<div className="p-8 text-center text-sm opacity-60">Loading admin panel...</div>}>
@@ -732,8 +906,41 @@ export default function PlantSwipe() {
                 ) : (
                   <Navigate to="/" replace />
                 )} />
-                <Route path="/plants/:id" element={<PlantInfoPage />} />
-                <Route path="*" element={<Navigate to="/" replace />} />
+                  <Route path="/plants/:id" element={<PlantInfoPage />} />
+                  <Route
+                    path="/"
+                    element={plants.length > 0 ? (
+                      <SwipePage
+                        current={current}
+                        index={index}
+                        setIndex={setIndex}
+                        x={x}
+                        y={y}
+                        onDragEnd={onDragEnd}
+                        handleInfo={handleInfo}
+                        handlePass={handlePass}
+                        handlePrevious={handlePrevious}
+                        liked={current ? likedIds.includes(current.id) : false}
+                        onToggleLike={() => { if (current) toggleLiked(current.id) }}
+                      />
+                    ) : (
+                    <>
+                      {loading && <div className="p-8 text-center text-sm opacity-60">{t('common.loading')}</div>}
+                      {loadError && <div className="p-8 text-center text-sm text-red-600">{t('common.error')}: {loadError}</div>}
+                      {!loading && !loadError && (
+                        <>
+                          {plants.length === 0 && !query && !loadError && !loading && (
+                            <div className="p-8 text-center text-sm opacity-60">
+                              {t('plant.noResults')}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </>
+                  )}
+                />
+                  <Route path="/error/:code" element={<ErrorPage />} />
+                  <Route path="*" element={<ErrorPage code="404" />} />
               </Routes>
               {/* When a background location is set, also render the overlay route on top */}
               {backgroundLocation && (
@@ -744,8 +951,6 @@ export default function PlantSwipe() {
                   />
                 </Routes>
               )}
-            </>
-          )}
         </main>
       </div>
 
@@ -754,62 +959,81 @@ export default function PlantSwipe() {
       <Dialog open={authOpen && !user} onOpenChange={setAuthOpen}>
         <DialogContent className="rounded-2xl">
           <DialogHeader>
-            <DialogTitle>{authMode === 'login' ? 'Log in' : 'Create your account'}</DialogTitle>
+            <DialogTitle>{authMode === 'login' ? t('auth.login') : t('auth.signup')}</DialogTitle>
             <DialogDescription>
-              {authMode === 'login' ? 'Access favorites, notes, and seed wishlists.' : 'Start saving favorites, notes, and seed wishlists.'}
+              {authMode === 'login' ? t('auth.loginDescription') : t('auth.signupDescription')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             {authMode === 'signup' && (
               <div className="grid gap-2">
-                <Label htmlFor="name">Display name</Label>
-                <Input id="name" type="text" placeholder="Your name" value={authDisplayName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthDisplayName(e.target.value)} />
+                <Label htmlFor="name">{t('auth.displayName')}</Label>
+                <Input id="name" type="text" placeholder={t('auth.displayNamePlaceholder')} value={authDisplayName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthDisplayName(e.target.value)} />
               </div>
             )}
             
             <div className="grid gap-2">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" placeholder="you@example.com" value={authEmail} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthEmail(e.target.value)} disabled={authSubmitting} />
+              <Label htmlFor="email">{t('auth.email')}</Label>
+              <Input id="email" type="email" placeholder={t('auth.emailPlaceholder')} value={authEmail} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthEmail(e.target.value)} disabled={authSubmitting} />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" placeholder="Password" value={authPassword} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword(e.target.value)} disabled={authSubmitting} />
+              <Label htmlFor="password">{t('auth.password')}</Label>
+              <Input id="password" type="password" placeholder={t('auth.passwordPlaceholder')} value={authPassword} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword(e.target.value)} disabled={authSubmitting} />
             </div>
             {authMode === 'signup' && (
               <div className="grid gap-2">
-                <Label htmlFor="confirm">Confirm password</Label>
-                <Input id="confirm" type="password" placeholder="Confirm password" value={authPassword2} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword2(e.target.value)} disabled={authSubmitting} />
+                <Label htmlFor="confirm">{t('auth.confirmPassword')}</Label>
+                <Input id="confirm" type="password" placeholder={t('auth.confirmPasswordPlaceholder')} value={authPassword2} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword2(e.target.value)} disabled={authSubmitting} />
               </div>
             )}
             {authError && <div className="text-sm text-red-600">{authError}</div>}
             <Button className="w-full rounded-2xl" onClick={submitAuth}>
-              {authMode === 'login' ? 'Continue' : 'Create account'}
+              {authMode === 'login' ? t('auth.continue') : t('auth.createAccount')}
             </Button>
             <div className="text-center text-sm">
               {authMode === 'login' ? (
-                <button className="underline" onClick={() => setAuthMode('signup')}>No account? Sign up</button>
+                <button className="underline" onClick={() => setAuthMode('signup')}>{t('auth.noAccount')}</button>
               ) : (
-                <button className="underline" onClick={() => setAuthMode('login')}>Have an account? Log in</button>
+                <button className="underline" onClick={() => setAuthMode('login')}>{t('auth.haveAccount')}</button>
               )}
             </div>
           </div>
         </DialogContent>
       </Dialog>
 
-      <BottomBar />
+      <Footer />
       <BroadcastToast />
+      <RequestPlantDialog open={requestPlantDialogOpen} onOpenChange={setRequestPlantDialogOpen} />
     </div>
+    </AuthActionsProvider>
   )
 }
 
+function getPlantTypeLabel(classification?: Plant["classification"]): string | null {
+  if (!classification?.type) return null
+  const label = formatClassificationLabel(classification.type)
+  return label || null
+}
+
+function getPlantUsageLabels(classification?: Plant["classification"]): string[] {
+  if (!classification?.activities) return []
+  return classification.activities
+    .map((activity) => formatClassificationLabel(activity))
+    .filter((label): label is string => Boolean(label))
+}
+
 function PlantInfoOverlay() {
-  const navigate = useNavigate()
+  const navigate = useLanguageNavigate()
   return (
     <Sheet open onOpenChange={(o) => { if (!o) navigate(-1) }}>
       <SheetContent
         side="bottom"
         className="rounded-t-2xl max-h-[85vh] overflow-y-auto p-4 md:p-6"
       >
+        <SheetHeader>
+          <SheetTitle className="sr-only">Plant Information</SheetTitle>
+          <SheetDescription className="sr-only">View detailed information about this plant</SheetDescription>
+        </SheetHeader>
         <div className="max-w-4xl mx-auto w-full">
           <PlantInfoPage />
         </div>

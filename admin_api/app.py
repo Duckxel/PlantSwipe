@@ -169,6 +169,10 @@ def _refresh_script_path(repo_root: str) -> str:
     return str(Path(repo_root) / "scripts" / "refresh-plant-swipe.sh")
 
 
+def _supabase_script_path(repo_root: str) -> str:
+    return str(Path(repo_root) / "scripts" / "deploy-supabase-functions.sh")
+
+
 def _ensure_executable(path: str) -> None:
     try:
         os.chmod(path, 0o755)
@@ -378,6 +382,83 @@ def admin_refresh():
     return _run_refresh(branch, stream=False)
 
 
+@app.get("/admin/deploy-edge-functions")
+@app.post("/admin/deploy-edge-functions")
+def admin_deploy_edge_functions():
+    _verify_request()
+    repo_root = _get_repo_root()
+    script_path = _supabase_script_path(repo_root)
+    if not os.path.isfile(script_path):
+        detail = {"error": "deploy script not found", "path": script_path}
+        try:
+            _log_admin_action("deploy_edge_functions_failed", detail=detail)
+        except Exception:
+            pass
+        return jsonify({"ok": False, "error": f"deploy script not found at {script_path}"}), 500
+
+    _ensure_executable(script_path)
+    env = os.environ.copy()
+    env.setdefault("CI", os.environ.get("CI", "true"))
+    env["PLANTSWIPE_REPO_DIR"] = repo_root
+
+    try:
+        res = subprocess.run(
+            [script_path],
+            cwd=repo_root,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=900,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        try:
+            _log_admin_action("deploy_edge_functions_failed", detail={"error": "timeout"})
+        except Exception:
+            pass
+        return jsonify({"ok": False, "error": "Supabase deployment timed out"}), 504
+    except Exception as e:
+        try:
+            _log_admin_action("deploy_edge_functions_failed", detail={"error": str(e) or "unexpected failure"})
+        except Exception:
+            pass
+        return jsonify({"ok": False, "error": str(e) or "Failed to run deploy script"}), 500
+
+    stdout = res.stdout or ""
+    stderr = res.stderr or ""
+    stdout_tail = "\n".join(stdout.splitlines()[-200:])
+    stderr_tail = "\n".join(stderr.splitlines()[-100:])
+    detail = {
+        "returncode": res.returncode,
+        "stdoutTail": stdout_tail,
+        "stderrTail": stderr_tail or None,
+    }
+    if res.returncode != 0:
+        try:
+            _log_admin_action("deploy_edge_functions_failed", detail=detail)
+        except Exception:
+            pass
+        return jsonify({
+            "ok": False,
+            "error": "Supabase deployment failed",
+            "returncode": res.returncode,
+            "stdout": stdout_tail,
+            "stderr": stderr_tail,
+        }), 500
+
+    try:
+        _log_admin_action("deploy_edge_functions", detail=detail)
+    except Exception:
+        pass
+    return jsonify({
+        "ok": True,
+        "message": "Supabase Edge Functions deployed successfully",
+        "returncode": res.returncode,
+        "stdout": stdout_tail,
+        "stderr": stderr_tail,
+    })
+
+
 
 @app.get("/health")
 def health():
@@ -451,33 +532,64 @@ def sync_schema():
         return jsonify({"ok": False, "error": "psql not available on server"}), 500
 
     try:
-        # Run psql with ON_ERROR_STOP for atomic failure; quiet mode to limit noise
+        # Run psql with ON_ERROR_STOP for atomic failure
+        # Use -a (echo all commands) and -e (echo errors) for better debugging
+        # Remove -q to see all output
         cmd = [
             "psql",
             db_url,
             "-v", "ON_ERROR_STOP=1",
             "-X",
-            "-q",
+            "-a",  # Echo all commands
+            "-e",  # Echo errors
             "-f", sql_path,
         ]
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=180, check=False)
-        if res.returncode != 0:
-            out = (res.stdout or "")
-            err = (res.stderr or "")
-            # Return tail to avoid huge payloads
-            tail = "\n".join((out + "\n" + err).splitlines()[-80:])
+        out = (res.stdout or "")
+        err = (res.stderr or "")
+        
+        # Check for errors even if returncode is 0 (some errors might not set it)
+        has_errors = res.returncode != 0 or "ERROR:" in out.upper() or "ERROR:" in err.upper()
+        
+        if has_errors or res.returncode != 0:
+            # Return more context for errors
+            full_output = out + "\n" + err if err else out
+            # Show last 100 lines for errors
+            tail = "\n".join(full_output.splitlines()[-100:])
             try:
-                _log_admin_action("sync_schema_failed", detail={"error": "psql failed", "detail": tail})
+                _log_admin_action("sync_schema_failed", detail={"error": "psql failed", "detail": tail, "returncode": res.returncode})
             except Exception:
                 pass
-            return jsonify({"ok": False, "error": "psql failed", "detail": tail}), 500
-        # Success
-        tail = "\n".join((res.stdout or "").splitlines()[-20:])
+            return jsonify({
+                "ok": False, 
+                "error": "psql failed", 
+                "detail": tail, 
+                "stdout": out, 
+                "stderr": err,
+                "returncode": res.returncode
+            }), 500
+        
+        # Success - show more output for debugging
+        tail = "\n".join((out or "").splitlines()[-100:])  # Show more lines
+        stderr_tail = "\n".join((err or "").splitlines()[-50:]) if err else None
+        
+        # Check for warnings in output
+        warnings = []
+        for line in (out + "\n" + (err or "")).splitlines():
+            if "WARNING:" in line.upper() or "NOTICE:" in line.upper():
+                warnings.append(line)
+        
         try:
-            _log_admin_action("sync_schema", detail={"stdoutTail": tail})
+            _log_admin_action("sync_schema", detail={"stdoutTail": tail, "stderrTail": stderr_tail, "warnings": warnings})
         except Exception:
             pass
-        return jsonify({"ok": True, "message": "Schema synchronized successfully", "stdoutTail": tail})
+        return jsonify({
+            "ok": True, 
+            "message": "Schema synchronized successfully", 
+            "stdoutTail": tail,
+            "stderr": stderr_tail,
+            "warnings": warnings
+        })
     except Exception as e:
         try:
             _log_admin_action("sync_schema_failed", detail={"error": str(e) or "Failed to run psql"})

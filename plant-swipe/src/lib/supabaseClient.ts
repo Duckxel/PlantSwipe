@@ -21,6 +21,29 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     detectSessionInUrl: false,
     storageKey: 'plantswipe.auth',
   },
+  realtime: {
+    // Reconnect automatically with exponential backoff
+    reconnectAfterMs: (tries: number) => {
+      // Exponential backoff: 1s, 2s, 4s, 8s, max 30s
+      return Math.min(1000 * Math.pow(2, tries), 30000)
+    },
+    // Heartbeat to detect connection issues
+    heartbeatIntervalMs: 30000,
+  },
+  global: {
+    // Add timeout to prevent hanging requests
+    fetch: (url, options = {}) => {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 30000) // 30s timeout
+      
+      return fetch(url, {
+        ...options,
+        signal: controller.signal,
+      }).finally(() => {
+        clearTimeout(timeoutId)
+      })
+    },
+  },
 })
 
 export type ProfileRow = {
@@ -36,6 +59,8 @@ export type ProfileRow = {
   timezone?: string | null
   experience_years?: number | null
   accent_key?: string | null
+  is_private?: boolean | null
+  disable_friend_requests?: boolean | null
 }
 
 // Garden-related table row types matching Supabase schema expectations

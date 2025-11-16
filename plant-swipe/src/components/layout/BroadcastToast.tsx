@@ -90,68 +90,101 @@ const BroadcastToast: React.FC = () => {
   const [pos, setPos] = React.useState<PositionKey>(loadPosition)
   const now = useNowTick(1000)
 
+  const refreshBroadcast = React.useCallback(async () => {
+    try {
+      const r = await fetch('/api/broadcast/active', {
+        headers: { Accept: 'application/json' },
+        credentials: 'same-origin',
+      })
+      if (r.ok) {
+        const body = await r.json().catch(() => ({}))
+        const next: Broadcast | null = body?.broadcast || null
+        if (next) {
+          setBroadcast(next)
+          savePersistedBroadcast(next)
+        } else {
+          const persisted = loadPersistedBroadcast(Date.now())
+          setBroadcast(persisted)
+          if (!persisted) savePersistedBroadcast(null)
+        }
+        return true
+      }
+    } catch {}
+    const persisted = loadPersistedBroadcast(Date.now())
+    setBroadcast(persisted)
+    return false
+  }, [])
+
   // Initial fetch to hydrate: on load, check server for active broadcast; if none, keep persisted
   React.useEffect(() => {
     let cancelled = false
     const load = async () => {
-      try {
-        const r = await fetch('/api/broadcast/active', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
-        if (r.ok) {
-          const b = await r.json().catch(() => ({}))
-          if (!cancelled) {
-            const next: Broadcast | null = b?.broadcast || null
-            if (next) {
-              setBroadcast(next)
-              savePersistedBroadcast(next)
-            } else {
-              // If server reports none but we have a valid persisted banner, keep it
-              const persisted = loadPersistedBroadcast(Date.now())
-              setBroadcast(persisted)
-              if (!persisted) savePersistedBroadcast(null)
-            }
-          }
-        } else {
-          // Keep previously persisted value if fetch fails
-          if (!cancelled) {
-            const persisted = loadPersistedBroadcast(Date.now())
-            setBroadcast(persisted)
-          }
-        }
-      } catch {}
+      await refreshBroadcast()
+      if (cancelled) return
     }
     load()
     return () => { cancelled = true }
-  }, [])
+  }, [refreshBroadcast])
 
-  // SSE stream for live updates
-  React.useEffect(() => {
-    let es: EventSource | null = null
+  // SSE stream for live updates with polling fallback
+    React.useEffect(() => {
+      let es: EventSource | null = null
+      let pollId: number | null = null
+
+    const startPolling = () => {
+      if (pollId) return
+        const tick = () => { void refreshBroadcast().catch(() => {}) }
+        pollId = window.setInterval(tick, 60000)
+      tick()
+    }
+
+    const stopPolling = () => {
+        if (pollId !== null) {
+          window.clearInterval(pollId)
+          pollId = null
+        }
+    }
+
+    const handleBroadcast = (ev: MessageEvent) => {
+      try {
+        const data = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data
+        const next: Broadcast = {
+          id: String(data?.id || ''),
+          message: String(data?.message || ''),
+          severity: (data?.severity === 'warning' || data?.severity === 'danger') ? data.severity : 'info',
+          createdAt: data?.createdAt || null,
+          expiresAt: data?.expiresAt || null,
+        }
+        setBroadcast(next)
+        savePersistedBroadcast(next)
+      } catch {}
+    }
+
+    const handleClear = () => {
+      setBroadcast(null)
+      savePersistedBroadcast(null)
+    }
+
     try {
       es = new EventSource('/api/broadcast/stream', { withCredentials: true })
-      es.addEventListener('broadcast', (ev: MessageEvent) => {
-        try {
-          const data = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data
-          const next: Broadcast = {
-            id: String(data?.id || ''),
-            message: String(data?.message || ''),
-            severity: (data?.severity === 'warning' || data?.severity === 'danger') ? data.severity : 'info',
-            createdAt: data?.createdAt || null,
-            expiresAt: data?.expiresAt || null,
-          }
-          setBroadcast(next)
-          savePersistedBroadcast(next)
-        } catch {}
-      })
-      es.addEventListener('clear', () => {
-        setBroadcast(null)
-        savePersistedBroadcast(null)
-      })
+      es.addEventListener('broadcast', handleBroadcast as EventListener)
+      es.addEventListener('clear', handleClear as EventListener)
       es.onerror = () => {
-        // Let browser retry; also keep UI stable
+        if (es) {
+          try { es.close() } catch {}
+          es = null
+        }
+        startPolling()
       }
-    } catch {}
-    return () => { try { es?.close() } catch {} }
-  }, [])
+    } catch {
+      startPolling()
+    }
+
+    return () => {
+      try { es?.close() } catch {}
+      stopPolling()
+    }
+  }, [refreshBroadcast])
 
   // Auto-hide on expiry
   React.useEffect(() => {

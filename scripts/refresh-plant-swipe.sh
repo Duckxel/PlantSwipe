@@ -3,17 +3,62 @@ set -euo pipefail
 
 # Refresh PlantSwipe deployment: git pull -> npm ci -> build -> reload nginx -> restart services
 
+SCRIPT_PATH="${BASH_SOURCE[0]:-$0}"
+SCRIPT_DIR="$(cd -- "$(dirname "$SCRIPT_PATH")" >/dev/null 2>&1 && pwd -P)"
+DEFAULT_REPO_DIR="$(cd "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd -P)"
+
 trap 'echo "[ERROR] Command failed at line $LINENO" >&2' ERR
 
-# Determine working directories based on where the command is RUN (caller cwd)
-# Allow explicit override via PLANTSWIPE_REPO_DIR when provided by the caller
-WORK_DIR="${PLANTSWIPE_REPO_DIR:-$(pwd -P)}"
-# Prefer nested plant-swipe app if present; otherwise use current dir as Node app
+log() { printf "[%s] %s\n" "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*"; }
+
+resolve_repo_root() {
+  local requested="${PLANTSWIPE_REPO_DIR:-}"
+  if [[ -n "$requested" ]]; then
+    local requested_real
+    requested_real="$(cd "$requested" 2>/dev/null && pwd -P || true)"
+    if [[ -n "$requested_real" ]] && git -C "$requested_real" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      git -C "$requested_real" rev-parse --show-toplevel 2>/dev/null && return 0
+      echo "$requested_real"
+      return 0
+    fi
+    log "[WARN] Ignoring PLANTSWIPE_REPO_DIR=$requested (not a git repository)"
+  fi
+
+  local candidates=()
+  candidates+=("$(pwd -P)")
+  candidates+=("$SCRIPT_DIR")
+  candidates+=("$DEFAULT_REPO_DIR")
+
+  for dir in "${candidates[@]}"; do
+    [[ -z "$dir" ]] && continue
+    if git -C "$dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      git -C "$dir" rev-parse --show-toplevel 2>/dev/null && return 0
+      echo "$(cd "$dir" && pwd -P)"
+      return 0
+    fi
+    if [[ -d "$dir/.git" ]]; then
+      echo "$(cd "$dir" && pwd -P)"
+      return 0
+    fi
+  done
+
+  echo "$DEFAULT_REPO_DIR"
+}
+
+WORK_DIR="$(resolve_repo_root)"
+
+# Prefer nested plant-swipe app if present; otherwise use repo root as Node app
 if [[ -f "$WORK_DIR/plant-swipe/package.json" ]]; then
   NODE_DIR="$WORK_DIR/plant-swipe"
 else
   NODE_DIR="$WORK_DIR"
 fi
+if [[ ! -f "$NODE_DIR/package.json" ]]; then
+  echo "[ERROR] Could not locate plant-swipe/package.json under detected repo root ($WORK_DIR)." >&2
+  echo "        Override with PLANTSWIPE_REPO_DIR or run the script from the repository checkout." >&2
+  exit 1
+fi
+NODE_DIR="$(cd "$NODE_DIR" >/dev/null 2>&1 && pwd -P)"
 
 # Use per-invocation Git config to avoid "dubious ownership" errors when
 # the repo directory is owned by a different user than the process (e.g., www-data)
@@ -23,8 +68,6 @@ GIT_SAFE_DIR="$WORK_DIR"
 SERVICE_NODE="plant-swipe-node"
 SERVICE_ADMIN="admin-api"
 SERVICE_NGINX="nginx"
-
-log() { printf "[%s] %s\n" "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*"; }
 
 # Configure sudo usage. When not running as root, prefer a non-interactive
 # askpass helper backed by PSSWORD_KEY loaded from common env files.
@@ -268,31 +311,35 @@ if ! "${GIT_LOCAL_CMD[@]}" fetch --all --prune; then
       fi
     fi
   else
-    echo "[ERROR] git fetch failed and cannot escalate privileges (RUN_AS_PREFIX not set)." >&2
-    echo "Diagnostics:" >&2
-    echo "- current user: $CURRENT_USER (euid=$EUID)" >&2
-    echo "- repo owner: $REPO_OWNER" >&2
-    echo "- can sudo non-interactively: $CAN_SUDO" >&2
-    echo "- askpass helper present: $([[ -n \"$SUDO_ASKPASS\" ]] && echo yes || echo no)" >&2
-    echo "- PSSWORD_KEY source: ${PSSWORD_KEY_SOURCE:-none}, length: ${#PSSWORD_KEY}" >&2
-    ls -ld "$WORK_DIR" "$WORK_DIR/.git" >&2 || true
-    ls -l "$WORK_DIR/.git/FETCH_HEAD" >&2 || true
-    if ! touch "$WORK_DIR/.git/FETCH_HEAD" 2>/dev/null; then
-      echo "- touch FETCH_HEAD as $CURRENT_USER: FAILED" >&2
-    else
-      echo "- touch FETCH_HEAD as $CURRENT_USER: OK" >&2
+    # Even without RUN_AS_PREFIX we can still try to self-heal permissions via sudo helpers.
+    attempt_git_permission_repair
+    if ! "${GIT_LOCAL_CMD[@]}" fetch --all --prune; then
+      echo "[ERROR] git fetch failed after auto-repair (no alternate git user available)." >&2
+      echo "Diagnostics:" >&2
+      echo "- current user: $CURRENT_USER (euid=$EUID)" >&2
+      echo "- repo owner: $REPO_OWNER" >&2
+      echo "- can sudo non-interactively: $CAN_SUDO" >&2
+      echo "- askpass helper present: $([[ -n \"$SUDO_ASKPASS\" ]] && echo yes || echo no)" >&2
+      echo "- PSSWORD_KEY source: ${PSSWORD_KEY_SOURCE:-none}, length: ${#PSSWORD_KEY}" >&2
+      ls -ld "$WORK_DIR" "$WORK_DIR/.git" >&2 || true
+      ls -l "$WORK_DIR/.git/FETCH_HEAD" >&2 || true
+      if ! touch "$WORK_DIR/.git/FETCH_HEAD" 2>/dev/null; then
+        echo "- touch FETCH_HEAD as $CURRENT_USER: FAILED" >&2
+      else
+        echo "- touch FETCH_HEAD as $CURRENT_USER: OK" >&2
+      fi
+      if command -v findmnt >/dev/null 2>&1; then
+        findmnt -no TARGET,SOURCE,FSTYPE,OPTIONS "$WORK_DIR" >&2 || true
+      fi
+      if command -v getenforce >/dev/null 2>&1; then
+        echo "SELinux: $(getenforce)" >&2
+      fi
+      echo "Remediation suggestions:" >&2
+      echo "- Option A: chown -R $CURRENT_USER:$CURRENT_USER '$WORK_DIR/.git' (preferred)" >&2
+      echo "- Option B: grant NOPASSWD sudo for chown/chmod/systemctl to $CURRENT_USER" >&2
+      echo "- Option C: set correct PSSWORD_KEY in $WORK_DIR/.env or $NODE_DIR/.env" >&2
+      exit 1
     fi
-    if command -v findmnt >/dev/null 2>&1; then
-      findmnt -no TARGET,SOURCE,FSTYPE,OPTIONS "$WORK_DIR" >&2 || true
-    fi
-    if command -v getenforce >/dev/null 2>&1; then
-      echo "SELinux: $(getenforce)" >&2
-    fi
-    echo "Remediation suggestions:" >&2
-    echo "- Option A: chown -R $CURRENT_USER:$CURRENT_USER '$WORK_DIR/.git' (preferred)" >&2
-    echo "- Option B: grant NOPASSWD sudo for chown/chmod/systemctl to $CURRENT_USER" >&2
-    echo "- Option C: set correct PSSWORD_KEY in $WORK_DIR/.env or $NODE_DIR/.env" >&2
-    exit 1
   fi
 fi
 
@@ -562,6 +609,30 @@ if [[ "$REPO_OWNER" != "" ]]; then
   fi
 else
   CI=${CI:-true} npm_config_cache="$CACHE_DIR" npm run build
+fi
+
+# Deploy Supabase Edge Functions (delegates to dedicated script)
+deploy_supabase_functions() {
+  local helper_script="$WORK_DIR/scripts/deploy-supabase-functions.sh"
+  if [[ ! -f "$helper_script" ]]; then
+    log "[INFO] Supabase deployment script not found at $helper_script; skipping."
+    return 0
+  fi
+  log "Invoking dedicated Supabase deployment script…"
+  # Ensure helper script is executable; fall back to bash if chmod fails
+  if ! chmod +x "$helper_script" 2>/dev/null; then
+    log "[WARN] Unable to set execute bit on $helper_script; continuing with bash invocation."
+    PLANTSWIPE_REPO_DIR="$WORK_DIR" bash "$helper_script"
+    return $?
+  fi
+  PLANTSWIPE_REPO_DIR="$WORK_DIR" "$helper_script"
+}
+
+# Optionally skip Supabase deployment if requested (default: skip)
+if [[ "${SKIP_SUPABASE_DEPLOY:-true}" == "true" ]]; then
+  log "Skipping Supabase Edge Function deployment (default or requested)"
+else
+  deploy_supabase_functions
 fi
 
 # Validate and reload nginx

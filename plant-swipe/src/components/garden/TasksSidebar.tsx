@@ -21,11 +21,11 @@ export function TasksSidebar({ className = '', gardenName, plants, todayTaskOccu
   }, [todayTaskOccurrences])
 
   const typeToColor: Record<'water'|'fertilize'|'harvest'|'cut'|'custom', string> = {
-    water: 'bg-blue-500',
-    fertilize: 'bg-green-500',
-    harvest: 'bg-yellow-400',
-    cut: 'bg-orange-500',
-    custom: 'bg-purple-500',
+    water: 'bg-blue-600 dark:bg-blue-500',
+    fertilize: 'bg-green-600 dark:bg-green-500',
+    harvest: 'bg-yellow-500 dark:bg-yellow-400',
+    cut: 'bg-orange-600 dark:bg-orange-500',
+    custom: 'bg-purple-600 dark:bg-purple-500',
   }
 
   const plantsWithTasks = React.useMemo(() => {
@@ -42,7 +42,7 @@ export function TasksSidebar({ className = '', gardenName, plants, todayTaskOccu
         <Card className="rounded-2xl p-4">
           <div className="text-sm opacity-60 mb-2">{gardenName}</div>
           <div className="h-2 bg-stone-200 rounded-full overflow-hidden">
-            <div className="h-2 bg-emerald-500" style={{ width: `${totalTasks === 0 ? 100 : Math.min(100, Math.round((totalDone / totalTasks) * 100))}%` }} />
+            <div className="h-2 bg-emerald-600 dark:bg-emerald-500" style={{ width: `${totalTasks === 0 ? 100 : Math.min(100, Math.round((totalDone / totalTasks) * 100))}%` }} />
           </div>
           <div className="text-xs opacity-70 mt-1">Today: {totalDone} / {totalTasks}</div>
         </Card>
