@@ -1,5 +1,5 @@
 import React from "react"
-import { ExternalLink, RefreshCw, ImageIcon } from "lucide-react"
+import { ExternalLink, RefreshCw, ImageIcon, Loader2, Trash2 } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -70,6 +70,7 @@ export const AdminMediaPanel: React.FC = () => {
   const [loading, setLoading] = React.useState(true)
   const [refreshing, setRefreshing] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  const [deletingId, setDeletingId] = React.useState<string | null>(null)
   const runtimeEnv = (globalThis as typeof globalThis & RuntimeEnv).__ENV__
   const adminToken =
     import.meta.env?.VITE_ADMIN_STATIC_TOKEN ?? runtimeEnv?.VITE_ADMIN_STATIC_TOKEN
@@ -116,6 +117,49 @@ export const AdminMediaPanel: React.FC = () => {
   React.useEffect(() => {
     fetchMedia().catch(() => {})
   }, [fetchMedia])
+
+  const handleDelete = React.useCallback(
+    async (entry: MediaEntry) => {
+      if (
+        !window.confirm(
+          `Delete "${entry.metadata?.originalName || entry.path}"?\nThis will remove the optimized file from storage.`,
+        )
+      ) {
+        return
+      }
+      setError(null)
+      setDeletingId(entry.id)
+      try {
+        const session = (await supabase.auth.getSession()).data.session
+        const token = session?.access_token
+        if (!token && !adminToken) {
+          setError("You must be signed in as an admin to delete media.")
+          return
+        }
+        const headers: Record<string, string> = { Accept: "application/json" }
+        if (token) headers["Authorization"] = `Bearer ${token}`
+        if (adminToken) headers["X-Admin-Token"] = String(adminToken)
+
+        const resp = await fetch(`/api/admin/media/${entry.id}`, {
+          method: "DELETE",
+          headers,
+          credentials: "same-origin",
+        })
+        const data = await resp.json().catch(() => null)
+        if (!resp.ok) {
+          throw new Error(data?.error || "Failed to delete media")
+        }
+        setEntries((prev) => prev.filter((item) => item.id !== entry.id))
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Failed to delete media"
+        setError(message)
+      } finally {
+        setDeletingId(null)
+      }
+    },
+    [adminToken],
+  )
 
   return (
     <div className="space-y-6">
@@ -238,6 +282,26 @@ export const AdminMediaPanel: React.FC = () => {
                             </a>
                           </Button>
                         )}
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          className="rounded-2xl"
+                          onClick={() => handleDelete(entry)}
+                          disabled={deletingId === entry.id}
+                        >
+                          {deletingId === entry.id ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Deleting...
+                            </>
+                          ) : (
+                            <>
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete
+                            </>
+                          )}
+                        </Button>
                         <div className="text-xs text-muted-foreground">
                           {formatTimestamp(entry.createdAt)}
                         </div>

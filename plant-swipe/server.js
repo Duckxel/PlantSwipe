@@ -1253,8 +1253,8 @@ app.use((req, res, next) => {
     } else {
       res.setHeader('Access-Control-Allow-Origin', '*')
     }
-    if (req.path && req.path.startsWith('/api/')) {
-      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+      if (req.path && req.path.startsWith('/api/')) {
+        res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS')
       res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
       if (req.method === 'OPTIONS') {
         res.status(204).end()
@@ -1267,7 +1267,7 @@ app.use((req, res, next) => {
 
 // Catch-all OPTIONS for any /api/* route (defense-in-depth)
 app.options('/api/*', (_req, res) => {
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.status(204).end()
@@ -3090,7 +3090,87 @@ app.get('/api/admin/media', async (req, res) => {
   }
 })
 app.options('/api/admin/media', (_req, res) => {
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS')
+  res.setHeader('Access-Control-Allow-Methods', 'GET,DELETE,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+app.delete('/api/admin/media/:id', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured for media deletion' })
+    return
+  }
+  const admin = await ensureAdmin(req, res)
+  if (!admin) return
+
+  try {
+    await ensureAdminMediaUploadsTable()
+  } catch {}
+
+  const mediaId = String(req.params?.id || '').trim()
+  if (!mediaId) {
+    res.status(400).json({ error: 'Missing media id' })
+    return
+  }
+
+  let mediaRow = null
+  try {
+    if (sql) {
+      const rows =
+        await sql`select id, bucket, path from public.admin_media_uploads where id = ${mediaId} limit 1`
+      mediaRow = rows?.[0] || null
+    } else {
+      const { data, error } = await supabaseServiceClient
+        .from('admin_media_uploads')
+        .select('id, bucket, path')
+        .eq('id', mediaId)
+        .maybeSingle()
+      if (error) {
+        res.status(500).json({ error: error.message || 'Failed to load media record' })
+        return
+      }
+      mediaRow = data || null
+    }
+  } catch (err) {
+    res.status(500).json({ error: err?.message || 'Failed to load media record' })
+    return
+  }
+
+  if (!mediaRow) {
+    res.status(404).json({ error: 'Media not found' })
+    return
+  }
+
+  let storageWarning = null
+  try {
+    const { error } = await supabaseServiceClient
+      .storage
+      .from(mediaRow.bucket)
+      .remove([mediaRow.path])
+    if (error) storageWarning = error.message || 'Failed to delete storage object'
+  } catch (err) {
+    storageWarning = err?.message || 'Failed to delete storage object'
+  }
+
+  try {
+    if (sql) {
+      await sql`delete from public.admin_media_uploads where id = ${mediaId}`
+    } else {
+      const { error } = await supabaseServiceClient
+        .from('admin_media_uploads')
+        .delete()
+        .eq('id', mediaId)
+      if (error) throw error
+    }
+  } catch (err) {
+    res.status(500).json({ error: err?.message || 'Failed to delete media record', storageWarning })
+    return
+  }
+
+  res.json({ ok: true, id: mediaId, storageWarning })
+})
+app.options('/api/admin/media/:id', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'DELETE,OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
   res.status(204).end()
 })
