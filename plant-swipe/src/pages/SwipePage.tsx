@@ -79,7 +79,8 @@ export const SwipePage: React.FC<SwipePageProps> = ({
     }
   }, [handleInfo, handlePass, handlePrevious])
 
-  const desktopCardHeight = "min(720px, calc(100vh - 12rem))"
+    const desktopCardHeight = "min(720px, calc(100vh - 12rem))"
+    const mobileCardHeight = "calc(100vh - 9rem)"
 
   const rarityKey = current?.rarity && rarityTone[current.rarity] ? current.rarity : "Common"
   const seasons = (current?.seasons ?? []) as PlantSeason[]
@@ -128,8 +129,8 @@ export const SwipePage: React.FC<SwipePageProps> = ({
         <div className="absolute inset-x-0 bottom-[-40%] h-72 rounded-full bg-emerald-100/50 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
           <div className="relative p-2 sm:p-6 md:p-12 space-y-6">
             <div
-              className="relative mx-auto w-full max-w-none md:max-w-3xl min-h-[520px] md:min-h-0"
-              style={isDesktop ? { height: desktopCardHeight } : { minHeight: "calc(100vh - 7rem)" }}
+              className="relative mx-auto w-full max-w-none md:max-w-3xl min-h-[520px]"
+              style={isDesktop ? { height: desktopCardHeight } : { height: mobileCardHeight }}
             >
               <AnimatePresence initial={false} mode="wait">
                 {current ? (
@@ -197,6 +198,60 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                         </div>
                         <h2 className="text-3xl font-semibold tracking-tight drop-shadow-sm">{current.name}</h2>
                         {current.scientificName && <p className="opacity-90 text-sm italic">{current.scientificName}</p>}
+                        <div
+                          className="mt-5 grid w-full gap-2 pb-2 sm:grid-cols-3 sm:gap-3 sm:pb-0"
+                          style={!isDesktop ? { paddingBottom: "calc(env(safe-area-inset-bottom) + 8px)" } : undefined}
+                        >
+                          <Button
+                            variant="outline"
+                            className="rounded-2xl w-full bg-white/90 text-black hover:bg-white"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handlePrevious()
+                            }}
+                            onPointerDown={(e) => e.stopPropagation()}
+                            aria-label={t("plant.back")}
+                          >
+                            {isDesktop ? (
+                              <>
+                                <ChevronLeft className="h-4 w-4 mr-1" />
+                                {t("plant.back")}
+                              </>
+                            ) : (
+                              <ChevronLeft className="h-5 w-5" />
+                            )}
+                          </Button>
+                          <Button
+                            className="rounded-2xl w-full bg-white/95 text-black hover:bg-white"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleInfo()
+                            }}
+                            onPointerDown={(e) => e.stopPropagation()}
+                          >
+                            {t("plant.info")}
+                            <ChevronUp className="h-4 w-4 ml-1" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            className="rounded-2xl w-full bg-white/90 text-black hover:bg-white"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handlePass()
+                            }}
+                            onPointerDown={(e) => e.stopPropagation()}
+                            aria-label={t("plant.next")}
+                          >
+                            {isDesktop ? (
+                              <>
+                                {t("plant.next")}
+                                <ChevronRight className="h-4 w-4 ml-1" />
+                              </>
+                            ) : (
+                              <ChevronRight className="h-5 w-5" />
+                            )}
+                          </Button>
+                        </div>
                       </div>
                     </Card>
                   </motion.div>
@@ -206,25 +261,6 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                   </div>
                 )}
               </AnimatePresence>
-              {current && (
-                <div
-                  className="mt-4 grid w-full gap-2 pb-4 sm:grid-cols-3 sm:gap-3 sm:pb-0"
-                  style={!isDesktop ? { paddingBottom: "calc(env(safe-area-inset-bottom) + 16px)" } : undefined}
-                >
-                  <Button variant="outline" className="rounded-2xl w-full" onClick={handlePrevious}>
-                    <ChevronLeft className="h-4 w-4 mr-1" />
-                    {t("plant.back")}
-                  </Button>
-                  <Button className="rounded-2xl w-full" onClick={handleInfo}>
-                    {t("plant.info")}
-                    <ChevronUp className="h-4 w-4 ml-1" />
-                  </Button>
-                  <Button variant="outline" className="rounded-2xl w-full" onClick={handlePass}>
-                    {t("plant.next")}
-                    <ChevronRight className="h-4 w-4 ml-1" />
-                  </Button>
-                </div>
-              )}
           </div>
 
             <div className="flex flex-wrap items-center justify-center gap-3 pt-3 sm:pt-4">
