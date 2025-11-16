@@ -1041,8 +1041,8 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
     if (seasons.length === 0) { setError("Select at least one season"); return }
     if (!description.trim()) { setError("Overview is required"); return }
     const descriptionWordCount = countWords(description)
-      if (descriptionWordCount < 100 || descriptionWordCount > 400) {
-      setError(`Overview must be between 100 and 400 words (currently ${descriptionWordCount}).`)
+    if (descriptionWordCount < 10 || descriptionWordCount > 400) {
+      setError(`Overview must be between 10 and 400 words (currently ${descriptionWordCount}).`)
       return
     }
     const sanitizedPhotos = sanitizePlantPhotos(photos)
