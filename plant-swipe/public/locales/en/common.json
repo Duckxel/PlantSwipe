@@ -35,6 +35,37 @@
       "termsOfServices": "Terms of Services"
     }
   },
+  "errorPage": {
+    "codeLabel": "Error code",
+    "tipsTitle": "Try these steps",
+    "actions": {
+      "home": "Back to home",
+      "contact": "Contact support"
+    },
+    "tips": {
+      "checkUrl": "Double-check the link or URL for typos.",
+      "refresh": "Refresh the page to see if it was a temporary glitch.",
+      "contact": "Reach out to us if you think this is a mistake."
+    },
+    "codes": {
+      "403": {
+        "title": "This gate is locked",
+        "description": "You don't have permission to view this page yet."
+      },
+      "404": {
+        "title": "We lost this page",
+        "description": "The plant trail you're following no longer exists or moved."
+      },
+      "500": {
+        "title": "We're tending the garden",
+        "description": "Something went wrong on our side. Please try again soon."
+      },
+      "default": {
+        "title": "Unexpected detour",
+        "description": "Something went wrong. Let's get you back on track."
+      }
+    }
+  },
   "contactUs": {
     "title": "Contact Us",
       "heroHeading": "We'd love to hear from you",
