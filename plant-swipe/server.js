@@ -2890,9 +2890,10 @@ app.post('/api/admin/upload-image', async (req, res) => {
         return
       }
 
-      const baseName = sanitizeUploadBaseName(file.originalname)
-      const typeSegment = deriveUploadTypeSegment(file.originalname, mime)
-      const objectPath = buildUploadObjectPath(baseName, typeSegment)
+        const baseName = sanitizeUploadBaseName(file.originalname)
+        const finalTypeSegment = sanitizePathSegment('webp', 'webp')
+        const objectPath = buildUploadObjectPath(baseName, finalTypeSegment)
+        const originalTypeSegment = deriveUploadTypeSegment(file.originalname, mime)
 
       try {
         const { error: uploadError } = await supabaseServiceClient
@@ -2940,21 +2941,25 @@ app.post('/api/admin/upload-image', async (req, res) => {
         payload.warning = 'Bucket is not public; no public URL is available'
       }
 
-      await recordAdminMediaUpload({
-        adminId: adminUser?.id || null,
-        adminEmail: adminUser?.email || null,
-        adminName: adminDisplayName || null,
-        bucket: adminUploadBucket,
-        path: objectPath,
-        publicUrl,
-        mimeType: 'image/webp',
-        originalMimeType: mime,
-        sizeBytes: optimizedBuffer.length,
-        originalSizeBytes: file.size,
-        quality: adminUploadWebpQuality,
-        compressionPercent,
-        metadata: { originalName: file.originalname, typeSegment },
-      })
+        await recordAdminMediaUpload({
+          adminId: adminUser?.id || null,
+          adminEmail: adminUser?.email || null,
+          adminName: adminDisplayName || null,
+          bucket: adminUploadBucket,
+          path: objectPath,
+          publicUrl,
+          mimeType: 'image/webp',
+          originalMimeType: mime,
+          sizeBytes: optimizedBuffer.length,
+          originalSizeBytes: file.size,
+          quality: adminUploadWebpQuality,
+          compressionPercent,
+          metadata: {
+            originalName: file.originalname,
+            typeSegment: finalTypeSegment,
+            originalTypeSegment,
+          },
+        })
 
       try {
         const actorId =

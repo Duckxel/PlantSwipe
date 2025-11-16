@@ -209,23 +209,11 @@ export const AdminMediaPanel: React.FC = () => {
                           </div>
                         </div>
                       </div>
-                      <div className="flex flex-col gap-2 text-sm text-muted-foreground md:text-right">
+                      <div className="flex flex-col gap-1 text-sm text-muted-foreground md:text-right">
                         <div>
-                          Optimized:{" "}
+                          Size:{" "}
                           <span className="font-medium text-foreground">
                             {formatBytes(entry.sizeBytes)}
-                          </span>
-                        </div>
-                        <div>
-                          Original:{" "}
-                          <span className="font-medium text-foreground">
-                            {formatBytes(entry.originalSizeBytes)}
-                          </span>
-                        </div>
-                        <div>
-                          Compression:{" "}
-                          <span className="font-medium text-foreground">
-                            {entry.compressionPercent ?? 0}%
                           </span>
                         </div>
                       </div>
