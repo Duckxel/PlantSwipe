@@ -621,31 +621,43 @@ export const GardenDashboardPage: React.FC = () => {
         setSpeciesOnHand(species);
         // Build last-30-days success using garden_tasks (fast, no occurrences)
         try {
-          const statsStart = new Date(today);
-          statsStart.setDate(statsStart.getDate() - 29);
-          const statsStartIso = statsStart.toISOString().slice(0, 10);
-          const rows = await getGardenTasks(id, statsStartIso, today);
-          const successByDay: Record<string, boolean> = {};
-          for (const r of rows) successByDay[r.day] = Boolean(r.success);
-          const days: Array<{
-            date: string;
-            due: number;
-            completed: number;
-            success: boolean;
-          }> = [];
-          const anchor30 = new Date(today);
-          for (let i = 29; i >= 0; i--) {
-            const d = new Date(anchor30);
-            d.setDate(d.getDate() - i);
-            const ds = d.toISOString().slice(0, 10);
-            const beforeCreation = gardenCreatedDayIso
-              ? ds < gardenCreatedDayIso
-              : false;
-            const success = beforeCreation ? false : Boolean(successByDay[ds]);
-            days.push({ date: ds, due: 0, completed: 0, success });
-          }
-          setDailyStats(days);
-        } catch {}
+            const statsStart = new Date(today);
+            statsStart.setDate(statsStart.getDate() - 29);
+            const statsStartIso = statsStart.toISOString().slice(0, 10);
+            const rows = await getGardenTasks(id, statsStartIso, today);
+            const successByDay: Record<string, boolean> = {};
+            for (const r of rows) successByDay[r.day] = Boolean(r.success);
+            const days: Array<{
+              date: string;
+              due: number;
+              completed: number;
+              success: boolean;
+            }> = [];
+            const anchor30 = new Date(today);
+            for (let i = 29; i >= 0; i--) {
+              const d = new Date(anchor30);
+              d.setDate(d.getDate() - i);
+              const ds = d.toISOString().slice(0, 10);
+              const beforeCreation = gardenCreatedDayIso
+                ? ds < gardenCreatedDayIso
+                : false;
+              const success = beforeCreation ? false : Boolean(successByDay[ds]);
+              days.push({ date: ds, due: 0, completed: 0, success });
+            }
+            setDailyStats((prev) => {
+              if (!prev || prev.length === 0) return days;
+              const prevByDate = new Map(prev.map((entry) => [entry.date, entry]));
+              return days.map((day) => {
+                const cached = prevByDate.get(day.date);
+                if (!cached) return day;
+                return {
+                  ...day,
+                  due: cached.due ?? day.due,
+                  completed: cached.completed ?? day.completed,
+                };
+              });
+            });
+          } catch {}
         serverTodayRef.current = today;
       } catch (e: any) {
         if (suppressError) {
