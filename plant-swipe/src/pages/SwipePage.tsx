@@ -199,12 +199,13 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                         <h2 className="text-3xl font-semibold tracking-tight drop-shadow-sm">{current.name}</h2>
                         {current.scientificName && <p className="opacity-90 text-sm italic">{current.scientificName}</p>}
                         <div
-                          className="mt-5 grid w-full gap-2 pb-2 sm:grid-cols-3 sm:gap-3 sm:pb-0"
+                          className="mt-5 grid w-full gap-2 pb-2 grid-cols-3 sm:gap-3 sm:pb-0"
                           style={!isDesktop ? { paddingBottom: "calc(env(safe-area-inset-bottom) + 8px)" } : undefined}
                         >
                           <Button
-                            variant="outline"
-                            className="rounded-2xl w-full bg-white/90 text-black hover:bg-white"
+                            className={`rounded-2xl w-full text-white transition-colors ${
+                              isDesktop ? "bg-black hover:bg-black/90" : "bg-black/80 hover:bg-black"
+                            }`}
                             onClick={(e) => {
                               e.stopPropagation()
                               handlePrevious()
@@ -233,8 +234,9 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                             <ChevronUp className="h-4 w-4 ml-1" />
                           </Button>
                           <Button
-                            variant="outline"
-                            className="rounded-2xl w-full bg-white/90 text-black hover:bg-white"
+                            className={`rounded-2xl w-full text-white transition-colors ${
+                              isDesktop ? "bg-black hover:bg-black/90" : "bg-black/80 hover:bg-black"
+                            }`}
                             onClick={(e) => {
                               e.stopPropagation()
                               handlePass()
