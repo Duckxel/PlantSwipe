@@ -30,14 +30,6 @@ export const isNewPlant = (plant?: Plant | null, referenceDate: Date = new Date(
   const createdAt = parseDate(createdAtRaw)
   if (!createdAt) return false
 
-  const updatedAtRaw = plant?.meta?.updatedAt
-  if (updatedAtRaw) {
-    const updatedAt = parseDate(updatedAtRaw)
-    if (updatedAt && Math.abs(updatedAt.getTime() - createdAt.getTime()) > 60 * 1000) {
-      return false
-    }
-  }
-
   const diff = referenceDate.getTime() - createdAt.getTime()
   return diff >= 0 && diff <= windowDays * DAYS_IN_MS
 }
