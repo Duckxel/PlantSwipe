@@ -72,7 +72,7 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
       </div>
       <Link
         to="/"
-        className="font-brand text-[2.25rem] md:text-[2.8125rem] leading-none font-semibold tracking-tight no-underline text-black dark:text-white hover:text-black dark:hover:text-white visited:text-black dark:visited:text-white active:text-black dark:active:text-white focus:text-black dark:focus:text-white focus-visible:outline-none outline-none hover:opacity-90 whitespace-nowrap shrink-0"
+        className="font-brand text-[3rem] md:text-[4rem] leading-none font-semibold tracking-tight no-underline text-black dark:text-white hover:text-black dark:hover:text-white visited:text-black dark:visited:text-white active:text-black dark:active:text-white focus:text-black dark:focus:text-white focus-visible:outline-none outline-none hover:opacity-90 whitespace-nowrap shrink-0"
         style={{ WebkitTapHighlightColor: 'transparent' }}
       >
         {t('common.appName')}
