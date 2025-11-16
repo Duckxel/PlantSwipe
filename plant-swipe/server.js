@@ -1064,6 +1064,121 @@ try {
 } catch {}
 const sql = connectionString ? postgres(connectionString, postgresOptions) : null
 
+let adminMediaUploadsEnsured = false
+async function ensureAdminMediaUploadsTable() {
+  if (!sql) return
+  if (adminMediaUploadsEnsured) return
+  const ddl = `
+    create table if not exists public.admin_media_uploads (
+      id uuid primary key default gen_random_uuid(),
+      admin_id uuid,
+      admin_email text,
+      admin_name text,
+      bucket text not null,
+      path text not null,
+      public_url text,
+      mime_type text,
+      original_mime_type text,
+      size_bytes integer,
+      original_size_bytes integer,
+      quality integer,
+      compression_percent integer,
+      metadata jsonb,
+      created_at timestamptz not null default now()
+    );
+    create index if not exists admin_media_uploads_created_idx on public.admin_media_uploads (created_at desc);
+    create index if not exists admin_media_uploads_admin_idx on public.admin_media_uploads (admin_id);
+    create unique index if not exists admin_media_uploads_bucket_path_idx on public.admin_media_uploads (bucket, path);
+  `
+  try {
+    await sql.unsafe(ddl, [], { simple: true })
+    adminMediaUploadsEnsured = true
+  } catch (err) {
+    console.error('[schema] failed to ensure admin_media_uploads table', err)
+  }
+}
+
+async function getAdminProfileName(userId) {
+  if (!userId) return null
+  if (sql) {
+    try {
+      const rows = await sql`select display_name from public.profiles where id = ${userId} limit 1`
+      if (Array.isArray(rows) && rows[0]?.display_name) return rows[0].display_name
+    } catch {}
+  }
+  if (supabaseServiceClient) {
+    try {
+      const { data, error } = await supabaseServiceClient
+        .from('profiles')
+        .select('display_name')
+        .eq('id', userId)
+        .limit(1)
+        .maybeSingle()
+      if (!error && data?.display_name) return data.display_name
+    } catch {}
+  }
+  return null
+}
+
+async function recordAdminMediaUpload(row) {
+  if (!row) return false
+  try {
+    if (sql) {
+      await sql`
+        insert into public.admin_media_uploads
+          (admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata)
+        values
+          (${row.adminId}, ${row.adminEmail}, ${row.adminName}, ${row.bucket}, ${row.path}, ${row.publicUrl}, ${row.mimeType}, ${row.originalMimeType}, ${row.sizeBytes}, ${row.originalSizeBytes}, ${row.quality}, ${row.compressionPercent}, ${sql.json(row.metadata || null)})
+        on conflict (bucket, path) do update set
+          admin_id = excluded.admin_id,
+          admin_email = excluded.admin_email,
+          admin_name = excluded.admin_name,
+          public_url = excluded.public_url,
+          mime_type = excluded.mime_type,
+          original_mime_type = excluded.original_mime_type,
+          size_bytes = excluded.size_bytes,
+          original_size_bytes = excluded.original_size_bytes,
+          quality = excluded.quality,
+          compression_percent = excluded.compression_percent,
+          metadata = excluded.metadata,
+          created_at = excluded.created_at
+      `
+      return true
+    }
+    if (supabaseServiceClient) {
+      const { error } = await supabaseServiceClient.from('admin_media_uploads').upsert(
+        {
+          admin_id: row.adminId,
+          admin_email: row.adminEmail,
+          admin_name: row.adminName,
+          bucket: row.bucket,
+          path: row.path,
+          public_url: row.publicUrl,
+          mime_type: row.mimeType,
+          original_mime_type: row.originalMimeType,
+          size_bytes: row.sizeBytes,
+          original_size_bytes: row.originalSizeBytes,
+          quality: row.quality,
+          compression_percent: row.compressionPercent,
+          metadata: row.metadata || null,
+        },
+        { onConflict: 'bucket,path' }
+      )
+      if (error) throw error
+      return true
+    }
+  } catch (err) {
+    console.error('[upload] failed to record admin media upload', err)
+  }
+  return false
+}
+
+if (sql) {
+  ensureAdminMediaUploadsTable().catch((err) =>
+    console.error('[schema] admin_media_uploads ensure failed', err),
+  )
+}
+
 // Resolve visits table name (default: public.web_visits). Supports alternate names like visit-web.
 const VISITS_TABLE_ENV =
   (process.env.VISITS_TABLE ||
@@ -2693,6 +2808,19 @@ app.post('/api/admin/upload-image', async (req, res) => {
   const adminPrincipal = await ensureAdmin(req, res)
   if (!adminPrincipal) return
 
+  try {
+    await ensureAdminMediaUploadsTable()
+  } catch {}
+
+  let adminUser = null
+  try {
+    adminUser = await getUserFromRequest(req)
+  } catch {}
+  let adminDisplayName = null
+  if (adminUser?.id) {
+    adminDisplayName = await getAdminProfileName(adminUser.id)
+  }
+
   singleAdminImageUpload(req, res, (err) => {
     if (err) {
       const message =
@@ -2765,6 +2893,10 @@ app.post('/api/admin/upload-image', async (req, res) => {
         .getPublicUrl(objectPath)
       const publicUrl = publicData?.publicUrl || null
       const uploadedAt = new Date().toISOString()
+      const compressionPercent =
+        file.size > 0
+          ? Math.max(0, Math.round(100 - (optimizedBuffer.length / file.size) * 100))
+          : 0
 
       const payload = {
         ok: true,
@@ -2777,26 +2909,34 @@ app.post('/api/admin/upload-image', async (req, res) => {
         originalSize: file.size,
         uploadedAt,
         quality: adminUploadWebpQuality,
+        compressionPercent,
       }
       if (!publicUrl) {
         payload.warning = 'Bucket is not public; no public URL is available'
       }
 
+      await recordAdminMediaUpload({
+        adminId: adminUser?.id || null,
+        adminEmail: adminUser?.email || null,
+        adminName: adminDisplayName || null,
+        bucket: adminUploadBucket,
+        path: objectPath,
+        publicUrl,
+        mimeType: 'image/webp',
+        originalMimeType: mime,
+        sizeBytes: optimizedBuffer.length,
+        originalSizeBytes: file.size,
+        quality: adminUploadWebpQuality,
+        compressionPercent,
+        metadata: { originalName: file.originalname },
+      })
+
       try {
-        let actorId = null
-        try {
-          const caller = await getUserFromRequest(req)
-          actorId =
-            caller?.id ||
-            (typeof adminPrincipal === 'string' && adminPrincipal.length > 0
-              ? adminPrincipal
-              : null)
-        } catch {
-          actorId =
-            typeof adminPrincipal === 'string' && adminPrincipal.length > 0
-              ? adminPrincipal
-              : null
-        }
+        const actorId =
+          adminUser?.id ||
+          (typeof adminPrincipal === 'string' && adminPrincipal.length > 0
+            ? adminPrincipal
+            : null)
         const detail = {
           bucket: adminUploadBucket,
           path: objectPath,
@@ -2834,7 +2974,7 @@ app.post('/api/admin/upload-image', async (req, res) => {
         }
       } catch {}
 
-      res.json(payload)
+        res.json(payload)
     })().catch((unhandled) => {
       console.error('[upload-image] unexpected failure', unhandled)
       if (!res.headersSent) {
@@ -2857,6 +2997,70 @@ app.post('/api/admin/plant-translations/ensure-schema', async (req, res) => {
 })
 app.options('/api/admin/plant-translations/ensure-schema', (_req, res) => {
   res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+app.get('/api/admin/media', async (req, res) => {
+  const admin = await ensureAdmin(req, res)
+  if (!admin) return
+
+  const limitParam = Number.parseInt(String(req.query?.limit || ''), 10)
+  const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 200) : 50
+
+  try {
+    let rows = []
+    if (sql) {
+      rows =
+        await sql`select id, admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, created_at from public.admin_media_uploads order by created_at desc limit ${limit}`
+    } else if (supabaseServiceClient) {
+      const { data, error } = await supabaseServiceClient
+        .from('admin_media_uploads')
+        .select(
+          'id, admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, created_at',
+        )
+        .order('created_at', { ascending: false })
+        .limit(limit)
+      if (error) throw error
+      rows = data || []
+    } else {
+      res.status(500).json({ error: 'Storage backend not configured' })
+      return
+    }
+
+    const media = (rows || []).map((row) => ({
+      id: row.id,
+      adminId: row.admin_id || row.adminId || null,
+      adminEmail: row.admin_email || row.adminEmail || null,
+      adminName: row.admin_name || row.adminName || null,
+      bucket: row.bucket,
+      path: row.path,
+      url: row.public_url || row.publicUrl || null,
+      mimeType: row.mime_type || row.mimeType || null,
+      originalMimeType: row.original_mime_type || row.originalMimeType || null,
+      sizeBytes:
+        typeof row.size_bytes === 'number' ? row.size_bytes : row.sizeBytes ?? null,
+      originalSizeBytes:
+        typeof row.original_size_bytes === 'number'
+          ? row.original_size_bytes
+          : row.originalSizeBytes ?? null,
+      quality: typeof row.quality === 'number' ? row.quality : row.quality ?? null,
+      compressionPercent:
+        typeof row.compression_percent === 'number'
+          ? row.compression_percent
+          : row.compressionPercent ?? null,
+      metadata: row.metadata || null,
+      createdAt: row.created_at || row.createdAt || null,
+    }))
+
+    res.json({ ok: true, media })
+  } catch (err) {
+    console.error('[media] failed to load admin media uploads', err)
+    res.status(500).json({ error: 'Failed to load media uploads' })
+  }
+})
+app.options('/api/admin/media', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
   res.status(204).end()
 })

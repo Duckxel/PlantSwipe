@@ -426,6 +426,28 @@ do $$ begin
     end if;
 end $$;
 
+-- ========== Admin media uploads ==========
+create table if not exists public.admin_media_uploads (
+  id uuid primary key default gen_random_uuid(),
+  admin_id uuid,
+  admin_email text,
+  admin_name text,
+  bucket text not null,
+  path text not null,
+  public_url text,
+  mime_type text,
+  original_mime_type text,
+  size_bytes integer,
+  original_size_bytes integer,
+  quality integer,
+  compression_percent integer,
+  metadata jsonb,
+  created_at timestamptz not null default now()
+);
+create index if not exists admin_media_uploads_created_idx on public.admin_media_uploads (created_at desc);
+create index if not exists admin_media_uploads_admin_idx on public.admin_media_uploads (admin_id);
+create unique index if not exists admin_media_uploads_bucket_path_idx on public.admin_media_uploads (bucket, path);
+
 -- Indexes for requested plant lookups
 create index if not exists requested_plants_plant_name_normalized_idx on public.requested_plants(plant_name_normalized);
 create unique index if not exists requested_plants_active_name_unique_idx on public.requested_plants(plant_name_normalized) where completed_at is null;

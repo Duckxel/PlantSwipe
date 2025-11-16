@@ -18,6 +18,7 @@ type UploadResult = {
   originalSize: number
   uploadedAt?: string
   quality?: number
+  compressionPercent?: number | null
 }
 
 type RuntimeEnv = {
@@ -45,6 +46,9 @@ export const AdminUploadPanel: React.FC = () => {
   const adminToken =
     import.meta.env?.VITE_ADMIN_STATIC_TOKEN ?? runtimeEnv?.VITE_ADMIN_STATIC_TOKEN
   const compressionPct = React.useMemo(() => {
+    if (typeof result?.compressionPercent === "number") {
+      return Math.max(0, result.compressionPercent)
+    }
     if (!result || !result.originalSize) return 0
     return Math.max(
       0,

@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { LazyCharts, ChartSuspense } from "@/components/admin/LazyChart";
 import { AdminUploadPanel } from "@/components/admin/AdminUploadPanel";
+import { AdminMediaPanel } from "@/components/admin/AdminMediaPanel";
 import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
 import { getAccentOption } from "@/lib/accent";
@@ -37,6 +38,7 @@ import {
   FileText,
   ScrollText,
   CloudUpload,
+  ImageIcon,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { CreatePlantPage } from "@/pages/CreatePlantPage";
@@ -65,7 +67,7 @@ const {
   Cell,
 } = LazyCharts;
 
-type AdminTab = "overview" | "members" | "requests" | "upload" | "admin_logs";
+type AdminTab = "overview" | "members" | "requests" | "upload" | "media" | "admin_logs";
 
 type ListedMember = {
   id: string;
@@ -2355,6 +2357,7 @@ export const AdminPage: React.FC = () => {
     { key: "members", label: "Members", Icon: Users },
     { key: "requests", label: "Requests", Icon: FileText },
     { key: "upload", label: "Upload", Icon: CloudUpload },
+  { key: "media", label: "Media", Icon: ImageIcon },
     { key: "admin_logs", label: "Admin Logs", Icon: ScrollText },
   ];
 
@@ -5027,6 +5030,9 @@ export const AdminPage: React.FC = () => {
 
                   {/* Upload Tab */}
                   {activeTab === "upload" && <AdminUploadPanel />}
+
+                  {/* Media Tab */}
+                  {activeTab === "media" && <AdminMediaPanel />}
 
                   {/* Admin Logs Tab */}
                   {activeTab === "admin_logs" && <AdminLogs />}
