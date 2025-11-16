@@ -94,29 +94,6 @@ const ArrayInputField: React.FC<{
         </div>
       )}
     </div>
-    )
-  }
-
-  return (
-    <div className="space-y-4">
-        <div className="flex flex-wrap gap-2 rounded-2xl border border-stone-200/70 bg-white/80 p-2 dark:border-[#3e3e42]/70 dark:bg-[#1e1e1e]">
-          {tabOptions.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-              onClick={() => setActiveTab(tab.id)}
-            className={`px-3 py-1.5 rounded-2xl text-sm font-medium transition ${
-              activeTab === tab.id
-                ? 'bg-emerald-600 text-white shadow'
-                : 'bg-transparent text-stone-600 dark:text-stone-300 hover:bg-stone-100/70 dark:hover:bg-[#2d2d30]'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-      {activeTab === 'classification' ? classificationSection : detailSections}
-    </div>
   )
 }
 
@@ -1148,7 +1125,29 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
             <Textarea value={meta?.authorNotes || ''} onChange={(e) => setMeta({ ...meta, authorNotes: e.target.value || undefined })} placeholder="Personal notes and observations" />
           </div>
         </div>
-      </CollapsibleSection>
-    </div>
-  )
-}
+        </CollapsibleSection>
+      </>
+    )
+
+    return (
+      <div className="space-y-4">
+        <div className="flex flex-wrap gap-2 rounded-2xl border border-stone-200/70 bg-white/80 p-2 dark:border-[#3e3e42]/70 dark:bg-[#1e1e1e]">
+          {tabOptions.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-3 py-1.5 rounded-2xl text-sm font-medium transition ${
+                activeTab === tab.id
+                  ? 'bg-emerald-600 text-white shadow'
+                  : 'bg-transparent text-stone-600 dark:text-stone-300 hover:bg-stone-100/70 dark:hover:bg-[#2d2d30]'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        {activeTab === 'classification' ? classificationSection : detailSections}
+      </div>
+    )
+  }
