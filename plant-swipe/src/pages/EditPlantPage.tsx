@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
+import { Select } from "@/components/ui/select"
 import { supabase } from "@/lib/supabaseClient"
 import { fetchAiPlantFill, fetchAiPlantFillField } from "@/lib/aiPlantFill"
 import type {
@@ -1231,18 +1232,18 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
                   Edit Language
                 </Label>
                   <div className="flex items-center gap-2">
-                    <select
-                      id="edit-language"
-                      className="flex h-9 flex-1 rounded-md border border-input bg-white dark:bg-[#2d2d30] dark:text-white px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
-                      value={editLanguage}
-                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEditLanguage(e.target.value as SupportedLanguage)}
-                    >
+                      <Select
+                        id="edit-language"
+                        className="h-9 flex-1 rounded-md px-3 py-1 text-base md:text-sm"
+                        value={editLanguage}
+                        onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEditLanguage(e.target.value as SupportedLanguage)}
+                      >
                       {SUPPORTED_LANGUAGES.map((lang) => (
                         <option key={lang} value={lang}>
                           {lang === 'en' ? 'English' : 'Français'}
                         </option>
                       ))}
-                    </select>
+                      </Select>
                     <Button
                       type="button"
                       variant="secondary"
@@ -1357,14 +1358,19 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
                   ))}
                 </div>
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="plant-rarity">Rarity</Label>
-                <select id="plant-rarity" className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm" value={rarity} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setRarity(e.target.value as Plant["rarity"])}>
-                  {(["Common", "Uncommon", "Rare", "Legendary"] as const).map((r) => (
-                    <option key={r} value={r}>{r}</option>
-                  ))}
-                </select>
-              </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="plant-rarity">Rarity</Label>
+                  <Select
+                    id="plant-rarity"
+                    className="h-9 w-full rounded-md px-3 py-1 text-base md:text-sm"
+                    value={rarity}
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setRarity(e.target.value as Plant["rarity"])}
+                  >
+                    {(["Common", "Uncommon", "Rare", "Legendary"] as const).map((r) => (
+                      <option key={r} value={r}>{r}</option>
+                    ))}
+                  </Select>
+                </div>
                 <div className="grid gap-2">
                   <Label htmlFor="plant-meaning">{t('createPlant.meaning')}</Label>
                   <Textarea

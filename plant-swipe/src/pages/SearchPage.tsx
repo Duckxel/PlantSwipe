@@ -19,8 +19,8 @@ export const SearchPage: React.FC<SearchPageProps> = ({
   likedIds = [],
 }) => {
   const { t } = useTranslation("common");
-  const cardSurface =
-    "group relative rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_35px_95px_-45px_rgba(16,185,129,0.65)]";
+    const cardSurface =
+      "group relative rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_35px_95px_-45px_rgba(16,185,129,0.65)]";
 
   return (
     <div className="max-w-6xl mx-auto mt-8 px-4 md:px-0 pb-16 space-y-6">
@@ -52,9 +52,9 @@ export const SearchPage: React.FC<SearchPageProps> = ({
             })
           }
           return (
-            <Card
-              key={p.id}
-              className={`${cardSurface} h-full`}
+              <Card
+                key={p.id}
+                className={`${cardSurface} h-full min-h-[200px]`}
               onClick={() => openInfo(p)}
               role="button"
               tabIndex={0}
@@ -62,7 +62,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({
                 if (e.key === "Enter") openInfo(p);
               }}
             >
-              <div className="grid grid-cols-1 sm:grid-cols-[160px_1fr] items-stretch h-full">
+                <div className="grid grid-cols-1 sm:grid-cols-[160px_1fr] items-stretch h-full">
                 <div className="relative w-full h-52 sm:w-40 sm:h-full flex-shrink-0 rounded-t-[28px] sm:rounded-l-[28px] sm:rounded-tr-none overflow-hidden bg-gradient-to-br from-stone-100 via-white to-stone-200 dark:from-[#2d2d30] dark:via-[#2a2a2e] dark:to-[#1f1f1f]">
                   {p.image ? (
                     <img
@@ -85,7 +85,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({
                     </div>
                   )}
                 </div>
-                <div className="p-4 space-y-2 flex flex-col">
+                  <div className="p-4 space-y-2 flex flex-col h-full">
                   <div className="flex items-center gap-2 flex-wrap">
                     <Badge className={`${rarityTone[p.rarity ?? "Common"]} rounded-xl`}>{p.rarity}</Badge>
                     {p.seasons.map((s: PlantSeason) => {
@@ -105,8 +105,8 @@ export const SearchPage: React.FC<SearchPageProps> = ({
                     <div className="font-semibold truncate text-lg">{p.name}</div>
                     <div className="text-xs italic opacity-60 truncate">{p.scientificName}</div>
                   </div>
-                  <p className="text-sm line-clamp-2 text-stone-600 dark:text-stone-300 flex-1">{p.description}</p>
-                  <div className="flex flex-wrap gap-1">
+                    <p className="text-sm line-clamp-2 text-stone-600 dark:text-stone-300 flex-1">{p.description}</p>
+                    <div className="flex flex-wrap gap-1 mt-auto max-h-[48px] overflow-hidden">
                     {p.colors.map((c) => (
                       <Badge key={c} variant="secondary" className="rounded-xl text-[11px]">
                         {c}

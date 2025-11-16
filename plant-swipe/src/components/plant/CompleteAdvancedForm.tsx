@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
+import { Select } from "@/components/ui/select"
 import type {
   PlantIdentifiers,
   PlantTraits,
@@ -38,6 +39,8 @@ import {
   PLANT_TYPE_OPTIONS,
   formatClassificationLabel,
 } from "@/constants/classification"
+
+const selectBaseClass = "h-9 w-full rounded-md px-3 py-1 text-sm"
 
 // Helper component for array inputs
 const ArrayInputField: React.FC<{
@@ -393,12 +396,12 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
   const classificationSection = (
     <CollapsibleSection title="Classification" defaultOpen>
       <div className="grid gap-4">
-        <div className="grid gap-2">
-          <Label>Type</Label>
-          <select
-            className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm"
-            value={selectedType || ''}
-            onChange={(e) => {
+          <div className="grid gap-2">
+            <Label>Type</Label>
+            <Select
+              className={selectBaseClass}
+              value={selectedType || ''}
+              onChange={(e) => {
               const nextValue = e.target.value as PlantClassification["type"] | ''
               updateClassification((draft) => {
                 if (nextValue) {
@@ -412,22 +415,22 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
                 }
               })
             }}
-          >
+            >
             <option value="">Select...</option>
             {PLANT_TYPE_OPTIONS.map((opt) => (
               <option key={opt} value={opt}>
                 {formatClassificationLabel(opt)}
               </option>
             ))}
-          </select>
+            </Select>
           <p className="text-xs opacity-70">A plant can only belong to one type at a time.</p>
         </div>
         <div className="grid gap-2">
           <Label>Subclass (type-specific)</Label>
-          <select
-            className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm"
-            value={selectedSubclass || ''}
-            onChange={(e) => {
+            <Select
+              className={selectBaseClass}
+              value={selectedSubclass || ''}
+              onChange={(e) => {
               const nextValue = e.target.value as PlantClassification["subclass"] | ''
               updateClassification((draft) => {
                 if (nextValue) {
@@ -441,22 +444,22 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
               })
             }}
             disabled={(selectedType || '') !== 'plant'}
-          >
+            >
             <option value="">Select...</option>
             {availableSubclassOptions.map((opt) => (
               <option key={opt} value={opt}>
                 {formatClassificationLabel(opt)}
               </option>
             ))}
-          </select>
+            </Select>
         </div>
         {availableSubSubclassOptions.length > 0 && (
           <div className="grid gap-2">
             <Label>Sub-subclass</Label>
-            <select
-              className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm"
-              value={classification?.subSubclass || ''}
-              onChange={(e) => {
+              <Select
+                className={selectBaseClass}
+                value={classification?.subSubclass || ''}
+                onChange={(e) => {
                 const nextValue = e.target.value as PlantClassification["subSubclass"] | ''
                 updateClassification((draft) => {
                   if (nextValue) {
@@ -466,14 +469,14 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
                   }
                 })
               }}
-            >
+              >
               <option value="">Select...</option>
               {availableSubSubclassOptions.map((opt) => (
                 <option key={opt} value={opt}>
                   {formatClassificationLabel(opt)}
                 </option>
               ))}
-            </select>
+              </Select>
           </div>
         )}
         <MultiSelectButtons
@@ -531,19 +534,19 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
             values={identifiers?.commonNames || []}
             onChange={(commonNames) => setIdentifiers({ ...identifiers, commonNames })}
           />
-          <div className="grid gap-2">
-            <Label>Taxon Rank</Label>
-            <select
-              className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm"
-              value={identifiers?.taxonRank || ''}
-              onChange={(e) => setIdentifiers({ ...identifiers, taxonRank: e.target.value as any || undefined })}
-            >
-              <option value="">Select...</option>
-              {['species', 'subspecies', 'variety', 'form', 'cultivar', 'hybrid'].map(opt => (
-                <option key={opt} value={opt}>{opt}</option>
-              ))}
-            </select>
-          </div>
+            <div className="grid gap-2">
+              <Label>Taxon Rank</Label>
+              <Select
+                className={selectBaseClass}
+                value={identifiers?.taxonRank || ''}
+                onChange={(e) => setIdentifiers({ ...identifiers, taxonRank: e.target.value as any || undefined })}
+              >
+                <option value="">Select...</option>
+                {['species', 'subspecies', 'variety', 'form', 'cultivar', 'hybrid'].map(opt => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </Select>
+            </div>
           <div className="grid gap-2">
             <Label>Cultivar Group</Label>
             <Input
@@ -604,60 +607,60 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
       {/* Traits */}
       <CollapsibleSection title="Traits">
         <div className="grid gap-4">
-          <div className="grid gap-2">
-            <Label>Life Cycle</Label>
-            <select
-              className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm"
-              value={traits?.lifeCycle || ''}
-              onChange={(e) => setTraits({ ...traits, lifeCycle: e.target.value as any || undefined })}
-            >
-              <option value="">Select...</option>
-              {['annual', 'biennial', 'perennial'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
-            </select>
-          </div>
+            <div className="grid gap-2">
+              <Label>Life Cycle</Label>
+              <Select
+                className={selectBaseClass}
+                value={traits?.lifeCycle || ''}
+                onChange={(e) => setTraits({ ...traits, lifeCycle: e.target.value as any || undefined })}
+              >
+                <option value="">Select...</option>
+                {['annual', 'biennial', 'perennial'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+              </Select>
+            </div>
           <MultiSelectButtons
             label="Habit"
             values={traits?.habit || []}
             options={['tree', 'shrub', 'vine', 'climber', 'herbaceous', 'succulent', 'grass', 'fern', 'aquatic'] as const}
             onChange={(habit) => setTraits({ ...traits, habit: habit as any })}
           />
-          <div className="grid gap-2">
-            <Label>Deciduous/Evergreen</Label>
-            <select
-              className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm"
-              value={traits?.deciduousEvergreen || ''}
-              onChange={(e) => setTraits({ ...traits, deciduousEvergreen: e.target.value as any || undefined })}
-            >
-              <option value="">Select...</option>
-              {['deciduous', 'evergreen', 'semi-evergreen'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
-            </select>
-          </div>
-          <div className="grid gap-2">
-            <Label>Growth Rate</Label>
-            <select
-              className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm"
-              value={traits?.growthRate || ''}
-              onChange={(e) => setTraits({ ...traits, growthRate: e.target.value as any || undefined })}
-            >
-              <option value="">Select...</option>
-              {['slow', 'moderate', 'fast'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
-            </select>
-          </div>
+            <div className="grid gap-2">
+              <Label>Deciduous/Evergreen</Label>
+              <Select
+                className={selectBaseClass}
+                value={traits?.deciduousEvergreen || ''}
+                onChange={(e) => setTraits({ ...traits, deciduousEvergreen: e.target.value as any || undefined })}
+              >
+                <option value="">Select...</option>
+                {['deciduous', 'evergreen', 'semi-evergreen'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label>Growth Rate</Label>
+              <Select
+                className={selectBaseClass}
+                value={traits?.growthRate || ''}
+                onChange={(e) => setTraits({ ...traits, growthRate: e.target.value as any || undefined })}
+              >
+                <option value="">Select...</option>
+                {['slow', 'moderate', 'fast'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+              </Select>
+            </div>
           <div className="flex items-center gap-2">
             <input type="checkbox" checked={traits?.thornsSpines || false} onChange={(e) => setTraits({ ...traits, thornsSpines: e.target.checked || undefined })} />
             <Label>Thorns/Spines</Label>
           </div>
-          <div className="grid gap-2">
-            <Label>Fragrance</Label>
-            <select
-              className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm"
-              value={traits?.fragrance || ''}
-              onChange={(e) => setTraits({ ...traits, fragrance: e.target.value as any || undefined })}
-            >
-              <option value="">Select...</option>
-              {['none', 'light', 'moderate', 'strong'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
-            </select>
-          </div>
+            <div className="grid gap-2">
+              <Label>Fragrance</Label>
+              <Select
+                className={selectBaseClass}
+                value={traits?.fragrance || ''}
+                onChange={(e) => setTraits({ ...traits, fragrance: e.target.value as any || undefined })}
+              >
+                <option value="">Select...</option>
+                {['none', 'light', 'moderate', 'strong'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+              </Select>
+            </div>
         <div className="flex flex-wrap gap-4">
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -679,51 +682,51 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
           <div className="grid gap-2">
             <Label>Toxicity</Label>
             <div className="grid grid-cols-2 gap-2">
-              <div>
-                <Label className="text-xs">To Humans</Label>
-                <select
-                  className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm"
-                  value={traits?.toxicity?.toHumans || ''}
-                  onChange={(e) => setTraits({ ...traits, toxicity: { ...traits?.toxicity, toHumans: e.target.value as any || undefined } })}
-                >
-                  <option value="">Select...</option>
-                  {['non-toxic', 'mild', 'moderate', 'severe'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                </select>
-              </div>
-              <div>
-                <Label className="text-xs">To Pets</Label>
-                <select
-                  className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm"
-                  value={traits?.toxicity?.toPets || ''}
-                  onChange={(e) => setTraits({ ...traits, toxicity: { ...traits?.toxicity, toPets: e.target.value as any || undefined } })}
-                >
-                  <option value="">Select...</option>
-                  {['non-toxic', 'mild', 'moderate', 'severe'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                </select>
-              </div>
+                <div>
+                  <Label className="text-xs">To Humans</Label>
+                  <Select
+                    className={selectBaseClass}
+                    value={traits?.toxicity?.toHumans || ''}
+                    onChange={(e) => setTraits({ ...traits, toxicity: { ...traits?.toxicity, toHumans: e.target.value as any || undefined } })}
+                  >
+                    <option value="">Select...</option>
+                    {['non-toxic', 'mild', 'moderate', 'severe'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs">To Pets</Label>
+                  <Select
+                    className={selectBaseClass}
+                    value={traits?.toxicity?.toPets || ''}
+                    onChange={(e) => setTraits({ ...traits, toxicity: { ...traits?.toxicity, toPets: e.target.value as any || undefined } })}
+                  >
+                    <option value="">Select...</option>
+                    {['non-toxic', 'mild', 'moderate', 'severe'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                  </Select>
+                </div>
             </div>
           </div>
           <div className="grid gap-2">
             <Label>Allergenicity</Label>
-            <select
-              className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm"
-              value={traits?.allergenicity || ''}
-              onChange={(e) => setTraits({ ...traits, allergenicity: e.target.value as any || undefined })}
-            >
-              <option value="">Select...</option>
-              {['low', 'medium', 'high'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
-            </select>
+              <Select
+                className={selectBaseClass}
+                value={traits?.allergenicity || ''}
+                onChange={(e) => setTraits({ ...traits, allergenicity: e.target.value as any || undefined })}
+              >
+                <option value="">Select...</option>
+                {['low', 'medium', 'high'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+              </Select>
           </div>
           <div className="grid gap-2">
             <Label>Invasiveness Status</Label>
-            <select
-              className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm"
-              value={traits?.invasiveness?.status || ''}
-              onChange={(e) => setTraits({ ...traits, invasiveness: { ...traits?.invasiveness, status: e.target.value as any || undefined } })}
-            >
-              <option value="">Select...</option>
-              {['not invasive', 'regional risk', 'invasive'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
-            </select>
+              <Select
+                className={selectBaseClass}
+                value={traits?.invasiveness?.status || ''}
+                onChange={(e) => setTraits({ ...traits, invasiveness: { ...traits?.invasiveness, status: e.target.value as any || undefined } })}
+              >
+                <option value="">Select...</option>
+                {['not invasive', 'regional risk', 'invasive'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+              </Select>
           </div>
           <ArrayInputField
             label="Invasive Regions"
@@ -835,17 +838,25 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
         <div className="grid gap-4">
           <div className="grid gap-2">
             <Label>Sun Exposure</Label>
-            <select className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm" value={environment?.sunExposure || ''} onChange={(e) => setEnvironment({ ...environment, sunExposure: e.target.value as any || undefined })}>
+            <Select
+              className={selectBaseClass}
+              value={environment?.sunExposure || ''}
+              onChange={(e) => setEnvironment({ ...environment, sunExposure: e.target.value as any || undefined })}
+            >
               <option value="">Select...</option>
               {['full sun', 'partial sun', 'partial shade', 'full shade'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
-            </select>
+            </Select>
           </div>
           <div className="grid gap-2">
             <Label>Light Intensity</Label>
-            <select className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm" value={environment?.lightIntensity || ''} onChange={(e) => setEnvironment({ ...environment, lightIntensity: e.target.value as any || undefined })}>
+            <Select
+              className={selectBaseClass}
+              value={environment?.lightIntensity || ''}
+              onChange={(e) => setEnvironment({ ...environment, lightIntensity: e.target.value as any || undefined })}
+            >
               <option value="">Select...</option>
               {['very high', 'high', 'medium', 'low'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
-            </select>
+            </Select>
           </div>
           <ArrayInputField
             label="USDA Zones"
@@ -874,34 +885,50 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
           </div>
           <div className="grid gap-2">
             <Label>Humidity Preference</Label>
-            <select className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm" value={environment?.humidityPref || ''} onChange={(e) => setEnvironment({ ...environment, humidityPref: e.target.value as any || undefined })}>
+            <Select
+              className={selectBaseClass}
+              value={environment?.humidityPref || ''}
+              onChange={(e) => setEnvironment({ ...environment, humidityPref: e.target.value as any || undefined })}
+            >
               <option value="">Select...</option>
               {['low', 'moderate', 'high'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
-            </select>
+            </Select>
           </div>
           <div className="grid gap-2">
             <Label>Wind Tolerance</Label>
-            <select className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm" value={environment?.windTolerance || ''} onChange={(e) => setEnvironment({ ...environment, windTolerance: e.target.value as any || undefined })}>
+            <Select
+              className={selectBaseClass}
+              value={environment?.windTolerance || ''}
+              onChange={(e) => setEnvironment({ ...environment, windTolerance: e.target.value as any || undefined })}
+            >
               <option value="">Select...</option>
               {['low', 'moderate', 'high'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
-            </select>
+            </Select>
           </div>
           <div className="grid gap-2">
             <Label>Soil</Label>
             <MultiSelectButtons label="Texture" values={environment?.soil?.texture || []} options={['sandy', 'loamy', 'silty', 'clayey'] as const} onChange={(texture) => setEnvironment({ ...environment, soil: { ...environment?.soil, texture: texture as any } })} />
             <div className="grid gap-2">
               <Label className="text-xs">Drainage</Label>
-              <select className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm" value={environment?.soil?.drainage || ''} onChange={(e) => setEnvironment({ ...environment, soil: { ...environment?.soil, drainage: e.target.value as any || undefined } })}>
-                <option value="">Select...</option>
-                {['free-draining', 'moderate', 'poor'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
-              </select>
+                <Select
+                  className={selectBaseClass}
+                  value={environment?.soil?.drainage || ''}
+                  onChange={(e) => setEnvironment({ ...environment, soil: { ...environment?.soil, drainage: e.target.value as any || undefined } })}
+                >
+                  <option value="">Select...</option>
+                  {['free-draining', 'moderate', 'poor'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                </Select>
             </div>
             <div className="grid gap-2">
               <Label className="text-xs">Fertility</Label>
-              <select className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm" value={environment?.soil?.fertility || ''} onChange={(e) => setEnvironment({ ...environment, soil: { ...environment?.soil, fertility: e.target.value as any || undefined } })}>
-                <option value="">Select...</option>
-                {['low', 'medium', 'high'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
-              </select>
+                <Select
+                  className={selectBaseClass}
+                  value={environment?.soil?.fertility || ''}
+                  onChange={(e) => setEnvironment({ ...environment, soil: { ...environment?.soil, fertility: e.target.value as any || undefined } })}
+                >
+                  <option value="">Select...</option>
+                  {['low', 'medium', 'high'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                </Select>
             </div>
             <div className="grid gap-2">
               <Label className="text-xs">pH Range</Label>
@@ -919,8 +946,8 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
           <div className="grid gap-4">
             <div className="grid gap-2">
               <Label>Sunlight</Label>
-              <select
-                className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm"
+              <Select
+                className={selectBaseClass}
                 value={care?.sunlight || ''}
                 onChange={(e) => setCare({ ...care, sunlight: e.target.value || undefined })}
               >
@@ -928,12 +955,12 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
                 {['Low', 'Medium', 'High', 'Full Sun', 'Partial Sun'].map(opt => (
                   <option key={opt} value={opt}>{opt}</option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div className="grid gap-2">
               <Label>Water Level</Label>
-              <select
-                className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm"
+              <Select
+                className={selectBaseClass}
                 value={care?.water || ''}
                 onChange={(e) => setCare({ ...care, water: e.target.value || undefined })}
               >
@@ -941,22 +968,30 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
                 {['Low', 'Medium', 'High'].map(opt => (
                   <option key={opt} value={opt}>{opt}</option>
                 ))}
-              </select>
+              </Select>
             </div>
-          <div className="grid gap-2">
-            <Label>Difficulty</Label>
-            <select className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm" value={care?.difficulty || ''} onChange={(e) => setCare({ ...care, difficulty: e.target.value as any || undefined })}>
-              <option value="">Select...</option>
-              {['easy', 'moderate', 'advanced'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
-            </select>
-          </div>
-          <div className="grid gap-2">
-            <Label>Maintenance Level</Label>
-            <select className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm" value={care?.maintenanceLevel || ''} onChange={(e) => setCare({ ...care, maintenanceLevel: e.target.value as any || undefined })}>
-              <option value="">Select...</option>
-              {['low', 'medium', 'high'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
-            </select>
-          </div>
+            <div className="grid gap-2">
+              <Label>Difficulty</Label>
+              <Select
+                className={selectBaseClass}
+                value={care?.difficulty || ''}
+                onChange={(e) => setCare({ ...care, difficulty: e.target.value as any || undefined })}
+              >
+                <option value="">Select...</option>
+                {['easy', 'moderate', 'advanced'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label>Maintenance Level</Label>
+              <Select
+                className={selectBaseClass}
+                value={care?.maintenanceLevel || ''}
+                onChange={(e) => setCare({ ...care, maintenanceLevel: e.target.value as any || undefined })}
+              >
+                <option value="">Select...</option>
+                {['low', 'medium', 'high'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+              </Select>
+            </div>
           <div className="grid gap-2">
             <Label>Watering</Label>
             <div className="grid gap-2">
@@ -966,28 +1001,40 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
                 <Input placeholder="Summer frequency" value={care?.watering?.frequency?.summer || ''} onChange={(e) => setCare({ ...care, watering: { ...care?.watering, frequency: { ...care?.watering?.frequency, summer: e.target.value || undefined } } })} />
                 <Input placeholder="Autumn frequency" value={care?.watering?.frequency?.autumn || ''} onChange={(e) => setCare({ ...care, watering: { ...care?.watering, frequency: { ...care?.watering?.frequency, autumn: e.target.value || undefined } } })} />
               </div>
-              <select className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm" value={care?.watering?.method || ''} onChange={(e) => setCare({ ...care, watering: { ...care?.watering, method: e.target.value as any || undefined } })}>
-                <option value="">Select method...</option>
-                {['at soil', 'bottom water', 'soak and dry', 'drip', 'none (aquatic)'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
-              </select>
+                <Select
+                  className={selectBaseClass}
+                  value={care?.watering?.method || ''}
+                  onChange={(e) => setCare({ ...care, watering: { ...care?.watering, method: e.target.value as any || undefined } })}
+                >
+                  <option value="">Select method...</option>
+                  {['at soil', 'bottom water', 'soak and dry', 'drip', 'none (aquatic)'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                </Select>
               <Input type="number" placeholder="Depth (cm)" value={care?.watering?.depthCm || ''} onChange={(e) => setCare({ ...care, watering: { ...care?.watering, depthCm: e.target.value ? Number(e.target.value) : undefined } })} />
             </div>
           </div>
           <div className="grid gap-2">
             <Label>Fertilizing</Label>
-            <select className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm" value={care?.fertilizing?.type || ''} onChange={(e) => setCare({ ...care, fertilizing: { ...care?.fertilizing, type: e.target.value as any || undefined } })}>
-              <option value="">Select type...</option>
-              {['balanced NPK', 'high K', 'organic compost', 'slow-release', 'foliar'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
-            </select>
+              <Select
+                className={selectBaseClass}
+                value={care?.fertilizing?.type || ''}
+                onChange={(e) => setCare({ ...care, fertilizing: { ...care?.fertilizing, type: e.target.value as any || undefined } })}
+              >
+                <option value="">Select type...</option>
+                {['balanced NPK', 'high K', 'organic compost', 'slow-release', 'foliar'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+              </Select>
             <Input placeholder="Schedule" value={care?.fertilizing?.schedule || ''} onChange={(e) => setCare({ ...care, fertilizing: { ...care?.fertilizing, schedule: e.target.value || undefined } })} />
           </div>
           <div className="grid gap-2">
             <Label>Pruning</Label>
             <MonthSelectorField values={care?.pruning?.bestMonths || []} onChange={(bestMonths) => setCare({ ...care, pruning: { ...care?.pruning, bestMonths } })} label="Best Months" />
-            <select className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm" value={care?.pruning?.method || ''} onChange={(e) => setCare({ ...care, pruning: { ...care?.pruning, method: e.target.value as any || undefined } })}>
-              <option value="">Select method...</option>
-              {['light trim', 'hard prune', 'deadheading', 'thinning', 'renewal'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
-            </select>
+              <Select
+                className={selectBaseClass}
+                value={care?.pruning?.method || ''}
+                onChange={(e) => setCare({ ...care, pruning: { ...care?.pruning, method: e.target.value as any || undefined } })}
+              >
+                <option value="">Select method...</option>
+                {['light trim', 'hard prune', 'deadheading', 'thinning', 'renewal'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+              </Select>
           </div>
           <div className="grid gap-2">
             <Label>Mulching</Label>
@@ -1012,13 +1059,17 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
       <CollapsibleSection title="Propagation">
         <div className="grid gap-4">
           <MultiSelectButtons label="Methods" values={propagation?.methods || []} options={['seed', 'cuttings', 'division', 'layering', 'grafting', 'tissue culture'] as const} onChange={(methods) => setPropagation({ ...propagation, methods: methods as any })} />
-          <div className="grid gap-2">
-            <Label>Seed Stratification</Label>
-            <select className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm" value={propagation?.seed?.stratification || ''} onChange={(e) => setPropagation({ ...propagation, seed: { ...propagation?.seed, stratification: e.target.value as any || undefined } })}>
-              <option value="">Select...</option>
-              {['none', 'cold-moist', 'warm', 'scarification'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
-            </select>
-          </div>
+            <div className="grid gap-2">
+              <Label>Seed Stratification</Label>
+              <Select
+                className={selectBaseClass}
+                value={propagation?.seed?.stratification || ''}
+                onChange={(e) => setPropagation({ ...propagation, seed: { ...propagation?.seed, stratification: e.target.value as any || undefined } })}
+              >
+                <option value="">Select...</option>
+                {['none', 'cold-moist', 'warm', 'scarification'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+              </Select>
+            </div>
           <div className="grid gap-2">
             <Label>Germination Days</Label>
             <div className="grid grid-cols-2 gap-2">
@@ -1033,13 +1084,17 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
       <CollapsibleSection title="Usage">
         <div className="grid gap-4">
           <MultiSelectButtons label="Garden Uses" values={usage?.gardenUses || []} options={['border', 'mass planting', 'hedge', 'groundcover', 'specimen', 'container', 'climber', 'wildlife garden', 'cut flower', 'fragrance'] as const} onChange={(gardenUses) => setUsage({ ...usage, gardenUses: gardenUses as any })} />
-          <div className="grid gap-2">
-            <Label>Indoor/Outdoor</Label>
-            <select className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm" value={usage?.indoorOutdoor || ''} onChange={(e) => setUsage({ ...usage, indoorOutdoor: e.target.value as any || undefined })}>
-              <option value="">Select...</option>
-              {['outdoor', 'indoor', 'both'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
-            </select>
-          </div>
+            <div className="grid gap-2">
+              <Label>Indoor/Outdoor</Label>
+              <Select
+                className={selectBaseClass}
+                value={usage?.indoorOutdoor || ''}
+                onChange={(e) => setUsage({ ...usage, indoorOutdoor: e.target.value as any || undefined })}
+              >
+                <option value="">Select...</option>
+                {['outdoor', 'indoor', 'both'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+              </Select>
+            </div>
           <MultiSelectButtons label="Edible Parts" values={usage?.edibleParts || []} options={['none', 'leaf', 'flower', 'fruit', 'seed', 'root', 'stem'] as const} onChange={(edibleParts) => setUsage({ ...usage, edibleParts: edibleParts as any })} />
           <ArrayInputField label="Culinary Uses" values={usage?.culinaryUses || []} onChange={(culinaryUses) => setUsage({ ...usage, culinaryUses })} />
           <ArrayInputField label="Medicinal Uses" values={usage?.medicinalUses || []} onChange={(medicinalUses) => setUsage({ ...usage, medicinalUses })} />
@@ -1052,13 +1107,17 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
           <ArrayInputField label="Native Range" values={ecology?.nativeRange || []} onChange={(nativeRange) => setEcology({ ...ecology, nativeRange })} />
           <ArrayInputField label="Pollinators" values={ecology?.pollinators || []} onChange={(pollinators) => setEcology({ ...ecology, pollinators })} />
           <ArrayInputField label="Wildlife Value" values={ecology?.wildlifeValue || []} onChange={(wildlifeValue) => setEcology({ ...ecology, wildlifeValue })} />
-          <div className="grid gap-2">
-            <Label>Conservation Status</Label>
-            <select className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm" value={ecology?.conservationStatus || ''} onChange={(e) => setEcology({ ...ecology, conservationStatus: e.target.value as any || undefined })}>
-              <option value="">Select...</option>
-              {['NE', 'DD', 'LC', 'NT', 'VU', 'EN', 'CR', 'EW', 'EX'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
-            </select>
-          </div>
+            <div className="grid gap-2">
+              <Label>Conservation Status</Label>
+              <Select
+                className={selectBaseClass}
+                value={ecology?.conservationStatus || ''}
+                onChange={(e) => setEcology({ ...ecology, conservationStatus: e.target.value as any || undefined })}
+              >
+                <option value="">Select...</option>
+                {['NE', 'DD', 'LC', 'NT', 'VU', 'EN', 'CR', 'EW', 'EX'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+              </Select>
+            </div>
         </div>
       </CollapsibleSection>
 
@@ -1082,21 +1141,29 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
       {/* Planting */}
       <CollapsibleSection title="Planting">
         <div className="grid gap-4">
-          <div className="grid gap-2">
-            <Label>Calendar</Label>
-            <select className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm" value={planting?.calendar?.hemisphere || ''} onChange={(e) => setPlanting({ ...planting, calendar: { ...planting?.calendar, hemisphere: e.target.value as any || undefined } })}>
-              <option value="">Select hemisphere...</option>
-              {['north', 'south', 'equatorial'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
-            </select>
+            <div className="grid gap-2">
+              <Label>Calendar</Label>
+              <Select
+                className={selectBaseClass}
+                value={planting?.calendar?.hemisphere || ''}
+                onChange={(e) => setPlanting({ ...planting, calendar: { ...planting?.calendar, hemisphere: e.target.value as any || undefined } })}
+              >
+                <option value="">Select hemisphere...</option>
+                {['north', 'south', 'equatorial'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+              </Select>
             <MonthSelectorField label="Sowing Months" values={planting?.calendar?.sowingMonths || []} onChange={(sowingMonths) => setPlanting({ ...planting, calendar: { ...planting?.calendar, sowingMonths } })} />
             <MonthSelectorField label="Planting Out Months" values={planting?.calendar?.plantingOutMonths || []} onChange={(plantingOutMonths) => setPlanting({ ...planting, calendar: { ...planting?.calendar, plantingOutMonths } })} />
-            <div className="grid gap-2">
-              <Label>Promotion Month</Label>
-              <select className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm" value={planting?.calendar?.promotionMonth || ''} onChange={(e) => setPlanting({ ...planting, calendar: { ...planting?.calendar, promotionMonth: e.target.value ? Number(e.target.value) : undefined } })}>
-                <option value="">Select...</option>
-                {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => <option key={m} value={m}>{['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m-1]}</option>)}
-              </select>
-            </div>
+              <div className="grid gap-2">
+                <Label>Promotion Month</Label>
+                <Select
+                  className={selectBaseClass}
+                  value={planting?.calendar?.promotionMonth || ''}
+                  onChange={(e) => setPlanting({ ...planting, calendar: { ...planting?.calendar, promotionMonth: e.target.value ? Number(e.target.value) : undefined } })}
+                >
+                  <option value="">Select...</option>
+                  {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => <option key={m} value={m}>{['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m-1]}</option>)}
+                </Select>
+              </div>
           </div>
           <ArrayInputField label="Site Preparation" values={planting?.sitePrep || []} onChange={(sitePrep) => setPlanting({ ...planting, sitePrep })} />
           <ArrayInputField label="Companion Plants" values={planting?.companionPlants || []} onChange={(companionPlants) => setPlanting({ ...planting, companionPlants })} />
@@ -1107,13 +1174,17 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
       {/* Meta */}
       <CollapsibleSection title="Meta">
         <div className="grid gap-4">
-          <div className="grid gap-2">
-            <Label>Rarity</Label>
-            <select className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm" value={meta?.rarity || ''} onChange={(e) => setMeta({ ...meta, rarity: e.target.value as any || undefined })}>
-              <option value="">Select...</option>
-              {['common', 'uncommon', 'rare', 'very rare'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
-            </select>
-          </div>
+            <div className="grid gap-2">
+              <Label>Rarity</Label>
+              <Select
+                className={selectBaseClass}
+                value={meta?.rarity || ''}
+                onChange={(e) => setMeta({ ...meta, rarity: e.target.value as any || undefined })}
+              >
+                <option value="">Select...</option>
+                {['common', 'uncommon', 'rare', 'very rare'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+              </Select>
+            </div>
           <ArrayInputField label="Tags" values={meta?.tags || []} onChange={(tags) => setMeta({ ...meta, tags })} />
             <div className="grid gap-2">
               <Label>Fun Fact</Label>
