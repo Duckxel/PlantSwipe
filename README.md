@@ -1,4 +1,4 @@
-# 🌿 PlantSwipe — fall in love with plants, one swipe at a time
+# 🌿 APHYLIA — fall in love with plants, one swipe at a time
 
 <div align="center">
 
