@@ -3,6 +3,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import { Select } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { supabase } from "@/lib/supabaseClient"
 import { fetchAiPlantFill, fetchAiPlantFillField } from "@/lib/aiPlantFill"
@@ -957,18 +958,18 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
                 {/* Language Selector */}
                 <div className="flex items-center gap-1.5">
                   <Languages className="h-4 w-4 opacity-70" />
-                  <select 
-                    id="plant-language" 
-                    className="flex h-7 px-2 rounded-lg border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] text-xs shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50" 
-                    value={inputLanguage} 
-                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setInputLanguage(e.target.value as SupportedLanguage)}
-                  >
+                    <Select
+                      id="plant-language"
+                      className="h-7 min-w-[64px] w-auto rounded-lg px-2 py-0 text-xs font-semibold uppercase tracking-wide focus-visible:ring-1"
+                      value={inputLanguage}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setInputLanguage(e.target.value as SupportedLanguage)}
+                    >
                     {SUPPORTED_LANGUAGES.map((lang) => (
                       <option key={lang} value={lang}>
                         {lang === 'en' ? 'EN' : 'FR'}
                       </option>
                     ))}
-                  </select>
+                    </Select>
                 </div>
                 <button
                   type="button"
