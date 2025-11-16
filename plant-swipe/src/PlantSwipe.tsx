@@ -629,22 +629,6 @@ export default function PlantSwipe() {
             onLogout={async () => { await signOut(); navigate('/') }}
           />
 
-          {/* Mobile Logo and App Name - Only on Discovery page (exact path match, no other routes) */}
-          {pathWithoutLang === "/" && location.pathname.replace(/^\/[a-z]{2}(-[A-Z]{2})?/, '') === "/" && (
-            <div className="md:hidden flex flex-col items-center justify-center mb-6 mt-4">
-              <div className="h-12 w-12 rounded-2xl bg-green-200 dark:bg-green-800 flex items-center justify-center shadow mb-2">
-                <Leaf className="h-6 w-6 text-green-800 dark:text-green-200" />
-              </div>
-              <Link
-                to="/"
-                className="text-2xl font-semibold tracking-tight no-underline text-black dark:text-white hover:text-black dark:hover:text-white visited:text-black dark:visited:text-white active:text-black dark:active:text-white focus:text-black dark:focus:text-white focus-visible:outline-none outline-none hover:opacity-90"
-                style={{ WebkitTapHighlightColor: 'transparent' }}
-              >
-                {t('common.appName')}
-              </Link>
-            </div>
-          )}
-
           {/* Mobile bottom nav (hide Create on phones) */}
           <MobileNavBar 
             canCreate={false} 
