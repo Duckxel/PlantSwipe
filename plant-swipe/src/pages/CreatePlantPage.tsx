@@ -721,13 +721,13 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
     const actorLabel = profile?.display_name?.trim() || user?.email?.trim() || user?.id || 'Unknown admin'
     const nowIso = new Date().toISOString()
     const metaBase = meta ?? {}
-    const baseFunFact = typeof metaBase.funFact === 'string' ? metaBase.funFact.trim() : ''
-    const funFactText = baseFunFact || meaning.trim()
-    if (!isFunFactValid(funFactText)) {
-      const sentenceCount = countSentences(funFactText)
-      setError(`Fun fact must contain between 1 and 3 sentences (currently ${sentenceCount}).`)
-      return
-    }
+      const baseFunFact = typeof metaBase.funFact === 'string' ? metaBase.funFact.trim() : ''
+      const funFactText = baseFunFact || meaning.trim()
+      if (funFactText && !isFunFactValid(funFactText)) {
+        const sentenceCount = countSentences(funFactText)
+        setError(`Fun fact must contain between 1 and 3 sentences (currently ${sentenceCount}).`)
+        return
+      }
     const createdAtValue = typeof metaBase.createdAt === 'string' && metaBase.createdAt.trim().length > 0
       ? metaBase.createdAt.trim()
       : nowIso
@@ -736,7 +736,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
       : actorLabel
       const metaForInsert: Partial<PlantMeta> = {
       ...metaBase,
-      funFact: funFactText || undefined,
+        funFact: funFactText || undefined,
       createdAt: createdAtValue,
       updatedAt: nowIso,
       createdBy: createdByValue,
