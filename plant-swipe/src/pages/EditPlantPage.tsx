@@ -757,6 +757,7 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
           const resolvedMeaning = String(translation?.meaning || data.meaning || translationMeta?.funFact || parsedMeta?.funFact || '')
         const resolvedDescription = String(translation?.description || data.description || '')
         const resolvedFunFact = String(translationMeta?.funFact || parsedMeta?.funFact || data.meaning || '')
+        const resolvedClassificationType = parsedClassification?.type ? String(parsedClassification.type) : ''
           const englishScientificName = String(data.scientific_name || parsedIdentifiers?.scientificName || '')
           const englishDescription = String(data.description || '')
           const resolvedColorsArray = Array.isArray(data.colors) ? (data.colors as string[]) : []
@@ -824,6 +825,7 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
             seasons: resolvedSeasons,
             description: englishDescription || resolvedDescription,
             funFact: resolvedFunFact,
+            classificationType: resolvedClassificationType,
           })
       } catch (e: any) {
         setError(e?.message || 'Failed to load plant')
