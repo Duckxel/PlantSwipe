@@ -194,6 +194,11 @@ const adminUploadMaxBytes = (() => {
   if (Number.isFinite(raw) && raw > 0) return raw
   return 15 * 1024 * 1024
 })()
+const adminUploadMaxDimension = (() => {
+  const raw = Number(process.env.ADMIN_UPLOAD_MAX_DIMENSION)
+  if (Number.isFinite(raw) && raw >= 256 && raw <= 8000) return Math.round(raw)
+  return 2000
+})()
 const adminUploadWebpQuality = (() => {
   const raw = Number(process.env.ADMIN_UPLOAD_WEBP_QUALITY)
   if (Number.isFinite(raw) && raw >= 30 && raw <= 100) return Math.round(raw)
@@ -2878,6 +2883,13 @@ app.post('/api/admin/upload-image', async (req, res) => {
       try {
         optimizedBuffer = await sharp(file.buffer)
           .rotate()
+          .resize({
+            width: adminUploadMaxDimension,
+            height: adminUploadMaxDimension,
+            fit: 'inside',
+            withoutEnlargement: true,
+            fastShrinkOnLoad: true,
+          })
           .webp({
             quality: adminUploadWebpQuality,
             effort: 5,
