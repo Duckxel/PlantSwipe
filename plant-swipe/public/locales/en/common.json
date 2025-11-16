@@ -164,6 +164,16 @@
       "new": "New",
       "popular": "Popular"
     },
+      "indicators": {
+        "sunLevel": "Sun level",
+        "waterLevel": "Water level",
+        "origin": "Origin",
+        "potFriendly": "Pot friendly",
+        "edible": "Edible",
+        "medicinal": "Medicinal",
+        "aromatic": "Aromatic",
+        "colors": "Colors"
+      },
     "infoCard": {
       "descriptionLabel": "Description",
       "descriptionFallback": "Description coming soon",

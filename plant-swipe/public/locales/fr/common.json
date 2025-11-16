@@ -164,6 +164,16 @@
       "new": "Nouveau",
       "popular": "Populaire"
     },
+      "indicators": {
+        "sunLevel": "Niveau d'ensoleillement",
+        "waterLevel": "Niveau d'arrosage",
+        "origin": "Origine",
+        "potFriendly": "Adaptée au pot",
+        "edible": "Comestible",
+        "medicinal": "Médicinale",
+        "aromatic": "Aromatique",
+        "colors": "Couleurs"
+      },
     "infoCard": {
       "descriptionLabel": "Description",
       "descriptionFallback": "Description à venir",
