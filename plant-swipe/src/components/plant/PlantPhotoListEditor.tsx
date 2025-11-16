@@ -3,6 +3,7 @@ import { Plus, Trash2 } from "lucide-react"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import { Select } from "@/components/ui/select"
 import type { PlantPhoto } from "@/types/plant"
 import { createEmptyPhoto, MAX_PLANT_PHOTOS } from "@/lib/photos"
 
@@ -121,25 +122,25 @@ export const PlantPhotoListEditor: React.FC<PlantPhotoListEditorProps> = ({
                 placeholder="https://example.com/photo.jpg"
               />
               <div className="flex flex-wrap gap-4 text-sm">
-                <label className="flex items-center gap-2">
-                  <select
-                    value={
-                      photo.isPrimary
-                        ? "primary"
-                        : photo.isVertical
-                        ? "vertical"
-                        : "other"
-                    }
-                    onChange={(e) =>
-                      setRole(index, e.target.value as "primary" | "vertical" | "other")
-                    }
-                    className="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  >
-                    <option value="primary">Primary</option>
-                    <option value="vertical">Vertical</option>
-                    <option value="other">Other</option>
-                  </select>
-                </label>
+                  <label className="flex items-center gap-2">
+                    <Select
+                      value={
+                        photo.isPrimary
+                          ? "primary"
+                          : photo.isVertical
+                          ? "vertical"
+                          : "other"
+                      }
+                      onChange={(e) =>
+                        setRole(index, e.target.value as "primary" | "vertical" | "other")
+                      }
+                      className="h-9 w-[140px] rounded-md px-3 py-1 text-sm"
+                    >
+                      <option value="primary">Primary</option>
+                      <option value="vertical">Vertical</option>
+                      <option value="other">Other</option>
+                    </Select>
+                  </label>
               </div>
               <Button
                 type="button"
