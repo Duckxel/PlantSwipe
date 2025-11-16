@@ -19,9 +19,10 @@ export const PlantPhotoListEditor: React.FC<PlantPhotoListEditorProps> = ({
   label,
   helperText,
 }) => {
-  const radioName = React.useId()
   const list = photos.length > 0 ? photos : [createEmptyPhoto(true)]
-  const canAddMore = photos.length < MAX_PLANT_PHOTOS
+  const hasBlankPlaceholder = list.some((photo) => !photo.url || !photo.url.trim())
+  const filledCount = list.filter((photo) => photo.url && photo.url.trim()).length
+  const canAddMore = !hasBlankPlaceholder && filledCount < MAX_PLANT_PHOTOS
 
   const updatePhoto = (index: number, patch: Partial<PlantPhoto>) => {
     onChange(
@@ -34,6 +35,7 @@ export const PlantPhotoListEditor: React.FC<PlantPhotoListEditorProps> = ({
       list.map((photo, idx) => ({
         ...photo,
         isPrimary: idx === index,
+        isVertical: idx === index ? false : photo.isVertical,
       }))
     )
   }
@@ -51,8 +53,23 @@ export const PlantPhotoListEditor: React.FC<PlantPhotoListEditorProps> = ({
       list.map((photo, idx) => ({
         ...photo,
         isVertical: idx === index,
+        isPrimary: idx === index ? false : photo.isPrimary,
       }))
     )
+  }
+
+  const setRole = (index: number, role: "primary" | "vertical" | "other") => {
+    if (role === "primary") {
+      setPrimary(index)
+    } else if (role === "vertical") {
+      setVertical(index, true)
+    } else {
+      onChange(
+        list.map((photo, idx) =>
+          idx === index ? { ...photo, isPrimary: false, isVertical: false } : photo
+        )
+      )
+    }
   }
 
   const removePhoto = (index: number) => {
@@ -105,21 +122,23 @@ export const PlantPhotoListEditor: React.FC<PlantPhotoListEditorProps> = ({
               />
               <div className="flex flex-wrap gap-4 text-sm">
                 <label className="flex items-center gap-2">
-                  <input
-                    type="radio"
-                    name={radioName}
-                    checked={photo.isPrimary ?? false}
-                    onChange={() => setPrimary(index)}
-                  />
-                  Primary
-                </label>
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={photo.isVertical ?? false}
-                    onChange={(e) => setVertical(index, e.target.checked)}
-                  />
-                  Vertical-friendly
+                  <select
+                    value={
+                      photo.isPrimary
+                        ? "primary"
+                        : photo.isVertical
+                        ? "vertical"
+                        : "other"
+                    }
+                    onChange={(e) =>
+                      setRole(index, e.target.value as "primary" | "vertical" | "other")
+                    }
+                    className="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  >
+                    <option value="primary">Primary</option>
+                    <option value="vertical">Vertical</option>
+                    <option value="other">Other</option>
+                  </select>
                 </label>
               </div>
               <Button
@@ -147,7 +166,7 @@ export const PlantPhotoListEditor: React.FC<PlantPhotoListEditorProps> = ({
           Add photo
         </Button>
         <span className="text-xs text-muted-foreground">
-          {photos.length}/{MAX_PLANT_PHOTOS} photos
+          {filledCount}/{MAX_PLANT_PHOTOS} photos
         </span>
       </div>
     </div>

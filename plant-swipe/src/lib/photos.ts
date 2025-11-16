@@ -109,6 +109,11 @@ export function upsertPrimaryPhoto(current: PlantPhoto[], url: string): PlantPho
 }
 
 export function ensureAtLeastOnePhoto(photos: PlantPhoto[]): PlantPhoto[] {
-  const base = photos.length > 0 ? photos : [createEmptyPhoto(true)]
-  return sanitizePlantPhotos(base)
+  const defined = photos.filter((photo) => typeof photo?.url === "string" && photo.url.trim())
+  let sanitized = sanitizePlantPhotos(defined)
+  const hasBlankPlaceholder = photos.some((photo) => !photo.url || !photo.url.trim())
+  if ((hasBlankPlaceholder || sanitized.length === 0) && sanitized.length < MAX_PLANT_PHOTOS) {
+    sanitized = [...sanitized, createEmptyPhoto(sanitized.every((photo) => !photo.isPrimary))]
+  }
+  return sanitized
 }
