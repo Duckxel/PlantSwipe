@@ -3560,11 +3560,11 @@ export const AdminPage: React.FC = () => {
                               disabled={deployingEdge}
                             >
                               <CloudUpload className="h-4 w-4" />
-                              <span>
-                                {deployingEdge
-                                  ? "Deploying..."
-                                  : "Deploy Edge Functions"}
-                              </span>
+                                <span>
+                                  {deployingEdge
+                                    ? "Deploying..."
+                                    : "Deploy Edge"}
+                                </span>
                             </Button>
                             <Button
                             className="rounded-2xl w-full"
