@@ -83,7 +83,7 @@ export function SchedulePickerDialog(props: {
   const remaining = Math.max(0, amount - countSelected)
   const disabledMore = remaining === 0
 
-  const maxForPeriod = (p: Period) => p === 'week' ? 7 : p === 'month' ? 4 : 12
+  const maxForPeriod = (p: Period) => (p === 'week' ? 7 : p === 'month' ? 12 : 52)
   // Period is enforced externally; no dropdown UI
   const handleAmountChange = (n: number) => {
     const max = maxForPeriod(period)
@@ -270,11 +270,11 @@ export function SchedulePickerDialog(props: {
               disabled={!!lockToYear}
             />
           </div>
-          <div className="text-xs opacity-60">
-            {(!lockToYear && period === 'week') && 'Max 7 per week.'}
-            {(!lockToYear && period === 'month') && 'Max 4 per month (otherwise use week).'}
-            {(lockToYear || period === 'year') && 'Max 12 per year (otherwise use month).'}
-          </div>
+            <div className="text-xs opacity-60">
+              {(!lockToYear && period === 'week') && 'Max 7 per week.'}
+              {(!lockToYear && period === 'month') && 'Max 12 per month.'}
+              {(lockToYear || period === 'year') && 'Max 52 per year.'}
+            </div>
           {allowedPeriods && allowedPeriods.length === 1 && (
             <div className="text-[11px] opacity-60">Frequency period is enforced by the plant. You can change the amount.</div>
           )}

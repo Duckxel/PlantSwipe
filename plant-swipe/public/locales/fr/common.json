@@ -409,8 +409,8 @@
     "seedsAvailable": "Graines disponibles",
     "wateringFrequency": "Fréquence d'arrosage par défaut",
     "maxPerWeek": "Max 7 par semaine.",
-    "maxPerMonth": "Max 4 par mois (sinon utilisez semaine).",
-    "maxPerYear": "Max 12 par an (sinon utilisez mois).",
+    "maxPerMonth": "Max 12 par mois.",
+    "maxPerYear": "Max 52 par an.",
     "saved": "Enregistré",
     "translating": "Traduction...",
     "translatingToAll": "Traduction dans toutes les langues..."

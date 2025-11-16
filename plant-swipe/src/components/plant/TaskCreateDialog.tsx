@@ -55,7 +55,7 @@ export function TaskCreateDialog({
     }
   }, [open])
 
-  const maxForPeriod = (p: Period) => (p === 'week' ? 7 : p === 'month' ? 4 : 12)
+  const maxForPeriod = (p: Period) => (p === 'week' ? 7 : p === 'month' ? 12 : 52)
   const countSelected = period === 'week' ? weeklyDays.length : period === 'month' ? monthlyNthWeekdays.length : yearlyDays.length
   const remaining = Math.max(0, amount - countSelected)
   const disabledMore = remaining === 0
