@@ -10,33 +10,6 @@ import { useTranslation } from "react-i18next"
 import { Link } from "@/components/i18n/Link"
 import { isNewPlant, isPlantOfTheMonth, isPopularPlant } from "@/lib/plantHighlights"
 
-const colorTokenMap: Record<string, string> = {
-  red: "#ef4444",
-  pink: "#f472b6",
-  yellow: "#facc15",
-  white: "#f5f5f4",
-  purple: "#c084fc",
-  blue: "#60a5fa",
-  orange: "#fb923c",
-  green: "#4ade80",
-  violet: "#a855f7",
-  magenta: "#db2777",
-  turquoise: "#2dd4bf",
-  gold: "#fbbf24",
-  amber: "#f59e0b",
-  coral: "#fb7185",
-  teal: "#5eead4",
-  lilac: "#c4b5fd",
-  lavender: "#c084fc",
-  indigo: "#6366f1",
-  bronze: "#b45309",
-  brown: "#b45309",
-  copper: "#d97706",
-  silver: "#d1d5db",
-  gray: "#9ca3af",
-  black: "#1f2937",
-}
-
 interface SwipePageProps {
   current: Plant | undefined
   index: number
@@ -106,9 +79,6 @@ export const SwipePage: React.FC<SwipePageProps> = ({
     }
   }, [handleInfo, handlePass, handlePrevious])
 
-  const description = current?.description?.trim()
-  const colorChips = current?.colors?.slice(0, 6) ?? []
-  const seedsCopy = current?.seedsAvailable ? t("discoveryPage.infoCard.seedsAvailable") : t("discoveryPage.infoCard.seedsUnavailable")
   const desktopCardHeight = "min(720px, calc(100vh - 12rem))"
 
   const rarityKey = current?.rarity && rarityTone[current.rarity] ? current.rarity : "Common"
@@ -144,7 +114,10 @@ export const SwipePage: React.FC<SwipePageProps> = ({
   }, [current, t])
 
     return (
-      <div className="max-w-5xl mx-auto mt-4 sm:mt-6 px-1 sm:px-4 md:px-0 pb-20 md:pb-16">
+      <div
+        className="max-w-5xl mx-auto mt-4 sm:mt-6 px-1 sm:px-4 md:px-0 pb-[140px] md:pb-16"
+        style={!isDesktop ? { paddingBottom: "calc(env(safe-area-inset-bottom) + 140px)" } : undefined}
+      >
       <motion.section
         initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
@@ -154,31 +127,34 @@ export const SwipePage: React.FC<SwipePageProps> = ({
         <div className="absolute inset-x-12 -top-24 h-56 rounded-full bg-emerald-200/40 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
         <div className="absolute inset-x-0 bottom-[-40%] h-72 rounded-full bg-emerald-100/50 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
           <div className="relative p-2 sm:p-6 md:p-12 space-y-6">
-          <div className="relative mx-auto w-full max-w-none md:max-w-3xl min-h-[520px] md:min-h-0" style={isDesktop ? { height: desktopCardHeight } : undefined}>
-            <AnimatePresence initial={false} mode="wait">
-              {current ? (
-                <motion.div
-                  key={`${current.id}-${index}`}
-                  drag
-                  dragElastic={0.28}
-                  dragMomentum={false}
-                  style={{ x, y }}
-                  dragConstraints={{ left: -500, right: 500, top: -500, bottom: 500 }}
-                  onDragEnd={onDragEnd}
-                  initial={{ scale: 0.94, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0.94, opacity: 0 }}
-                  transition={{ duration: 0.2, ease: "easeOut" }}
-                  className="relative w-full md:h-full cursor-grab active:cursor-grabbing select-none"
-                >
-                  <Card className="h-full flex flex-col overflow-hidden rounded-[28px] border border-white/60 dark:border-white/10 bg-white/90 dark:bg-[#111111]/90 backdrop-blur shadow-2xl">
-                    <div className="relative w-full overflow-hidden rounded-[28px] md:rounded-b-none flex-none aspect-[3/4] sm:aspect-[4/5] md:aspect-auto md:flex-[0.62]">
+            <div
+              className="relative mx-auto w-full max-w-none md:max-w-3xl min-h-[520px] md:min-h-0"
+              style={isDesktop ? { height: desktopCardHeight } : { minHeight: "calc(100vh - 7rem)" }}
+            >
+              <AnimatePresence initial={false} mode="wait">
+                {current ? (
+                  <motion.div
+                    key={`${current.id}-${index}`}
+                    drag
+                    dragElastic={0.28}
+                    dragMomentum={false}
+                    style={{ x, y }}
+                    dragConstraints={{ left: -500, right: 500, top: -500, bottom: 500 }}
+                    onDragEnd={onDragEnd}
+                    initial={{ scale: 0.94, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.94, opacity: 0 }}
+                    transition={{ duration: 0.2, ease: "easeOut" }}
+                    className="relative h-full w-full cursor-grab active:cursor-grabbing select-none"
+                  >
+                    <Card className="relative h-full w-full overflow-hidden rounded-[28px] border border-white/60 dark:border-white/10 bg-black text-white shadow-2xl">
                       {current.image ? (
-                        <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${current.image})` }} />
+                        <div className="absolute inset-0 z-0 bg-cover bg-center" style={{ backgroundImage: `url(${current.image})` }} />
                       ) : (
-                        <div className="absolute inset-0 bg-gradient-to-br from-emerald-200 via-emerald-100 to-white" />
+                        <div className="absolute inset-0 z-0 bg-gradient-to-br from-emerald-200 via-emerald-100 to-white" />
                       )}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-transparent" />
+                      <div className="absolute inset-0 z-10 bg-gradient-to-t from-black/80 via-black/30 to-transparent" aria-hidden="true" />
+                      <div className="absolute inset-0 z-10 bg-gradient-to-b from-black/10 via-transparent to-black/80" aria-hidden="true" />
                       {highlightBadges.length > 0 && (
                         <div className="absolute top-4 left-4 z-20 flex flex-col gap-2">
                           {highlightBadges.map((badge) => (
@@ -207,7 +183,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                           <Heart className={`h-5 w-5 ${liked ? "fill-current" : ""}`} />
                         </button>
                       </div>
-                      <div className="absolute bottom-0 left-0 right-0 p-6 text-white">
+                      <div className="absolute bottom-0 left-0 right-0 z-20 p-6 pb-8 text-white">
                         <div className="mb-3 flex flex-wrap items-center gap-2">
                           <Badge className={`${rarityTone[rarityKey]} backdrop-blur bg-opacity-90`}>{current?.rarity ?? "Common"}</Badge>
                           {seasons.map((s) => {
@@ -222,100 +198,33 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                         <h2 className="text-3xl font-semibold tracking-tight drop-shadow-sm">{current.name}</h2>
                         {current.scientificName && <p className="opacity-90 text-sm italic">{current.scientificName}</p>}
                       </div>
-                    </div>
-
-                    <CardContent className="flex flex-col gap-4 p-5 sm:p-6 md:p-8 md:flex-[0.38]">
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <div className="rounded-2xl border border-emerald-100/70 dark:border-emerald-900/40 bg-emerald-50/60 dark:bg-emerald-900/10 p-4 backdrop-blur-sm space-y-2">
-                          <div className="mb-1 text-xs uppercase tracking-wide text-emerald-700 dark:text-emerald-300 font-semibold">
-                            {t("discoveryPage.infoCard.descriptionLabel")}
-                          </div>
-                          <p className="text-sm text-emerald-900 dark:text-emerald-100 line-clamp-4">
-                            {description || t("discoveryPage.infoCard.descriptionFallback")}
-                          </p>
-                        </div>
-
-                        <div className="rounded-2xl border border-stone-200/80 dark:border-[#3e3e42]/60 bg-white/70 dark:bg-[#1f1f1f]/60 p-4 backdrop-blur-sm space-y-3">
-                          <div className="flex items-center justify-between gap-3">
-                            <span className="text-xs uppercase tracking-wide opacity-70">{t("discoveryPage.infoCard.colorsLabel")}</span>
-                            <Badge
-                              className={`rounded-full text-[11px] font-medium border-none px-3 py-1 ${
-                                current?.seedsAvailable
-                                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200"
-                                  : "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-200"
-                              }`}
-                            >
-                              {seedsCopy}
-                            </Badge>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            {colorChips.length > 0 ? (
-                              colorChips.map((color) => {
-                                const key = color.toLowerCase().split(/[\s-]/)[0]
-                                const swatch = colorTokenMap[key] ?? "#a8a29e"
-                                return (
-                                  <span
-                                    key={color}
-                                    className="flex items-center gap-2 rounded-full border border-white/60 dark:border-white/10 bg-white/80 dark:bg-[#111111]/80 px-3 py-1 text-xs font-medium text-stone-700 dark:text-stone-100 shadow-sm"
-                                  >
-                                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: swatch }} />
-                                    {color}
-                                  </span>
-                                )
-                              })
-                            ) : (
-                              <span className="text-xs text-stone-500 dark:text-stone-400">{t("plant.none")}</span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="mt-auto grid w-full gap-2 sm:grid-cols-3 sm:gap-3">
-                        <Button
-                          variant="outline"
-                          className="rounded-2xl w-full"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handlePrevious()
-                          }}
-                          onPointerDown={(e) => e.stopPropagation()}
-                        >
-                          <ChevronLeft className="h-4 w-4 mr-1" />
-                          {t("plant.back")}
-                        </Button>
-                        <Button
-                          className="rounded-2xl w-full"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleInfo()
-                          }}
-                          onPointerDown={(e) => e.stopPropagation()}
-                        >
-                          {t("plant.info")}
-                          <ChevronUp className="h-4 w-4 ml-1" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          className="rounded-2xl w-full"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handlePass()
-                          }}
-                          onPointerDown={(e) => e.stopPropagation()}
-                        >
-                          {t("plant.next")}
-                          <ChevronRight className="h-4 w-4 ml-1" />
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              ) : (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <EmptyState onReset={() => setIndex(0)} />
+                    </Card>
+                  </motion.div>
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <EmptyState onReset={() => setIndex(0)} />
+                  </div>
+                )}
+              </AnimatePresence>
+              {current && (
+                <div
+                  className="mt-4 grid w-full gap-2 pb-4 sm:grid-cols-3 sm:gap-3 sm:pb-0"
+                  style={!isDesktop ? { paddingBottom: "calc(env(safe-area-inset-bottom) + 16px)" } : undefined}
+                >
+                  <Button variant="outline" className="rounded-2xl w-full" onClick={handlePrevious}>
+                    <ChevronLeft className="h-4 w-4 mr-1" />
+                    {t("plant.back")}
+                  </Button>
+                  <Button className="rounded-2xl w-full" onClick={handleInfo}>
+                    {t("plant.info")}
+                    <ChevronUp className="h-4 w-4 ml-1" />
+                  </Button>
+                  <Button variant="outline" className="rounded-2xl w-full" onClick={handlePass}>
+                    {t("plant.next")}
+                    <ChevronRight className="h-4 w-4 ml-1" />
+                  </Button>
                 </div>
               )}
-            </AnimatePresence>
           </div>
 
             <div className="flex flex-wrap items-center justify-center gap-3 pt-3 sm:pt-4">
