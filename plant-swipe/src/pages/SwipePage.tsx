@@ -14,6 +14,7 @@ import {
   SunDim,
   Droplets,
   Droplet,
+  Slash,
   Globe2,
   MapPin,
   Flower2,
@@ -507,14 +508,14 @@ const WATER_ACCENTS: Record<IndicatorLevel, string> = {
 const buildIndicatorItems = (plant: Plant, t: TFunction<"common">): IndicatorItem[] => {
   const items: IndicatorItem[] = []
   const sunSource = plant.environment?.sunExposure || plant.care?.sunlight
-  if (sunSource) {
-    const level = getDescriptorLevel(sunSource) ?? "medium"
+  const sunLevel = resolveSunLevel(sunSource)
+  if (sunSource && sunLevel) {
     items.push({
       key: "sun",
       label: formatIndicatorValue(sunSource) || t("discoveryPage.indicators.sunLevel", { defaultValue: "Sun level" }),
       description: t("discoveryPage.indicators.sunLevel", { defaultValue: "Sun level" }),
-      icon: getSunIcon(level),
-      accentClass: SUN_ACCENTS[level],
+      icon: getSunIcon(sunLevel),
+      accentClass: SUN_ACCENTS[sunLevel],
       ariaValue: formatIndicatorValue(sunSource),
     })
   }
@@ -523,14 +524,14 @@ const buildIndicatorItems = (plant: Plant, t: TFunction<"common">): IndicatorIte
   const freqAmount = typeof freqAmountRaw === "number" ? freqAmountRaw : Number(freqAmountRaw || 0)
   const freqPeriod = (plant.waterFreqPeriod || plant.waterFreqUnit) as "day" | "week" | "month" | "year" | undefined
   const derivedWater = deriveWaterLevelFromFrequency(freqPeriod, freqAmount) || plant.care?.water
-  if (derivedWater) {
-    const level = getDescriptorLevel(derivedWater) ?? "medium"
+  const waterLevel = resolveWaterLevel(derivedWater)
+  if (derivedWater && waterLevel) {
     items.push({
       key: "water",
       label: formatIndicatorValue(derivedWater) || t("discoveryPage.indicators.waterLevel", { defaultValue: "Water level" }),
       description: t("discoveryPage.indicators.waterLevel", { defaultValue: "Water level" }),
-      icon: getWaterIcon(level),
-      accentClass: WATER_ACCENTS[level],
+      icon: getWaterIcon(waterLevel),
+      accentClass: WATER_ACCENTS[waterLevel],
       ariaValue: formatIndicatorValue(derivedWater),
     })
   }
@@ -632,18 +633,60 @@ const getWaterIcon = (level: IndicatorLevel) => {
     case "high":
       return <Droplets className="h-5 w-5" />
     case "low":
-      return <Droplet className="h-5 w-5 opacity-70" />
+      return (
+        <span className="relative flex items-center justify-center">
+          <Droplet className="h-5 w-5 opacity-70" />
+          <Slash className="absolute h-4 w-4 text-white" strokeWidth={2} />
+        </span>
+      )
     default:
       return <Droplet className="h-5 w-5" />
   }
 }
 
-const getDescriptorLevel = (value?: string | null): IndicatorLevel | null => {
-  if (!value) return null
-  const normalized = value.toString().toLowerCase()
-  if (normalized.includes("full") || normalized.includes("high") || normalized.includes("bright")) return "high"
-  if (normalized.includes("partial") || normalized.includes("medium") || normalized.includes("moderate")) return "medium"
-  if (normalized.includes("low") || normalized.includes("shade") || normalized.includes("no sun")) return "low"
+const normalizeDescriptor = (value?: string | null): string => value?.toString().trim().toLowerCase() ?? ""
+
+const includesAny = (value: string, tokens: string[]) => tokens.some((token) => value.includes(token))
+
+const resolveSunLevel = (value?: string | null): IndicatorLevel | null => {
+  const normalized = normalizeDescriptor(value)
+  if (!normalized) return null
+
+  const sunHighTokens = ["full sun", "direct sun", "bright light", "very bright", "brightness 7", "plein soleil"]
+  const sunMediumTokens = ["partial sun", "partial shade", "filtered sun", "indirect light", "medium light", "brightness medium"]
+  const sunLowTokens = ["full shade", "shade only", "no sun", "no sunlight", "low light", "brightness empty", "no sun necessary"]
+
+  if (includesAny(normalized, sunHighTokens)) return "high"
+  if (includesAny(normalized, sunMediumTokens)) return "medium"
+  if (includesAny(normalized, sunLowTokens)) return "low"
+
+  if (normalized.includes("partial shade")) return "medium"
+  if (normalized.includes("partial")) return "medium"
+  if (normalized.includes("shade")) return normalized.includes("partial") ? "medium" : "low"
+  if (normalized.includes("sun")) return normalized.includes("partial") ? "medium" : "high"
+  if (normalized.includes("high") || normalized.includes("bright")) return "high"
+  if (normalized.includes("medium") || normalized.includes("moderate") || normalized.includes("indirect")) return "medium"
+  if (normalized.includes("low") || normalized.includes("dark")) return "low"
+
+  return null
+}
+
+const resolveWaterLevel = (value?: string | null): IndicatorLevel | null => {
+  const normalized = normalizeDescriptor(value)
+  if (!normalized) return null
+
+  const waterHighTokens = ["keep moist", "moist soil", "soak", "wet", "daily", "frequent", "humidity high", "high humidity", "high water", "constant moisture"]
+  const waterMediumTokens = ["medium", "moderate", "balanced", "weekly", "every few days", "humidity mid", "average", "regular"]
+  const waterLowTokens = ["low", "dry", "drought", "sparingly", "infrequent", "monthly", "humidity low", "succulent", "well-drained"]
+
+  if (includesAny(normalized, waterHighTokens) || normalized === "high") return "high"
+  if (includesAny(normalized, waterMediumTokens) || normalized === "medium") return "medium"
+  if (includesAny(normalized, waterLowTokens) || normalized === "low") return "low"
+
+  if (normalized.includes("frequent") || normalized.includes("often")) return "high"
+  if (normalized.includes("weekly") || normalized.includes("regular") || normalized.includes("average")) return "medium"
+  if (normalized.includes("rarely") || normalized.includes("seldom") || normalized.includes("little")) return "low"
+
   return null
 }
 
