@@ -34,6 +34,7 @@ import type { Plant, PlantDimensions } from "@/types/plant";
 import { rarityTone, seasonBadge } from "@/constants/badges";
 import { formatClassificationLabel } from "@/constants/classification";
 import { cn, deriveWaterLevelFromFrequency } from "@/lib/utils";
+import { resolveColorValue } from "@/lib/colors";
 import { isNewPlant, isPlantOfTheMonth, isPopularPlant } from "@/lib/plantHighlights";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/context/AuthContext";
@@ -206,26 +207,6 @@ const MAP_PIN_POSITIONS = [
 ]
 
 const MONTH_KEYS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
-
-const NAMED_COLOR_MAP: Record<string, string> = {
-  red: '#f87171',
-  orange: '#fb923c',
-  yellow: '#facc15',
-  green: '#34d399',
-  blue: '#60a5fa',
-  purple: '#c084fc',
-  pink: '#f472b6',
-  white: '#e5e7eb',
-  black: '#1f2937',
-  brown: '#b45309',
-  bronze: '#b45309',
-  gold: '#fbbf24',
-  silver: '#a1a1aa',
-  teal: '#14b8a6',
-  indigo: '#6366f1',
-  cyan: '#22d3ee',
-  magenta: '#d946ef'
-}
 
 const TEXT_EXTRACTION_KEYS = ['text', 'value', 'defaultValue', 'description', 'label', 'name', 'title'] as const
 
@@ -738,8 +719,6 @@ type BaseTooltipProps = {
 const isSeasonKey = (value: unknown): value is SeasonKey =>
   typeof value === 'string' && value in TIMELINE_COLORS;
 
-const HEX_COLOR_REGEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/
-
 const descriptorScore = (value?: string | null): number => {
   if (!value) return 0
   const normalized = value.toString().trim().toLowerCase()
@@ -756,18 +735,6 @@ const descriptorScore = (value?: string | null): number => {
   if (normalized.includes('easy')) return 2
   if (normalized.includes('difficult') || normalized.includes('hard')) return 4
   return 3
-}
-
-const resolveColorValue = (value?: string | null): string => {
-  if (!value) return '#34d399'
-  const trimmed = value.trim()
-  if (!trimmed) return '#34d399'
-  if (HEX_COLOR_REGEX.test(trimmed)) return trimmed
-  const normalized = trimmed.toLowerCase()
-  if (NAMED_COLOR_MAP[normalized]) return NAMED_COLOR_MAP[normalized]
-  const firstWord = normalized.split(/[\s/-]+/)[0]
-  if (NAMED_COLOR_MAP[firstWord]) return NAMED_COLOR_MAP[firstWord]
-  return trimmed
 }
 
 export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?: boolean; onToggleLike?: () => void; isOverlayMode?: boolean; onRequestPlant?: () => void }> = ({ plant, onClose, liked = false, onToggleLike, isOverlayMode = false, onRequestPlant }) => {
