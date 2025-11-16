@@ -271,7 +271,7 @@ export function mergePlantWithTranslation(
             : basePlant.rarity === 'Legendary' ? 'very rare'
             : undefined),
           authorNotes: translationMeta?.authorNotes || meta?.authorNotes || basePlant.author_notes || undefined,
-          funFact: translationMeta?.funFact || meta?.funFact || basePlant.meaning || undefined,
+          funFact: translationMeta?.funFact || meta?.funFact || undefined,
           createdAt: translationMeta?.createdAt || meta?.createdAt || basePlant.created_at || undefined,
           updatedAt: translationMeta?.updatedAt || meta?.updatedAt || basePlant.updated_at || undefined,
         },

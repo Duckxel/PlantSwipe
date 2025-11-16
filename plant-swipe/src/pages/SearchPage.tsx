@@ -24,7 +24,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({
 
   return (
     <div className="max-w-6xl mx-auto mt-8 px-4 md:px-0 pb-16 space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
         {plants.map((p) => {
           const highlightBadges: Array<{ key: string; label: string; className: string; icon: React.ReactNode }> = []
           if (isPlantOfTheMonth(p)) {
@@ -54,7 +54,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({
           return (
             <Card
               key={p.id}
-              className={cardSurface}
+              className={`${cardSurface} h-full`}
               onClick={() => openInfo(p)}
               role="button"
               tabIndex={0}
