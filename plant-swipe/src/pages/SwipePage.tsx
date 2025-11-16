@@ -14,7 +14,6 @@ import {
   SunDim,
   Droplets,
   Droplet,
-  DropletSlash,
   Globe2,
   MapPin,
   Flower2,
@@ -633,7 +632,7 @@ const getWaterIcon = (level: IndicatorLevel) => {
     case "high":
       return <Droplets className="h-5 w-5" />
     case "low":
-      return <DropletSlash className="h-5 w-5" />
+      return <Droplet className="h-5 w-5 opacity-70" />
     default:
       return <Droplet className="h-5 w-5" />
   }
