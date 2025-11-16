@@ -80,7 +80,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
   }, [handleInfo, handlePass, handlePrevious])
 
     const desktopCardHeight = "min(720px, calc(100vh - 12rem))"
-    const mobileCardHeight = "calc(100vh - 9rem)"
+    const mobileCardHeight = "calc(100vh - 11.5rem)"
 
   const rarityKey = current?.rarity && rarityTone[current.rarity] ? current.rarity : "Common"
   const seasons = (current?.seasons ?? []) as PlantSeason[]
@@ -116,7 +116,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
 
     return (
       <div
-        className="max-w-5xl mx-auto mt-4 sm:mt-6 px-1 sm:px-4 md:px-0 pb-[140px] md:pb-16"
+        className="max-w-5xl mx-auto mt-0 sm:mt-6 px-1 sm:px-4 md:px-0 pb-[140px] md:pb-16"
         style={!isDesktop ? { paddingBottom: "calc(env(safe-area-inset-bottom) + 140px)" } : undefined}
       >
       <motion.section
