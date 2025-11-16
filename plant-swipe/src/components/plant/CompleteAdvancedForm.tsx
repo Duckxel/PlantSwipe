@@ -94,6 +94,29 @@ const ArrayInputField: React.FC<{
         </div>
       )}
     </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+        <div className="flex flex-wrap gap-2 rounded-2xl border border-stone-200/70 bg-white/80 p-2 dark:border-[#3e3e42]/70 dark:bg-[#1e1e1e]">
+          {tabOptions.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+              onClick={() => setActiveTab(tab.id)}
+            className={`px-3 py-1.5 rounded-2xl text-sm font-medium transition ${
+              activeTab === tab.id
+                ? 'bg-emerald-600 text-white shadow'
+                : 'bg-transparent text-stone-600 dark:text-stone-300 hover:bg-stone-100/70 dark:hover:bg-[#2d2d30]'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+      {activeTab === 'classification' ? classificationSection : detailSections}
+    </div>
   )
 }
 
@@ -271,6 +294,7 @@ interface CompleteAdvancedFormProps {
   // All form state
   classification: Partial<PlantClassification>
   setClassification: React.Dispatch<React.SetStateAction<Partial<PlantClassification>>>
+  focusClassificationTabSignal?: number
   identifiers: Partial<PlantIdentifiers>
   setIdentifiers: React.Dispatch<React.SetStateAction<Partial<PlantIdentifiers>>>
   traits: Partial<PlantTraits>
@@ -302,6 +326,7 @@ interface CompleteAdvancedFormProps {
 export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
   classification,
   setClassification,
+  focusClassificationTabSignal,
   identifiers,
   setIdentifiers,
   traits,
@@ -335,6 +360,17 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
   const availableSubSubclassOptions = selectedSubclass ? PLANT_SUBSUBCLASS_OPTIONS[selectedSubclass] || [] : []
   const selectedActivities = classification?.activities || []
   const selectedSubActivities = classification?.subActivities || {}
+  const [activeTab, setActiveTab] = React.useState<'classification' | 'details'>('classification')
+  const tabOptions: Array<{ id: 'classification' | 'details'; label: string }> = [
+    { id: 'classification', label: 'Classification' },
+    { id: 'details', label: 'Details' },
+  ]
+
+  React.useEffect(() => {
+    if (typeof focusClassificationTabSignal === 'number') {
+      setActiveTab('classification')
+    }
+  }, [focusClassificationTabSignal])
 
   const updateClassification = (mutator: (draft: Partial<PlantClassification>) => void) => {
     setClassification((prev) => {
@@ -377,116 +413,119 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
     })
   }
 
-  return (
-    <div className="space-y-4">
-        <CollapsibleSection title="Classification" defaultOpen>
-          <div className="grid gap-4">
-            <div className="grid gap-2">
-              <Label>Type</Label>
-              <select
-                className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm"
-                value={selectedType || ''}
-                onChange={(e) => {
-                  const nextValue = e.target.value as PlantClassification["type"] | ''
-                  updateClassification((draft) => {
-                    if (nextValue) {
-                      draft.type = nextValue as PlantClassification["type"]
-                    } else {
-                      delete draft.type
-                    }
-                    if (nextValue !== 'plant') {
-                      delete draft.subclass
-                      delete draft.subSubclass
-                    }
-                  })
-                }}
-              >
-                <option value="">Select...</option>
-                {PLANT_TYPE_OPTIONS.map((opt) => (
-                  <option key={opt} value={opt}>
-                    {formatClassificationLabel(opt)}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs opacity-70">A plant can only belong to one type at a time.</p>
-            </div>
-            <div className="grid gap-2">
-              <Label>Subclass (type-specific)</Label>
-              <select
-                className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm"
-                value={selectedSubclass || ''}
-                onChange={(e) => {
-                  const nextValue = e.target.value as PlantClassification["subclass"] | ''
-                  updateClassification((draft) => {
-                    if (nextValue) {
-                      draft.subclass = nextValue as PlantClassification["subclass"]
-                    } else {
-                      delete draft.subclass
-                    }
-                    if (nextValue !== 'vegetable') {
-                      delete draft.subSubclass
-                    }
-                  })
-                }}
-                disabled={(selectedType || '') !== 'plant'}
-              >
-                <option value="">Select...</option>
-                {availableSubclassOptions.map((opt) => (
-                  <option key={opt} value={opt}>
-                    {formatClassificationLabel(opt)}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {availableSubSubclassOptions.length > 0 && (
-              <div className="grid gap-2">
-                <Label>Sub-subclass</Label>
-                <select
-                  className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm"
-                  value={classification?.subSubclass || ''}
-                  onChange={(e) => {
-                    const nextValue = e.target.value as PlantClassification["subSubclass"] | ''
-                    updateClassification((draft) => {
-                      if (nextValue) {
-                        draft.subSubclass = nextValue as PlantClassification["subSubclass"]
-                      } else {
-                        delete draft.subSubclass
-                      }
-                    })
-                  }}
-                >
-                  <option value="">Select...</option>
-                  {availableSubSubclassOptions.map((opt) => (
-                    <option key={opt} value={opt}>
-                      {formatClassificationLabel(opt)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-            <MultiSelectButtons
-              label="Activities"
-              values={selectedActivities}
-              options={PLANT_ACTIVITY_OPTIONS}
-              onChange={handleActivitiesChange}
-            />
-            {selectedActivities.map((activity) => {
-              const options = PLANT_SUBACTIVITY_OPTIONS[activity]
-              if (!options || options.length === 0) {
-                return null
-              }
-              return (
-                <MultiSelectButtons
-                  key={activity}
-                  label={`Subactivity — ${formatClassificationLabel(activity)}`}
-                  values={selectedSubActivities[activity] || []}
-                  options={options}
-                  onChange={(values) => handleSubActivitiesChange(activity, values)}
-                />
-              )
-            })}
+  const classificationSection = (
+    <CollapsibleSection title="Classification" defaultOpen>
+      <div className="grid gap-4">
+        <div className="grid gap-2">
+          <Label>Type</Label>
+          <select
+            className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm"
+            value={selectedType || ''}
+            onChange={(e) => {
+              const nextValue = e.target.value as PlantClassification["type"] | ''
+              updateClassification((draft) => {
+                if (nextValue) {
+                  draft.type = nextValue as PlantClassification["type"]
+                } else {
+                  delete draft.type
+                }
+                if (nextValue !== 'plant') {
+                  delete draft.subclass
+                  delete draft.subSubclass
+                }
+              })
+            }}
+          >
+            <option value="">Select...</option>
+            {PLANT_TYPE_OPTIONS.map((opt) => (
+              <option key={opt} value={opt}>
+                {formatClassificationLabel(opt)}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs opacity-70">A plant can only belong to one type at a time.</p>
+        </div>
+        <div className="grid gap-2">
+          <Label>Subclass (type-specific)</Label>
+          <select
+            className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm"
+            value={selectedSubclass || ''}
+            onChange={(e) => {
+              const nextValue = e.target.value as PlantClassification["subclass"] | ''
+              updateClassification((draft) => {
+                if (nextValue) {
+                  draft.subclass = nextValue as PlantClassification["subclass"]
+                } else {
+                  delete draft.subclass
+                }
+                if (nextValue !== 'vegetable') {
+                  delete draft.subSubclass
+                }
+              })
+            }}
+            disabled={(selectedType || '') !== 'plant'}
+          >
+            <option value="">Select...</option>
+            {availableSubclassOptions.map((opt) => (
+              <option key={opt} value={opt}>
+                {formatClassificationLabel(opt)}
+              </option>
+            ))}
+          </select>
+        </div>
+        {availableSubSubclassOptions.length > 0 && (
+          <div className="grid gap-2">
+            <Label>Sub-subclass</Label>
+            <select
+              className="flex h-9 w-full rounded-md border border-input dark:border-[#3e3e42] bg-transparent dark:bg-[#2d2d30] px-3 py-1 text-sm"
+              value={classification?.subSubclass || ''}
+              onChange={(e) => {
+                const nextValue = e.target.value as PlantClassification["subSubclass"] | ''
+                updateClassification((draft) => {
+                  if (nextValue) {
+                    draft.subSubclass = nextValue as PlantClassification["subSubclass"]
+                  } else {
+                    delete draft.subSubclass
+                  }
+                })
+              }}
+            >
+              <option value="">Select...</option>
+              {availableSubSubclassOptions.map((opt) => (
+                <option key={opt} value={opt}>
+                  {formatClassificationLabel(opt)}
+                </option>
+              ))}
+            </select>
           </div>
-        </CollapsibleSection>
+        )}
+        <MultiSelectButtons
+          label="Activities"
+          values={selectedActivities}
+          options={PLANT_ACTIVITY_OPTIONS}
+          onChange={handleActivitiesChange}
+        />
+        {selectedActivities.map((activity) => {
+          const options = PLANT_SUBACTIVITY_OPTIONS[activity]
+          if (!options || options.length === 0) {
+            return null
+          }
+          return (
+            <MultiSelectButtons
+              key={activity}
+              label={`Subactivity — ${formatClassificationLabel(activity)}`}
+              values={selectedSubActivities[activity] || []}
+              options={options}
+              onChange={(values) => handleSubActivitiesChange(activity, values)}
+            />
+          )
+        })}
+      </div>
+    </CollapsibleSection>
+  )
+
+  const detailSections = (
+    <>
       {/* Identifiers */}
       <CollapsibleSection title="Identifiers">
         <div className="grid gap-4">

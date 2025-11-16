@@ -1,4 +1,10 @@
-export type RequiredFieldId = 'scientificName' | 'colors' | 'seasons' | 'description' | 'funFact'
+export type RequiredFieldId =
+  | 'scientificName'
+  | 'colors'
+  | 'seasons'
+  | 'description'
+  | 'funFact'
+  | 'classification'
 
 export type AiFieldStatus = 'pending' | 'working' | 'filled' | 'missing'
 
@@ -32,6 +38,11 @@ export const REQUIRED_FIELD_CONFIG: Array<{
     label: 'Meaning / Symbolism',
     sourceKeys: ['meta'],
   },
+    {
+      id: 'classification',
+      label: 'Classification',
+      sourceKeys: ['classification'],
+    },
 ]
 
 export const AI_FIELD_STATUS_TEXT: Record<AiFieldStatus, string> = {
@@ -47,6 +58,7 @@ export const REQUIRED_FIELD_TO_SCHEMA_KEY: Record<RequiredFieldId, string> = {
   seasons: 'seasons',
   description: 'description',
   funFact: 'meta',
+  classification: 'classification',
 }
 
 export interface AiFieldStateSnapshot {
@@ -55,6 +67,7 @@ export interface AiFieldStateSnapshot {
   seasons: string[]
   description: string
   funFact: string
+  classificationType: string
 }
 
 export const MIN_DESCRIPTION_WORDS = 100
@@ -190,6 +203,8 @@ export function isFieldFilledFromState(id: RequiredFieldId, state: AiFieldStateS
       return isDescriptionValid(state.description)
     case 'funFact':
       return isFunFactValid(state.funFact)
+    case 'classification':
+      return state.classificationType.trim().length > 0
     default:
       return false
   }
@@ -249,6 +264,13 @@ export function isFieldFilledFromData(
       }
       return false
     }
+      case 'classification': {
+        if (fieldKey === 'classification' && fieldData && typeof fieldData === 'object') {
+          const value = (fieldData as any).type
+          return typeof value === 'string' && value.trim().length > 0
+        }
+        return false
+      }
     default:
       return false
   }

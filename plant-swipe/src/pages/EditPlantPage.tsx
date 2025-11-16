@@ -166,6 +166,7 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
   }
     // New JSONB structure state
     const [classification, setClassification] = React.useState<Partial<PlantClassification>>({})
+    const [classificationTabSignal, setClassificationTabSignal] = React.useState(0)
   const [identifiers, setIdentifiers] = React.useState<Partial<PlantIdentifiers>>({})
   const [traits, setTraits] = React.useState<Partial<PlantTraits>>({})
   const [dimensions, setDimensions] = React.useState<Partial<PlantDimensions>>({})
@@ -194,6 +195,7 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
       seasons,
       description,
       funFact,
+      classificationType: classification?.type ?? '',
     }
     const nextStatuses: Record<RequiredFieldId, AiFieldStatus> = { ...aiFieldStatuses }
     let statusChanged = false
@@ -216,7 +218,7 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
       }
       return missing
     })
-  }, [aiFilling, aiFieldStatuses, scientificName, colors, seasons, description, funFact])
+    }, [aiFilling, aiFieldStatuses, scientificName, colors, seasons, description, funFact, classification?.type])
 
   const toggleSeason = (s: Plant["seasons"][number]) => {
     setSeasons((cur: string[]) => (cur.includes(s) ? cur.filter((x: string) => x !== s) : [...cur, s]))
@@ -595,13 +597,14 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
         }
       }
 
-      const finalizeSnapshot = (): AiFieldStateSnapshot => ({
-        scientificName: latestScientificName,
-        colors: latestColors,
-        seasons: latestSeasons,
-        description: latestDescription,
-        funFact: latestFunFact,
-      })
+        const finalizeSnapshot = (): AiFieldStateSnapshot => ({
+          scientificName: latestScientificName,
+          colors: latestColors,
+          seasons: latestSeasons,
+          description: latestDescription,
+          funFact: latestFunFact,
+          classificationType: latestClassification?.type ?? '',
+        })
 
       const runFullFill = async () => {
         const aiData = await fetchAiPlantFill({
@@ -950,7 +953,30 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
     }
   }
 
-  const save = async () => {
+    const focusClassificationTab = React.useCallback(() => {
+      setClassificationTabSignal((prev) => prev + 1)
+    }, [])
+
+    const ensureClassificationValid = () => {
+      if (!classification?.type) {
+        setError('Please choose a plant type inside the Classification tab.')
+        focusClassificationTab()
+        return false
+      }
+      if (classification.type === 'plant' && !classification.subclass) {
+        setError('Please select a subclass for plant types.')
+        focusClassificationTab()
+        return false
+      }
+      if (classification.subclass === 'vegetable' && !classification.subSubclass) {
+        setError('Please select a sub-subclass when subclass is Vegetable.')
+        focusClassificationTab()
+        return false
+      }
+      return true
+    }
+
+    const save = async () => {
     if (!id) return
     setError(null)
     setOk(null)
@@ -962,10 +988,11 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
     if (seasons.length === 0) { setError("Select at least one season"); return }
     if (!description.trim()) { setError("Overview is required"); return }
     const descriptionWordCount = countWords(description)
-    if (descriptionWordCount < 100 || descriptionWordCount > 400) {
+      if (descriptionWordCount < 100 || descriptionWordCount > 400) {
       setError(`Overview must be between 100 and 400 words (currently ${descriptionWordCount}).`)
       return
     }
+      if (!ensureClassificationValid()) return
     // Validate frequency constraints
     const periodMax: Record<'week'|'month'|'year', number> = { week: 7, month: 4, year: 12 }
     const maxAllowed = periodMax[waterFreqPeriod]
@@ -1275,6 +1302,7 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
                 <CompleteAdvancedForm
                   classification={classification}
                   setClassification={setClassification}
+                  focusClassificationTabSignal={classificationTabSignal}
                   identifiers={identifiers}
                   setIdentifiers={setIdentifiers}
                   traits={traits}
