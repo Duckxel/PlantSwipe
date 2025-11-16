@@ -556,6 +556,21 @@ export default function PlantSwipe() {
 
   const FilterControls = () => (
     <div className="space-y-6">
+      {/* Sort */}
+      <div>
+        <div className="text-xs font-medium mb-2 uppercase tracking-wide opacity-60">{t("plant.sortLabel")}</div>
+        <select
+          value={searchSort}
+          onChange={(e) => setSearchSort(e.target.value as SearchSortMode)}
+          className="w-full rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-white"
+        >
+          <option value="default">{t("plant.sortDefault")}</option>
+          <option value="newest">{t("plant.sortNewest")}</option>
+          <option value="popular">{t("plant.sortPopular")}</option>
+          <option value="favorites">{t("plant.sortFavorites")}</option>
+        </select>
+      </div>
+
       {/* Classification */}
       <div>
         <FilterSectionHeader
@@ -628,21 +643,6 @@ export default function PlantSwipe() {
             </div>
           </div>
         )}
-      </div>
-
-      {/* Sort */}
-      <div>
-        <div className="text-xs font-medium mb-2 uppercase tracking-wide opacity-60">{t("plant.sortLabel")}</div>
-        <select
-          value={searchSort}
-          onChange={(e) => setSearchSort(e.target.value as SearchSortMode)}
-          className="w-full rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-white"
-        >
-          <option value="default">{t("plant.sortDefault")}</option>
-          <option value="newest">{t("plant.sortNewest")}</option>
-          <option value="popular">{t("plant.sortPopular")}</option>
-          <option value="favorites">{t("plant.sortFavorites")}</option>
-        </select>
       </div>
 
       {/* Seasons */}
