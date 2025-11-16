@@ -38,6 +38,7 @@ import { isNewPlant, isPlantOfTheMonth, isPopularPlant } from "@/lib/plantHighli
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
+import { getPrimaryPhotoUrl, MAX_PLANT_PHOTOS } from "@/lib/photos";
 import { useTranslation } from "react-i18next";
 import {
   ResponsiveContainer,
@@ -1042,7 +1043,30 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
     [humanize],
   )
 
-  const heroImage = plant.image || (plant as any)?.image_url || ''
+  const fallbackHeroImage = getPrimaryPhotoUrl(plant.photos ?? []) || plant.image || (plant as any)?.image_url || ''
+  const galleryPhotos = React.useMemo(() => {
+    if (Array.isArray(plant.photos) && plant.photos.length > 0) {
+      return plant.photos
+        .filter((photo) => typeof photo?.url === "string" && photo.url.trim())
+        .slice(0, MAX_PLANT_PHOTOS)
+        .map((photo) => ({ ...photo, url: photo.url.trim() }))
+    }
+    return fallbackHeroImage ? [{ url: fallbackHeroImage, isPrimary: true }] : []
+  }, [plant.photos, fallbackHeroImage])
+  const [activePhotoIndex, setActivePhotoIndex] = React.useState(0)
+  const gallerySignature = React.useMemo(
+    () => galleryPhotos.map((photo) => photo.url).join("|"),
+    [galleryPhotos]
+  )
+  React.useEffect(() => {
+    if (galleryPhotos.length === 0) {
+      setActivePhotoIndex(0)
+      return
+    }
+    const primaryIdx = galleryPhotos.findIndex((photo) => photo.isPrimary)
+    setActivePhotoIndex(primaryIdx !== -1 ? primaryIdx : 0)
+  }, [plant.id, gallerySignature, galleryPhotos.length])
+  const activePhotoUrl = galleryPhotos[activePhotoIndex]?.url || fallbackHeroImage || ""
   const friendlyFrequency = React.useMemo(
     () => formatFrequencyLabel(freqLabel),
     [formatFrequencyLabel, freqLabel]
@@ -1734,35 +1758,56 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
               transition={{ delay: 0.3, duration: 0.6 }}
               className="relative"
             >
-              <div
-                className={cn(
-                  'group relative overflow-hidden rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] shadow-lg transition hover:shadow-xl',
-                  heroImage ? 'cursor-zoom-in' : 'cursor-default'
-                )}
-                role={heroImage ? 'button' : undefined}
-                tabIndex={heroImage ? 0 : undefined}
-                onClick={() => heroImage && setIsImageFullScreen(true)}
-                onKeyDown={(e) => {
-                  if (heroImage && (e.key === 'Enter' || e.key === ' ')) {
-                    e.preventDefault()
-                    setIsImageFullScreen(true)
-                  }
-                }}
-                aria-label={heroImage ? t('plantInfo.viewFullScreen') : undefined}
-              >
-                {heroImage ? (
-                  <img
-                    src={heroImage}
-                    alt={plant.name}
-                    className="max-h-[420px] w-full object-cover transition duration-500 group-hover:scale-[1.02]"
-                  />
-                ) : (
-                  <div className="flex h-[320px] items-center justify-center text-stone-600 dark:text-stone-400">
-                    <Leaf className="mr-2 h-6 w-6" />
-                    {t('plantInfo.overview')}
-                  </div>
-                )}
-              </div>
+                <div
+                  className={cn(
+                    'group relative overflow-hidden rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] shadow-lg transition hover:shadow-xl',
+                    activePhotoUrl ? 'cursor-zoom-in' : 'cursor-default'
+                  )}
+                  role={activePhotoUrl ? 'button' : undefined}
+                  tabIndex={activePhotoUrl ? 0 : undefined}
+                  onClick={() => activePhotoUrl && setIsImageFullScreen(true)}
+                  onKeyDown={(e) => {
+                    if (activePhotoUrl && (e.key === 'Enter' || e.key === ' ')) {
+                      e.preventDefault()
+                      setIsImageFullScreen(true)
+                    }
+                  }}
+                  aria-label={activePhotoUrl ? t('plantInfo.viewFullScreen') : undefined}
+                >
+                  {activePhotoUrl ? (
+                    <>
+                      <img
+                        src={activePhotoUrl}
+                        alt={plant.name}
+                        className="max-h-[420px] w-full object-cover transition duration-500 group-hover:scale-[1.02]"
+                      />
+                      {galleryPhotos.length > 1 && (
+                        <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 gap-2">
+                          {galleryPhotos.map((photo, idx) => (
+                            <button
+                              key={`${photo.url}-${idx}`}
+                              type="button"
+                              className={cn(
+                                'h-2.5 w-2.5 rounded-full border border-white/70 transition',
+                                idx === activePhotoIndex ? 'bg-white' : 'bg-white/40 hover:bg-white/70'
+                              )}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                setActivePhotoIndex(idx)
+                              }}
+                              aria-label={t('plantInfo.viewPhoto', { defaultValue: 'View photo {{index}}', index: idx + 1 })}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="flex h-[320px] items-center justify-center text-stone-600 dark:text-stone-400">
+                      <Leaf className="mr-2 h-6 w-6" />
+                      {t('plantInfo.overview')}
+                    </div>
+                  )}
+                </div>
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -2466,20 +2511,22 @@ export const PlantDetails: React.FC<{ plant: Plant; onClose: () => void; liked?:
                   onTouchEnd={handleTouchEnd}
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <img
-                    ref={imageRef}
-                    src={plant.image}
-                    alt={plant.name}
-                    className={`max-w-full max-h-full select-none object-contain ${zoom > 1 ? 'cursor-move' : 'cursor-zoom-in'}`}
-                    style={{
-                      transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`,
-                      transformOrigin: 'center center',
-                      transition: isDragging ? 'none' : 'transform 0.1s ease-out'
-                    }}
-                    onMouseDown={handleImageMouseDown}
-                    draggable={false}
-                    onClick={(e) => e.stopPropagation()}
-                  />
+                    {activePhotoUrl ? (
+                      <img
+                        ref={imageRef}
+                        src={activePhotoUrl}
+                        alt={plant.name}
+                        className={`max-w-full max-h-full select-none object-contain ${zoom > 1 ? 'cursor-move' : 'cursor-zoom-in'}`}
+                        style={{
+                          transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`,
+                          transformOrigin: 'center center',
+                          transition: isDragging ? 'none' : 'transform 0.1s ease-out'
+                        }}
+                        onMouseDown={handleImageMouseDown}
+                        draggable={false}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    ) : null}
                 </div>
               </div>
             </DialogContent>

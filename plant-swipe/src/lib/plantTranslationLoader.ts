@@ -6,6 +6,7 @@
 import { supabase } from './supabaseClient'
 import type { SupportedLanguage } from './i18n'
 import type { Plant } from '@/types/plant'
+import { getPrimaryPhotoUrl, normalizePlantPhotos } from '@/lib/photos'
 
 const sanitizeStringValue = (value: string): string | undefined => {
   const trimmed = value.trim()
@@ -137,10 +138,12 @@ export function mergePlantWithTranslation(
     const translationProblems = translation?.problems
       ? (typeof translation.problems === 'string' ? JSON.parse(translation.problems) : translation.problems)
       : null
+    const normalizedPhotos = normalizePlantPhotos(basePlant.photos, basePlant.image_url || basePlant.image)
 
-      const mergedPlant: Plant = {
+    const mergedPlant: Plant = {
       id: String(basePlant.id),
       name: translation?.name || basePlant.name || '',
+    photos: normalizedPhotos,
       // New structured format - merge with translations where applicable
       identifiers: {
         ...identifiers,
@@ -279,7 +282,7 @@ export function mergePlantWithTranslation(
       rarity: (basePlant.rarity || 'Common') as Plant['rarity'],
       meaning: translation?.meaning || basePlant.meaning || '',
       description: translation?.description || basePlant.description || '',
-      image: basePlant.image_url || basePlant.image || '',
+    image: getPrimaryPhotoUrl(normalizedPhotos) || basePlant.image_url || basePlant.image || '',
       seedsAvailable: Boolean(basePlant.seeds_available ?? commerce?.seedsAvailable ?? false),
       waterFreqUnit: basePlant.water_freq_unit || basePlant.waterFreqUnit || undefined,
       waterFreqValue: basePlant.water_freq_value ?? basePlant.waterFreqValue ?? null,
@@ -311,7 +314,7 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
         supabase
           .from('plants')
           .select(
-            'id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount, classification, identifiers, traits, dimensions, phenology, environment, care, propagation, usage, ecology, commerce, problems, planting, meta, created_at, updated_at'
+              'id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, photos, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount, classification, identifiers, traits, dimensions, phenology, environment, care, propagation, usage, ecology, commerce, problems, planting, meta, created_at, updated_at'
           )
         .order('name', { ascending: true }),
       supabase.rpc('top_liked_plants', { limit_count: TOP_LIKED_LIMIT }),

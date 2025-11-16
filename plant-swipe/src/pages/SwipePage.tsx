@@ -9,6 +9,7 @@ import { rarityTone, seasonBadge } from "@/constants/badges"
 import { useTranslation } from "react-i18next"
 import { Link } from "@/components/i18n/Link"
 import { isNewPlant, isPlantOfTheMonth, isPopularPlant } from "@/lib/plantHighlights"
+import { getVerticalPhotoUrl } from "@/lib/photos"
 
 interface SwipePageProps {
   current: Plant | undefined
@@ -84,6 +85,11 @@ export const SwipePage: React.FC<SwipePageProps> = ({
 
   const rarityKey = current?.rarity && rarityTone[current.rarity] ? current.rarity : "Common"
   const seasons = (current?.seasons ?? []) as PlantSeason[]
+  const displayImage = React.useMemo(() => {
+    if (!current) return ""
+    const vertical = getVerticalPhotoUrl(current.photos ?? [])
+    return vertical || current.image || ""
+  }, [current])
   const highlightBadges = React.useMemo(() => {
     if (!current) return []
     const badges: Array<{ key: string; label: string; icon: React.ReactNode; className: string }> = []
@@ -148,9 +154,9 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                     transition={{ duration: 0.2, ease: "easeOut" }}
                     className="relative h-full w-full cursor-grab active:cursor-grabbing select-none"
                   >
-                    <Card className="relative h-full w-full overflow-hidden rounded-[28px] border border-white/60 dark:border-white/10 bg-black text-white shadow-2xl">
-                      {current.image ? (
-                        <div className="absolute inset-0 z-0 bg-cover bg-center" style={{ backgroundImage: `url(${current.image})` }} />
+                      <Card className="relative h-full w-full overflow-hidden rounded-[28px] border border-white/60 dark:border-white/10 bg-black text-white shadow-2xl">
+                        {displayImage ? (
+                          <div className="absolute inset-0 z-0 bg-cover bg-center" style={{ backgroundImage: `url(${displayImage})` }} />
                       ) : (
                         <div className="absolute inset-0 z-0 bg-gradient-to-br from-emerald-200 via-emerald-100 to-white" />
                       )}
