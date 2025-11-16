@@ -66,6 +66,12 @@ export interface ColorInfo {
   hex?: string
 }
 
+export interface PlantPhoto {
+  url: string
+  isPrimary?: boolean
+  isVertical?: boolean
+}
+
 export interface PlantPhenology {
   flowerColors?: ColorInfo[]
   leafColors?: ColorInfo[]
@@ -228,6 +234,7 @@ export interface Plant {
   // Legacy name field for backward compatibility
   name: string
   image?: string
+  photos?: PlantPhoto[]
   // New structured format
   identifiers?: PlantIdentifiers
   traits?: PlantTraits

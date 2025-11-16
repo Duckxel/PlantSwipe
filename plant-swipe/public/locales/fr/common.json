@@ -164,6 +164,16 @@
       "new": "Nouveau",
       "popular": "Populaire"
     },
+      "indicators": {
+        "sunLevel": "Niveau d'ensoleillement",
+        "waterLevel": "Niveau d'arrosage",
+        "origin": "Origine",
+        "potFriendly": "Adaptée au pot",
+        "edible": "Comestible",
+        "medicinal": "Médicinale",
+        "aromatic": "Aromatique",
+        "colors": "Couleurs"
+      },
     "infoCard": {
       "descriptionLabel": "Description",
       "descriptionFallback": "Description à venir",
@@ -397,6 +407,7 @@
     "description": "Vue d'ensemble",
     "descriptionPlaceholder": "Vue d'ensemble facultative de votre plante",
     "imageUrl": "URL de l'image",
+    "photosHelper": "Ajoutez au moins une URL d'image. Marquez-en une comme principale pour les fiches et signalez celles adaptées au format vertical.",
     "inputLanguage": "Langue d'entrée",
     "inputLanguageDescription": "Sélectionnez la langue dans laquelle vous écrivez. Toutes les langues utiliseront ces données initialement.",
     "translateToAll": "Traduire dans toutes les langues avec DeepL",
@@ -460,6 +471,7 @@
       "shareCopied": "Lien copié dans le presse-papiers !",
       "shareFailed": "Échec de la copie du lien",
       "viewFullScreen": "Voir l'image en plein écran",
+        "viewPhoto": "Voir la photo {{index}}",
       "viewFullDetails": "Afficher tous les détails",
       "deleteConfirm": "Supprimer cette plante ? Cela échouera si elle est utilisée dans un jardin.",
       "day": "jour",
