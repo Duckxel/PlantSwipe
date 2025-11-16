@@ -39,6 +39,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { useLanguage } from "@/lib/i18nRouting";
 import { loadPlantsWithTranslations } from "@/lib/plantTranslationLoader";
 import { isPlantOfTheMonth } from "@/lib/plantHighlights";
+import { formatClassificationLabel } from "@/constants/classification";
 import { useTranslation } from "react-i18next";
 
 // Lazy load heavy pages for code splitting
@@ -46,7 +47,7 @@ const AdminPage = lazy(() => import("@/pages/AdminPage").then(module => ({ defau
 const GardenDashboardPage = lazy(() => import("@/pages/GardenDashboardPage").then(module => ({ default: module.GardenDashboardPage })));
 const GardenListPage = lazy(() => import("@/pages/GardenListPage").then(module => ({ default: module.GardenListPage })));
 
-type SearchSortMode = "default" | "newest" | "popular"
+type SearchSortMode = "default" | "newest" | "popular" | "favorites"
 
 // --- Main Component ---
 export default function PlantSwipe() {
@@ -58,7 +59,10 @@ export default function PlantSwipe() {
   const [colorFilter, setColorFilter] = useState<string | null>(null)
   const [onlySeeds, setOnlySeeds] = useState(false)
   const [onlyFavorites, setOnlyFavorites] = useState(false)
-  const [favoritesFirst, setFavoritesFirst] = useState(false)
+  const [classificationFilter, setClassificationFilter] = useState<string | null>(null)
+  const [seasonSectionOpen, setSeasonSectionOpen] = useState(true)
+  const [colorSectionOpen, setColorSectionOpen] = useState(true)
+  const [classificationSectionOpen, setClassificationSectionOpen] = useState(false)
   const [showFilters, setShowFilters] = useState(() => {
     if (typeof window === "undefined") return true
     return window.innerWidth >= 1024
@@ -93,6 +97,14 @@ export default function PlantSwipe() {
   const [plants, setPlants] = useState<Plant[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const classificationOptions = useMemo(() => {
+    const labels = new Set<string>()
+    plants.forEach((plant) => {
+      extractClassificationLabels(plant.classification).forEach((label) => labels.add(label))
+    })
+    return Array.from(labels).sort((a, b) => a.localeCompare(b))
+  }, [plants])
+  const likedSet = React.useMemo(() => new Set(likedIds), [likedIds])
 
   // Hydrate liked ids from profile when available
   React.useEffect(() => {
@@ -253,32 +265,27 @@ export default function PlantSwipe() {
     }
   }, [user?.id, profile?.display_name])
 
-    const filtered = useMemo(() => {
-      const likedSet = new Set(likedIds)
-      const lowerQuery = query.toLowerCase()
-      const base = plants.filter((p: Plant) => {
-        const colors = Array.isArray(p.colors) ? p.colors : []
-        const seasons = Array.isArray(p.seasons) ? p.seasons : []
-        const matchesQ = `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")}`
-          .toLowerCase()
-          .includes(lowerQuery)
-        const matchesSeason = seasonFilter ? seasons.includes(seasonFilter as Plant['seasons'][number]) : true
-        const matchesColor = colorFilter ? colors.map((c: string) => c.toLowerCase()).includes(colorFilter.toLowerCase()) : true
-        const matchesSeeds = onlySeeds ? Boolean(p.seedsAvailable) : true
-        const matchesFav = onlyFavorites ? likedSet.has(p.id) : true
-        return matchesQ && matchesSeason && matchesColor && matchesSeeds && matchesFav
-      })
-    if (favoritesFirst) {
-      return base.slice().sort((a, b) => {
-        const la = likedSet.has(a.id) ? 1 : 0
-        const lb = likedSet.has(b.id) ? 1 : 0
-        if (la !== lb) return lb - la
-        // fallback: by name asc to keep deterministic
-        return a.name.localeCompare(b.name)
-      })
-    }
-    return base
-  }, [plants, query, seasonFilter, colorFilter, onlySeeds, onlyFavorites, favoritesFirst, likedIds])
+  const filtered = useMemo(() => {
+    const lowerQuery = query.toLowerCase()
+    const normalizedClassification = classificationFilter?.toLowerCase() ?? null
+    return plants.filter((p: Plant) => {
+      const colors = Array.isArray(p.colors) ? p.colors : []
+      const seasons = Array.isArray(p.seasons) ? p.seasons : []
+      const matchesQ = `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")}`
+        .toLowerCase()
+        .includes(lowerQuery)
+      const matchesSeason = seasonFilter ? seasons.includes(seasonFilter as Plant['seasons'][number]) : true
+      const matchesColor = colorFilter ? colors.map((c: string) => c.toLowerCase()).includes(colorFilter.toLowerCase()) : true
+      const matchesSeeds = onlySeeds ? Boolean(p.seedsAvailable) : true
+      const matchesFav = onlyFavorites ? likedSet.has(p.id) : true
+      const matchesClassification = normalizedClassification
+        ? extractClassificationLabels(p.classification).some(
+            (label) => label.toLowerCase() === normalizedClassification
+          )
+        : true
+      return matchesQ && matchesSeason && matchesColor && matchesSeeds && matchesFav && matchesClassification
+    })
+  }, [plants, query, seasonFilter, colorFilter, onlySeeds, onlyFavorites, classificationFilter, likedSet])
 
   // Swiping-only randomized order with continuous wrap-around
   const [shuffleEpoch, setShuffleEpoch] = useState(0)
@@ -323,6 +330,13 @@ export default function PlantSwipe() {
         if (diff !== 0) return diff
         return a.name.localeCompare(b.name)
       })
+    } else if (searchSort === "favorites") {
+      arr.sort((a, b) => {
+        const la = likedSet.has(a.id) ? 1 : 0
+        const lb = likedSet.has(b.id) ? 1 : 0
+        if (la !== lb) return lb - la
+        return a.name.localeCompare(b.name)
+      })
     } else if (searchSort === "popular") {
       arr.sort((a, b) => {
         const diff = (b.popularity?.likes ?? 0) - (a.popularity?.likes ?? 0)
@@ -331,7 +345,7 @@ export default function PlantSwipe() {
       })
     }
     return arr
-  }, [filtered, searchSort])
+  }, [filtered, searchSort, likedSet])
 
   const current = swipeList.length > 0 ? swipeList[index % swipeList.length] : undefined
 
@@ -513,6 +527,22 @@ export default function PlantSwipe() {
     }
   }, [user])
 
+  const FilterSectionHeader: React.FC<{ label: string; isOpen: boolean; onToggle: () => void }> = ({
+    label,
+    isOpen,
+    onToggle,
+  }) => (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="flex w-full items-center justify-between text-xs font-medium uppercase tracking-wide text-stone-500 dark:text-stone-300"
+      aria-expanded={isOpen}
+    >
+      <span>{label}</span>
+      {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+    </button>
+  )
+
   const FilterControls = () => (
     <div className="space-y-6">
       {/* Sort */}
@@ -526,45 +556,91 @@ export default function PlantSwipe() {
           <option value="default">{t("plant.sortDefault")}</option>
           <option value="newest">{t("plant.sortNewest")}</option>
           <option value="popular">{t("plant.sortPopular")}</option>
+          <option value="favorites">{t("plant.sortFavorites")}</option>
         </select>
       </div>
 
       {/* Seasons */}
       <div>
-        <div className="text-xs font-medium mb-2 uppercase tracking-wide opacity-60">{t("plant.season")}</div>
-        <div className="flex flex-wrap gap-2">
-          {(["Spring", "Summer", "Autumn", "Winter"] as const).map((s) => (
-            <button
-              key={s}
-              onClick={() => setSeasonFilter((cur) => (cur === s ? null : s))}
-              className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
-                seasonFilter === s ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
-              }`}
-              aria-pressed={seasonFilter === s}
-            >
-              {t(`plant.${s.toLowerCase()}`)}
-            </button>
-          ))}
-        </div>
+        <FilterSectionHeader
+          label={t("plant.season")}
+          isOpen={seasonSectionOpen}
+          onToggle={() => setSeasonSectionOpen((prev) => !prev)}
+        />
+        {seasonSectionOpen && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {(["Spring", "Summer", "Autumn", "Winter"] as const).map((s) => (
+              <button
+                key={s}
+                onClick={() => setSeasonFilter((cur) => (cur === s ? null : s))}
+                className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
+                  seasonFilter === s ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                }`}
+                aria-pressed={seasonFilter === s}
+              >
+                {t(`plant.${s.toLowerCase()}`)}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Colors */}
       <div>
-        <div className="text-xs font-medium mb-2 uppercase tracking-wide opacity-60">{t("plant.color")}</div>
-        <div className="flex flex-wrap gap-2">
-          {["Red", "Pink", "Yellow", "White", "Purple", "Blue", "Orange", "Green"].map((c) => (
-            <button
-              key={c}
-              onClick={() => setColorFilter((cur) => (cur === c ? null : c))}
-              className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
-                colorFilter === c ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
-              }`}
-              aria-pressed={colorFilter === c}
-            >
-              {t(`plant.${c.toLowerCase()}`)}
-            </button>
-          ))}
-        </div>
+        <FilterSectionHeader
+          label={t("plant.color")}
+          isOpen={colorSectionOpen}
+          onToggle={() => setColorSectionOpen((prev) => !prev)}
+        />
+        {colorSectionOpen && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {["Red", "Pink", "Yellow", "White", "Purple", "Blue", "Orange", "Green"].map((c) => (
+              <button
+                key={c}
+                onClick={() => setColorFilter((cur) => (cur === c ? null : c))}
+                className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
+                  colorFilter === c ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                }`}
+                aria-pressed={colorFilter === c}
+              >
+                {t(`plant.${c.toLowerCase()}`)}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Classification */}
+      <div>
+        <FilterSectionHeader
+          label={t("plant.classification")}
+          isOpen={classificationSectionOpen}
+          onToggle={() => setClassificationSectionOpen((prev) => !prev)}
+        />
+        {classificationSectionOpen && (
+          classificationOptions.length > 0 ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {classificationOptions.map((option) => (
+                <button
+                  key={option}
+                  onClick={() => setClassificationFilter((cur) => (cur === option ? null : option))}
+                  className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
+                    classificationFilter === option
+                      ? "bg-black dark:bg-white text-white dark:text-black"
+                      : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                  }`}
+                  aria-pressed={classificationFilter === option}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-3 text-xs opacity-60">
+              {t("plantInfo.values.notAvailable", { defaultValue: "N/A" })}
+            </p>
+          )
+        )}
       </div>
 
       {/* Toggles */}
@@ -587,17 +663,6 @@ export default function PlantSwipe() {
         >
           <span className="inline-block h-2 w-2 rounded-full bg-current" /> {t("plant.favoritesOnly")}
         </button>
-        <button
-          onClick={() => setFavoritesFirst((v) => !v)}
-          className={`w-full justify-center px-3 py-2 rounded-2xl text-sm shadow-sm border flex items-center gap-2 transition ${
-            favoritesFirst
-              ? "bg-rose-200 dark:bg-rose-800 text-rose-900 dark:text-rose-100 border-rose-400 dark:border-rose-600"
-              : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
-          }`}
-          aria-pressed={favoritesFirst}
-        >
-          {t("plant.favoritesFirst")}
-        </button>
       </div>
 
       {/* Active filters summary */}
@@ -606,10 +671,10 @@ export default function PlantSwipe() {
         <div className="flex flex-wrap gap-2">
           {seasonFilter && <Badge variant="secondary" className="rounded-xl">{t(`plant.${seasonFilter.toLowerCase()}`)}</Badge>}
           {colorFilter && <Badge variant="secondary" className="rounded-xl">{t(`plant.${colorFilter.toLowerCase()}`)}</Badge>}
+          {classificationFilter && <Badge variant="secondary" className="rounded-xl">{classificationFilter}</Badge>}
           {onlySeeds && <Badge variant="secondary" className="rounded-xl">{t("plant.seedsOnly")}</Badge>}
           {onlyFavorites && <Badge variant="secondary" className="rounded-xl">{t("plant.favoritesOnly")}</Badge>}
-          {favoritesFirst && <Badge variant="secondary" className="rounded-xl">{t("plant.favoritesFirst")}</Badge>}
-          {!seasonFilter && !colorFilter && !onlySeeds && !onlyFavorites && !favoritesFirst && (
+          {!seasonFilter && !colorFilter && !classificationFilter && !onlySeeds && !onlyFavorites && (
             <span className="opacity-50">{t("plant.none")}</span>
           )}
         </div>
@@ -887,6 +952,27 @@ export default function PlantSwipe() {
     </div>
     </AuthActionsProvider>
   )
+}
+
+function extractClassificationLabels(classification?: Plant["classification"]): string[] {
+  if (!classification) return []
+  const labels: string[] = []
+  const addLabel = (value?: string | null) => {
+    const label = formatClassificationLabel(value)
+    if (label) labels.push(label)
+  }
+  addLabel(classification.type)
+  addLabel(classification.subclass)
+  addLabel(classification.subSubclass)
+  if (Array.isArray(classification.activities)) {
+    classification.activities.forEach(addLabel)
+  }
+  if (classification.subActivities) {
+    Object.values(classification.subActivities).forEach((list) => {
+      if (Array.isArray(list)) list.forEach(addLabel)
+    })
+  }
+  return labels
 }
 
 function PlantInfoOverlay() {
