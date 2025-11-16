@@ -162,16 +162,31 @@ export const AdminMediaPanel: React.FC = () => {
                   entry.path
                 const displayLink =
                   entry.url || `supabase://${entry.bucket}/${entry.path}`
+                const isImage =
+                  (entry.mimeType || entry.originalMimeType || "").startsWith(
+                    "image/",
+                  )
                 return (
                   <div
                     key={entry.id}
                     className="rounded-2xl border bg-white/70 p-4 dark:border-[#3e3e42] dark:bg-[#1a1a1d]"
                   >
                     <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                      <div className="flex flex-1 items-center gap-3">
-                        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-200">
-                          <ImageIcon className="h-5 w-5" />
-                        </div>
+                        <div className="flex flex-1 items-center gap-3">
+                          <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-200 overflow-hidden">
+                            {isImage && entry.url ? (
+                              <div className="h-full w-full rounded-xl bg-muted">
+                                <img
+                                  src={entry.url}
+                                  alt={fileName}
+                                  className="h-full w-full object-cover"
+                                  loading="lazy"
+                                />
+                              </div>
+                            ) : (
+                              <ImageIcon className="h-5 w-5" />
+                            )}
+                          </div>
                         <div className="min-w-0">
                           <div className="truncate text-sm font-semibold">{fileName}</div>
                   <div className="text-xs text-muted-foreground space-x-1">
