@@ -908,16 +908,23 @@ export const AdminPage: React.FC = () => {
   };
 
   const [onlineUsers, setOnlineUsers] = React.useState<number>(0);
-  const [registeredCount, setRegisteredCount] = React.useState<number | null>(
-    null,
-  );
-  const [registeredLoading, setRegisteredLoading] =
-    React.useState<boolean>(true);
-  const [registeredRefreshing, setRegisteredRefreshing] =
-    React.useState<boolean>(false);
-  const [registeredUpdatedAt, setRegisteredUpdatedAt] = React.useState<
-    number | null
-  >(null);
+    const [registeredCount, setRegisteredCount] = React.useState<number | null>(
+      null,
+    );
+    const [registeredLoading, setRegisteredLoading] =
+      React.useState<boolean>(true);
+    const [registeredRefreshing, setRegisteredRefreshing] =
+      React.useState<boolean>(false);
+    const [registeredUpdatedAt, setRegisteredUpdatedAt] = React.useState<
+      number | null
+    >(null);
+    const [plantsCount, setPlantsCount] = React.useState<number | null>(null);
+    const [plantsLoading, setPlantsLoading] = React.useState<boolean>(true);
+    const [plantsRefreshing, setPlantsRefreshing] =
+      React.useState<boolean>(false);
+    const [plantsUpdatedAt, setPlantsUpdatedAt] = React.useState<number | null>(
+      null,
+    );
   const [onlineLoading, setOnlineLoading] = React.useState<boolean>(true);
   const [onlineRefreshing, setOnlineRefreshing] =
     React.useState<boolean>(false);
@@ -1944,53 +1951,82 @@ export const AdminPage: React.FC = () => {
 
   // Backup UI disabled for now
 
-  // Loader for total registered accounts (DB first via admin API; fallback to client count)
-  const loadRegisteredCount = React.useCallback(
-    async (opts?: { initial?: boolean }) => {
-      const isInitial = !!opts?.initial;
-      if (isInitial) setRegisteredLoading(true);
-      else setRegisteredRefreshing(true);
-      try {
-        const session = (await supabase.auth.getSession()).data.session;
-        const token = session?.access_token;
-        const headers: Record<string, string> = { Accept: "application/json" };
-        if (token) headers["Authorization"] = `Bearer ? ${token}`;
+    // Loader for total registered accounts & plants (DB first via admin API; fallback to client count)
+    const loadRegisteredCount = React.useCallback(
+      async (opts?: { initial?: boolean }) => {
+        const isInitial = !!opts?.initial;
+        if (isInitial) {
+          setRegisteredLoading(true);
+          setPlantsLoading(true);
+        } else {
+          setRegisteredRefreshing(true);
+          setPlantsRefreshing(true);
+        }
         try {
-          const adminToken = (globalThis as any)?.__ENV__
-            ?.VITE_ADMIN_STATIC_TOKEN;
-          if (adminToken) headers["X-Admin-Token"] = String(adminToken);
-        } catch {}
-        const resp = await fetchWithRetry("/api/admin/stats", {
-          headers,
-          credentials: "same-origin",
-        }).catch(() => null);
-        if (resp && resp.ok) {
-          const data = await safeJson(resp);
-          if (typeof data?.profilesCount === "number") {
-            setRegisteredCount(data.profilesCount);
-            setRegisteredUpdatedAt(Date.now());
-            return;
+          const session = (await supabase.auth.getSession()).data.session;
+          const token = session?.access_token;
+          const headers: Record<string, string> = { Accept: "application/json" };
+          if (token) headers["Authorization"] = `Bearer ? ${token}`;
+          try {
+            const adminToken = (globalThis as any)?.__ENV__
+              ?.VITE_ADMIN_STATIC_TOKEN;
+            if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+          } catch {}
+          const resp = await fetchWithRetry("/api/admin/stats", {
+            headers,
+            credentials: "same-origin",
+          }).catch(() => null);
+          let registeredUpdated = false;
+          let plantsUpdated = false;
+          if (resp && resp.ok) {
+            const data = await safeJson(resp);
+            if (typeof data?.profilesCount === "number") {
+              setRegisteredCount(data.profilesCount);
+              setRegisteredUpdatedAt(Date.now());
+              registeredUpdated = true;
+            }
+            if (typeof data?.plantsCount === "number") {
+              setPlantsCount(data.plantsCount);
+              setPlantsUpdatedAt(Date.now());
+              plantsUpdated = true;
+            }
+          }
+          // Fallback: client-side counts (may be limited by RLS)
+          if (!registeredUpdated) {
+            const { count, error } = await supabase
+              .from("profiles")
+              .select("id", { count: "exact", head: true });
+            if (!error && typeof count === "number") {
+              setRegisteredCount(count);
+              setRegisteredUpdatedAt(Date.now());
+              registeredUpdated = true;
+            }
+          }
+          if (!plantsUpdated) {
+            const { count: totalPlants, error: plantsError } = await supabase
+              .from("plants")
+              .select("id", { count: "exact", head: true });
+            if (!plantsError && typeof totalPlants === "number") {
+              setPlantsCount(totalPlants);
+              setPlantsUpdatedAt(Date.now());
+            }
+          }
+          // Don't set to 0 on error - keep previous value
+        } catch (e) {
+          console.error("[AdminPage] Failed to load overview counts:", e);
+          // Keep last known values on error - don't set to 0
+        } finally {
+          if (isInitial) {
+            setRegisteredLoading(false);
+            setPlantsLoading(false);
+          } else {
+            setRegisteredRefreshing(false);
+            setPlantsRefreshing(false);
           }
         }
-        // Fallback: client-side count (may be limited by RLS)
-        const { count, error } = await supabase
-          .from("profiles")
-          .select("id", { count: "exact", head: true });
-        if (!error && typeof count === "number") {
-          setRegisteredCount(count);
-          setRegisteredUpdatedAt(Date.now());
-        }
-        // Don't set to 0 on error - keep previous value
-      } catch (e) {
-        console.error("[AdminPage] Failed to load registered count:", e);
-        // Keep last known value on error - don't set to 0
-      } finally {
-        if (isInitial) setRegisteredLoading(false);
-        else setRegisteredRefreshing(false);
-      }
-    },
-    [safeJson, fetchWithRetry],
-  );
+      },
+      [safeJson, fetchWithRetry],
+    );
 
   React.useEffect(() => {
     // Stagger initial load to avoid blocking
@@ -3707,7 +3743,7 @@ export const AdminPage: React.FC = () => {
                       </CardContent>
                     </Card>
                     <div className="pt-2">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
                         <Card className="rounded-2xl">
                           <CardContent className="p-4 space-y-2">
                             <div className="flex items-center justify-between gap-2">
@@ -3841,6 +3877,43 @@ export const AdminPage: React.FC = () => {
                                 ? "-"
                                 : registeredUpdatedAt !== null
                                   ? (registeredCount ?? "-")
+                                  : "-"}
+                            </div>
+                          </CardContent>
+                        </Card>
+                        <Card className="rounded-2xl">
+                          <CardContent className="p-4">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="text-sm opacity-60">
+                                  Total plants
+                                </div>
+                                <div className="text-xs opacity-60">
+                                  {plantsUpdatedAt
+                                    ? `Updated ? ${formatTimeAgo(plantsUpdatedAt)}`
+                                    : "Updated -"}
+                                </div>
+                              </div>
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                aria-label="Refresh total plants"
+                                onClick={() =>
+                                  loadRegisteredCount({ initial: false })
+                                }
+                                disabled={plantsLoading || plantsRefreshing}
+                                className="h-8 w-8 rounded-xl border bg-white text-black hover:bg-stone-50"
+                              >
+                                <RefreshCw
+                                  className={`h-4 w-4 ? ${plantsLoading || plantsRefreshing ? "animate-spin" : ""}`}
+                                />
+                              </Button>
+                            </div>
+                            <div className="text-2xl font-semibold tabular-nums mt-1">
+                              {plantsLoading
+                                ? "-"
+                                : plantsUpdatedAt !== null
+                                  ? (plantsCount ?? "-")
                                   : "-"}
                             </div>
                           </CardContent>
