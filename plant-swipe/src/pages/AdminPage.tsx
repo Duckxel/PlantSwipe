@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { LazyCharts, ChartSuspense } from "@/components/admin/LazyChart";
+import { AdminUploadPanel } from "@/components/admin/AdminUploadPanel";
 import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
 import { getAccentOption } from "@/lib/accent";
@@ -64,7 +65,7 @@ const {
   Cell,
 } = LazyCharts;
 
-type AdminTab = "overview" | "members" | "requests" | "admin_logs";
+type AdminTab = "overview" | "members" | "requests" | "upload" | "admin_logs";
 
 type ListedMember = {
   id: string;
@@ -2353,6 +2354,7 @@ export const AdminPage: React.FC = () => {
     { key: "overview", label: "Overview", Icon: LayoutDashboard },
     { key: "members", label: "Members", Icon: Users },
     { key: "requests", label: "Requests", Icon: FileText },
+    { key: "upload", label: "Upload", Icon: CloudUpload },
     { key: "admin_logs", label: "Admin Logs", Icon: ScrollText },
   ];
 
@@ -5020,11 +5022,14 @@ export const AdminPage: React.FC = () => {
                         </div>
                       </DialogContent>
                     </Dialog>
-                  </div>
-                )}
+                    </div>
+                  )}
 
-                {/* Admin Logs Tab */}
-                {activeTab === "admin_logs" && <AdminLogs />}
+                  {/* Upload Tab */}
+                  {activeTab === "upload" && <AdminUploadPanel />}
+
+                  {/* Admin Logs Tab */}
+                  {activeTab === "admin_logs" && <AdminLogs />}
 
                 {/* Members Tab */}
                 {activeTab === "members" && (

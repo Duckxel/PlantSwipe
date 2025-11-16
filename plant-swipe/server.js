@@ -17,6 +17,8 @@ import net from 'net'
 import OpenAI from 'openai'
 import { z } from 'zod'
 import { zodResponseFormat } from 'openai/helpers/zod'
+import multer from 'multer'
+import sharp from 'sharp'
 
 
 dotenv.config()
@@ -43,6 +45,7 @@ preferEnv('DATABASE_URL', ['DB_URL', 'PG_URL', 'POSTGRES_URL', 'POSTGRES_PRISMA_
 // Normalize Supabase envs for server code if only VITE_* are present
 preferEnv('SUPABASE_URL', ['VITE_SUPABASE_URL', 'REACT_APP_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_URL'])
 preferEnv('SUPABASE_ANON_KEY', ['VITE_SUPABASE_ANON_KEY', 'REACT_APP_SUPABASE_ANON_KEY', 'NEXT_PUBLIC_SUPABASE_ANON_KEY'])
+preferEnv('SUPABASE_SERVICE_ROLE_KEY', ['SUPABASE_SERVICE_KEY', 'SUPABASE_SERVICE_ROLE', 'SUPABASE_SERVICE_ROLE_TOKEN'])
 // Normalize optional admin token from frontend env
 preferEnv('ADMIN_STATIC_TOKEN', ['VITE_ADMIN_STATIC_TOKEN'])
 
@@ -137,6 +140,15 @@ const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABA
 const supabaseServer = (supabaseUrlEnv && supabaseAnonKey)
   ? createSupabaseClient(supabaseUrlEnv, supabaseAnonKey, { auth: { persistSession: false, autoRefreshToken: false } })
   : null
+const supabaseServiceKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+  || process.env.SUPABASE_SERVICE_KEY
+  || process.env.SUPABASE_SERVICE_ROLE
+  || process.env.SUPABASE_SERVICE_ROLE_TOKEN
+  || ''
+const supabaseServiceClient = (supabaseUrlEnv && supabaseServiceKey)
+  ? createSupabaseClient(supabaseUrlEnv, supabaseServiceKey, { auth: { persistSession: false, autoRefreshToken: false } })
+  : null
 
 const openaiApiKey = process.env.OPENAI_KEY || process.env.OPENAI_API_KEY || ''
 const openaiModel = process.env.OPENAI_MODEL || 'gpt-5-nano'
@@ -173,6 +185,64 @@ const contactRateLimitStore = new Map()
 // Support both server-only and Vite-style env variable names
 const adminStaticToken = process.env.ADMIN_STATIC_TOKEN || process.env.VITE_ADMIN_STATIC_TOKEN || ''
 const adminPublicMode = String(process.env.ADMIN_PUBLIC_MODE || process.env.VITE_ADMIN_PUBLIC_MODE || '').toLowerCase() === 'true'
+
+const adminUploadBucket = (process.env.ADMIN_UPLOAD_BUCKET || process.env.SUPABASE_UTILITY_BUCKET || 'UTILITY').trim() || 'UTILITY'
+const adminUploadPrefixRaw = (process.env.ADMIN_UPLOAD_PREFIX || 'admin/uploads').trim()
+const adminUploadPrefix = adminUploadPrefixRaw.replace(/^\/+|\/+$/g, '') || 'admin/uploads'
+const adminUploadMaxBytes = (() => {
+  const raw = Number(process.env.ADMIN_UPLOAD_MAX_BYTES)
+  if (Number.isFinite(raw) && raw > 0) return raw
+  return 15 * 1024 * 1024
+})()
+const adminUploadWebpQuality = (() => {
+  const raw = Number(process.env.ADMIN_UPLOAD_WEBP_QUALITY)
+  if (Number.isFinite(raw) && raw >= 30 && raw <= 100) return Math.round(raw)
+  return 82
+})()
+const adminUploadMulter = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: adminUploadMaxBytes },
+})
+const singleAdminImageUpload = adminUploadMulter.single('file')
+const adminUploadAllowedMimeTypes = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/avif',
+  'image/heic',
+  'image/heif',
+  'image/gif',
+  'image/tiff',
+  'image/bmp',
+  'image/svg+xml',
+])
+
+function sanitizeUploadBaseName(name) {
+  try {
+    const parsed = path.parse(String(name || '')).name || 'upload'
+    const normalized = parsed.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+    return normalized || 'upload'
+  } catch {
+    return 'upload'
+  }
+}
+
+function buildUploadObjectPath(baseName) {
+  const now = new Date()
+  const pad = (n) => String(n).padStart(2, '0')
+  const unique =
+    (typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : crypto.randomBytes(10).toString('hex'))
+  const segments = [
+    adminUploadPrefix,
+    String(now.getUTCFullYear()),
+    pad(now.getUTCMonth() + 1),
+    pad(now.getUTCDate()),
+    `${baseName}-${unique}.webp`,
+  ].filter(Boolean)
+  return segments.join('/').replace(/\/{2,}/g, '/')
+}
 
 // Extract Supabase user id and email from Authorization header. Falls back to
 // decoding the JWT locally when the server anon client isn't configured.
@@ -2613,6 +2683,165 @@ app.options('/api/admin/deploy-edge-functions', (_req, res) => {
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
   res.status(204).end()
+})
+
+app.post('/api/admin/upload-image', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
+    return
+  }
+  const adminPrincipal = await ensureAdmin(req, res)
+  if (!adminPrincipal) return
+
+  singleAdminImageUpload(req, res, (err) => {
+    if (err) {
+      const message =
+        err?.code === 'LIMIT_FILE_SIZE'
+          ? `File exceeds the maximum size of ${(adminUploadMaxBytes / (1024 * 1024)).toFixed(1)} MB`
+          : err?.message || 'Failed to process upload'
+      res.status(400).json({ error: message })
+      return
+    }
+    ;(async () => {
+      const file = req.file
+      if (!file) {
+        res.status(400).json({ error: 'Missing image file (expected form field "file")' })
+        return
+      }
+      const mime = (file.mimetype || '').toLowerCase()
+      if (!mime.startsWith('image/')) {
+        res.status(400).json({ error: 'Only image uploads are supported' })
+        return
+      }
+      if (!adminUploadAllowedMimeTypes.has(mime)) {
+        res.status(400).json({ error: `Unsupported image type: ${mime}` })
+        return
+      }
+      if (!file.buffer || file.buffer.length === 0) {
+        res.status(400).json({ error: 'Uploaded file is empty' })
+        return
+      }
+
+      let optimizedBuffer
+      try {
+        optimizedBuffer = await sharp(file.buffer)
+          .rotate()
+          .webp({
+            quality: adminUploadWebpQuality,
+            effort: 5,
+            smartSubsample: true,
+          })
+          .toBuffer()
+      } catch (sharpErr) {
+        console.error('[upload-image] failed to convert image to webp', sharpErr)
+        res.status(400).json({ error: 'Failed to convert image. Please upload a valid image file.' })
+        return
+      }
+
+      const baseName = sanitizeUploadBaseName(file.originalname)
+      const objectPath = buildUploadObjectPath(baseName)
+
+      try {
+        const { error: uploadError } = await supabaseServiceClient
+          .storage
+          .from(adminUploadBucket)
+          .upload(objectPath, optimizedBuffer, {
+            cacheControl: '31536000',
+            contentType: 'image/webp',
+            upsert: false,
+          })
+        if (uploadError) {
+          throw new Error(uploadError.message || 'Supabase storage upload failed')
+        }
+      } catch (storageErr) {
+        console.error('[upload-image] supabase storage upload failed', storageErr)
+        res.status(500).json({ error: storageErr?.message || 'Failed to store optimized image' })
+        return
+      }
+
+      const { data: publicData } = supabaseServiceClient
+        .storage
+        .from(adminUploadBucket)
+        .getPublicUrl(objectPath)
+      const publicUrl = publicData?.publicUrl || null
+      const uploadedAt = new Date().toISOString()
+
+      const payload = {
+        ok: true,
+        bucket: adminUploadBucket,
+        path: objectPath,
+        url: publicUrl,
+        mimeType: 'image/webp',
+        size: optimizedBuffer.length,
+        originalMimeType: mime,
+        originalSize: file.size,
+        uploadedAt,
+        quality: adminUploadWebpQuality,
+      }
+      if (!publicUrl) {
+        payload.warning = 'Bucket is not public; no public URL is available'
+      }
+
+      try {
+        let actorId = null
+        try {
+          const caller = await getUserFromRequest(req)
+          actorId =
+            caller?.id ||
+            (typeof adminPrincipal === 'string' && adminPrincipal.length > 0
+              ? adminPrincipal
+              : null)
+        } catch {
+          actorId =
+            typeof adminPrincipal === 'string' && adminPrincipal.length > 0
+              ? adminPrincipal
+              : null
+        }
+        const detail = {
+          bucket: adminUploadBucket,
+          path: objectPath,
+          url: publicUrl,
+          originalMimeType: mime,
+          originalSize: file.size,
+          optimizedSize: optimizedBuffer.length,
+          quality: adminUploadWebpQuality,
+        }
+        let logged = false
+        if (sql) {
+          try {
+            await sql`
+              insert into public.admin_activity_logs (admin_id, action, target, detail)
+              values (${actorId}, 'upload_image', ${objectPath}, ${sql.json(detail)})
+            `
+            logged = true
+          } catch (logErr) {
+            console.error('[upload-image] failed to log admin activity (db)', logErr)
+          }
+        }
+        if (!logged) {
+          try {
+            await insertAdminActivityViaRest(req, {
+              admin_id: actorId,
+              admin_name: null,
+              action: 'upload_image',
+              target: objectPath,
+              detail,
+            })
+            logged = true
+          } catch (restErr) {
+            console.error('[upload-image] failed to log admin activity (rest)', restErr)
+          }
+        }
+      } catch {}
+
+      res.json(payload)
+    })().catch((unhandled) => {
+      console.error('[upload-image] unexpected failure', unhandled)
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Unexpected upload failure' })
+      }
+    })
+  })
 })
 
 app.post('/api/admin/plant-translations/ensure-schema', async (req, res) => {
