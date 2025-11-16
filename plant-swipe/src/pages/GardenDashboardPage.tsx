@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -64,6 +65,9 @@ import { mergePlantWithTranslation } from "@/lib/plantTranslationLoader";
 import { OverviewSectionSkeleton } from "@/components/garden/GardenSkeletons";
 
 type TabKey = "overview" | "plants" | "routine" | "settings";
+
+const getMaxScheduleSelections = (period: "week" | "month" | "year") =>
+  period === "week" ? 7 : period === "month" ? 12 : 52;
 
 export const GardenDashboardPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -387,14 +391,33 @@ export const GardenDashboardPage: React.FC = () => {
           setServerToday(todayLocal);
           serverTodayRef.current = todayLocal;
         }
-        // Resolve 'today' for subsequent computations regardless of hydration path
-        let today = serverToday || todayLocal || "";
-        if (!today) {
-          const nowIso2 = await fetchServerNowISO();
-          today = nowIso2.slice(0, 10);
-          setServerToday(today);
-          serverTodayRef.current = today;
-        }
+          // Resolve 'today' for subsequent computations regardless of hydration path
+          let today = serverToday || todayLocal || "";
+          if (!today) {
+            const nowIso2 = await fetchServerNowISO();
+            today = nowIso2.slice(0, 10);
+            setServerToday(today);
+            serverTodayRef.current = today;
+          }
+          if (today) {
+            try {
+              const { due, completed } = await getGardenTodayProgressUltraFast(
+                id,
+                today,
+              );
+              const success = due === 0 ? true : completed >= due;
+              setDailyStats((prev) =>
+                prev.map((d) =>
+                  d.date === today ? { ...d, due, completed, success } : d,
+                ),
+              );
+            } catch (err) {
+              console.warn(
+                "[GardenDashboard] Failed to hydrate today progress:",
+                err,
+              );
+            }
+          }
         // Ensure base streak is refreshed from server, at most once per session
         try {
           if (!streakRefreshedRef.current) {
@@ -1894,10 +1917,15 @@ export const GardenDashboardPage: React.FC = () => {
         gardenPlant.plant?.waterFreqAmount ??
         gardenPlant.plant?.waterFreqValue ??
         1;
-      const amount = Number(amountRaw) > 0 ? Number(amountRaw) : 1;
+      const amountUnclamped =
+        Number(amountRaw) > 0 ? Number(amountRaw) : 1;
+      const safeAmount = Math.max(
+        1,
+        Math.min(amountUnclamped, getMaxScheduleSelections(period)),
+      );
       setPendingGardenPlantId(gardenPlant.id);
       setPendingPeriod(period);
-      setPendingAmount(amount);
+      setPendingAmount(safeAmount);
       setInitialSelectionState({
         weeklyDays: schedule?.weeklyDays || undefined,
         monthlyDays: schedule?.monthlyDays || undefined,
@@ -1918,10 +1946,15 @@ export const GardenDashboardPage: React.FC = () => {
         gardenPlant.plant?.waterFreqAmount ??
         gardenPlant.plant?.waterFreqValue ??
         1;
-      const amount = Number(amountRaw) > 0 ? Number(amountRaw) : 1;
+      const amountUnclamped =
+        Number(amountRaw) > 0 ? Number(amountRaw) : 1;
+      const safeAmount = Math.max(
+        1,
+        Math.min(amountUnclamped, getMaxScheduleSelections(period)),
+      );
       setPendingGardenPlantId(gardenPlant.id);
       setPendingPeriod(period);
-      setPendingAmount(amount);
+      setPendingAmount(safeAmount);
       setInitialSelectionState(undefined);
       setScheduleLockYear(false);
       setScheduleAllowedPeriods([period]);
@@ -2086,7 +2119,8 @@ export const GardenDashboardPage: React.FC = () => {
       } catch {}
       skipTodayCacheRef.current = true;
       await updateTodayProgressState();
-      await load();
+      await load({ silent: true, preserveHeavy: true });
+      await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday);
       // Signal other UI (nav bars) to refresh notification badges
       emitGardenRealtime("tasks");
     } catch (e) {
@@ -2671,11 +2705,17 @@ export const GardenDashboardPage: React.FC = () => {
 
           {/* Add Plant Dialog */}
           <Dialog open={addOpen} onOpenChange={setAddOpen}>
-            <DialogContent className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur">
+              <DialogContent
+                className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur"
+                aria-describedby={undefined}
+              >
               <DialogHeader>
                 <DialogTitle>
                   {t("gardenDashboard.plantsSection.addPlantToGarden")}
                 </DialogTitle>
+                  <DialogDescription className="sr-only">
+                    {t("gardenDashboard.plantsSection.searchPlants")}
+                  </DialogDescription>
               </DialogHeader>
               <div className="space-y-3">
                 <Input
@@ -2728,11 +2768,17 @@ export const GardenDashboardPage: React.FC = () => {
 
           {/* Add Plant Details Dialog */}
           <Dialog open={addDetailsOpen} onOpenChange={setAddDetailsOpen}>
-            <DialogContent className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur">
+              <DialogContent
+                className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur"
+                aria-describedby={undefined}
+              >
               <DialogHeader>
                 <DialogTitle>
                   {t("gardenDashboard.plantsSection.addDetails")}
                 </DialogTitle>
+                  <DialogDescription className="sr-only">
+                    {t("gardenDashboard.plantsSection.customName")}
+                  </DialogDescription>
               </DialogHeader>
               <div className="space-y-3">
                 <div>
@@ -2820,11 +2866,19 @@ export const GardenDashboardPage: React.FC = () => {
 
           {/* Invite Dialog */}
           <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
-            <DialogContent className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur">
+              <DialogContent
+                className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur"
+                aria-describedby={undefined}
+              >
               <DialogHeader>
                 <DialogTitle>
                   {t("gardenDashboard.settingsSection.addMemberTitle")}
                 </DialogTitle>
+                  <DialogDescription className="sr-only">
+                    {t(
+                      "gardenDashboard.settingsSection.enterDisplayNameOrEmail",
+                    )}
+                  </DialogDescription>
               </DialogHeader>
               <div className="space-y-3">
                 <div className="relative">

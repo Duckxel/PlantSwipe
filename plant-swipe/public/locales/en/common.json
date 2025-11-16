@@ -420,8 +420,8 @@
     "seedsAvailable": "Seeds available",
     "wateringFrequency": "Default watering frequency",
     "maxPerWeek": "Max 7 per week.",
-    "maxPerMonth": "Max 4 per month (otherwise use week).",
-    "maxPerYear": "Max 12 per year (otherwise use month).",
+    "maxPerMonth": "Max 12 per month.",
+    "maxPerYear": "Max 52 per year.",
     "saved": "Saved",
     "translating": "Translating...",
     "translatingToAll": "Translating to all languages..."
