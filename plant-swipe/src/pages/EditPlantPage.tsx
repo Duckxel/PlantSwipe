@@ -31,6 +31,7 @@ import { Languages, Sparkles, Loader2, CheckCircle2, AlertCircle, Circle } from 
 import { CompleteAdvancedForm } from "@/components/plant/CompleteAdvancedForm"
 import { PlantPhotoListEditor } from "@/components/plant/PlantPhotoListEditor"
 import { useAuth } from "@/context/AuthContext"
+import { useTranslation } from "react-i18next"
 import {
   REQUIRED_FIELD_CONFIG,
   REQUIRED_FIELD_TO_SCHEMA_KEY,
@@ -75,6 +76,7 @@ interface EditPlantPageProps {
 export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved }) => {
   const { id } = useParams<{ id: string }>()
   const { user, profile } = useAuth()
+  const { t } = useTranslation('common')
 
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
@@ -1230,7 +1232,19 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
                 <Label htmlFor="plant-name">Name <span className="text-red-500">*</span></Label>
                 <Input id="plant-name" autoComplete="off" value={name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} required />
               </div>
-                <PlantPhotoListEditor photos={photos} onChange={handlePhotosChange} />
+                <PlantPhotoListEditor
+                  photos={photos}
+                  onChange={handlePhotosChange}
+                  label={
+                    <>
+                      {t('createPlant.imageUrl')} <span className="text-red-500">*</span>
+                    </>
+                  }
+                  helperText={t(
+                    'createPlant.photosHelper',
+                    'Add at least one image URL. Mark one as primary for cards and flag vertical-friendly shots for portrait layouts.'
+                  )}
+                />
                 {editLanguage === 'en' && (
                   <>
                     <div className="flex items-center justify-between mb-4 p-4 rounded-xl border bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-950/20 dark:to-blue-950/20 dark:border-purple-800/30">

@@ -395,6 +395,24 @@ const disallowedImageKeys = new Set(['image', 'imageurl', 'image_url', 'imageURL
 const disallowedFieldKeys = new Set(['externalids'])
 const metadataKeys = new Set(['type', 'description', 'options', 'items', 'additionalProperties', 'examples', 'format'])
 
+function pickPrimaryPhotoUrlFromArray(photos, fallback) {
+  if (Array.isArray(photos)) {
+    const normalized = []
+    for (const entry of photos) {
+      if (!entry || typeof entry !== 'object') continue
+      const url = typeof entry.url === 'string' ? entry.url.trim() : ''
+      if (!url) continue
+      normalized.push({ url, isPrimary: entry.isPrimary === true })
+    }
+    if (normalized.length > 0) {
+      const primary = normalized.find((photo) => photo.isPrimary && photo.url)
+      if (primary && primary.url) return primary.url
+      return normalized[0].url
+    }
+  }
+  return typeof fallback === 'string' && fallback ? fallback : ''
+}
+
 const JsonValueSchema = z.lazy(() =>
   z.union([
     z.string(),
@@ -4171,30 +4189,33 @@ async function loadPlantsViaSupabase() {
         .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, photos, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount')
       .order('name', { ascending: true })
     if (error) return null
-    return (Array.isArray(data) ? data : []).map((r) => ({
-      id: r.id,
-      name: r.name,
-      scientificName: r.scientific_name,
-      colors: r.colors ?? [],
-      seasons: r.seasons ?? [],
-      rarity: r.rarity,
-      meaning: r.meaning ?? '',
-      description: r.description ?? '',
-        photos: Array.isArray(r.photos) ? r.photos : undefined,
-      image: r.image_url ?? '',
-      care: {
-        sunlight: r.care_sunlight,
-        water: r.care_water,
-        soil: r.care_soil,
-        difficulty: r.care_difficulty,
-      },
-      seedsAvailable: r.seeds_available === true,
-      // Optional frequency fields (tolerated by client)
-      waterFreqUnit: r.water_freq_unit ?? undefined,
-      waterFreqValue: r.water_freq_value ?? null,
-      waterFreqPeriod: r.water_freq_period ?? undefined,
-      waterFreqAmount: r.water_freq_amount ?? null,
-    }))
+      return (Array.isArray(data) ? data : []).map((r) => {
+        const photos = Array.isArray(r.photos) ? r.photos : undefined
+        return {
+          id: r.id,
+          name: r.name,
+          scientificName: r.scientific_name,
+          colors: r.colors ?? [],
+          seasons: r.seasons ?? [],
+          rarity: r.rarity,
+          meaning: r.meaning ?? '',
+          description: r.description ?? '',
+          photos,
+          image: pickPrimaryPhotoUrlFromArray(photos, r.image_url ?? ''),
+          care: {
+            sunlight: r.care_sunlight,
+            water: r.care_water,
+            soil: r.care_soil,
+            difficulty: r.care_difficulty,
+          },
+          seedsAvailable: r.seeds_available === true,
+          // Optional frequency fields (tolerated by client)
+          waterFreqUnit: r.water_freq_unit ?? undefined,
+          waterFreqValue: r.water_freq_value ?? null,
+          waterFreqPeriod: r.water_freq_period ?? undefined,
+          waterFreqAmount: r.water_freq_amount ?? null,
+        }
+      })
   } catch {
     return null
   }
@@ -4296,26 +4317,29 @@ app.get('/api/plants', async (_req, res) => {
   try {
     if (sql) {
       try {
-        const rows = await sql`select * from plants order by name asc`
-        const mapped = rows.map(r => ({
-          id: r.id,
-          name: r.name,
-          scientificName: r.scientific_name,
-          colors: r.colors ?? [],
-          seasons: r.seasons ?? [],
-          rarity: r.rarity,
-          meaning: r.meaning ?? '',
-          description: r.description ?? '',
-            photos: Array.isArray(r.photos) ? r.photos : undefined,
-          image: r.image_url ?? '',
-          care: {
-            sunlight: r.care_sunlight,
-            water: r.care_water,
-            soil: r.care_soil,
-            difficulty: r.care_difficulty,
-          },
-          seedsAvailable: r.seeds_available === true,
-        }))
+          const rows = await sql`select * from plants order by name asc`
+          const mapped = rows.map(r => {
+            const photos = Array.isArray(r.photos) ? r.photos : undefined
+            return {
+              id: r.id,
+              name: r.name,
+              scientificName: r.scientific_name,
+              colors: r.colors ?? [],
+              seasons: r.seasons ?? [],
+              rarity: r.rarity,
+              meaning: r.meaning ?? '',
+              description: r.description ?? '',
+              photos,
+              image: pickPrimaryPhotoUrlFromArray(photos, r.image_url ?? ''),
+              care: {
+                sunlight: r.care_sunlight,
+                water: r.care_water,
+                soil: r.care_soil,
+                difficulty: r.care_difficulty,
+              },
+              seedsAvailable: r.seeds_available === true,
+            }
+          })
         res.json(mapped)
         return
       } catch (e) {
@@ -5861,37 +5885,41 @@ app.get('/api/garden/:id/overview', async (req, res) => {
         where gp.garden_id = ${gardenId}
         order by gp.sort_index asc nulls last
       `
-      plants = (gpRows || []).map((r) => ({
-        id: String(r.id),
-        gardenId: String(r.garden_id),
-        plantId: String(r.plant_id),
-        nickname: r.nickname,
-        seedsPlanted: Number(r.seeds_planted || 0),
-        plantedAt: r.planted_at || null,
-        expectedBloomDate: r.expected_bloom_date || null,
-        overrideWaterFreqUnit: r.override_water_freq_unit || null,
-        overrideWaterFreqValue: (r.override_water_freq_value ?? null),
-        plantsOnHand: Number(r.plants_on_hand || 0),
-        sortIndex: (r.sort_index ?? null),
-        plant: r.p_id ? {
-          id: String(r.p_id),
-          name: String(r.p_name || ''),
-          scientificName: String(r.p_scientific_name || ''),
-          colors: Array.isArray(r.p_colors) ? r.p_colors.map(String) : [],
-          seasons: Array.isArray(r.p_seasons) ? r.p_seasons.map(String) : [],
-          rarity: r.p_rarity,
-          meaning: r.p_meaning || '',
-          description: r.p_description || '',
-          photos: Array.isArray(r.p_photos) ? r.p_photos : undefined,
-          image: r.p_image_url || '',
-          care: { sunlight: r.p_care_sunlight || 'Low', water: r.p_care_water || 'Low', soil: r.p_care_soil || '', difficulty: r.p_care_difficulty || 'Easy' },
-          seedsAvailable: Boolean(r.p_seeds_available ?? false),
-          waterFreqUnit: r.p_water_freq_unit || undefined,
-          waterFreqValue: r.p_water_freq_value ?? null,
-          waterFreqPeriod: r.p_water_freq_period || undefined,
-          waterFreqAmount: r.p_water_freq_amount ?? null,
-        } : null,
-      }))
+        plants = (gpRows || []).map((r) => {
+          const plantPhotos = Array.isArray(r.p_photos) ? r.p_photos : undefined
+          const plantImage = pickPrimaryPhotoUrlFromArray(plantPhotos, r.p_image_url || '')
+          return {
+            id: String(r.id),
+            gardenId: String(r.garden_id),
+            plantId: String(r.plant_id),
+            nickname: r.nickname,
+            seedsPlanted: Number(r.seeds_planted || 0),
+            plantedAt: r.planted_at || null,
+            expectedBloomDate: r.expected_bloom_date || null,
+            overrideWaterFreqUnit: r.override_water_freq_unit || null,
+            overrideWaterFreqValue: (r.override_water_freq_value ?? null),
+            plantsOnHand: Number(r.plants_on_hand || 0),
+            sortIndex: (r.sort_index ?? null),
+            plant: r.p_id ? {
+              id: String(r.p_id),
+              name: String(r.p_name || ''),
+              scientificName: String(r.p_scientific_name || ''),
+              colors: Array.isArray(r.p_colors) ? r.p_colors.map(String) : [],
+              seasons: Array.isArray(r.p_seasons) ? r.p_seasons.map(String) : [],
+              rarity: r.p_rarity,
+              meaning: r.p_meaning || '',
+              description: r.p_description || '',
+              photos: plantPhotos,
+              image: plantImage,
+              care: { sunlight: r.p_care_sunlight || 'Low', water: r.p_care_water || 'Low', soil: r.p_care_soil || '', difficulty: r.p_care_difficulty || 'Easy' },
+              seedsAvailable: Boolean(r.p_seeds_available ?? false),
+              waterFreqUnit: r.p_water_freq_unit || undefined,
+              waterFreqValue: r.p_water_freq_value ?? null,
+              waterFreqPeriod: r.p_water_freq_period || undefined,
+              waterFreqAmount: r.p_water_freq_amount ?? null,
+            } : null,
+          }
+        })
 
       const mRows = await sql`
         select gm.garden_id::text as garden_id, gm.user_id::text as user_id, gm.role, gm.joined_at,
@@ -5938,6 +5966,7 @@ app.get('/api/garden/:id/overview', async (req, res) => {
         const pResp = await fetch(pUrl, { headers })
         const pRows = pResp.ok ? (await pResp.json().catch(() => [])) : []
         for (const p of pRows) {
+            const plantPhotos = Array.isArray(p.photos) ? p.photos : undefined
           plantsMap[String(p.id)] = {
             id: String(p.id),
             name: String(p.name || ''),
@@ -5947,8 +5976,8 @@ app.get('/api/garden/:id/overview', async (req, res) => {
             rarity: p.rarity,
             meaning: p.meaning || '',
             description: p.description || '',
-              photos: Array.isArray(p.photos) ? p.photos : undefined,
-            image: p.image_url || '',
+              photos: plantPhotos,
+              image: pickPrimaryPhotoUrlFromArray(plantPhotos, p.image_url || ''),
             care: { sunlight: p.care_sunlight || 'Low', water: p.care_water || 'Low', soil: p.care_soil || '', difficulty: p.care_difficulty || 'Easy' },
             seedsAvailable: Boolean(p.seeds_available ?? false),
             waterFreqUnit: p.water_freq_unit || undefined,
