@@ -461,6 +461,7 @@
       "shareCopied": "Link copied to clipboard!",
       "shareFailed": "Failed to copy link",
       "viewFullScreen": "View image in full screen",
+        "viewPhoto": "View photo {{index}}",
       "viewFullDetails": "View full details",
       "deleteConfirm": "Delete this plant? This will fail if it is used in any garden.",
       "day": "day",

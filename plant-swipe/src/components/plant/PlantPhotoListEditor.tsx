@@ -4,7 +4,7 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import type { PlantPhoto } from "@/types/plant"
-import { createEmptyPhoto } from "@/lib/photos"
+import { createEmptyPhoto, MAX_PLANT_PHOTOS } from "@/lib/photos"
 
 interface PlantPhotoListEditorProps {
   photos: PlantPhoto[]
@@ -21,6 +21,7 @@ export const PlantPhotoListEditor: React.FC<PlantPhotoListEditorProps> = ({
 }) => {
   const radioName = React.useId()
   const list = photos.length > 0 ? photos : [createEmptyPhoto(true)]
+  const canAddMore = photos.length < MAX_PLANT_PHOTOS
 
   const updatePhoto = (index: number, patch: Partial<PlantPhoto>) => {
     onChange(
@@ -33,6 +34,23 @@ export const PlantPhotoListEditor: React.FC<PlantPhotoListEditorProps> = ({
       list.map((photo, idx) => ({
         ...photo,
         isPrimary: idx === index,
+      }))
+    )
+  }
+
+  const setVertical = (index: number, next: boolean) => {
+    if (!next) {
+      onChange(
+        list.map((photo, idx) =>
+          idx === index ? { ...photo, isVertical: false } : photo
+        )
+      )
+      return
+    }
+    onChange(
+      list.map((photo, idx) => ({
+        ...photo,
+        isVertical: idx === index,
       }))
     )
   }
@@ -50,6 +68,7 @@ export const PlantPhotoListEditor: React.FC<PlantPhotoListEditorProps> = ({
   }
 
   const addPhoto = () => {
+    if (!canAddMore) return
     onChange([
       ...list,
       createEmptyPhoto(list.every((photo) => !photo.isPrimary)),
@@ -98,9 +117,7 @@ export const PlantPhotoListEditor: React.FC<PlantPhotoListEditorProps> = ({
                   <input
                     type="checkbox"
                     checked={photo.isVertical ?? false}
-                    onChange={(e) =>
-                      updatePhoto(index, { isVertical: e.target.checked })
-                    }
+                    onChange={(e) => setVertical(index, e.target.checked)}
                   />
                   Vertical-friendly
                 </label>
@@ -118,15 +135,21 @@ export const PlantPhotoListEditor: React.FC<PlantPhotoListEditorProps> = ({
           </div>
         ))}
       </div>
-      <Button
-        type="button"
-        variant="secondary"
-        onClick={addPhoto}
-        className="rounded-2xl w-fit"
-      >
-        <Plus className="h-4 w-4 mr-2" />
-        Add photo
-      </Button>
+      <div className="flex items-center gap-3">
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={addPhoto}
+          className="rounded-2xl w-fit"
+          disabled={!canAddMore}
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          Add photo
+        </Button>
+        <span className="text-xs text-muted-foreground">
+          {photos.length}/{MAX_PLANT_PHOTOS} photos
+        </span>
+      </div>
     </div>
   )
 }

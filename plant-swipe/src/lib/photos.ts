@@ -1,5 +1,7 @@
 import type { PlantPhoto } from "@/types/plant"
 
+export const MAX_PLANT_PHOTOS = 5
+
 const normalizeBoolean = (value: unknown): boolean => value === true
 
 export function createEmptyPhoto(isPrimary = false): PlantPhoto {
@@ -10,18 +12,19 @@ export function sanitizePlantPhotos(photos: PlantPhoto[]): PlantPhoto[] {
   const sanitized: PlantPhoto[] = []
   const seen = new Set<string>()
 
-  photos.forEach((photo) => {
+  for (const photo of photos) {
+    if (sanitized.length >= MAX_PLANT_PHOTOS) break
     const url = typeof photo?.url === "string" ? photo.url.trim() : ""
-    if (!url) return
+    if (!url) continue
     const key = url.toLowerCase()
-    if (seen.has(key)) return
+    if (seen.has(key)) continue
     seen.add(key)
     sanitized.push({
       url,
       isPrimary: normalizeBoolean(photo.isPrimary),
       isVertical: normalizeBoolean(photo.isVertical),
     })
-  })
+  }
 
   if (sanitized.length === 0) {
     return sanitized
@@ -32,9 +35,15 @@ export function sanitizePlantPhotos(photos: PlantPhoto[]): PlantPhoto[] {
     primaryIndex = 0
   }
 
+  let verticalIndex = sanitized.findIndex((photo) => photo.isVertical)
+  if (verticalIndex === -1) {
+    verticalIndex = undefined
+  }
+
   return sanitized.map((photo, index) => ({
     ...photo,
     isPrimary: index === primaryIndex,
+    isVertical: verticalIndex !== undefined ? index === verticalIndex : false,
   }))
 }
 
@@ -72,6 +81,12 @@ export function getPrimaryPhotoUrl(photos: PlantPhoto[]): string {
   return first ? first.url.trim() : ""
 }
 
+export function getVerticalPhotoUrl(photos: PlantPhoto[]): string {
+  const vertical = photos.find((photo) => photo.isVertical && photo.url.trim())
+  if (vertical) return vertical.url.trim()
+  return ""
+}
+
 export function upsertPrimaryPhoto(current: PlantPhoto[], url: string): PlantPhoto[] {
   const trimmed = typeof url === "string" ? url.trim() : ""
   if (!trimmed) return current
@@ -79,16 +94,20 @@ export function upsertPrimaryPhoto(current: PlantPhoto[], url: string): PlantPho
   const sanitized = sanitizePlantPhotos(current)
   const existingIndex = sanitized.findIndex((photo) => photo.url === trimmed)
 
+  let next = sanitized
   if (existingIndex !== -1) {
-    return sanitized.map((photo, index) => ({
+    next = sanitized.map((photo, index) => ({
       ...photo,
       isPrimary: index === existingIndex,
     }))
+  } else {
+    next = sanitizePlantPhotos([{ url: trimmed, isPrimary: true, isVertical: false }, ...sanitized])
   }
 
-  return sanitizePlantPhotos([{ url: trimmed, isPrimary: true, isVertical: false }, ...sanitized])
+  return next.slice(0, MAX_PLANT_PHOTOS)
 }
 
 export function ensureAtLeastOnePhoto(photos: PlantPhoto[]): PlantPhoto[] {
-  return photos.length > 0 ? photos : [createEmptyPhoto(true)]
+  const base = photos.length > 0 ? photos : [createEmptyPhoto(true)]
+  return sanitizePlantPhotos(base)
 }
