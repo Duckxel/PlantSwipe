@@ -227,18 +227,42 @@ function sanitizeUploadBaseName(name) {
   }
 }
 
-function buildUploadObjectPath(baseName) {
-  const now = new Date()
-  const pad = (n) => String(n).padStart(2, '0')
+function sanitizePathSegment(value, fallback = 'unknown') {
+  try {
+    const normalized = String(value || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+    return normalized || fallback
+  } catch {
+    return fallback
+  }
+}
+
+function deriveUploadTypeSegment(originalName, mimeType) {
+  try {
+    const ext = path.extname(String(originalName || ''))
+    if (ext && ext.length > 1) {
+      return sanitizePathSegment(ext.slice(1))
+    }
+  } catch {}
+  try {
+    if (mimeType && mimeType.includes('/')) {
+      const subtype = mimeType.split('/')[1]
+      if (subtype) return sanitizePathSegment(subtype)
+    }
+  } catch {}
+  return 'unknown'
+}
+
+function buildUploadObjectPath(baseName, typeSegment) {
   const unique =
     (typeof crypto.randomUUID === 'function'
       ? crypto.randomUUID()
       : crypto.randomBytes(10).toString('hex'))
   const segments = [
     adminUploadPrefix,
-    String(now.getUTCFullYear()),
-    pad(now.getUTCMonth() + 1),
-    pad(now.getUTCDate()),
+    sanitizePathSegment(typeSegment, 'unknown'),
     `${baseName}-${unique}.webp`,
   ].filter(Boolean)
   return segments.join('/').replace(/\/{2,}/g, '/')
@@ -2867,7 +2891,8 @@ app.post('/api/admin/upload-image', async (req, res) => {
       }
 
       const baseName = sanitizeUploadBaseName(file.originalname)
-      const objectPath = buildUploadObjectPath(baseName)
+      const typeSegment = deriveUploadTypeSegment(file.originalname, mime)
+      const objectPath = buildUploadObjectPath(baseName, typeSegment)
 
       try {
         const { error: uploadError } = await supabaseServiceClient
@@ -2928,7 +2953,7 @@ app.post('/api/admin/upload-image', async (req, res) => {
         originalSizeBytes: file.size,
         quality: adminUploadWebpQuality,
         compressionPercent,
-        metadata: { originalName: file.originalname },
+        metadata: { originalName: file.originalname, typeSegment },
       })
 
       try {

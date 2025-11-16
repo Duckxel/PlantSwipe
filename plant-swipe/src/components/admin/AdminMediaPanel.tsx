@@ -23,7 +23,7 @@ type MediaEntry = {
   originalSizeBytes: number | null
   quality: number | null
   compressionPercent: number | null
-  metadata?: { originalName?: string | null } | null
+  metadata?: { originalName?: string | null; typeSegment?: string | null } | null
   createdAt: string | null
 }
 
@@ -172,9 +172,17 @@ export const AdminMediaPanel: React.FC = () => {
                         </div>
                         <div className="min-w-0">
                           <div className="truncate text-sm font-semibold">{fileName}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {entry.bucket} · {entry.mimeType || entry.originalMimeType || "-"}
-                          </div>
+                  <div className="text-xs text-muted-foreground space-x-1">
+                    <span>{entry.bucket}</span>
+                    <span>·</span>
+                    <span>{entry.mimeType || entry.originalMimeType || "-"}</span>
+                    {entry.metadata?.typeSegment && (
+                      <>
+                        <span>·</span>
+                        <span>{entry.metadata.typeSegment}</span>
+                      </>
+                    )}
+                  </div>
                           <div className="text-xs text-muted-foreground">
                             Uploaded by{" "}
                             <span className="font-medium">
