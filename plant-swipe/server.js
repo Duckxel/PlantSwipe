@@ -2614,13 +2614,14 @@ app.options('/api/admin/plant-translations/ensure-schema', (_req, res) => {
   res.status(204).end()
 })
 
-// Admin: global stats (bypass RLS via server connection)
-app.get('/api/admin/stats', async (req, res) => {
+  // Admin: global stats (bypass RLS via server connection)
+  app.get('/api/admin/stats', async (req, res) => {
   const uid = "public"
   if (!uid) return
   try {
     let profilesCount = 0
     let authUsersCount = null
+      let plantsCount = null
 
     if (sql) {
       try {
@@ -2630,7 +2631,11 @@ app.get('/api/admin/stats', async (req, res) => {
       try {
         const authRows = await sql`select count(*)::int as count from auth.users`
         authUsersCount = Array.isArray(authRows) && authRows[0] ? Number(authRows[0].count) : null
-      } catch {}
+        } catch {}
+        try {
+          const plantsRows = await sql`select count(*)::int as count from public.plants`
+          plantsCount = Array.isArray(plantsRows) && plantsRows[0] ? Number(plantsRows[0].count) : 0
+        } catch {}
     }
 
     // Fallback via Supabase REST RPC if DB connection not available
@@ -2657,12 +2662,22 @@ app.get('/api/admin/stats', async (req, res) => {
           const val = await ar.json().catch(() => null)
           if (typeof val === 'number' && Number.isFinite(val)) authUsersCount = val
         }
-      } catch {}
+        } catch {}
+        try {
+          const pr = await fetch(`${supabaseUrlEnv}/rest/v1/plants?select=id`, {
+            headers: { ...baseHeaders, 'Prefer': 'count=exact', 'Range': '0-0' },
+          })
+          if (pr.ok) {
+            const contentRange = pr.headers.get('content-range') || ''
+            const match = contentRange.match(/\/(\d+)$/)
+            if (match) plantsCount = Number(match[1])
+          }
+        } catch {}
     }
 
-    res.json({ ok: true, profilesCount, authUsersCount })
+      res.json({ ok: true, profilesCount, authUsersCount, plantsCount })
   } catch (e) {
-    res.status(200).json({ ok: true, profilesCount: 0, authUsersCount: null, error: e?.message || 'Failed to load stats', errorCode: 'ADMIN_STATS_ERROR' })
+      res.status(200).json({ ok: true, profilesCount: 0, authUsersCount: null, plantsCount: null, error: e?.message || 'Failed to load stats', errorCode: 'ADMIN_STATS_ERROR' })
   }
 })
 
