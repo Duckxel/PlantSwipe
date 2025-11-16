@@ -9,9 +9,6 @@ import {
   PartyPopper,
   Palette,
   Flame,
-  Sun,
-  SunMedium,
-  SunDim,
   Droplets,
   Droplet,
   Slash,
@@ -620,11 +617,11 @@ const buildIndicatorItems = (plant: Plant, t: TFunction<"common">): IndicatorIte
 const getSunIcon = (level: IndicatorLevel) => {
   switch (level) {
     case "high":
-      return <Sun className="h-5 w-5" />
+      return <BrightnessHighIcon />
     case "low":
-      return <SunDim className="h-5 w-5" />
+      return <BrightnessLowIcon />
     default:
-      return <SunMedium className="h-5 w-5" />
+      return <BrightnessMediumIcon />
   }
 }
 
@@ -644,7 +641,17 @@ const getWaterIcon = (level: IndicatorLevel) => {
   }
 }
 
-const normalizeDescriptor = (value?: string | null): string => value?.toString().trim().toLowerCase() ?? ""
+const normalizeDescriptor = (value?: string | null): string => {
+  if (!value) return ""
+  return value
+    .toString()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[_/+-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase()
+}
 
 const includesAny = (value: string, tokens: string[]) => tokens.some((token) => value.includes(token))
 
@@ -653,8 +660,8 @@ const resolveSunLevel = (value?: string | null): IndicatorLevel | null => {
   if (!normalized) return null
 
   const sunHighTokens = ["full sun", "direct sun", "bright light", "very bright", "brightness 7", "plein soleil"]
-  const sunMediumTokens = ["partial sun", "partial shade", "filtered sun", "indirect light", "medium light", "brightness medium"]
-  const sunLowTokens = ["full shade", "shade only", "no sun", "no sunlight", "low light", "brightness empty", "no sun necessary"]
+    const sunMediumTokens = ["partial sun", "partial shade", "filtered sun", "indirect light", "medium light", "brightness medium"]
+    const sunLowTokens = ["full shade", "shade only", "no sun", "no sunlight", "low light", "brightness empty", "no sun necessary", "shade tolerant"]
 
   if (includesAny(normalized, sunHighTokens)) return "high"
   if (includesAny(normalized, sunMediumTokens)) return "medium"
@@ -675,9 +682,9 @@ const resolveWaterLevel = (value?: string | null): IndicatorLevel | null => {
   const normalized = normalizeDescriptor(value)
   if (!normalized) return null
 
-  const waterHighTokens = ["keep moist", "moist soil", "soak", "wet", "daily", "frequent", "humidity high", "high humidity", "high water", "constant moisture"]
-  const waterMediumTokens = ["medium", "moderate", "balanced", "weekly", "every few days", "humidity mid", "average", "regular"]
-  const waterLowTokens = ["low", "dry", "drought", "sparingly", "infrequent", "monthly", "humidity low", "succulent", "well-drained"]
+  const waterHighTokens = ["keep moist", "moist soil", "soak", "wet", "daily", "frequent", "humidity high", "high humidity", "high water", "constant moisture", "plenty of water"]
+  const waterMediumTokens = ["medium", "moderate", "balanced", "weekly", "every few days", "humidity mid", "average", "regular", "even moisture"]
+  const waterLowTokens = ["low", "dry", "drought", "sparingly", "infrequent", "monthly", "humidity low", "succulent", "well-drained", "allow soil to dry"]
 
   if (includesAny(normalized, waterHighTokens) || normalized === "high") return "high"
   if (includesAny(normalized, waterMediumTokens) || normalized === "medium") return "medium"
@@ -689,6 +696,64 @@ const resolveWaterLevel = (value?: string | null): IndicatorLevel | null => {
 
   return null
 }
+
+const BrightnessHighIcon = () => (
+  <svg
+    viewBox="0 0 24 24"
+    className="h-5 w-5"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={1.7}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <circle cx="12" cy="12" r="4.5" />
+    <line x1="12" y1="1.5" x2="12" y2="4" />
+    <line x1="12" y1="20" x2="12" y2="22.5" />
+    <line x1="1.5" y1="12" x2="4" y2="12" />
+    <line x1="20" y1="12" x2="22.5" y2="12" />
+    <line x1="4.6" y1="4.6" x2="6.8" y2="6.8" />
+    <line x1="17.2" y1="17.2" x2="19.4" y2="19.4" />
+    <line x1="4.6" y1="19.4" x2="6.8" y2="17.2" />
+    <line x1="17.2" y1="6.8" x2="19.4" y2="4.6" />
+  </svg>
+)
+
+const BrightnessMediumIcon = () => (
+  <svg
+    viewBox="0 0 24 24"
+    className="h-5 w-5"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={1.7}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <circle cx="12" cy="12" r="4.5" />
+    <line x1="12" y1="2" x2="12" y2="5" />
+    <line x1="12" y1="19" x2="12" y2="22" />
+    <line x1="2" y1="12" x2="5" y2="12" />
+    <line x1="19" y1="12" x2="22" y2="12" />
+  </svg>
+)
+
+const BrightnessLowIcon = () => (
+  <svg
+    viewBox="0 0 24 24"
+    className="h-5 w-5"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={1.7}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <circle cx="12" cy="12" r="5" strokeDasharray="2.5 3" />
+    <circle cx="12" cy="12" r="2" fill="currentColor" opacity={0.35} />
+  </svg>
+)
 
 const formatIndicatorValue = (value?: string | null): string => {
   if (!value) return ""
