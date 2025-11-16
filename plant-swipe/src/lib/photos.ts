@@ -35,32 +35,33 @@ export function sanitizePlantPhotos(photos: PlantPhoto[]): PlantPhoto[] {
     primaryIndex = 0
   }
 
-  let verticalIndex = sanitized.findIndex((photo) => photo.isVertical)
+  let verticalIndex: number | null = sanitized.findIndex((photo) => photo.isVertical)
   if (verticalIndex === -1) {
-    verticalIndex = undefined
+    verticalIndex = null
   }
 
   return sanitized.map((photo, index) => ({
     ...photo,
     isPrimary: index === primaryIndex,
-    isVertical: verticalIndex !== undefined ? index === verticalIndex : false,
+    isVertical: verticalIndex !== null ? index === verticalIndex : false,
   }))
 }
 
 export function normalizePlantPhotos(raw: unknown, fallbackUrl?: string | null): PlantPhoto[] {
   const source = Array.isArray(raw) ? raw : []
-  const coalesced = source
-    .map((entry) => {
-      if (!entry || typeof entry !== "object") return null
-      const url = typeof (entry as any).url === "string" ? (entry as any).url.trim() : ""
-      if (!url) return null
-      return {
-        url,
-        isPrimary: normalizeBoolean((entry as any).isPrimary),
-        isVertical: normalizeBoolean((entry as any).isVertical),
-      } satisfies PlantPhoto
+  const coalesced: PlantPhoto[] = []
+
+  for (const entry of source) {
+    if (!entry || typeof entry !== "object") continue
+    const url = typeof (entry as any).url === "string" ? (entry as any).url.trim() : ""
+    if (!url) continue
+    coalesced.push({
+      url,
+      isPrimary: normalizeBoolean((entry as any).isPrimary),
+      isVertical: normalizeBoolean((entry as any).isVertical),
     })
-    .filter((entry): entry is PlantPhoto => !!entry)
+    if (coalesced.length >= MAX_PLANT_PHOTOS) break
+  }
 
   let sanitized = sanitizePlantPhotos(coalesced)
 
