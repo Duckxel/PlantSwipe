@@ -35,6 +35,11 @@ type MediaEntry = {
   createdAt: string | null
 }
 
+type AdminMediaPanelProps = {
+  filterBuckets?: string[]
+  filterLabel?: string
+}
+
 const BYTES_IN_MB = 1024 * 1024
 
 function formatBytes(value?: number | null) {
@@ -73,7 +78,10 @@ function formatRelativeTime(value?: string | null) {
   }
 }
 
-export const AdminMediaPanel: React.FC = () => {
+export const AdminMediaPanel: React.FC<AdminMediaPanelProps> = ({
+  filterBuckets,
+  filterLabel,
+}) => {
   const [entries, setEntries] = React.useState<MediaEntry[]>([])
   const [loading, setLoading] = React.useState(true)
   const [refreshing, setRefreshing] = React.useState(false)
@@ -83,6 +91,13 @@ export const AdminMediaPanel: React.FC = () => {
   const runtimeEnv = (globalThis as typeof globalThis & RuntimeEnv).__ENV__
   const adminToken =
     import.meta.env?.VITE_ADMIN_STATIC_TOKEN ?? runtimeEnv?.VITE_ADMIN_STATIC_TOKEN
+
+  const normalizedFilterBuckets = React.useMemo(() => {
+    if (!filterBuckets || filterBuckets.length === 0) return null
+    return filterBuckets
+      .map((bucket) => bucket?.toString().trim().toLowerCase())
+      .filter((bucket): bucket is string => Boolean(bucket))
+  }, [filterBuckets])
 
   const fetchMedia = React.useCallback(
     async ({ showSpinner = false }: { showSpinner?: boolean } = {}) => {
@@ -184,18 +199,40 @@ export const AdminMediaPanel: React.FC = () => {
     }
   }, [])
 
+  const visibleEntries = React.useMemo(() => {
+    if (!normalizedFilterBuckets || normalizedFilterBuckets.length === 0) {
+      return entries
+    }
+    return entries.filter((entry) =>
+      entry.bucket
+        ? normalizedFilterBuckets.includes(entry.bucket.toLowerCase())
+        : false,
+    )
+  }, [entries, normalizedFilterBuckets])
+
+  const hasBucketFilter =
+    Array.isArray(normalizedFilterBuckets) && normalizedFilterBuckets.length > 0
+  const emptyStateMessage = hasBucketFilter
+    ? `No ${(filterLabel || "filtered").toLowerCase()} uploads found yet.`
+    : "No media uploads found yet."
+
   return (
     <div className="space-y-6">
       <Card className="rounded-2xl">
         <CardContent className="p-6 space-y-4">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div className="text-2xl font-semibold tracking-tight">Media library</div>
-              <p className="text-sm text-muted-foreground">
-                Recent uploads to the Supabase bucket, including who uploaded them and
-                file details.
-              </p>
-            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="text-2xl font-semibold tracking-tight">Media library</div>
+                <p className="text-sm text-muted-foreground">
+                  Recent uploads to the Supabase bucket, including who uploaded them and
+                  file details.
+                </p>
+                {hasBucketFilter && (
+                  <div className="mt-1 text-xs font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-300">
+                    Showing {filterLabel || "filtered"} bucket
+                  </div>
+                )}
+              </div>
             <Button
               type="button"
               variant="outline"
@@ -214,15 +251,15 @@ export const AdminMediaPanel: React.FC = () => {
               {error}
             </div>
           )}
-          {loading ? (
-            <div className="text-sm text-muted-foreground">Loading media uploads...</div>
-          ) : entries.length === 0 ? (
-            <div className="rounded-2xl border border-dashed p-6 text-center text-sm text-muted-foreground">
-              No media uploads found yet.
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {entries.map((entry) => {
+            {loading ? (
+              <div className="text-sm text-muted-foreground">Loading media uploads...</div>
+            ) : visibleEntries.length === 0 ? (
+              <div className="rounded-2xl border border-dashed p-6 text-center text-sm text-muted-foreground">
+                {emptyStateMessage}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {visibleEntries.map((entry) => {
                 const fileName =
                   entry.metadata?.originalName ||
                   entry.path.split("/").filter(Boolean).pop() ||
