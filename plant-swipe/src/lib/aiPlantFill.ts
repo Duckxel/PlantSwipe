@@ -193,3 +193,44 @@ export async function fetchAiPlantFillField({
 
   return payload?.data ?? null
 }
+
+export interface PlantKnowledgeCheckResult {
+  known: boolean
+  confidence: number
+  summary: string
+}
+
+export async function detectAiPlantKnowledge(plantName: string, signal?: AbortSignal): Promise<PlantKnowledgeCheckResult> {
+  const trimmedName = plantName.trim()
+  if (!trimmedName) {
+    throw new Error('Plant name is required')
+  }
+  const headers = await buildAuthHeaders()
+  const response = await fetch('/api/admin/ai/plant-fill/detect', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ plantName: trimmedName }),
+    signal,
+  })
+
+  let payload: any = null
+  try {
+    payload = await response.json()
+  } catch {}
+
+  if (!response.ok) {
+    const message = payload?.error || `AI detection failed with status ${response.status}`
+    throw new Error(message)
+  }
+
+  if (!payload?.success) {
+    const message = payload?.error || 'Failed to verify plant name'
+    throw new Error(message)
+  }
+
+  const known = Boolean(payload.known)
+  const confidence = typeof payload.confidence === 'number' ? payload.confidence : Number(payload.confidence) || 0
+  const summary = typeof payload.summary === 'string' ? payload.summary.trim() : ''
+
+  return { known, confidence, summary }
+}

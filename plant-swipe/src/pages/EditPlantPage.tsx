@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Select } from "@/components/ui/select"
 import { supabase } from "@/lib/supabaseClient"
-import { fetchAiPlantFill, fetchAiPlantFillField } from "@/lib/aiPlantFill"
+import { fetchAiPlantFill, fetchAiPlantFillField, detectAiPlantKnowledge, type PlantKnowledgeCheckResult } from "@/lib/aiPlantFill"
 import type {
   Plant,
   PlantIdentifiers,
@@ -69,6 +69,7 @@ const AI_STATUS_STYLES: Record<AiFieldStatus, { text: string }> = {
 }
 
 const MAX_AI_RETRY_ROUNDS = 2
+const MAX_AI_TOTAL_ATTEMPTS = MAX_AI_RETRY_ROUNDS + 1
 
 interface EditPlantPageProps {
   onCancel: () => void
@@ -108,6 +109,7 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
   const [aiFieldStatuses, setAiFieldStatuses] = React.useState<Record<RequiredFieldId, AiFieldStatus>>(() => createInitialStatuses())
   const [aiMissingFields, setAiMissingFields] = React.useState<RequiredFieldId[]>([])
   const [aiStatusVisible, setAiStatusVisible] = React.useState(false)
+  const [aiDetection, setAiDetection] = React.useState<PlantKnowledgeCheckResult | null>(null)
   const abortControllerRef = React.useRef<AbortController | null>(null)
   const resetAiTracking = () => {
     setAiFieldStatuses(createInitialStatuses())
@@ -198,6 +200,11 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
   const initialCreatedByRef = React.useRef<string | null>(null)
 
   const funFact = React.useMemo(() => (meta?.funFact ?? '').trim(), [meta?.funFact])
+  const isAiFillLanguageAllowed = editLanguage === 'en'
+  const detectionConfidenceText =
+    aiDetection && aiDetection.confidence > 0
+      ? ` (confidence ${Math.round(aiDetection.confidence * 100)}%)`
+      : ''
   const handlePhotosChange = React.useCallback((next: PlantPhoto[]) => {
     setPhotos(ensureAtLeastOnePhoto(next))
   }, [])
@@ -248,6 +255,10 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
       }
     }, [])
 
+  React.useEffect(() => {
+    setAiDetection(null)
+  }, [name, editLanguage])
+
   const loadSchema = async () => {
     try {
       const response = await fetch('/PLANT-INFO-SCHEMA.json')
@@ -291,8 +302,9 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
 
     setAiStatusVisible(true)
     resetAiTracking()
+    setAiDetection(null)
     setAiFilling(true)
-    setAiFillProgress({ completed: 0, total: 0, field: undefined })
+    setAiFillProgress({ completed: 0, total: 0, field: 'detecting plant name' })
     abortControllerRef.current?.abort()
     const controller = new AbortController()
     abortControllerRef.current = controller
@@ -300,6 +312,14 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
     setOk(null)
 
     try {
+      const detection = await detectAiPlantKnowledge(name.trim(), controller.signal)
+      setAiDetection(detection)
+      if (!detection.known) {
+        const detail = detection.summary ? ` ${detection.summary}` : ''
+        setError(`AI could not identify "${name.trim()}".${detail ? detail : ''} Please verify the spelling or fill the remaining fields manually.`)
+        return
+      }
+
       const schema = await loadSchema()
       if (!schema) {
         setError('Failed to load schema')
@@ -714,31 +734,32 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
         missing = await retryMissingFields(missing)
       }
 
-      if (missing.length === 0) {
-        setOk('AI data loaded successfully! Please review and edit before saving.')
-      } else {
-        const missingLabels = REQUIRED_FIELD_CONFIG
-          .filter(({ id }) => missing.includes(id))
-          .map(({ label }) => label)
-        let message = `AI could not fill the following required fields after retrying: ${missingLabels.join(', ')}. Please complete them manually.`
-        if (missing.includes('description')) {
-          const wordCount = countWords(latestDescription)
-          message += ` The overview must be between 100 and 400 words (currently ${wordCount}).`
-        }
-        if (missing.includes('funFact')) {
-          const sentenceCount = countSentences(latestFunFact)
-          message += ` The fun fact must contain between 1 and 3 sentences (currently ${sentenceCount}).`
-        }
-        setError(message)
-      }
-      } catch (err: any) {
-        console.error('AI fill error:', err)
-        if (err?.message === 'AI fill was cancelled' || err?.message === 'AI fill cancelled.') {
-          setError('AI fill cancelled.')
+        if (missing.length === 0) {
+          setOk('AI data loaded successfully! Please review and edit before saving.')
         } else {
-          setError(err?.message || 'Failed to fill data with AI. Please try again.')
+          const missingLabels = REQUIRED_FIELD_CONFIG
+            .filter(({ id }) => missing.includes(id))
+            .map(({ label }) => label)
+          const attemptLabel = MAX_AI_TOTAL_ATTEMPTS === 1 ? '1 attempt' : `${MAX_AI_TOTAL_ATTEMPTS} attempts`
+          let message = `AI could not fill the following required fields after ${attemptLabel}: ${missingLabels.join(', ')}. Please complete them manually.`
+          if (missing.includes('description')) {
+            const wordCount = countWords(latestDescription)
+            message += ` The overview must be between 100 and 400 words (currently ${wordCount}).`
+          }
+          if (missing.includes('funFact')) {
+            const sentenceCount = countSentences(latestFunFact)
+            message += ` The fun fact must contain between 1 and 3 sentences (currently ${sentenceCount}).`
+          }
+          setError(message)
         }
-      } finally {
+        } catch (err: any) {
+          console.error('AI fill error:', err)
+          if (err?.message === 'AI fill was cancelled' || err?.message === 'AI fill cancelled.' || err?.name === 'AbortError') {
+            setError('AI fill cancelled.')
+          } else {
+            setError(err?.message || 'Failed to fill data with AI. Please try again.')
+          }
+        } finally {
         setAiFilling(false)
         setAiFillProgress({ completed: 0, total: 0, field: undefined })
         abortControllerRef.current = null
@@ -1287,6 +1308,19 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
                         <p className="text-sm text-purple-700 dark:text-purple-300">
                           Let AI fill in all the advanced fields based on the plant name.
                         </p>
+                          {aiDetection && (
+                            <p
+                              className={`text-xs mt-2 ${
+                                aiDetection.known
+                                  ? "text-purple-700 dark:text-purple-200"
+                                  : "text-red-600 dark:text-red-400"
+                              }`}
+                            >
+                              {aiDetection.known
+                                ? `AI recognized this plant${detectionConfidenceText || ""}. ${aiDetection.summary}`
+                                : `AI could not confirm this plant${detectionConfidenceText || ""}.${aiDetection.summary ? ` ${aiDetection.summary}` : ""}`}
+                            </p>
+                          )}
                       </div>
                       <Button
                         type="button"

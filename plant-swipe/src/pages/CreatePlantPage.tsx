@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Select } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { supabase } from "@/lib/supabaseClient"
-import { fetchAiPlantFill, fetchAiPlantFillField } from "@/lib/aiPlantFill"
+import { fetchAiPlantFill, fetchAiPlantFillField, detectAiPlantKnowledge, type PlantKnowledgeCheckResult } from "@/lib/aiPlantFill"
 import type {
   Plant,
   PlantIdentifiers,
@@ -68,6 +68,7 @@ const AI_STATUS_STYLES: Record<AiFieldStatus, { text: string }> = {
 }
 
 const MAX_AI_RETRY_ROUNDS = 2
+const MAX_AI_TOTAL_ATTEMPTS = MAX_AI_RETRY_ROUNDS + 1
 
 function generateUUIDv4(): string {
   try {
@@ -115,6 +116,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
   const [aiFieldStatuses, setAiFieldStatuses] = React.useState<Record<RequiredFieldId, AiFieldStatus>>(() => createInitialStatuses())
   const [aiMissingFields, setAiMissingFields] = React.useState<RequiredFieldId[]>([])
   const [aiStatusVisible, setAiStatusVisible] = React.useState(false)
+  const [aiDetection, setAiDetection] = React.useState<PlantKnowledgeCheckResult | null>(null)
   const abortControllerRef = React.useRef<AbortController | null>(null)
   const resetAiTracking = () => {
     setAiFieldStatuses(createInitialStatuses())
@@ -217,6 +219,11 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
   const [waterFreqAmount] = React.useState<number>(1)
 
   const funFact = React.useMemo(() => (meta?.funFact ?? '').trim(), [meta?.funFact])
+  const isAiFillLanguageAllowed = inputLanguage === 'en'
+  const detectionConfidenceText =
+    aiDetection && aiDetection.confidence > 0
+      ? ` (confidence ${Math.round(aiDetection.confidence * 100)}%)`
+      : ''
 
   const handlePhotosChange = React.useCallback((next: PlantPhoto[]) => {
     setPhotos(ensureAtLeastOnePhoto(next))
@@ -268,6 +275,10 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
     }
   }, [initialName])
 
+  React.useEffect(() => {
+    setAiDetection(null)
+  }, [name, inputLanguage])
+
     React.useEffect(() => {
       return () => {
         abortControllerRef.current?.abort()
@@ -309,6 +320,12 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
 
   // AI Fill function
   const handleAiFill = async () => {
+    if (inputLanguage !== 'en') {
+      setOk(null)
+      setError("AI fill is only available when the language selector is set to English (EN).")
+      return
+    }
+
     if (!name.trim()) {
       setError("Please enter a plant name first")
       return
@@ -316,8 +333,9 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
 
     setAiStatusVisible(true)
     resetAiTracking()
+    setAiDetection(null)
     setAiFilling(true)
-    setAiFillProgress({ completed: 0, total: 0, field: undefined })
+    setAiFillProgress({ completed: 0, total: 0, field: 'detecting plant name' })
     abortControllerRef.current?.abort()
     const controller = new AbortController()
     abortControllerRef.current = controller
@@ -325,6 +343,14 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
     setOk(null)
 
     try {
+      const detection = await detectAiPlantKnowledge(name.trim(), controller.signal)
+      setAiDetection(detection)
+      if (!detection.known) {
+        const detail = detection.summary ? ` ${detection.summary}` : ''
+        setError(`AI could not identify "${name.trim()}".${detail ? detail : ''} Please double-check the spelling or fill the fields manually.`)
+        return
+      }
+
       const schema = await loadSchema()
       if (!schema) {
         setError("Failed to load schema")
@@ -614,13 +640,14 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
         missing = await retryMissingFields(missing)
       }
 
-      if (missing.length === 0) {
-        setOk("AI data loaded successfully! Please review and edit before saving.")
-      } else {
-        const missingLabels = REQUIRED_FIELD_CONFIG
-          .filter(({ id }) => missing.includes(id))
-          .map(({ label }) => label)
-        let message = `AI could not fill the following required fields after retrying: ${missingLabels.join(', ')}. Please complete them manually.`
+        if (missing.length === 0) {
+          setOk("AI data loaded successfully! Please review and edit before saving.")
+        } else {
+          const missingLabels = REQUIRED_FIELD_CONFIG
+            .filter(({ id }) => missing.includes(id))
+            .map(({ label }) => label)
+          const attemptLabel = MAX_AI_TOTAL_ATTEMPTS === 1 ? '1 attempt' : `${MAX_AI_TOTAL_ATTEMPTS} attempts`
+          let message = `AI could not fill the following required fields after ${attemptLabel}: ${missingLabels.join(', ')}. Please complete them manually.`
         if (missing.includes('description')) {
           const wordCount = countWords(latestDescription)
           message += ` The overview must be between 100 and 400 words (currently ${wordCount}).`
@@ -631,14 +658,14 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
         }
         setError(message)
       }
-    } catch (err: any) {
-      console.error('AI fill error:', err)
-      if (err?.message === 'AI fill was cancelled' || err?.message === 'AI fill cancelled.') {
-        setError('AI fill cancelled.')
-      } else {
-        setError(err?.message || 'Failed to fill data with AI. Please try again.')
-      }
-    } finally {
+      } catch (err: any) {
+        console.error('AI fill error:', err)
+        if (err?.message === 'AI fill was cancelled' || err?.message === 'AI fill cancelled.' || err?.name === 'AbortError') {
+          setError('AI fill cancelled.')
+        } else {
+          setError(err?.message || 'Failed to fill data with AI. Please try again.')
+        }
+      } finally {
       setAiFilling(false)
       setAiFillProgress({ completed: 0, total: 0, field: undefined })
       abortControllerRef.current = null
@@ -999,37 +1026,55 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
                     'Add at least one image URL. Mark one as primary for cards and flag vertical-friendly shots for portrait layouts.'
                   )}
                 />
-            {advanced && (
-              <>
-                <div className="flex items-center justify-between mb-4 p-4 rounded-xl border bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-950/20 dark:to-blue-950/20 dark:border-purple-800/30">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 font-semibold text-purple-900 dark:text-purple-200 mb-1">
-                      <Sparkles className="h-5 w-5" />
-                      AI Assistant
+              {advanced && (
+                <>
+                  <div className="flex items-center justify-between mb-4 p-4 rounded-xl border bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-950/20 dark:to-blue-950/20 dark:border-purple-800/30">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 font-semibold text-purple-900 dark:text-purple-200 mb-1">
+                        <Sparkles className="h-5 w-5" />
+                        AI Assistant
+                      </div>
+                      <p className="text-sm text-purple-700 dark:text-purple-300">
+                        Let AI fill in all the advanced fields based on the plant name
+                      </p>
+                      {!isAiFillLanguageAllowed && (
+                        <p className="text-xs text-purple-700 dark:text-purple-300 mt-2">
+                          Switch the language selector to English (EN) to enable AI fill.
+                        </p>
+                      )}
+                      {aiDetection && (
+                        <p
+                          className={`text-xs mt-2 ${
+                            aiDetection.known
+                              ? "text-purple-700 dark:text-purple-200"
+                              : "text-red-600 dark:text-red-400"
+                          }`}
+                        >
+                          {aiDetection.known
+                            ? `AI recognized this plant${detectionConfidenceText || ""}. ${aiDetection.summary}`
+                            : `AI could not confirm this plant${detectionConfidenceText || ""}.${aiDetection.summary ? ` ${aiDetection.summary}` : ""}`}
+                        </p>
+                      )}
                     </div>
-                    <p className="text-sm text-purple-700 dark:text-purple-300">
-                      Let AI fill in all the advanced fields based on the plant name
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    onClick={handleAiFill}
-                    disabled={aiFilling || !name.trim() || saving || translating}
-                    className="rounded-2xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white border-0 shadow-lg"
+                    <Button
+                      type="button"
+                      onClick={handleAiFill}
+                      disabled={aiFilling || !name.trim() || saving || translating || !isAiFillLanguageAllowed}
+                      className="rounded-2xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white border-0 shadow-lg"
                     >
-                    {aiFilling ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Filling{aiFillProgress.total > 0 ? ` ${Math.round((Math.min(aiFillProgress.completed, aiFillProgress.total) / aiFillProgress.total) * 100)}%` : '...'}
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="h-4 w-4 mr-2" />
-                        Fill with AI
-                      </>
-                    )}
-                  </Button>
-                </div>
+                      {aiFilling ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Filling{aiFillProgress.total > 0 ? ` ${Math.round((Math.min(aiFillProgress.completed, aiFillProgress.total) / aiFillProgress.total) * 100)}%` : '...'}
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="h-4 w-4 mr-2" />
+                          Fill with AI
+                        </>
+                      )}
+                    </Button>
+                  </div>
                 {aiStatusVisible && (
                   <div className="mb-4 rounded-xl border border-purple-100 bg-purple-50/70 p-4 dark:border-purple-900/40 dark:bg-purple-950/20">
                     <div className="text-xs font-semibold uppercase tracking-wide text-purple-700 dark:text-purple-300">
