@@ -1,13 +1,8 @@
 import React from 'react'
 import { Info, AlertTriangle, XCircle } from 'lucide-react'
+import { loadPersistedBroadcast, savePersistedBroadcast, type BroadcastRecord } from '@/lib/broadcastStorage'
 
-export type Broadcast = {
-  id: string
-  message: string
-  severity?: 'info' | 'warning' | 'danger'
-  createdAt: string | null
-  expiresAt: string | null
-}
+export type Broadcast = BroadcastRecord
 
 function useNowTick(intervalMs: number = 1000) {
   const [now, setNow] = React.useState<number>(() => Date.now())
@@ -57,36 +52,8 @@ function savePosition(pos: PositionKey) {
   try { localStorage.setItem('plantswipe.broadcast.pos', pos) } catch {}
 }
 
-// Persist the last active broadcast so it survives reloads while still valid
-function loadPersistedBroadcast(nowMs: number): Broadcast | null {
-  try {
-    const raw = localStorage.getItem('plantswipe.broadcast.active')
-    if (!raw) return null
-    const data = JSON.parse(raw)
-    if (!data || typeof data !== 'object') return null
-    const b: Broadcast = {
-      id: String((data as any).id || ''),
-      message: String((data as any).message || ''),
-      severity: ((data as any).severity === 'warning' || (data as any).severity === 'danger') ? (data as any).severity : 'info',
-      createdAt: (data as any).createdAt || null,
-      expiresAt: (data as any).expiresAt || null,
-    }
-    const remaining = msRemaining(b.expiresAt, nowMs)
-    if (remaining !== null && remaining <= 0) return null
-    return b
-  } catch {}
-  return null
-}
-
-function savePersistedBroadcast(b: Broadcast | null) {
-  try {
-    if (!b) localStorage.removeItem('plantswipe.broadcast.active')
-    else localStorage.setItem('plantswipe.broadcast.active', JSON.stringify(b))
-  } catch {}
-}
-
 const BroadcastToast: React.FC = () => {
-  const [broadcast, setBroadcast] = React.useState<Broadcast | null>(() => loadPersistedBroadcast(Date.now()))
+  const [broadcast, setBroadcast] = React.useState<Broadcast | null>(() => loadPersistedBroadcast())
   const [pos, setPos] = React.useState<PositionKey>(loadPosition)
   const now = useNowTick(1000)
 
@@ -103,14 +70,14 @@ const BroadcastToast: React.FC = () => {
           setBroadcast(next)
           savePersistedBroadcast(next)
         } else {
-          const persisted = loadPersistedBroadcast(Date.now())
+          const persisted = loadPersistedBroadcast()
           setBroadcast(persisted)
           if (!persisted) savePersistedBroadcast(null)
         }
         return true
       }
     } catch {}
-    const persisted = loadPersistedBroadcast(Date.now())
+    const persisted = loadPersistedBroadcast()
     setBroadcast(persisted)
     return false
   }, [])

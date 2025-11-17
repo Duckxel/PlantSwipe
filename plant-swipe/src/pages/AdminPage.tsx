@@ -39,6 +39,11 @@ import {
   CloudUpload,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
+import {
+  loadPersistedBroadcast,
+  savePersistedBroadcast,
+  type BroadcastRecord,
+} from "@/lib/broadcastStorage";
 import { CreatePlantPage } from "@/pages/CreatePlantPage";
 import {
   Dialog,
@@ -261,18 +266,10 @@ export const AdminPage: React.FC = () => {
   React.useEffect(() => {
     let cancelled = false;
     const checkActiveBroadcast = async () => {
-      // Fast path: open if a persisted, still-valid broadcast exists
-      try {
-        const raw = localStorage.getItem("plantswipe.broadcast.active");
-        if (raw) {
-          const data = JSON.parse(raw);
-          const ex = data?.expiresAt
-            ? Date.parse(String(data.expiresAt))
-            : null;
-          const stillValid = !ex || ex > Date.now();
-          if (!cancelled && stillValid) setBroadcastOpen(true);
-        }
-      } catch {}
+      const persisted = loadPersistedBroadcast();
+      if (!cancelled && persisted) {
+        setBroadcastOpen(true);
+      }
       try {
         const r = await fetch("/api/broadcast/active", {
           headers: { Accept: "application/json" },
@@ -288,30 +285,30 @@ export const AdminPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-    }, []);
+  }, []);
 
-    // Even when collapsed, poll for broadcast state to auto-open when a broadcast starts
-    React.useEffect(() => {
-      let cancelled = false;
-      const poll = async () => {
-        try {
-          const r = await fetch("/api/broadcast/active", {
-            headers: { Accept: "application/json" },
-            credentials: "same-origin",
-          });
-          if (!cancelled && r.ok) {
-            const data = await r.json().catch(() => ({}));
-            if (data?.broadcast) setBroadcastOpen(true);
-          }
-        } catch {}
-      };
-      const id = window.setInterval(poll, 60000);
-      poll();
-      return () => {
-        cancelled = true;
-        clearInterval(id);
-      };
-    }, []);
+  // Even when collapsed, poll for broadcast state to auto-open when a broadcast starts
+  React.useEffect(() => {
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const r = await fetch("/api/broadcast/active", {
+          headers: { Accept: "application/json" },
+          credentials: "same-origin",
+        });
+        if (!cancelled && r.ok) {
+          const data = await r.json().catch(() => ({}));
+          if (data?.broadcast) setBroadcastOpen(true);
+        }
+      } catch {}
+    };
+    const id = window.setInterval(poll, 60000);
+    poll();
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
   const consoleRef = React.useRef<HTMLDivElement | null>(null);
   React.useEffect(() => {
     if (!consoleOpen) return;
@@ -801,7 +798,7 @@ export const AdminPage: React.FC = () => {
       // First attempt: restart via Node API (preserves Authorization)
       const nodeHeaders = (() => {
         const h: Record<string, string> = { Accept: "application/json" };
-        if (token) h["Authorization"] = `Bearer ? ${token}`;
+        if (token) h["Authorization"] = `Bearer ${token}`;
         const adminToken = (globalThis as any)?.__ENV__
           ?.VITE_ADMIN_STATIC_TOKEN;
         if (adminToken) h["X-Admin-Token"] = String(adminToken);
@@ -1353,7 +1350,7 @@ export const AdminPage: React.FC = () => {
         try {
           const token = (await supabase.auth.getSession()).data.session
             ?.access_token;
-          if (token) headers["Authorization"] = `Bearer ? ${token}`;
+          if (token) headers["Authorization"] = `Bearer ${token}`;
           const staticToken = (globalThis as any)?.__ENV__
             ?.VITE_ADMIN_STATIC_TOKEN;
           if (staticToken) headers["X-Admin-Token"] = staticToken;
@@ -1661,7 +1658,7 @@ export const AdminPage: React.FC = () => {
         try {
           const session = (await supabase.auth.getSession()).data.session;
           const token = session?.access_token;
-          if (token) headersNode["Authorization"] = `Bearer ? ${token}`;
+          if (token) headersNode["Authorization"] = `Bearer ${token}`;
         } catch {}
         const respNode = await fetchWithRetry("/api/admin/branches", {
           headers: headersNode,
@@ -1762,7 +1759,7 @@ export const AdminPage: React.FC = () => {
           adminToken = null;
         }
         const authHeaders: Record<string, string> = {};
-        if (token) authHeaders["Authorization"] = `Bearer ? ${token}`;
+        if (token) authHeaders["Authorization"] = `Bearer ${token}`;
         if (adminToken) authHeaders["X-Admin-Token"] = String(adminToken);
         const sseHeaders = { ...authHeaders };
         const nodeJsonHeaders = { ...authHeaders, Accept: "application/json" };
@@ -1967,7 +1964,7 @@ export const AdminPage: React.FC = () => {
           const session = (await supabase.auth.getSession()).data.session;
           const token = session?.access_token;
           const headers: Record<string, string> = { Accept: "application/json" };
-          if (token) headers["Authorization"] = `Bearer ? ${token}`;
+          if (token) headers["Authorization"] = `Bearer ${token}`;
           try {
             const adminToken = (globalThis as any)?.__ENV__
               ?.VITE_ADMIN_STATIC_TOKEN;
@@ -2058,7 +2055,7 @@ export const AdminPage: React.FC = () => {
         const resp = await fetchWithRetry("/api/admin/online-users", {
           headers: (() => {
             const h: Record<string, string> = { Accept: "application/json" };
-            if (token) h["Authorization"] = `Bearer ? ${token}`;
+            if (token) h["Authorization"] = `Bearer ${token}`;
             const adminToken = (globalThis as any)?.__ENV__
               ?.VITE_ADMIN_STATIC_TOKEN;
             if (adminToken) h["X-Admin-Token"] = String(adminToken);
@@ -2118,7 +2115,7 @@ export const AdminPage: React.FC = () => {
         const session = (await supabase.auth.getSession()).data.session;
         const token = session?.access_token;
         const headers: Record<string, string> = { Accept: "application/json" };
-        if (token) headers["Authorization"] = `Bearer ? ${token}`;
+        if (token) headers["Authorization"] = `Bearer ${token}`;
         try {
           const adminToken = (globalThis as any)?.__ENV__
             ?.VITE_ADMIN_STATIC_TOKEN;
@@ -2485,7 +2482,7 @@ export const AdminPage: React.FC = () => {
         const session = (await supabase.auth.getSession()).data.session;
         const token = session?.access_token;
         const headers: Record<string, string> = { Accept: "application/json" };
-        if (token) headers["Authorization"] = `Bearer ? ${token}`;
+        if (token) headers["Authorization"] = `Bearer ${token}`;
         try {
           const adminToken = (globalThis as any)?.__ENV__
             ?.VITE_ADMIN_STATIC_TOKEN;
@@ -2602,7 +2599,7 @@ export const AdminPage: React.FC = () => {
         const session = (await supabase.auth.getSession()).data.session;
         const token = session?.access_token;
         const headers: Record<string, string> = { Accept: "application/json" };
-        if (token) headers["Authorization"] = `Bearer ? ${token}`;
+        if (token) headers["Authorization"] = `Bearer ${token}`;
         try {
           const adminToken = (globalThis as any)?.__ENV__
             ?.VITE_ADMIN_STATIC_TOKEN;
@@ -2689,7 +2686,7 @@ export const AdminPage: React.FC = () => {
         const token = session?.access_token;
         const url = `/api/admin/member?q=${encodeURIComponent(query)}`;
         const headers: Record<string, string> = { Accept: "application/json" };
-        if (token) headers["Authorization"] = `Bearer ? ${token}`;
+        if (token) headers["Authorization"] = `Bearer ${token}`;
         try {
           const adminToken = (globalThis as any)?.__ENV__
             ?.VITE_ADMIN_STATIC_TOKEN;
@@ -2745,7 +2742,7 @@ export const AdminPage: React.FC = () => {
             Accept: "application/json",
             "Content-Type": "application/json",
           };
-          if (token) headers2["Authorization"] = `Bearer ? ${token}`;
+          if (token) headers2["Authorization"] = `Bearer ${token}`;
           try {
             const adminToken = (globalThis as any)?.__ENV__
               ?.VITE_ADMIN_STATIC_TOKEN;
@@ -2773,7 +2770,7 @@ export const AdminPage: React.FC = () => {
             Accept: "application/json",
             "Content-Type": "application/json",
           };
-          if (token) headers2["Authorization"] = `Bearer ? ${token}`;
+          if (token) headers2["Authorization"] = `Bearer ${token}`;
           try {
             const adminToken = (globalThis as any)?.__ENV__
               ?.VITE_ADMIN_STATIC_TOKEN;
@@ -2816,7 +2813,7 @@ export const AdminPage: React.FC = () => {
         const session = (await supabase.auth.getSession()).data.session;
         const token = session?.access_token;
         const headers: Record<string, string> = { Accept: "application/json" };
-        if (token) headers["Authorization"] = `Bearer ? ${token}`;
+        if (token) headers["Authorization"] = `Bearer ${token}`;
         try {
           const adminToken = (globalThis as any)?.__ENV__
             ?.VITE_ADMIN_STATIC_TOKEN;
@@ -2857,7 +2854,7 @@ export const AdminPage: React.FC = () => {
             Accept: "application/json",
             "Content-Type": "application/json",
           };
-          if (token) headers2["Authorization"] = `Bearer ? ${token}`;
+          if (token) headers2["Authorization"] = `Bearer ${token}`;
           try {
             const adminToken = (globalThis as any)?.__ENV__
               ?.VITE_ADMIN_STATIC_TOKEN;
@@ -2885,7 +2882,7 @@ export const AdminPage: React.FC = () => {
             Accept: "application/json",
             "Content-Type": "application/json",
           };
-          if (token) headers2["Authorization"] = `Bearer ? ${token}`;
+          if (token) headers2["Authorization"] = `Bearer ${token}`;
           try {
             const adminToken = (globalThis as any)?.__ENV__
               ?.VITE_ADMIN_STATIC_TOKEN;
@@ -2995,7 +2992,7 @@ export const AdminPage: React.FC = () => {
         "Content-Type": "application/json",
         Accept: "application/json",
       };
-      if (token) headers["Authorization"] = `Bearer ? ${token}`;
+      if (token) headers["Authorization"] = `Bearer ${token}`;
       try {
         const adminToken = (globalThis as any)?.__ENV__
           ?.VITE_ADMIN_STATIC_TOKEN;
@@ -3032,7 +3029,7 @@ export const AdminPage: React.FC = () => {
         "Content-Type": "application/json",
         Accept: "application/json",
       };
-      if (token) headers["Authorization"] = `Bearer ? ${token}`;
+      if (token) headers["Authorization"] = `Bearer ${token}`;
       try {
         const adminToken = (globalThis as any)?.__ENV__
           ?.VITE_ADMIN_STATIC_TOKEN;
@@ -3072,7 +3069,7 @@ export const AdminPage: React.FC = () => {
         "Content-Type": "application/json",
         Accept: "application/json",
       };
-      if (token) headers["Authorization"] = `Bearer ? ${token}`;
+      if (token) headers["Authorization"] = `Bearer ${token}`;
       try {
         const adminToken = (globalThis as any)?.__ENV__
           ?.VITE_ADMIN_STATIC_TOKEN;
@@ -3119,7 +3116,7 @@ export const AdminPage: React.FC = () => {
         const token = (await supabase.auth.getSession()).data.session
           ?.access_token;
         const headers: Record<string, string> = { Accept: "application/json" };
-        if (token) headers["Authorization"] = `Bearer ? ${token}`;
+        if (token) headers["Authorization"] = `Bearer ${token}`;
         try {
           const adminToken = (globalThis as any)?.__ENV__
             ?.VITE_ADMIN_STATIC_TOKEN;
@@ -6402,36 +6399,9 @@ const BroadcastControls: React.FC<{
   onExpired?: () => void;
   onActive?: () => void;
 }> = ({ inline = false, onExpired, onActive }) => {
-  const [active, setActive] = React.useState<{
-    id: string;
-    message: string;
-    severity?: "info" | "warning" | "danger";
-    expiresAt: string | null;
-    adminName?: string | null;
-  } | null>(() => {
-    // Seed from persisted broadcast for instant edit UI on reload
-    try {
-      const raw = localStorage.getItem("plantswipe.broadcast.active");
-      if (raw) {
-        const data = JSON.parse(raw);
-        const ex = data?.expiresAt ? Date.parse(String(data.expiresAt)) : null;
-        const stillValid = !ex || ex > Date.now();
-        if (stillValid) {
-          return {
-            id: String(data?.id || ""),
-            message: String(data?.message || ""),
-            severity:
-              data?.severity === "warning" || data?.severity === "danger"
-                ? data.severity
-                : "info",
-            expiresAt: data?.expiresAt || null,
-            adminName: data?.adminName || null,
-          };
-        }
-      }
-    } catch {}
-    return null;
-  });
+  const [active, setActive] = React.useState<BroadcastRecord | null>(() =>
+    loadPersistedBroadcast(),
+  );
   const [message, setMessage] = React.useState("");
   // Default to warning requested, but server/UI sometimes using info; keep 'warning' default selectable
   const [severity, setSeverity] = React.useState<"info" | "warning" | "danger">(
@@ -6491,14 +6461,15 @@ const BroadcastControls: React.FC<{
         const b = await r.json().catch(() => ({}));
         if (b?.broadcast) {
           setActive(b.broadcast);
+          savePersistedBroadcast(b.broadcast);
           // Pre-fill edit fields so admin can immediately edit
           setMessage(b.broadcast.message || "");
           setSeverity((b.broadcast.severity as any) || "info");
           // Inform parent to open the section if collapsed
           onActive?.();
         } else {
-          // If we already have a valid active (e.g., from persisted state), keep it
-          setActive((prev) => (prev ? prev : null));
+          setActive(null);
+          savePersistedBroadcast(null);
         }
       }
     } catch {
@@ -6521,7 +6492,7 @@ const BroadcastControls: React.FC<{
         try {
           const data =
             typeof ev.data === "string" ? JSON.parse(ev.data) : ev.data;
-          setActive({
+          const next: BroadcastRecord = {
             id: String(data?.id || ""),
             message: String(data?.message || ""),
             severity:
@@ -6530,7 +6501,10 @@ const BroadcastControls: React.FC<{
                 : "info",
             expiresAt: data?.expiresAt || null,
             adminName: data?.adminName || null,
-          });
+            createdAt: data?.createdAt || null,
+          };
+          setActive(next);
+          savePersistedBroadcast(next);
           // Pre-fill edit values if none entered yet
           setMessage((prev) =>
             prev && prev.trim().length > 0 ? prev : String(data?.message || ""),
@@ -6546,6 +6520,7 @@ const BroadcastControls: React.FC<{
       });
       es.addEventListener("clear", () => {
         setActive(null);
+        savePersistedBroadcast(null);
       });
     } catch {}
     return () => {
@@ -6563,6 +6538,7 @@ const BroadcastControls: React.FC<{
     const id = window.setTimeout(
       () => {
         setActive(null);
+        savePersistedBroadcast(null);
         onExpired?.();
       },
       Math.max(0, remain),
@@ -6581,7 +6557,7 @@ const BroadcastControls: React.FC<{
         Accept: "application/json",
         "Content-Type": "application/json",
       };
-      if (token) headers["Authorization"] = `Bearer ? ${token}`;
+      if (token) headers["Authorization"] = `Bearer ${token}`;
       try {
         const staticToken = (globalThis as any)?.__ENV__
           ?.VITE_ADMIN_STATIC_TOKEN;
@@ -6616,6 +6592,7 @@ const BroadcastControls: React.FC<{
       const b = await resp.json().catch(() => ({}));
       if (!resp.ok) throw new Error(b?.error || `HTTP ? ${resp.status}`);
       setActive(b?.broadcast || null);
+      savePersistedBroadcast(b?.broadcast || null);
       setMessage("");
       setSeverity("warning");
     } catch (e) {
@@ -6632,7 +6609,7 @@ const BroadcastControls: React.FC<{
       const session = (await supabase.auth.getSession()).data.session;
       const token = session?.access_token;
       const headers: Record<string, string> = { Accept: "application/json" };
-      if (token) headers["Authorization"] = `Bearer ? ${token}`;
+      if (token) headers["Authorization"] = `Bearer ${token}`;
       try {
         const staticToken = (globalThis as any)?.__ENV__
           ?.VITE_ADMIN_STATIC_TOKEN;
@@ -6646,6 +6623,7 @@ const BroadcastControls: React.FC<{
       const b = await resp.json().catch(() => ({}));
       if (!resp.ok) throw new Error(b?.error || `HTTP ? ${resp.status}`);
       setActive(null);
+      savePersistedBroadcast(null);
     } catch (e) {
       alert((e as Error)?.message || "Failed to remove broadcast");
     } finally {
@@ -6710,7 +6688,7 @@ const BroadcastControls: React.FC<{
                     Accept: "application/json",
                     "Content-Type": "application/json",
                   };
-                  if (token) headers["Authorization"] = `Bearer ? ${token}`;
+                  if (token) headers["Authorization"] = `Bearer ${token}`;
                   try {
                     const staticToken = (globalThis as any)?.__ENV__
                       ?.VITE_ADMIN_STATIC_TOKEN;
@@ -6750,6 +6728,7 @@ const BroadcastControls: React.FC<{
                   if (!resp.ok)
                     throw new Error(b?.error || `HTTP ? ${resp.status}`);
                   setActive(b?.broadcast || null);
+                  savePersistedBroadcast(b?.broadcast || null);
                   setMessage("");
                 } catch (e) {
                   alert((e as Error)?.message || "Failed to update broadcast");
@@ -6855,7 +6834,7 @@ function AddAdminNote({
         Accept: "application/json",
         "Content-Type": "application/json",
       };
-      if (token) headers["Authorization"] = `Bearer ? ${token}`;
+      if (token) headers["Authorization"] = `Bearer ${token}`;
       try {
         const adminToken = (globalThis as any)?.__ENV__
           ?.VITE_ADMIN_STATIC_TOKEN;
@@ -6875,7 +6854,7 @@ function AddAdminNote({
           Accept: "application/json",
           "Content-Type": "application/json",
         };
-        if (token) headers2["Authorization"] = `Bearer ? ${token}`;
+        if (token) headers2["Authorization"] = `Bearer ${token}`;
         try {
           const adminToken = (globalThis as any)?.__ENV__
             ?.VITE_ADMIN_STATIC_TOKEN;
@@ -6961,7 +6940,7 @@ function NoteRow({
       const session = (await supabase.auth.getSession()).data.session;
       const token = session?.access_token;
       const headers: Record<string, string> = { Accept: "application/json" };
-      if (token) headers["Authorization"] = `Bearer ? ${token}`;
+      if (token) headers["Authorization"] = `Bearer ${token}`;
       try {
         const adminToken = (globalThis as any)?.__ENV__
           ?.VITE_ADMIN_STATIC_TOKEN;
@@ -6980,7 +6959,7 @@ function NoteRow({
           Accept: "application/json",
           "Content-Type": "application/json",
         };
-        if (token) headers2["Authorization"] = `Bearer ? ${token}`;
+        if (token) headers2["Authorization"] = `Bearer ${token}`;
         try {
           const adminToken = (globalThis as any)?.__ENV__
             ?.VITE_ADMIN_STATIC_TOKEN;
@@ -7128,7 +7107,7 @@ const AdminLogs: React.FC = () => {
       const session = (await supabase.auth.getSession()).data.session;
       const token = session?.access_token;
       const headers: Record<string, string> = { Accept: "application/json" };
-      if (token) headers["Authorization"] = `Bearer ? ${token}`;
+      if (token) headers["Authorization"] = `Bearer ${token}`;
       try {
         const adminToken = (globalThis as any)?.__ENV__
           ?.VITE_ADMIN_STATIC_TOKEN;
