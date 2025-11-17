@@ -6468,8 +6468,13 @@ const BroadcastControls: React.FC<{
           // Inform parent to open the section if collapsed
           onActive?.();
         } else {
-          setActive(null);
-          savePersistedBroadcast(null);
+          const persisted = loadPersistedBroadcast();
+          if (persisted) {
+            setActive(persisted);
+          } else {
+            setActive(null);
+            savePersistedBroadcast(null);
+          }
         }
       }
     } catch {
