@@ -1049,6 +1049,87 @@ async function generateFieldData(options) {
   return cleanedValue !== undefined ? cleanedValue : undefined
 }
 
+function clampConfidence(value) {
+  if (typeof value === 'string') {
+    const parsed = Number(value)
+    if (!Number.isNaN(parsed)) {
+      value = parsed
+    }
+  }
+  if (!Number.isFinite(value)) {
+    return 0
+  }
+  if (value < 0) return 0
+  if (value > 1) return 1
+  return Math.round(value * 1000) / 1000
+}
+
+function trimSummary(summary) {
+  if (typeof summary !== 'string') {
+    return ''
+  }
+  const normalized = summary.replace(/\s+/g, ' ').trim()
+  if (!normalized) return ''
+  return normalized.slice(0, 280)
+}
+
+async function detectPlantKnowledge(plantName) {
+  if (!openaiClient) {
+    throw new Error('OpenAI client not configured')
+  }
+  const instructions = [
+    'You verify whether a provided plant name refers to a real, botanically recognized plant, tree, flower, herb, or crop.',
+    'Return strictly JSON shaped as {"known": boolean, "confidence": number between 0 and 1, "summary": string <= 200 chars}.',
+    'Set "known" to false if the name appears fictional, is an animal/mineral, or you are unsure.',
+    'Keep the summary concise and factual; do not include markdown or extra keys.',
+  ].join('\n')
+
+  const response = await openaiClient.responses.create(
+    {
+      model: openaiModel,
+      reasoning: { effort: 'low' },
+      instructions,
+      input: `Plant name to assess: ${plantName}`,
+    },
+    { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 180000) },
+  )
+
+  const outputText = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
+  if (!outputText) {
+    throw new Error('AI returned empty output while detecting plant knowledge')
+  }
+
+  let parsed
+  try {
+    parsed = JSON.parse(outputText)
+  } catch (parseError) {
+    const jsonMatch = outputText.match(/\{[\s\S]*\}/)
+    if (jsonMatch) {
+      try {
+        parsed = JSON.parse(jsonMatch[0])
+      } catch (innerError) {
+        console.error('[server] Failed to parse extracted AI detection response:', innerError, outputText)
+      }
+    } else {
+      console.error('[server] Failed to parse AI detection response:', parseError, outputText)
+    }
+  }
+
+  const knownFlag = Boolean(
+    parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed.known : false,
+  )
+  const confidenceValue =
+    parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed.confidence : 0
+  const summaryValue =
+    parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed.summary : ''
+
+  return {
+    known: knownFlag,
+    confidence: clampConfidence(confidenceValue),
+    summary: trimSummary(summaryValue || (knownFlag ? `Identified ${plantName}` : '')),
+  }
+}
+
 function removeExternalIds(node) {
   if (!node || typeof node !== 'object') return node
   if (Array.isArray(node)) {
@@ -1420,6 +1501,38 @@ app.get('/api/admin/admin-logs', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to load admin logs' })
   }
+})
+
+// Admin: AI-assisted plant detection
+app.post('/api/admin/ai/plant-fill/detect', async (req, res) => {
+  try {
+    const caller = await ensureAdmin(req, res)
+    if (!caller) return
+    if (!openaiClient) {
+      res.status(503).json({ error: 'AI plant detection is not configured' })
+      return
+    }
+
+    const body = req.body || {}
+    const plantName = typeof body.plantName === 'string' ? body.plantName.trim() : ''
+    if (!plantName) {
+      res.status(400).json({ error: 'Plant name is required' })
+      return
+    }
+
+    const detection = await detectPlantKnowledge(plantName)
+    res.json({ success: true, ...detection })
+  } catch (err) {
+    console.error('[server] AI plant detection failed:', err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: err?.message || 'Failed to verify plant name' })
+    }
+  }
+})
+app.options('/api/admin/ai/plant-fill/detect', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
 })
 
 // Admin: AI-assisted plant data fill
