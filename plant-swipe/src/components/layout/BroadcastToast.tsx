@@ -2,7 +2,7 @@ import React from 'react'
 import { Info, AlertTriangle, XCircle } from 'lucide-react'
 import { useTheme } from '@/context/ThemeContext'
 import { cn } from '@/lib/utils'
-import { useBroadcastState } from '@/hooks/useBroadcastState'
+import { useBroadcastActions, useBroadcastState } from '@/hooks/useBroadcastState'
 import { msRemaining } from '@/lib/broadcasts'
 
 function useNowTick(intervalMs: number = 1000) {
@@ -68,7 +68,11 @@ function formatRemainingDuration(ms: number): string {
 const BroadcastToast: React.FC = () => {
   const { effectiveTheme } = useTheme()
   const isDarkTheme = effectiveTheme === 'dark'
-  const { broadcast } = useBroadcastState()
+  const { broadcast, ready } = useBroadcastState()
+  const { refresh } = useBroadcastActions()
+  React.useEffect(() => {
+    void refresh()
+  }, [refresh])
   const [pos, setPos] = React.useState<PositionKey>(loadPosition)
   const now = useNowTick(1000)
 
@@ -104,7 +108,7 @@ const BroadcastToast: React.FC = () => {
     return formatRemainingDuration(remaining)
   }, [broadcast?.expiresAt, now])
 
-  if (!broadcast) return null
+  if (!ready || !broadcast) return null
 
   const handleCycle = (e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault()

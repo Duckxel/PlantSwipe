@@ -6413,7 +6413,7 @@ const BroadcastControls: React.FC<{
   onActive?: () => void;
 }> = ({ inline = false, onExpired, onActive }) => {
   const { broadcast: active, ready } = useBroadcastState();
-  const { applyServerPayload } = useBroadcastActions();
+  const { applyServerPayload, refresh } = useBroadcastActions();
   const [message, setMessage] = React.useState("");
   // Default to warning requested, but server/UI sometimes using info; keep 'warning' default selectable
   const [severity, setSeverity] = React.useState<"info" | "warning" | "danger">(
@@ -6430,6 +6430,9 @@ const BroadcastControls: React.FC<{
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
+  React.useEffect(() => {
+    void refresh();
+  }, [refresh]);
 
   React.useEffect(() => {
     if (!active) {
