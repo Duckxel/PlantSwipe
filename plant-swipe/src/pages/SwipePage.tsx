@@ -348,10 +348,47 @@ const EmptyState = ({ onReset }: { onReset: () => void }) => {
   )
 }
 
+const useSupportsHover = () => {
+  const [supportsHover, setSupportsHover] = React.useState<boolean>(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return true
+    }
+    return window.matchMedia("(hover: hover) and (pointer: fine)").matches
+  })
+
+  React.useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return
+    }
+
+    const mediaQuery = window.matchMedia("(hover: hover) and (pointer: fine)")
+    const handleChange = (event: MediaQueryListEvent) => {
+      setSupportsHover(event.matches)
+    }
+
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", handleChange)
+    } else if (typeof mediaQuery.addListener === "function") {
+      mediaQuery.addListener(handleChange)
+    }
+
+    return () => {
+      if (typeof mediaQuery.removeEventListener === "function") {
+        mediaQuery.removeEventListener("change", handleChange)
+      } else if (typeof mediaQuery.removeListener === "function") {
+        mediaQuery.removeListener(handleChange)
+      }
+    }
+  }, [])
+
+  return supportsHover
+}
+
 const PlantMetaRail: React.FC<{ plant: Plant; variant: "sidebar" | "inline" }> = ({ plant, variant }) => {
   const { t } = useTranslation("common")
   const [activeKey, setActiveKey] = React.useState<string | null>(null)
   const items = React.useMemo(() => buildIndicatorItems(plant, t), [plant, t])
+  const supportsHover = useSupportsHover()
 
   React.useEffect(() => {
     setActiveKey(null)
@@ -361,9 +398,17 @@ const PlantMetaRail: React.FC<{ plant: Plant; variant: "sidebar" | "inline" }> =
 
   if (variant === "inline") {
     return (
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-col items-end gap-2">
         {items.map((item) => (
-          <InlineIndicatorCard key={item.key} item={item} />
+          <IndicatorPill
+            key={item.key}
+            item={item}
+            active={activeKey === item.key}
+            onActivate={() => setActiveKey(item.key)}
+            onDeactivate={() => setActiveKey((prev) => (prev === item.key ? null : prev))}
+            supportsHover={supportsHover}
+            variant="inline"
+          />
         ))}
       </div>
     )
@@ -378,6 +423,8 @@ const PlantMetaRail: React.FC<{ plant: Plant; variant: "sidebar" | "inline" }> =
           active={activeKey === item.key}
           onActivate={() => setActiveKey(item.key)}
           onDeactivate={() => setActiveKey((prev) => (prev === item.key ? null : prev))}
+          supportsHover={supportsHover}
+          variant="sidebar"
         />
       ))}
     </div>
@@ -407,64 +454,14 @@ interface IndicatorPillProps {
   active: boolean
   onActivate: () => void
   onDeactivate: () => void
+  supportsHover: boolean
+  variant: "sidebar" | "inline"
 }
 
-const InlineIndicatorCard: React.FC<{ item: IndicatorItem }> = ({ item }) => {
-  const isColorVariant = item.variant === "color" && (item.colors?.length ?? 0) > 0
-
-  return (
-    <div className="flex min-w-[160px] flex-1 basis-[calc(50%-0.25rem)] items-start gap-3 rounded-2xl border border-white/15 bg-black/65 px-3 py-2 text-white shadow-lg shadow-black/15 backdrop-blur">
-      <span
-        className={cn(
-          "flex h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-black/40",
-          item.accentClass,
-          isColorVariant && "p-0",
-        )}
-        aria-hidden="true"
-      >
-        {isColorVariant ? (
-          <div className="flex items-center gap-1">
-            {item.colors!.slice(0, 3).map((color) => (
-              <span
-                key={color.id}
-                className="h-3.5 w-3.5 rounded-full border border-white/40"
-                style={{ backgroundColor: color.tone }}
-              />
-            ))}
-          </div>
-        ) : (
-          item.icon
-        )}
-      </span>
-      <div className="flex-1 space-y-1 text-left">
-        {item.description && (
-          <p className="text-[9px] uppercase tracking-[0.25em] text-white/55">{item.description}</p>
-        )}
-        <p className="text-sm font-semibold leading-tight">{item.label}</p>
-        {item.detailList?.length ? (
-          <p className="text-[11px] leading-tight text-white/80">{item.detailList.join(", ")}</p>
-        ) : null}
-        {isColorVariant && (
-          <div className="flex flex-wrap gap-1.5 pt-1">
-            {item.colors!.map((color) => (
-              <span
-                key={color.id}
-                className="h-3.5 w-3.5 rounded-full border border-white/35"
-                style={{ backgroundColor: color.tone }}
-                aria-label={color.label}
-                title={color.label}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-const IndicatorPill: React.FC<IndicatorPillProps> = ({ item, active, onActivate, onDeactivate }) => {
+const IndicatorPill: React.FC<IndicatorPillProps> = ({ item, active, onActivate, onDeactivate, supportsHover, variant }) => {
   const isColorVariant = item.variant === "color" && (item.colors?.length ?? 0) > 0
   const ariaLabel = `${item.description ?? ""}${item.description ? ": " : ""}${item.ariaValue ?? item.label}`.trim()
+  const isSidebarVariant = variant === "sidebar"
 
   const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation()
@@ -475,32 +472,40 @@ const IndicatorPill: React.FC<IndicatorPillProps> = ({ item, active, onActivate,
     }
   }
 
+  const detailBaseClass = cn(
+    "rounded-2xl border border-white/15 bg-black/70 px-3 py-2 text-left shadow-xl backdrop-blur-md",
+    isSidebarVariant ? "mr-3" : "mr-2",
+  )
+
+  const detailWidthClass = isSidebarVariant
+    ? isColorVariant
+      ? "max-w-[240px]"
+      : "max-w-[220px]"
+    : "max-w-[min(260px,calc(100vw-5rem))]"
+
+  const detailMotionProps = { initial: { opacity: 0, x: 16 }, animate: { opacity: 1, x: 0 }, exit: { opacity: 0, x: 16 } }
+
   return (
-    <div className="pointer-events-auto">
+    <div className={cn("pointer-events-auto", !isSidebarVariant && "basis-auto")}>
       <button
         type="button"
         aria-label={ariaLabel || undefined}
         aria-expanded={active}
         aria-pressed={active}
-        onMouseEnter={onActivate}
-        onMouseLeave={onDeactivate}
+        onMouseEnter={supportsHover ? onActivate : undefined}
+        onMouseLeave={supportsHover ? onDeactivate : undefined}
         onFocus={onActivate}
         onBlur={onDeactivate}
         onClick={handleClick}
         onPointerDown={(event) => event.stopPropagation()}
-        className="group relative flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white/80 focus-visible:ring-offset-transparent"
+        className={cn(
+          "group relative flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white/80 focus-visible:ring-offset-transparent",
+          !isSidebarVariant && "justify-end",
+        )}
       >
         <AnimatePresence>
           {active && (
-            <motion.div
-              className={cn(
-                "mr-3 rounded-2xl border border-white/15 bg-black/70 px-3 py-2 text-left shadow-xl backdrop-blur-md",
-                isColorVariant ? "max-w-[240px]" : "max-w-[220px]",
-              )}
-              initial={{ opacity: 0, x: 16 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 16 }}
-            >
+            <motion.div className={cn(detailBaseClass, detailWidthClass)} {...detailMotionProps}>
               {isColorVariant ? (
                 <div className="flex flex-wrap gap-1.5">
                   {item.colors!.map((color) => (
@@ -541,15 +546,15 @@ const IndicatorPill: React.FC<IndicatorPillProps> = ({ item, active, onActivate,
             isColorVariant && "p-0",
           )}
         >
-            {isColorVariant ? (
-              <span
-                className="flex h-5 w-5 items-center justify-center rounded-full border border-white/35"
-                style={{ backgroundColor: item.colors?.[0]?.tone ?? DEFAULT_PLANT_COLOR }}
-                aria-hidden="true"
-              />
-            ) : (
-              item.icon
-            )}
+          {isColorVariant ? (
+            <span
+              className="flex h-5 w-5 items-center justify-center rounded-full border border-white/35"
+              style={{ backgroundColor: item.colors?.[0]?.tone ?? DEFAULT_PLANT_COLOR }}
+              aria-hidden="true"
+            />
+          ) : (
+            item.icon
+          )}
         </span>
       </button>
     </div>
