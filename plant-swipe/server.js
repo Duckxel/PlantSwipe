@@ -222,6 +222,36 @@ const adminUploadAllowedMimeTypes = new Set([
   'image/svg+xml',
 ])
 
+const gardenCoverUploadBucket = (() => {
+  const fromEnv = (process.env.GARDEN_UPLOAD_BUCKET || '').trim()
+  if (fromEnv) return fromEnv
+  const preferred = 'PHOTOS'
+  if (preferred) return preferred
+  return adminUploadBucket
+})()
+const gardenCoverUploadPrefixRaw = (process.env.GARDEN_UPLOAD_PREFIX || 'gardens/covers').trim()
+const gardenCoverUploadPrefix = gardenCoverUploadPrefixRaw.replace(/^\/+|\/+$/g, '') || 'gardens/covers'
+const gardenCoverMaxBytes = (() => {
+  const raw = Number(process.env.GARDEN_UPLOAD_MAX_BYTES)
+  if (Number.isFinite(raw) && raw > 0) return raw
+  return adminUploadMaxBytes
+})()
+const gardenCoverMaxDimension = (() => {
+  const raw = Number(process.env.GARDEN_UPLOAD_MAX_DIMENSION)
+  if (Number.isFinite(raw) && raw >= 128 && raw <= 4000) return Math.round(raw)
+  return 1000
+})()
+const gardenCoverWebpQuality = (() => {
+  const raw = Number(process.env.GARDEN_UPLOAD_WEBP_QUALITY)
+  if (Number.isFinite(raw) && raw >= 30 && raw <= 100) return Math.round(raw)
+  return adminUploadWebpQuality
+})()
+const gardenCoverMulter = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: gardenCoverMaxBytes },
+})
+const singleGardenCoverUpload = gardenCoverMulter.single('file')
+
 function sanitizeUploadBaseName(name) {
   try {
     const parsed = path.parse(String(name || '')).name || 'upload'
@@ -260,17 +290,54 @@ function deriveUploadTypeSegment(originalName, mimeType) {
   return 'unknown'
 }
 
-function buildUploadObjectPath(baseName, typeSegment) {
+function buildUploadObjectPath(baseName, typeSegment, prefix = adminUploadPrefix) {
   const unique =
     (typeof crypto.randomUUID === 'function'
       ? crypto.randomUUID()
       : crypto.randomBytes(10).toString('hex'))
+  const cleanPrefix = typeof prefix === 'string' ? prefix.replace(/^\/+|\/+$/g, '') : ''
   const segments = [
-    adminUploadPrefix,
+    cleanPrefix,
     sanitizePathSegment(typeSegment, 'unknown'),
     `${baseName}-${unique}.webp`,
   ].filter(Boolean)
   return segments.join('/').replace(/\/{2,}/g, '/')
+}
+
+function parseStoragePublicUrl(url) {
+  try {
+    if (!url || !supabaseUrlEnv) return null
+    const normalizedBase = supabaseUrlEnv.replace(/\/+$/, '')
+    const publicPrefix = `${normalizedBase}/storage/v1/object/public/`
+    if (!String(url).startsWith(publicPrefix)) return null
+    const remainder = String(url).slice(publicPrefix.length)
+    const parts = remainder.split('/').filter(Boolean)
+    if (parts.length < 2) return null
+    const bucket = parts.shift()
+    const path = parts.join('/')
+    if (!bucket || !path) return null
+    return { bucket, path }
+  } catch {
+    return null
+  }
+}
+
+async function deleteGardenCoverObject(publicUrl) {
+  if (!publicUrl || !supabaseServiceClient) return { deleted: false, reason: 'unavailable' }
+  const info = parseStoragePublicUrl(publicUrl)
+  if (!info) return { deleted: false, reason: 'not_managed' }
+  if (info.bucket !== gardenCoverUploadBucket) return { deleted: false, reason: 'different_bucket' }
+  if (gardenCoverUploadPrefix && !info.path.startsWith(`${gardenCoverUploadPrefix}/`)) {
+    return { deleted: false, reason: 'different_prefix' }
+  }
+  try {
+    const { error } = await supabaseServiceClient.storage.from(info.bucket).remove([info.path])
+    if (error) throw error
+    return { deleted: true }
+  } catch (err) {
+    console.error('[garden-cover] failed to delete storage object', err)
+    return { deleted: false, reason: err?.message || 'delete_failed' }
+  }
 }
 
 // Extract Supabase user id and email from Authorization header. Falls back to
@@ -6163,6 +6230,272 @@ async function isGardenMember(req, gardenId, userIdOverride = null) {
     return false
   }
 }
+
+async function isGardenOwner(req, gardenId, userIdOverride = null) {
+  try {
+    const user = userIdOverride ? { id: userIdOverride } : await getUserFromRequest(req)
+    if (!user?.id) return false
+    try { if (await isAdminFromRequest(req)) return true } catch {}
+    if (sql) {
+      const rows = await sql`
+        select role from public.garden_members
+        where garden_id = ${gardenId} and user_id = ${user.id}
+        limit 1
+      `
+      if (Array.isArray(rows) && rows.length > 0) {
+        return String(rows[0].role || '').toLowerCase() === 'owner'
+      }
+    }
+    if (supabaseUrlEnv && supabaseAnonKey) {
+      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+      const bearer = getBearerTokenFromRequest(req)
+      if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
+      const url = `${supabaseUrlEnv}/rest/v1/garden_members?garden_id=eq.${encodeURIComponent(gardenId)}&user_id=eq.${encodeURIComponent(user.id)}&select=role&limit=1`
+      const r = await fetch(url, { headers })
+      if (r.ok) {
+        const arr = await r.json().catch(() => [])
+        if (Array.isArray(arr) && arr.length > 0) {
+          return String(arr[0].role || '').toLowerCase() === 'owner'
+        }
+      }
+    }
+    return false
+  } catch {
+    return false
+  }
+}
+
+async function getGardenCoverRow(gardenId) {
+  if (sql) {
+    const rows = await sql`
+      select id::text as id, cover_image_url
+      from public.gardens
+      where id = ${gardenId}
+      limit 1
+    `
+    return Array.isArray(rows) && rows.length > 0 ? rows[0] : null
+  }
+  if (supabaseServiceClient) {
+    const { data, error } = await supabaseServiceClient
+      .from('gardens')
+      .select('id, cover_image_url')
+      .eq('id', gardenId)
+      .maybeSingle()
+    if (error) throw error
+    return data
+  }
+  return null
+}
+
+async function updateGardenCoverImage(gardenId, publicUrl) {
+  if (sql) {
+    await sql`
+      update public.gardens
+      set cover_image_url = ${publicUrl}
+      where id = ${gardenId}
+    `
+    return
+  }
+  if (supabaseServiceClient) {
+    const { error } = await supabaseServiceClient
+      .from('gardens')
+      .update({ cover_image_url: publicUrl })
+      .eq('id', gardenId)
+    if (error) throw error
+    return
+  }
+  throw new Error('Database connection not configured')
+}
+
+app.post('/api/garden/:id/upload-cover', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
+    return
+  }
+  const gardenId = String(req.params.id || '').trim()
+  if (!gardenId) {
+    res.status(400).json({ error: 'Garden id is required' })
+    return
+  }
+  const user = await getUserFromRequest(req)
+  if (!user?.id) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return
+  }
+  const canEdit = await isGardenOwner(req, gardenId, user.id)
+  if (!canEdit) {
+    res.status(403).json({ error: 'Forbidden' })
+    return
+  }
+
+  singleGardenCoverUpload(req, res, (err) => {
+    if (err) {
+      const message =
+        err?.code === 'LIMIT_FILE_SIZE'
+          ? `File exceeds the maximum size of ${(gardenCoverMaxBytes / (1024 * 1024)).toFixed(1)} MB`
+          : err?.message || 'Failed to process upload'
+      res.status(400).json({ error: message })
+      return
+    }
+    ;(async () => {
+      const file = req.file
+      if (!file) {
+        res.status(400).json({ error: 'Missing image file (expected form field "file")' })
+        return
+      }
+      const gardenRow = await getGardenCoverRow(gardenId)
+      if (!gardenRow) {
+        res.status(404).json({ error: 'Garden not found' })
+        return
+      }
+      const previousUrl = gardenRow.cover_image_url || null
+      const mime = (file.mimetype || '').toLowerCase()
+      if (!mime.startsWith('image/')) {
+        res.status(400).json({ error: 'Only image uploads are supported' })
+        return
+      }
+      if (!adminUploadAllowedMimeTypes.has(mime)) {
+        res.status(400).json({ error: `Unsupported image type: ${mime}` })
+        return
+      }
+      if (!file.buffer || file.buffer.length === 0) {
+        res.status(400).json({ error: 'Uploaded file is empty' })
+        return
+      }
+
+      let optimizedBuffer
+      try {
+        optimizedBuffer = await sharp(file.buffer)
+          .rotate()
+          .resize({
+            width: gardenCoverMaxDimension,
+            height: gardenCoverMaxDimension,
+            fit: 'inside',
+            withoutEnlargement: true,
+            fastShrinkOnLoad: true,
+          })
+          .webp({
+            quality: gardenCoverWebpQuality,
+            effort: 5,
+            smartSubsample: true,
+          })
+          .toBuffer()
+      } catch (sharpErr) {
+        console.error('[garden-cover] failed to convert image to webp', sharpErr)
+        res.status(400).json({ error: 'Failed to convert image. Please upload a valid image file.' })
+        return
+      }
+
+      const baseName = sanitizeUploadBaseName(file.originalname)
+      const gardenSegment = sanitizePathSegment(`garden-${gardenId}`, 'garden')
+      const typeSegment = gardenSegment ? `cover-${gardenSegment}` : 'cover'
+      const objectPath = buildUploadObjectPath(baseName, typeSegment, gardenCoverUploadPrefix)
+
+      try {
+        const { error: uploadError } = await supabaseServiceClient
+          .storage
+          .from(gardenCoverUploadBucket)
+          .upload(objectPath, optimizedBuffer, {
+            cacheControl: '31536000',
+            contentType: 'image/webp',
+            upsert: false,
+          })
+        if (uploadError) {
+          throw new Error(uploadError.message || 'Supabase storage upload failed')
+        }
+      } catch (storageErr) {
+        console.error('[garden-cover] supabase storage upload failed', storageErr)
+        res.status(500).json({ error: storageErr?.message || 'Failed to store optimized image' })
+        return
+      }
+
+      const { data: publicData } = supabaseServiceClient
+        .storage
+        .from(gardenCoverUploadBucket)
+        .getPublicUrl(objectPath)
+      const publicUrl = publicData?.publicUrl || null
+      if (!publicUrl) {
+        res.status(500).json({ error: 'Failed to generate public URL for cover image' })
+        return
+      }
+
+      try {
+        await updateGardenCoverImage(gardenId, publicUrl)
+      } catch (dbErr) {
+        console.error('[garden-cover] failed to update garden cover', dbErr)
+        res.status(500).json({ error: dbErr?.message || 'Failed to update garden cover' })
+        return
+      }
+
+      let deletedPrevious = false
+      if (previousUrl && previousUrl !== publicUrl) {
+        try {
+          const result = await deleteGardenCoverObject(previousUrl)
+          deletedPrevious = Boolean(result.deleted)
+        } catch {}
+      }
+
+      const compressionPercent =
+        file.size > 0
+          ? Math.max(0, Math.round(100 - (optimizedBuffer.length / file.size) * 100))
+          : 0
+
+      res.json({
+        ok: true,
+        gardenId,
+        bucket: gardenCoverUploadBucket,
+        path: objectPath,
+        url: publicUrl,
+        mimeType: 'image/webp',
+        size: optimizedBuffer.length,
+        originalMimeType: mime,
+        originalSize: file.size,
+        quality: gardenCoverWebpQuality,
+        maxDimension: gardenCoverMaxDimension,
+        compressionPercent,
+        deletedPrevious,
+      })
+    })().catch((uploadErr) => {
+      console.error('[garden-cover] unexpected failure', uploadErr)
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Unexpected upload failure' })
+      }
+    })
+  })
+})
+
+app.post('/api/garden/:id/cover/cleanup', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured for storage cleanup' })
+    return
+  }
+  const gardenId = String(req.params.id || '').trim()
+  if (!gardenId) {
+    res.status(400).json({ error: 'Garden id is required' })
+    return
+  }
+  const user = await getUserFromRequest(req)
+  if (!user?.id) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return
+  }
+  const canEdit = await isGardenOwner(req, gardenId, user.id)
+  if (!canEdit) {
+    res.status(403).json({ error: 'Forbidden' })
+    return
+  }
+  const targetUrl = String(req.body?.url || '').trim()
+  if (!targetUrl) {
+    res.status(400).json({ error: 'url is required' })
+    return
+  }
+  try {
+    const result = await deleteGardenCoverObject(targetUrl)
+    res.json({ ok: true, deleted: Boolean(result.deleted), reason: result.reason })
+  } catch (err) {
+    res.status(500).json({ error: err?.message || 'Failed to delete cover image' })
+  }
+})
 
 app.get('/api/garden/:id/activity', async (req, res) => {
   try {
