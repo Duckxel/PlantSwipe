@@ -12,6 +12,15 @@ import { AdminMediaPanel } from "@/components/admin/AdminMediaPanel";
 import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
 import { getAccentOption } from "@/lib/accent";
+import {
+  BroadcastMessage,
+  loadPersistedBroadcast,
+  loadSeededBroadcast,
+  msRemaining as broadcastMsRemaining,
+  normalizeBroadcast as normalizeBroadcastMessage,
+  persistBroadcast,
+  seedBroadcastInWindow,
+} from "@/lib/broadcasts";
 // Re-export for convenience
 import {
   RefreshCw,
@@ -805,7 +814,7 @@ export const AdminPage: React.FC = () => {
       // First attempt: restart via Node API (preserves Authorization)
       const nodeHeaders = (() => {
         const h: Record<string, string> = { Accept: "application/json" };
-        if (token) h["Authorization"] = `Bearer ? ${token}`;
+        if (token) h["Authorization"] = `Bearer ${token}`;
         const adminToken = (globalThis as any)?.__ENV__
           ?.VITE_ADMIN_STATIC_TOKEN;
         if (adminToken) h["X-Admin-Token"] = String(adminToken);
@@ -1357,7 +1366,7 @@ export const AdminPage: React.FC = () => {
         try {
           const token = (await supabase.auth.getSession()).data.session
             ?.access_token;
-          if (token) headers["Authorization"] = `Bearer ? ${token}`;
+          if (token) headers["Authorization"] = `Bearer ${token}`;
           const staticToken = (globalThis as any)?.__ENV__
             ?.VITE_ADMIN_STATIC_TOKEN;
           if (staticToken) headers["X-Admin-Token"] = staticToken;
@@ -1665,7 +1674,7 @@ export const AdminPage: React.FC = () => {
         try {
           const session = (await supabase.auth.getSession()).data.session;
           const token = session?.access_token;
-          if (token) headersNode["Authorization"] = `Bearer ? ${token}`;
+          if (token) headersNode["Authorization"] = `Bearer ${token}`;
         } catch {}
         const respNode = await fetchWithRetry("/api/admin/branches", {
           headers: headersNode,
@@ -1766,7 +1775,7 @@ export const AdminPage: React.FC = () => {
           adminToken = null;
         }
         const authHeaders: Record<string, string> = {};
-        if (token) authHeaders["Authorization"] = `Bearer ? ${token}`;
+        if (token) authHeaders["Authorization"] = `Bearer ${token}`;
         if (adminToken) authHeaders["X-Admin-Token"] = String(adminToken);
         const sseHeaders = { ...authHeaders };
         const nodeJsonHeaders = { ...authHeaders, Accept: "application/json" };
@@ -1971,7 +1980,7 @@ export const AdminPage: React.FC = () => {
           const session = (await supabase.auth.getSession()).data.session;
           const token = session?.access_token;
           const headers: Record<string, string> = { Accept: "application/json" };
-          if (token) headers["Authorization"] = `Bearer ? ${token}`;
+          if (token) headers["Authorization"] = `Bearer ${token}`;
           try {
             const adminToken = (globalThis as any)?.__ENV__
               ?.VITE_ADMIN_STATIC_TOKEN;
@@ -2062,7 +2071,7 @@ export const AdminPage: React.FC = () => {
         const resp = await fetchWithRetry("/api/admin/online-users", {
           headers: (() => {
             const h: Record<string, string> = { Accept: "application/json" };
-            if (token) h["Authorization"] = `Bearer ? ${token}`;
+            if (token) h["Authorization"] = `Bearer ${token}`;
             const adminToken = (globalThis as any)?.__ENV__
               ?.VITE_ADMIN_STATIC_TOKEN;
             if (adminToken) h["X-Admin-Token"] = String(adminToken);
@@ -2122,7 +2131,7 @@ export const AdminPage: React.FC = () => {
         const session = (await supabase.auth.getSession()).data.session;
         const token = session?.access_token;
         const headers: Record<string, string> = { Accept: "application/json" };
-        if (token) headers["Authorization"] = `Bearer ? ${token}`;
+        if (token) headers["Authorization"] = `Bearer ${token}`;
         try {
           const adminToken = (globalThis as any)?.__ENV__
             ?.VITE_ADMIN_STATIC_TOKEN;
@@ -2490,7 +2499,7 @@ export const AdminPage: React.FC = () => {
         const session = (await supabase.auth.getSession()).data.session;
         const token = session?.access_token;
         const headers: Record<string, string> = { Accept: "application/json" };
-        if (token) headers["Authorization"] = `Bearer ? ${token}`;
+        if (token) headers["Authorization"] = `Bearer ${token}`;
         try {
           const adminToken = (globalThis as any)?.__ENV__
             ?.VITE_ADMIN_STATIC_TOKEN;
@@ -2501,7 +2510,7 @@ export const AdminPage: React.FC = () => {
           { headers, credentials: "same-origin" },
         );
         const data = await safeJson(resp);
-        if (!resp.ok) throw new Error(data?.error || `HTTP ? ${resp.status}`);
+        if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`);
 
         // Debug: log response to help diagnose background task issues
         if (process.env.NODE_ENV === "development") {
@@ -2607,7 +2616,7 @@ export const AdminPage: React.FC = () => {
         const session = (await supabase.auth.getSession()).data.session;
         const token = session?.access_token;
         const headers: Record<string, string> = { Accept: "application/json" };
-        if (token) headers["Authorization"] = `Bearer ? ${token}`;
+        if (token) headers["Authorization"] = `Bearer ${token}`;
         try {
           const adminToken = (globalThis as any)?.__ENV__
             ?.VITE_ADMIN_STATIC_TOKEN;
@@ -2618,7 +2627,7 @@ export const AdminPage: React.FC = () => {
           { headers, credentials: "same-origin" },
         );
         const data = await safeJson(resp);
-        if (!resp.ok) throw new Error(data?.error || `HTTP ? ${resp.status}`);
+        if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`);
         const rawMembers = Array.isArray(data?.members) ? data.members : [];
         const normalized: ListedMember[] = rawMembers
           .map((m: any) => {
@@ -2694,7 +2703,7 @@ export const AdminPage: React.FC = () => {
         const token = session?.access_token;
         const url = `/api/admin/member?q=${encodeURIComponent(query)}`;
         const headers: Record<string, string> = { Accept: "application/json" };
-        if (token) headers["Authorization"] = `Bearer ? ${token}`;
+        if (token) headers["Authorization"] = `Bearer ${token}`;
         try {
           const adminToken = (globalThis as any)?.__ENV__
             ?.VITE_ADMIN_STATIC_TOKEN;
@@ -2702,7 +2711,7 @@ export const AdminPage: React.FC = () => {
         } catch {}
         const resp = await fetch(url, { headers, credentials: "same-origin" });
         const data = await safeJson(resp);
-        if (!resp.ok) throw new Error(data?.error || `HTTP ? ${resp.status}`);
+        if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`);
         setMemberData({
           user: data?.user || null,
           profile: data?.profile || null,
@@ -2750,7 +2759,7 @@ export const AdminPage: React.FC = () => {
             Accept: "application/json",
             "Content-Type": "application/json",
           };
-          if (token) headers2["Authorization"] = `Bearer ? ${token}`;
+          if (token) headers2["Authorization"] = `Bearer ${token}`;
           try {
             const adminToken = (globalThis as any)?.__ENV__
               ?.VITE_ADMIN_STATIC_TOKEN;
@@ -2778,7 +2787,7 @@ export const AdminPage: React.FC = () => {
             Accept: "application/json",
             "Content-Type": "application/json",
           };
-          if (token) headers2["Authorization"] = `Bearer ? ${token}`;
+          if (token) headers2["Authorization"] = `Bearer ${token}`;
           try {
             const adminToken = (globalThis as any)?.__ENV__
               ?.VITE_ADMIN_STATIC_TOKEN;
@@ -2821,7 +2830,7 @@ export const AdminPage: React.FC = () => {
         const session = (await supabase.auth.getSession()).data.session;
         const token = session?.access_token;
         const headers: Record<string, string> = { Accept: "application/json" };
-        if (token) headers["Authorization"] = `Bearer ? ${token}`;
+        if (token) headers["Authorization"] = `Bearer ${token}`;
         try {
           const adminToken = (globalThis as any)?.__ENV__
             ?.VITE_ADMIN_STATIC_TOKEN;
@@ -2832,7 +2841,7 @@ export const AdminPage: React.FC = () => {
           { headers, credentials: "same-origin" },
         );
         const data = await safeJson(resp);
-        if (!resp.ok) throw new Error(data?.error || `HTTP ? ${resp.status}`);
+        if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`);
         const users = Array.isArray(data?.users)
           ? data.users.map((u: any) => ({
               id: String(u.id),
@@ -2862,7 +2871,7 @@ export const AdminPage: React.FC = () => {
             Accept: "application/json",
             "Content-Type": "application/json",
           };
-          if (token) headers2["Authorization"] = `Bearer ? ${token}`;
+          if (token) headers2["Authorization"] = `Bearer ${token}`;
           try {
             const adminToken = (globalThis as any)?.__ENV__
               ?.VITE_ADMIN_STATIC_TOKEN;
@@ -2890,7 +2899,7 @@ export const AdminPage: React.FC = () => {
             Accept: "application/json",
             "Content-Type": "application/json",
           };
-          if (token) headers2["Authorization"] = `Bearer ? ${token}`;
+          if (token) headers2["Authorization"] = `Bearer ${token}`;
           try {
             const adminToken = (globalThis as any)?.__ENV__
               ?.VITE_ADMIN_STATIC_TOKEN;
@@ -3000,7 +3009,7 @@ export const AdminPage: React.FC = () => {
         "Content-Type": "application/json",
         Accept: "application/json",
       };
-      if (token) headers["Authorization"] = `Bearer ? ${token}`;
+      if (token) headers["Authorization"] = `Bearer ${token}`;
       try {
         const adminToken = (globalThis as any)?.__ENV__
           ?.VITE_ADMIN_STATIC_TOKEN;
@@ -3013,7 +3022,7 @@ export const AdminPage: React.FC = () => {
         body: JSON.stringify({ email: lookupEmail, reason: banReason }),
       });
       const data = await safeJson(resp);
-      if (!resp.ok) throw new Error(data?.error || `HTTP ? ${resp.status}`);
+      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`);
       alert("User banned successfully");
       setBanReason("");
       setBanOpen(false);
@@ -3037,7 +3046,7 @@ export const AdminPage: React.FC = () => {
         "Content-Type": "application/json",
         Accept: "application/json",
       };
-      if (token) headers["Authorization"] = `Bearer ? ${token}`;
+      if (token) headers["Authorization"] = `Bearer ${token}`;
       try {
         const adminToken = (globalThis as any)?.__ENV__
           ?.VITE_ADMIN_STATIC_TOKEN;
@@ -3050,7 +3059,7 @@ export const AdminPage: React.FC = () => {
         body: JSON.stringify({ email: lookupEmail }),
       });
       const data = await safeJson(resp);
-      if (!resp.ok) throw new Error(data?.error || `HTTP ? ${resp.status}`);
+      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`);
       alert("User promoted to admin successfully");
       setPromoteOpen(false);
       // Refresh profile info
@@ -3077,7 +3086,7 @@ export const AdminPage: React.FC = () => {
         "Content-Type": "application/json",
         Accept: "application/json",
       };
-      if (token) headers["Authorization"] = `Bearer ? ${token}`;
+      if (token) headers["Authorization"] = `Bearer ${token}`;
       try {
         const adminToken = (globalThis as any)?.__ENV__
           ?.VITE_ADMIN_STATIC_TOKEN;
@@ -3090,7 +3099,7 @@ export const AdminPage: React.FC = () => {
         body: JSON.stringify({ email: lookupEmail }),
       });
       const data = await safeJson(resp);
-      if (!resp.ok) throw new Error(data?.error || `HTTP ? ${resp.status}`);
+      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`);
       alert("Admin removed successfully");
       setDemoteOpen(false);
       // Refresh profile info
@@ -3124,7 +3133,7 @@ export const AdminPage: React.FC = () => {
         const token = (await supabase.auth.getSession()).data.session
           ?.access_token;
         const headers: Record<string, string> = { Accept: "application/json" };
-        if (token) headers["Authorization"] = `Bearer ? ${token}`;
+        if (token) headers["Authorization"] = `Bearer ${token}`;
         try {
           const adminToken = (globalThis as any)?.__ENV__
             ?.VITE_ADMIN_STATIC_TOKEN;
@@ -6404,13 +6413,7 @@ export const AdminPage: React.FC = () => {
 );
 };
 
-type BroadcastState = {
-  id: string;
-  message: string;
-  severity?: "info" | "warning" | "danger";
-  expiresAt: string | null;
-  adminName?: string | null;
-};
+type BroadcastState = BroadcastMessage;
 
 // --- Broadcast controls (Overview tab) ---
 const BroadcastControls: React.FC<{
@@ -6419,33 +6422,16 @@ const BroadcastControls: React.FC<{
   onActive?: () => void;
 }> = ({ inline = false, onExpired, onActive }) => {
   const [active, setActive] = React.useState<BroadcastState | null>(() => {
-    // Seed from persisted broadcast for instant edit UI on reload
-    try {
-      const raw = localStorage.getItem("plantswipe.broadcast.active");
-      if (raw) {
-        const data = JSON.parse(raw);
-        const ex = data?.expiresAt ? Date.parse(String(data.expiresAt)) : null;
-        const stillValid = !ex || ex > Date.now();
-        if (stillValid) {
-          return {
-            id: String(data?.id || ""),
-            message: String(data?.message || ""),
-            severity:
-              data?.severity === "warning" || data?.severity === "danger"
-                ? data.severity
-                : "info",
-            expiresAt: data?.expiresAt || null,
-            adminName: data?.adminName || null,
-          };
-        }
-      }
-    } catch {}
-    return null;
+    const seeded = loadSeededBroadcast();
+    if (seeded) return seeded;
+    return loadPersistedBroadcast();
   });
-  const [message, setMessage] = React.useState("");
+  const [message, setMessage] = React.useState(
+    () => active?.message ?? "",
+  );
   // Default to warning requested, but server/UI sometimes using info; keep 'warning' default selectable
   const [severity, setSeverity] = React.useState<"info" | "warning" | "danger">(
-    "warning",
+    () => active?.severity ?? "warning",
   );
   // Duration selector (default 5 minutes for send; empty string keeps current on edit)
   const [duration, setDuration] = React.useState<string>("5m");
@@ -6470,30 +6456,39 @@ const BroadcastControls: React.FC<{
 
   const msRemaining = React.useCallback(
     (expiresAt: string | null): number | null => {
-      if (!expiresAt) return null;
-      const end = Date.parse(expiresAt);
-      if (!Number.isFinite(end)) return null;
-      return Math.max(0, end - now);
+      return broadcastMsRemaining(expiresAt, now);
     },
     [now],
   );
 
-    const normalizeSeededBroadcast = React.useCallback(
-      (raw: any): BroadcastState | null => {
-        if (!raw || typeof raw !== "object") return null;
-        return {
-          id: String(raw.id || ""),
-          message: String(raw.message || ""),
-          severity:
-            raw.severity === "warning" || raw.severity === "danger"
-              ? raw.severity
-              : "info",
-          expiresAt: raw.expiresAt || null,
-          adminName: raw.adminName || null,
-        };
-      },
-      [],
-    );
+  const applyBroadcastState = React.useCallback(
+    (
+      raw: any | null,
+      {
+        notifyParent = true,
+        propagate = false,
+        primeInputs = true,
+      }: { notifyParent?: boolean; propagate?: boolean; primeInputs?: boolean } = {},
+    ): BroadcastState | null => {
+      const next = raw ? normalizeBroadcastMessage(raw) : null;
+      setActive(next);
+      persistBroadcast(next);
+      if (propagate) seedBroadcastInWindow(next);
+      if (next) {
+        if (primeInputs) {
+          setMessage((prev) =>
+            prev && prev.trim().length > 0 ? prev : next.message || "",
+          );
+          setSeverity(next.severity ?? "info");
+        }
+        if (notifyParent) onActive?.();
+      } else if (notifyParent) {
+        onExpired?.();
+      }
+      return next;
+    },
+    [onActive, onExpired],
+  );
 
   const formatDuration = (ms: number): string => {
     const totalSeconds = Math.floor(Math.max(0, ms) / 1000);
@@ -6517,23 +6512,13 @@ const BroadcastControls: React.FC<{
       });
       if (r.ok) {
         const b = await r.json().catch(() => ({}));
-        if (b?.broadcast) {
-          setActive(b.broadcast);
-          // Pre-fill edit fields so admin can immediately edit
-          setMessage(b.broadcast.message || "");
-          setSeverity((b.broadcast.severity as any) || "info");
-          // Inform parent to open the section if collapsed
-          onActive?.();
-        } else {
-          // If we already have a valid active (e.g., from persisted state), keep it
-          setActive((prev) => (prev ? prev : null));
-        }
+        applyBroadcastState(b?.broadcast ?? null);
       }
     } catch {
     } finally {
       setInitializing(false);
     }
-  }, []);
+  }, [applyBroadcastState]);
 
   // On load, if an active message exists, go straight to edit mode
   React.useEffect(() => {
@@ -6549,31 +6534,11 @@ const BroadcastControls: React.FC<{
         try {
           const data =
             typeof ev.data === "string" ? JSON.parse(ev.data) : ev.data;
-          setActive({
-            id: String(data?.id || ""),
-            message: String(data?.message || ""),
-            severity:
-              data?.severity === "warning" || data?.severity === "danger"
-                ? data.severity
-                : "info",
-            expiresAt: data?.expiresAt || null,
-            adminName: data?.adminName || null,
-          });
-          // Pre-fill edit values if none entered yet
-          setMessage((prev) =>
-            prev && prev.trim().length > 0 ? prev : String(data?.message || ""),
-          );
-          setSeverity(
-            (data?.severity === "warning" || data?.severity === "danger"
-              ? data.severity
-              : "info") as any,
-          );
-          // Ask parent to open the section so admin sees edit/delete UI
-          onActive?.();
+          applyBroadcastState(data);
         } catch {}
       });
       es.addEventListener("clear", () => {
-        setActive(null);
+        applyBroadcastState(null);
       });
     } catch {}
     return () => {
@@ -6581,24 +6546,13 @@ const BroadcastControls: React.FC<{
         es?.close();
       } catch {}
     };
-  }, []);
+  }, [applyBroadcastState]);
 
     React.useEffect(() => {
       if (typeof window === "undefined") return;
       const handleSeed = (event: Event) => {
         const detail = (event as CustomEvent)?.detail;
-        const next = normalizeSeededBroadcast(detail);
-        if (!next) {
-          setActive(null);
-          onExpired?.();
-          return;
-        }
-        setActive(next);
-        setMessage((prev) =>
-          prev && prev.trim().length > 0 ? prev : next.message,
-        );
-        setSeverity(next.severity || "info");
-        onActive?.();
+        applyBroadcastState(detail);
       };
       window.addEventListener(
         "plantswipe:broadcastSeed",
@@ -6609,22 +6563,21 @@ const BroadcastControls: React.FC<{
           "plantswipe:broadcastSeed",
           handleSeed as EventListener,
         );
-    }, [normalizeSeededBroadcast, onActive, onExpired]);
+    }, [applyBroadcastState]);
 
   // When current broadcast expires, revert to create form and notify parent (to re-open section)
-  React.useEffect(() => {
-    if (!active?.expiresAt) return;
-    const remain = msRemaining(active.expiresAt);
-    if (remain === null) return;
-    const id = window.setTimeout(
-      () => {
-        setActive(null);
-        onExpired?.();
-      },
-      Math.max(0, remain),
-    );
-    return () => window.clearTimeout(id);
-  }, [active?.expiresAt, onExpired, msRemaining]);
+    React.useEffect(() => {
+      if (!active?.expiresAt) return;
+      const remain = msRemaining(active.expiresAt);
+      if (remain === null) return;
+      const id = window.setTimeout(
+        () => {
+          applyBroadcastState(null);
+        },
+        Math.max(0, remain),
+      );
+      return () => window.clearTimeout(id);
+    }, [active?.expiresAt, applyBroadcastState, msRemaining]);
 
   const onSubmit = React.useCallback(async () => {
     if (submitting) return;
@@ -6637,7 +6590,7 @@ const BroadcastControls: React.FC<{
         Accept: "application/json",
         "Content-Type": "application/json",
       };
-      if (token) headers["Authorization"] = `Bearer ? ${token}`;
+      if (token) headers["Authorization"] = `Bearer ${token}`;
       try {
         const staticToken = (globalThis as any)?.__ENV__
           ?.VITE_ADMIN_STATIC_TOKEN;
@@ -6670,8 +6623,11 @@ const BroadcastControls: React.FC<{
         }),
       });
       const b = await resp.json().catch(() => ({}));
-      if (!resp.ok) throw new Error(b?.error || `HTTP ? ${resp.status}`);
-      setActive(b?.broadcast || null);
+      if (!resp.ok) throw new Error(b?.error || `HTTP ${resp.status}`);
+      applyBroadcastState(b?.broadcast ?? null, {
+        propagate: true,
+        primeInputs: false,
+      });
       setMessage("");
       setSeverity("warning");
     } catch (e) {
@@ -6679,7 +6635,13 @@ const BroadcastControls: React.FC<{
     } finally {
       setSubmitting(false);
     }
-  }, [message, submitting, duration, severity]);
+  }, [
+    applyBroadcastState,
+    duration,
+    message,
+    severity,
+    submitting,
+  ]);
 
   const onRemove = React.useCallback(async () => {
     if (removing) return;
@@ -6688,7 +6650,7 @@ const BroadcastControls: React.FC<{
       const session = (await supabase.auth.getSession()).data.session;
       const token = session?.access_token;
       const headers: Record<string, string> = { Accept: "application/json" };
-      if (token) headers["Authorization"] = `Bearer ? ${token}`;
+      if (token) headers["Authorization"] = `Bearer ${token}`;
       try {
         const staticToken = (globalThis as any)?.__ENV__
           ?.VITE_ADMIN_STATIC_TOKEN;
@@ -6700,14 +6662,64 @@ const BroadcastControls: React.FC<{
         credentials: "same-origin",
       });
       const b = await resp.json().catch(() => ({}));
-      if (!resp.ok) throw new Error(b?.error || `HTTP ? ${resp.status}`);
-      setActive(null);
+      if (!resp.ok) throw new Error(b?.error || `HTTP ${resp.status}`);
+      applyBroadcastState(null, { propagate: true });
     } catch (e) {
       alert((e as Error)?.message || "Failed to remove broadcast");
     } finally {
       setRemoving(false);
     }
-  }, [removing]);
+  }, [applyBroadcastState, removing]);
+
+  const onUpdateBroadcast = React.useCallback(async () => {
+    if (!active) return;
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const token = session?.access_token;
+      const headers: Record<string, string> = {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      try {
+        const staticToken = (globalThis as any)?.__ENV__
+          ?.VITE_ADMIN_STATIC_TOKEN;
+        if (staticToken) headers["X-Admin-Token"] = String(staticToken);
+      } catch {}
+      const resp = await fetch("/api/admin/broadcast", {
+        method: "PUT",
+        headers,
+        credentials: "same-origin",
+        body: JSON.stringify({
+          message: (message.length ? message : active.message).trim(),
+          severity,
+          durationMs: (() => {
+            const v = duration;
+            if (v === "" || v === "unlimited") return null;
+            const m = v.match(/^(\d+)([smhd])$/);
+            if (!m) return null;
+            const n = Number(m[1]);
+            const u = m[2];
+            const mult =
+              u === "s"
+                ? 1000
+                : u === "m"
+                  ? 60000
+                  : u === "h"
+                    ? 3600000
+                    : 86400000;
+            return n * mult;
+          })(),
+        }),
+      });
+      const b = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(b?.error || `HTTP ${resp.status}`);
+      applyBroadcastState(b?.broadcast ?? null, { propagate: true });
+      setMessage("");
+    } catch (e) {
+      alert((e as Error)?.message || "Failed to update broadcast");
+    }
+  }, [active, applyBroadcastState, duration, message, severity]);
 
   // Duration selection removed; default send duration is 5 minutes
 
@@ -6753,65 +6765,13 @@ const BroadcastControls: React.FC<{
             <option value="1d">1 day</option>
             <option value="unlimited">Unlimited</option>
           </select>
-          <div className="flex gap-2">
-            <Button
-              className="rounded-2xl"
-              variant="secondary"
-              onClick={async () => {
-                try {
-                  const session = (await supabase.auth.getSession()).data
-                    .session;
-                  const token = session?.access_token;
-                  const headers: Record<string, string> = {
-                    Accept: "application/json",
-                    "Content-Type": "application/json",
-                  };
-                  if (token) headers["Authorization"] = `Bearer ? ${token}`;
-                  try {
-                    const staticToken = (globalThis as any)?.__ENV__
-                      ?.VITE_ADMIN_STATIC_TOKEN;
-                    if (staticToken)
-                      headers["X-Admin-Token"] = String(staticToken);
-                  } catch {}
-                  const resp = await fetch("/api/admin/broadcast", {
-                    method: "PUT",
-                    headers,
-                    credentials: "same-origin",
-                    body: JSON.stringify({
-                      message: (message.length
-                        ? message
-                        : active.message
-                      ).trim(),
-                      severity,
-                      durationMs: (() => {
-                        const v = duration;
-                        if (v === "" || v === "unlimited") return null;
-                        const m = v.match(/^(\d+)([smhd])$/);
-                        if (!m) return null;
-                        const n = Number(m[1]);
-                        const u = m[2];
-                        const mult =
-                          u === "s"
-                            ? 1000
-                            : u === "m"
-                              ? 60000
-                              : u === "h"
-                                ? 3600000
-                                : 86400000;
-                        return n * mult;
-                      })(),
-                    }),
-                  });
-                  const b = await resp.json().catch(() => ({}));
-                  if (!resp.ok)
-                    throw new Error(b?.error || `HTTP ? ${resp.status}`);
-                  setActive(b?.broadcast || null);
-                  setMessage("");
-                } catch (e) {
-                  alert((e as Error)?.message || "Failed to update broadcast");
-                }
-              }}
-            >
+            <div className="flex gap-2">
+              <Button
+                className="rounded-2xl"
+                variant="secondary"
+                onClick={onUpdateBroadcast}
+                disabled={!active}
+              >
               Save
             </Button>
             <Button
@@ -6911,7 +6871,7 @@ function AddAdminNote({
         Accept: "application/json",
         "Content-Type": "application/json",
       };
-      if (token) headers["Authorization"] = `Bearer ? ${token}`;
+      if (token) headers["Authorization"] = `Bearer ${token}`;
       try {
         const adminToken = (globalThis as any)?.__ENV__
           ?.VITE_ADMIN_STATIC_TOKEN;
@@ -6924,14 +6884,14 @@ function AddAdminNote({
         body: JSON.stringify({ profileId, message: value.trim() }),
       });
       const data = await resp.json().catch(() => ({}));
-      if (!resp.ok) throw new Error(data?.error || `HTTP ? ${resp.status}`);
+      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`);
       // Log note create (UI)
       try {
         const headers2: Record<string, string> = {
           Accept: "application/json",
           "Content-Type": "application/json",
         };
-        if (token) headers2["Authorization"] = `Bearer ? ${token}`;
+        if (token) headers2["Authorization"] = `Bearer ${token}`;
         try {
           const adminToken = (globalThis as any)?.__ENV__
             ?.VITE_ADMIN_STATIC_TOKEN;
@@ -7017,7 +6977,7 @@ function NoteRow({
       const session = (await supabase.auth.getSession()).data.session;
       const token = session?.access_token;
       const headers: Record<string, string> = { Accept: "application/json" };
-      if (token) headers["Authorization"] = `Bearer ? ${token}`;
+      if (token) headers["Authorization"] = `Bearer ${token}`;
       try {
         const adminToken = (globalThis as any)?.__ENV__
           ?.VITE_ADMIN_STATIC_TOKEN;
@@ -7036,7 +6996,7 @@ function NoteRow({
           Accept: "application/json",
           "Content-Type": "application/json",
         };
-        if (token) headers2["Authorization"] = `Bearer ? ${token}`;
+        if (token) headers2["Authorization"] = `Bearer ${token}`;
         try {
           const adminToken = (globalThis as any)?.__ENV__
             ?.VITE_ADMIN_STATIC_TOKEN;
@@ -7184,7 +7144,7 @@ const AdminLogs: React.FC = () => {
       const session = (await supabase.auth.getSession()).data.session;
       const token = session?.access_token;
       const headers: Record<string, string> = { Accept: "application/json" };
-      if (token) headers["Authorization"] = `Bearer ? ${token}`;
+      if (token) headers["Authorization"] = `Bearer ${token}`;
       try {
         const adminToken = (globalThis as any)?.__ENV__
           ?.VITE_ADMIN_STATIC_TOKEN;
@@ -7195,7 +7155,7 @@ const AdminLogs: React.FC = () => {
         credentials: "same-origin",
       });
       const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(data?.error || `HTTP ? ${r.status}`);
+      if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);
       const list = Array.isArray(data?.logs) ? data.logs : [];
       setLogs(list);
       setVisibleCount(Math.min(20, list.length || 20));

@@ -66,14 +66,14 @@
         document.head.appendChild(s)
       }
 
-      function emitBroadcastSeed(payload) {
+        function emitBroadcastSeed(payload) {
         try { window.__LAST_BROADCAST_SEED__ = payload ?? null } catch {}
         try {
           window.dispatchEvent(new CustomEvent('plantswipe:broadcastSeed', { detail: payload ?? null }))
         } catch {}
       }
 
-      function syncBroadcastFromWindow() {
+        function syncBroadcastFromWindow() {
         try {
           if (typeof window.__BROADCAST__ === 'undefined') return undefined
           var payload = window.__BROADCAST__
@@ -90,6 +90,46 @@
           return undefined
         }
       }
+
+        function refreshBroadcastFromApi() {
+          if (typeof fetch !== 'function') return
+          var targets = []
+          function addTarget(url) {
+            if (!url) return
+            if (targets.indexOf(url) === -1) targets.push(url)
+          }
+          addTarget(join(basePath, 'api/broadcast/active'))
+          addTarget('/api/broadcast/active')
+          var idx = 0
+          function attempt() {
+            if (idx >= targets.length) return
+            var url = targets[idx++]
+            try {
+              fetch(url, { cache: 'no-store', credentials: 'include', headers: { Accept: 'application/json' } })
+                .then(function (res) {
+                  if (!res.ok) throw new Error('status ' + res.status)
+                  return res.json()
+                })
+                .then(function (body) {
+                  var payload = body && typeof body === 'object' ? body.broadcast || null : null
+                  try {
+                    if (payload && typeof payload === 'object') {
+                      localStorage.setItem('plantswipe.broadcast.active', JSON.stringify(payload))
+                    } else {
+                      localStorage.removeItem('plantswipe.broadcast.active')
+                    }
+                  } catch {}
+                  emitBroadcastSeed(payload && typeof payload === 'object' ? payload : null)
+                })
+                .catch(function () {
+                  attempt()
+                })
+            } catch (_) {
+              attempt()
+            }
+          }
+          attempt()
+        }
 
     function setEmptyEnv() {
       if (!window.__ENV__) {
@@ -134,6 +174,7 @@
         tryNext(i + 1)
       })
     })(0)
+      refreshBroadcastFromApi()
   } catch (e) {
     try { window.__ENV__ = window.__ENV__ || {} } catch (_) {}
   }

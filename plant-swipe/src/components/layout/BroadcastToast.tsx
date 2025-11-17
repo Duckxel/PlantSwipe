@@ -2,14 +2,14 @@ import React from 'react'
 import { Info, AlertTriangle, XCircle } from 'lucide-react'
 import { useTheme } from '@/context/ThemeContext'
 import { cn } from '@/lib/utils'
-
-export type Broadcast = {
-  id: string
-  message: string
-  severity?: 'info' | 'warning' | 'danger'
-  createdAt: string | null
-  expiresAt: string | null
-}
+import {
+  BroadcastMessage,
+  loadPersistedBroadcast,
+  loadSeededBroadcast,
+  msRemaining,
+  normalizeBroadcast,
+  persistBroadcast,
+} from '@/lib/broadcasts'
 
 const REVALIDATE_INTERVAL_MS = 60_000
 const POLL_FALLBACK_INTERVAL_MS = 30_000
@@ -23,14 +23,6 @@ function useNowTick(intervalMs: number = 1000) {
   }, [intervalMs])
   return now
 }
-
-function msRemaining(expiresAt: string | null, nowMs: number): number | null {
-  if (!expiresAt) return null
-  const end = Date.parse(expiresAt)
-  if (!Number.isFinite(end)) return null
-  return Math.max(0, end - nowMs)
-}
-
 const POSITIONS = [
   { key: 'tr', className: 'top-4 right-4' },
   { key: 'tl', className: 'top-4 left-4' },
@@ -63,37 +55,6 @@ function savePosition(pos: PositionKey) {
   try { localStorage.setItem('plantswipe.broadcast.pos', pos) } catch {}
 }
 
-function normalizeBroadcast(raw: any): Broadcast {
-  return {
-    id: String(raw?.id || ''),
-    message: String(raw?.message || ''),
-    severity: raw?.severity === 'warning' || raw?.severity === 'danger' ? raw.severity : 'info',
-    createdAt: raw?.createdAt || null,
-    expiresAt: raw?.expiresAt || null,
-  }
-}
-
-function loadPersistedBroadcast(nowMs: number): Broadcast | null {
-  try {
-    const raw = localStorage.getItem('plantswipe.broadcast.active')
-    if (!raw) return null
-    const data = JSON.parse(raw)
-    if (!data || typeof data !== 'object') return null
-    const b = normalizeBroadcast(data)
-    const remaining = msRemaining(b.expiresAt, nowMs)
-    if (remaining !== null && remaining <= 0) return null
-    return b
-  } catch {}
-  return null
-}
-
-function savePersistedBroadcast(b: Broadcast | null) {
-  try {
-    if (!b) localStorage.removeItem('plantswipe.broadcast.active')
-    else localStorage.setItem('plantswipe.broadcast.active', JSON.stringify(b))
-  } catch {}
-}
-
 function isAbortError(error: unknown): boolean {
   return Boolean(error && typeof error === 'object' && 'name' in error && (error as { name?: string }).name === 'AbortError')
 }
@@ -118,23 +79,10 @@ function formatRemainingDuration(ms: number): string {
   return `${totalSeconds}s`
 }
 
-function loadSeededBroadcast(nowMs: number): Broadcast | null {
-  try {
-    const seedSource = (globalThis as any)
-    const seed = seedSource?.__LAST_BROADCAST_SEED__ ?? seedSource?.__BROADCAST__
-    if (!seed || typeof seed !== 'object') return null
-    const next = normalizeBroadcast(seed)
-    const remaining = msRemaining(next.expiresAt, nowMs)
-    if (remaining !== null && remaining <= 0) return null
-    return next
-  } catch {}
-  return null
-}
-
 const BroadcastToast: React.FC = () => {
   const { effectiveTheme } = useTheme()
   const isDarkTheme = effectiveTheme === 'dark'
-  const [broadcast, setBroadcast] = React.useState<Broadcast | null>(() => {
+  const [broadcast, setBroadcast] = React.useState<BroadcastMessage | null>(() => {
     const seeded = loadSeededBroadcast(Date.now())
     if (seeded) return seeded
     return loadPersistedBroadcast(Date.now())
@@ -161,18 +109,18 @@ const BroadcastToast: React.FC = () => {
       const next = body?.broadcast ? normalizeBroadcast(body.broadcast) : null
       if (next) {
         setBroadcast(next)
-        savePersistedBroadcast(next)
+        persistBroadcast(next)
       } else {
         const persisted = loadPersistedBroadcast(Date.now())
         setBroadcast(persisted)
-        if (!persisted) savePersistedBroadcast(null)
+        if (!persisted) persistBroadcast(null)
       }
       return Boolean(next)
     } catch (err) {
       if (!isAbortError(err)) {
         const persisted = loadPersistedBroadcast(Date.now())
         setBroadcast(persisted)
-        if (!persisted) savePersistedBroadcast(null)
+        if (!persisted) persistBroadcast(null)
       }
       return false
     } finally {
@@ -194,7 +142,7 @@ const BroadcastToast: React.FC = () => {
     const seeded = loadSeededBroadcast(Date.now())
     if (seeded) {
       setBroadcast(prev => prev ?? seeded)
-      savePersistedBroadcast(seeded)
+      persistBroadcast(seeded)
     }
   }, [])
 
@@ -208,13 +156,13 @@ const BroadcastToast: React.FC = () => {
       const seeded = loadSeededBroadcast(Date.now())
       if (seeded) {
         setBroadcast(seeded)
-        savePersistedBroadcast(seeded)
+        persistBroadcast(seeded)
         return
       }
       const persisted = loadPersistedBroadcast(Date.now())
       if (persisted) {
         setBroadcast(persisted)
-        savePersistedBroadcast(persisted)
+        persistBroadcast(persisted)
         return
       }
       attempts += 1
@@ -232,19 +180,24 @@ const BroadcastToast: React.FC = () => {
       const detail = (event as CustomEvent)?.detail
       if (!detail || typeof detail !== 'object') {
         setBroadcast(null)
-        savePersistedBroadcast(null)
+        persistBroadcast(null)
         return
       }
       try {
         const next = normalizeBroadcast(detail)
+        if (!next) {
+          setBroadcast(null)
+          persistBroadcast(null)
+          return
+        }
         const remaining = msRemaining(next.expiresAt, Date.now())
         if (remaining !== null && remaining <= 0) {
           setBroadcast(null)
-          savePersistedBroadcast(null)
+          persistBroadcast(null)
           return
         }
         setBroadcast(next)
-        savePersistedBroadcast(next)
+        persistBroadcast(next)
       } catch {}
     }
     window.addEventListener('plantswipe:broadcastSeed', handleSeed as EventListener)
@@ -276,32 +229,37 @@ const BroadcastToast: React.FC = () => {
     let pollId: number | null = null
     let reconnectId: number | null = null
 
-    const startPolling = () => {
-      if (pollId !== null) return
-      const tick = () => { void refreshBroadcast().catch(() => {}) }
-      pollId = window.setInterval(tick, POLL_FALLBACK_INTERVAL_MS)
-      tick()
-    }
+      const startPolling = () => {
+        if (pollId !== null) return
+        const tick = () => { void refreshBroadcast().catch(() => {}) }
+        pollId = window.setInterval(tick, POLL_FALLBACK_INTERVAL_MS)
+        tick()
+      }
 
-    const stopPolling = () => {
-      if (pollId === null) return
-      window.clearInterval(pollId)
-      pollId = null
-    }
+      const stopPolling = () => {
+        if (pollId === null) return
+        window.clearInterval(pollId)
+        pollId = null
+      }
 
-    const handleBroadcast = (ev: MessageEvent) => {
-      try {
-        const data = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data
-        const next = normalizeBroadcast(data)
-        setBroadcast(next)
-        savePersistedBroadcast(next)
-      } catch {}
-    }
+      const handleBroadcast = (ev: MessageEvent) => {
+        try {
+          const data = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data
+          const next = normalizeBroadcast(data)
+          if (!next) {
+            setBroadcast(null)
+            persistBroadcast(null)
+            return
+          }
+          setBroadcast(next)
+          persistBroadcast(next)
+        } catch {}
+      }
 
-    const handleClear = () => {
-      setBroadcast(null)
-      savePersistedBroadcast(null)
-    }
+      const handleClear = () => {
+        setBroadcast(null)
+        persistBroadcast(null)
+      }
 
     const cleanupSse = () => {
       if (!es) return
@@ -351,7 +309,7 @@ const BroadcastToast: React.FC = () => {
     const remaining = msRemaining(broadcast.expiresAt, now)
     if (remaining !== null && remaining <= 0) {
       setBroadcast(null)
-      savePersistedBroadcast(null)
+      persistBroadcast(null)
     }
   }, [broadcast?.expiresAt, now])
 
