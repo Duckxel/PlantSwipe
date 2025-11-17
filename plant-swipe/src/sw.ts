@@ -28,9 +28,7 @@ registerRoute(navigationRoute)
 
 registerRoute(
   ({ url }) => /\/api\/.+\/stream/.test(url.pathname),
-  new NetworkOnly({
-    cacheName: 'api-stream-bypass',
-  })
+  new NetworkOnly()
 )
 
 registerRoute(
