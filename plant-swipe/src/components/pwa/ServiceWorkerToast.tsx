@@ -1,10 +1,15 @@
 import React from 'react'
-import { useRegisterSW } from 'virtual:pwa-register/react'
+import { Workbox } from 'workbox-window'
 
 const AUTO_HIDE_MS = 8000
 const READY_ACK_KEY = 'plantswipe.offlineReadyAck'
 const disablePwaFlag = String(import.meta.env.VITE_DISABLE_PWA ?? '').trim().toLowerCase()
 const PWA_DISABLED = disablePwaFlag === 'true' || disablePwaFlag === '1' || disablePwaFlag === 'yes' || disablePwaFlag === 'on' || disablePwaFlag === 'disable' || disablePwaFlag === 'disabled'
+
+const resolveScope = () => {
+  const scope = import.meta.env.BASE_URL || '/'
+  return scope.endsWith('/') ? scope : `${scope}/`
+}
 
 const getIsOffline = () => {
   if (typeof navigator === 'undefined') return false
@@ -38,71 +43,65 @@ export function ServiceWorkerToast() {
   const [needRefreshFlag, setNeedRefreshFlag] = React.useState(false)
   const [isOffline, setIsOffline] = React.useState(getIsOffline)
   const autoHideTimer = React.useRef<number | null>(null)
+  const wbRef = React.useRef<Workbox | null>(null)
 
-  React.useEffect(() => {
-    if (!PWA_DISABLED) return
-    if (typeof navigator === 'undefined' || !navigator.serviceWorker?.getRegistrations) return
-    navigator.serviceWorker
-      .getRegistrations()
-      .then((regs) => Promise.all(regs.map((reg) => reg.unregister().catch(() => {}))))
-      .catch(() => {})
-
-    if (typeof window !== 'undefined' && 'caches' in window && window.caches?.keys) {
-      window.caches
-        .keys()
-        .then((keys) => Promise.all(keys.map((key) => window.caches.delete(key).catch(() => false))))
+    React.useEffect(() => {
+      if (!PWA_DISABLED) return
+      if (typeof navigator === 'undefined' || !navigator.serviceWorker?.getRegistrations) return
+      navigator.serviceWorker
+        .getRegistrations()
+        .then((regs) => Promise.all(regs.map((reg) => reg.unregister().catch(() => {}))))
         .catch(() => {})
-    }
-  }, [PWA_DISABLED])
 
-    const { updateServiceWorker } = useRegisterSW(
-    PWA_DISABLED
-      ? {
-          immediate: false,
-          onRegisteredSW: (_swUrl, registration) => {
-            registration?.unregister().catch(() => {})
-          },
+      if (typeof window !== 'undefined' && 'caches' in window && window.caches?.keys) {
+        window.caches
+          .keys()
+          .then((keys) => Promise.all(keys.map((key) => window.caches.delete(key).catch(() => false))))
+          .catch(() => {})
+      }
+    }, [])
+
+    React.useEffect(() => {
+      if (PWA_DISABLED) return
+      if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return
+
+      const scope = resolveScope()
+      const swUrl = `${scope}sw.js`
+      const wb = new Workbox(swUrl, { scope })
+      wbRef.current = wb
+
+      const handleWaiting = () => {
+        setNeedRefreshFlag(true)
+        setRefreshDismissed(false)
+        setMode('update')
+        setVisible(true)
+      }
+
+      const handleActivated = (event: { isUpdate?: boolean }) => {
+        if (!event.isUpdate) {
+          setOfflineReadyFlag(true)
         }
-      : {
-          immediate: true,
-          onOfflineReady() {
-            setOfflineReadyFlag(true)
-          },
-          onNeedRefresh() {
-            setNeedRefreshFlag(true)
-            setRefreshDismissed(false)
-          },
-          onRegisterError(error) {
-            if (import.meta.env.DEV) {
-              console.error('[PWA] Service worker registration failed', error)
-            }
-          },
-        }
-  )
+      }
 
-  if (PWA_DISABLED) {
-    return null
-  }
+      wb.addEventListener('waiting', handleWaiting)
+      wb.addEventListener('externalwaiting', handleWaiting)
+      wb.addEventListener('activated', handleActivated)
+      wb.addEventListener('externalactivated', handleActivated)
 
-  React.useEffect(() => {
-    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
-    let mounted = true
-    navigator.serviceWorker
-      .getRegistration()
-      .then((registration) => {
-        if (!mounted) return
-        if (registration?.waiting) {
-          setNeedRefreshFlag(true)
-          setRefreshDismissed(false)
-          setMode('update')
-          setVisible(true)
+      wb.register().catch((error) => {
+        if (import.meta.env.DEV) {
+          console.error('[PWA] Service worker registration failed', error)
         }
       })
-      .catch(() => {})
-    return () => {
-      mounted = false
-    }
-  }, [])
+
+      return () => {
+        wb.removeEventListener('waiting', handleWaiting)
+        wb.removeEventListener('externalwaiting', handleWaiting)
+        wb.removeEventListener('activated', handleActivated)
+        wb.removeEventListener('externalactivated', handleActivated)
+        wbRef.current = null
+      }
+    }, [])
 
   React.useEffect(() => {
     if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
@@ -180,7 +179,21 @@ export function ServiceWorkerToast() {
   const triggerUpdate = () => {
     setNeedRefreshFlag(false)
     setRefreshDismissed(false)
-    updateServiceWorker(true)
+    const wb = wbRef.current
+    const postSkipWaiting = () => {
+      if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
+      if (navigator.serviceWorker?.controller) {
+        navigator.serviceWorker.controller.postMessage({ type: 'SKIP_WAITING' })
+      }
+    }
+
+    if (wb) {
+      wb.messageSW({ type: 'SKIP_WAITING' }).catch(() => {
+        postSkipWaiting()
+      })
+    } else {
+      postSkipWaiting()
+    }
     setVisible(false)
   }
 
@@ -189,19 +202,23 @@ export function ServiceWorkerToast() {
     window.location.reload()
   }
 
-  if (!visible || (mode === 'update' && (refreshDismissed || !needRefreshFlag)) || (mode === 'offline' && !isOffline)) return null
+    const isBlockingMode = mode === 'update' || mode === 'offline'
 
-  const isBlockingMode = mode === 'update' || mode === 'offline'
+    React.useEffect(() => {
+      if (!isBlockingMode || !visible) return
+      if (typeof document === 'undefined') return
+      const prev = document.body.style.overflow
+      document.body.style.overflow = 'hidden'
+      return () => {
+        document.body.style.overflow = prev
+      }
+    }, [isBlockingMode, visible])
 
-  React.useEffect(() => {
-    if (!isBlockingMode) return
-    if (typeof document === 'undefined') return
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.body.style.overflow = prev
+    if (PWA_DISABLED) {
+      return null
     }
-  }, [isBlockingMode])
+
+    if (!visible || (mode === 'update' && (refreshDismissed || !needRefreshFlag)) || (mode === 'offline' && !isOffline)) return null
 
   const title =
     mode === 'update'

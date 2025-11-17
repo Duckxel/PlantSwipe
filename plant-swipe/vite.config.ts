@@ -30,11 +30,11 @@ export default defineConfig({
   base: appBase,
   plugins: [
     react(),
-    VitePWA({
-      disable: isPwaDisabled,
-      base: appBase,
-      registerType: 'autoUpdate',
-      injectRegister: 'auto',
+      VitePWA({
+        disable: isPwaDisabled,
+        base: appBase,
+        registerType: 'autoUpdate',
+        injectRegister: null,
       strategies: 'injectManifest',
       srcDir: 'src',
       filename: 'sw.ts',
