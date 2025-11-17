@@ -1,5 +1,5 @@
+import type { BroadcastMessage } from '@/lib/broadcasts'
 import {
-  BroadcastMessage,
   loadPersistedBroadcast,
   loadSeededBroadcast,
   msRemaining,
@@ -24,7 +24,6 @@ class BroadcastStore {
   private listeners = new Set<Listener>()
   private started = false
   private refreshPromise: Promise<boolean> | null = null
-  private revalidateId: number | null = null
   private pollId: number | null = null
   private reconnectId: number | null = null
   private expiryTimeout: number | null = null
@@ -40,7 +39,7 @@ class BroadcastStore {
     if (this.started || typeof window === 'undefined') return
     this.started = true
     void this.refresh()
-    this.revalidateId = window.setInterval(() => { void this.refresh() }, REVALIDATE_INTERVAL_MS)
+    window.setInterval(() => { void this.refresh() }, REVALIDATE_INTERVAL_MS)
     document.addEventListener('visibilitychange', this.handleVisibility)
     window.addEventListener('online', this.handleOnline)
     window.addEventListener('plantswipe:broadcastSeed', this.handleSeed as EventListener)
