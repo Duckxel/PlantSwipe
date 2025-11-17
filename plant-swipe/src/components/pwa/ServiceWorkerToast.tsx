@@ -160,6 +160,18 @@ export function ServiceWorkerToast() {
 
   if (!visible || (mode === 'update' && (refreshDismissed || !needRefreshFlag)) || (mode === 'offline' && !isOffline)) return null
 
+  const isBlockingMode = mode === 'update' || mode === 'offline'
+
+  React.useEffect(() => {
+    if (!isBlockingMode) return
+    if (typeof document === 'undefined') return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [isBlockingMode])
+
   const title =
     mode === 'update'
       ? 'New release available'
@@ -175,35 +187,38 @@ export function ServiceWorkerToast() {
 
   return (
     <div
-      className="fixed bottom-6 right-6 z-[999] max-w-sm rounded-2xl border border-emerald-500/40 bg-neutral-900/90 p-4 text-white shadow-2xl backdrop-blur"
-      role="status"
-      aria-live="polite"
+      className={
+        isBlockingMode
+          ? 'fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 p-4'
+          : 'fixed bottom-6 right-6 z-[999] max-w-sm rounded-2xl border border-emerald-500/40 bg-neutral-900/90 p-4 text-white shadow-2xl backdrop-blur'
+      }
+      role={isBlockingMode ? 'dialog' : 'status'}
+      aria-live={isBlockingMode ? undefined : 'polite'}
+      aria-modal={isBlockingMode ? 'true' : undefined}
     >
-      <p className="text-sm font-semibold">{title}</p>
-      <p className="mt-2 text-xs text-white/70">{description}</p>
-        <div className="mt-3 flex gap-2 text-sm">
+      <div
+        className={
+          isBlockingMode
+            ? 'w-full max-w-md rounded-2xl border border-white/20 bg-neutral-900 p-6 text-white shadow-2xl'
+            : 'text-white'
+        }
+      >
+        <p className={isBlockingMode ? 'text-xl font-semibold' : 'text-sm font-semibold'}>{title}</p>
+        <p className={isBlockingMode ? 'mt-3 text-sm text-white/80' : 'mt-2 text-xs text-white/70'}>{description}</p>
+        <div className={`mt-4 flex gap-2 ${isBlockingMode ? 'text-base' : 'text-sm'}`}>
           {mode === 'update' ? (
-            <>
-              <button
-                type="button"
-                onClick={triggerUpdate}
-                className="rounded-full bg-emerald-400 px-3 py-1 font-semibold text-emerald-950 transition hover:bg-emerald-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-200"
-              >
-                Reload now
-              </button>
-              <button
-                type="button"
-                onClick={dismiss}
-                className="rounded-full border border-white/30 px-3 py-1 text-white/80 transition hover:border-white hover:text-white"
-              >
-                Later
-              </button>
-            </>
+            <button
+              type="button"
+              onClick={triggerUpdate}
+              className="w-full rounded-full bg-emerald-400 px-4 py-2 font-semibold text-emerald-950 transition hover:bg-emerald-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-200"
+            >
+              Reload now
+            </button>
           ) : mode === 'offline' ? (
             <button
               type="button"
               onClick={retryConnection}
-              className="rounded-full bg-amber-300/90 px-3 py-1 font-semibold text-amber-950 transition hover:bg-amber-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-100"
+              className="w-full rounded-full bg-amber-300 px-4 py-2 font-semibold text-amber-950 transition hover:bg-amber-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-100"
             >
               Retry connection
             </button>
@@ -217,6 +232,7 @@ export function ServiceWorkerToast() {
             </button>
           )}
         </div>
+      </div>
     </div>
   )
 }
