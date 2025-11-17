@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Select } from "@/components/ui/select"
 import { supabase } from "@/lib/supabaseClient"
-import { fetchAiPlantFill, fetchAiPlantFillField } from "@/lib/aiPlantFill"
+import { fetchAiPlantFill, fetchAiPlantFillField, verifyPlantNameIsPlant } from "@/lib/aiPlantFill"
 import type {
   Plant,
   PlantIdentifiers,
@@ -47,6 +47,8 @@ import {
   isFunFactValid,
   countWords,
   countSentences,
+  getRequiredIdsBySchemaKey,
+  getRequiredFieldLabel,
   type AiFieldStatus,
   type RequiredFieldId,
   type AiFieldStateSnapshot,
@@ -69,6 +71,7 @@ const AI_STATUS_STYLES: Record<AiFieldStatus, { text: string }> = {
 }
 
 const MAX_AI_RETRY_ROUNDS = 2
+const MAX_AI_ATTEMPTS_PER_FIELD = 3
 
 interface EditPlantPageProps {
   onCancel: () => void
@@ -109,10 +112,29 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
   const [aiMissingFields, setAiMissingFields] = React.useState<RequiredFieldId[]>([])
   const [aiStatusVisible, setAiStatusVisible] = React.useState(false)
   const abortControllerRef = React.useRef<AbortController | null>(null)
+    const [aiPanelMessage, setAiPanelMessage] = React.useState<string | null>(null)
+    const [aiPanelNotices, setAiPanelNotices] = React.useState<string[]>([])
+    const aiFieldAttemptCountsRef = React.useRef<Record<string, number>>({})
+    const aiFieldNoticeRef = React.useRef<Record<string, boolean>>({})
   const resetAiTracking = () => {
     setAiFieldStatuses(createInitialStatuses())
     setAiMissingFields([])
   }
+    const resetAiPanelState = () => {
+      setAiPanelMessage(null)
+      setAiPanelNotices([])
+      aiFieldAttemptCountsRef.current = {}
+      aiFieldNoticeRef.current = {}
+    }
+    const addAiNotice = (notice: string) => {
+      setAiPanelNotices((prev) => (prev.includes(notice) ? prev : [...prev, notice]))
+    }
+    const formatRequiredLabels = (ids: RequiredFieldId[]) => {
+      return ids
+        .map((id) => getRequiredFieldLabel(id))
+        .filter((label) => typeof label === 'string' && label.trim().length > 0)
+        .join(', ')
+    }
   const markFieldWorking = (fieldKey: string) => {
     if (!fieldKey || fieldKey === 'init' || fieldKey === 'complete') return
     setAiFieldStatuses((prev) => {
@@ -276,51 +298,59 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
     }
   }
 
-  const handleAiFill = async () => {
-    if (editLanguage !== 'en') {
-      setOk(null)
-      setError('AI fill is only available when editing the English content.')
-      return
-    }
-
-    if (!name.trim()) {
-      setOk(null)
-      setError('Please enter a plant name first')
-      return
-    }
-
-    setAiStatusVisible(true)
-    resetAiTracking()
-    setAiFilling(true)
-    setAiFillProgress({ completed: 0, total: 0, field: undefined })
-    abortControllerRef.current?.abort()
-    const controller = new AbortController()
-    abortControllerRef.current = controller
-    setError(null)
-    setOk(null)
-
-    try {
-      const schema = await loadSchema()
-      if (!schema) {
-        setError('Failed to load schema')
+    const handleAiFill = async () => {
+      if (editLanguage !== 'en') {
+        setAiStatusVisible(true)
+        resetAiPanelState()
+        addAiNotice('AI fill currently supports English entries only.')
+        setAiPanelMessage('Switch the edit language to EN to use the AI assistant.')
+        setOk(null)
+        setError('AI fill is only available when editing the English content.')
         return
       }
 
-      const schemaWithMandatory: Record<string, unknown> = { ...(schema as Record<string, unknown>) }
-      if (!('colors' in schemaWithMandatory)) {
-        schemaWithMandatory.colors = {
-          type: 'array',
-          items: 'string',
-          description: 'List of primary flower or foliage colors (simple color names).',
-        }
+      const trimmedName = name.trim()
+      if (!trimmedName) {
+        setOk(null)
+        setError('Please enter a plant name first')
+        return
       }
-      if (!('seasons' in schemaWithMandatory)) {
-        schemaWithMandatory.seasons = {
-          type: 'array',
-          items: 'string',
-          description: 'Seasons when the plant is most active or in bloom (Spring, Summer, Autumn, Winter).',
+
+      setAiStatusVisible(true)
+      resetAiTracking()
+      resetAiPanelState()
+      setAiFilling(true)
+      setAiPanelMessage('Checking plant name...')
+      setAiFillProgress({ completed: 0, total: 0, field: undefined })
+      abortControllerRef.current?.abort()
+      const controller = new AbortController()
+      abortControllerRef.current = controller
+      setError(null)
+      setOk(null)
+
+    try {
+        const schema = await loadSchema()
+        if (!schema) {
+          setAiPanelMessage('Failed to load AI schema. Please try again later.')
+          setError('Failed to load schema')
+          return
         }
-      }
+
+        const schemaWithMandatory: Record<string, unknown> = { ...(schema as Record<string, unknown>) }
+        if (!('colors' in schemaWithMandatory)) {
+          schemaWithMandatory.colors = {
+            type: 'array',
+            items: 'string',
+            description: 'List of primary flower or foliage colors (simple color names).',
+          }
+        }
+        if (!('seasons' in schemaWithMandatory)) {
+          schemaWithMandatory.seasons = {
+            type: 'array',
+            items: 'string',
+            description: 'Seasons when the plant is most active or in bloom (Spring, Summer, Autumn, Winter).',
+          }
+        }
         if (!('description' in schemaWithMandatory)) {
           schemaWithMandatory.description = {
             type: 'string',
@@ -353,6 +383,28 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
           }
           schemaWithMandatory.classification = classificationSchema
         }
+
+        try {
+          const verification = await verifyPlantNameIsPlant(trimmedName, controller.signal)
+          if (!verification.isPlant) {
+            const reason = verification.reason?.trim() || ''
+            setAiPanelMessage(
+              reason
+                ? `AI could not confirm "${trimmedName}" is a plant: ${reason}`
+                : `AI could not confirm "${trimmedName}" is a plant.`,
+            )
+            addAiNotice('AI fill skipped. Double-check the plant name or provide a scientific name before retrying.')
+            return
+          }
+        } catch (verifyErr: any) {
+          console.error('AI plant name verification failed:', verifyErr)
+          setAiPanelMessage('Could not verify plant name. Please try again.')
+          addAiNotice('Plant name verification failed, so AI fill was not started.')
+          setError(verifyErr?.message || 'Could not verify plant name.')
+          return
+        }
+
+        setAiPanelMessage(null)
 
         let latestClassification: Partial<PlantClassification> = { ...(classification ?? {}) }
         let latestIdentifiers: Partial<PlantIdentifiers> = { ...(identifiers ?? {}) }
@@ -656,19 +708,66 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
           classificationType: latestClassification?.type ?? '',
         })
 
-      const runFullFill = async () => {
+        const registerFieldFailure = (fieldKey: string, stillMissingIds: RequiredFieldId[], reason?: string) => {
+          if (stillMissingIds.length === 0) {
+            delete aiFieldAttemptCountsRef.current[fieldKey]
+            delete aiFieldNoticeRef.current[fieldKey]
+            return
+          }
+          const nextAttempt = (aiFieldAttemptCountsRef.current[fieldKey] ?? 0) + 1
+          aiFieldAttemptCountsRef.current[fieldKey] = nextAttempt
+          if (nextAttempt < MAX_AI_ATTEMPTS_PER_FIELD) {
+            return
+          }
+          if (aiFieldNoticeRef.current[fieldKey]) {
+            return
+          }
+          aiFieldNoticeRef.current[fieldKey] = true
+          const labelText = formatRequiredLabels(stillMissingIds) || fieldKey
+          const cleanedReason = reason ? reason.replace(/\s+/g, ' ').trim().replace(/\.+$/, '') : `AI couldn't complete ${labelText}`
+          addAiNotice(`${cleanedReason}. ${labelText} still incomplete after ${nextAttempt} attempts, please finish manually.`)
+        }
+
+        const processFieldResult = (fieldKey: string, fieldData: unknown) => {
+          if (!fieldKey || fieldKey === 'init' || fieldKey === 'complete') return
+          markFieldResult(fieldKey, fieldData)
+          if (fieldData !== undefined && fieldData !== null) {
+            applyAiResult({ [fieldKey]: fieldData })
+          }
+          const relatedIds = getRequiredIdsBySchemaKey(fieldKey)
+          if (relatedIds.length === 0) return
+          const snapshot = finalizeSnapshot()
+          const stillMissing = relatedIds.filter((id) => !isFieldFilledFromState(id, snapshot))
+          if (stillMissing.length > 0) {
+            registerFieldFailure(fieldKey, stillMissing)
+          } else {
+            delete aiFieldAttemptCountsRef.current[fieldKey]
+            delete aiFieldNoticeRef.current[fieldKey]
+          }
+        }
+
+        const runFullFill = async () => {
         const aiData = await fetchAiPlantFill({
-          plantName: name.trim(),
+            plantName: trimmedName,
           schema: schemaWithMandatory,
           existingData: buildExistingData(),
           signal: controller.signal,
+            continueOnFieldError: true,
           onProgress: ({ completed, total, field }) => {
             setAiFillProgress({ completed, total, field })
             if (field) markFieldWorking(field)
           },
           onFieldComplete: ({ field, data }) => {
-            markFieldResult(field, data)
+              processFieldResult(field, data)
           },
+            onFieldError: ({ field, error }) => {
+              setAiPanelMessage((prev) => prev ?? 'AI encountered some issues, keeping completed sections while retrying missing ones.')
+              const relatedIds = getRequiredIdsBySchemaKey(field)
+              if (relatedIds.length === 0) return
+              const snapshot = finalizeSnapshot()
+              const stillMissing = relatedIds.filter((id) => !isFieldFilledFromState(id, snapshot))
+              registerFieldFailure(field, stillMissing, error)
+            },
         })
         applyAiResult(aiData)
         return finalizeAiStatuses(finalizeSnapshot())
@@ -687,21 +786,22 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
             setAiFillProgress((prev) => ({ completed: prev.completed, total: prev.total, field: fieldKey }))
             try {
               const existingFieldData = buildExistingData()[fieldKey as keyof ReturnType<typeof buildExistingData>]
-              const data = await fetchAiPlantFillField({
-                plantName: name.trim(),
+                await fetchAiPlantFillField({
+                  plantName: trimmedName,
                 schema: schemaWithMandatory,
                 fieldKey,
                 existingField: existingFieldData,
                 signal: controller.signal,
                 onFieldComplete: ({ field, data }) => {
-                  markFieldResult(field, data)
+                    processFieldResult(field, data)
                 },
               })
-              if (data !== undefined && data !== null) {
-                applyAiResult({ [fieldKey]: data })
-              }
-            } catch (err) {
-              console.error(`AI retry failed for ${fieldKey}:`, err)
+              } catch (err: any) {
+                console.error(`AI retry failed for ${fieldKey}:`, err)
+                const relatedIds = getRequiredIdsBySchemaKey(fieldKey)
+                const snapshot = finalizeSnapshot()
+                const stillMissing = relatedIds.filter((id) => !isFieldFilledFromState(id, snapshot))
+                registerFieldFailure(fieldKey, stillMissing, err?.message || String(err))
             }
           }
           currentMissing = finalizeAiStatuses(finalizeSnapshot())
@@ -714,31 +814,35 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
         missing = await retryMissingFields(missing)
       }
 
-      if (missing.length === 0) {
-        setOk('AI data loaded successfully! Please review and edit before saving.')
-      } else {
-        const missingLabels = REQUIRED_FIELD_CONFIG
-          .filter(({ id }) => missing.includes(id))
-          .map(({ label }) => label)
-        let message = `AI could not fill the following required fields after retrying: ${missingLabels.join(', ')}. Please complete them manually.`
-        if (missing.includes('description')) {
-          const wordCount = countWords(latestDescription)
-          message += ` The overview must be between 100 and 400 words (currently ${wordCount}).`
-        }
-        if (missing.includes('funFact')) {
-          const sentenceCount = countSentences(latestFunFact)
-          message += ` The fun fact must contain between 1 and 3 sentences (currently ${sentenceCount}).`
-        }
-        setError(message)
-      }
-      } catch (err: any) {
-        console.error('AI fill error:', err)
-        if (err?.message === 'AI fill was cancelled' || err?.message === 'AI fill cancelled.') {
-          setError('AI fill cancelled.')
+        if (missing.length === 0) {
+          setOk('AI data loaded successfully! Please review and edit before saving.')
+          setAiPanelMessage(null)
         } else {
-          setError(err?.message || 'Failed to fill data with AI. Please try again.')
+          const missingLabels = REQUIRED_FIELD_CONFIG
+            .filter(({ id }) => missing.includes(id))
+            .map(({ label }) => label)
+          let message = `AI could not fill the following required fields after retrying: ${missingLabels.join(', ')}. Please complete them manually.`
+          if (missing.includes('description')) {
+            const wordCount = countWords(latestDescription)
+            message += ` The overview must be between 100 and 400 words (currently ${wordCount}).`
+          }
+          if (missing.includes('funFact')) {
+            const sentenceCount = countSentences(latestFunFact)
+            message += ` The fun fact must contain between 1 and 3 sentences (currently ${sentenceCount}).`
+          }
+          setAiPanelMessage('AI fill finished with some missing fields.')
+          addAiNotice(message)
+          setError(message)
         }
-      } finally {
+        } catch (err: any) {
+          console.error('AI fill error:', err)
+          setAiPanelMessage((prev) => prev ?? 'AI fill stopped. Any completed fields were kept.')
+          if (err?.message === 'AI fill was cancelled' || err?.message === 'AI fill cancelled.') {
+            setError('AI fill cancelled.')
+          } else {
+            setError(err?.message || 'Failed to fill data with AI. Please try again.')
+          }
+        } finally {
         setAiFilling(false)
         setAiFillProgress({ completed: 0, total: 0, field: undefined })
         abortControllerRef.current = null
@@ -1276,70 +1380,74 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
                     'Add at least one image URL. Mark one as primary for cards and flag vertical-friendly shots for portrait layouts.'
                   )}
                 />
-                {editLanguage === 'en' && (
-                  <>
-                    <div className="flex items-center justify-between mb-4 p-4 rounded-xl border bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-950/20 dark:to-blue-950/20 dark:border-purple-800/30">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 font-semibold text-purple-900 dark:text-purple-200 mb-1">
-                          <Sparkles className="h-5 w-5" />
-                          AI Assistant
+                  {editLanguage === 'en' ? (
+                    <>
+                      <div className="flex items-center justify-between mb-4 p-4 rounded-xl border bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-950/20 dark:to-blue-950/20 dark:border-purple-800/30">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 font-semibold text-purple-900 dark:text-purple-200 mb-1">
+                            <Sparkles className="h-5 w-5" />
+                            AI Assistant
+                          </div>
+                          <p className="text-sm text-purple-700 dark:text-purple-300">
+                            Let AI fill in all the advanced fields based on the plant name.
+                          </p>
                         </div>
-                        <p className="text-sm text-purple-700 dark:text-purple-300">
-                          Let AI fill in all the advanced fields based on the plant name.
-                        </p>
-                      </div>
-                      <Button
-                        type="button"
-                        onClick={handleAiFill}
-                        disabled={aiFilling || !name.trim() || saving || translating}
-                        className="rounded-2xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white border-0 shadow-lg"
-                      >
+                        <Button
+                          type="button"
+                          onClick={handleAiFill}
+                          disabled={aiFilling || !name.trim() || saving || translating}
+                          className="rounded-2xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white border-0 shadow-lg"
+                        >
                           {aiFilling ? (
                             <>
                               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                               Filling{aiFillProgress.total > 0 ? ` ${Math.round((Math.min(aiFillProgress.completed, aiFillProgress.total) / aiFillProgress.total) * 100)}%` : '...'}
                             </>
                           ) : (
-                          <>
-                            <Sparkles className="h-4 w-4 mr-2" />
-                            Fill with AI
-                          </>
-                        )}
-                      </Button>
-                </div>
-                {aiStatusVisible && (
-                  <div className="mb-4 rounded-xl border border-purple-100 bg-purple-50/70 p-4 dark:border-purple-900/40 dark:bg-purple-950/20">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-purple-700 dark:text-purple-300">
-                      Required by AI
-                    </div>
-                    <div className="mt-2 space-y-2">
-                      {REQUIRED_FIELD_CONFIG.map(({ id, label }) => {
-                        const status = aiFieldStatuses[id]
-                        return (
-                          <div key={id} className="flex items-center justify-between text-xs">
-                            <div className="flex items-center gap-2">
-                              {renderStatusIcon(status)}
-                              <span className="text-muted-foreground dark:text-stone-300">{label}</span>
-                            </div>
-                            <span className={`font-medium ${AI_STATUS_STYLES[status].text}`}>
-                              {AI_FIELD_STATUS_TEXT[status]}
-                            </span>
-                          </div>
-                        )
-                      })}
-                    </div>
-                    {aiMissingFields.length > 0 && (
-                      <div className="mt-3 text-xs text-red-600 dark:text-red-400">
-                        Missing:{" "}
-                        {REQUIRED_FIELD_CONFIG.filter(({ id }) => aiMissingFields.includes(id))
-                          .map(({ label }) => label)
-                          .join(", ")}
+                            <>
+                              <Sparkles className="h-4 w-4 mr-2" />
+                              Fill with AI
+                            </>
+                          )}
+                        </Button>
                       </div>
-                    )}
-                  </div>
-                )}
-                  </>
-                )}
+                      {aiStatusVisible && (
+                        <div className="mb-4 rounded-xl border border-purple-100 bg-purple-50/70 p-4 dark:border-purple-900/40 dark:bg-purple-950/20">
+                          <div className="text-xs font-semibold uppercase tracking-wide text-purple-700 dark:text-purple-300">
+                            Required by AI
+                          </div>
+                          <div className="mt-2 space-y-2">
+                            {REQUIRED_FIELD_CONFIG.map(({ id, label }) => {
+                              const status = aiFieldStatuses[id]
+                              return (
+                                <div key={id} className="flex items-center justify-between text-xs">
+                                  <div className="flex items-center gap-2">
+                                    {renderStatusIcon(status)}
+                                    <span className="text-muted-foreground dark:text-stone-300">{label}</span>
+                                  </div>
+                                  <span className={`font-medium ${AI_STATUS_STYLES[status].text}`}>
+                                    {AI_FIELD_STATUS_TEXT[status]}
+                                  </span>
+                                </div>
+                              )
+                            })}
+                          </div>
+                          {aiMissingFields.length > 0 && (
+                            <div className="mt-3 text-xs text-red-600 dark:text-red-400">
+                              Missing:{" "}
+                              {REQUIRED_FIELD_CONFIG.filter(({ id }) => aiMissingFields.includes(id))
+                                .map(({ label }) => label)
+                                .join(", ")}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="mb-4 rounded-xl border border-dashed border-purple-200 bg-purple-50/50 p-4 text-sm text-purple-700 dark:border-purple-900/50 dark:bg-purple-950/30 dark:text-purple-200">
+                      Switch the edit language to <span className="font-semibold">English</span> to enable the AI assistant.
+                    </div>
+                  )}
               <div className="grid gap-2">
                 <Label htmlFor="plant-scientific">Scientific name</Label>
                 <Input id="plant-scientific" autoComplete="off" value={scientificName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setScientificName(e.target.value)} />
@@ -1421,51 +1529,72 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
                 />
                 {ok && <div className="text-sm text-green-600">{ok}</div>}
                 {translating && <div className="text-sm text-blue-600">Translating all fields to all languages...</div>}
-                  {aiFilling && (
-                    <div className="flex flex-col gap-2 text-sm text-purple-600 dark:text-purple-400">
-                      <div className="flex items-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        AI is filling in the plant data...
-                      </div>
-                      {aiFillProgress.field && !['init', 'complete'].includes(aiFillProgress.field) && (
-                        <div className="text-xs font-medium">
-                          Working on: <span className="font-semibold">{aiFillProgress.field}</span>
+                    {(aiFilling || aiPanelMessage || aiPanelNotices.length > 0) && (
+                      <div className="flex flex-col gap-2 text-sm text-purple-600 dark:text-purple-400">
+                        <div className="flex items-center gap-2">
+                          {aiFilling ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <AlertCircle className="h-4 w-4" />
+                          )}
+                          <span>
+                            {aiPanelMessage ||
+                              (aiFilling
+                                ? 'AI is filling in the plant data...'
+                                : 'AI fill status updates')}
+                          </span>
                         </div>
-                      )}
-                      <div className="flex items-center gap-2">
-                        <div className="h-2 flex-1 rounded-full bg-purple-200 dark:bg-purple-950">
-                          <div
-                            className="h-full rounded-full bg-purple-500 transition-all"
-                            style={{
-                              width: `${aiFillProgress.total > 0 ? Math.round((aiFillProgress.completed / aiFillProgress.total) * 100) : 0}%`,
+                        {aiFilling && aiFillProgress.field && !['init', 'complete'].includes(aiFillProgress.field) && (
+                          <div className="text-xs font-medium">
+                            Working on: <span className="font-semibold">{aiFillProgress.field}</span>
+                          </div>
+                        )}
+                        {aiFilling && (
+                          <div className="flex items-center gap-2">
+                            <div className="h-2 flex-1 rounded-full bg-purple-200 dark:bg-purple-950">
+                              <div
+                                className="h-full rounded-full bg-purple-500 transition-all"
+                                style={{
+                                  width: `${aiFillProgress.total > 0 ? Math.round((aiFillProgress.completed / aiFillProgress.total) * 100) : 0}%`,
+                                }}
+                              />
+                            </div>
+                            <span className="text-xs font-medium min-w-[4rem] text-right">
+                              {aiFillProgress.total > 0
+                                ? `${Math.min(aiFillProgress.completed, aiFillProgress.total)} / ${aiFillProgress.total}`
+                                : '...'}
+                            </span>
+                          </div>
+                        )}
+                        {aiPanelNotices.length > 0 && (
+                          <div className="space-y-1 text-xs">
+                            {aiPanelNotices.map((notice) => (
+                              <div key={notice}>{notice}</div>
+                            ))}
+                          </div>
+                        )}
+                        {aiFilling && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="self-start rounded-2xl"
+                            onClick={() => {
+                              abortControllerRef.current?.abort()
+                              abortControllerRef.current = null
+                              setAiFilling(false)
+                              setAiFillProgress({ completed: 0, total: 0, field: undefined })
+                              setOk(null)
+                              setError('AI fill cancelled.')
+                              setAiPanelMessage('AI fill cancelled.')
+                              resetAiTracking()
                             }}
-                          />
-                        </div>
-                        <span className="text-xs font-medium min-w-[4rem] text-right">
-                          {aiFillProgress.total > 0
-                            ? `${Math.min(aiFillProgress.completed, aiFillProgress.total)} / ${aiFillProgress.total}`
-                            : '...'}
-                        </span>
+                          >
+                            Stop AI fill
+                          </Button>
+                        )}
                       </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="self-start rounded-2xl"
-                        onClick={() => {
-                        abortControllerRef.current?.abort()
-                        abortControllerRef.current = null
-                        setAiFilling(false)
-                        setAiFillProgress({ completed: 0, total: 0, field: undefined })
-                        setOk(null)
-                        setError('AI fill cancelled.')
-                        resetAiTracking()
-                        }}
-                      >
-                        Stop AI fill
-                      </Button>
-                    </div>
-                  )}
+                    )}
                 <div className="flex gap-2 pt-2">
                   <Button
                     variant="secondary"

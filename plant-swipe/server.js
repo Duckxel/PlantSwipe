@@ -1049,6 +1049,71 @@ async function generateFieldData(options) {
   return cleanedValue !== undefined ? cleanedValue : undefined
 }
 
+async function verifyPlantNameCandidate(plantName) {
+  if (!openaiClient) {
+    throw new Error('OpenAI client not configured')
+  }
+
+  const instructions = [
+    'You verify whether a provided term clearly refers to a plant species, cultivar, or commonly recognized plant.',
+    'Respond strictly with compact JSON: {"isPlant": true|false, "reason": "very short explanation"}',
+    'Return isPlant = true only when the name primarily identifies a plant (botanical or common).',
+    'Return false for people, companies, fictional characters, generic objects, or ambiguous inputs.',
+    'Do not include markdown or prose outside the JSON.',
+  ].join('\n')
+
+  const prompt = [`Name to classify: ${plantName}`].join('\n')
+
+  const response = await openaiClient.responses.create(
+    {
+      model: openaiModel,
+      reasoning: { effort: 'low' },
+      instructions,
+      input: prompt,
+    },
+    { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 60000) },
+  )
+
+  const outputText = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
+  if (!outputText) {
+    throw new Error('AI returned empty verification output')
+  }
+
+  let parsed
+  try {
+    parsed = JSON.parse(outputText)
+  } catch {
+    const jsonMatch = outputText.match(/\{[\s\S]*\}/)
+    if (jsonMatch) {
+      try {
+        parsed = JSON.parse(jsonMatch[0])
+      } catch {}
+    }
+  }
+
+  const normalized =
+    parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+
+  let isPlant = false
+  if (typeof normalized.isPlant === 'boolean') {
+    isPlant = normalized.isPlant
+  } else if (typeof normalized.result === 'string') {
+    const lowered = normalized.result.trim().toLowerCase()
+    isPlant = lowered.startsWith('y') || lowered.includes('plant')
+  } else if (/"isPlant"\s*:\s*true/i.test(outputText)) {
+    isPlant = true
+  }
+
+  const reason =
+    typeof normalized.reason === 'string'
+      ? normalized.reason
+      : typeof normalized.explanation === 'string'
+        ? normalized.explanation
+        : outputText
+
+  return { isPlant: Boolean(isPlant), reason: reason.trim() }
+}
+
 function removeExternalIds(node) {
   if (!node || typeof node !== 'object') return node
   if (Array.isArray(node)) {
@@ -1594,6 +1659,36 @@ app.get('/api/admin/admin-logs', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e?.message || 'Failed to load admin logs' })
   }
+})
+
+// Admin: AI plant name verification
+app.post('/api/admin/ai/plant-fill/verify-name', async (req, res) => {
+  try {
+    const caller = await ensureAdmin(req, res)
+    if (!caller) return
+    if (!openaiClient) {
+      res.status(503).json({ error: 'AI plant fill is not configured' })
+      return
+    }
+    const body = req.body || {}
+    const plantName = typeof body.plantName === 'string' ? body.plantName.trim() : ''
+    if (!plantName) {
+      res.status(400).json({ error: 'Plant name is required' })
+      return
+    }
+    const result = await verifyPlantNameCandidate(plantName)
+    res.json({ success: true, isPlant: result.isPlant, reason: result.reason })
+  } catch (err) {
+    console.error('[server] AI plant name verification failed:', err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: err?.message || 'Failed to verify plant name' })
+    }
+  }
+})
+app.options('/api/admin/ai/plant-fill/verify-name', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
 })
 
 // Admin: AI-assisted plant data fill
