@@ -31,7 +31,14 @@ type MediaEntry = {
   originalSizeBytes: number | null
   quality: number | null
   compressionPercent: number | null
-  metadata?: { originalName?: string | null; typeSegment?: string | null } | null
+  metadata?: {
+    originalName?: string | null
+    originalUploadName?: string | null
+    storageName?: string | null
+    displayName?: string | null
+    typeSegment?: string | null
+    [key: string]: any
+  } | null
   createdAt: string | null
 }
 
