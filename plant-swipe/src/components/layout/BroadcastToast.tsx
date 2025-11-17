@@ -163,9 +163,7 @@ const BroadcastToast: React.FC = () => {
     }
   }, [broadcast?.expiresAt, now])
 
-  if (!broadcast) return null
-
-  const severity = (broadcast.severity === 'warning' || broadcast.severity === 'danger') ? broadcast.severity : 'info'
+  const severity = (broadcast?.severity === 'warning' || broadcast?.severity === 'danger') ? broadcast?.severity : 'info'
   const severityLabel = severity === 'warning' ? 'Warning' : severity === 'danger' ? 'Danger' : 'Information'
   const severityVisuals = React.useMemo(() => {
     switch (severity) {
@@ -189,6 +187,8 @@ const BroadcastToast: React.FC = () => {
         }
     }
   }, [severity])
+
+  if (!broadcast) return null
 
   const IconComp = severity === 'warning' ? AlertTriangle : severity === 'danger' ? XCircle : Info
 
