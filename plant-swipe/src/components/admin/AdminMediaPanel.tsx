@@ -31,8 +31,20 @@ type MediaEntry = {
   originalSizeBytes: number | null
   quality: number | null
   compressionPercent: number | null
-  metadata?: { originalName?: string | null; typeSegment?: string | null } | null
+  metadata?: {
+    originalName?: string | null
+    originalUploadName?: string | null
+    storageName?: string | null
+    displayName?: string | null
+    typeSegment?: string | null
+    [key: string]: any
+  } | null
   createdAt: string | null
+}
+
+type AdminMediaPanelProps = {
+  filterBuckets?: string[]
+  filterLabel?: string
 }
 
 const BYTES_IN_MB = 1024 * 1024
@@ -73,7 +85,10 @@ function formatRelativeTime(value?: string | null) {
   }
 }
 
-export const AdminMediaPanel: React.FC = () => {
+export const AdminMediaPanel: React.FC<AdminMediaPanelProps> = ({
+  filterBuckets,
+  filterLabel,
+}) => {
   const [entries, setEntries] = React.useState<MediaEntry[]>([])
   const [loading, setLoading] = React.useState(true)
   const [refreshing, setRefreshing] = React.useState(false)
@@ -83,6 +98,13 @@ export const AdminMediaPanel: React.FC = () => {
   const runtimeEnv = (globalThis as typeof globalThis & RuntimeEnv).__ENV__
   const adminToken =
     import.meta.env?.VITE_ADMIN_STATIC_TOKEN ?? runtimeEnv?.VITE_ADMIN_STATIC_TOKEN
+
+  const normalizedFilterBuckets = React.useMemo(() => {
+    if (!filterBuckets || filterBuckets.length === 0) return null
+    return filterBuckets
+      .map((bucket) => bucket?.toString().trim().toLowerCase())
+      .filter((bucket): bucket is string => Boolean(bucket))
+  }, [filterBuckets])
 
   const fetchMedia = React.useCallback(
     async ({ showSpinner = false }: { showSpinner?: boolean } = {}) => {
@@ -100,7 +122,13 @@ export const AdminMediaPanel: React.FC = () => {
         const headers: Record<string, string> = { Accept: "application/json" }
         if (token) headers["Authorization"] = `Bearer ${token}`
         if (adminToken) headers["X-Admin-Token"] = String(adminToken)
-        const resp = await fetch("/api/admin/media?limit=100", {
+        const params = new URLSearchParams({ limit: "100" })
+        const bucketParam =
+          normalizedFilterBuckets && normalizedFilterBuckets.length === 1
+            ? normalizedFilterBuckets[0]
+            : null
+        if (bucketParam) params.set("bucket", bucketParam)
+        const resp = await fetch(`/api/admin/media?${params.toString()}`, {
           method: "GET",
           headers,
           credentials: "same-origin",
@@ -120,18 +148,22 @@ export const AdminMediaPanel: React.FC = () => {
         setLoading(false)
       }
     },
-    [adminToken],
+    [adminToken, normalizedFilterBuckets],
   )
 
-  React.useEffect(() => {
-    fetchMedia().catch(() => {})
-  }, [fetchMedia])
+    React.useEffect(() => {
+      fetchMedia().catch(() => {})
+    }, [fetchMedia])
 
   const handleDelete = React.useCallback(
-    async (entry: MediaEntry) => {
+      async (entry: MediaEntry) => {
+        const storageName =
+          entry.metadata?.storageName ||
+          entry.metadata?.displayName ||
+          entry.path
       if (
         !window.confirm(
-          `Delete "${entry.metadata?.originalName || entry.path}"?\nThis will remove the optimized file from storage.`,
+            `Delete "${storageName}"?\nThis will remove the optimized file from storage.`,
         )
       ) {
         return
@@ -184,18 +216,40 @@ export const AdminMediaPanel: React.FC = () => {
     }
   }, [])
 
+  const visibleEntries = React.useMemo(() => {
+    if (!normalizedFilterBuckets || normalizedFilterBuckets.length === 0) {
+      return entries
+    }
+    return entries.filter((entry) =>
+      entry.bucket
+        ? normalizedFilterBuckets.includes(entry.bucket.toLowerCase())
+        : false,
+    )
+  }, [entries, normalizedFilterBuckets])
+
+  const hasBucketFilter =
+    Array.isArray(normalizedFilterBuckets) && normalizedFilterBuckets.length > 0
+  const emptyStateMessage = hasBucketFilter
+    ? `No ${(filterLabel || "filtered").toLowerCase()} uploads found yet.`
+    : "No media uploads found yet."
+
   return (
     <div className="space-y-6">
       <Card className="rounded-2xl">
         <CardContent className="p-6 space-y-4">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div className="text-2xl font-semibold tracking-tight">Media library</div>
-              <p className="text-sm text-muted-foreground">
-                Recent uploads to the Supabase bucket, including who uploaded them and
-                file details.
-              </p>
-            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="text-2xl font-semibold tracking-tight">Media library</div>
+                <p className="text-sm text-muted-foreground">
+                  Recent uploads to the Supabase bucket, including who uploaded them and
+                  file details.
+                </p>
+                {hasBucketFilter && (
+                  <div className="mt-1 text-xs font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-300">
+                    Showing {filterLabel || "filtered"} bucket
+                  </div>
+                )}
+              </div>
             <Button
               type="button"
               variant="outline"
@@ -214,19 +268,24 @@ export const AdminMediaPanel: React.FC = () => {
               {error}
             </div>
           )}
-          {loading ? (
-            <div className="text-sm text-muted-foreground">Loading media uploads...</div>
-          ) : entries.length === 0 ? (
-            <div className="rounded-2xl border border-dashed p-6 text-center text-sm text-muted-foreground">
-              No media uploads found yet.
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {entries.map((entry) => {
-                const fileName =
-                  entry.metadata?.originalName ||
-                  entry.path.split("/").filter(Boolean).pop() ||
-                  entry.path
+            {loading ? (
+              <div className="text-sm text-muted-foreground">Loading media uploads...</div>
+            ) : visibleEntries.length === 0 ? (
+              <div className="rounded-2xl border border-dashed p-6 text-center text-sm text-muted-foreground">
+                {emptyStateMessage}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {visibleEntries.map((entry) => {
+                  const storageName =
+                    entry.metadata?.storageName ||
+                    entry.metadata?.displayName ||
+                    entry.path.split("/").filter(Boolean).pop() ||
+                    entry.path
+                  const shouldShorten = storageName.length > 15
+                  const shortName = shouldShorten
+                    ? `${storageName.slice(0, Math.max(3, 15 - 3))}...`
+                    : storageName
                 const displayLink =
                   entry.url || `supabase://${entry.bucket}/${entry.path}`
                 const isImage =
@@ -245,7 +304,7 @@ export const AdminMediaPanel: React.FC = () => {
                               <div className="h-full w-full rounded-xl bg-muted">
                                 <img
                                   src={entry.url}
-                                  alt={fileName}
+                                  alt={storageName}
                                   className="h-full w-full object-cover"
                                   loading="lazy"
                                 />
@@ -255,7 +314,12 @@ export const AdminMediaPanel: React.FC = () => {
                             )}
                           </div>
                         <div className="min-w-0">
-                          <div className="truncate text-sm font-semibold">{fileName}</div>
+                          <div
+                            className="truncate text-sm font-semibold"
+                            title={storageName}
+                          >
+                            {shortName}
+                          </div>
                   <div className="text-xs text-muted-foreground space-x-1">
                     <span>{entry.bucket}</span>
                     <span>·</span>
