@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { PlantDetails } from "@/components/plant/PlantDetails";
-import { Info, ArrowUpRight } from "lucide-react";
+import { Info, ArrowUpRight, UploadCloud, Loader2 } from "lucide-react";
 import { SchedulePickerDialog } from "@/components/plant/SchedulePickerDialog";
 import { TaskEditorDialog } from "@/components/plant/TaskEditorDialog";
 import type { Garden } from "@/types/garden";
@@ -4009,18 +4009,151 @@ function GardenDetailsEditor({
   const { t } = useTranslation("common");
   const [name, setName] = React.useState(garden.name);
   const [imageUrl, setImageUrl] = React.useState(garden.coverImageUrl || "");
+  const [initialCoverUrl, setInitialCoverUrl] = React.useState(
+    garden.coverImageUrl || "",
+  );
   const [submitting, setSubmitting] = React.useState(false);
   const [err, setErr] = React.useState<string | null>(null);
+  const [uploadError, setUploadError] = React.useState<string | null>(null);
+  const [uploadStatus, setUploadStatus] = React.useState<string | null>(null);
+  const [uploadingCover, setUploadingCover] = React.useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  React.useEffect(() => {
+    const cover = garden.coverImageUrl || "";
+    setInitialCoverUrl(cover);
+    setImageUrl(cover);
+  }, [garden.id, garden.coverImageUrl]);
+
+  const cleanupCover = React.useCallback(
+    async (url: string | null) => {
+      if (!url) return;
+      try {
+        const session = (await supabase.auth.getSession()).data.session;
+        const token = session?.access_token;
+        if (!token) return;
+        await fetch(`/api/garden/${garden.id}/cover/cleanup`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ url }),
+          credentials: "same-origin",
+        });
+      } catch (cleanupErr) {
+        console.warn(
+          "[GardenDetailsEditor] failed to cleanup previous cover",
+          cleanupErr,
+        );
+      }
+    },
+    [garden.id],
+  );
+
+  const handleCoverUpload = React.useCallback(
+    async (file: File | null) => {
+      if (!file || !canEdit) return;
+      setUploadError(null);
+      setUploadStatus(null);
+      if (!file.type.startsWith("image/")) {
+        setUploadError(
+          t("gardenDashboard.settingsSection.coverUploadInvalidType"),
+        );
+        return;
+      }
+      const MAX_MB = 15;
+      if (file.size > MAX_MB * 1024 * 1024) {
+        setUploadError(
+          t("gardenDashboard.settingsSection.coverUploadTooLarge", {
+            max: MAX_MB,
+          }),
+        );
+        return;
+      }
+      setUploadingCover(true);
+      try {
+        const session = (await supabase.auth.getSession()).data.session;
+        const token = session?.access_token;
+        if (!token) {
+          setUploadError(
+            t("gardenDashboard.settingsSection.coverUploadAuthError"),
+          );
+          return;
+        }
+        const form = new FormData();
+        form.append("file", file);
+        const headers: Record<string, string> = {
+          Authorization: `Bearer ${token}`,
+        };
+        const resp = await fetch(`/api/garden/${garden.id}/upload-cover`, {
+          method: "POST",
+          headers,
+          body: form,
+          credentials: "same-origin",
+        });
+        const data = await resp.json().catch(() => null);
+        if (!resp.ok) {
+          throw new Error(
+            data?.error || t("gardenDashboard.settingsSection.coverUploadError"),
+          );
+        }
+        const newUrl = (data?.url as string) || "";
+        if (newUrl) {
+          setImageUrl(newUrl);
+          setInitialCoverUrl(newUrl);
+          setUploadStatus(
+            t("gardenDashboard.settingsSection.coverUploadSuccess"),
+          );
+          setErr(null);
+          await onSaved();
+        }
+      } catch (uploadErr) {
+        setUploadError(
+          uploadErr instanceof Error
+            ? uploadErr.message
+            : t("gardenDashboard.settingsSection.coverUploadError"),
+        );
+      } finally {
+        setUploadingCover(false);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      }
+    },
+    [canEdit, garden.id, onSaved, t],
+  );
+
+  const onCoverFileChange = React.useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const nextFile = event.target.files?.[0] || null;
+      void handleCoverUpload(nextFile);
+    },
+    [handleCoverUpload],
+  );
+
+  const triggerCoverUpload = React.useCallback(() => {
+    if (!canEdit) return;
+    fileInputRef.current?.click();
+  }, [canEdit]);
+
   const save = async () => {
     if (submitting) return;
     if (!canEdit) return;
+    const normalizedName = name.trim() || garden.name;
+    const normalizedCover = imageUrl.trim() || null;
+    const nameChanged = (garden.name || "") !== (normalizedName || "");
+    const coverChanged =
+      (initialCoverUrl || "") !== (normalizedCover || "");
+    if (!nameChanged && !coverChanged) {
+      setErr(null);
+      return;
+    }
     setSubmitting(true);
     try {
       const { error } = await supabase
         .from("gardens")
         .update({
-          name: name.trim() || garden.name,
-          cover_image_url: imageUrl.trim() || null,
+          name: normalizedName,
+          cover_image_url: normalizedCover,
         })
         .eq("id", garden.id);
       if (error) {
@@ -4028,14 +4161,14 @@ function GardenDetailsEditor({
         return;
       }
       setErr(null);
-      // Log garden details update so other clients refresh via SSE
+      if (coverChanged) {
+        await cleanupCover(initialCoverUrl || null);
+        setInitialCoverUrl(normalizedCover || "");
+      }
       try {
-        const changedName = (garden.name || "") !== (name.trim() || "");
-        const changedCover =
-          (garden.coverImageUrl || "") !== (imageUrl.trim() || "");
         const parts: string[] = [];
-        if (changedName) parts.push(`name: "${name.trim() || "-"}"`);
-        if (changedCover) parts.push("cover image updated");
+        if (nameChanged) parts.push(`name: "${normalizedName || "-"}"`);
+        if (coverChanged) parts.push("cover image updated");
         if (parts.length > 0) {
           await logGardenActivity({
             gardenId: garden.id,
@@ -4050,6 +4183,7 @@ function GardenDetailsEditor({
       setSubmitting(false);
     }
   };
+
   return (
     <div className="space-y-3">
       <div>
@@ -4062,16 +4196,85 @@ function GardenDetailsEditor({
           disabled={!canEdit}
         />
       </div>
-      <div>
-        <label className="text-sm font-medium">
-          {t("gardenDashboard.settingsSection.coverImageUrl")}
-        </label>
+      <div className="space-y-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <label className="text-sm font-medium">
+            {t("gardenDashboard.settingsSection.coverImageUrl")}
+          </label>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="rounded-2xl"
+            onClick={triggerCoverUpload}
+            disabled={!canEdit || uploadingCover}
+          >
+            {uploadingCover ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                {t("gardenDashboard.settingsSection.coverUploadUploading")}
+              </>
+            ) : (
+              <>
+                <UploadCloud className="mr-2 h-4 w-4" />
+                {t("gardenDashboard.settingsSection.coverUploadButton")}
+              </>
+            )}
+          </Button>
+        </div>
         <Input
           value={imageUrl}
-          onChange={(e: any) => setImageUrl(e.target.value)}
+          onChange={(e: any) => {
+            setImageUrl(e.target.value);
+            setUploadError(null);
+            setUploadStatus(null);
+          }}
           placeholder="https://?"
+          disabled={!canEdit || uploadingCover}
+        />
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          hidden
+          onChange={onCoverFileChange}
           disabled={!canEdit}
         />
+        {uploadError && (
+          <div className="text-sm text-red-600">{uploadError}</div>
+        )}
+        {uploadStatus && (
+          <div className="text-sm text-emerald-600">{uploadStatus}</div>
+        )}
+        <div className="text-xs text-muted-foreground space-y-1">
+          <div>
+            {canEdit
+              ? t("gardenDashboard.settingsSection.coverUploadHelper")
+              : t("gardenDashboard.settingsSection.coverUploadDisabled")}
+          </div>
+          {canEdit && (
+            <div>
+              {t(
+                "gardenDashboard.settingsSection.coverUploadDeleteWarning",
+              )}
+            </div>
+          )}
+        </div>
+        <div className="mt-2 rounded-2xl border border-dashed border-stone-200 dark:border-[#3e3e42] bg-white/70 dark:bg-[#1b1b1f]/60 h-32 overflow-hidden flex items-center justify-center">
+          {imageUrl ? (
+            <img
+              src={imageUrl}
+              alt={t("gardenDashboard.settingsSection.coverPreviewAlt")}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <div className="text-sm text-muted-foreground px-4 text-center">
+              {t(
+                "gardenDashboard.settingsSection.coverUploadPreviewEmpty",
+              )}
+            </div>
+          )}
+        </div>
       </div>
       {err && <div className="text-sm text-red-600">{err}</div>}
       <div className="flex justify-end gap-2 pt-2">
