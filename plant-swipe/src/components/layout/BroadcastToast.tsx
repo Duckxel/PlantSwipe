@@ -94,22 +94,22 @@ const BroadcastToast: React.FC = () => {
   }, [refreshBroadcast])
 
   // SSE stream for live updates with polling fallback
-    React.useEffect(() => {
-      let es: EventSource | null = null
-      let pollId: number | null = null
+  React.useEffect(() => {
+    let es: EventSource | null = null
+    let pollId: number | null = null
 
     const startPolling = () => {
       if (pollId) return
-        const tick = () => { void refreshBroadcast().catch(() => {}) }
-        pollId = window.setInterval(tick, 60000)
+      const tick = () => { void refreshBroadcast().catch(() => {}) }
+      pollId = window.setInterval(tick, 60000)
       tick()
     }
 
     const stopPolling = () => {
-        if (pollId !== null) {
-          window.clearInterval(pollId)
-          pollId = null
-        }
+      if (pollId !== null) {
+        window.clearInterval(pollId)
+        pollId = null
+      }
     }
 
     const handleBroadcast = (ev: MessageEvent) => {
@@ -167,9 +167,28 @@ const BroadcastToast: React.FC = () => {
 
   const severity = (broadcast.severity === 'warning' || broadcast.severity === 'danger') ? broadcast.severity : 'info'
   const severityLabel = severity === 'warning' ? 'Warning' : severity === 'danger' ? 'Danger' : 'Information'
-  const borderClass = severity === 'warning' ? 'border-yellow-400' : severity === 'danger' ? 'border-red-500' : 'border-white'
-  const squareBgClass = severity === 'warning' ? 'bg-yellow-400' : severity === 'danger' ? 'bg-red-500' : 'bg-white'
-  const iconColorClass = severity === 'warning' ? 'text-yellow-600' : severity === 'danger' ? 'text-red-600' : 'text-neutral-500'
+  const severityVisuals = React.useMemo(() => {
+    switch (severity) {
+      case 'warning':
+        return {
+          border: 'border-yellow-400 dark:border-yellow-300/80',
+          square: 'border-yellow-300 dark:border-yellow-300/60 bg-yellow-400 dark:bg-yellow-400/40',
+          icon: 'text-yellow-600 dark:text-yellow-200',
+        }
+      case 'danger':
+        return {
+          border: 'border-red-500 dark:border-red-400/80',
+          square: 'border-red-400 dark:border-red-400/60 bg-red-500 dark:bg-red-500/35',
+          icon: 'text-red-600 dark:text-red-300',
+        }
+      default:
+        return {
+          border: 'border-white dark:border-white/20',
+          square: 'border-neutral-200 dark:border-white/25 bg-white dark:bg-white/15',
+          icon: 'text-neutral-500 dark:text-neutral-100',
+        }
+    }
+  }, [severity])
 
   const IconComp = severity === 'warning' ? AlertTriangle : severity === 'danger' ? XCircle : Info
 
@@ -189,14 +208,14 @@ const BroadcastToast: React.FC = () => {
       title="Click to move between corners"
       style={{ WebkitTapHighlightColor: 'transparent' }}
     >
-      <div className={`select-none rounded-2xl border ${borderClass} bg-white shadow-lg text-sm text-neutral-900 overflow-hidden p-3 sm:p-4`}>
+      <div className={`select-none rounded-2xl border ${severityVisuals.border} bg-white dark:bg-[#111217] shadow-lg dark:shadow-[0_25px_50px_rgba(0,0,0,0.65)] text-sm text-neutral-900 dark:text-neutral-100 overflow-hidden p-3 sm:p-4 transition-colors`}>
         <div className="flex items-start gap-2">
-          <span className={`mt-[2px] ${iconColorClass}`}>
+          <span className={`mt-[2px] ${severityVisuals.icon}`}>
             <IconComp className="h-4 w-4" />
           </span>
           <div className="break-words flex-1">
             <div className="flex items-center gap-2 mb-1">
-              <span className={`h-3 w-3 rounded-sm border border-neutral-300 ${squareBgClass}`} aria-hidden />
+              <span className={`h-3 w-3 rounded-sm border ${severityVisuals.square}`} aria-hidden />
               <div className="font-semibold">{severityLabel}</div>
             </div>
             <div>{broadcast.message}</div>

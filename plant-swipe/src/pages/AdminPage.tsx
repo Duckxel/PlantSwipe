@@ -6766,7 +6766,7 @@ const BroadcastControls: React.FC<{
             maxLength={200}
           />
           <select
-            className="rounded-xl border px-3 py-2 text-sm bg-white"
+            className="rounded-xl border border-stone-300 dark:border-[#3e3e42] px-3 py-2 text-sm bg-white dark:bg-[#2d2d30] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
             value={severity}
             onChange={(e) => setSeverity((e.target.value as any) || "warning")}
             aria-label="Type"
