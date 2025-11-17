@@ -282,6 +282,10 @@ export const AdminMediaPanel: React.FC<AdminMediaPanelProps> = ({
                     entry.metadata?.displayName ||
                     entry.path.split("/").filter(Boolean).pop() ||
                     entry.path
+                  const shouldShorten = storageName.length > 15
+                  const shortName = shouldShorten
+                    ? `${storageName.slice(0, Math.max(3, 15 - 3))}...`
+                    : storageName
                 const displayLink =
                   entry.url || `supabase://${entry.bucket}/${entry.path}`
                 const isImage =
@@ -310,8 +314,11 @@ export const AdminMediaPanel: React.FC<AdminMediaPanelProps> = ({
                             )}
                           </div>
                         <div className="min-w-0">
-                          <div className="truncate text-sm font-semibold">
-                            {storageName}
+                          <div
+                            className="truncate text-sm font-semibold"
+                            title={storageName}
+                          >
+                            {shortName}
                           </div>
                   <div className="text-xs text-muted-foreground space-x-1">
                     <span>{entry.bucket}</span>
