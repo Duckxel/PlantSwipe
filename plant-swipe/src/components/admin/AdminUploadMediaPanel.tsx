@@ -40,8 +40,8 @@ export const AdminUploadMediaPanel: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-3xl border border-stone-200 bg-white/90 p-4 shadow-sm dark:border-[#3e3e42] dark:bg-[#1a1a1d]">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <div className="rounded-3xl border border-stone-200 bg-white/90 p-5 shadow-sm dark:border-[#3e3e42] dark:bg-[#1a1a1d]">
+        <div className="flex flex-col gap-4">
           <div>
             <div className="text-sm font-semibold tracking-wide text-stone-600 dark:text-stone-200">
               Upload and Media
@@ -50,24 +50,26 @@ export const AdminUploadMediaPanel: React.FC = () => {
               Switch between uploading new assets or reviewing what was already uploaded.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {sectionTabs.map(({ key, label, Icon }) => (
-              <button
-                key={key}
-                type="button"
-                className={cn(
-                  "flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium transition",
-                  section === key
-                    ? "bg-emerald-600 text-white shadow"
-                    : "bg-stone-100 text-stone-700 hover:text-black dark:bg-[#2d2d30] dark:text-stone-200",
-                )}
-                onClick={() => setSection(key)}
-                aria-pressed={section === key}
-              >
-                <Icon className="h-4 w-4" />
-                {label}
-              </button>
-            ))}
+          <div className="inline-flex flex-wrap gap-2">
+            <div className="inline-flex rounded-full bg-stone-100 p-1 shadow-inner dark:bg-[#2d2d30]">
+              {sectionTabs.map(({ key, label, Icon }) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500",
+                    section === key
+                      ? "bg-white text-emerald-600 shadow-sm dark:bg-white/90"
+                      : "text-stone-600 hover:text-black dark:text-stone-200 dark:hover:text-white",
+                  )}
+                  onClick={() => setSection(key)}
+                  aria-pressed={section === key}
+                >
+                  <Icon className="h-4 w-4" />
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
