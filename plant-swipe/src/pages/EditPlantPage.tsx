@@ -109,6 +109,14 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
   const [aiMissingFields, setAiMissingFields] = React.useState<RequiredFieldId[]>([])
   const [aiStatusVisible, setAiStatusVisible] = React.useState(false)
   const abortControllerRef = React.useRef<AbortController | null>(null)
+  const canonicalPath = id ? `/plants/${id}/edit` : "/plants/edit"
+  const pageTitle = name
+    ? t("editPlant.metaTitle", { defaultValue: `Edit ${name}`, name })
+    : t("editPlant.metaTitleFallback", { defaultValue: "Edit plant" })
+  const pageDescription = t("editPlant.metaDescription", {
+    defaultValue: "Update plant data, translations, and media before publishing.",
+    name,
+  })
   const resetAiTracking = () => {
     setAiFieldStatuses(createInitialStatuses())
     setAiMissingFields([])
@@ -1218,6 +1226,7 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
 
   return (
     <div className="max-w-3xl mx-auto mt-8 px-4 md:px-0">
+      <PageHead title={pageTitle} description={pageDescription} path={canonicalPath} type="article" />
       <Card className="rounded-3xl">
         <CardContent className="p-6 md:p-8 space-y-4">
           <form autoComplete="off" className="space-y-4">

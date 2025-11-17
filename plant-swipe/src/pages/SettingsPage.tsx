@@ -10,6 +10,7 @@ import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
 import { useTheme } from "@/context/ThemeContext"
 import { Settings, Mail, Lock, Trash2, AlertTriangle, Check, ChevronDown, ChevronUp, Globe, Monitor, Sun, Moon } from "lucide-react"
+import { PageHead } from "@/components/layout/PageHead"
 import { SUPPORTED_LANGUAGES } from "@/lib/i18n"
 
 export default function SettingsPage() {
@@ -41,6 +42,8 @@ export default function SettingsPage() {
     "relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50 via-white to-stone-100 dark:from-[#1b1b1f] dark:via-[#121214] dark:to-[#050506] p-6 md:p-10 shadow-[0_35px_60px_-15px_rgba(16,185,129,0.35)]"
   const glassCard =
     "rounded-[24px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#151517]/90 shadow-[0_25px_70px_-45px_rgba(15,23,42,0.65)]"
+  const pageTitle = t('settings.title', { defaultValue: 'Account Settings' })
+  const pageDescription = t('settings.description', { defaultValue: 'Manage your account preferences and security settings.' })
 
   // Function to partially censor email
   const censorEmail = (email: string): string => {
@@ -264,6 +267,7 @@ export default function SettingsPage() {
   if (loading) {
     return (
       <div className="max-w-4xl mx-auto mt-8 px-4 md:px-0">
+        <PageHead title={pageTitle} description={pageDescription} path="/settings" />
         <div className="p-8 text-center text-sm opacity-60">{t('settings.loading')}</div>
       </div>
     )
@@ -271,6 +275,7 @@ export default function SettingsPage() {
 
   return (
     <div className="max-w-4xl mx-auto mt-8 px-4 md:px-0 pb-16 space-y-6">
+      <PageHead title={pageTitle} description={pageDescription} path="/settings" />
       <div className={heroCardClass}>
         <div className="absolute -right-12 top-0 h-40 w-40 rounded-full bg-emerald-200/60 dark:bg-emerald-500/10 blur-3xl" aria-hidden />
         <div className="absolute -left-16 bottom-0 h-32 w-32 rounded-full bg-emerald-100/70 dark:bg-emerald-500/5 blur-3xl" aria-hidden />

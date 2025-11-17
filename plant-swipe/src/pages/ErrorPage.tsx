@@ -5,6 +5,7 @@ import { AlertTriangle, Home, LifeBuoy } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { useLanguageNavigate } from "@/lib/i18nRouting"
+import { PageHead } from "@/components/layout/PageHead"
 
 type ErrorPageProps = {
   code?: string
@@ -30,12 +31,16 @@ export function ErrorPage({ code: providedCode }: ErrorPageProps) {
   const description = t(`errorPage.codes.${translationKey}.description`)
 
   const tips = TIP_KEYS.map((key) => t(key))
+  const canonicalPath = `/error/${encodeURIComponent(normalizedCode)}`
+  const pageTitle = `${title} – ${normalizedCode}`
+  const pageDescription = description
 
   const handleHome = () => navigate("/")
   const handleContact = () => navigate("/contact")
 
   return (
     <section className="flex min-h-[60vh] w-full items-center justify-center py-12">
+      <PageHead title={pageTitle} description={pageDescription} path={canonicalPath} type="article" />
       <div className="relative w-full max-w-3xl overflow-hidden rounded-3xl border border-white/50 bg-white/80 px-8 py-12 text-center shadow-2xl backdrop-blur dark:border-white/5 dark:bg-[#1f1f23]/80">
         <div className="absolute inset-x-6 top-6 flex justify-center">
           <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-4 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-emerald-700 dark:text-emerald-200">

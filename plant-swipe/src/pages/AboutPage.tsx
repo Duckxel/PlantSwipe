@@ -5,6 +5,7 @@ import { Link } from "@/components/i18n/Link"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
+import { PageHead } from "@/components/layout/PageHead"
 
 type PillarCard = { eyebrow: string; title: string; description: string | string[] }
 type MemberCard = {
@@ -51,8 +52,12 @@ export default function AboutPage() {
     (t("meet.order", { returnObjects: true }) as string[]) ?? Object.keys(meetMembers)
   const meetBadge = t("meet.badge")
 
+  const heroTitle = t("hero.title", { defaultValue: "Meet Aphylia" })
+  const heroSubtitle = t("hero.subtitle", { defaultValue: "We grow slow software with fast iteration for plant lovers." })
+
   return (
     <div className="max-w-5xl mx-auto mt-8 px-4 md:px-0 pb-16 space-y-12">
+      <PageHead title={heroTitle} description={heroSubtitle} path="/about" type="article" />
       <section className="relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50 via-white to-stone-100 dark:from-[#252526] dark:via-[#1e1e1e] dark:to-[#171717]">
         <div className="absolute -right-24 -top-24 h-64 w-64 rounded-full bg-emerald-200/40 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
         <div className="absolute -left-16 bottom-[-30%] h-72 w-72 rounded-full bg-emerald-100/50 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />

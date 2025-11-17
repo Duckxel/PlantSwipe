@@ -183,6 +183,13 @@ SUPABASE_DB_PASSWORD=your-db-password
 # Optional: DeepL Translation API
 DEEPL_API_KEY=your-deepl-api-key
 DEEPL_API_URL=https://api-free.deepl.com/v2/translate
+
+# SEO / Sitemap
+SITEMAP_BASE_URL=https://aphylia.com
+# Optional overrides (defaults shown)
+# SITEMAP_SITE_NAME=Aphylia
+# SITEMAP_LANGS=en,fr
+# SITEMAP_DEFAULT_LANG=en
 ```
 
 </details>
@@ -195,6 +202,7 @@ DEEPL_API_URL=https://api-free.deepl.com/v2/translate
 | **Development** | `npm run dev` | Start Vite dev server (port 5173) |
 | **API Server** | `npm run serve` | Start Express API server (port 3000) |
 | **Build** | `npm run build` | Build production bundle |
+| **Sitemap** | `npm run sitemap` | Regenerate `public/sitemap.xml` from Supabase + static routes |
 | **Preview** | `npm run preview` | Preview production build |
 | **Lint** | `npm run lint` | Run ESLint |
 | **Check Translations** | `npm run check-translations` | Validate translation files |

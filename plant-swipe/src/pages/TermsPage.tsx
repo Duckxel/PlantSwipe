@@ -2,6 +2,7 @@ import { ShieldCheck, Scale, Repeat, Info } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { PageHead } from "@/components/layout/PageHead"
 
 const sections = [
   {
@@ -29,9 +30,14 @@ const sections = [
 export default function TermsPage() {
   const { t } = useTranslation("common")
   const currentYear = new Date().getFullYear()
+  const heroTitle = t("termsPage.hero.title", { defaultValue: "Aphylia Terms of Services" })
+  const heroSubtitle = t("termsPage.hero.subtitle", {
+    defaultValue: "This summary is intentionally lightweight while we iterate quickly. By using our internal environments you agree to the guidelines below.",
+  })
 
   return (
     <div className="max-w-4xl mx-auto mt-8 px-4 pb-20 space-y-10">
+      <PageHead title={heroTitle} description={heroSubtitle} path="/terms" type="article" />
       <section className="rounded-[28px] border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1f1f1f] p-8 md:p-12 space-y-4 shadow-sm shadow-emerald-500/5">
         <Badge className="rounded-2xl px-4 py-1 w-fit bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200">
           {t("termsPage.hero.eyebrow", { defaultValue: "Internal policies" })}

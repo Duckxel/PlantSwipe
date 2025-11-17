@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { useTranslation } from "react-i18next";
 import { Flame, PartyPopper, Sparkles } from "lucide-react";
 import { isNewPlant, isPlantOfTheMonth, isPopularPlant } from "@/lib/plantHighlights";
+import { PageHead } from "@/components/layout/PageHead";
 
 interface SearchPageProps {
   plants: Plant[];
@@ -19,11 +20,17 @@ export const SearchPage: React.FC<SearchPageProps> = ({
   likedIds = [],
 }) => {
   const { t } = useTranslation("common");
+  const searchTitle = t("common.search", { defaultValue: "Search" })
+  const searchDescription = t("plant.refineFilters", {
+    defaultValue: "Refine your plant hunt with filters for color, rarity, and seasons, then dive into each card for full details.",
+  })
     const cardSurface =
       "group relative rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_35px_95px_-45px_rgba(16,185,129,0.65)]";
 
   return (
-    <div className="max-w-6xl mx-auto mt-8 px-4 md:px-0 pb-16 space-y-6">
+    <>
+      <PageHead title={searchTitle} description={searchDescription} path="/search" />
+      <div className="max-w-6xl mx-auto mt-8 px-4 md:px-0 pb-16 space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
         {plants.map((p) => {
           const highlightBadges: Array<{ key: string; label: string; className: string; icon: React.ReactNode }> = []
@@ -119,11 +126,12 @@ export const SearchPage: React.FC<SearchPageProps> = ({
           )
         })}
       </div>
-      {plants.length === 0 && (
+        {plants.length === 0 && (
         <div className="text-center py-12 rounded-[28px] border border-dashed border-stone-200 dark:border-[#3e3e42] text-sm text-stone-500 dark:text-stone-300">
           {t("plant.noResults")}
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 };

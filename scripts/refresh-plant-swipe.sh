@@ -594,21 +594,38 @@ else
   npm ci --include=dev --no-audit --no-fund --cache "$CACHE_DIR"
 fi
 
+log "Generating sitemap…"
+if [[ -n "$REPO_OWNER" ]]; then
+  if [[ $EUID -eq 0 ]]; then
+    sudo -u "$REPO_OWNER" -H npm_config_cache="$CACHE_DIR" npm run sitemap
+  elif [[ "$REPO_OWNER" != "$CURRENT_USER" && -n "$SUDO" ]]; then
+    if $SUDO -n true >/dev/null 2>&1; then
+      $SUDO -u "$REPO_OWNER" -H npm_config_cache="$CACHE_DIR" npm run sitemap
+    else
+      npm_config_cache="$CACHE_DIR" npm run sitemap
+    fi
+  else
+    npm_config_cache="$CACHE_DIR" npm run sitemap
+  fi
+else
+  npm_config_cache="$CACHE_DIR" npm run sitemap
+fi
+
 log "Building application…"
 if [[ "$REPO_OWNER" != "" ]]; then
   if [[ "$EUID" -eq 0 ]]; then
-    sudo -u "$REPO_OWNER" -H env CI=${CI:-true} npm_config_cache="$CACHE_DIR" npm run build
+    sudo -u "$REPO_OWNER" -H env CI=${CI:-true} SKIP_SITEMAP_GENERATION=1 npm_config_cache="$CACHE_DIR" npm run build
   elif [[ "$REPO_OWNER" != "$CURRENT_USER" && -n "$SUDO" ]]; then
     if $SUDO -n true >/dev/null 2>&1; then
-      $SUDO -u "$REPO_OWNER" -H env CI=${CI:-true} npm_config_cache="$CACHE_DIR" npm run build
+      $SUDO -u "$REPO_OWNER" -H env CI=${CI:-true} SKIP_SITEMAP_GENERATION=1 npm_config_cache="$CACHE_DIR" npm run build
     else
-      CI=${CI:-true} npm_config_cache="$CACHE_DIR" npm run build
+      CI=${CI:-true} SKIP_SITEMAP_GENERATION=1 npm_config_cache="$CACHE_DIR" npm run build
     fi
   else
-    CI=${CI:-true} npm_config_cache="$CACHE_DIR" npm run build
+    CI=${CI:-true} SKIP_SITEMAP_GENERATION=1 npm_config_cache="$CACHE_DIR" npm run build
   fi
 else
-  CI=${CI:-true} npm_config_cache="$CACHE_DIR" npm run build
+  CI=${CI:-true} SKIP_SITEMAP_GENERATION=1 npm_config_cache="$CACHE_DIR" npm run build
 fi
 
 # Deploy Supabase Edge Functions (delegates to dedicated script)

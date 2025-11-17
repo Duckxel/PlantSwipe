@@ -42,12 +42,17 @@ import { useTranslation } from "react-i18next";
 import { useLanguageNavigate } from "@/lib/i18nRouting";
 import { Link } from "@/components/i18n/Link";
 import { GardenListSkeleton } from "@/components/garden/GardenSkeletons";
+import { PageHead } from "@/components/layout/PageHead";
 
 export const GardenListPage: React.FC = () => {
   const { user } = useAuth();
   const { openLogin } = useAuthActions();
   const navigate = useLanguageNavigate();
   const { t } = useTranslation("common");
+  const pageTitle = t("garden.title", { defaultValue: "Gardens" });
+  const pageDescription = t("garden.createFirst", {
+    defaultValue: "Create your first garden to get started!",
+  });
   const [gardens, setGardens] = React.useState<Garden[]>([]);
   const [dragIndex, setDragIndex] = React.useState<number | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -1880,6 +1885,7 @@ export const GardenListPage: React.FC = () => {
 
   return (
     <div className="max-w-6xl mx-auto mt-8 px-4 md:px-0 pb-16">
+      <PageHead title={pageTitle} description={pageDescription} path="/gardens" />
       <div
         className={`grid grid-cols-1 ${user ? "lg:grid-cols-[minmax(0,1fr)_360px]" : ""} gap-8`}
       >

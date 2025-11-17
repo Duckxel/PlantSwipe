@@ -215,6 +215,10 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
   const [seedsAvailable] = React.useState(false)
   const [waterFreqPeriod] = React.useState<'week' | 'month' | 'year'>('week')
   const [waterFreqAmount] = React.useState<number>(1)
+  const pageTitle = t('createPlant.title', { defaultValue: 'Add plant' })
+  const pageDescription = t('createPlant.metaDescription', {
+    defaultValue: 'Create a new plant entry with translations, media, and AI-assisted fields.',
+  })
 
   const funFact = React.useMemo(() => (meta?.funFact ?? '').trim(), [meta?.funFact])
 
@@ -949,6 +953,7 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
 
   return (
     <div className="max-w-3xl mx-auto mt-8 px-4 md:px-0">
+      <PageHead title={pageTitle} description={pageDescription} path="/create" type="article" />
       <Card className="rounded-3xl">
         <CardContent className="p-6 md:p-8 space-y-4">
           <form autoComplete="off" className="space-y-4">

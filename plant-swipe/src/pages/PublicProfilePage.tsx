@@ -12,6 +12,7 @@ import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff, Flame, Sprout,
 import { useTranslation } from "react-i18next"
 import i18n from "@/lib/i18n"
 import { ProfilePageSkeleton } from "@/components/garden/GardenSkeletons"
+import { PageHead } from "@/components/layout/PageHead"
 
 type PublicProfile = {
   id: string
@@ -75,6 +76,10 @@ export default function PublicProfilePage() {
   const searchRequestRef = React.useRef(0)
   const trimmedSearchTerm = searchTerm.trim()
   const needsMoreInput = trimmedSearchTerm.length < 2
+  const canonicalPath = displayParam ? `/u/${encodeURIComponent(displayParam)}` : '/u'
+  const profileName = pp?.display_name || pp?.username || t('profile.member', { defaultValue: 'Member' })
+  const pageTitle = t('profile.metaTitle', { defaultValue: `${profileName} on Aphylia`, member: profileName })
+  const pageDescription = (pp?.bio?.trim() || t('profile.metaDescription', { defaultValue: 'See gardening stats, streaks, and highlights.' })).slice(0, 180)
   
 
   const formatLastSeen = React.useCallback((iso: string | null | undefined) => {
@@ -707,6 +712,7 @@ export default function PublicProfilePage() {
 
   return (
     <div className="max-w-5xl mx-auto mt-8 px-4 md:px-0 pb-16 space-y-6">
+      <PageHead title={pageTitle} description={pageDescription} path={canonicalPath} type="profile" />
       {user?.id && (
         <div ref={searchContainerRef} className="relative mb-6">
           <label

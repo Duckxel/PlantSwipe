@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { supabase } from "@/lib/supabaseClient"
+import { PageHead } from "@/components/layout/PageHead"
 
 const CHANNEL_EMAILS = {
   support: "support@aphylia.app",
@@ -67,10 +68,15 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
 
   const currentChannelLabel = channelOptions[selectedChannel]?.label ?? channelOptions.support.label
   const currentChannelDescription = channelOptions[selectedChannel]?.description ?? channelOptions.support.description
-    const currentEmail = CHANNEL_EMAILS[selectedChannel]
+  const currentEmail = CHANNEL_EMAILS[selectedChannel]
   const recipientCardTitle = t('contactUs.recipientCardTitle', { defaultValue: t('contactUs.supportEmail') })
   const recipientCardDescription = t('contactUs.recipientCardDescription', { defaultValue: t('contactUs.supportEmailDescription') })
-    const heroHeading = t('contactUs.heroHeading', { defaultValue: t('contactUs.title') })
+  const heroHeading = t('contactUs.heroHeading', { defaultValue: t('contactUs.title') })
+  const heroDescription = t('contactUs.description', { defaultValue: "We're here to help! Get in touch with our support team." })
+  const seoTitle = selectedChannel === "business"
+    ? `${t('contactUs.channelSelector.options.business.name', { defaultValue: "Business" })} – ${t('contactUs.title', { defaultValue: 'Contact Us' })}`
+    : `${t('contactUs.channelSelector.options.support.name', { defaultValue: "Support" })} – ${t('contactUs.title', { defaultValue: 'Contact Us' })}`
+  const canonicalPath = selectedChannel === "business" ? "/contact/business" : "/contact"
 
   const handleEmailClick = () => {
     setFormOpen(true);
@@ -227,6 +233,7 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
 
     return (
       <div className="max-w-5xl mx-auto mt-8 px-4 md:px-0 pb-16 space-y-6">
+        <PageHead title={seoTitle} description={heroDescription} path={canonicalPath} type="article" />
         <div className="relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50 via-white to-stone-100 dark:from-[#1b1b1f] dark:via-[#131314] dark:to-[#070708] p-6 md:p-10 shadow-[0_35px_60px_-15px_rgba(16,185,129,0.35)] flex flex-col gap-3">
           <div className="absolute -right-20 top-0 h-40 w-40 rounded-full bg-emerald-200/60 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
           <div className="absolute -left-16 bottom-0 h-32 w-32 rounded-full bg-emerald-100/70 dark:bg-emerald-500/5 blur-3xl" aria-hidden="true" />

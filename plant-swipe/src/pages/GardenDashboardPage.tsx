@@ -63,6 +63,7 @@ import { useTranslation } from "react-i18next";
 import { useLanguage } from "@/lib/i18nRouting";
 import { mergePlantWithTranslation } from "@/lib/plantTranslationLoader";
 import { OverviewSectionSkeleton } from "@/components/garden/GardenSkeletons";
+import { PageHead } from "@/components/layout/PageHead";
 
 type TabKey = "overview" | "plants" | "routine" | "settings";
 
@@ -2258,12 +2259,24 @@ export const GardenDashboardPage: React.FC = () => {
     ],
   );
 
+  const canonicalPath = id ? `/garden/${id}` : "/garden";
+  const seoTitle = garden?.name
+    ? `${garden.name} – ${t("gardenDashboard.title", { defaultValue: "Garden dashboard" })}`
+    : t("gardenDashboard.title", { defaultValue: "Garden dashboard" });
+  const seoDescription = t("gardenDashboard.meta.description", {
+    defaultValue: garden?.name
+      ? `Track watering streaks, member roles, and plant tasks inside ${garden.name}.`
+      : "Track watering streaks, member roles, and plant tasks inside your garden.",
+    name: garden?.name ?? "",
+  });
+
   const sidebarPanelBase =
     "md:sticky md:top-4 self-start rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 shadow-[0_25px_70px_-40px_rgba(15,23,42,0.65)]";
   const mainPanelClass =
     "min-h-[60vh] rounded-[32px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-6 md:p-8 shadow-[0_35px_95px_-45px_rgba(15,23,42,0.65)]";
   return (
     <div className="max-w-6xl mx-auto mt-8 px-4 md:px-0 pb-16 grid grid-cols-1 md:grid-cols-[220px_1fr] lg:grid-cols-[220px_1fr] gap-8">
+      <PageHead title={seoTitle} description={seoDescription} path={canonicalPath} type="article" />
       {error && <div className="p-6 text-sm text-red-600">{error}</div>}
       {loading && (
         <>

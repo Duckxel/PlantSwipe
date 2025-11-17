@@ -15,6 +15,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { User, Search, UserPlus, Check, X, ArrowUpRight } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import { PageHead } from "@/components/layout/PageHead";
 
 type FriendRequest = {
   id: string;
@@ -90,6 +91,10 @@ export const FriendsPage: React.FC = () => {
   const friendListCard =
     glassCard +
     " relative overflow-hidden shadow-[0_35px_95px_-45px_rgba(16,185,129,0.75)]";
+  const pageTitle = t("friends.pageTitle", { defaultValue: "Friends" });
+  const pageDescription = t("friends.pageDescription", {
+    defaultValue: "Manage friend requests, search fellow growers, and celebrate streaks together.",
+  });
 
   const loadFriends = React.useCallback(async () => {
     if (!user?.id) return;
@@ -599,20 +604,22 @@ export const FriendsPage: React.FC = () => {
     };
   }, [menuOpenFriendId]);
 
-  if (!user) {
+    if (!user) {
+      return (
+        <div className="max-w-6xl mx-auto mt-8 px-4 md:px-0 pb-16 space-y-6">
+          <PageHead title={pageTitle} description={pageDescription} path="/friends" />
+          <Card className={glassCard}>
+            <CardContent className="p-6 md:p-8 text-center text-sm text-stone-600 dark:text-stone-300">
+              {t("friends.pleaseLogin")}
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
+
     return (
       <div className="max-w-6xl mx-auto mt-8 px-4 md:px-0 pb-16 space-y-6">
-        <Card className={glassCard}>
-          <CardContent className="p-6 md:p-8 text-center text-sm text-stone-600 dark:text-stone-300">
-            {t("friends.pleaseLogin")}
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  return (
-    <div className="max-w-6xl mx-auto mt-8 px-4 md:px-0 pb-16 space-y-6">
+        <PageHead title={pageTitle} description={pageDescription} path="/friends" />
       <div
         className={`flex flex-col lg:grid gap-6 items-stretch ${
           pendingRequests.length > 0 || sentPendingRequests.length > 0

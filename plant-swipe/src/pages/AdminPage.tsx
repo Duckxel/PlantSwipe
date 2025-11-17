@@ -39,6 +39,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { CreatePlantPage } from "@/pages/CreatePlantPage";
+import { PageHead } from "@/components/layout/PageHead";
 import {
   Dialog,
   DialogTrigger,
@@ -122,6 +123,9 @@ export const AdminPage: React.FC = () => {
     "rounded-[20px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/92 dark:bg-[#1a1a1d]/92 backdrop-blur";
   const sidebarHeroClass =
     "relative flex flex-col flex-1 rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50 via-white to-stone-100 dark:from-[#252526] dark:via-[#1e1e1e] dark:to-[#171717] shadow-[0_35px_60px_-20px_rgba(16,185,129,0.35)]";
+  const pageTitle = "Admin dashboard";
+  const pageDescription =
+    "Monitor deployments, health checks, member activity, and moderation tooling for Aphylia.";
   const shortenMiddle = React.useCallback(
     (value: string, maxChars: number = 28): string => {
       try {
@@ -3190,8 +3194,9 @@ export const AdminPage: React.FC = () => {
     return () => clearTimeout(t);
   }, [activeTab]);
 
-  return (
-    <div className="px-4 py-6 md:px-8">
+    return (
+      <div className="px-4 py-6 md:px-8">
+        <PageHead title={pageTitle} description={pageDescription} path="/admin" />
       <div className="max-w-6xl mx-auto space-y-4 md:space-y-6">
         {/* Mobile Navigation */}
         <div className={`md:hidden ${mobileNavPanelClass}`}>

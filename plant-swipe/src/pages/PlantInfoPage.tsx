@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabaseClient'
 import { useTranslation } from 'react-i18next'
 import { useLanguage, useLanguageNavigate } from '@/lib/i18nRouting'
 import { mergePlantWithTranslation } from '@/lib/plantTranslationLoader'
+import { PageHead } from '@/components/layout/PageHead'
 
 export const PlantInfoPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
@@ -139,12 +140,50 @@ export const PlantInfoPage: React.FC = () => {
     }
   }
 
-  if (loading) return <div className="max-w-4xl mx-auto mt-8 px-4">{t('common.loading')}</div>
-  if (error) return <div className="max-w-4xl mx-auto mt-8 px-4 text-red-600 text-sm">{error}</div>
-  if (!plant) return <div className="max-w-4xl mx-auto mt-8 px-4">{t('plantInfo.plantNotFound')}</div>
+  const canonicalPath = id ? `/plants/${encodeURIComponent(id)}` : '/plants'
+  const fallbackDescription = t('plantInfo.metaDescription', {
+    defaultValue: 'Explore detailed care tips, symbolism, and photos for this plant.',
+  })
+  const pageTitle = plant?.name
+    ? t('plantInfo.metaTitle', { defaultValue: `${plant.name} plant profile`, name: plant.name })
+    : t('plantInfo.metaTitleFallback', { defaultValue: 'Plant profile' })
+  const pageDescription = (plant?.description?.trim() || fallbackDescription).slice(0, 180)
+  const heroImage = React.useMemo(() => {
+    if (!plant) return ''
+    const fromPhotos = Array.isArray(plant.photos)
+      ? plant.photos.find((photo) => photo?.isPrimary)?.url || plant.photos[0]?.url
+      : null
+    return fromPhotos || plant.image || ''
+  }, [plant?.photos, plant?.image])
+
+  if (loading) {
+    return (
+      <div className="max-w-4xl mx-auto mt-8 px-4">
+        <PageHead title={pageTitle} description={pageDescription} path={canonicalPath} image={heroImage} type="article" />
+        {t('common.loading')}
+      </div>
+    )
+  }
+  if (error) {
+    return (
+      <div className="max-w-4xl mx-auto mt-8 px-4 text-red-600 text-sm">
+        <PageHead title={pageTitle} description={pageDescription} path={canonicalPath} image={heroImage} type="article" />
+        {error}
+      </div>
+    )
+  }
+  if (!plant) {
+    return (
+      <div className="max-w-4xl mx-auto mt-8 px-4">
+        <PageHead title={pageTitle} description={pageDescription} path={canonicalPath} image={heroImage} type="article" />
+        {t('plantInfo.plantNotFound')}
+      </div>
+    )
+  }
 
   return (
     <div className="max-w-6xl mx-auto mt-6 px-4 lg:px-6 pb-14">
+      <PageHead title={pageTitle} description={pageDescription} path={canonicalPath} image={heroImage} type="article" />
       <PlantDetails
         plant={plant}
         onClose={handleClose}
