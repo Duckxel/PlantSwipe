@@ -85,6 +85,24 @@ export function ServiceWorkerToast() {
   }
 
   React.useEffect(() => {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
+    let mounted = true
+    navigator.serviceWorker
+      .getRegistration()
+      .then((registration) => {
+        if (!mounted) return
+        if (registration?.waiting) {
+          setNeedRefreshFlag(true)
+          setRefreshDismissed(false)
+        }
+      })
+      .catch(() => {})
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  React.useEffect(() => {
     if (offlineReadyFlag && !readyAcknowledged && !isOffline) {
       setMode('ready')
       setVisible(true)
