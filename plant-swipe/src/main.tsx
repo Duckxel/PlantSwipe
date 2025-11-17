@@ -41,6 +41,15 @@ try {
 
 try { initWindowControlsOverlay() } catch {}
 
+if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker
+      .getRegistration()
+      .then((registration) => registration?.update().catch(() => {}))
+      .catch(() => {})
+  })
+}
+
 createRoot(document.getElementById('root')!).render(
   <App />,
 )
