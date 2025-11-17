@@ -240,6 +240,10 @@ class BroadcastStore {
 
 export const broadcastStore = new BroadcastStore()
 
+if (typeof window !== 'undefined') {
+  broadcastStore.start()
+}
+
 export function applyBroadcastPayload(payload: any, options?: { emitSeed?: boolean }) {
   broadcastStore.applyServerPayload(payload, options)
 }
