@@ -398,7 +398,7 @@ const PlantMetaRail: React.FC<{ plant: Plant; variant: "sidebar" | "inline" }> =
 
   if (variant === "inline") {
     return (
-      <div className="flex flex-wrap gap-3 justify-between">
+      <div className="flex flex-wrap items-center justify-end gap-3">
         {items.map((item) => (
           <IndicatorPill
             key={item.key}
@@ -461,6 +461,7 @@ interface IndicatorPillProps {
 const IndicatorPill: React.FC<IndicatorPillProps> = ({ item, active, onActivate, onDeactivate, supportsHover, variant }) => {
   const isColorVariant = item.variant === "color" && (item.colors?.length ?? 0) > 0
   const ariaLabel = `${item.description ?? ""}${item.description ? ": " : ""}${item.ariaValue ?? item.label}`.trim()
+  const isSidebarVariant = variant === "sidebar"
 
   const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation()
@@ -471,25 +472,21 @@ const IndicatorPill: React.FC<IndicatorPillProps> = ({ item, active, onActivate,
     }
   }
 
-  const detailBaseClass =
-    variant === "sidebar"
-      ? "mr-3 rounded-2xl border border-white/15 bg-black/70 px-3 py-2 text-left shadow-xl backdrop-blur-md"
-      : "mb-2 w-full rounded-2xl border border-white/15 bg-black/70 px-3 py-2 text-left shadow-xl backdrop-blur-md order-first"
+  const detailBaseClass = cn(
+    "rounded-2xl border border-white/15 bg-black/70 px-3 py-2 text-left shadow-xl backdrop-blur-md",
+    isSidebarVariant ? "mr-3" : "mr-2",
+  )
 
-  const detailWidthClass =
-    variant === "sidebar"
-      ? isColorVariant
-        ? "max-w-[240px]"
-        : "max-w-[220px]"
-      : "max-w-none"
+  const detailWidthClass = isSidebarVariant
+    ? isColorVariant
+      ? "max-w-[240px]"
+      : "max-w-[220px]"
+    : "max-w-[min(260px,calc(100vw-5rem))]"
 
-  const detailMotionProps =
-    variant === "sidebar"
-      ? { initial: { opacity: 0, x: 16 }, animate: { opacity: 1, x: 0 }, exit: { opacity: 0, x: 16 } }
-      : { initial: { opacity: 0, y: -8 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -8 } }
+  const detailMotionProps = { initial: { opacity: 0, x: 16 }, animate: { opacity: 1, x: 0 }, exit: { opacity: 0, x: 16 } }
 
   return (
-    <div className={cn("pointer-events-auto", variant === "inline" && "flex-1 basis-[calc(50%-0.75rem)] min-w-[120px]")}>
+    <div className={cn("pointer-events-auto", !isSidebarVariant && "basis-auto")}>
       <button
         type="button"
         aria-label={ariaLabel || undefined}
@@ -503,7 +500,7 @@ const IndicatorPill: React.FC<IndicatorPillProps> = ({ item, active, onActivate,
         onPointerDown={(event) => event.stopPropagation()}
         className={cn(
           "group relative flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white/80 focus-visible:ring-offset-transparent",
-          variant === "inline" ? "flex-col gap-2" : "",
+          !isSidebarVariant && "justify-end",
         )}
       >
         <AnimatePresence>
