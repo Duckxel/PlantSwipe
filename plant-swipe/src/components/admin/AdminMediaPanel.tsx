@@ -115,7 +115,13 @@ export const AdminMediaPanel: React.FC<AdminMediaPanelProps> = ({
         const headers: Record<string, string> = { Accept: "application/json" }
         if (token) headers["Authorization"] = `Bearer ${token}`
         if (adminToken) headers["X-Admin-Token"] = String(adminToken)
-        const resp = await fetch("/api/admin/media?limit=100", {
+        const params = new URLSearchParams({ limit: "100" })
+        const bucketParam =
+          normalizedFilterBuckets && normalizedFilterBuckets.length === 1
+            ? normalizedFilterBuckets[0]
+            : null
+        if (bucketParam) params.set("bucket", bucketParam)
+        const resp = await fetch(`/api/admin/media?${params.toString()}`, {
           method: "GET",
           headers,
           credentials: "same-origin",
@@ -135,12 +141,12 @@ export const AdminMediaPanel: React.FC<AdminMediaPanelProps> = ({
         setLoading(false)
       }
     },
-    [adminToken],
+    [adminToken, normalizedFilterBuckets],
   )
 
-  React.useEffect(() => {
-    fetchMedia().catch(() => {})
-  }, [fetchMedia])
+    React.useEffect(() => {
+      fetchMedia().catch(() => {})
+    }, [fetchMedia])
 
   const handleDelete = React.useCallback(
     async (entry: MediaEntry) => {

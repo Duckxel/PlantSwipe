@@ -3253,6 +3253,15 @@ app.get('/api/admin/media', async (req, res) => {
 
   const limitParam = Number.parseInt(String(req.query?.limit || ''), 10)
   const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 200) : 50
+  const bucketParamRaw =
+    typeof req.query?.bucket === 'string'
+      ? String(req.query.bucket).trim().toLowerCase()
+      : null
+  const gardenBucketName = gardenCoverUploadBucket
+    ? gardenCoverUploadBucket.toLowerCase()
+    : null
+  const includeGardenCovers =
+    !bucketParamRaw || (gardenBucketName && bucketParamRaw === gardenBucketName)
 
   try {
     let rows = []
@@ -3274,9 +3283,14 @@ app.get('/api/admin/media', async (req, res) => {
       return
     }
 
-    const media = (rows || [])
+    let media = (rows || [])
       .map((row) => normalizeAdminMediaRow(row))
       .filter(Boolean)
+    if (bucketParamRaw) {
+      media = media.filter(
+        (item) => (item?.bucket || '').toLowerCase() === bucketParamRaw,
+      )
+    }
 
     const seenKeys = new Set(
       media
@@ -3284,14 +3298,17 @@ app.get('/api/admin/media', async (req, res) => {
         .map((item) => `${item.bucket}/${item.path}`.toLowerCase()),
     )
 
-    let gardenMedia = []
-    try {
-      gardenMedia = await syncGardenCoverMedia(seenKeys, limit)
-    } catch (coverErr) {
-      console.error('[media] failed to sync garden cover uploads', coverErr)
+    let combined = [...media]
+    if (includeGardenCovers) {
+      try {
+        const gardenMedia = await syncGardenCoverMedia(seenKeys, limit)
+        combined = combined.concat(gardenMedia.filter(Boolean))
+      } catch (coverErr) {
+        console.error('[media] failed to sync garden cover uploads', coverErr)
+      }
     }
+    combined = combined.filter(Boolean)
 
-    const combined = [...media, ...gardenMedia].filter(Boolean)
     combined.sort((a, b) => {
       const aTime = a?.createdAt ? Date.parse(a.createdAt) : 0
       const bTime = b?.createdAt ? Date.parse(b.createdAt) : 0
