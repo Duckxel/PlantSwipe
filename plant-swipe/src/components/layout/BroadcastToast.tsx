@@ -120,7 +120,8 @@ function formatRemainingDuration(ms: number): string {
 
 function loadSeededBroadcast(nowMs: number): Broadcast | null {
   try {
-    const seed = (globalThis as any)?.__BROADCAST__
+    const seedSource = (globalThis as any)
+    const seed = seedSource?.__LAST_BROADCAST_SEED__ ?? seedSource?.__BROADCAST__
     if (!seed || typeof seed !== 'object') return null
     const next = normalizeBroadcast(seed)
     const remaining = msRemaining(next.expiresAt, nowMs)
@@ -196,6 +197,34 @@ const BroadcastToast: React.FC = () => {
       savePersistedBroadcast(seeded)
     }
   }, [])
+
+  React.useEffect(() => {
+    if (broadcast) return
+    let cancelled = false
+    let attempts = 0
+    const MAX_ATTEMPTS = 25
+    const retry = () => {
+      if (cancelled) return
+      const seeded = loadSeededBroadcast(Date.now())
+      if (seeded) {
+        setBroadcast(seeded)
+        savePersistedBroadcast(seeded)
+        return
+      }
+      const persisted = loadPersistedBroadcast(Date.now())
+      if (persisted) {
+        setBroadcast(persisted)
+        savePersistedBroadcast(persisted)
+        return
+      }
+      attempts += 1
+      if (attempts < MAX_ATTEMPTS) {
+        window.setTimeout(retry, 200)
+      }
+    }
+    retry()
+    return () => { cancelled = true }
+  }, [broadcast])
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return

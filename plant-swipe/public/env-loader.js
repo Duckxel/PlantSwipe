@@ -67,6 +67,7 @@
       }
 
       function emitBroadcastSeed(payload) {
+        try { window.__LAST_BROADCAST_SEED__ = payload ?? null } catch {}
         try {
           window.dispatchEvent(new CustomEvent('plantswipe:broadcastSeed', { detail: payload ?? null }))
         } catch {}
@@ -78,9 +79,11 @@
           var payload = window.__BROADCAST__
           if (payload && typeof payload === 'object') {
             localStorage.setItem('plantswipe.broadcast.active', JSON.stringify(payload))
+            try { window.__LAST_BROADCAST_SEED__ = payload } catch {}
             return payload
           } else {
             localStorage.removeItem('plantswipe.broadcast.active')
+            try { window.__LAST_BROADCAST_SEED__ = null } catch {}
             return null
           }
         } catch {
@@ -106,7 +109,10 @@
                 }
                 injectInline(txt)
                 var seeded = syncBroadcastFromWindow()
-                if (seeded !== undefined) emitBroadcastSeed(seeded)
+                if (seeded !== undefined) {
+                  emitBroadcastSeed(seeded)
+                  setTimeout(function () { emitBroadcastSeed(seeded) }, 0)
+                }
                 setTimeout(function () {
                   onDone(window.__ENV__ && typeof window.__ENV__ === 'object')
                 }, 0)
