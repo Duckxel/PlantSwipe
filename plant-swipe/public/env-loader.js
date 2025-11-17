@@ -41,30 +41,42 @@
       return (cleanBase + cleanResource).replace(/\/{2,}/g, '/')
     }
 
-    var candidates = []
-    function pushCandidate(url) {
-      if (!url) return
-      if (candidates.indexOf(url) === -1) {
-        candidates.push(url)
+      var candidates = []
+      function pushCandidate(url) {
+        if (!url) return
+        if (candidates.indexOf(url) === -1) {
+          candidates.push(url)
+        }
       }
-    }
 
-    pushCandidate(join(basePath, 'api/env.js'))
-    pushCandidate('/api/env.js')
-    pushCandidate(join(basePath, 'env.js'))
-    pushCandidate('/env.js')
+      pushCandidate(join(basePath, 'api/env.js'))
+      pushCandidate('/api/env.js')
+      pushCandidate(join(basePath, 'env.js'))
+      pushCandidate('/env.js')
 
-    function isProbablyHtml(text) {
-      if (!text) return false
-      var t = text.trim().slice(0, 200).toLowerCase()
-      return t.startsWith('<!doctype') || t.startsWith('<html') || t.includes('<head') || t.includes('<body')
-    }
+      function isProbablyHtml(text) {
+        if (!text) return false
+        var t = text.trim().slice(0, 200).toLowerCase()
+        return t.startsWith('<!doctype') || t.startsWith('<html') || t.includes('<head') || t.includes('<body')
+      }
 
-    function injectInline(jsText) {
-      var s = document.createElement('script')
-      s.text = jsText
-      document.head.appendChild(s)
-    }
+      function injectInline(jsText) {
+        var s = document.createElement('script')
+        s.text = jsText
+        document.head.appendChild(s)
+      }
+
+      function syncBroadcastFromWindow() {
+        try {
+          if (typeof window.__BROADCAST__ === 'undefined') return
+          var payload = window.__BROADCAST__
+          if (payload && typeof payload === 'object') {
+            localStorage.setItem('plantswipe.broadcast.active', JSON.stringify(payload))
+          } else {
+            localStorage.removeItem('plantswipe.broadcast.active')
+          }
+        } catch {}
+      }
 
     function setEmptyEnv() {
       if (!window.__ENV__) {
@@ -77,16 +89,17 @@
         fetch(url, { cache: 'no-store', credentials: 'same-origin' })
           .then(function (res) {
             if (!res.ok) throw new Error('status ' + res.status)
-            var ct = (res.headers.get('content-type') || '').toLowerCase()
-            return res.text().then(function (txt) {
-              if (isProbablyHtml(txt) || (ct && ct.includes('text/html'))) {
-                throw new Error('html response for ' + url)
-              }
-              injectInline(txt)
-              setTimeout(function () {
-                onDone(window.__ENV__ && typeof window.__ENV__ === 'object')
-              }, 0)
-            })
+              var ct = (res.headers.get('content-type') || '').toLowerCase()
+              return res.text().then(function (txt) {
+                if (isProbablyHtml(txt) || (ct && ct.includes('text/html'))) {
+                  throw new Error('html response for ' + url)
+                }
+                injectInline(txt)
+                syncBroadcastFromWindow()
+                setTimeout(function () {
+                  onDone(window.__ENV__ && typeof window.__ENV__ === 'object')
+                }, 0)
+              })
           })
           .catch(function () { onDone(false) })
       } catch (e) { onDone(false) }

@@ -1711,7 +1711,7 @@ app.get('/api/health/db', async (_req, res) => {
 // Runtime environment injector for client (exposes safe VITE_* only)
 // Serve on both /api/env.js and /env.js to be resilient to proxy rules.
 // Some static hosts might hijack /env.js and serve index.html; prefer /api/env.js in index.html.
-app.get(['/api/env.js', '/env.js'], (_req, res) => {
+app.get(['/api/env.js', '/env.js'], async (_req, res) => {
   try {
     const disablePwaEnv = String(process.env.VITE_DISABLE_PWA || process.env.DISABLE_PWA || process.env.PWA_DISABLED || '').trim()
     const env = {
@@ -1721,14 +1721,36 @@ app.get(['/api/env.js', '/env.js'], (_req, res) => {
       VITE_ADMIN_PUBLIC_MODE: String(process.env.VITE_ADMIN_PUBLIC_MODE || process.env.ADMIN_PUBLIC_MODE || '').toLowerCase() === 'true',
       VITE_DISABLE_PWA: disablePwaEnv,
     }
-    const js = `window.__ENV__ = ${JSON.stringify(env).replace(/</g, '\\u003c')};\n`
+
+    let broadcast = null
+    try {
+      const row = await getActiveBroadcastRow()
+      if (row) {
+        broadcast = {
+          id: String(row.id || ''),
+          message: String(row.message || ''),
+          severity: String(row.severity || 'info'),
+          createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
+          expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
+          createdBy: row.created_by ? String(row.created_by) : null,
+          adminName: row.admin_name ? String(row.admin_name) : null,
+        }
+      }
+    } catch {}
+
+    const serialize = (value) => JSON.stringify(value ?? null).replace(/</g, '\\u003c')
+    const js = [
+      `window.__ENV__ = ${serialize(env)};`,
+      `window.__BROADCAST__ = ${serialize(broadcast)};`,
+    ].join('\n')
+
     res.setHeader('Content-Type', 'application/javascript; charset=utf-8')
     res.setHeader('Cache-Control', 'no-store')
     res.send(js)
   } catch (e) {
     res.setHeader('Content-Type', 'application/javascript; charset=utf-8')
     res.setHeader('Cache-Control', 'no-store')
-    res.send('window.__ENV__ = {}')
+    res.send('window.__ENV__ = {}; window.__BROADCAST__ = null;')
   }
 })
 
