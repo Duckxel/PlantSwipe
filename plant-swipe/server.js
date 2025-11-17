@@ -1325,12 +1325,12 @@ async function syncGardenCoverMedia(existingKeys, limit = 200) {
         select
           g.id::text as id,
           g.name,
-          g.owner_id::text as owner_id,
+          g.created_by::text as owner_id,
           g.cover_image_url,
           coalesce(g.updated_at, g.created_at, now()) as updated_at,
           p.display_name as owner_name
         from public.gardens g
-        left join public.profiles p on p.id = g.owner_id
+        left join public.profiles p on p.id = g.created_by
         where g.cover_image_url is not null
         order by coalesce(g.updated_at, g.created_at, now()) desc
         limit ${limit}
@@ -1339,7 +1339,7 @@ async function syncGardenCoverMedia(existingKeys, limit = 200) {
       const { data, error } = await supabaseServiceClient
         .from('gardens')
         .select(
-          'id, name, owner_id, cover_image_url, updated_at, created_at, owner:profiles(display_name)'
+          'id, name, created_by, cover_image_url, updated_at, created_at, owner:profiles(display_name)'
         )
         .not('cover_image_url', 'is', null)
         .order('created_at', { ascending: false })
@@ -1368,6 +1368,12 @@ async function syncGardenCoverMedia(existingKeys, limit = 200) {
     }
     const key = parsed.bucket && parsed.path ? `${parsed.bucket}/${parsed.path}`.toLowerCase() : null
     if (!key || existingKeys.has(key)) continue
+    const ownerId =
+      row.owner_id ||
+      row.ownerId ||
+      row.created_by ||
+      row.createdBy ||
+      null
     const ownerName =
       row.owner_name ||
       (row.owner && (row.owner.display_name || row.owner.displayName)) ||
@@ -1379,7 +1385,7 @@ async function syncGardenCoverMedia(existingKeys, limit = 200) {
       row.createdAt ||
       null
     const recorded = await recordAdminMediaUpload({
-      adminId: row.owner_id || row.ownerId || null,
+      adminId: ownerId,
       adminEmail: null,
       adminName: ownerName,
       bucket: parsed.bucket,
@@ -6422,7 +6428,7 @@ async function isGardenOwner(req, gardenId, userIdOverride = null) {
 async function getGardenCoverRow(gardenId) {
   if (sql) {
     const rows = await sql`
-      select id::text as id, cover_image_url, name, owner_id::text as owner_id
+      select id::text as id, cover_image_url, name, created_by::text as owner_id
       from public.gardens
       where id = ${gardenId}
       limit 1
@@ -6432,11 +6438,11 @@ async function getGardenCoverRow(gardenId) {
   if (supabaseServiceClient) {
     const { data, error } = await supabaseServiceClient
       .from('gardens')
-      .select('id, cover_image_url, name, owner_id')
+      .select('id, cover_image_url, name, created_by')
       .eq('id', gardenId)
       .maybeSingle()
     if (error) throw error
-    return data
+    return data ? { ...data, owner_id: data.created_by } : null
   }
   return null
 }
