@@ -348,10 +348,47 @@ const EmptyState = ({ onReset }: { onReset: () => void }) => {
   )
 }
 
+const useSupportsHover = () => {
+  const [supportsHover, setSupportsHover] = React.useState<boolean>(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return true
+    }
+    return window.matchMedia("(hover: hover) and (pointer: fine)").matches
+  })
+
+  React.useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return
+    }
+
+    const mediaQuery = window.matchMedia("(hover: hover) and (pointer: fine)")
+    const handleChange = (event: MediaQueryListEvent) => {
+      setSupportsHover(event.matches)
+    }
+
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", handleChange)
+    } else if (typeof mediaQuery.addListener === "function") {
+      mediaQuery.addListener(handleChange)
+    }
+
+    return () => {
+      if (typeof mediaQuery.removeEventListener === "function") {
+        mediaQuery.removeEventListener("change", handleChange)
+      } else if (typeof mediaQuery.removeListener === "function") {
+        mediaQuery.removeListener(handleChange)
+      }
+    }
+  }, [])
+
+  return supportsHover
+}
+
 const PlantMetaRail: React.FC<{ plant: Plant; variant: "sidebar" | "inline" }> = ({ plant, variant }) => {
   const { t } = useTranslation("common")
   const [activeKey, setActiveKey] = React.useState<string | null>(null)
   const items = React.useMemo(() => buildIndicatorItems(plant, t), [plant, t])
+  const supportsHover = useSupportsHover()
 
   React.useEffect(() => {
     setActiveKey(null)
@@ -378,6 +415,7 @@ const PlantMetaRail: React.FC<{ plant: Plant; variant: "sidebar" | "inline" }> =
           active={activeKey === item.key}
           onActivate={() => setActiveKey(item.key)}
           onDeactivate={() => setActiveKey((prev) => (prev === item.key ? null : prev))}
+          supportsHover={supportsHover}
         />
       ))}
     </div>
@@ -407,6 +445,7 @@ interface IndicatorPillProps {
   active: boolean
   onActivate: () => void
   onDeactivate: () => void
+  supportsHover: boolean
 }
 
 const InlineIndicatorCard: React.FC<{ item: IndicatorItem }> = ({ item }) => {
@@ -462,7 +501,7 @@ const InlineIndicatorCard: React.FC<{ item: IndicatorItem }> = ({ item }) => {
   )
 }
 
-const IndicatorPill: React.FC<IndicatorPillProps> = ({ item, active, onActivate, onDeactivate }) => {
+const IndicatorPill: React.FC<IndicatorPillProps> = ({ item, active, onActivate, onDeactivate, supportsHover }) => {
   const isColorVariant = item.variant === "color" && (item.colors?.length ?? 0) > 0
   const ariaLabel = `${item.description ?? ""}${item.description ? ": " : ""}${item.ariaValue ?? item.label}`.trim()
 
@@ -482,8 +521,8 @@ const IndicatorPill: React.FC<IndicatorPillProps> = ({ item, active, onActivate,
         aria-label={ariaLabel || undefined}
         aria-expanded={active}
         aria-pressed={active}
-        onMouseEnter={onActivate}
-        onMouseLeave={onDeactivate}
+        onMouseEnter={supportsHover ? onActivate : undefined}
+        onMouseLeave={supportsHover ? onDeactivate : undefined}
         onFocus={onActivate}
         onBlur={onDeactivate}
         onClick={handleClick}
