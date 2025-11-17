@@ -326,9 +326,7 @@ const BroadcastToast: React.FC = () => {
     }
   }, [broadcast?.expiresAt, now])
 
-  if (!broadcast) return null
-
-  const severity = broadcast.severity === 'warning' || broadcast.severity === 'danger' ? broadcast.severity : 'info'
+  const severity = (broadcast?.severity === 'warning' || broadcast?.severity === 'danger') ? broadcast.severity : 'info'
   const severityLabel = severity === 'warning' ? 'Warning' : severity === 'danger' ? 'Danger' : 'Information'
   const severityPalette = React.useMemo(() => {
     if (severity === 'warning') {
@@ -354,11 +352,13 @@ const BroadcastToast: React.FC = () => {
 
   const IconComp = severity === 'warning' ? AlertTriangle : severity === 'danger' ? XCircle : Info
   const expiresInLabel = React.useMemo(() => {
-    if (!broadcast.expiresAt) return null
+    if (!broadcast?.expiresAt) return null
     const remaining = msRemaining(broadcast.expiresAt, now)
     if (remaining === null || remaining <= 0) return null
     return formatRemainingDuration(remaining)
-  }, [broadcast.expiresAt, now])
+  }, [broadcast?.expiresAt, now])
+
+  if (!broadcast) return null
 
   const handleCycle = (e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault()
