@@ -398,7 +398,7 @@ const PlantMetaRail: React.FC<{ plant: Plant; variant: "sidebar" | "inline" }> =
 
   if (variant === "inline") {
     return (
-      <div className="flex flex-wrap items-center justify-end gap-3">
+      <div className="flex flex-col items-end gap-2">
         {items.map((item) => (
           <IndicatorPill
             key={item.key}
