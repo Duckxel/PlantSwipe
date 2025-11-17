@@ -2,8 +2,8 @@ import React from 'react'
 import { Info, AlertTriangle, XCircle } from 'lucide-react'
 import { useTheme } from '@/context/ThemeContext'
 import { cn } from '@/lib/utils'
+import type { BroadcastMessage } from '@/lib/broadcasts'
 import {
-  BroadcastMessage,
   loadPersistedBroadcast,
   loadSeededBroadcast,
   msRemaining,

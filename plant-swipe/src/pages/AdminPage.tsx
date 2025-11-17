@@ -12,8 +12,8 @@ import { AdminMediaPanel } from "@/components/admin/AdminMediaPanel";
 import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
 import { getAccentOption } from "@/lib/accent";
+import type { BroadcastMessage } from "@/lib/broadcasts";
 import {
-  BroadcastMessage,
   loadPersistedBroadcast,
   loadSeededBroadcast,
   msRemaining as broadcastMsRemaining,
