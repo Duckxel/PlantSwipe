@@ -12,15 +12,8 @@ import { AdminMediaPanel } from "@/components/admin/AdminMediaPanel";
 import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
 import { getAccentOption } from "@/lib/accent";
-import type { BroadcastMessage } from "@/lib/broadcasts";
-import {
-  loadPersistedBroadcast,
-  loadSeededBroadcast,
-  msRemaining as broadcastMsRemaining,
-  normalizeBroadcast as normalizeBroadcastMessage,
-  persistBroadcast,
-  seedBroadcastInWindow,
-} from "@/lib/broadcasts";
+import { msRemaining as broadcastMsRemaining } from "@/lib/broadcasts";
+import { useBroadcastActions, useBroadcastState } from "@/hooks/useBroadcastState";
 // Re-export for convenience
 import {
   RefreshCw,
@@ -6413,25 +6406,18 @@ export const AdminPage: React.FC = () => {
 );
 };
 
-type BroadcastState = BroadcastMessage;
-
 // --- Broadcast controls (Overview tab) ---
 const BroadcastControls: React.FC<{
   inline?: boolean;
   onExpired?: () => void;
   onActive?: () => void;
 }> = ({ inline = false, onExpired, onActive }) => {
-  const [active, setActive] = React.useState<BroadcastState | null>(() => {
-    const seeded = loadSeededBroadcast();
-    if (seeded) return seeded;
-    return loadPersistedBroadcast();
-  });
-  const [message, setMessage] = React.useState(
-    () => active?.message ?? "",
-  );
+  const { broadcast: active, ready } = useBroadcastState();
+  const { applyServerPayload } = useBroadcastActions();
+  const [message, setMessage] = React.useState("");
   // Default to warning requested, but server/UI sometimes using info; keep 'warning' default selectable
   const [severity, setSeverity] = React.useState<"info" | "warning" | "danger">(
-    () => active?.severity ?? "warning",
+    "warning",
   );
   // Duration selector (default 5 minutes for send; empty string keeps current on edit)
   const [duration, setDuration] = React.useState<string>("5m");
@@ -6439,55 +6425,40 @@ const BroadcastControls: React.FC<{
   const [submitting, setSubmitting] = React.useState(false);
   const [removing, setRemoving] = React.useState(false);
   const [now, setNow] = React.useState(() => Date.now());
-  // Prevent flashing the create UI before we know if an active broadcast exists
-  const [initializing, setInitializing] = React.useState(true);
-
-  // Default duration behavior:
-  // - Create mode (no active): default to 5m
-  // - Edit mode (active): default to "Keep current" (empty string) so we don't override
-  React.useEffect(() => {
-    setDuration(active ? "" : "5m");
-  }, [active]);
 
   React.useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
 
+  React.useEffect(() => {
+    if (!active) {
+      setSeverity("warning");
+      setDuration("5m");
+      return;
+    }
+    setSeverity(active.severity ?? "info");
+    setDuration("");
+  }, [active]);
+
+  React.useEffect(() => {
+    if (!active) return;
+    setMessage((prev) =>
+      prev && prev.trim().length > 0 ? prev : active.message,
+    );
+  }, [active]);
+
+  React.useEffect(() => {
+    if (!ready) return;
+    if (active) onActive?.();
+    else onExpired?.();
+  }, [active, ready, onActive, onExpired]);
+
   const msRemaining = React.useCallback(
     (expiresAt: string | null): number | null => {
       return broadcastMsRemaining(expiresAt, now);
     },
     [now],
-  );
-
-  const applyBroadcastState = React.useCallback(
-    (
-      raw: any | null,
-      {
-        notifyParent = true,
-        propagate = false,
-        primeInputs = true,
-      }: { notifyParent?: boolean; propagate?: boolean; primeInputs?: boolean } = {},
-    ): BroadcastState | null => {
-      const next = raw ? normalizeBroadcastMessage(raw) : null;
-      setActive(next);
-      persistBroadcast(next);
-      if (propagate) seedBroadcastInWindow(next);
-      if (next) {
-        if (primeInputs) {
-          setMessage((prev) =>
-            prev && prev.trim().length > 0 ? prev : next.message || "",
-          );
-          setSeverity(next.severity ?? "info");
-        }
-        if (notifyParent) onActive?.();
-      } else if (notifyParent) {
-        onExpired?.();
-      }
-      return next;
-    },
-    [onActive, onExpired],
   );
 
   const formatDuration = (ms: number): string => {
@@ -6503,81 +6474,7 @@ const BroadcastControls: React.FC<{
     return `${s}s`;
   };
 
-  const loadActive = React.useCallback(async () => {
-    try {
-      const r = await fetch("/api/broadcast/active", {
-        headers: { Accept: "application/json" },
-        credentials: "same-origin",
-        cache: "no-store",
-      });
-      if (r.ok) {
-        const b = await r.json().catch(() => ({}));
-        applyBroadcastState(b?.broadcast ?? null);
-      }
-    } catch {
-    } finally {
-      setInitializing(false);
-    }
-  }, [applyBroadcastState]);
-
-  // On load, if an active message exists, go straight to edit mode
-  React.useEffect(() => {
-    loadActive();
-  }, [loadActive]);
-
-  // Live updates via SSE to keep admin panel in sync with user toasts
-  React.useEffect(() => {
-    let es: EventSource | null = null;
-    try {
-      es = new EventSource("/api/broadcast/stream", { withCredentials: true });
-      es.addEventListener("broadcast", (ev: MessageEvent) => {
-        try {
-          const data =
-            typeof ev.data === "string" ? JSON.parse(ev.data) : ev.data;
-          applyBroadcastState(data);
-        } catch {}
-      });
-      es.addEventListener("clear", () => {
-        applyBroadcastState(null);
-      });
-    } catch {}
-    return () => {
-      try {
-        es?.close();
-      } catch {}
-    };
-  }, [applyBroadcastState]);
-
-    React.useEffect(() => {
-      if (typeof window === "undefined") return;
-      const handleSeed = (event: Event) => {
-        const detail = (event as CustomEvent)?.detail;
-        applyBroadcastState(detail);
-      };
-      window.addEventListener(
-        "plantswipe:broadcastSeed",
-        handleSeed as EventListener,
-      );
-      return () =>
-        window.removeEventListener(
-          "plantswipe:broadcastSeed",
-          handleSeed as EventListener,
-        );
-    }, [applyBroadcastState]);
-
-  // When current broadcast expires, revert to create form and notify parent (to re-open section)
-    React.useEffect(() => {
-      if (!active?.expiresAt) return;
-      const remain = msRemaining(active.expiresAt);
-      if (remain === null) return;
-      const id = window.setTimeout(
-        () => {
-          applyBroadcastState(null);
-        },
-        Math.max(0, remain),
-      );
-      return () => window.clearTimeout(id);
-    }, [active?.expiresAt, applyBroadcastState, msRemaining]);
+  const initializing = !ready;
 
   const onSubmit = React.useCallback(async () => {
     if (submitting) return;
@@ -6624,10 +6521,7 @@ const BroadcastControls: React.FC<{
       });
       const b = await resp.json().catch(() => ({}));
       if (!resp.ok) throw new Error(b?.error || `HTTP ${resp.status}`);
-      applyBroadcastState(b?.broadcast ?? null, {
-        propagate: true,
-        primeInputs: false,
-      });
+      applyServerPayload(b?.broadcast ?? null, { emitSeed: true });
       setMessage("");
       setSeverity("warning");
     } catch (e) {
@@ -6635,13 +6529,7 @@ const BroadcastControls: React.FC<{
     } finally {
       setSubmitting(false);
     }
-  }, [
-    applyBroadcastState,
-    duration,
-    message,
-    severity,
-    submitting,
-  ]);
+  }, [applyServerPayload, duration, message, severity, submitting]);
 
   const onRemove = React.useCallback(async () => {
     if (removing) return;
@@ -6663,13 +6551,13 @@ const BroadcastControls: React.FC<{
       });
       const b = await resp.json().catch(() => ({}));
       if (!resp.ok) throw new Error(b?.error || `HTTP ${resp.status}`);
-      applyBroadcastState(null, { propagate: true });
+      applyServerPayload(null, { emitSeed: true });
     } catch (e) {
       alert((e as Error)?.message || "Failed to remove broadcast");
     } finally {
       setRemoving(false);
     }
-  }, [applyBroadcastState, removing]);
+  }, [applyServerPayload, removing]);
 
   const onUpdateBroadcast = React.useCallback(async () => {
     if (!active) return;
@@ -6714,12 +6602,12 @@ const BroadcastControls: React.FC<{
       });
       const b = await resp.json().catch(() => ({}));
       if (!resp.ok) throw new Error(b?.error || `HTTP ${resp.status}`);
-      applyBroadcastState(b?.broadcast ?? null, { propagate: true });
+      applyServerPayload(b?.broadcast ?? null, { emitSeed: true });
       setMessage("");
     } catch (e) {
       alert((e as Error)?.message || "Failed to update broadcast");
     }
-  }, [active, applyBroadcastState, duration, message, severity]);
+  }, [active, applyServerPayload, duration, message, severity]);
 
   // Duration selection removed; default send duration is 5 minutes
 
