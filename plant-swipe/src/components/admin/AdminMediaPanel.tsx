@@ -149,10 +149,14 @@ export const AdminMediaPanel: React.FC<AdminMediaPanelProps> = ({
     }, [fetchMedia])
 
   const handleDelete = React.useCallback(
-    async (entry: MediaEntry) => {
+      async (entry: MediaEntry) => {
+        const storageName =
+          entry.metadata?.storageName ||
+          entry.metadata?.displayName ||
+          entry.path
       if (
         !window.confirm(
-          `Delete "${entry.metadata?.originalName || entry.path}"?\nThis will remove the optimized file from storage.`,
+            `Delete "${storageName}"?\nThis will remove the optimized file from storage.`,
         )
       ) {
         return
@@ -266,10 +270,11 @@ export const AdminMediaPanel: React.FC<AdminMediaPanelProps> = ({
             ) : (
               <div className="space-y-4">
                 {visibleEntries.map((entry) => {
-                const fileName =
-                  entry.metadata?.originalName ||
-                  entry.path.split("/").filter(Boolean).pop() ||
-                  entry.path
+                  const storageName =
+                    entry.metadata?.storageName ||
+                    entry.metadata?.displayName ||
+                    entry.path.split("/").filter(Boolean).pop() ||
+                    entry.path
                 const displayLink =
                   entry.url || `supabase://${entry.bucket}/${entry.path}`
                 const isImage =
@@ -288,7 +293,7 @@ export const AdminMediaPanel: React.FC<AdminMediaPanelProps> = ({
                               <div className="h-full w-full rounded-xl bg-muted">
                                 <img
                                   src={entry.url}
-                                  alt={fileName}
+                                  alt={storageName}
                                   className="h-full w-full object-cover"
                                   loading="lazy"
                                 />
@@ -298,7 +303,9 @@ export const AdminMediaPanel: React.FC<AdminMediaPanelProps> = ({
                             )}
                           </div>
                         <div className="min-w-0">
-                          <div className="truncate text-sm font-semibold">{fileName}</div>
+                          <div className="truncate text-sm font-semibold">
+                            {storageName}
+                          </div>
                   <div className="text-xs text-muted-foreground space-x-1">
                     <span>{entry.bucket}</span>
                     <span>·</span>

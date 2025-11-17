@@ -1216,6 +1216,17 @@ async function getAdminProfileName(userId) {
   return null
 }
 
+function extractStorageName(path) {
+  try {
+    if (!path) return null
+    const parts = String(path).split('/').filter(Boolean)
+    if (parts.length === 0) return String(path)
+    return parts[parts.length - 1]
+  } catch {
+    return path || null
+  }
+}
+
 function normalizeAdminMediaRow(row) {
   if (!row) return null
   return {
@@ -1255,12 +1266,32 @@ async function recordAdminMediaUpload(row) {
       }
     })()
     const createdAtValue = createdAt || new Date().toISOString()
+    const storageName =
+      row.metadata?.storageName ||
+      row.metadata?.displayName ||
+      extractStorageName(row.path)
+    const metadataPayload = (() => {
+      const base =
+        row.metadata && typeof row.metadata === 'object' ? { ...row.metadata } : {}
+      if (base.originalName && !base.originalUploadName) {
+        base.originalUploadName = base.originalName
+      }
+      if (storageName) {
+        base.storageName = storageName
+        if (!base.displayName) base.displayName = storageName
+        base.originalName = storageName
+      } else if (!base.originalName && base.storageName) {
+        base.originalName = base.storageName
+      }
+      return base
+    })()
+
     if (sql) {
       const inserted = await sql`
         insert into public.admin_media_uploads
           (admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, created_at)
         values
-          (${row.adminId}, ${row.adminEmail}, ${row.adminName}, ${row.bucket}, ${row.path}, ${row.publicUrl}, ${row.mimeType}, ${row.originalMimeType}, ${row.sizeBytes}, ${row.originalSizeBytes}, ${row.quality}, ${row.compressionPercent}, ${sql.json(row.metadata || null)}, ${createdAtValue})
+          (${row.adminId}, ${row.adminEmail}, ${row.adminName}, ${row.bucket}, ${row.path}, ${row.publicUrl}, ${row.mimeType}, ${row.originalMimeType}, ${row.sizeBytes}, ${row.originalSizeBytes}, ${row.quality}, ${row.compressionPercent}, ${sql.json(metadataPayload || null)}, ${createdAtValue})
         on conflict (bucket, path) do update set
           admin_id = excluded.admin_id,
           admin_email = excluded.admin_email,
@@ -1272,7 +1303,7 @@ async function recordAdminMediaUpload(row) {
           original_size_bytes = excluded.original_size_bytes,
           quality = excluded.quality,
           compression_percent = excluded.compression_percent,
-          metadata = excluded.metadata,
+            metadata = excluded.metadata,
           created_at = excluded.created_at
         returning id, admin_id, admin_email, admin_name, bucket, path, public_url, mime_type, original_mime_type, size_bytes, original_size_bytes, quality, compression_percent, metadata, created_at
       `
@@ -1297,7 +1328,7 @@ async function recordAdminMediaUpload(row) {
             original_size_bytes: row.originalSizeBytes,
             quality: row.quality,
             compression_percent: row.compressionPercent,
-            metadata: row.metadata || null,
+            metadata: metadataPayload || null,
             created_at: createdAtValue,
           },
           { onConflict: 'bucket,path' }
