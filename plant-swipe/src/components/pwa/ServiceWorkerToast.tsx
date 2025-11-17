@@ -94,11 +94,24 @@ export function ServiceWorkerToast() {
         if (registration?.waiting) {
           setNeedRefreshFlag(true)
           setRefreshDismissed(false)
+          setMode('update')
+          setVisible(true)
         }
       })
       .catch(() => {})
     return () => {
       mounted = false
+    }
+  }, [])
+
+  React.useEffect(() => {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
+    const handleControllerChange = () => {
+      window.location.reload()
+    }
+    navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange)
+    return () => {
+      navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange)
     }
   }, [])
 
