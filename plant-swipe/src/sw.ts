@@ -14,7 +14,6 @@ declare const self: ServiceWorkerGlobalScope & {
   }>
 }
 
-self.skipWaiting()
 clientsClaim()
 
 cleanupOutdatedCaches()
