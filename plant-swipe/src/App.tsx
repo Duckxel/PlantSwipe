@@ -1,5 +1,6 @@
 import React from 'react'
 import PlantSwipe from "@/PlantSwipe"
+import ServiceWorkerToast from '@/components/pwa/ServiceWorkerToast'
 import { AuthProvider, useAuth } from '@/context/AuthContext'
 import { ThemeProvider } from '@/context/ThemeContext'
 import { BrowserRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom'
@@ -87,8 +88,9 @@ export default function App() {
       <ThemeProvider>
         <AuthProvider>
           <BrowserRouter basename={routerBase}>
-              <LanguageRoutes />
+            <LanguageRoutes />
           </BrowserRouter>
+          <ServiceWorkerToast />
         </AuthProvider>
       </ThemeProvider>
     </I18nextProvider>
