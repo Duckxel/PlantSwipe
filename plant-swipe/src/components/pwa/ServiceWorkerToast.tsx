@@ -6,6 +6,11 @@ const READY_ACK_KEY = 'plantswipe.offlineReadyAck'
 const disablePwaFlag = String(import.meta.env.VITE_DISABLE_PWA ?? '').trim().toLowerCase()
 const PWA_DISABLED = disablePwaFlag === 'true' || disablePwaFlag === '1' || disablePwaFlag === 'yes' || disablePwaFlag === 'on' || disablePwaFlag === 'disable' || disablePwaFlag === 'disabled'
 
+const getIsOffline = () => {
+  if (typeof navigator === 'undefined') return false
+  return !navigator.onLine
+}
+
 const readReadyAck = () => {
   if (typeof window === 'undefined') return false
   try {
@@ -26,11 +31,12 @@ const persistReadyAck = () => {
 
 export function ServiceWorkerToast() {
   const [visible, setVisible] = React.useState(false)
-  const [mode, setMode] = React.useState<'ready' | 'update'>('ready')
+  const [mode, setMode] = React.useState<'ready' | 'update' | 'offline'>('ready')
   const [readyAcknowledged, setReadyAcknowledged] = React.useState(readReadyAck)
   const [refreshDismissed, setRefreshDismissed] = React.useState(false)
   const [offlineReadyFlag, setOfflineReadyFlag] = React.useState(false)
   const [needRefreshFlag, setNeedRefreshFlag] = React.useState(false)
+  const [isOffline, setIsOffline] = React.useState(getIsOffline)
   const autoHideTimer = React.useRef<number | null>(null)
 
   React.useEffect(() => {
@@ -49,7 +55,7 @@ export function ServiceWorkerToast() {
     }
   }, [PWA_DISABLED])
 
-  const { updateServiceWorker } = useRegisterSW(
+    const { updateServiceWorker } = useRegisterSW(
     PWA_DISABLED
       ? {
           immediate: false,
@@ -79,23 +85,23 @@ export function ServiceWorkerToast() {
   }
 
   React.useEffect(() => {
-    if (offlineReadyFlag && !readyAcknowledged) {
+    if (offlineReadyFlag && !readyAcknowledged && !isOffline) {
       setMode('ready')
       setVisible(true)
     } else if (offlineReadyFlag && readyAcknowledged) {
       setOfflineReadyFlag(false)
     }
-  }, [offlineReadyFlag, readyAcknowledged])
+  }, [offlineReadyFlag, readyAcknowledged, isOffline])
 
   React.useEffect(() => {
-    if (needRefreshFlag) {
+    if (needRefreshFlag && !isOffline) {
       setMode('update')
       setVisible(true)
     }
-  }, [needRefreshFlag])
+  }, [needRefreshFlag, isOffline])
 
   React.useEffect(() => {
-    if (!visible || mode === 'update') return
+    if (!visible || mode !== 'ready') return
     window.clearTimeout(autoHideTimer.current ?? undefined)
     autoHideTimer.current = window.setTimeout(() => {
       setVisible(false)
@@ -106,13 +112,34 @@ export function ServiceWorkerToast() {
     return () => window.clearTimeout(autoHideTimer.current ?? undefined)
   }, [visible, mode])
 
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return
+    const handleOnline = () => setIsOffline(false)
+    const handleOffline = () => setIsOffline(true)
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
+
+  React.useEffect(() => {
+    if (isOffline) {
+      setMode('offline')
+      setVisible(true)
+    } else if (mode === 'offline') {
+      setVisible(false)
+    }
+  }, [isOffline, mode])
+
   const dismiss = () => {
     window.clearTimeout(autoHideTimer.current ?? undefined)
     if (mode === 'ready') {
       setReadyAcknowledged(true)
       persistReadyAck()
       setOfflineReadyFlag(false)
-    } else {
+    } else if (mode === 'update') {
       setRefreshDismissed(true)
       setNeedRefreshFlag(false)
     }
@@ -126,16 +153,25 @@ export function ServiceWorkerToast() {
     setVisible(false)
   }
 
-  if (!visible || (mode === 'update' && (refreshDismissed || !needRefreshFlag))) return null
+  const retryConnection = () => {
+    if (typeof window === 'undefined') return
+    window.location.reload()
+  }
+
+  if (!visible || (mode === 'update' && (refreshDismissed || !needRefreshFlag)) || (mode === 'offline' && !isOffline)) return null
 
   const title =
     mode === 'update'
       ? 'New release available'
-      : 'Offline mode ready'
+        : mode === 'offline'
+          ? 'You appear to be offline'
+          : 'Offline mode ready'
   const description =
     mode === 'update'
       ? 'Reload to use the latest Aphylia experience.'
-      : 'You can keep swiping even without a network connection.'
+        : mode === 'offline'
+          ? 'Reconnect to the internet to continue using Aphylia without interruptions.'
+          : 'You can keep swiping even without a network connection.'
 
   return (
     <div
@@ -145,34 +181,42 @@ export function ServiceWorkerToast() {
     >
       <p className="text-sm font-semibold">{title}</p>
       <p className="mt-2 text-xs text-white/70">{description}</p>
-      <div className="mt-3 flex gap-2 text-sm">
-        {mode === 'update' ? (
-          <>
+        <div className="mt-3 flex gap-2 text-sm">
+          {mode === 'update' ? (
+            <>
+              <button
+                type="button"
+                onClick={triggerUpdate}
+                className="rounded-full bg-emerald-400 px-3 py-1 font-semibold text-emerald-950 transition hover:bg-emerald-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-200"
+              >
+                Reload now
+              </button>
+              <button
+                type="button"
+                onClick={dismiss}
+                className="rounded-full border border-white/30 px-3 py-1 text-white/80 transition hover:border-white hover:text-white"
+              >
+                Later
+              </button>
+            </>
+          ) : mode === 'offline' ? (
             <button
               type="button"
-              onClick={triggerUpdate}
-              className="rounded-full bg-emerald-400 px-3 py-1 font-semibold text-emerald-950 transition hover:bg-emerald-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-200"
+              onClick={retryConnection}
+              className="rounded-full bg-amber-300/90 px-3 py-1 font-semibold text-amber-950 transition hover:bg-amber-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-100"
             >
-              Reload now
+              Retry connection
             </button>
+          ) : (
             <button
               type="button"
               onClick={dismiss}
               className="rounded-full border border-white/30 px-3 py-1 text-white/80 transition hover:border-white hover:text-white"
             >
-              Later
+              Got it
             </button>
-          </>
-        ) : (
-          <button
-            type="button"
-            onClick={dismiss}
-            className="rounded-full border border-white/30 px-3 py-1 text-white/80 transition hover:border-white hover:text-white"
-          >
-            Got it
-          </button>
-        )}
-      </div>
+          )}
+        </div>
     </div>
   )
 }
