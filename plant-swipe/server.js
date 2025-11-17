@@ -222,8 +222,13 @@ const adminUploadAllowedMimeTypes = new Set([
   'image/svg+xml',
 ])
 
-const gardenCoverUploadBucket =
-  (process.env.GARDEN_UPLOAD_BUCKET || adminUploadBucket).trim() || adminUploadBucket
+const gardenCoverUploadBucket = (() => {
+  const fromEnv = (process.env.GARDEN_UPLOAD_BUCKET || '').trim()
+  if (fromEnv) return fromEnv
+  const preferred = 'PHOTOS'
+  if (preferred) return preferred
+  return adminUploadBucket
+})()
 const gardenCoverUploadPrefixRaw = (process.env.GARDEN_UPLOAD_PREFIX || 'gardens/covers').trim()
 const gardenCoverUploadPrefix = gardenCoverUploadPrefixRaw.replace(/^\/+|\/+$/g, '') || 'gardens/covers'
 const gardenCoverMaxBytes = (() => {
