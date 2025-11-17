@@ -279,6 +279,7 @@ export const AdminPage: React.FC = () => {
         const r = await fetch("/api/broadcast/active", {
           headers: { Accept: "application/json" },
           credentials: "same-origin",
+          cache: "no-store",
         });
         if (!cancelled && r.ok) {
           const data = await r.json().catch(() => ({}));
@@ -300,6 +301,7 @@ export const AdminPage: React.FC = () => {
           const r = await fetch("/api/broadcast/active", {
             headers: { Accept: "application/json" },
             credentials: "same-origin",
+            cache: "no-store",
           });
           if (!cancelled && r.ok) {
             const data = await r.json().catch(() => ({}));
@@ -6402,19 +6404,21 @@ export const AdminPage: React.FC = () => {
 );
 };
 
+type BroadcastState = {
+  id: string;
+  message: string;
+  severity?: "info" | "warning" | "danger";
+  expiresAt: string | null;
+  adminName?: string | null;
+};
+
 // --- Broadcast controls (Overview tab) ---
 const BroadcastControls: React.FC<{
   inline?: boolean;
   onExpired?: () => void;
   onActive?: () => void;
 }> = ({ inline = false, onExpired, onActive }) => {
-  const [active, setActive] = React.useState<{
-    id: string;
-    message: string;
-    severity?: "info" | "warning" | "danger";
-    expiresAt: string | null;
-    adminName?: string | null;
-  } | null>(() => {
+  const [active, setActive] = React.useState<BroadcastState | null>(() => {
     // Seed from persisted broadcast for instant edit UI on reload
     try {
       const raw = localStorage.getItem("plantswipe.broadcast.active");
@@ -6474,6 +6478,23 @@ const BroadcastControls: React.FC<{
     [now],
   );
 
+    const normalizeSeededBroadcast = React.useCallback(
+      (raw: any): BroadcastState | null => {
+        if (!raw || typeof raw !== "object") return null;
+        return {
+          id: String(raw.id || ""),
+          message: String(raw.message || ""),
+          severity:
+            raw.severity === "warning" || raw.severity === "danger"
+              ? raw.severity
+              : "info",
+          expiresAt: raw.expiresAt || null,
+          adminName: raw.adminName || null,
+        };
+      },
+      [],
+    );
+
   const formatDuration = (ms: number): string => {
     const totalSeconds = Math.floor(Math.max(0, ms) / 1000);
     const s = totalSeconds % 60;
@@ -6492,6 +6513,7 @@ const BroadcastControls: React.FC<{
       const r = await fetch("/api/broadcast/active", {
         headers: { Accept: "application/json" },
         credentials: "same-origin",
+        cache: "no-store",
       });
       if (r.ok) {
         const b = await r.json().catch(() => ({}));
@@ -6560,6 +6582,34 @@ const BroadcastControls: React.FC<{
       } catch {}
     };
   }, []);
+
+    React.useEffect(() => {
+      if (typeof window === "undefined") return;
+      const handleSeed = (event: Event) => {
+        const detail = (event as CustomEvent)?.detail;
+        const next = normalizeSeededBroadcast(detail);
+        if (!next) {
+          setActive(null);
+          onExpired?.();
+          return;
+        }
+        setActive(next);
+        setMessage((prev) =>
+          prev && prev.trim().length > 0 ? prev : next.message,
+        );
+        setSeverity(next.severity || "info");
+        onActive?.();
+      };
+      window.addEventListener(
+        "plantswipe:broadcastSeed",
+        handleSeed as EventListener,
+      );
+      return () =>
+        window.removeEventListener(
+          "plantswipe:broadcastSeed",
+          handleSeed as EventListener,
+        );
+    }, [normalizeSeededBroadcast, onActive, onExpired]);
 
   // When current broadcast expires, revert to create form and notify parent (to re-open section)
   React.useEffect(() => {
@@ -6792,12 +6842,12 @@ const BroadcastControls: React.FC<{
             onChange={(e) => setMessage(e.target.value)}
             maxLength={200}
           />
-          <select
-            className="rounded-xl border px-3 py-2 text-sm bg-white"
-            value={severity}
-            onChange={(e) => setSeverity((e.target.value as any) || "warning")}
-            aria-label="Type"
-          >
+            <select
+              className="rounded-xl border border-stone-300 dark:border-[#3e3e42] px-3 py-2 text-sm bg-white dark:bg-[#2d2d30] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
+              value={severity}
+              onChange={(e) => setSeverity((e.target.value as any) || "warning")}
+              aria-label="Type"
+            >
             <option value="info">Information</option>
             <option value="warning">Warning</option>
             <option value="danger">Danger</option>

@@ -118,10 +118,26 @@ function formatRemainingDuration(ms: number): string {
   return `${totalSeconds}s`
 }
 
+function loadSeededBroadcast(nowMs: number): Broadcast | null {
+  try {
+    const seed = (globalThis as any)?.__BROADCAST__
+    if (!seed || typeof seed !== 'object') return null
+    const next = normalizeBroadcast(seed)
+    const remaining = msRemaining(next.expiresAt, nowMs)
+    if (remaining !== null && remaining <= 0) return null
+    return next
+  } catch {}
+  return null
+}
+
 const BroadcastToast: React.FC = () => {
   const { effectiveTheme } = useTheme()
   const isDarkTheme = effectiveTheme === 'dark'
-  const [broadcast, setBroadcast] = React.useState<Broadcast | null>(() => loadPersistedBroadcast(Date.now()))
+  const [broadcast, setBroadcast] = React.useState<Broadcast | null>(() => {
+    const seeded = loadSeededBroadcast(Date.now())
+    if (seeded) return seeded
+    return loadPersistedBroadcast(Date.now())
+  })
   const [pos, setPos] = React.useState<PositionKey>(loadPosition)
   const now = useNowTick(1000)
   const fetchAbortRef = React.useRef<AbortController | null>(null)
@@ -172,6 +188,39 @@ const BroadcastToast: React.FC = () => {
   React.useEffect(() => {
     void refreshBroadcast()
   }, [refreshBroadcast])
+
+  React.useEffect(() => {
+    const seeded = loadSeededBroadcast(Date.now())
+    if (seeded) {
+      setBroadcast(prev => prev ?? seeded)
+      savePersistedBroadcast(seeded)
+    }
+  }, [])
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return
+    const handleSeed = (event: Event) => {
+      const detail = (event as CustomEvent)?.detail
+      if (!detail || typeof detail !== 'object') {
+        setBroadcast(null)
+        savePersistedBroadcast(null)
+        return
+      }
+      try {
+        const next = normalizeBroadcast(detail)
+        const remaining = msRemaining(next.expiresAt, Date.now())
+        if (remaining !== null && remaining <= 0) {
+          setBroadcast(null)
+          savePersistedBroadcast(null)
+          return
+        }
+        setBroadcast(next)
+        savePersistedBroadcast(next)
+      } catch {}
+    }
+    window.addEventListener('plantswipe:broadcastSeed', handleSeed as EventListener)
+    return () => window.removeEventListener('plantswipe:broadcastSeed', handleSeed as EventListener)
+  }, [])
 
   React.useEffect(() => {
     const handleVisibility = () => {
