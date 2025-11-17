@@ -50,6 +50,7 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
+import { useTranslation } from "react-i18next";
 const {
   ResponsiveContainer,
   ComposedChart,
@@ -84,6 +85,7 @@ export const AdminPage: React.FC = () => {
   const navigate = useNavigate();
   const { effectiveTheme } = useTheme();
   const { user, profile } = useAuth();
+  const { t } = useTranslation("common");
   const isDark = effectiveTheme === "dark";
 
   // Get user's accent color (more subtle version)
@@ -124,8 +126,9 @@ export const AdminPage: React.FC = () => {
   const sidebarHeroClass =
     "relative flex flex-col flex-1 rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50 via-white to-stone-100 dark:from-[#252526] dark:via-[#1e1e1e] dark:to-[#171717] shadow-[0_35px_60px_-20px_rgba(16,185,129,0.35)]";
   const pageTitle = "Admin dashboard";
-  const pageDescription =
-    "Monitor deployments, health checks, member activity, and moderation tooling for Aphylia.";
+  const pageDescription = t("meta.admin.description", {
+    defaultValue: "Monitor deployments, health checks, member activity, and moderation tools in the all-in-one Aphylia admin panel.",
+  });
   const shortenMiddle = React.useCallback(
     (value: string, maxChars: number = 28): string => {
       try {

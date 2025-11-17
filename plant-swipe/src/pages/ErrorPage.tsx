@@ -33,7 +33,10 @@ export function ErrorPage({ code: providedCode }: ErrorPageProps) {
   const tips = TIP_KEYS.map((key) => t(key))
   const canonicalPath = `/error/${encodeURIComponent(normalizedCode)}`
   const pageTitle = `${title} – ${normalizedCode}`
-  const pageDescription = description
+  const fallbackMetaDescription = t('meta.error.description', {
+    defaultValue: "Something went wrong—follow the troubleshooting tips or contact support if the issue persists.",
+  })
+  const pageDescription = description || fallbackMetaDescription
 
   const handleHome = () => navigate("/")
   const handleContact = () => navigate("/contact")

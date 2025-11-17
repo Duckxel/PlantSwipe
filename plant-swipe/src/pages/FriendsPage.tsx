@@ -92,8 +92,8 @@ export const FriendsPage: React.FC = () => {
     glassCard +
     " relative overflow-hidden shadow-[0_35px_95px_-45px_rgba(16,185,129,0.75)]";
   const pageTitle = t("friends.pageTitle", { defaultValue: "Friends" });
-  const pageDescription = t("friends.pageDescription", {
-    defaultValue: "Manage friend requests, search fellow growers, and celebrate streaks together.",
+  const pageDescription = t("meta.friends.description", {
+    defaultValue: "Manage friend requests, search growers by display name, and keep track of accepted invitations.",
   });
 
   const loadFriends = React.useCallback(async () => {

@@ -921,5 +921,55 @@
       "nameRequired": "Le nom de la plante est requis",
       "mustBeLoggedIn": "Vous devez être connecté pour demander une plante"
     }
+  },
+  "meta": {
+    "home": {
+      "description": "Swipe through curated plant cards to discover new species, view rich photos, and save favorites with one gesture."
+    },
+    "search": {
+      "description": "Filter hundreds of plants by color, rarity, season, or care difficulty to find the perfect match for your garden."
+    },
+    "gardenList": {
+      "description": "See every garden you manage in one dashboard, track member counts, and monitor daily task progress at a glance."
+    },
+    "gardenDashboard": {
+      "description": "Dive into a single garden to review routines, assign tasks, monitor streaks, and collaborate with teammates in real time."
+    },
+    "plantInfo": {
+      "description": "Read complete botanical profiles: scientific names, symbolism, care guides, seasonal highlights, and photo galleries."
+    },
+    "createPlant": {
+      "description": "Add a new plant to the encyclopedia with translations, photos, classification, and optional AI-assisted fields."
+    },
+    "editPlant": {
+      "description": "Update existing plant data, refresh translations, and keep photos or care details accurate across every language."
+    },
+    "profile": {
+      "description": "Showcase your gardening streaks, gardens, and highlights so friends can explore your Aphylia activity."
+    },
+    "friends": {
+      "description": "Manage friend requests, search growers by display name, and keep track of accepted invitations."
+    },
+    "contact": {
+      "description": "Reach the Aphylia team for support or business inquiries through a guided form or direct email shortcuts."
+    },
+    "about": {
+      "description": "Meet the founders, learn Aphylia’s mission, and explore the pillars behind our slow software ethos for plant lovers."
+    },
+    "download": {
+      "description": "Install the Aphylia PWA on iOS, Android, or desktop with step-by-step instructions and troubleshooting tips."
+    },
+    "terms": {
+      "description": "Review the internal-use terms covering acceptable behavior, updates, and how to get help during closed testing."
+    },
+    "settings": {
+      "description": "Manage account basics: emails, passwords, theme, language, privacy controls, and friend-request preferences."
+    },
+    "admin": {
+      "description": "Monitor deployments, health checks, member activity, and moderation tools in the all-in-one Aphylia admin panel."
+    },
+    "error": {
+      "description": "Something went wrong—follow the troubleshooting tips or contact support if the issue persists."
+    }
   }
 }

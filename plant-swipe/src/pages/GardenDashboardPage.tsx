@@ -2263,11 +2263,8 @@ export const GardenDashboardPage: React.FC = () => {
   const seoTitle = garden?.name
     ? `${garden.name} – ${t("gardenDashboard.title", { defaultValue: "Garden dashboard" })}`
     : t("gardenDashboard.title", { defaultValue: "Garden dashboard" });
-  const seoDescription = t("gardenDashboard.meta.description", {
-    defaultValue: garden?.name
-      ? `Track watering streaks, member roles, and plant tasks inside ${garden.name}.`
-      : "Track watering streaks, member roles, and plant tasks inside your garden.",
-    name: garden?.name ?? "",
+  const seoDescription = t("meta.gardenDashboard.description", {
+    defaultValue: "Dive into a single garden to review routines, assign tasks, monitor streaks, and collaborate with teammates in real time.",
   });
 
   const sidebarPanelBase =

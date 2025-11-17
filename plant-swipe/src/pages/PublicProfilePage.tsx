@@ -79,7 +79,10 @@ export default function PublicProfilePage() {
   const canonicalPath = displayParam ? `/u/${encodeURIComponent(displayParam)}` : '/u'
   const profileName = pp?.display_name || pp?.username || t('profile.member', { defaultValue: 'Member' })
   const pageTitle = t('profile.metaTitle', { defaultValue: `${profileName} on Aphylia`, member: profileName })
-  const pageDescription = (pp?.bio?.trim() || t('profile.metaDescription', { defaultValue: 'See gardening stats, streaks, and highlights.' })).slice(0, 180)
+  const fallbackProfileDescription = t('meta.profile.description', {
+    defaultValue: "Showcase your gardening streaks, gardens, and highlights so friends can explore your Aphylia activity.",
+  })
+  const pageDescription = (pp?.bio?.trim() || fallbackProfileDescription).slice(0, 180)
   
 
   const formatLastSeen = React.useCallback((iso: string | null | undefined) => {

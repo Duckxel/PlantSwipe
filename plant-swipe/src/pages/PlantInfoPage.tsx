@@ -141,8 +141,8 @@ export const PlantInfoPage: React.FC = () => {
   }
 
   const canonicalPath = id ? `/plants/${encodeURIComponent(id)}` : '/plants'
-  const fallbackDescription = t('plantInfo.metaDescription', {
-    defaultValue: 'Explore detailed care tips, symbolism, and photos for this plant.',
+  const fallbackDescription = t('meta.plantInfo.description', {
+    defaultValue: 'Read complete botanical profiles: scientific names, symbolism, care guides, seasonal highlights, and photo galleries.',
   })
   const pageTitle = plant?.name
     ? t('plantInfo.metaTitle', { defaultValue: `${plant.name} plant profile`, name: plant.name })

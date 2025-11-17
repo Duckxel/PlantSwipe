@@ -82,10 +82,13 @@ export default function DownloadPage() {
   const heroSubtitle = t("downloadPage.hero.subtitle", {
     defaultValue: "Install the PWA on phones, tablets, and desktops in seconds.",
   })
+  const metaDescription = t("meta.download.description", {
+    defaultValue: "Install the Aphylia PWA on iOS, Android, or desktop with step-by-step instructions and troubleshooting tips.",
+  })
 
   return (
     <div className="max-w-5xl mx-auto mt-8 px-4 pb-16 space-y-12">
-      <PageHead title={heroTitle} description={heroSubtitle} path="/download" />
+      <PageHead title={heroTitle} description={metaDescription} path="/download" />
       <section className="relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50 via-white to-stone-100 dark:from-[#252526] dark:via-[#1e1e1e] dark:to-[#171717]">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,_129,_0.12),_transparent_60%)] dark:bg-[radial-gradient(circle_at_top,_rgba(16,_185,_129,_0.18),_transparent_65%)]" aria-hidden="true" />
         <motion.div

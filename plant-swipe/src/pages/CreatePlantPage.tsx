@@ -216,9 +216,9 @@ export const CreatePlantPage: React.FC<CreatePlantPageProps> = ({ onCancel, onSa
   const [waterFreqPeriod] = React.useState<'week' | 'month' | 'year'>('week')
   const [waterFreqAmount] = React.useState<number>(1)
   const pageTitle = t('createPlant.title', { defaultValue: 'Add plant' })
-  const pageDescription = t('createPlant.metaDescription', {
-    defaultValue: 'Create a new plant entry with translations, media, and AI-assisted fields.',
-  })
+    const pageDescription = t('meta.createPlant.description', {
+      defaultValue: 'Add a new plant to the encyclopedia with translations, photos, classification, and optional AI-assisted fields.',
+    })
 
   const funFact = React.useMemo(() => (meta?.funFact ?? '').trim(), [meta?.funFact])
 

@@ -43,7 +43,10 @@ export default function SettingsPage() {
   const glassCard =
     "rounded-[24px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#151517]/90 shadow-[0_25px_70px_-45px_rgba(15,23,42,0.65)]"
   const pageTitle = t('settings.title', { defaultValue: 'Account Settings' })
-  const pageDescription = t('settings.description', { defaultValue: 'Manage your account preferences and security settings.' })
+  const pageDescription = t('meta.settings.description', {
+    defaultValue: "Manage account basics: emails, passwords, theme, language, privacy controls, and friend-request preferences.",
+  })
+  const heroDescription = t('settings.description', { defaultValue: 'Manage your account preferences and security settings.' })
 
   // Function to partially censor email
   const censorEmail = (email: string): string => {
@@ -284,9 +287,9 @@ export default function SettingsPage() {
             <Settings className="h-4 w-4" />
             {t('settings.title')}
           </div>
-          <p className="text-sm text-stone-600 dark:text-stone-300 max-w-2xl">
-            {t('settings.description')}
-          </p>
+            <p className="text-sm text-stone-600 dark:text-stone-300 max-w-2xl">
+              {heroDescription}
+            </p>
         </div>
       </div>
 

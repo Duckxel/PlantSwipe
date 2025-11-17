@@ -50,8 +50,8 @@ export const GardenListPage: React.FC = () => {
   const navigate = useLanguageNavigate();
   const { t } = useTranslation("common");
   const pageTitle = t("garden.title", { defaultValue: "Gardens" });
-  const pageDescription = t("garden.createFirst", {
-    defaultValue: "Create your first garden to get started!",
+  const pageDescription = t("meta.gardenList.description", {
+    defaultValue: "See every garden you manage in one dashboard, track member counts, and monitor daily task progress at a glance.",
   });
   const [gardens, setGardens] = React.useState<Garden[]>([]);
   const [dragIndex, setDragIndex] = React.useState<number | null>(null);

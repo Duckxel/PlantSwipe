@@ -113,8 +113,8 @@ export const EditPlantPage: React.FC<EditPlantPageProps> = ({ onCancel, onSaved 
   const pageTitle = name
     ? t("editPlant.metaTitle", { defaultValue: `Edit ${name}`, name })
     : t("editPlant.metaTitleFallback", { defaultValue: "Edit plant" })
-  const pageDescription = t("editPlant.metaDescription", {
-    defaultValue: "Update plant data, translations, and media before publishing.",
+  const pageDescription = t("meta.editPlant.description", {
+    defaultValue: "Update existing plant data, refresh translations, and keep photos or care details accurate across every language.",
     name,
   })
   const resetAiTracking = () => {

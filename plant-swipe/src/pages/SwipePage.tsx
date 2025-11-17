@@ -60,11 +60,14 @@ export const SwipePage: React.FC<SwipePageProps> = ({
   liked = false,
   onToggleLike,
   }) => {
-    const { t } = useTranslation("common")
-    const [isDesktop, setIsDesktop] = React.useState(() => (typeof window !== "undefined" ? window.innerWidth >= 768 : false))
+      const { t } = useTranslation("common")
+      const [isDesktop, setIsDesktop] = React.useState(() => (typeof window !== "undefined" ? window.innerWidth >= 768 : false))
       const heroTitle = t("discoveryPage.hero.title", { defaultValue: "Discover your next plant crush" })
       const heroSubtitle = t("discoveryPage.hero.subtitle", {
         defaultValue: "Swipe through handpicked species, peek at their lore, and bookmark anything that sparks joy.",
+      })
+      const metaDescription = t("meta.home.description", {
+        defaultValue: "Swipe through curated plant cards to discover new species, view rich photos, and save favorites with one gesture.",
       })
 
     React.useEffect(() => {
@@ -147,8 +150,8 @@ export const SwipePage: React.FC<SwipePageProps> = ({
   }, [current, t])
 
     return (
-      <>
-        <PageHead title={heroTitle} description={heroSubtitle} path="/" />
+        <>
+          <PageHead title={heroTitle} description={metaDescription} path="/" />
         <div
         className="max-w-5xl mx-auto -mt-2 sm:mt-6 px-1 sm:px-4 md:px-0 pb-[140px] md:pb-16"
         style={!isDesktop ? { paddingBottom: "calc(env(safe-area-inset-bottom) + 140px)" } : undefined}
