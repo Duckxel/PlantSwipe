@@ -653,6 +653,15 @@ Ensure production environment variables are set:
 - **Local testing**: run `VITE_ENABLE_PWA=true npm run dev` to test the service worker in development. Use the “Application ▸ Manifest” panel in devtools to inspect install assets.
 - **Disable caching during QA**: add `VITE_DISABLE_PWA=true` to `plant-swipe/.env` (or the deployment env) before running `scripts/refresh-plant-swipe.sh`. The build will skip generating the service worker, and existing clients automatically unregister on next load, so a normal refresh always pulls the latest assets.
 
+### Automated Sitemap
+
+- `npm run generate:sitemap` (backed by `scripts/generate-sitemap.js`) writes `public/sitemap.xml`, combining hand-picked static routes and `/plants/:id` detail pages fetched from Supabase.
+- The command runs automatically at the start of `npm run build`, so every invocation of `scripts/refresh-plant-swipe.sh` (which already runs `npm run build`) refreshes the sitemap before assets are compiled.
+- **Required env**: set `PLANTSWIPE_SITE_URL` (or `SITE_URL`/`VITE_SITE_URL`) to the canonical origin, e.g. `https://aphylia.app`. Optional knobs include `SITEMAP_DEFAULT_LANGUAGE`, `SITEMAP_MAX_PLANT_URLS`, `SITEMAP_PLANT_BATCH_SIZE`, and `SKIP_SITEMAP_GENERATION=1` (useful for very fast local builds).
+- **Supabase access**: provide `SUPABASE_URL` plus either `SUPABASE_SERVICE_ROLE_KEY` or `VITE_SUPABASE_ANON_KEY`. When credentials are missing the script logs a warning and falls back to static URLs only.
+- **Locales**: language variants are inferred from `public/locales/<lang>` and mirrored for every route, respecting `VITE_APP_BASE_PATH` for sub-path deployments.
+- Run `npm run generate:sitemap` manually any time you need to reissue the sitemap without rebuilding the rest of the bundle.
+
 ### Local Deployments
 
 1. **First-time server provisioning**: `sudo ./setup.sh`. This installs system packages, node dependencies, builds the PWA (`npm run build`), provisions nginx/systemd, and links `/var/www/PlantSwipe/plant-swipe` to the repo. Use `PWA_BASE_PATH=/custom/ sudo ./setup.sh` if you serve the UI from a sub-path.
