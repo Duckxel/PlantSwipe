@@ -10,6 +10,7 @@ import { useAuth } from '@/context/AuthContext'
 import { SchedulePickerDialog } from '@/components/plant/SchedulePickerDialog'
 import { TaskCreateDialog } from '@/components/plant/TaskCreateDialog'
 import { supabase } from '@/lib/supabaseClient'
+import { ensureRealtimeReady } from '@/lib/supabaseRealtimeGuard'
 import { useTranslation } from 'react-i18next'
 
 export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, onChanged }: { open: boolean; onOpenChange: (o: boolean) => void; gardenId: string; gardenPlantId: string; onChanged?: () => Promise<void> | void }) {
@@ -99,31 +100,46 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
     }
   }, [open, gardenId, load, user?.id])
 
-  // Also listen to postgres changes for immediate updates
-  React.useEffect(() => {
-    if (!open || !gardenId) return
+    // Also listen to postgres changes for immediate updates
+    React.useEffect(() => {
+      if (!open || !gardenId) return
+      let active = true
+      let channel: ReturnType<typeof supabase.channel> | null = null
 
-    const channel = supabase.channel(`rt-tasks-editor-${gardenId}`)
-      // Task definition changes
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_tasks' }, () => {
-        load().catch(() => {})
-      })
-      // Task occurrence changes (completions)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_task_occurrences' }, () => {
-        load().catch(() => {})
-      })
-      // Garden activity changes (may indicate task completions)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_activity_logs', filter: `garden_id=eq.${gardenId}` }, () => {
-        load().catch(() => {})
-      })
+      const subscribe = async () => {
+        if (!(await ensureRealtimeReady())) return
+        if (!active) return
 
-    const subscription = channel.subscribe()
-    if (subscription instanceof Promise) subscription.catch(() => {})
+        channel = supabase
+          .channel(`rt-tasks-editor-${gardenId}`)
+          // Task definition changes
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_tasks' }, () => {
+            load().catch(() => {})
+          })
+          // Task occurrence changes (completions)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_plant_task_occurrences' }, () => {
+            load().catch(() => {})
+          })
+          // Garden activity changes (may indicate task completions)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'garden_activity_logs', filter: `garden_id=eq.${gardenId}` }, () => {
+            load().catch(() => {})
+          })
 
-    return () => {
-      try { supabase.removeChannel(channel) } catch {}
-    }
-  }, [open, gardenId, load])
+        const subscription = channel.subscribe()
+        if (subscription instanceof Promise) subscription.catch(() => {})
+      }
+
+      void subscribe()
+
+      return () => {
+        active = false
+        if (channel) {
+          try {
+            supabase.removeChannel(channel)
+          } catch {}
+        }
+      }
+    }, [open, gardenId, load])
 
   const resetEditor = () => {
     setPatternPeriod('week')

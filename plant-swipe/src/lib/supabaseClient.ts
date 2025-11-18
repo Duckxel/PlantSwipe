@@ -13,6 +13,9 @@ const supabaseAnonKey = getEnvAny([
   'NEXT_PUBLIC_SUPABASE_ANON_KEY',
 ])
 
+export const SUPABASE_URL = supabaseUrl
+export const SUPABASE_ANON_KEY = supabaseAnonKey
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
