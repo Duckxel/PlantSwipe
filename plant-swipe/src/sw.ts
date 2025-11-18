@@ -25,6 +25,9 @@ const buildMeta: BuildMeta = {
   commit: import.meta.env.VITE_COMMIT_SHA || undefined,
 }
 
+const DAY_IN_SECONDS = 60 * 60 * 24
+const YEAR_IN_SECONDS = DAY_IN_SECONDS * 365
+
 const broadcastMessage = async (payload: { type: string; meta?: BuildMeta }) => {
   const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
   for (const client of clients) {
@@ -59,14 +62,18 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   const tasks: Array<Promise<unknown>> = []
-  if (self.registration.navigationPreload) {
-    tasks.push(self.registration.navigationPreload.enable())
+  if (self.registration?.navigationPreload) {
+    try {
+      tasks.push(self.registration.navigationPreload.disable().catch(() => undefined))
+    } catch {
+      /* ignore */
+    }
   }
   tasks.push(
     broadcastMessage({
       type: 'SW_ACTIVATED',
       meta: buildMeta,
-    })
+    }),
   )
   event.waitUntil(Promise.all(tasks))
 })
@@ -91,7 +98,7 @@ const pageStrategy = new NetworkFirst({
   networkTimeoutSeconds: 5,
   plugins: [
     new CacheableResponsePlugin({ statuses: [0, 200] }),
-    new ExpirationPlugin({ maxEntries: 50, maxAgeSeconds: 60 * 60 * 24 }),
+    new ExpirationPlugin({ maxEntries: 50, maxAgeSeconds: DAY_IN_SECONDS * 7 }),
   ],
 })
 
@@ -147,7 +154,7 @@ registerRoute(
     cacheName: 'static-assets',
     plugins: [
       new CacheableResponsePlugin({ statuses: [0, 200] }),
-      new ExpirationPlugin({ maxEntries: 120, maxAgeSeconds: 60 * 60 * 24 * 60 }),
+      new ExpirationPlugin({ maxEntries: 120, maxAgeSeconds: YEAR_IN_SECONDS }),
     ],
   })
 )
@@ -157,7 +164,7 @@ registerRoute(
   new StaleWhileRevalidate({
     cacheName: 'image-cache',
     plugins: [
-      new ExpirationPlugin({ maxEntries: 80, maxAgeSeconds: 60 * 60 * 24 * 30 }),
+      new ExpirationPlugin({ maxEntries: 80, maxAgeSeconds: DAY_IN_SECONDS * 60 }),
       new CacheableResponsePlugin({ statuses: [0, 200] }),
     ],
   })
@@ -169,7 +176,7 @@ registerRoute(
     cacheName: 'font-cache',
     plugins: [
       new CacheableResponsePlugin({ statuses: [0, 200] }),
-      new ExpirationPlugin({ maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 30 }),
+      new ExpirationPlugin({ maxEntries: 20, maxAgeSeconds: YEAR_IN_SECONDS }),
     ],
   })
 )

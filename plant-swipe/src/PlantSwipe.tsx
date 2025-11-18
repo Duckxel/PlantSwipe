@@ -38,6 +38,7 @@ import { ErrorPage } from "@/pages/ErrorPage";
 import { supabase } from "@/lib/supabaseClient";
 import { useLanguage } from "@/lib/i18nRouting";
 import { loadPlantsWithTranslations } from "@/lib/plantTranslationLoader";
+import { getVerticalPhotoUrl } from "@/lib/photos";
 import { isPlantOfTheMonth } from "@/lib/plantHighlights";
 import { formatClassificationLabel } from "@/constants/classification";
 import { useTranslation } from "react-i18next";
@@ -364,6 +365,33 @@ export default function PlantSwipe() {
 
   const current = swipeList.length > 0 ? swipeList[index % swipeList.length] : undefined
   const boostImagePriority = initialCardBoostRef.current && index === 0
+
+  React.useEffect(() => {
+    if (currentView !== "discovery") return
+      if (typeof document === "undefined" || typeof window === "undefined") return
+      if (!current || index !== 0) return
+      const candidate = getVerticalPhotoUrl(current.photos ?? []) || current.image || ""
+      if (!candidate) return
+      const href = new URL(candidate, window.location.origin).toString()
+      const existing = document.querySelector<HTMLLinkElement>('link[data-aphylia-preload="hero"]')
+      if (existing && existing.href === href) {
+        return
+      }
+      if (existing) {
+        existing.remove()
+      }
+      const link = document.createElement("link")
+      link.rel = "preload"
+      link.as = "image"
+      link.href = href
+      link.setAttribute("data-aphylia-preload", "hero")
+      document.head.appendChild(link)
+      return () => {
+        if (link.parentNode) {
+          link.parentNode.removeChild(link)
+        }
+      }
+  }, [currentView, current?.id, current?.image, index])
 
   const handlePass = () => {
     if (swipeList.length === 0) return

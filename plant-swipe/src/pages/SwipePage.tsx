@@ -60,7 +60,8 @@ export const SwipePage: React.FC<SwipePageProps> = ({
   handlePrevious,
   liked = false,
   onToggleLike,
-    }) => {
+  boostImagePriority = false,
+}) => {
       const { t } = useTranslation("common")
     const seoTitle = t("seo.home.title", { defaultValue: "Aphylia" })
       const seoDescription = t("seo.home.description", {
