@@ -45,6 +45,7 @@ interface SwipePageProps {
   handlePrevious: () => void
   liked?: boolean
   onToggleLike?: () => void
+  boostImagePriority?: boolean
 }
 
 export const SwipePage: React.FC<SwipePageProps> = ({
@@ -117,6 +118,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
     const vertical = getVerticalPhotoUrl(current.photos ?? [])
     return vertical || current.image || ""
   }, [current])
+  const shouldPrioritizeImage = Boolean(boostImagePriority && displayImage)
   const highlightBadges = React.useMemo(() => {
     if (!current) return []
     const badges: Array<{ key: string; label: string; icon: React.ReactNode; className: string }> = []
@@ -181,12 +183,22 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                     transition={{ duration: 0.2, ease: "easeOut" }}
                     className="relative h-full w-full cursor-grab active:cursor-grabbing select-none"
                   >
-                      <Card className="relative h-full w-full overflow-hidden rounded-[28px] border border-white/60 dark:border-white/10 bg-black text-white shadow-2xl">
-                        {displayImage ? (
-                          <div className="absolute inset-0 z-0 bg-cover bg-center" style={{ backgroundImage: `url(${displayImage})` }} />
-                      ) : (
-                        <div className="absolute inset-0 z-0 bg-gradient-to-br from-emerald-200 via-emerald-100 to-white" />
-                      )}
+                        <Card className="relative h-full w-full overflow-hidden rounded-[28px] border border-white/60 dark:border-white/10 bg-black text-white shadow-2xl">
+                          {displayImage ? (
+                            <img
+                              src={displayImage}
+                              alt={current?.name ? `${current.name} preview` : 'Plant preview'}
+                              className="absolute inset-0 z-0 h-full w-full object-cover"
+                              loading={shouldPrioritizeImage ? 'eager' : 'lazy'}
+                              fetchPriority={shouldPrioritizeImage ? 'high' : 'auto'}
+                              decoding="async"
+                              width={960}
+                              height={1280}
+                              sizes="(max-width: 768px) 100vw, 70vw"
+                            />
+                        ) : (
+                          <div className="absolute inset-0 z-0 bg-gradient-to-br from-emerald-200 via-emerald-100 to-white" />
+                        )}
                       <div className="absolute inset-0 z-10 bg-gradient-to-t from-black/80 via-black/30 to-transparent" aria-hidden="true" />
                       <div className="absolute inset-0 z-10 bg-gradient-to-b from-black/10 via-transparent to-black/80" aria-hidden="true" />
                       {highlightBadges.length > 0 && (

@@ -3,6 +3,7 @@ import { Workbox } from 'workbox-window'
 
 const AUTO_HIDE_MS = 8000
 const READY_ACK_KEY = 'plantswipe.offlineReadyAck'
+const VERSION_KEY = 'plantswipe.appVersion'
 const disablePwaFlag = String(import.meta.env.VITE_DISABLE_PWA ?? '').trim().toLowerCase()
 const PWA_DISABLED = disablePwaFlag === 'true' || disablePwaFlag === '1' || disablePwaFlag === 'yes' || disablePwaFlag === 'on' || disablePwaFlag === 'disable' || disablePwaFlag === 'disabled'
 
@@ -34,6 +35,28 @@ const persistReadyAck = () => {
   }
 }
 
+const readStoredVersion = () => {
+  if (typeof window === 'undefined') return null
+  try {
+    return window.localStorage.getItem(VERSION_KEY)
+  } catch {
+    return null
+  }
+}
+
+const persistVersion = (value: string | null) => {
+  if (typeof window === 'undefined') return
+  try {
+    if (value) {
+      window.localStorage.setItem(VERSION_KEY, value)
+    } else {
+      window.localStorage.removeItem(VERSION_KEY)
+    }
+  } catch {
+    // ignore
+  }
+}
+
 export function ServiceWorkerToast() {
   const [visible, setVisible] = React.useState(false)
   const [mode, setMode] = React.useState<'ready' | 'update' | 'offline'>('ready')
@@ -43,6 +66,8 @@ export function ServiceWorkerToast() {
   const [needRefreshFlag, setNeedRefreshFlag] = React.useState(false)
   const [isOffline, setIsOffline] = React.useState(getIsOffline)
   const [offlineHint, setOfflineHint] = React.useState<string | null>(null)
+  const [activeVersion, setActiveVersion] = React.useState<string | null>(readStoredVersion)
+  const [availableVersion, setAvailableVersion] = React.useState<string | null>(null)
   const autoHideTimer = React.useRef<number | null>(null)
   const wbRef = React.useRef<Workbox | null>(null)
   const pendingReloadRef = React.useRef(false)
@@ -77,6 +102,29 @@ export function ServiceWorkerToast() {
     setMode('update')
     setVisible(true)
   }, [])
+
+  const handleSwMessage = React.useCallback(
+    (event: MessageEvent) => {
+      const data = event.data
+      if (!data || data.source !== 'aphylia-sw') return
+      if (data.type === 'SW_UPDATE_FOUND') {
+        if (typeof data.meta?.version === 'string') {
+          setAvailableVersion(data.meta.version)
+        }
+        surfaceWaitingUpdate()
+        return
+      }
+      if (data.type === 'SW_ACTIVATED') {
+        const nextVersion = typeof data.meta?.version === 'string' ? data.meta.version : null
+        if (nextVersion) {
+          setActiveVersion(nextVersion)
+          persistVersion(nextVersion)
+          setAvailableVersion((current) => (current === nextVersion ? null : current))
+        }
+      }
+    },
+    [surfaceWaitingUpdate]
+  )
 
   React.useEffect(() => {
     if (PWA_DISABLED) return
@@ -184,6 +232,24 @@ export function ServiceWorkerToast() {
   }, [])
 
   React.useEffect(() => {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
+    navigator.serviceWorker.addEventListener('message', handleSwMessage)
+    return () => {
+      navigator.serviceWorker.removeEventListener('message', handleSwMessage)
+    }
+  }, [handleSwMessage])
+
+  React.useEffect(() => {
+    if (PWA_DISABLED) return
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
+    navigator.serviceWorker.ready
+      .then((registration) => {
+        registration?.active?.postMessage({ type: 'SW_CLIENT_READY' })
+      })
+      .catch(() => {})
+  }, [])
+
+  React.useEffect(() => {
     if (isOffline) {
       setMode('offline')
       setVisible(true)
@@ -210,6 +276,7 @@ export function ServiceWorkerToast() {
   const triggerUpdate = () => {
     setNeedRefreshFlag(false)
     setRefreshDismissed(false)
+    setAvailableVersion(null)
     pendingReloadRef.current = true
     const wb = wbRef.current
     const postSkipWaiting = () => {
@@ -242,31 +309,37 @@ export function ServiceWorkerToast() {
 
   const isBlockingMode = mode === 'update' || mode === 'offline'
 
-    React.useEffect(() => {
-      if (!isBlockingMode || !visible) return
-      if (typeof document === 'undefined') return
-      const prev = document.body.style.overflow
-      document.body.style.overflow = 'hidden'
-      return () => {
-        document.body.style.overflow = prev
-      }
-    }, [isBlockingMode, visible])
+  React.useEffect(() => {
+    if (!isBlockingMode || !visible) return
+    if (typeof document === 'undefined') return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [isBlockingMode, visible])
 
-  if (PWA_DISABLED) {
-    return null
-  }
+    if (PWA_DISABLED) {
+      return null
+    }
 
-  if (!visible || (mode === 'update' && (refreshDismissed || !needRefreshFlag)) || (mode === 'offline' && !isOffline)) return null
+    if (!visible || (mode === 'update' && (refreshDismissed || !needRefreshFlag)) || (mode === 'offline' && !isOffline)) return null
 
-  const title =
-    mode === 'update'
-      ? 'New release available'
+    const title =
+      mode === 'update'
+        ? availableVersion
+          ? `Aphylia v${availableVersion} ready`
+          : 'New release available'
         : mode === 'offline'
           ? 'You appear to be offline'
           : 'Offline mode ready'
-  const description =
-    mode === 'update'
-      ? 'Reload to use the latest Aphylia experience.'
+    const description =
+      mode === 'update'
+        ? availableVersion && activeVersion && availableVersion !== activeVersion
+          ? `Reload to move from v${activeVersion} to v${availableVersion}.`
+          : availableVersion
+            ? `Reload to use Aphylia v${availableVersion}.`
+            : 'Reload to use the latest Aphylia experience.'
         : mode === 'offline'
           ? 'Reconnect to the internet to continue using Aphylia without interruptions.'
           : 'You can keep swiping even without a network connection.'
@@ -289,8 +362,13 @@ export function ServiceWorkerToast() {
             : 'text-white'
         }
       >
-        <p className={isBlockingMode ? 'text-xl font-semibold' : 'text-sm font-semibold'}>{title}</p>
+          <p className={isBlockingMode ? 'text-xl font-semibold' : 'text-sm font-semibold'}>{title}</p>
           <p className={isBlockingMode ? 'mt-3 text-sm text-white/80' : 'mt-2 text-xs text-white/70'}>{description}</p>
+          {mode === 'update' && availableVersion ? (
+            <p className="mt-2 text-[11px] uppercase tracking-wide text-emerald-200/80">
+              {activeVersion ? `Current v${activeVersion}` : 'Current build'} → v{availableVersion}
+            </p>
+          ) : null}
           {mode === 'offline' && offlineHint ? <p className="mt-2 text-xs text-amber-200/90">{offlineHint}</p> : null}
         <div className={`mt-4 flex gap-2 ${isBlockingMode ? 'text-base' : 'text-sm'}`}>
           {mode === 'update' ? (
