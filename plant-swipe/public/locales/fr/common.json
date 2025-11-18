@@ -35,6 +35,55 @@
       "termsOfServices": "Conditions d'utilisation"
     }
   },
+  "seo": {
+    "defaults": {
+      "description": "Découvrez, balayez et gérez les plantes parfaites pour chaque jardin."
+    },
+    "home": {
+      "title": "Aphylia",
+      "description": "Balayez des espèces sélectionnées, découvrez leur histoire et sauvegardez vos favoris dans l'encyclopédie vivante d'Aphylia."
+    },
+    "search": {
+      "title": "Recherche botanique avancée",
+      "description": "Filtrez par couleur, saison, rareté et usages pour trouver l'espèce idéale pour votre prochain projet."
+    },
+    "about": {
+      "title": "À propos d'Aphylia",
+      "description": "Découvrez les fondateurs, les rituels et l'ambition créative derrière le laboratoire végétal augmenté d'Aphylia."
+    },
+    "contactSupport": {
+      "title": "Contacter le support Aphylia",
+      "description": "Écrivez-nous pour des questions produit, de l'aide à l'onboarding ou pour signaler un bug."
+    },
+    "contactBusiness": {
+      "title": "Contacter l'équipe business Aphylia",
+      "description": "Démarrez une conversation partenariat, presse ou déploiement entreprise avec l'équipe cœur."
+    },
+    "download": {
+      "title": "Télécharger l'application PWA Aphylia",
+      "description": "Suivez les guides d'installation iOS, Android et desktop pour garder chaque testeur à jour."
+    },
+    "terms": {
+      "title": "Règles & conditions Aphylia",
+      "description": "Consultez les directives internes qui sécurisent et cadrent notre bêta privée."
+    },
+    "plant": {
+      "title": "Profil de {{name}}",
+      "fallbackTitle": "Fiche encyclopédique",
+      "fallbackDescription": "Explorez les soins, traits et histoires de chaque espèce dans Aphylia.",
+      "missingDescription": "Conseils d'entretien, signification et points forts de {{name}}."
+    },
+    "profile": {
+      "title": "{{name}} sur Aphylia",
+      "fallbackTitle": "Profil de cultivateur Aphylia",
+      "description": "Découvrez les jardins partagés, statistiques et activités de {{name}} au sein de la communauté.",
+      "fallbackDescription": "Parcourez les jardins publics, séries et moments forts des cultivateurs Aphylia."
+    },
+    "error": {
+      "title": "Page introuvable",
+      "description": "Nous n'avons pas pu charger cette route. Essayez les astuces proposées ou retournez à l'accueil."
+    }
+  },
   "errorPage": {
     "codeLabel": "Code d'erreur",
     "tipsTitle": "Que faire ?",

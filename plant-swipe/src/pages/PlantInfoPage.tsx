@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabaseClient'
 import { useTranslation } from 'react-i18next'
 import { useLanguage, useLanguageNavigate } from '@/lib/i18nRouting'
 import { mergePlantWithTranslation } from '@/lib/plantTranslationLoader'
+import { usePageMetadata } from '@/hooks/usePageMetadata'
 
 export const PlantInfoPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
@@ -20,7 +21,25 @@ export const PlantInfoPage: React.FC = () => {
     const [loading, setLoading] = React.useState(true)
     const [error, setError] = React.useState<string | null>(null)
     const [likedIds, setLikedIds] = React.useState<string[]>([])
-    const [requestDialogOpen, setRequestDialogOpen] = React.useState(false)
+  const [requestDialogOpen, setRequestDialogOpen] = React.useState(false)
+  const fallbackTitle = t('seo.plant.fallbackTitle', { defaultValue: 'Plant encyclopedia entry' })
+  const fallbackDescription = t('seo.plant.fallbackDescription', {
+    defaultValue: 'Explore care notes, traits, and lore for every species in Aphylia.',
+  })
+  const resolvedTitle = plant?.name
+    ? t('seo.plant.title', { name: plant.name, defaultValue: `${plant.name} plant profile` })
+    : fallbackTitle
+  const plantDescription =
+    typeof plant?.description === 'string' && plant.description.trim().length > 0 ? plant.description : null
+  const resolvedDescription =
+    plantDescription ||
+    (plant?.name
+      ? t('seo.plant.missingDescription', {
+          name: plant.name,
+          defaultValue: `${plant.name} care tips, meaning, and highlights.`,
+        })
+      : fallbackDescription)
+  usePageMetadata({ title: resolvedTitle, description: resolvedDescription })
   
   // Check if we're in overlay mode (has backgroundLocation) or full page mode
   const state = location.state as { backgroundLocation?: any } | null

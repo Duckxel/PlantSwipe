@@ -12,6 +12,7 @@ import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff, Flame, Sprout,
 import { useTranslation } from "react-i18next"
 import i18n from "@/lib/i18n"
 import { ProfilePageSkeleton } from "@/components/garden/GardenSkeletons"
+import { usePageMetadata } from "@/hooks/usePageMetadata"
 
 type PublicProfile = {
   id: string
@@ -75,7 +76,31 @@ export default function PublicProfilePage() {
   const searchRequestRef = React.useRef(0)
   const trimmedSearchTerm = searchTerm.trim()
   const needsMoreInput = trimmedSearchTerm.length < 2
-  
+  const fallbackProfileTitle = t('seo.profile.fallbackTitle', { defaultValue: 'Aphylia grower profile' })
+  const fallbackProfileDescription = t('seo.profile.fallbackDescription', {
+    defaultValue: 'Browse public gardens, streaks, and highlights from Aphylia growers.',
+  })
+  const preferredDisplayName = React.useMemo(() => {
+    const candidate =
+      (pp?.display_name && pp.display_name.trim()) ||
+      (pp?.username && pp.username.trim()) ||
+      (displayParam && displayParam !== '_me' ? displayParam : '')
+    return candidate ? candidate.trim() : ''
+  }, [pp?.display_name, pp?.username, displayParam])
+  const seoTitle = preferredDisplayName
+    ? t('seo.profile.title', { name: preferredDisplayName, defaultValue: `${preferredDisplayName} on Aphylia` })
+    : fallbackProfileTitle
+  const bioDescription = typeof pp?.bio === 'string' ? pp.bio.trim() : ''
+  const seoDescription =
+    bioDescription ||
+    (preferredDisplayName
+      ? t('seo.profile.description', {
+          name: preferredDisplayName,
+          defaultValue: `See shared gardens, stats, and activity from ${preferredDisplayName}.`,
+        })
+      : fallbackProfileDescription)
+  usePageMetadata({ title: seoTitle, description: seoDescription })
+
 
   const formatLastSeen = React.useCallback((iso: string | null | undefined) => {
     if (!iso) return t('profile.aLongTimeAgo')

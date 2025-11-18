@@ -2,6 +2,7 @@ import { ShieldCheck, Scale, Repeat, Info } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { usePageMetadata } from "@/hooks/usePageMetadata"
 
 const sections = [
   {
@@ -29,6 +30,11 @@ const sections = [
 export default function TermsPage() {
   const { t } = useTranslation("common")
   const currentYear = new Date().getFullYear()
+  const seoTitle = t("seo.terms.title", { defaultValue: "Aphylia terms & testing rules" })
+  const seoDescription = t("seo.terms.description", {
+    defaultValue: "Review the internal usage guidelines that keep our private beta safe, secure, and respectful.",
+  })
+  usePageMetadata({ title: seoTitle, description: seoDescription })
 
   return (
     <div className="max-w-4xl mx-auto mt-8 px-4 pb-20 space-y-10">

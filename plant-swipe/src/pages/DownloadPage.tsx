@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Link } from "@/components/i18n/Link"
+import { usePageMetadata } from "@/hooks/usePageMetadata"
 
 const platformGuides = [
   {
@@ -77,6 +78,11 @@ const supportTips = [
 
 export default function DownloadPage() {
   const { t } = useTranslation("common")
+  const seoTitle = t("seo.download.title", { defaultValue: "Download the Aphylia PWA" })
+  const seoDescription = t("seo.download.description", {
+    defaultValue: "Follow install guides for iOS, Android, and desktop so every tester stays up to date.",
+  })
+  usePageMetadata({ title: seoTitle, description: seoDescription })
 
   return (
     <div className="max-w-5xl mx-auto mt-8 px-4 pb-16 space-y-12">
