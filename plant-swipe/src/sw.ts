@@ -61,12 +61,21 @@ self.addEventListener('install', (event) => {
 })
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
+  const tasks: Array<Promise<unknown>> = []
+  if (self.registration?.navigationPreload) {
+    try {
+      tasks.push(self.registration.navigationPreload.disable().catch(() => undefined))
+    } catch {
+      /* ignore */
+    }
+  }
+  tasks.push(
     broadcastMessage({
       type: 'SW_ACTIVATED',
       meta: buildMeta,
-    })
+    }),
   )
+  event.waitUntil(Promise.all(tasks))
 })
 
 cleanupOutdatedCaches()
