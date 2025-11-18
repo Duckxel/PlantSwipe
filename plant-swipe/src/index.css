@@ -128,8 +128,12 @@
 
 @layer components {
   .legal-content {
-    @apply space-y-4 text-base leading-relaxed text-stone-700 dark:text-stone-200;
+    @apply space-y-4 text-base leading-relaxed text-stone-700 dark:text-stone-200 text-left;
     font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+
+  .legal-content [align] {
+    text-align: left !important;
   }
 
   .legal-content h1,
@@ -139,11 +143,15 @@
   }
 
   .legal-content h1 {
-    @apply text-3xl font-semibold mb-6;
+    @apply text-3xl font-semibold mb-6 text-center;
   }
 
   .legal-content h2 {
     @apply text-2xl font-semibold mt-10 mb-4;
+  }
+
+  .legal-content h2:first-of-type {
+    text-align: center;
   }
 
   .legal-content h3 {
