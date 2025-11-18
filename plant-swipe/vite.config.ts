@@ -21,10 +21,26 @@ const normalizeBasePath = (value?: string) => {
   return next.replace(/\/{2,}/g, '/')
 }
 
+const resolveBooleanFlag = (value?: string | null, fallback = false) => {
+  if (value === undefined || value === null) return fallback
+  const normalized = value.trim().toLowerCase()
+  if (!normalized) return fallback
+  if (['false', '0', 'off', 'no', 'disable', 'disabled'].includes(normalized)) return false
+  if (['true', '1', 'on', 'yes', 'enable', 'enabled'].includes(normalized)) return true
+  return fallback
+}
+
 const appBase = normalizeBasePath(process.env.VITE_APP_BASE_PATH)
 const scope = appBase === '/' ? '/' : appBase
 const disablePwaFlag = String(process.env.VITE_DISABLE_PWA || process.env.DISABLE_PWA || process.env.PWA_DISABLED || '').trim().toLowerCase()
 const isPwaDisabled = disablePwaFlag === 'true' || disablePwaFlag === '1' || disablePwaFlag === 'yes' || disablePwaFlag === 'on' || disablePwaFlag === 'disable' || disablePwaFlag === 'disabled'
+const shouldEmitSourcemaps = resolveBooleanFlag(
+  process.env.VITE_BUILD_SOURCEMAP ||
+    process.env.VITE_SOURCEMAP ||
+    process.env.BUILD_SOURCEMAP ||
+    process.env.SOURCEMAP,
+  true,
+)
 
 export default defineConfig({
   base: appBase,
@@ -89,6 +105,7 @@ export default defineConfig({
   envPrefix: ['VITE_'],
   resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
   build: {
+      sourcemap: shouldEmitSourcemaps,
     rollupOptions: {
       output: {
         manualChunks: {
