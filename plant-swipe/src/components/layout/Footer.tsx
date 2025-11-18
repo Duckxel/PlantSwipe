@@ -36,7 +36,7 @@ export const Footer: React.FC = () => {
           {/* Social Media Icons */}
           <div className="flex items-center gap-4">
             <a
-              href="https://youtube.com"
+              href="https://www.youtube.com/@aphylia_app"
               target="_blank"
               rel="noopener noreferrer"
               className="text-stone-600 dark:text-stone-400 hover:text-red-600 dark:hover:text-red-500 transition-colors"
