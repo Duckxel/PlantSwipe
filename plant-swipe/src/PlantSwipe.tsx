@@ -75,9 +75,6 @@ export default function PlantSwipe() {
   const [index, setIndex] = useState(0)
   const [likedIds, setLikedIds] = useState<string[]>([])
   const initialCardBoostRef = React.useRef(true)
-  React.useEffect(() => {
-    initialCardBoostRef.current = false
-  }, [])
 
   const location = useLocation()
   const state = location.state as { backgroundLocation?: any } | null
@@ -364,34 +361,41 @@ export default function PlantSwipe() {
   }, [filtered, searchSort, likedSet])
 
   const current = swipeList.length > 0 ? swipeList[index % swipeList.length] : undefined
-  const boostImagePriority = initialCardBoostRef.current && index === 0
+  const heroImageCandidate = current ? (getVerticalPhotoUrl(current.photos ?? []) || current.image || "") : ""
+  const boostImagePriority = initialCardBoostRef.current && index === 0 && Boolean(heroImageCandidate)
+
+  React.useEffect(() => {
+    if (!initialCardBoostRef.current) return
+    if (!heroImageCandidate) return
+    if (index !== 0) return
+    initialCardBoostRef.current = false
+  }, [heroImageCandidate, index])
 
   React.useEffect(() => {
     if (currentView !== "discovery") return
-      if (typeof document === "undefined" || typeof window === "undefined") return
-      if (!current || index !== 0) return
-      const candidate = getVerticalPhotoUrl(current.photos ?? []) || current.image || ""
-      if (!candidate) return
-      const href = new URL(candidate, window.location.origin).toString()
-      const existing = document.querySelector<HTMLLinkElement>('link[data-aphylia-preload="hero"]')
-      if (existing && existing.href === href) {
-        return
+    if (typeof document === "undefined" || typeof window === "undefined") return
+    if (!current || index !== 0) return
+    if (!heroImageCandidate) return
+    const href = new URL(heroImageCandidate, window.location.origin).toString()
+    const existing = document.querySelector<HTMLLinkElement>('link[data-aphylia-preload="hero"]')
+    if (existing && existing.href === href) {
+      return
+    }
+    if (existing) {
+      existing.remove()
+    }
+    const link = document.createElement("link")
+    link.rel = "preload"
+    link.as = "image"
+    link.href = href
+    link.setAttribute("data-aphylia-preload", "hero")
+    document.head.appendChild(link)
+    return () => {
+      if (link.parentNode) {
+        link.parentNode.removeChild(link)
       }
-      if (existing) {
-        existing.remove()
-      }
-      const link = document.createElement("link")
-      link.rel = "preload"
-      link.as = "image"
-      link.href = href
-      link.setAttribute("data-aphylia-preload", "hero")
-      document.head.appendChild(link)
-      return () => {
-        if (link.parentNode) {
-          link.parentNode.removeChild(link)
-        }
-      }
-  }, [currentView, current?.id, current?.image, index])
+    }
+  }, [currentView, heroImageCandidate, index])
 
   const handlePass = () => {
     if (swipeList.length === 0) return

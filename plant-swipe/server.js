@@ -7604,25 +7604,49 @@ app.delete('/api/admin/broadcast', async (req, res) => {
 // Static assets
 const distDir = path.resolve(__dirname, 'dist')
 const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365
+const ONE_WEEK_SECONDS = 60 * 60 * 24 * 7
+const ONE_DAY_SECONDS = 60 * 60 * 24
+const DEFAULT_STALE_WHILE_REVALIDATE = ONE_WEEK_SECONDS
+const EXTENDED_STALE_WHILE_REVALIDATE = ONE_WEEK_SECONDS * 4
 const hashedAssetPattern = /assets\/.+\.[a-f0-9]{8}\.(?:js|mjs|cjs|css|json|png|jpe?g|webp|avif|svg|ttf|woff2?)$/i
 app.use(
   express.static(distDir, {
-    setHeaders: (res, filePath) => {
-      const relativePath = path.relative(distDir, filePath).replace(/\\+/g, '/')
-      if (relativePath === 'index.html') {
-        res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate')
-        return
-      }
-      if (hashedAssetPattern.test(relativePath)) {
-        res.setHeader('Cache-Control', `public, max-age=${ONE_YEAR_SECONDS}, immutable`)
-        return
-      }
-      if (relativePath.startsWith('assets/')) {
-        res.setHeader('Cache-Control', 'public, max-age=604800')
-        return
-      }
-      res.setHeader('Cache-Control', 'public, max-age=300')
-    },
+      setHeaders: (res, filePath) => {
+        const relativePath = path.relative(distDir, filePath).replace(/\\+/g, '/')
+        if (relativePath === 'index.html') {
+          res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate')
+          return
+        }
+        if (hashedAssetPattern.test(relativePath)) {
+          res.setHeader('Cache-Control', `public, max-age=${ONE_YEAR_SECONDS}, immutable`)
+          return
+        }
+        if (relativePath.startsWith('assets/')) {
+          res.setHeader(
+            'Cache-Control',
+            `public, max-age=${ONE_WEEK_SECONDS}, stale-while-revalidate=${EXTENDED_STALE_WHILE_REVALIDATE}`,
+          )
+          return
+        }
+        if (
+          relativePath.startsWith('locales/') ||
+          relativePath.startsWith('icons/') ||
+          relativePath === 'offline.html' ||
+          relativePath === 'robots.txt' ||
+          relativePath === 'env-loader.js' ||
+          relativePath === 'env.js'
+        ) {
+          res.setHeader(
+            'Cache-Control',
+            `public, max-age=${ONE_WEEK_SECONDS}, stale-while-revalidate=${EXTENDED_STALE_WHILE_REVALIDATE}`,
+          )
+          return
+        }
+        res.setHeader(
+          'Cache-Control',
+          `public, max-age=${ONE_DAY_SECONDS}, stale-while-revalidate=${DEFAULT_STALE_WHILE_REVALIDATE}`,
+        )
+      },
   }),
 )
 app.get('*', (req, res) => {
