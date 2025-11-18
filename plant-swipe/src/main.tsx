@@ -4,9 +4,19 @@ import './lib/i18n' // Initialize i18n before App
 import App from './App.tsx'
 import { initAccentFromStorage } from '@/lib/accent'
 
+type WindowControlsOverlay = {
+  visible?: boolean
+  getTitlebarAreaRect?: () => DOMRect | DOMRectReadOnly
+  addEventListener?: (type: 'geometrychange', listener: () => void) => void
+}
+
+type NavigatorWithOverlay = Navigator & {
+  windowControlsOverlay?: WindowControlsOverlay
+}
+
 const initWindowControlsOverlay = () => {
   if (typeof navigator === 'undefined') return
-  const overlay = (navigator as any).windowControlsOverlay
+  const overlay = (navigator as NavigatorWithOverlay).windowControlsOverlay
   if (!overlay || typeof overlay.getTitlebarAreaRect !== 'function') return
 
   const applyGeometry = () => {
@@ -23,7 +33,11 @@ const initWindowControlsOverlay = () => {
 }
 
 // Apply saved accent before rendering to avoid flash
-try { initAccentFromStorage() } catch {}
+try {
+  initAccentFromStorage()
+} catch {
+  /* ignore accent init errors */
+}
 
 // Apply theme before rendering to avoid flash
 try {
@@ -37,9 +51,36 @@ try {
   } else {
     document.documentElement.classList.remove('dark')
   }
-} catch {}
+} catch {
+  /* ignore theme init errors */
+}
 
-try { initWindowControlsOverlay() } catch {}
+try {
+  initWindowControlsOverlay()
+} catch {
+  /* ignore overlay init errors */
+}
+
+if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker
+      .getRegistration()
+      .then((registration) => registration?.update().catch(() => {}))
+      .catch(() => {})
+  })
+}
+
+if (import.meta.env.PROD) {
+  try {
+    console.info('[Aphylia] Build info', {
+      version: (import.meta.env as Record<string, string>).VITE_APP_VERSION ?? 'unknown',
+      commit: (import.meta.env as Record<string, string>).VITE_COMMIT_SHA ?? 'unknown',
+      base: import.meta.env.BASE_URL,
+    })
+  } catch {
+    /* ignore logging failures */
+  }
+}
 
 createRoot(document.getElementById('root')!).render(
   <App />,

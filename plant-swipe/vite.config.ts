@@ -30,12 +30,15 @@ export default defineConfig({
   base: appBase,
   plugins: [
     react(),
-    VitePWA({
+      VitePWA({
         disable: isPwaDisabled,
-      base: appBase,
-      registerType: 'autoUpdate',
-      injectRegister: 'auto',
-        includeAssets: [
+        base: appBase,
+        registerType: 'autoUpdate',
+        injectRegister: null,
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
+      includeAssets: [
         'env-loader.js',
         'env.js',
         'icons/plant-swipe-icon.svg',
@@ -44,18 +47,19 @@ export default defineConfig({
         'icons/icon-maskable-512.png',
         'locales/en/common.json',
         'locales/fr/common.json',
-        'PLANT-INFO-SCHEMA.json',
+          'PLANT-INFO-SCHEMA.json',
+          'offline.html',
       ],
-        manifest: {
-          id: 'aphylia',
-          name: 'Aphylia',
-          short_name: 'Aphylia',
-          description: 'Discover, swipe and manage the perfect plants for every garden.',
+      manifest: {
+        id: 'aphylia',
+        name: 'Aphylia',
+        short_name: 'Aphylia',
+        description: 'Discover, swipe and manage the perfect plants for every garden.',
         lang: 'en',
         theme_color: '#052e16',
         background_color: '#03120c',
-          display: 'standalone',
-          display_override: ['window-controls-overlay', 'standalone'],
+        display: 'standalone',
+        display_override: ['window-controls-overlay', 'standalone'],
         scope,
         start_url: scope,
         orientation: 'portrait-primary',
@@ -71,44 +75,9 @@ export default defineConfig({
           { name: 'My gardens', url: scope === '/' ? '/gardens' : `${scope}gardens`, description: 'Open your garden dashboard' },
         ],
       },
-      workbox: {
-        cleanupOutdatedCaches: true,
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,json,txt,woff2}'],
-        navigateFallback: 'index.html',
-          runtimeCaching: [
-            {
-              urlPattern: ({ url }) => /\/api\/.+\/stream/.test(url.pathname),
-              handler: 'NetworkOnly',
-              options: {
-                cacheName: 'api-stream-bypass',
-              },
-            },
-            {
-              urlPattern: ({ url }) => url.pathname.startsWith('/api/') && !/\/stream/.test(url.pathname),
-              handler: 'NetworkFirst',
-              options: {
-                cacheName: 'api-cache',
-                networkTimeoutSeconds: 10,
-                cacheableResponse: { statuses: [0, 200] },
-              },
-            },
-          {
-            urlPattern: /\/locales\/.*\.json$/i,
-            handler: 'StaleWhileRevalidate',
-            options: {
-              cacheName: 'i18n-cache',
-              expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 },
-            },
-          },
-          {
-            urlPattern: ({ request }) => request.destination === 'image',
-            handler: 'StaleWhileRevalidate',
-            options: {
-              cacheName: 'image-cache',
-              expiration: { maxEntries: 60, maxAgeSeconds: 60 * 60 * 24 * 14 },
-            },
-          },
-        ],
+      injectManifest: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,json,txt,woff,woff2,ttf}'],
+        globIgnores: ['**/*.map', '**/node_modules/**'],
       },
       devOptions: {
         enabled: process.env.VITE_ENABLE_PWA === 'true',
