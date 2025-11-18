@@ -314,7 +314,7 @@ export default function PlantSwipe() {
   React.useEffect(() => {
     if (!afterFirstPaint || typeof window === "undefined" || plants.length === 0) return
     const HEARTBEAT_MS = 60_000
-    let timer: ReturnType<typeof window.setInterval> | null = null
+    let timer: number | null = null
     let cancelled = false
     const sendHeartbeat = async () => {
       try {
@@ -353,7 +353,9 @@ export default function PlantSwipe() {
     })
     return () => {
       cancelled = true
-      if (timer) clearInterval(timer)
+        if (timer !== null) {
+          window.clearInterval(timer)
+        }
       cancelIdle()
     }
     }, [afterFirstPaint, location.pathname, location.search, user?.id, plants.length])
