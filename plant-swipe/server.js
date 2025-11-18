@@ -2500,6 +2500,31 @@ async function computeNextVisitNum(sessionId) {
   }
 }
 
+async function deleteAdminMediaUploadByObject(bucket, path) {
+  if (!bucket || !path) return false
+  try {
+    if (sql) {
+      await sql`
+        delete from public.admin_media_uploads
+        where bucket = ${bucket} and path = ${path}
+      `
+      return true
+    }
+    if (supabaseServiceClient) {
+      const { error } = await supabaseServiceClient
+        .from('admin_media_uploads')
+        .delete()
+        .eq('bucket', bucket)
+        .eq('path', path)
+      if (error) throw error
+      return true
+    }
+  } catch (err) {
+    console.error('[media] failed to delete admin media entry', err)
+  }
+  return false
+}
+
 async function insertWebVisitViaSupabaseRest(payload, req) {
   try {
     if (!supabaseUrlEnv || !supabaseAnonKey) return false
@@ -6717,13 +6742,19 @@ app.post('/api/garden/:id/upload-cover', async (req, res) => {
         return
       }
 
-      let deletedPrevious = false
-      if (previousUrl && previousUrl !== publicUrl) {
-        try {
-          const result = await deleteGardenCoverObject(previousUrl)
-          deletedPrevious = Boolean(result.deleted)
-        } catch {}
-      }
+        let deletedPrevious = false
+        if (previousUrl && previousUrl !== publicUrl) {
+          try {
+            const result = await deleteGardenCoverObject(previousUrl)
+            deletedPrevious = Boolean(result.deleted)
+          } catch {}
+          try {
+            const parsedPrevious = parseStoragePublicUrl(previousUrl)
+            if (parsedPrevious?.bucket && parsedPrevious?.path) {
+              await deleteAdminMediaUploadByObject(parsedPrevious.bucket, parsedPrevious.path)
+            }
+          } catch {}
+        }
 
       const compressionPercent =
         file.size > 0
