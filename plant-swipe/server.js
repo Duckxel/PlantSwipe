@@ -5223,6 +5223,11 @@ app.post('/api/translate', async (req, res) => {
 
 app.get('/api/plants', async (_req, res) => {
   try {
+    const setPlantsCache = () => {
+      if (!res.getHeader('Cache-Control')) {
+        res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300')
+      }
+    }
     if (sql) {
       try {
           const rows = await sql`select * from plants order by name asc`
@@ -5248,7 +5253,8 @@ app.get('/api/plants', async (_req, res) => {
               seedsAvailable: r.seeds_available === true,
             }
           })
-        res.json(mapped)
+          setPlantsCache()
+          res.json(mapped)
         return
       } catch (e) {
         // Fall through to Supabase fallback on SQL query failure
@@ -5256,6 +5262,7 @@ app.get('/api/plants', async (_req, res) => {
     }
     const fallback = await loadPlantsViaSupabase()
     if (fallback) {
+        setPlantsCache()
       res.json(fallback)
       return
     }
@@ -7596,7 +7603,28 @@ app.delete('/api/admin/broadcast', async (req, res) => {
 
 // Static assets
 const distDir = path.resolve(__dirname, 'dist')
-app.use(express.static(distDir))
+const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365
+const hashedAssetPattern = /assets\/.+\.[a-f0-9]{8}\.(?:js|mjs|cjs|css|json|png|jpe?g|webp|avif|svg|ttf|woff2?)$/i
+app.use(
+  express.static(distDir, {
+    setHeaders: (res, filePath) => {
+      const relativePath = path.relative(distDir, filePath).replace(/\\+/g, '/')
+      if (relativePath === 'index.html') {
+        res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate')
+        return
+      }
+      if (hashedAssetPattern.test(relativePath)) {
+        res.setHeader('Cache-Control', `public, max-age=${ONE_YEAR_SECONDS}, immutable`)
+        return
+      }
+      if (relativePath.startsWith('assets/')) {
+        res.setHeader('Cache-Control', 'public, max-age=604800')
+        return
+      }
+      res.setHeader('Cache-Control', 'public, max-age=300')
+    },
+  }),
+)
 app.get('*', (req, res) => {
   // Record initial page load visit for SPA routes
   try {
@@ -7612,8 +7640,9 @@ app.get('*', (req, res) => {
         .then((uid) => insertWebVisit({ sessionId, userId: uid || null, pagePath, referrer, userAgent, ipAddress, geo, extra: { source: 'initial_load' }, language: acceptLanguage }, req))
         .catch(() => {}))
       .catch(() => {})
-  } catch {}
-  res.sendFile(path.join(distDir, 'index.html'))
+    } catch {}
+    res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate')
+    res.sendFile(path.join(distDir, 'index.html'))
 })
 
 const shouldListen = String(process.env.DISABLE_LISTEN || 'false').toLowerCase() !== 'true'
