@@ -264,7 +264,10 @@
     "noAccount": "Pas de compte ? S'inscrire",
     "haveAccount": "Vous avez un compte ? Se connecter",
     "passwordsDontMatch": "Les mots de passe ne correspondent pas",
-    "unexpectedError": "Erreur inattendue"
+    "unexpectedError": "Erreur inattendue",
+    "acceptTermsLabel": "J'ai lu et j'accepte les",
+    "termsLinkLabel": "Conditions d'utilisation",
+    "mustAcceptTerms": "Veuillez accepter les conditions d'utilisation pour continuer"
   },
   "settings": {
     "title": "Paramètres du compte",

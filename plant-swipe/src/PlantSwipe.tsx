@@ -1,6 +1,6 @@
 import React, { useMemo, useState, lazy, Suspense } from "react";
 import { Routes, Route, useLocation } from "react-router-dom";
-import { useLanguageNavigate, usePathWithoutLanguage } from "@/lib/i18nRouting";
+import { useLanguageNavigate, usePathWithoutLanguage, addLanguagePrefix } from "@/lib/i18nRouting";
 import { Navigate } from "@/components/i18n/Navigate";
 import { useMotionValue, animate } from "framer-motion";
 import { Search, ChevronDown, ChevronUp, ListFilter, MessageSquarePlus, Plus } from "lucide-react";
@@ -97,8 +97,10 @@ export default function PlantSwipe() {
   const [authPassword, setAuthPassword] = useState("")
   const [authPassword2, setAuthPassword2] = useState("")
   const [authDisplayName, setAuthDisplayName] = useState("")
+  const [authAcceptedTerms, setAuthAcceptedTerms] = useState(false)
   
   const [authSubmitting, setAuthSubmitting] = useState(false)
+  const termsPath = React.useMemo(() => addLanguagePrefix('/terms', currentLang), [currentLang])
 
   const [plants, setPlants] = useState<Plant[]>([])
   const [loading, setLoading] = useState(true)
@@ -533,7 +535,13 @@ export default function PlantSwipe() {
       if (authMode === 'signup') {
         if (authPassword !== authPassword2) {
           console.warn('[auth] password mismatch')
-          setAuthError('Passwords do not match')
+          setAuthError(t('auth.passwordsDontMatch'))
+          setAuthSubmitting(false)
+          return
+        }
+        if (!authAcceptedTerms) {
+          console.warn('[auth] terms not accepted')
+          setAuthError(t('auth.mustAcceptTerms'))
           setAuthSubmitting(false)
           return
         }
@@ -559,7 +567,7 @@ export default function PlantSwipe() {
     } catch (e: unknown) {
       console.error('[auth] unexpected error', e)
       const msg = e && typeof e === 'object' && 'message' in e ? String((e as { message?: unknown }).message || '') : ''
-      setAuthError(msg || 'Unexpected error')
+      setAuthError(msg || t('auth.unexpectedError'))
       setAuthSubmitting(false)
     }
   }
@@ -570,6 +578,18 @@ export default function PlantSwipe() {
       setAuthOpen(false)
     }
   }, [user])
+
+  React.useEffect(() => {
+    if (!authOpen) {
+      setAuthAcceptedTerms(false)
+    }
+  }, [authOpen])
+
+  React.useEffect(() => {
+    if (authMode !== 'signup') {
+      setAuthAcceptedTerms(false)
+    }
+  }, [authMode])
 
   const FilterSectionHeader: React.FC<{ label: string; isOpen: boolean; onToggle: () => void }> = ({
     label,
@@ -1018,6 +1038,29 @@ export default function PlantSwipe() {
               <div className="grid gap-2">
                 <Label htmlFor="confirm">{t('auth.confirmPassword')}</Label>
                 <Input id="confirm" type="password" placeholder={t('auth.confirmPasswordPlaceholder')} value={authPassword2} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthPassword2(e.target.value)} disabled={authSubmitting} />
+              </div>
+            )}
+            {authMode === 'signup' && (
+              <div className="flex items-start gap-3 rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] p-3">
+                <input
+                  id="auth-accept-terms"
+                  type="checkbox"
+                  checked={authAcceptedTerms}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAuthAcceptedTerms(e.target.checked)}
+                  disabled={authSubmitting}
+                  className="mt-1 h-4 w-4 shrink-0 rounded border-stone-300 text-emerald-600 accent-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-50 dark:border-[#555] dark:bg-[#1e1e1e]"
+                />
+                <Label htmlFor="auth-accept-terms" className="text-sm leading-5 text-stone-600 dark:text-stone-200">
+                  {t('auth.acceptTermsLabel')}{" "}
+                  <a
+                    href={termsPath}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300"
+                  >
+                    {t('auth.termsLinkLabel')}
+                  </a>.
+                </Label>
               </div>
             )}
             {authError && <div className="text-sm text-red-600">{authError}</div>}

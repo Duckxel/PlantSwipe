@@ -264,7 +264,10 @@
     "noAccount": "No account? Sign up",
     "haveAccount": "Have an account? Log in",
     "passwordsDontMatch": "Passwords do not match",
-    "unexpectedError": "Unexpected error"
+    "unexpectedError": "Unexpected error",
+    "acceptTermsLabel": "I have read and agree to the",
+    "termsLinkLabel": "Terms of Service",
+    "mustAcceptTerms": "Please accept the Terms of Service to continue"
   },
   "settings": {
     "title": "Account Settings",
