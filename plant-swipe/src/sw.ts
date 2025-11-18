@@ -104,7 +104,17 @@ warmStrategyCache({
 
 registerRoute(
   ({ request, url }) => request.mode === 'navigate' && !/\/api\//.test(url.pathname),
-  pageStrategy
+  async ({ event }) => {
+    if (self.registration.navigationPreload) {
+      try {
+        const preloadResponse = await event.preloadResponse
+        if (preloadResponse) return preloadResponse
+      } catch {
+        // ignore preload failures and fall back to strategy
+      }
+    }
+    return pageStrategy.handle({ event })
+  }
 )
 
 registerRoute(
