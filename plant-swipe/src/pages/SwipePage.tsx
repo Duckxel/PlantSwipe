@@ -43,27 +43,28 @@ interface SwipePageProps {
   handleInfo: () => void
   handlePass: () => void
   handlePrevious: () => void
-    liked?: boolean
-    onToggleLike?: () => void
-    boostImagePriority?: boolean
-    isLoading?: boolean
+  liked?: boolean
+  onToggleLike?: () => void
+  boostImagePriority?: boolean
+  isLoading?: boolean
 }
 
-export const SwipePage: React.FC<SwipePageProps> = ({
-  current,
-  index,
-  setIndex,
-  x,
-  y,
-  onDragEnd,
-  handleInfo,
-  handlePass,
-  handlePrevious,
-  liked = false,
-  onToggleLike,
-  boostImagePriority = false,
-  isLoading = false,
-}) => {
+export const SwipePage: React.FC<SwipePageProps> = (props) => {
+  const {
+    current,
+    index,
+    setIndex,
+    x,
+    y,
+    onDragEnd,
+    handleInfo,
+    handlePass,
+    handlePrevious,
+    liked = false,
+    onToggleLike,
+    boostImagePriority = false,
+    isLoading = false,
+  } = props
   const { t } = useTranslation("common")
     const seoTitle = t("seo.home.title", { defaultValue: "Aphylia" })
       const seoDescription = t("seo.home.description", {
@@ -121,7 +122,10 @@ export const SwipePage: React.FC<SwipePageProps> = ({
     const vertical = getVerticalPhotoUrl(current.photos ?? [])
     return vertical || current.image || ""
   }, [current])
-  const shouldPrioritizeImage = Boolean(boostImagePriority && displayImage)
+  const shouldPrioritizeImage = React.useMemo(
+    () => Boolean(displayImage && boostImagePriority),
+    [boostImagePriority, displayImage],
+  )
 
   React.useEffect(() => {
     if (!shouldPrioritizeImage || !displayImage || typeof document === "undefined") {
