@@ -611,6 +611,11 @@ else
   CI=${CI:-true} npm_config_cache="$CACHE_DIR" npm run build
 fi
 
+SITEMAP_PATH="$NODE_DIR/public/sitemap.xml"
+if [[ -f "$SITEMAP_PATH" && -n "$REPO_OWNER" ]]; then
+  chown "$REPO_OWNER:$REPO_OWNER" "$SITEMAP_PATH" || true
+fi
+
 # Deploy Supabase Edge Functions (delegates to dedicated script)
 deploy_supabase_functions() {
   local helper_script="$WORK_DIR/scripts/deploy-supabase-functions.sh"
