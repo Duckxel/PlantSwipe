@@ -57,11 +57,12 @@ export const SwipePage: React.FC<SwipePageProps> = ({
   onDragEnd,
   handleInfo,
   handlePass,
-  handlePrevious,
-  liked = false,
-  onToggleLike,
-    }) => {
-      const { t } = useTranslation("common")
+    handlePrevious,
+    liked = false,
+    onToggleLike,
+    boostImagePriority = false,
+  }) => {
+    const { t } = useTranslation("common")
     const seoTitle = t("seo.home.title", { defaultValue: "Aphylia" })
       const seoDescription = t("seo.home.description", {
         defaultValue: "Swipe through curated species, unlock their lore, and save favorites in Aphylia's living encyclopedia.",
