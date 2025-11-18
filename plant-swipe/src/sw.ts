@@ -129,7 +129,7 @@ registerRoute(
   new StaleWhileRevalidate({
     cacheName: 'i18n-cache',
     plugins: [
-      new ExpirationPlugin({ maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 }),
+      new ExpirationPlugin({ maxEntries: 40, maxAgeSeconds: 60 * 60 * 24 * 30 }),
       new CacheableResponsePlugin({ statuses: [0, 200] }),
     ],
   })
@@ -143,11 +143,11 @@ registerRoute(
     const assetsPrefix = `${scopeBasePath}assets/`
     return url.origin === self.location.origin && url.pathname.startsWith(assetsPrefix)
   },
-  new StaleWhileRevalidate({
+  new CacheFirst({
     cacheName: 'static-assets',
     plugins: [
       new CacheableResponsePlugin({ statuses: [0, 200] }),
-      new ExpirationPlugin({ maxEntries: 80, maxAgeSeconds: 60 * 60 * 24 * 7 }),
+      new ExpirationPlugin({ maxEntries: 120, maxAgeSeconds: 60 * 60 * 24 * 60 }),
     ],
   })
 )
@@ -157,7 +157,7 @@ registerRoute(
   new StaleWhileRevalidate({
     cacheName: 'image-cache',
     plugins: [
-      new ExpirationPlugin({ maxEntries: 60, maxAgeSeconds: 60 * 60 * 24 * 14 }),
+      new ExpirationPlugin({ maxEntries: 80, maxAgeSeconds: 60 * 60 * 24 * 30 }),
       new CacheableResponsePlugin({ statuses: [0, 200] }),
     ],
   })

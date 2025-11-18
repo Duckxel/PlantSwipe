@@ -73,6 +73,10 @@ export default function PlantSwipe() {
 
   const [index, setIndex] = useState(0)
   const [likedIds, setLikedIds] = useState<string[]>([])
+  const initialCardBoostRef = React.useRef(true)
+  React.useEffect(() => {
+    initialCardBoostRef.current = false
+  }, [])
 
   const location = useLocation()
   const state = location.state as { backgroundLocation?: any } | null
@@ -359,6 +363,7 @@ export default function PlantSwipe() {
   }, [filtered, searchSort, likedSet])
 
   const current = swipeList.length > 0 ? swipeList[index % swipeList.length] : undefined
+  const boostImagePriority = initialCardBoostRef.current && index === 0
 
   const handlePass = () => {
     if (swipeList.length === 0) return
@@ -910,7 +915,7 @@ export default function PlantSwipe() {
                   <Route
                     path="/"
                     element={plants.length > 0 ? (
-                      <SwipePage
+                        <SwipePage
                         current={current}
                         index={index}
                         setIndex={setIndex}
@@ -922,6 +927,7 @@ export default function PlantSwipe() {
                         handlePrevious={handlePrevious}
                         liked={current ? likedIds.includes(current.id) : false}
                         onToggleLike={() => { if (current) toggleLiked(current.id) }}
+                          boostImagePriority={boostImagePriority}
                       />
                     ) : (
                     <>
