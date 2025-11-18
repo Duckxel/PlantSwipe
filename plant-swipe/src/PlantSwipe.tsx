@@ -366,7 +366,8 @@ export default function PlantSwipe() {
   const current = swipeList.length > 0 ? swipeList[index % swipeList.length] : undefined
   const boostImagePriority = initialCardBoostRef.current && index === 0
 
-    React.useEffect(() => {
+  React.useEffect(() => {
+    if (currentView !== "discovery") return
       if (typeof document === "undefined" || typeof window === "undefined") return
       if (!current || index !== 0) return
       const candidate = getVerticalPhotoUrl(current.photos ?? []) || current.image || ""
@@ -390,7 +391,7 @@ export default function PlantSwipe() {
           link.parentNode.removeChild(link)
         }
       }
-    }, [current?.id, current?.image, index])
+  }, [currentView, current?.id, current?.image, index])
 
   const handlePass = () => {
     if (swipeList.length === 0) return
