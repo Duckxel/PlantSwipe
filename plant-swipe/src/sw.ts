@@ -104,16 +104,17 @@ warmStrategyCache({
 
 registerRoute(
   ({ request, url }) => request.mode === 'navigate' && !/\/api\//.test(url.pathname),
-  async ({ event }) => {
+  async ({ event, request }) => {
+    const navEvent = event as FetchEvent
     if (self.registration.navigationPreload) {
       try {
-        const preloadResponse = await event.preloadResponse
+        const preloadResponse = await navEvent.preloadResponse
         if (preloadResponse) return preloadResponse
       } catch {
         // ignore preload failures and fall back to strategy
       }
     }
-    return pageStrategy.handle({ event })
+    return pageStrategy.handle({ event: navEvent, request })
   }
 )
 
