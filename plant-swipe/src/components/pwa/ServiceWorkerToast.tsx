@@ -84,9 +84,7 @@ export function ServiceWorkerToast() {
       }
 
       wb.addEventListener('waiting', handleWaiting)
-      wb.addEventListener('externalwaiting', handleWaiting)
       wb.addEventListener('activated', handleActivated)
-      wb.addEventListener('externalactivated', handleActivated)
 
       wb.register().catch((error) => {
         if (import.meta.env.DEV) {
@@ -96,9 +94,7 @@ export function ServiceWorkerToast() {
 
       return () => {
         wb.removeEventListener('waiting', handleWaiting)
-        wb.removeEventListener('externalwaiting', handleWaiting)
         wb.removeEventListener('activated', handleActivated)
-        wb.removeEventListener('externalactivated', handleActivated)
         wbRef.current = null
       }
     }, [])
