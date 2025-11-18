@@ -125,3 +125,72 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer components {
+  .legal-content {
+    @apply space-y-4 text-base leading-relaxed text-stone-700 dark:text-stone-200;
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+
+  .legal-content h1,
+  .legal-content h2,
+  .legal-content h3 {
+    @apply text-stone-900 dark:text-stone-50;
+  }
+
+  .legal-content h1 {
+    @apply text-3xl font-semibold mb-6;
+  }
+
+  .legal-content h2 {
+    @apply text-2xl font-semibold mt-10 mb-4;
+  }
+
+  .legal-content h3 {
+    @apply text-xl font-semibold mt-6 mb-3;
+  }
+
+  .legal-content p {
+    @apply text-base leading-relaxed text-stone-700 dark:text-stone-200;
+  }
+
+  .legal-content ul,
+  .legal-content ol {
+    @apply ml-6 mt-3 space-y-2 text-base;
+  }
+
+  .legal-content ul {
+    list-style-type: disc;
+  }
+
+  .legal-content ol {
+    list-style-type: decimal;
+  }
+
+  .legal-content li {
+    @apply pl-1;
+  }
+
+  .legal-content a {
+    @apply text-emerald-600 dark:text-emerald-300 underline decoration-dotted decoration-emerald-400/60 transition-colors;
+  }
+
+  .legal-content strong,
+  .legal-content b {
+    @apply text-stone-900 dark:text-stone-50 font-semibold;
+  }
+
+  .legal-content table {
+    @apply w-full text-sm;
+  }
+
+  .legal-content th,
+  .legal-content td {
+    @apply border border-stone-200 dark:border-[#3e3e42] px-3 py-2 text-left align-top;
+  }
+
+  .legal-content [data-custom-class="subtitle"],
+  .legal-content [data-custom-class="body_text"] {
+    @apply text-base text-stone-700 dark:text-stone-200;
+  }
+}
