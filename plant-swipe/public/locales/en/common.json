@@ -35,6 +35,55 @@
       "termsOfServices": "Terms of Services"
     }
   },
+  "seo": {
+    "defaults": {
+      "description": "Discover, swipe and manage the perfect plants for every garden."
+    },
+    "home": {
+      "title": "Plant discovery & swipe deck",
+      "description": "Swipe through curated species, unlock their lore, and save favorites in Aphylia's living encyclopedia."
+    },
+    "search": {
+      "title": "Advanced plant search",
+      "description": "Filter by color, season, rarity, and uses to pinpoint the right species for your next planting plan."
+    },
+    "about": {
+      "title": "About Aphylia",
+      "description": "Meet the founders, rituals, and creative ambition behind Aphylia's augmented plant lab."
+    },
+    "contactSupport": {
+      "title": "Contact Aphylia support",
+      "description": "Reach the team for product questions, onboarding help, or to report an issue."
+    },
+    "contactBusiness": {
+      "title": "Contact Aphylia business team",
+      "description": "Start partnership, press, or enterprise deployment conversations with the core team."
+    },
+    "download": {
+      "title": "Download the Aphylia PWA",
+      "description": "Follow step-by-step install guides for iOS, Android, and desktop so every tester stays up to date."
+    },
+    "terms": {
+      "title": "Aphylia terms & testing rules",
+      "description": "Review the internal usage guidelines that keep our private beta safe, secure, and respectful."
+    },
+    "plant": {
+      "title": "{{name}} plant profile",
+      "fallbackTitle": "Plant encyclopedia entry",
+      "fallbackDescription": "Explore care notes, traits, and lore for every species in Aphylia.",
+      "missingDescription": "{{name}} care tips, meaning, and highlights."
+    },
+    "profile": {
+      "title": "{{name}} on Aphylia",
+      "fallbackTitle": "Aphylia grower profile",
+      "description": "See shared gardens, stats, and activity from {{name}} inside the Aphylia community.",
+      "fallbackDescription": "Browse public gardens, streaks, and highlights from Aphylia growers."
+    },
+    "error": {
+      "title": "Page not found",
+      "description": "We couldn't load this route. Try the recovery tips or head back home."
+    }
+  },
   "errorPage": {
     "codeLabel": "Error code",
     "tipsTitle": "Try these steps",

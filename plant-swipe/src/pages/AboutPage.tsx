@@ -5,6 +5,7 @@ import { Link } from "@/components/i18n/Link"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
+import { usePageMetadata } from "@/hooks/usePageMetadata"
 
 type PillarCard = { eyebrow: string; title: string; description: string | string[] }
 type MemberCard = {
@@ -41,6 +42,12 @@ const memberProfiles: Record<
 
 export default function AboutPage() {
   const { t } = useTranslation("About")
+  const { t: tCommon } = useTranslation("common")
+  const seoTitle = tCommon("seo.about.title", { defaultValue: "About Aphylia" })
+  const seoDescription = tCommon("seo.about.description", {
+    defaultValue: "Meet the founders, rituals, and creative ambition behind Aphylia's augmented plant lab.",
+  })
+  usePageMetadata({ title: seoTitle, description: seoDescription })
   const featureItems = (t("services.items", { returnObjects: true }) as string[]) ?? []
   const pillars = t("pillars", { returnObjects: true }) as {
     title: string

@@ -5,6 +5,7 @@ import { AlertTriangle, Home, LifeBuoy } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { useLanguageNavigate } from "@/lib/i18nRouting"
+import { usePageMetadata } from "@/hooks/usePageMetadata"
 
 type ErrorPageProps = {
   code?: string
@@ -28,6 +29,11 @@ export function ErrorPage({ code: providedCode }: ErrorPageProps) {
   const translationKey = i18n.exists(`errorPage.codes.${normalizedCode}.title`) ? normalizedCode : "default"
   const title = t(`errorPage.codes.${translationKey}.title`)
   const description = t(`errorPage.codes.${translationKey}.description`)
+  const seoTitle = title || t("seo.error.title", { defaultValue: "Page not found" })
+  const seoDescription = description || t("seo.error.description", {
+    defaultValue: "We couldn't load this route. Try the recovery tips or head back home.",
+  })
+  usePageMetadata({ title: seoTitle, description: seoDescription })
 
   const tips = TIP_KEYS.map((key) => t(key))
 

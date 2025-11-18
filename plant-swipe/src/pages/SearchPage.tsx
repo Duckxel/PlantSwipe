@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { useTranslation } from "react-i18next";
 import { Flame, PartyPopper, Sparkles } from "lucide-react";
 import { isNewPlant, isPlantOfTheMonth, isPopularPlant } from "@/lib/plantHighlights";
+import { usePageMetadata } from "@/hooks/usePageMetadata";
 
 interface SearchPageProps {
   plants: Plant[];
@@ -17,8 +18,13 @@ export const SearchPage: React.FC<SearchPageProps> = ({
   plants,
   openInfo,
   likedIds = [],
-}) => {
-  const { t } = useTranslation("common");
+  }) => {
+    const { t } = useTranslation("common");
+    const seoTitle = t("seo.search.title", { defaultValue: "Advanced plant search" });
+    const seoDescription = t("seo.search.description", {
+      defaultValue: "Filter by color, season, rarity, and uses to pinpoint the right species for your next planting plan.",
+    });
+    usePageMetadata({ title: seoTitle, description: seoDescription });
     const cardSurface =
       "group relative rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_35px_95px_-45px_rgba(16,185,129,0.65)]";
 

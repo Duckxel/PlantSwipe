@@ -31,6 +31,7 @@ import { isNewPlant, isPlantOfTheMonth, isPopularPlant } from "@/lib/plantHighli
 import { getVerticalPhotoUrl } from "@/lib/photos"
 import { cn, deriveWaterLevelFromFrequency } from "@/lib/utils"
 import { resolveColorValue, DEFAULT_PLANT_COLOR } from "@/lib/colors"
+import { usePageMetadata } from "@/hooks/usePageMetadata"
 
 interface SwipePageProps {
   current: Plant | undefined
@@ -58,8 +59,13 @@ export const SwipePage: React.FC<SwipePageProps> = ({
   handlePrevious,
   liked = false,
   onToggleLike,
-  }) => {
-    const { t } = useTranslation("common")
+    }) => {
+      const { t } = useTranslation("common")
+      const seoTitle = t("seo.home.title", { defaultValue: "Plant discovery & swipe deck" })
+      const seoDescription = t("seo.home.description", {
+        defaultValue: "Swipe through curated species, unlock their lore, and save favorites in Aphylia's living encyclopedia.",
+      })
+      usePageMetadata({ title: seoTitle, description: seoDescription })
     const [isDesktop, setIsDesktop] = React.useState(() => (typeof window !== "undefined" ? window.innerWidth >= 768 : false))
 
     React.useEffect(() => {
