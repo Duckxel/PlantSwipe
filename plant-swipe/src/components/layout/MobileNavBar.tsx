@@ -24,14 +24,6 @@ export const MobileNavBar: React.FC<MobileNavBarProps> = ({ canCreate, onProfile
   const { t } = useTranslation('common')
   const [profileMenuOpen, setProfileMenuOpen] = React.useState(false)
   const canUseDOM = typeof document !== "undefined"
-  const navLayerStyle = React.useMemo<React.CSSProperties>(() => ({
-    willChange: "transform",
-    transform: "translateZ(0)",
-    WebkitTransform: "translateZ(0)",
-    backfaceVisibility: "hidden",
-    WebkitBackfaceVisibility: "hidden",
-    contain: "layout paint",
-  }), [])
   
   const currentView: "discovery" | "gardens" | "search" | "create" | "profile" =
     pathWithoutLang === "/" ? "discovery" :
@@ -46,10 +38,9 @@ export const MobileNavBar: React.FC<MobileNavBarProps> = ({ canCreate, onProfile
 
   const navElement = (
     <nav
-      className="fixed bottom-0 left-0 right-0 md:hidden z-50 isolate border-t border-stone-200 dark:border-[#3e3e42] bg-white/70 dark:bg-[#252526]/90 backdrop-blur-xl supports-[backdrop-filter]:bg-white/50 dark:supports-[backdrop-filter]:bg-[#252526]/80 shadow-[0_-8px_30px_rgba(0,0,0,0.08)] dark:shadow-[0_-8px_30px_rgba(0,0,0,0.3)] pb-[max(env(safe-area-inset-bottom),0px)]"
+      className="fixed bottom-0 left-0 right-0 md:hidden z-50 border-t border-stone-200 dark:border-[#3e3e42] bg-white/70 dark:bg-[#252526]/90 backdrop-blur-xl supports-[backdrop-filter]:bg-white/50 dark:supports-[backdrop-filter]:bg-[#252526]/80 shadow-[0_-8px_30px_rgba(0,0,0,0.08)] dark:shadow-[0_-8px_30px_rgba(0,0,0,0.3)] pb-[max(env(safe-area-inset-bottom),0px)]"
       role="navigation"
       aria-label="Primary"
-      style={navLayerStyle}
     >
       <div className="relative mx-auto max-w-6xl px-6 pt-3 pb-3">
         {/* Center floating create button */}
