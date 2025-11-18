@@ -82,53 +82,66 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
         <NavPill to="/gardens" isActive={pathWithoutLang.startsWith('/gardens') || pathWithoutLang.startsWith('/garden/')} icon={<Sprout className="h-4 w-4" />} label={t('common.garden')} showDot={hasUnfinished} />
         <NavPill to="/search" isActive={pathWithoutLang.startsWith('/search')} icon={<Search className="h-4 w-4" />} label={t('common.encyclopedia')} />
       </nav>
-  <div className="ml-auto flex items-center gap-2 flex-wrap sm:flex-nowrap min-w-0 justify-end">
+    <div className="ml-auto flex flex-1 justify-end">
+      <div className="grid min-h-[48px] w-full max-w-[360px] grid-cols-2 gap-2">
         {!user ? (
           <>
-            <Button className="rounded-2xl" variant="secondary" onClick={openSignup}>
+            <Button className="rounded-2xl h-12 w-full" variant="secondary" onClick={openSignup}>
               <UserPlus className="h-4 w-4 mr-2" /> {t('common.signup')}
             </Button>
-            <Button className="rounded-2xl" variant="default" onClick={openLogin}>
+            <Button className="rounded-2xl h-12 w-full" variant="default" onClick={openLogin}>
               <LogIn className="h-4 w-4 mr-2" /> {t('common.login')}
             </Button>
           </>
         ) : (
-          <div className="relative" ref={anchorRef}>
-            <Button className="rounded-2xl" variant="secondary" onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); setMenuOpen((o) => !o); }} aria-label="Profile menu" aria-haspopup="menu" aria-expanded={menuOpen}>
-              <User className="h-4 w-4 mr-2 shrink-0" />
-              <span className="hidden sm:inline max-w-[40vw] truncate min-w-0">{label}</span>
-              <ChevronDown className="h-4 w-4 ml-2 opacity-70" />
-            </Button>
-            {menuOpen && menuPosition && createPortal(
-              <div
-                ref={menuRef}
-                className="w-40 rounded-xl border bg-white dark:bg-[#252526] dark:border-[#3e3e42] shadow z-[60] p-1"
-                style={{ position: 'fixed', top: menuPosition.top, right: menuPosition.right }}
-                role="menu"
+          <>
+            <div className="col-span-2 relative" ref={anchorRef}>
+              <Button
+                className="rounded-2xl h-12 w-full justify-between sm:justify-center"
+                variant="secondary"
+                onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); setMenuOpen((o) => !o); }}
+                aria-label="Profile menu"
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
               >
-                {profile?.is_admin && (
-                  <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/admin') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
-                    <Shield className="h-4 w-4" /> {t('common.admin')}
+                <User className="h-4 w-4 mr-2 shrink-0" />
+                <span className="hidden sm:inline max-w-[40vw] truncate min-w-0">{label}</span>
+                <ChevronDown className="h-4 w-4 ml-2 opacity-70" />
+              </Button>
+              {menuOpen && menuPosition && createPortal(
+                <div
+                  ref={menuRef}
+                  className="w-40 rounded-xl border bg-white dark:bg-[#252526] dark:border-[#3e3e42] shadow z-[60] p-1"
+                  style={{ position: 'fixed', top: menuPosition.top, right: menuPosition.right }}
+                  role="menu"
+                >
+                  {profile?.is_admin && (
+                    <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/admin') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
+                      <Shield className="h-4 w-4" /> {t('common.admin')}
+                    </button>
+                  )}
+                  <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); (onProfile ? onProfile : () => navigate('/profile'))() }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
+                    <User className="h-4 w-4" /> {t('common.profile')}
                   </button>
-                )}
-                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); (onProfile ? onProfile : () => navigate('/profile'))() }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
-                  <User className="h-4 w-4" /> {t('common.profile')}
-                </button>
-                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/friends') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
-                  <HeartHandshake className="h-4 w-4" /> {t('common.friends')}
-                </button>
-                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/settings') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
-                  <Settings className="h-4 w-4" /> {t('common.settings')}
-                </button>
-                <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); if (onLogout) { onLogout() } }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-red-600 dark:text-red-400 flex items-center gap-2" role="menuitem">
-                  <LogOut className="h-4 w-4" /> {t('common.logout')}
-                </button>
-              </div>,
-              document.body
-            )}
-          </div>
+                  <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/friends') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
+                    <HeartHandshake className="h-4 w-4" /> {t('common.friends')}
+                  </button>
+                  <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/settings') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
+                    <Settings className="h-4 w-4" /> {t('common.settings')}
+                  </button>
+                  <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); if (onLogout) { onLogout() } }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-red-600 dark:text-red-400 flex items-center gap-2" role="menuitem">
+                    <LogOut className="h-4 w-4" /> {t('common.logout')}
+                  </button>
+                </div>,
+                document.body
+              )}
+            </div>
+            <span className="col-span-1 invisible h-12 rounded-2xl" aria-hidden="true" />
+            <span className="col-span-1 invisible h-12 rounded-2xl" aria-hidden="true" />
+          </>
         )}
       </div>
+    </div>
     </header>
   )
 }

@@ -35,12 +35,12 @@ import AboutPage from "@/pages/AboutPage";
 import DownloadPage from "@/pages/DownloadPage";
 import TermsPage from "@/pages/TermsPage";
 import { ErrorPage } from "@/pages/ErrorPage";
-import { supabase } from "@/lib/supabaseClient";
 import { useLanguage } from "@/lib/i18nRouting";
 import { loadPlantsWithTranslations } from "@/lib/plantTranslationLoader";
 import { isPlantOfTheMonth } from "@/lib/plantHighlights";
 import { formatClassificationLabel } from "@/constants/classification";
 import { useTranslation } from "react-i18next";
+import type { SupabaseClient, RealtimeChannel } from "@supabase/supabase-js";
 
 // Lazy load heavy pages for code splitting
 const AdminPage = lazy(() => import("@/pages/AdminPage").then(module => ({ default: module.AdminPage })));
@@ -49,11 +49,94 @@ const GardenListPage = lazy(() => import("@/pages/GardenListPage").then(module =
 
 type SearchSortMode = "default" | "newest" | "popular" | "favorites"
 
+const PLANT_CACHE_KEY = "plantswipe.cache.v1"
+
+const readCachedPlants = (): Plant[] => {
+  if (typeof window === "undefined") return []
+  try {
+    const raw = window.localStorage.getItem(PLANT_CACHE_KEY)
+    if (!raw) return []
+    const payload = JSON.parse(raw)
+    if (Array.isArray(payload?.plants)) {
+      return payload.plants as Plant[]
+    }
+  } catch {
+    /* ignore cache errors */
+  }
+  return []
+}
+
+const writePlantCache = (plants: Plant[]) => {
+  if (typeof window === "undefined") return
+  try {
+    const payload = { plants, updatedAt: Date.now() }
+    window.localStorage.setItem(PLANT_CACHE_KEY, JSON.stringify(payload))
+  } catch {
+    /* ignore cache write errors */
+  }
+}
+
+const getSupabaseClient = (() => {
+  let clientPromise: Promise<SupabaseClient> | null = null
+  return () => {
+    if (!clientPromise) {
+      clientPromise = import("@/lib/supabaseClient").then((module) => module.supabase)
+    }
+    return clientPromise
+  }
+})()
+
+const useAfterFirstPaint = () => {
+  const [ready, setReady] = React.useState<boolean>(typeof window === "undefined")
+  React.useEffect(() => {
+    if (typeof window === "undefined") return
+    let raf = window.requestAnimationFrame(() => {
+      raf = window.requestAnimationFrame(() => setReady(true))
+    })
+    return () => {
+      window.cancelAnimationFrame(raf)
+    }
+  }, [])
+  return ready
+}
+
+const runAfterIdle = (cb: () => void) => {
+  if (typeof window === "undefined") {
+    cb()
+    return () => {}
+  }
+  const win = window as Window &
+    Partial<{
+      requestIdleCallback: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number
+      cancelIdleCallback: (handle: number) => void
+    }>
+  if (typeof win.requestIdleCallback === "function") {
+    const handle = win.requestIdleCallback(
+      () => {
+        cb()
+      },
+      { timeout: 2000 },
+    )
+    return () => {
+      if (typeof win.cancelIdleCallback === "function") {
+        win.cancelIdleCallback(handle)
+      }
+    }
+  }
+  const timer = window.setTimeout(cb, 0)
+  return () => window.clearTimeout(timer)
+}
+
 // --- Main Component ---
 export default function PlantSwipe() {
   const { user, signIn, signUp, signOut, profile, refreshProfile } = useAuth()
   const currentLang = useLanguage()
   const { t } = useTranslation('common')
+  const afterFirstPaint = useAfterFirstPaint()
+  const initialCachedPlants = React.useMemo(() => readCachedPlants(), [])
+  const [plants, setPlants] = useState<Plant[]>(initialCachedPlants)
+  const [loading, setLoading] = useState(() => initialCachedPlants.length === 0)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [query, setQuery] = useState("")
   const [seasonFilter, setSeasonFilter] = useState<string | null>(null)
   const [colorFilter, setColorFilter] = useState<string | null>(null)
@@ -99,9 +182,10 @@ export default function PlantSwipe() {
   
   const [authSubmitting, setAuthSubmitting] = useState(false)
 
-  const [plants, setPlants] = useState<Plant[]>([])
-  const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState<string | null>(null)
+  const plantsRef = React.useRef<Plant[]>(initialCachedPlants)
+  React.useEffect(() => {
+    plantsRef.current = plants
+  }, [plants])
   const typeOptions = useMemo(() => {
     const labels = new Set<string>()
     plants.forEach((plant) => {
@@ -126,7 +210,9 @@ export default function PlantSwipe() {
   }, [profile?.liked_plant_ids])
 
   const loadPlants = React.useCallback(async () => {
-    setLoading(true)
+    if (plantsRef.current.length === 0) {
+      setLoading(true)
+    }
     setLoadError(null)
     let ok = false
     try {
@@ -135,6 +221,7 @@ export default function PlantSwipe() {
       // This ensures translations are properly loaded for all languages, including English
       const plantsWithTranslations = await loadPlantsWithTranslations(currentLang)
       setPlants(plantsWithTranslations)
+      writePlantCache(plantsWithTranslations)
       ok = true
     } catch (e: unknown) {
       const msg = e && typeof e === 'object' && 'message' in e ? String((e as { message?: unknown }).message || '') : ''
@@ -156,70 +243,89 @@ export default function PlantSwipe() {
     return () => { try { window.removeEventListener('plants:refresh', onRefresh as EventListener) } catch {} }
   }, [loadPlants])
 
-  // Global presence tracking so Admin can see "currently online" users
-  const presenceRef = React.useRef<ReturnType<typeof supabase.channel> | null>(null)
+  // Track SPA route changes to server for visit analytics (deferred until after first paint)
   React.useEffect(() => {
-    // Track SPA route changes to server for visit analytics
-    const sendVisit = async (path: string) => {
-      try {
-        const base: string = ''
-        const session = (await supabase.auth.getSession()).data.session
-        const token = session?.access_token
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-        if (token) headers.Authorization = `Bearer ${token}`
-        const ref = document.referrer || ''
-        const extra = {
-          viewport: { w: window.innerWidth, h: window.innerHeight, dpr: window.devicePixelRatio || 1 },
-          screen: { w: window.screen?.width || null, h: window.screen?.height || null, colorDepth: (window.screen as any)?.colorDepth || null },
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || null,
-          platform: navigator.platform || null,
-          vendor: navigator.vendor || null,
-          hardwareConcurrency: (navigator as any).hardwareConcurrency || null,
-          memoryGB: (navigator as any).deviceMemory || null,
-          webgl: (() => {
-            try {
-              const c = document.createElement('canvas')
-              const gl = (c.getContext('webgl2') || c.getContext('webgl')) as WebGLRenderingContext | WebGL2RenderingContext | null
-              if (!gl) return null
-              const vendor = (gl as any).getParameter?.((gl as any).VENDOR)
-              const renderer = (gl as any).getParameter?.((gl as any).RENDERER)
-              return { vendor: vendor ?? null, renderer: renderer ?? null }
-            } catch { return null }
-          })(),
-        }
-        await fetch(`${base}/api/track-visit`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            pagePath: path,
-            referrer: ref,
-            userId: user?.id || null,
-            pageTitle: document.title || null,
-            language: navigator.language || (navigator as any).languages?.[0] || null,
-            // utm removed from server; not sent anymore
-            extra,
-          }),
-          keepalive: true,
-        })
-      } catch {}
-    }
+    if (!afterFirstPaint || typeof window === "undefined") return
+    let cancelled = false
+    const cancelIdle = runAfterIdle(() => {
+      if (cancelled) return
+      const sendVisit = async (path: string) => {
+        try {
+          const base: string = ''
+          let token: string | null = null
+          try {
+            const client = await getSupabaseClient()
+            const session = (await client.auth.getSession()).data.session
+            token = session?.access_token ?? null
+          } catch {
+            token = null
+          }
+          if (cancelled) return
+          const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+          if (token) headers.Authorization = `Bearer ${token}`
+          const ref = document.referrer || ''
+          const extra = {
+            viewport: { w: window.innerWidth, h: window.innerHeight, dpr: window.devicePixelRatio || 1 },
+            screen: { w: window.screen?.width || null, h: window.screen?.height || null, colorDepth: (window.screen as any)?.colorDepth || null },
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || null,
+            platform: navigator.platform || null,
+            vendor: navigator.vendor || null,
+            hardwareConcurrency: (navigator as any).hardwareConcurrency || null,
+            memoryGB: (navigator as any).deviceMemory || null,
+            webgl: (() => {
+              try {
+                const c = document.createElement('canvas')
+                const gl = (c.getContext('webgl2') || c.getContext('webgl')) as WebGLRenderingContext | WebGL2RenderingContext | null
+                if (!gl) return null
+                const vendor = (gl as any).getParameter?.((gl as any).VENDOR)
+                const renderer = (gl as any).getParameter?.((gl as any).RENDERER)
+                return { vendor: vendor ?? null, renderer: renderer ?? null }
+              } catch {
+                return null
+              }
+            })(),
+          }
+          await fetch(`${base}/api/track-visit`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              pagePath: path,
+              referrer: ref,
+              userId: user?.id || null,
+              pageTitle: document.title || null,
+              language: navigator.language || (navigator as any).languages?.[0] || null,
+              extra,
+            }),
+            keepalive: true,
+          })
+        } catch {}
+      }
 
-    // Initial on mount and on subsequent route changes
-    sendVisit(location.pathname + location.search).catch(() => {})
-    const unlisten = () => {
-      // react-router v6 provides useLocation, so listen via effect dependency
+      sendVisit(location.pathname + location.search).catch(() => {})
+    })
+    return () => {
+      cancelled = true
+      cancelIdle()
     }
-    return () => { unlisten() }
-  }, [location.pathname, location.search, user?.id])
+  }, [afterFirstPaint, location.pathname, location.search, user?.id])
 
-  // Heartbeat: periodically record a lightweight visit so Admin "online" stays fresh
+  // Heartbeat: periodically record a lightweight visit so Admin "online" stays fresh (after initial paint + data)
   React.useEffect(() => {
+    if (!afterFirstPaint || typeof window === "undefined" || plants.length === 0) return
     const HEARTBEAT_MS = 60_000
     let timer: ReturnType<typeof setInterval> | null = null
+    let cancelled = false
     const sendHeartbeat = async () => {
       try {
-        const session = (await supabase.auth.getSession()).data.session
-        const token = session?.access_token
+        let token: string | null = null
+        try {
+          const client = await getSupabaseClient()
+          const session = (await client.auth.getSession()).data.session
+          token = session?.access_token ?? null
+        } catch {
+          token = null
+        }
+        if (cancelled) return
         const headers: Record<string, string> = { 'Content-Type': 'application/json' }
         if (token) headers.Authorization = `Bearer ${token}`
         await fetch('/api/track-visit', {
@@ -237,46 +343,74 @@ export default function PlantSwipe() {
         })
       } catch {}
     }
-    timer = setInterval(() => { sendHeartbeat().catch(() => {}) }, HEARTBEAT_MS)
-    return () => { if (timer) clearInterval(timer) }
-  }, [location.pathname, location.search, user?.id])
+    const cancelIdle = runAfterIdle(() => {
+      if (cancelled) return
+      sendHeartbeat().catch(() => {})
+      timer = window.setInterval(() => {
+        sendHeartbeat().catch(() => {})
+      }, HEARTBEAT_MS)
+    })
+    return () => {
+      cancelled = true
+      if (timer) clearInterval(timer)
+      cancelIdle()
+    }
+  }, [afterFirstPaint, location.pathname, location.search, user?.id, plants.length])
 
   React.useEffect(() => {
-    // Stable anonymous id for non-authenticated visitors
-    let anonId: string | null = null
-    try {
-      anonId = localStorage.getItem('plantswipe.anon_id')
-      if (!anonId) {
-        anonId = `anon_${Math.random().toString(36).slice(2, 10)}`
-        localStorage.setItem('plantswipe.anon_id', anonId)
-      }
-    } catch {}
-
-    const key = user?.id || anonId || `anon_${Math.random().toString(36).slice(2, 10)}`
-    const channel = supabase.channel('global-presence', { config: { presence: { key } } })
-
-    channel
-      .on('presence', { event: 'sync' }, () => {
-        // no-op: can be used for debugging presence state
-      })
-      .subscribe((status: unknown) => {
-        if (status === 'SUBSCRIBED') {
-          try {
-            channel.track({
-              user_id: user?.id || null,
-              display_name: profile?.display_name || null,
-              online_at: new Date().toISOString(),
-            })
-          } catch {}
+    if (!afterFirstPaint || typeof window === "undefined") return
+    let cancelled = false
+    let channel: RealtimeChannel | null = null
+    let client: SupabaseClient | null = null
+    const cleanupIdle = runAfterIdle(async () => {
+      if (cancelled) return
+      let anonId: string | null = null
+      try {
+        anonId = localStorage.getItem('plantswipe.anon_id')
+        if (!anonId) {
+          anonId = `anon_${Math.random().toString(36).slice(2, 10)}`
+          localStorage.setItem('plantswipe.anon_id', anonId)
         }
-      })
-
-    presenceRef.current = channel
+      } catch {}
+      const key = user?.id || anonId || `anon_${Math.random().toString(36).slice(2, 10)}`
+      try {
+        client = await getSupabaseClient()
+      } catch {
+        return
+      }
+      if (cancelled || !client) return
+      channel = client.channel('global-presence', { config: { presence: { key } } })
+      channel
+        .on('presence', { event: 'sync' }, () => {
+          // no-op: can be used for debugging presence state
+        })
+        .subscribe((status: unknown) => {
+          if (status === 'SUBSCRIBED') {
+            try {
+              channel?.track({
+                user_id: user?.id || null,
+                display_name: profile?.display_name || null,
+                online_at: new Date().toISOString(),
+              })
+            } catch {}
+          }
+        })
+    })
     return () => {
-      try { channel.untrack() } catch {}
-      supabase.removeChannel(channel)
+      cancelled = true
+      cleanupIdle()
+      if (channel) {
+        try {
+          channel.untrack()
+        } catch {}
+      }
+      if (channel && client) {
+        try {
+          client.removeChannel(channel)
+        } catch {}
+      }
     }
-  }, [user?.id, profile?.display_name])
+  }, [afterFirstPaint, user?.id, profile?.display_name])
 
   const filtered = useMemo(() => {
     const lowerQuery = query.toLowerCase()
@@ -363,6 +497,7 @@ export default function PlantSwipe() {
   }, [filtered, searchSort, likedSet])
 
   const current = swipeList.length > 0 ? swipeList[index % swipeList.length] : undefined
+  const swipeIsLoading = loading && swipeList.length === 0
   const boostImagePriority = initialCardBoostRef.current && index === 0
 
   const handlePass = () => {
@@ -474,7 +609,8 @@ export default function PlantSwipe() {
       // fire-and-forget sync to Supabase
       ;(async () => {
         try {
-          const { error } = await supabase
+          const client = await getSupabaseClient()
+          const { error } = await client
             .from('profiles')
             .update({ liked_plant_ids: next })
             .eq('id', user!.id)
@@ -912,35 +1048,31 @@ export default function PlantSwipe() {
                   <Navigate to="/" replace />
                 )} />
                   <Route path="/plants/:id" element={<PlantInfoPage />} />
-                  <Route
-                    path="/"
-                    element={plants.length > 0 ? (
-                        <SwipePage
-                        current={current}
-                        index={index}
-                        setIndex={setIndex}
-                        x={x}
-                        y={y}
-                        onDragEnd={onDragEnd}
-                        handleInfo={handleInfo}
-                        handlePass={handlePass}
-                        handlePrevious={handlePrevious}
-                        liked={current ? likedIds.includes(current.id) : false}
-                        onToggleLike={() => { if (current) toggleLiked(current.id) }}
-                          boostImagePriority={boostImagePriority}
-                      />
-                    ) : (
+                <Route
+                  path="/"
+                  element={plants.length > 0 || swipeIsLoading ? (
+                    <SwipePage
+                      current={current}
+                      index={index}
+                      setIndex={setIndex}
+                      x={x}
+                      y={y}
+                      onDragEnd={onDragEnd}
+                      handleInfo={handleInfo}
+                      handlePass={handlePass}
+                      handlePrevious={handlePrevious}
+                      liked={current ? likedIds.includes(current.id) : false}
+                      onToggleLike={() => { if (current) toggleLiked(current.id) }}
+                      boostImagePriority={boostImagePriority}
+                      isLoading={swipeIsLoading}
+                    />
+                  ) : (
                     <>
-                      {loading && <div className="p-8 text-center text-sm opacity-60">{t('common.loading')}</div>}
                       {loadError && <div className="p-8 text-center text-sm text-red-600">{t('common.error')}: {loadError}</div>}
-                      {!loading && !loadError && (
-                        <>
-                          {plants.length === 0 && !query && !loadError && !loading && (
-                            <div className="p-8 text-center text-sm opacity-60">
-                              {t('plant.noResults')}
-                            </div>
-                          )}
-                        </>
+                      {!loadError && (
+                        <div className="p-8 text-center text-sm opacity-60">
+                          {t('plant.noResults')}
+                        </div>
                       )}
                     </>
                   )}

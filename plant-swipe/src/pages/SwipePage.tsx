@@ -43,9 +43,10 @@ interface SwipePageProps {
   handleInfo: () => void
   handlePass: () => void
   handlePrevious: () => void
-  liked?: boolean
-  onToggleLike?: () => void
-  boostImagePriority?: boolean
+    liked?: boolean
+    onToggleLike?: () => void
+    boostImagePriority?: boolean
+    isLoading?: boolean
 }
 
 export const SwipePage: React.FC<SwipePageProps> = ({
@@ -57,12 +58,13 @@ export const SwipePage: React.FC<SwipePageProps> = ({
   onDragEnd,
   handleInfo,
   handlePass,
-    handlePrevious,
-    liked = false,
-    onToggleLike,
-    boostImagePriority = false,
-  }) => {
-    const { t } = useTranslation("common")
+  handlePrevious,
+  liked = false,
+  onToggleLike,
+  boostImagePriority = false,
+  isLoading = false,
+}) => {
+  const { t } = useTranslation("common")
     const seoTitle = t("seo.home.title", { defaultValue: "Aphylia" })
       const seoDescription = t("seo.home.description", {
         defaultValue: "Swipe through curated species, unlock their lore, and save favorites in Aphylia's living encyclopedia.",
@@ -120,6 +122,25 @@ export const SwipePage: React.FC<SwipePageProps> = ({
     return vertical || current.image || ""
   }, [current])
   const shouldPrioritizeImage = Boolean(boostImagePriority && displayImage)
+
+  React.useEffect(() => {
+    if (!shouldPrioritizeImage || !displayImage || typeof document === "undefined") {
+      return
+    }
+    const existing = Array.from(document.head.querySelectorAll<HTMLLinkElement>('link[data-swipe-preload]')).find(
+      (link) => link.dataset.swipePreload === displayImage,
+    )
+    if (existing) return
+    const link = document.createElement("link")
+    link.rel = "preload"
+    link.as = "image"
+    link.href = displayImage
+    link.setAttribute("data-swipe-preload", displayImage)
+    document.head.appendChild(link)
+    return () => {
+      link.remove()
+    }
+  }, [displayImage, shouldPrioritizeImage])
   const highlightBadges = React.useMemo(() => {
     if (!current) return []
     const badges: Array<{ key: string; label: string; icon: React.ReactNode; className: string }> = []
@@ -309,11 +330,29 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                       </div>
                     </Card>
                   </motion.div>
-                ) : (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <EmptyState onReset={() => setIndex(0)} />
-                  </div>
-                )}
+                  ) : isLoading ? (
+                    <motion.div
+                      key="swipe-skeleton"
+                      initial={{ scale: 0.94, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      exit={{ scale: 0.94, opacity: 0 }}
+                      transition={{ duration: 0.2, ease: "easeOut" }}
+                      className="relative h-full w-full select-none"
+                    >
+                      <LoadingCardSkeleton />
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key="swipe-empty"
+                      initial={{ scale: 0.94, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      exit={{ scale: 0.94, opacity: 0 }}
+                      transition={{ duration: 0.2, ease: "easeOut" }}
+                      className="absolute inset-0 flex items-center justify-center"
+                    >
+                      <EmptyState onReset={() => setIndex(0)} />
+                    </motion.div>
+                  )}
               </AnimatePresence>
           </div>
 
@@ -366,6 +405,27 @@ const EmptyState = ({ onReset }: { onReset: () => void }) => {
     </Card>
   )
 }
+
+const LoadingCardSkeleton = () => (
+  <Card className="relative h-full w-full overflow-hidden rounded-[28px] border border-white/40 dark:border-white/10 bg-gradient-to-br from-stone-900 via-stone-800 to-stone-900 text-white shadow-2xl">
+    <div className="absolute inset-0 animate-pulse bg-gradient-to-b from-white/5 via-white/0 to-black/50" aria-hidden="true" />
+    <div className="absolute inset-x-0 bottom-0 z-10 p-6 pb-8 space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="h-6 w-20 rounded-full bg-white/20" />
+        <span className="h-6 w-16 rounded-full bg-white/10" />
+      </div>
+      <div className="space-y-2">
+        <div className="h-10 w-56 rounded-full bg-white/30" />
+        <div className="h-4 w-40 rounded-full bg-white/20" />
+      </div>
+      <div className="grid grid-cols-3 gap-3 pt-2">
+        <span className="h-12 rounded-2xl bg-white/15" />
+        <span className="h-12 rounded-2xl bg-white/15" />
+        <span className="h-12 rounded-2xl bg-white/15" />
+      </div>
+    </div>
+  </Card>
+)
 
 const useSupportsHover = () => {
   const [supportsHover, setSupportsHover] = React.useState<boolean>(() => {
