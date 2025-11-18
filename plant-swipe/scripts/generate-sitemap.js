@@ -1,0 +1,384 @@
+#!/usr/bin/env node
+
+import path from 'node:path'
+import fs from 'node:fs/promises'
+import fsSync from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import dotenv from 'dotenv'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+
+const startedAt = Date.now()
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+const appRoot = path.resolve(__dirname, '..')
+const publicDir = path.join(appRoot, 'public')
+const sitemapPath = path.join(publicDir, 'sitemap.xml')
+
+loadEnvFiles(appRoot)
+
+const shouldSkip = parseBoolean(process.env.SKIP_SITEMAP_GENERATION)
+if (shouldSkip) {
+  console.log('[sitemap] SKIP_SITEMAP_GENERATION is set — skipping sitemap generation.')
+  process.exit(0)
+}
+
+const defaultSiteUrl = 'https://aphylia.app'
+const rawSiteUrl = (process.env.PLANTSWIPE_SITE_URL || process.env.SITE_URL || process.env.VITE_SITE_URL || defaultSiteUrl).trim()
+
+let siteUrlBase
+try {
+  const parsed = new URL(rawSiteUrl)
+  const normalizedPath = parsed.pathname.replace(/\/+$/, '')
+  siteUrlBase = `${parsed.origin}${normalizedPath}`
+} catch (error) {
+  console.error(`[sitemap] Invalid PLANTSWIPE_SITE_URL "${rawSiteUrl}". Provide a fully-qualified URL such as https://aphylia.app.`)
+  process.exit(1)
+}
+const siteUrlWithSlash = siteUrlBase.endsWith('/') ? siteUrlBase : `${siteUrlBase}/`
+
+const basePath = normalizeBasePath(process.env.VITE_APP_BASE_PATH)
+const defaultLanguage = (process.env.SITEMAP_DEFAULT_LANGUAGE || 'en').trim() || 'en'
+
+const STATIC_ROUTES = [
+  { path: '/', changefreq: 'daily', priority: 1.0 },
+  { path: '/search', changefreq: 'daily', priority: 0.9 },
+  { path: '/gardens', changefreq: 'weekly', priority: 0.8 },
+  { path: '/download', changefreq: 'monthly', priority: 0.7 },
+  { path: '/about', changefreq: 'monthly', priority: 0.6 },
+  { path: '/contact', changefreq: 'monthly', priority: 0.6 },
+  { path: '/contact/business', changefreq: 'monthly', priority: 0.5 },
+  { path: '/terms', changefreq: 'yearly', priority: 0.4 },
+]
+
+async function main() {
+  await fs.mkdir(publicDir, { recursive: true })
+
+  const languages = await detectLanguages(path.join(publicDir, 'locales'), defaultLanguage)
+
+  const dynamicRoutes = await loadPlantRoutes().catch((error) => {
+    console.warn(`[sitemap] Failed to load dynamic plant routes: ${error.message || error}`)
+    return []
+  })
+
+  const normalizedRoutes = mergeAndNormalizeRoutes([...STATIC_ROUTES, ...dynamicRoutes])
+
+  const nowIso = new Date().toISOString()
+  const urlEntries = []
+
+  for (const route of normalizedRoutes) {
+    const localizedByLang = new Map()
+    for (const lang of languages) {
+      const localizedPath = addLanguagePrefix(route.path, lang, defaultLanguage)
+      const withBasePath = applyBasePath(localizedPath, basePath)
+      const absoluteUrl = new URL(withBasePath, siteUrlWithSlash).href
+      localizedByLang.set(lang, absoluteUrl)
+    }
+
+    if (!localizedByLang.size) continue
+    const defaultHref = findDefaultHref(localizedByLang, defaultLanguage) || localizedByLang.values().next().value
+    const alternates = [
+      ...Array.from(localizedByLang.entries(), ([hreflang, href]) => ({ hreflang, href })),
+    ]
+    if (defaultHref) {
+      const hasDefault = alternates.some((alt) => alt.hreflang === 'x-default')
+      if (!hasDefault) {
+        alternates.push({ hreflang: 'x-default', href: defaultHref })
+      }
+    }
+
+    for (const [lang, href] of localizedByLang.entries()) {
+      urlEntries.push({
+        loc: href,
+        changefreq: route.changefreq,
+        priority: route.priority,
+        lastmod: route.lastmod || nowIso,
+        alternates,
+        lang,
+      })
+    }
+  }
+
+  urlEntries.sort((a, b) => a.loc.localeCompare(b.loc))
+
+  const xml = [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">',
+    ...urlEntries.map((entry) => {
+      const lines = [
+        '  <url>',
+        `    <loc>${escapeXml(entry.loc)}</loc>`,
+      ]
+      if (entry.lastmod) lines.push(`    <lastmod>${entry.lastmod}</lastmod>`)
+      if (entry.changefreq) lines.push(`    <changefreq>${entry.changefreq}</changefreq>`)
+      if (typeof entry.priority === 'number') lines.push(`    <priority>${entry.priority.toFixed(1)}</priority>`)
+      entry.alternates?.forEach((alt) => {
+        if (!alt?.href || !alt?.hreflang) return
+        lines.push(`    <xhtml:link rel="alternate" hreflang="${escapeXml(alt.hreflang)}" href="${escapeXml(alt.href)}" />`)
+      })
+      lines.push('  </url>')
+      return lines.join('\n')
+    }),
+    '</urlset>',
+    '',
+  ].join('\n')
+
+  await fs.writeFile(sitemapPath, xml, 'utf8')
+
+  const relPath = path.relative(appRoot, sitemapPath)
+  console.log(`[sitemap] Generated ${urlEntries.length} URLs (${languages.length} locales, ${dynamicRoutes.length} dynamic) in ${Date.now() - startedAt}ms → ${relPath}`)
+}
+
+main().catch((error) => {
+  console.error('[sitemap] Generation failed:', error)
+  process.exit(1)
+})
+
+async function detectLanguages(localesDir, fallback) {
+  try {
+    const entries = await fs.readdir(localesDir, { withFileTypes: true })
+    const languages = []
+    const seen = new Set()
+    for (const dirent of entries) {
+      if (!dirent.isDirectory()) continue
+      const name = dirent.name.trim()
+      if (!name) continue
+      const key = name.toLowerCase()
+      if (seen.has(key)) continue
+      seen.add(key)
+      languages.push(name)
+    }
+    const fallbackKey = fallback.toLowerCase()
+    if (!seen.has(fallbackKey)) {
+      languages.unshift(fallback)
+    }
+    return languages.length ? languages : [fallback]
+  } catch {
+    return [fallback]
+  }
+}
+
+async function loadPlantRoutes() {
+  const supabaseUrl =
+    process.env.SUPABASE_URL ||
+    process.env.VITE_SUPABASE_URL ||
+    process.env.REACT_APP_SUPABASE_URL ||
+    process.env.NEXT_PUBLIC_SUPABASE_URL
+
+  const supabaseKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_SERVICE_KEY ||
+    process.env.SUPABASE_SERVICE_ROLE ||
+    process.env.SUPABASE_SERVICE_ROLE_TOKEN ||
+    process.env.SUPABASE_ANON_KEY ||
+    process.env.VITE_SUPABASE_ANON_KEY ||
+    process.env.REACT_APP_SUPABASE_ANON_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    ''
+
+  if (!supabaseUrl || !supabaseKey) {
+    console.warn('[sitemap] Supabase credentials missing — static routes only.')
+    return []
+  }
+
+  const client = createSupabaseClient(supabaseUrl, supabaseKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  })
+
+  const maxPlants = positiveInteger(process.env.SITEMAP_MAX_PLANT_URLS, 5000)
+  const batchSize = positiveInteger(process.env.SITEMAP_PLANT_BATCH_SIZE, 500)
+
+  const results = []
+  let offset = 0
+
+  while (results.length < maxPlants) {
+    const limit = Math.min(batchSize, maxPlants - results.length)
+    const to = offset + limit - 1
+    const { data, error } = await client
+      .from('plants')
+      .select('id, updated_at, meta')
+      .order('updated_at', { ascending: false })
+      .range(offset, to)
+
+    if (error) {
+      throw new Error(error.message || 'Supabase query failed')
+    }
+
+    if (!data || data.length === 0) {
+      break
+    }
+
+    for (const row of data) {
+      if (!row?.id) continue
+      const normalizedId = encodeURIComponent(String(row.id))
+      const route = {
+        path: `/plants/${normalizedId}`,
+        changefreq: 'weekly',
+        priority: 0.7,
+        lastmod: pickLastmod(row),
+      }
+      results.push(route)
+      if (results.length >= maxPlants) break
+    }
+
+    if (data.length < limit) break
+    offset += limit
+  }
+
+  return results
+}
+
+function pickLastmod(row) {
+  if (row?.updated_at) {
+    const iso = toIsoString(row.updated_at)
+    if (iso) return iso
+  }
+  if (!row?.meta) return null
+  let meta = row.meta
+  if (typeof meta === 'string') {
+    try {
+      meta = JSON.parse(meta)
+    } catch {
+      meta = null
+    }
+  }
+  if (meta && typeof meta === 'object') {
+    const iso = toIsoString(meta.updatedAt || meta.updated_at)
+    if (iso) return iso
+  }
+  return null
+}
+
+function mergeAndNormalizeRoutes(routes) {
+  const seen = new Map()
+  const normalized = []
+
+  for (const route of routes) {
+    const normalizedRoute = normalizeRoute(route)
+    if (!normalizedRoute) continue
+    const existing = seen.get(normalizedRoute.path)
+    if (existing) {
+      existing.priority = Math.max(existing.priority, normalizedRoute.priority)
+      if (!existing.lastmod && normalizedRoute.lastmod) {
+        existing.lastmod = normalizedRoute.lastmod
+      }
+      continue
+    }
+    seen.set(normalizedRoute.path, normalizedRoute)
+    normalized.push(normalizedRoute)
+  }
+
+  normalized.sort((a, b) => a.path.localeCompare(b.path))
+  return normalized
+}
+
+function normalizeRoute(route) {
+  if (!route || !route.path) return null
+  let normalizedPath = route.path.trim()
+  if (!normalizedPath.startsWith('/')) normalizedPath = `/${normalizedPath}`
+  normalizedPath = normalizedPath.replace(/\/{2,}/g, '/')
+  if (normalizedPath.length > 1) normalizedPath = normalizedPath.replace(/\/+$/, '')
+
+  const rawPriority = typeof route.priority === 'number' ? route.priority : Number(route.priority)
+  const priority = Number.isFinite(rawPriority) ? clamp(rawPriority, 0, 1) : 0.5
+  const changefreq = route.changefreq || 'weekly'
+  const lastmod = toIsoString(route.lastmod)
+
+  return {
+    path: normalizedPath || '/',
+    priority,
+    changefreq,
+    lastmod,
+  }
+}
+
+function addLanguagePrefix(pathname, lang, defaultLang) {
+  const current = (lang || '').toLowerCase()
+  const fallback = (defaultLang || '').toLowerCase()
+  if (!lang || current === fallback) {
+    return pathname
+  }
+  if (pathname === '/' || pathname === '') {
+    return `/${lang}`
+  }
+  return `/${lang}${pathname}`
+}
+
+function applyBasePath(pathname, base) {
+  if (!base || base === '/') {
+    return pathname === '' ? '/' : pathname
+  }
+  if (pathname === '/' || pathname === '') {
+    return base
+  }
+  const trimmed = pathname.replace(/^\/+/, '')
+  return `${base}${trimmed}`.replace(/\/{2,}/g, '/')
+}
+
+function normalizeBasePath(value) {
+  if (!value || value === '/') return '/'
+  let next = value.trim()
+  if (!next.startsWith('/')) next = `/${next}`
+  if (!next.endsWith('/')) next = `${next}/`
+  return next.replace(/\/{2,}/g, '/')
+}
+
+function findDefaultHref(map, defaultLang) {
+  const target = (defaultLang || '').toLowerCase()
+  for (const [lang, href] of map.entries()) {
+    if (String(lang).toLowerCase() === target) {
+      return href
+    }
+  }
+  return null
+}
+
+function parseBoolean(value) {
+  if (value === undefined || value === null) return false
+  const normalized = String(value).trim().toLowerCase()
+  return ['1', 'true', 'yes', 'on', 'enable', 'enabled'].includes(normalized)
+}
+
+function positiveInteger(value, fallback) {
+  const num = Number(value)
+  if (!Number.isFinite(num) || num <= 0) return fallback
+  return Math.floor(num)
+}
+
+function clamp(value, min, max) {
+  if (!Number.isFinite(value)) return min
+  return Math.min(Math.max(value, min), max)
+}
+
+function toIsoString(value) {
+  if (!value) return null
+  const date = value instanceof Date ? value : new Date(value)
+  const time = date.getTime()
+  if (!Number.isFinite(time)) return null
+  return date.toISOString()
+}
+
+function escapeXml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/'/g, '&apos;')
+}
+
+function loadEnvFiles(rootDir) {
+  const candidates = [
+    { file: '.env', override: false },
+    { file: '.env.local', override: true },
+    { file: '.env.production', override: true },
+    { file: '.env.server', override: true },
+  ]
+
+  for (const candidate of candidates) {
+    const fullPath = path.join(rootDir, candidate.file)
+    if (fsSync.existsSync(fullPath)) {
+      dotenv.config({ path: fullPath, override: candidate.override })
+    }
+  }
+}
