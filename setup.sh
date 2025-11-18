@@ -549,7 +549,36 @@ sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && rm -rf node_modules"
 sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && npm_config_cache='$NODE_DIR/.npm-cache' npm ci --no-audit --no-fund"
 
 log "Building PlantSwipe web client + API bundle (base ${PWA_BASE_PATH})…"
-sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && VITE_APP_BASE_PATH='${PWA_BASE_PATH}' CI=${CI:-true} npm_config_cache='$NODE_DIR/.npm-cache' npm run build"
+# Check available memory before building (warn if low)
+if command -v free >/dev/null 2>&1; then
+  available_mem_kb=$(free | awk '/^Mem:/ {print $7}')
+  available_mem_gb=$((available_mem_kb / 1024 / 1024))
+  if [[ $available_mem_gb -lt 2 ]]; then
+    log "[WARN] Low available memory detected (~${available_mem_gb}GB). Build may fail or be slow."
+    log "[INFO] Consider adding swap space or increasing system RAM"
+  else
+    log "Available memory: ~${available_mem_gb}GB (should be sufficient)"
+  fi
+fi
+
+log "Build may take several minutes and require significant memory…"
+if ! sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && VITE_APP_BASE_PATH='${PWA_BASE_PATH}' CI=${CI:-true} npm_config_cache='$NODE_DIR/.npm-cache' npm run build" 2>&1 | tee /tmp/plantswipe-build.log; then
+  build_exit_code=$?
+  log "[ERROR] Build failed with exit code $build_exit_code"
+  if grep -qi "killed\|out of memory\|oom" /tmp/plantswipe-build.log 2>/dev/null; then
+    log "[ERROR] Build was killed, likely due to insufficient memory (OOM)"
+    log "[INFO] Check available memory with: free -h"
+    log "[INFO] Consider increasing swap space or running on a system with more RAM"
+    log "[INFO] Last 50 lines of build log:"
+    tail -n 50 /tmp/plantswipe-build.log 2>/dev/null || true
+  else
+    log "[ERROR] Build failed. Last 50 lines of build log:"
+    tail -n 50 /tmp/plantswipe-build.log 2>/dev/null || true
+  fi
+  log "[INFO] Full build log available at: /tmp/plantswipe-build.log"
+  exit 1
+fi
+log "Build completed successfully"
 
 # Ensure public directory and sitemap.xml are writable by www-data for sitemap generation
 ensure_sitemap_permissions() {
