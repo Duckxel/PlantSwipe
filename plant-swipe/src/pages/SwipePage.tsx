@@ -61,7 +61,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
   onToggleLike,
     }) => {
       const { t } = useTranslation("common")
-      const seoTitle = t("seo.home.title", { defaultValue: "Plant discovery & swipe deck" })
+    const seoTitle = t("seo.home.title", { defaultValue: "Aphylia" })
       const seoDescription = t("seo.home.description", {
         defaultValue: "Swipe through curated species, unlock their lore, and save favorites in Aphylia's living encyclopedia.",
       })
