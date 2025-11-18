@@ -1,0 +1,12 @@
+# robots.txt for Aphylia
+
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /create
+Disallow: /settings
+Disallow: /friends
+Disallow: /profile
+Disallow: /api/
+
+Sitemap: https://aphylia.app/sitemap.xml
