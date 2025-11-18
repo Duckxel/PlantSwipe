@@ -551,6 +551,33 @@ sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && npm_config_cache='$NODE_D
 log "Building PlantSwipe web client + API bundle (base ${PWA_BASE_PATH})…"
 sudo -u "$SERVICE_USER" -H bash -lc "cd '$NODE_DIR' && VITE_APP_BASE_PATH='${PWA_BASE_PATH}' CI=${CI:-true} npm_config_cache='$NODE_DIR/.npm-cache' npm run build"
 
+# Ensure public directory and sitemap.xml are writable by www-data for sitemap generation
+ensure_sitemap_permissions() {
+  local public_dir="$NODE_DIR/public"
+  local sitemap_file="$public_dir/sitemap.xml"
+  
+  log "Ensuring sitemap.xml permissions for $SERVICE_USER…"
+  
+  # Ensure public directory exists and is writable
+  $SUDO mkdir -p "$public_dir"
+  $SUDO chown -R "$SERVICE_USER:$SERVICE_USER" "$public_dir" || true
+  $SUDO chmod -R u+rwX "$public_dir" || true
+  
+  # If sitemap.xml exists, ensure it's writable
+  if [[ -f "$sitemap_file" ]]; then
+    $SUDO chown "$SERVICE_USER:$SERVICE_USER" "$sitemap_file" || true
+    $SUDO chmod u+rw "$sitemap_file" || true
+  fi
+  
+  # Ensure parent directories are traversable
+  $SUDO chmod u+x "$NODE_DIR" || true
+  if [[ "$NODE_DIR" != "$REPO_DIR" ]]; then
+    $SUDO chmod u+x "$REPO_DIR" || true
+  fi
+}
+
+ensure_sitemap_permissions
+
 # Link web root expected by nginx config to the repo copy, unless that would create
 # a self-referential link (e.g., when the repo itself lives at /var/www/PlantSwipe).
 log "Preparing web root link: $WEB_ROOT_LINK -> $NODE_DIR"
