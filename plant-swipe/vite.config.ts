@@ -47,7 +47,8 @@ export default defineConfig({
         'icons/icon-maskable-512.png',
         'locales/en/common.json',
         'locales/fr/common.json',
-        'PLANT-INFO-SCHEMA.json',
+          'PLANT-INFO-SCHEMA.json',
+          'offline.html',
       ],
       manifest: {
         id: 'aphylia',

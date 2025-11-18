@@ -42,66 +42,99 @@ export function ServiceWorkerToast() {
   const [offlineReadyFlag, setOfflineReadyFlag] = React.useState(false)
   const [needRefreshFlag, setNeedRefreshFlag] = React.useState(false)
   const [isOffline, setIsOffline] = React.useState(getIsOffline)
+  const [offlineHint, setOfflineHint] = React.useState<string | null>(null)
   const autoHideTimer = React.useRef<number | null>(null)
   const wbRef = React.useRef<Workbox | null>(null)
+  const pendingReloadRef = React.useRef(false)
 
-    React.useEffect(() => {
-      if (!PWA_DISABLED) return
-      if (typeof navigator === 'undefined' || !navigator.serviceWorker?.getRegistrations) return
-      navigator.serviceWorker
-        .getRegistrations()
-        .then((regs) => Promise.all(regs.map((reg) => reg.unregister().catch(() => {}))))
+  const requestRegistrationUpdate = React.useCallback(() => {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
+    navigator.serviceWorker
+      .getRegistration()
+      .then((registration) => registration?.update().catch(() => {}))
+      .catch(() => {})
+  }, [])
+
+  React.useEffect(() => {
+    if (!PWA_DISABLED) return
+    if (typeof navigator === 'undefined' || !navigator.serviceWorker?.getRegistrations) return
+    navigator.serviceWorker
+      .getRegistrations()
+      .then((regs) => Promise.all(regs.map((reg) => reg.unregister().catch(() => {}))))
+      .catch(() => {})
+
+    if (typeof window !== 'undefined' && 'caches' in window && window.caches?.keys) {
+      window.caches
+        .keys()
+        .then((keys) => Promise.all(keys.map((key) => window.caches.delete(key).catch(() => false))))
         .catch(() => {})
+    }
+  }, [])
 
-      if (typeof window !== 'undefined' && 'caches' in window && window.caches?.keys) {
-        window.caches
-          .keys()
-          .then((keys) => Promise.all(keys.map((key) => window.caches.delete(key).catch(() => false))))
-          .catch(() => {})
+  const surfaceWaitingUpdate = React.useCallback(() => {
+    setNeedRefreshFlag(true)
+    setRefreshDismissed(false)
+    setMode('update')
+    setVisible(true)
+  }, [])
+
+  React.useEffect(() => {
+    if (PWA_DISABLED) return
+    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return
+
+    const scope = resolveScope()
+    const swUrl = `${scope}sw.js`
+    const wb = new Workbox(swUrl, { scope })
+    wbRef.current = wb
+
+    const handleWaiting = () => {
+      surfaceWaitingUpdate()
+    }
+
+    const handleActivated = (event: { isUpdate?: boolean }) => {
+      if (!event.isUpdate) {
+        setOfflineReadyFlag(true)
       }
-    }, [])
+    }
 
-    React.useEffect(() => {
-      if (PWA_DISABLED) return
-      if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return
+    wb.addEventListener('waiting', handleWaiting)
+    wb.addEventListener('activated', handleActivated)
 
-      const scope = resolveScope()
-      const swUrl = `${scope}sw.js`
-      const wb = new Workbox(swUrl, { scope })
-      wbRef.current = wb
-
-      const handleWaiting = () => {
-        setNeedRefreshFlag(true)
-        setRefreshDismissed(false)
-        setMode('update')
-        setVisible(true)
+    wb.register().catch((error) => {
+      if (import.meta.env.DEV) {
+        console.error('[PWA] Service worker registration failed', error)
       }
+    })
 
-      const handleActivated = (event: { isUpdate?: boolean }) => {
-        if (!event.isUpdate) {
-          setOfflineReadyFlag(true)
-        }
-      }
+    return () => {
+      wb.removeEventListener('waiting', handleWaiting)
+      wb.removeEventListener('activated', handleActivated)
+      wbRef.current = null
+    }
+  }, [surfaceWaitingUpdate])
 
-      wb.addEventListener('waiting', handleWaiting)
-      wb.addEventListener('activated', handleActivated)
-
-      wb.register().catch((error) => {
-        if (import.meta.env.DEV) {
-          console.error('[PWA] Service worker registration failed', error)
+  React.useEffect(() => {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
+    let mounted = true
+    navigator.serviceWorker
+      .getRegistration()
+      .then((registration) => {
+        if (!mounted) return
+        if (registration?.waiting) {
+          surfaceWaitingUpdate()
         }
       })
-
-      return () => {
-        wb.removeEventListener('waiting', handleWaiting)
-        wb.removeEventListener('activated', handleActivated)
-        wbRef.current = null
-      }
-    }, [])
+      .catch(() => {})
+    return () => {
+      mounted = false
+    }
+  }, [surfaceWaitingUpdate])
 
   React.useEffect(() => {
     if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
     const handleControllerChange = () => {
+      if (!pendingReloadRef.current) return
+      pendingReloadRef.current = false
       window.location.reload()
     }
     navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange)
@@ -154,8 +187,10 @@ export function ServiceWorkerToast() {
     if (isOffline) {
       setMode('offline')
       setVisible(true)
+      setOfflineHint('Waiting for a connection…')
     } else if (mode === 'offline') {
       setVisible(false)
+      setOfflineHint(null)
     }
   }, [isOffline, mode])
 
@@ -175,6 +210,7 @@ export function ServiceWorkerToast() {
   const triggerUpdate = () => {
     setNeedRefreshFlag(false)
     setRefreshDismissed(false)
+    pendingReloadRef.current = true
     const wb = wbRef.current
     const postSkipWaiting = () => {
       if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
@@ -195,10 +231,16 @@ export function ServiceWorkerToast() {
 
   const retryConnection = () => {
     if (typeof window === 'undefined') return
-    window.location.reload()
+    if (navigator.onLine) {
+      requestRegistrationUpdate()
+      window.location.reload()
+      return
+    }
+    requestRegistrationUpdate()
+    setOfflineHint('Still offline. Double-check Wi‑Fi or cellular data.')
   }
 
-    const isBlockingMode = mode === 'update' || mode === 'offline'
+  const isBlockingMode = mode === 'update' || mode === 'offline'
 
     React.useEffect(() => {
       if (!isBlockingMode || !visible) return
@@ -210,11 +252,11 @@ export function ServiceWorkerToast() {
       }
     }, [isBlockingMode, visible])
 
-    if (PWA_DISABLED) {
-      return null
-    }
+  if (PWA_DISABLED) {
+    return null
+  }
 
-    if (!visible || (mode === 'update' && (refreshDismissed || !needRefreshFlag)) || (mode === 'offline' && !isOffline)) return null
+  if (!visible || (mode === 'update' && (refreshDismissed || !needRefreshFlag)) || (mode === 'offline' && !isOffline)) return null
 
   const title =
     mode === 'update'
@@ -248,7 +290,8 @@ export function ServiceWorkerToast() {
         }
       >
         <p className={isBlockingMode ? 'text-xl font-semibold' : 'text-sm font-semibold'}>{title}</p>
-        <p className={isBlockingMode ? 'mt-3 text-sm text-white/80' : 'mt-2 text-xs text-white/70'}>{description}</p>
+          <p className={isBlockingMode ? 'mt-3 text-sm text-white/80' : 'mt-2 text-xs text-white/70'}>{description}</p>
+          {mode === 'offline' && offlineHint ? <p className="mt-2 text-xs text-amber-200/90">{offlineHint}</p> : null}
         <div className={`mt-4 flex gap-2 ${isBlockingMode ? 'text-base' : 'text-sm'}`}>
           {mode === 'update' ? (
             <button

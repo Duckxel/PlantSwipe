@@ -1,11 +1,12 @@
 /// <reference lib="webworker" />
 
 import { clientsClaim } from 'workbox-core'
-import { cleanupOutdatedCaches, createHandlerBoundToURL, precacheAndRoute } from 'workbox-precaching'
-import { registerRoute, NavigationRoute } from 'workbox-routing'
+import { cleanupOutdatedCaches, precacheAndRoute } from 'workbox-precaching'
+import { registerRoute } from 'workbox-routing'
 import { CacheFirst, NetworkFirst, NetworkOnly, StaleWhileRevalidate } from 'workbox-strategies'
 import { CacheableResponsePlugin } from 'workbox-cacheable-response'
 import { ExpirationPlugin } from 'workbox-expiration'
+import { offlineFallback, warmStrategyCache } from 'workbox-recipes'
 
 declare const self: ServiceWorkerGlobalScope & {
   __WB_MANIFEST: Array<{
@@ -16,14 +17,35 @@ declare const self: ServiceWorkerGlobalScope & {
 
 clientsClaim()
 
+self.addEventListener('activate', (event) => {
+  if (self.registration.navigationPreload) {
+    event.waitUntil(self.registration.navigationPreload.enable())
+  }
+})
+
 cleanupOutdatedCaches()
 precacheAndRoute(self.__WB_MANIFEST)
 
 const appShellUrl = new URL('index.html', self.registration.scope)
-const navigationRoute = new NavigationRoute(createHandlerBoundToURL(appShellUrl.pathname), {
-  denylist: [/\/api\//],
+
+const pageStrategy = new NetworkFirst({
+  cacheName: 'pages-cache',
+  networkTimeoutSeconds: 5,
+  plugins: [
+    new CacheableResponsePlugin({ statuses: [0, 200] }),
+    new ExpirationPlugin({ maxEntries: 50, maxAgeSeconds: 60 * 60 * 24 }),
+  ],
 })
-registerRoute(navigationRoute)
+
+warmStrategyCache({
+  urls: [appShellUrl.pathname],
+  strategy: pageStrategy,
+})
+
+registerRoute(
+  ({ request, url }) => request.mode === 'navigate' && !/\/api\//.test(url.pathname),
+  pageStrategy
+)
 
 registerRoute(
   ({ url }) => /\/api\/.+\/stream/.test(url.pathname),
@@ -74,6 +96,10 @@ registerRoute(
     ],
   })
 )
+
+offlineFallback({
+  pageFallback: '/offline.html',
+})
 
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {

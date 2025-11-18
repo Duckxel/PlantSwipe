@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Aphylia – Offline</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        background: #020617;
+        color: #f8fafc;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 2rem;
+        background: radial-gradient(circle at top, rgba(16, 185, 129, 0.15), transparent), #020617;
+      }
+      .card {
+        max-width: 420px;
+        padding: 2rem;
+        border-radius: 1.5rem;
+        border: 1px solid rgba(148, 163, 184, 0.3);
+        background: rgba(2, 6, 23, 0.85);
+        box-shadow: 0 20px 60px rgba(15, 118, 110, 0.2);
+        text-align: center;
+      }
+      h1 {
+        font-size: 1.35rem;
+        margin-bottom: 0.5rem;
+      }
+      p {
+        margin: 0.75rem 0;
+        color: rgba(226, 232, 240, 0.85);
+      }
+      button {
+        margin-top: 1.25rem;
+        width: 100%;
+        border: none;
+        border-radius: 999px;
+        padding: 0.85rem 1rem;
+        font-size: 1rem;
+        font-weight: 600;
+        background: #34d399;
+        color: #022c22;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>You’re offline</h1>
+      <p>Aphylia needs a network connection to sync plants, gardens, and messages. Please reconnect to continue.</p>
+      <p id="status">Waiting for a connection…</p>
+      <button id="retry">Retry now</button>
+    </div>
+    <script>
+      const statusEl = document.getElementById('status')
+      const retryBtn = document.getElementById('retry')
+
+      const updateStatus = () => {
+        if (navigator.onLine) {
+          statusEl.textContent = 'Online! Reloading…'
+          retryBtn.disabled = true
+          window.location.reload()
+        } else {
+          statusEl.textContent = 'Still offline. Check Wi‑Fi or cellular data.'
+          retryBtn.disabled = false
+        }
+      }
+
+      window.addEventListener('online', updateStatus)
+      retryBtn.addEventListener('click', updateStatus)
+    </script>
+  </body>
+</html>
