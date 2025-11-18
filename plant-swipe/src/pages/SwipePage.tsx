@@ -231,7 +231,10 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                         </button>
                       </div>
                         {isDesktop && <PlantMetaRail plant={current} variant="sidebar" />}
-                      <div className="absolute bottom-0 left-0 right-0 z-20 p-6 pb-8 text-white">
+                        <div
+                          className="absolute bottom-0 left-0 right-0 z-20 p-6 text-white"
+                          style={!isDesktop ? { paddingBottom: "calc(env(safe-area-inset-bottom) + 140px)" } : { paddingBottom: "140px" }}
+                        >
                           {!isDesktop && (
                             <div className="mb-3 -mx-1">
                               <PlantMetaRail plant={current} variant="inline" />
@@ -250,62 +253,6 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                         </div>
                         <h2 className="text-3xl font-semibold tracking-tight drop-shadow-sm">{current.name}</h2>
                         {current.scientificName && <p className="opacity-90 text-sm italic">{current.scientificName}</p>}
-                        <div
-                          className="mt-5 grid w-full gap-2 pb-2 grid-cols-3 sm:gap-3 sm:pb-0"
-                          style={!isDesktop ? { paddingBottom: "calc(env(safe-area-inset-bottom) + 8px)" } : undefined}
-                        >
-                          <Button
-                            className={`rounded-2xl w-full text-white transition-colors ${
-                              isDesktop ? "bg-black hover:bg-black/90" : "bg-black/80 hover:bg-black"
-                            }`}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handlePrevious()
-                            }}
-                            onPointerDown={(e) => e.stopPropagation()}
-                            aria-label={t("plant.back")}
-                          >
-                            {isDesktop ? (
-                              <>
-                                <ChevronLeft className="h-4 w-4 mr-1" />
-                                {t("plant.back")}
-                              </>
-                            ) : (
-                              <ChevronLeft className="h-5 w-5" />
-                            )}
-                          </Button>
-                          <Button
-                            className="rounded-2xl w-full bg-white/95 text-black hover:bg-white"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleInfo()
-                            }}
-                            onPointerDown={(e) => e.stopPropagation()}
-                          >
-                            {t("plant.info")}
-                            <ChevronUp className="h-4 w-4 ml-1" />
-                          </Button>
-                          <Button
-                            className={`rounded-2xl w-full text-white transition-colors ${
-                              isDesktop ? "bg-black hover:bg-black/90" : "bg-black/80 hover:bg-black"
-                            }`}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handlePass()
-                            }}
-                            onPointerDown={(e) => e.stopPropagation()}
-                            aria-label={t("plant.next")}
-                          >
-                            {isDesktop ? (
-                              <>
-                                {t("plant.next")}
-                                <ChevronRight className="h-4 w-4 ml-1" />
-                              </>
-                            ) : (
-                              <ChevronRight className="h-5 w-5" />
-                            )}
-                          </Button>
-                        </div>
                       </div>
                     </Card>
                   </motion.div>
@@ -314,7 +261,67 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                     <EmptyState onReset={() => setIndex(0)} />
                   </div>
                 )}
-              </AnimatePresence>
+                </AnimatePresence>
+                {current && (
+                  <div
+                    className="pointer-events-none absolute bottom-0 left-0 right-0 z-30 p-6 pb-4"
+                    style={!isDesktop ? { paddingBottom: "calc(env(safe-area-inset-bottom) + 8px)" } : undefined}
+                  >
+                    <div className="pointer-events-auto grid w-full grid-cols-3 gap-2 sm:gap-3">
+                      <Button
+                        className={`rounded-2xl w-full text-white transition-colors ${
+                          isDesktop ? "bg-black hover:bg-black/90" : "bg-black/80 hover:bg-black"
+                        }`}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handlePrevious()
+                        }}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        aria-label={t("plant.back")}
+                      >
+                        {isDesktop ? (
+                          <>
+                            <ChevronLeft className="h-4 w-4 mr-1" />
+                            {t("plant.back")}
+                          </>
+                        ) : (
+                          <ChevronLeft className="h-5 w-5" />
+                        )}
+                      </Button>
+                      <Button
+                        className="rounded-2xl w-full bg-white/95 text-black hover:bg-white"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleInfo()
+                        }}
+                        onPointerDown={(e) => e.stopPropagation()}
+                      >
+                        {t("plant.info")}
+                        <ChevronUp className="h-4 w-4 ml-1" />
+                      </Button>
+                      <Button
+                        className={`rounded-2xl w-full text-white transition-colors ${
+                          isDesktop ? "bg-black hover:bg-black/90" : "bg-black/80 hover:bg-black"
+                        }`}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handlePass()
+                        }}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        aria-label={t("plant.next")}
+                      >
+                        {isDesktop ? (
+                          <>
+                            {t("plant.next")}
+                            <ChevronRight className="h-4 w-4 ml-1" />
+                          </>
+                        ) : (
+                          <ChevronRight className="h-5 w-5" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
           </div>
 
             <div className="flex flex-wrap items-center justify-center gap-3 pt-3 sm:pt-4">
