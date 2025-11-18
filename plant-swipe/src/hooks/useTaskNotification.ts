@@ -2,6 +2,7 @@ import React from "react"
 import { getUserTasksTodayCached } from "@/lib/gardens"
 import { addGardenBroadcastListener } from "@/lib/realtime"
 import { supabase } from "@/lib/supabaseClient"
+import { ensureRealtimeReady } from "@/lib/supabaseRealtimeGuard"
 
 type UseTaskNotificationOptions = {
   channelKey?: string
@@ -130,39 +131,51 @@ export function useTaskNotification(userId: string | null | undefined, options?:
     }
   }, [userId, scheduleRefresh])
 
-  React.useEffect(() => {
-    if (!userId) return
-    if (typeof window === "undefined") return
+    React.useEffect(() => {
+      if (!userId) return
+      if (typeof window === "undefined") return
+      let active = true
+      let channel: ReturnType<typeof supabase.channel> | null = null
 
-    const channelName = `rt-task-badge-${channelKey}-${userId}`
+      const connect = async () => {
+        if (!(await ensureRealtimeReady())) return
+        if (!active) return
 
-    const channel = supabase.channel(channelName)
-      .on("postgres_changes", {
-        event: "*",
-        schema: "public",
-        table: "garden_plant_task_occurrences",
-      }, () => scheduleRefresh())
-      .on("postgres_changes", {
-        event: "*",
-        schema: "public",
-        table: "garden_plant_tasks",
-      }, () => scheduleRefresh())
-      .on("postgres_changes", {
-        event: "*",
-        schema: "public",
-        table: "garden_plants",
-      }, () => scheduleRefresh())
+        const channelName = `rt-task-badge-${channelKey}-${userId}`
 
-    const subscription = channel.subscribe()
-    if (subscription instanceof Promise) {
-      subscription.catch(() => {})
-    }
+        channel = supabase.channel(channelName)
+          .on("postgres_changes", {
+            event: "*",
+            schema: "public",
+            table: "garden_plant_task_occurrences",
+          }, () => scheduleRefresh())
+          .on("postgres_changes", {
+            event: "*",
+            schema: "public",
+            table: "garden_plant_tasks",
+          }, () => scheduleRefresh())
+          .on("postgres_changes", {
+            event: "*",
+            schema: "public",
+            table: "garden_plants",
+          }, () => scheduleRefresh())
 
-    return () => {
-      clearRefreshTimer()
-      try { supabase.removeChannel(channel) } catch {}
-    }
-  }, [userId, channelKey, scheduleRefresh, clearRefreshTimer])
+        const subscription = channel.subscribe()
+        if (subscription instanceof Promise) {
+          subscription.catch(() => {})
+        }
+      }
+
+      void connect()
+
+      return () => {
+        active = false
+        clearRefreshTimer()
+        if (channel) {
+          try { supabase.removeChannel(channel) } catch {}
+        }
+      }
+    }, [userId, channelKey, scheduleRefresh, clearRefreshTimer])
 
   return { hasUnfinished, refresh: refreshNotification }
 }

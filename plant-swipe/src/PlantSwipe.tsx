@@ -36,6 +36,7 @@ import DownloadPage from "@/pages/DownloadPage";
 import TermsPage from "@/pages/TermsPage";
 import { ErrorPage } from "@/pages/ErrorPage";
 import { supabase } from "@/lib/supabaseClient";
+import { ensureRealtimeReady } from "@/lib/supabaseRealtimeGuard";
 import { useLanguage } from "@/lib/i18nRouting";
 import { loadPlantsWithTranslations } from "@/lib/plantTranslationLoader";
 import { isPlantOfTheMonth } from "@/lib/plantHighlights";
@@ -241,42 +242,60 @@ export default function PlantSwipe() {
     return () => { if (timer) clearInterval(timer) }
   }, [location.pathname, location.search, user?.id])
 
-  React.useEffect(() => {
-    // Stable anonymous id for non-authenticated visitors
-    let anonId: string | null = null
-    try {
-      anonId = localStorage.getItem('plantswipe.anon_id')
-      if (!anonId) {
-        anonId = `anon_${Math.random().toString(36).slice(2, 10)}`
-        localStorage.setItem('plantswipe.anon_id', anonId)
+    React.useEffect(() => {
+      let active = true
+      let channel: ReturnType<typeof supabase.channel> | null = null
+
+      const connect = async () => {
+        if (!(await ensureRealtimeReady())) return
+        if (!active) return
+        // Stable anonymous id for non-authenticated visitors
+        let anonId: string | null = null
+        try {
+          anonId = localStorage.getItem('plantswipe.anon_id')
+          if (!anonId) {
+            anonId = `anon_${Math.random().toString(36).slice(2, 10)}`
+            localStorage.setItem('plantswipe.anon_id', anonId)
+          }
+        } catch {}
+
+        const key = user?.id || anonId || `anon_${Math.random().toString(36).slice(2, 10)}`
+        if (!active) return
+        channel = supabase.channel('global-presence', { config: { presence: { key } } })
+
+        channel
+          .on('presence', { event: 'sync' }, () => {
+            // no-op: can be used for debugging presence state
+          })
+          .subscribe((status: unknown) => {
+            if (status === 'SUBSCRIBED') {
+              try {
+                channel?.track({
+                  user_id: user?.id || null,
+                  display_name: profile?.display_name || null,
+                  online_at: new Date().toISOString(),
+                })
+              } catch {}
+            }
+          })
+
+        presenceRef.current = channel
       }
-    } catch {}
 
-    const key = user?.id || anonId || `anon_${Math.random().toString(36).slice(2, 10)}`
-    const channel = supabase.channel('global-presence', { config: { presence: { key } } })
+      void connect()
 
-    channel
-      .on('presence', { event: 'sync' }, () => {
-        // no-op: can be used for debugging presence state
-      })
-      .subscribe((status: unknown) => {
-        if (status === 'SUBSCRIBED') {
+      return () => {
+        active = false
+        if (channel) {
           try {
-            channel.track({
-              user_id: user?.id || null,
-              display_name: profile?.display_name || null,
-              online_at: new Date().toISOString(),
-            })
+            channel.untrack()
+          } catch {}
+          try {
+            supabase.removeChannel(channel)
           } catch {}
         }
-      })
-
-    presenceRef.current = channel
-    return () => {
-      try { channel.untrack() } catch {}
-      supabase.removeChannel(channel)
-    }
-  }, [user?.id, profile?.display_name])
+      }
+    }, [user?.id, profile?.display_name])
 
   const filtered = useMemo(() => {
     const lowerQuery = query.toLowerCase()

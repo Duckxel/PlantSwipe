@@ -1,5 +1,6 @@
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabaseClient'
+import { disableRealtime, ensureRealtimeReady } from '@/lib/supabaseRealtimeGuard'
 
 export type GardenRealtimeKind =
   | 'tasks'
@@ -24,9 +25,11 @@ const listeners = new Set<Listener>()
 
 let broadcastChannel: RealtimeChannel | null = null
 let isSubscribed = false
-let realtimeAvailable = true
+let creationPromise: Promise<RealtimeChannel | null> | null = null
 
-function createChannel(): RealtimeChannel | null {
+async function createChannel(): Promise<RealtimeChannel | null> {
+  const ready = await ensureRealtimeReady()
+  if (!ready) return null
   try {
     const channel = supabase.channel('garden-broadcast', {
       config: {
@@ -47,24 +50,34 @@ function createChannel(): RealtimeChannel | null {
       }
     })
 
-    realtimeAvailable = true
     return channel
   } catch (error) {
-    realtimeAvailable = false
+    disableRealtime('channel-create')
     console.warn('[garden-broadcast] realtime disabled; falling back to local-only updates', error)
     return null
   }
 }
 
-function ensureChannel(): RealtimeChannel | null {
-  if (!realtimeAvailable) return null
-  if (!broadcastChannel) broadcastChannel = createChannel()
-  return broadcastChannel
+async function ensureChannel(): Promise<RealtimeChannel | null> {
+  if (broadcastChannel) return broadcastChannel
+  if (!creationPromise) {
+    creationPromise = createChannel()
+      .then((channel) => {
+        broadcastChannel = channel
+        return channel
+      })
+      .finally(() => {
+        creationPromise = null
+      })
+  }
+  return creationPromise
 }
 
-function ensureSubscribed(): void {
-  const channel = ensureChannel()
-  if (!channel || isSubscribed) return
+async function ensureSubscribed(): Promise<boolean> {
+  if (isSubscribed && broadcastChannel) return true
+  const channel = await ensureChannel()
+  if (!channel) return false
+  if (isSubscribed) return true
   const result = channel.subscribe((status) => {
     if (status === 'SUBSCRIBED') {
       isSubscribed = true
@@ -72,29 +85,37 @@ function ensureSubscribed(): void {
       isSubscribed = false
     }
   })
-  if (result.state === 'joined') {
+  if ((result as RealtimeChannel | undefined)?.state === 'joined') {
     isSubscribed = true
+  } else if (result instanceof Promise) {
+    result.catch(() => {})
   }
+  return isSubscribed
 }
 
 export async function addGardenBroadcastListener(listener: Listener): Promise<() => Promise<void>> {
   listeners.add(listener)
-  ensureSubscribed()
+  const subscribed = await ensureSubscribed()
+  if (!subscribed) {
+    return async () => {
+      listeners.delete(listener)
+    }
+  }
   return async () => {
     listeners.delete(listener)
-    if (listeners.size === 0) {
+    if (listeners.size === 0 && broadcastChannel) {
       try {
-        if (broadcastChannel) await supabase.removeChannel(broadcastChannel)
+        await supabase.removeChannel(broadcastChannel)
       } catch {}
-      broadcastChannel = createChannel()
+      broadcastChannel = null
       isSubscribed = false
     }
   }
 }
 
 export async function broadcastGardenUpdate(message: Omit<GardenBroadcastMessage, 'timestamp'>): Promise<void> {
-  ensureSubscribed()
-  if (!realtimeAvailable || !broadcastChannel) return
+  const subscribed = await ensureSubscribed()
+  if (!subscribed || !broadcastChannel) return
   const payload: GardenBroadcastMessage = {
     ...message,
     timestamp: new Date().toISOString(),
