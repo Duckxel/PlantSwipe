@@ -7608,7 +7608,8 @@ const ONE_WEEK_SECONDS = 60 * 60 * 24 * 7
 const ONE_DAY_SECONDS = 60 * 60 * 24
 const DEFAULT_STALE_WHILE_REVALIDATE = ONE_WEEK_SECONDS
 const EXTENDED_STALE_WHILE_REVALIDATE = ONE_WEEK_SECONDS * 4
-const hashedAssetPattern = /assets\/.+\.[a-f0-9]{8}\.(?:js|mjs|cjs|css|json|png|jpe?g|webp|avif|svg|ttf|woff2?)$/i
+const hashedAssetPattern =
+  /assets\/.+[-.]([a-z0-9_\-]{8,})\.(?:js|mjs|cjs|css|json|png|jpe?g|webp|avif|svg|ttf|woff2?)$/i
 app.use(
   express.static(distDir, {
       setHeaders: (res, filePath) => {

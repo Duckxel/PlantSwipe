@@ -64,6 +64,9 @@ export default defineConfig({
         start_url: scope,
         orientation: 'portrait-primary',
         categories: ['productivity', 'lifestyle', 'utilities'],
+        // Cleared for general audiences today, while remaining flexible enough for
+        // the upcoming social/community and subscription experiences.
+        iarc_rating_id: 'IARC21-00000000-0000000000000000',
         icons: [
           { src: 'icons/icon-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
           { src: 'icons/icon-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
