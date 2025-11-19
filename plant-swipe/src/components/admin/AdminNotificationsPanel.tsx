@@ -258,13 +258,14 @@ export function AdminNotificationsPanel() {
         messageVariants,
         randomize: formState.randomize,
         timezone: formState.timezone,
-        plannedFor: formState.deliveryMode === 'planned' ? inputToIso(formState.plannedFor) : null,
+        plannedFor:
+          formState.deliveryMode === 'planned' ? inputToIso(formState.plannedFor) || undefined : undefined,
         scheduleStartAt:
           formState.deliveryMode === 'scheduled'
-            ? inputToIso(formState.scheduleStart || formState.plannedFor)
-            : null,
-        scheduleInterval: formState.deliveryMode === 'scheduled' ? formState.scheduleInterval : null,
-        ctaUrl: formState.ctaUrl.trim() || null,
+            ? inputToIso(formState.scheduleStart || formState.plannedFor) || undefined
+            : undefined,
+        scheduleInterval: formState.deliveryMode === 'scheduled' ? formState.scheduleInterval : undefined,
+        ctaUrl: formState.ctaUrl.trim() || undefined,
         customUserIds:
           formState.audience === 'custom'
             ? formState.customUserIds
