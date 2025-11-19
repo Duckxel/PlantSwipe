@@ -35,6 +35,10 @@
     padding-top: var(--window-controls-overlay-height, 0px);
   }
 
+    body.mobile-nav-mounted {
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
   #root {
     min-height: 100vh;
     min-height: 100dvh;

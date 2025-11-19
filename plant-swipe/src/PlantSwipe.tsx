@@ -529,6 +529,8 @@ export default function PlantSwipe() {
 
   const openLogin = React.useCallback(() => { setAuthMode("login"); setAuthOpen(true) }, [])
   const openSignup = React.useCallback(() => { setAuthMode("signup"); setAuthOpen(true) }, [])
+  const handleProfileNavigation = React.useCallback(() => { navigate('/profile') }, [navigate])
+  const handleLogoutNavigation = React.useCallback(async () => { await signOut(); navigate('/') }, [signOut, navigate])
 
   const submitAuth = async () => {
     if (authSubmitting) return
@@ -802,15 +804,15 @@ export default function PlantSwipe() {
             openSignup={openSignup}
             user={user}
             displayName={profile?.display_name || null}
-            onProfile={() => navigate('/profile')}
-            onLogout={async () => { await signOut(); navigate('/') }}
+            onProfile={handleProfileNavigation}
+            onLogout={handleLogoutNavigation}
           />
 
           {/* Mobile bottom nav (hide Create on phones) */}
-          <MobileNavBar 
-            canCreate={false} 
-            onProfile={() => navigate('/profile')}
-            onLogout={async () => { await signOut(); navigate('/') }}
+          <MobileNavBar
+            canCreate={false}
+            onProfile={handleProfileNavigation}
+            onLogout={handleLogoutNavigation}
             onLogin={openLogin}
           />
 
