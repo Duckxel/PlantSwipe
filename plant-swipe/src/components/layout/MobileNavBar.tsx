@@ -160,7 +160,35 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
     </Sheet>
   )
 
-  if (!canUseDOM) {
+  const [portalContainer, setPortalContainer] = React.useState<HTMLElement | null>(null)
+
+  React.useEffect(() => {
+    if (!canUseDOM) return
+
+    let mounted = true
+    let created = false
+    let node = document.querySelector('[data-mobile-nav-root]') as HTMLElement | null
+
+    if (!node) {
+      node = document.createElement('div')
+      node.setAttribute('data-mobile-nav-root', 'true')
+      document.body.appendChild(node)
+      created = true
+    }
+
+    if (mounted) {
+      setPortalContainer(node)
+    }
+
+    return () => {
+      mounted = false
+      if (created && node?.parentNode) {
+        node.parentNode.removeChild(node)
+      }
+    }
+  }, [canUseDOM])
+
+  if (!canUseDOM || !portalContainer) {
     return (
       <>
         {navElement}
@@ -171,7 +199,7 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
 
   return (
     <>
-      {createPortal(navElement, document.body)}
+      {createPortal(navElement, portalContainer)}
       {sheetElement}
     </>
   )
