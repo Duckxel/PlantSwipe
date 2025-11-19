@@ -11,12 +11,12 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 
 interface MobileNavBarProps {
   canCreate?: boolean
-  onProfile?: () => void
-  onLogout?: () => void
+  onProfile?: () => void | Promise<void>
+  onLogout?: () => void | Promise<void>
   onLogin?: () => void
 }
 
-export const MobileNavBar: React.FC<MobileNavBarProps> = ({ canCreate, onProfile, onLogout, onLogin }) => {
+const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfile, onLogout, onLogin }) => {
   const pathWithoutLang = usePathWithoutLanguage()
   const navigate = useLanguageNavigate()
   const { user, profile } = useAuth()
@@ -176,6 +176,8 @@ export const MobileNavBar: React.FC<MobileNavBarProps> = ({ canCreate, onProfile
     </>
   )
 }
+
+export const MobileNavBar = React.memo(MobileNavBarComponent)
 
 export default MobileNavBar
 

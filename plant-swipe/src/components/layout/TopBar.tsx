@@ -10,8 +10,8 @@ interface TopBarProps {
   openSignup: () => void
   user?: { id: string | null } | null
   displayName?: string | null
-  onProfile?: () => void
-  onLogout?: () => void
+  onProfile?: () => void | Promise<void>
+  onLogout?: () => void | Promise<void>
 }
 
 import { useAuth } from "@/context/AuthContext"
