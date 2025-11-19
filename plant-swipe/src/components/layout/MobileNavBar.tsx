@@ -9,6 +9,44 @@ import { useTaskNotification } from "@/hooks/useTaskNotification"
 import { useTranslation } from "react-i18next"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 
+const MOBILE_NAV_ATTR = "data-mobile-nav-root"
+
+let portalHost: HTMLElement | null = null
+let portalUsers = 0
+
+const isStandaloneDisplayMode = () => {
+  if (typeof window === "undefined") return false
+  if ((window.navigator as Navigator & { standalone?: boolean }).standalone) return true
+  if (typeof window.matchMedia === "function") {
+    try {
+      return window.matchMedia("(display-mode: standalone)").matches
+    } catch {
+      return false
+    }
+  }
+  return false
+}
+
+const ensurePortalHost = () => {
+  if (typeof document === "undefined") return null
+  if (portalHost && document.body.contains(portalHost)) {
+    return portalHost
+  }
+  const existing = document.querySelector<HTMLElement>(`[${MOBILE_NAV_ATTR}]`)
+  if (existing) {
+    portalHost = existing
+    return existing
+  }
+  const node = document.createElement('div')
+  node.setAttribute(MOBILE_NAV_ATTR, "true")
+  node.style.position = "relative"
+  node.style.zIndex = "60"
+  node.style.width = "100%"
+  document.body.appendChild(node)
+  portalHost = node
+  return node
+}
+
 interface MobileNavBarProps {
   canCreate?: boolean
   onProfile?: () => void | Promise<void>
@@ -21,9 +59,11 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
   const navigate = useLanguageNavigate()
   const { user, profile } = useAuth()
   const { hasUnfinished } = useTaskNotification(user?.id ?? null, { channelKey: "mobile" })
-  const { t } = useTranslation('common')
+  const { t } = useTranslation("common")
   const [profileMenuOpen, setProfileMenuOpen] = React.useState(false)
   const canUseDOM = typeof document !== "undefined"
+  const [portalContainer, setPortalContainer] = React.useState<HTMLElement | null>(() => (canUseDOM ? ensurePortalHost() : null))
+  const [isStandalone, setIsStandalone] = React.useState(() => (typeof window !== "undefined" ? isStandaloneDisplayMode() : false))
   
   const currentView: "discovery" | "gardens" | "search" | "create" | "profile" =
     pathWithoutLang === "/" ? "discovery" :
@@ -160,31 +200,60 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
     </Sheet>
   )
 
-  const [portalContainer, setPortalContainer] = React.useState<HTMLElement | null>(null)
+  React.useEffect(() => {
+    if (!canUseDOM || typeof window === "undefined") return
+    if ((window.navigator as Navigator & { standalone?: boolean }).standalone) {
+      setIsStandalone(true)
+    }
+    if (typeof window.matchMedia !== "function") return
+    let mq: MediaQueryList | null = null
+    try {
+      mq = window.matchMedia("(display-mode: standalone)")
+    } catch {
+      mq = null
+    }
+    if (!mq) return
+    const handleChange = () => {
+      setIsStandalone(isStandaloneDisplayMode())
+    }
+    handleChange()
+    if (typeof mq.addEventListener === "function") {
+      mq.addEventListener("change", handleChange)
+    } else if (typeof mq.addListener === "function") {
+      mq.addListener(handleChange)
+    }
+    return () => {
+      if (!mq) return
+      if (typeof mq.removeEventListener === "function") {
+        mq.removeEventListener("change", handleChange)
+      } else if (typeof mq.removeListener === "function") {
+        mq.removeListener(handleChange)
+      }
+    }
+  }, [canUseDOM])
+
+  React.useLayoutEffect(() => {
+    if (!canUseDOM) return
+    const node = ensurePortalHost()
+    if (!node) return
+    portalUsers += 1
+    setPortalContainer(node)
+    return () => {
+      portalUsers = Math.max(0, portalUsers - 1)
+      if (!isStandalone && portalUsers === 0 && node.parentNode) {
+        node.parentNode.removeChild(node)
+        if (portalHost === node) {
+          portalHost = null
+        }
+      }
+    }
+  }, [canUseDOM, isStandalone])
 
   React.useEffect(() => {
-    if (!canUseDOM) return
-
-    let mounted = true
-    let created = false
-    let node = document.querySelector('[data-mobile-nav-root]') as HTMLElement | null
-
-    if (!node) {
-      node = document.createElement('div')
-      node.setAttribute('data-mobile-nav-root', 'true')
-      document.body.appendChild(node)
-      created = true
-    }
-
-    if (mounted) {
-      setPortalContainer(node)
-    }
-
+    if (!canUseDOM || typeof document === "undefined") return
+    document.body.classList.add("mobile-nav-mounted")
     return () => {
-      mounted = false
-      if (created && node?.parentNode) {
-        node.parentNode.removeChild(node)
-      }
+      document.body.classList.remove("mobile-nav-mounted")
     }
   }, [canUseDOM])
 
