@@ -173,11 +173,11 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                 {current ? (
                   <motion.div
                     key={`${current.id}-${index}`}
-                    drag="x"
-                    dragElastic={{ left: 0.28, right: 0.28 }}
+                    drag
+                    dragElastic={{ left: 0.28, right: 0.28, top: 0.18, bottom: 0.08 }}
                     dragMomentum={false}
                     style={{ x, y }}
-                    dragConstraints={{ left: -500, right: 500 }}
+                    dragConstraints={{ left: -500, right: 500, top: -280, bottom: 0 }}
                     onDragEnd={onDragEnd}
                     initial={{ scale: 0.94, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
@@ -535,6 +535,38 @@ const IndicatorPill: React.FC<IndicatorPillProps> = ({
   const ariaLabel = `${item.description ?? ""}${item.description ? ": " : ""}${item.ariaValue ?? item.label}`.trim()
   const isSidebarVariant = variant === "sidebar"
   const allowHover = supportsHover && !disableHoverActivation
+  const keyboardFocusRef = React.useRef(false)
+
+  const handleFocus = React.useCallback(
+    (event: React.FocusEvent<HTMLButtonElement>) => {
+      if (disableHoverActivation) {
+        let isKeyboardFocus = true
+        if (typeof event.currentTarget.matches === "function") {
+          try {
+            isKeyboardFocus = event.currentTarget.matches(":focus-visible")
+          } catch {
+            isKeyboardFocus = true
+          }
+        }
+        keyboardFocusRef.current = isKeyboardFocus
+        if (!isKeyboardFocus) return
+      }
+      onActivate()
+    },
+    [disableHoverActivation, onActivate],
+  )
+
+  const handleBlur = React.useCallback(() => {
+      if (disableHoverActivation) {
+        if (!keyboardFocusRef.current) {
+          return
+        }
+      }
+      keyboardFocusRef.current = false
+      onDeactivate()
+    },
+    [disableHoverActivation, onDeactivate],
+  )
 
   const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation()
@@ -567,8 +599,8 @@ const IndicatorPill: React.FC<IndicatorPillProps> = ({
         aria-pressed={active}
         onMouseEnter={allowHover ? onActivate : undefined}
         onMouseLeave={allowHover ? onDeactivate : undefined}
-        onFocus={onActivate}
-        onBlur={onDeactivate}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
         onClick={handleClick}
         onPointerDown={(event) => event.stopPropagation()}
         className={cn(

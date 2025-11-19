@@ -1,4 +1,5 @@
 import React from "react"
+import { createPortal } from "react-dom"
 import { Link } from "@/components/i18n/Link"
 import { usePathWithoutLanguage, useLanguageNavigate } from "@/lib/i18nRouting"
 import { Sparkles, Sprout, Search, Plus, User, Shield, HeartHandshake, Settings, LogOut } from "lucide-react"
@@ -15,7 +16,57 @@ interface MobileNavBarProps {
   onLogin?: () => void
 }
 
+const MOBILE_NAV_HOST_ATTR = "data-mobile-nav-root"
+const MOBILE_NAV_HOST_ID = "mobile-nav-root"
+
+const isBrowser = typeof window !== "undefined"
+const useIsomorphicLayoutEffect = isBrowser ? React.useLayoutEffect : React.useEffect
+
+let mobileNavHost: HTMLElement | null = null
+let mobileNavHostUsers = 0
+
+const useMobileNavHost = () => {
+  const [host, setHost] = React.useState<HTMLElement | null>(() => {
+    if (typeof document === "undefined") return null
+    const existing = document.querySelector<HTMLElement>(`[${MOBILE_NAV_HOST_ATTR}="true"]`)
+    return existing ?? null
+  })
+
+  useIsomorphicLayoutEffect(() => {
+    if (typeof document === "undefined") return undefined
+
+    let element = mobileNavHost
+    if (!element) {
+      element = document.querySelector<HTMLElement>(`[${MOBILE_NAV_HOST_ATTR}="true"]`) ?? null
+    }
+
+    if (!element) {
+      element = document.createElement("div")
+      element.id = MOBILE_NAV_HOST_ID
+      element.setAttribute(MOBILE_NAV_HOST_ATTR, "true")
+      element.style.position = "relative"
+      document.body.appendChild(element)
+    }
+
+    mobileNavHost = element
+    mobileNavHostUsers += 1
+    setHost(element)
+
+    return () => {
+      mobileNavHostUsers -= 1
+      if (mobileNavHostUsers <= 0 && mobileNavHost?.parentElement) {
+        mobileNavHost.parentElement.removeChild(mobileNavHost)
+        mobileNavHost = null
+      }
+      setHost(null)
+    }
+  }, [])
+
+  return host
+}
+
 const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfile, onLogout, onLogin }) => {
+  const host = useMobileNavHost()
   const pathWithoutLang = usePathWithoutLanguage()
   const navigate = useLanguageNavigate()
   const { user, profile } = useAuth()
@@ -43,7 +94,7 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
   const displayName = profile?.display_name || null
   const label = displayName && displayName.trim().length > 0 ? displayName : t('common.profile')
 
-  return (
+  const navMarkup = (
     <>
       <nav
       ref={navRef}
@@ -120,74 +171,80 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
       </div>
       </nav>
       <Sheet open={profileMenuOpen} onOpenChange={setProfileMenuOpen}>
-      <SheetContent side="bottom" className="rounded-t-3xl">
-        <SheetHeader>
-          <SheetTitle>{label}</SheetTitle>
-        </SheetHeader>
-        <div className="mt-6 space-y-2">
-          {profile?.is_admin && (
+        <SheetContent side="bottom" className="rounded-t-3xl">
+          <SheetHeader>
+            <SheetTitle>{label}</SheetTitle>
+          </SheetHeader>
+          <div className="mt-6 space-y-2">
+            {profile?.is_admin && (
+              <button
+                onClick={() => {
+                  setProfileMenuOpen(false)
+                  navigate("/admin")
+                }}
+                className="w-full text-left px-4 py-3 rounded-2xl hover:bg-stone-100 dark:hover:bg-[#2d2d30] flex items-center gap-3"
+              >
+                <Shield className="h-5 w-5" />
+                <span>{t("common.admin")}</span>
+              </button>
+            )}
             <button
               onClick={() => {
                 setProfileMenuOpen(false)
-                navigate("/admin")
+                if (onProfile) {
+                  onProfile()
+                } else {
+                  navigate("/profile")
+                }
               }}
               className="w-full text-left px-4 py-3 rounded-2xl hover:bg-stone-100 dark:hover:bg-[#2d2d30] flex items-center gap-3"
             >
-              <Shield className="h-5 w-5" />
-              <span>{t("common.admin")}</span>
+              <User className="h-5 w-5" />
+              <span>{t("common.profile")}</span>
             </button>
-          )}
-          <button
-            onClick={() => {
-              setProfileMenuOpen(false)
-              if (onProfile) {
-                onProfile()
-              } else {
-                navigate("/profile")
-              }
-            }}
-            className="w-full text-left px-4 py-3 rounded-2xl hover:bg-stone-100 dark:hover:bg-[#2d2d30] flex items-center gap-3"
-          >
-            <User className="h-5 w-5" />
-            <span>{t("common.profile")}</span>
-          </button>
-          <button
-            onClick={() => {
-              setProfileMenuOpen(false)
-              navigate("/friends")
-            }}
-            className="w-full text-left px-4 py-3 rounded-2xl hover:bg-stone-100 dark:hover:bg-[#2d2d30] flex items-center gap-3"
-          >
-            <HeartHandshake className="h-5 w-5" />
-            <span>{t("common.friends")}</span>
-          </button>
-          <button
-            onClick={() => {
-              setProfileMenuOpen(false)
-              navigate("/settings")
-            }}
-            className="w-full text-left px-4 py-3 rounded-2xl hover:bg-stone-100 dark:hover:bg-[#2d2d30] flex items-center gap-3"
-          >
-            <Settings className="h-5 w-5" />
-            <span>{t("common.settings")}</span>
-          </button>
-          <button
-            onClick={() => {
-              setProfileMenuOpen(false)
-              if (onLogout) {
-                onLogout()
-              }
-            }}
-            className="w-full text-left px-4 py-3 rounded-2xl hover:bg-stone-100 dark:hover:bg-[#2d2d30] text-red-600 dark:text-red-400 flex items-center gap-3"
-          >
-            <LogOut className="h-5 w-5" />
-            <span>{t("common.logout")}</span>
-          </button>
-        </div>
-      </SheetContent>
-    </Sheet>
+            <button
+              onClick={() => {
+                setProfileMenuOpen(false)
+                navigate("/friends")
+              }}
+              className="w-full text-left px-4 py-3 rounded-2xl hover:bg-stone-100 dark:hover:bg-[#2d2d30] flex items-center gap-3"
+            >
+              <HeartHandshake className="h-5 w-5" />
+              <span>{t("common.friends")}</span>
+            </button>
+            <button
+              onClick={() => {
+                setProfileMenuOpen(false)
+                navigate("/settings")
+              }}
+              className="w-full text-left px-4 py-3 rounded-2xl hover:bg-stone-100 dark:hover:bg-[#2d2d30] flex items-center gap-3"
+            >
+              <Settings className="h-5 w-5" />
+              <span>{t("common.settings")}</span>
+            </button>
+            <button
+              onClick={() => {
+                setProfileMenuOpen(false)
+                if (onLogout) {
+                  onLogout()
+                }
+              }}
+              className="w-full text-left px-4 py-3 rounded-2xl hover:bg-stone-100 dark:hover:bg-[#2d2d30] text-red-600 dark:text-red-400 flex items-center gap-3"
+            >
+              <LogOut className="h-5 w-5" />
+              <span>{t("common.logout")}</span>
+            </button>
+          </div>
+        </SheetContent>
+      </Sheet>
     </>
   )
+
+  if (host) {
+    return createPortal(navMarkup, host)
+  }
+
+  return navMarkup
 }
 
 export const MobileNavBar = React.memo(MobileNavBarComponent)
