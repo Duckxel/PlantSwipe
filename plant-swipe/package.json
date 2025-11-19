@@ -41,7 +41,8 @@
     "three": "^0.181.1",
     "workbox-recipes": "^7.3.0",
     "workbox-window": "^7.3.0",
-    "zod": "^4.1.12"
+    "zod": "^4.1.12",
+    "web-push": "^3.6.6"
   },
   "devDependencies": {
     "@eslint/js": "^9.33.0",

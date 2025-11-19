@@ -20,6 +20,19 @@ type BuildMeta = {
   commit?: string
 }
 
+type NotificationActionOption = {
+  action: string
+  title: string
+  icon?: string
+}
+
+type ExtendedNotificationOptions = NotificationOptions & {
+  actions?: NotificationActionOption[]
+  vibrate?: number[]
+  renotify?: boolean
+  image?: string
+}
+
 const buildMeta: BuildMeta = {
   version: import.meta.env.VITE_APP_VERSION ?? 'dev',
   commit: import.meta.env.VITE_COMMIT_SHA || undefined,
@@ -46,6 +59,22 @@ const resolveScopedPath = (pathname: string) => {
 const offlinePagePath = new URL('offline.html', self.registration.scope).pathname
 const offlineImagePath = new URL('icons/icon-192x192.png', self.registration.scope).pathname
 const scopeBasePath = new URL('.', self.registration.scope).pathname
+const notificationIconUrl = new URL('icons/icon-192x192.png', self.registration.scope).href
+const notificationBadgeUrl = new URL('icons/icon-96x96.png', self.registration.scope).href
+const defaultNotificationTarget = new URL('.', self.registration.scope).href
+
+const resolveNotificationUrl = (target?: string | null) => {
+  if (!target) return defaultNotificationTarget
+  try {
+    return new URL(target, self.location.origin).href
+  } catch {
+    try {
+      return new URL(target, self.registration.scope).href
+    } catch {
+      return defaultNotificationTarget
+    }
+  }
+}
 
 clientsClaim()
 
@@ -200,4 +229,100 @@ self.addEventListener('message', (event) => {
       })
     }
   }
+})
+
+self.addEventListener('push', (event) => {
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') {
+    return
+  }
+  let payload: any = {}
+  if (event.data) {
+    let raw: string | undefined
+    try {
+      raw = event.data.text()
+    } catch {
+      raw = undefined
+    }
+    if (raw && raw.length) {
+      try {
+        payload = JSON.parse(raw)
+      } catch {
+        payload = { body: raw }
+      }
+    }
+  }
+  const title = typeof payload.title === 'string' && payload.title.length ? payload.title : 'Aphylia'
+  const data = payload.data && typeof payload.data === 'object' ? payload.data : {}
+  const options: ExtendedNotificationOptions = {
+    body: typeof payload.body === 'string' ? payload.body : undefined,
+    tag:
+      typeof payload.tag === 'string' && payload.tag.length
+        ? payload.tag
+        : (data as any)?.campaignId || 'aphylia',
+    data,
+    icon: typeof payload.icon === 'string' && payload.icon.length ? payload.icon : notificationIconUrl,
+    badge: typeof payload.badge === 'string' && payload.badge.length ? payload.badge : notificationBadgeUrl,
+  }
+  if (Array.isArray(payload.actions) && payload.actions.length) {
+    const normalizedActions = payload.actions
+      .map((action: any, index: number) => {
+        if (!action) return null
+        const actionId =
+          (typeof action.action === 'string' && action.action.length && action.action) ||
+          (typeof action.id === 'string' && action.id.length && action.id) ||
+          `action-${index}`
+        const actionTitle =
+          (typeof action.title === 'string' && action.title.length && action.title) ||
+          'Open'
+        const icon = typeof action.icon === 'string' && action.icon.length ? action.icon : undefined
+        return { action: actionId, title: actionTitle, icon }
+      })
+      .filter((entry: NotificationActionOption | null): entry is NotificationActionOption => Boolean(entry))
+    if (normalizedActions.length) {
+      options.actions = normalizedActions.slice(0, 3)
+    }
+  }
+  if (Array.isArray(payload.vibrate)) {
+    options.vibrate = payload.vibrate
+  } else {
+    options.vibrate = [100, 50, 100]
+  }
+  if (typeof payload.requireInteraction === 'boolean') {
+    options.requireInteraction = payload.requireInteraction
+  }
+  if (typeof payload.renotify === 'boolean') {
+    options.renotify = payload.renotify
+  }
+  if (typeof payload.image === 'string' && payload.image.length) {
+    options.image = payload.image
+  }
+  if (typeof payload.silent === 'boolean') {
+    options.silent = payload.silent
+  }
+  event.waitUntil(self.registration.showNotification(title, options))
+})
+
+self.addEventListener('notificationclick', (event) => {
+  const notificationData = (event.notification?.data || {}) as { ctaUrl?: string; url?: string }
+  const target = resolveNotificationUrl(notificationData.ctaUrl || notificationData.url)
+  event.notification?.close()
+  event.waitUntil(
+    (async () => {
+      const allClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+      for (const client of allClients) {
+        if ('focus' in client) {
+          const windowClient = client as WindowClient
+          const normalizedClientUrl = windowClient.url?.replace(/\/?$/, '/')
+          const normalizedTarget = target.replace(/\/?$/, '/')
+          if (normalizedClientUrl === normalizedTarget) {
+            await windowClient.focus()
+            return
+          }
+        }
+      }
+      if (self.clients.openWindow) {
+        await self.clients.openWindow(target)
+      }
+    })(),
+  )
 })

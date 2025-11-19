@@ -19,6 +19,7 @@ import { z } from 'zod'
 import { zodResponseFormat } from 'openai/helpers/zod'
 import multer from 'multer'
 import sharp from 'sharp'
+import webpush from 'web-push'
 
 
 dotenv.config()
@@ -180,6 +181,28 @@ const businessEmailFrom =
 const resendApiKey = process.env.RESEND_API_KEY || process.env.RESEND_KEY || ''
 const supportEmailWebhook = process.env.SUPPORT_EMAIL_WEBHOOK_URL || process.env.CONTACT_WEBHOOK_URL || ''
 const contactRateLimitStore = new Map()
+
+const vapidPublicKey =
+  process.env.VAPID_PUBLIC_KEY ||
+  process.env.WEB_PUSH_PUBLIC_KEY ||
+  process.env.VITE_VAPID_PUBLIC_KEY ||
+  ''
+const vapidPrivateKey =
+  process.env.VAPID_PRIVATE_KEY ||
+  process.env.WEB_PUSH_PRIVATE_KEY ||
+  process.env.VITE_VAPID_PRIVATE_KEY ||
+  ''
+let pushNotificationsEnabled = false
+if (vapidPublicKey && vapidPrivateKey) {
+  try {
+    webpush.setVapidDetails('mailto:support@aphylia.app', vapidPublicKey, vapidPrivateKey)
+    pushNotificationsEnabled = true
+  } catch (err) {
+    console.error('[notifications] Failed to configure VAPID keys:', err)
+  }
+} else {
+  console.warn('[notifications] VAPID keys not configured — push notifications disabled')
+}
 
 // Admin bypass configuration
 // Support both server-only and Vite-style env variable names
@@ -1989,6 +2012,7 @@ app.get(['/api/env.js', '/env.js'], (_req, res) => {
       VITE_ADMIN_STATIC_TOKEN: process.env.VITE_ADMIN_STATIC_TOKEN || process.env.ADMIN_STATIC_TOKEN || '',
       VITE_ADMIN_PUBLIC_MODE: String(process.env.VITE_ADMIN_PUBLIC_MODE || process.env.ADMIN_PUBLIC_MODE || '').toLowerCase() === 'true',
       VITE_DISABLE_PWA: disablePwaEnv,
+      VITE_VAPID_PUBLIC_KEY: process.env.VITE_VAPID_PUBLIC_KEY || process.env.VAPID_PUBLIC_KEY || '',
     }
     const js = `window.__ENV__ = ${JSON.stringify(env).replace(/</g, '\\u003c')};\n`
     res.setHeader('Content-Type', 'application/javascript; charset=utf-8')
@@ -2812,6 +2836,132 @@ async function ensureBroadcastTable() {
   } catch {}
 }
 
+let notificationTablesEnsured = false
+async function ensureNotificationTables() {
+  if (!sql) return
+  if (notificationTablesEnsured) return
+  try {
+    await sql`
+      create table if not exists public.notification_campaigns (
+        id uuid primary key default gen_random_uuid(),
+        title text not null,
+        description text,
+        delivery_mode text not null default 'send_now' check (delivery_mode in ('send_now','planned','scheduled')),
+        state text not null default 'draft' check (state in ('draft','scheduled','processing','paused','completed','cancelled')),
+        audience text not null default 'all' check (audience in ('all','tasks_open','inactive_week','admins','custom')),
+        filters jsonb not null default '{}'::jsonb,
+        message_variants text[] not null default '{}'::text[],
+        randomize boolean not null default true,
+        timezone text default 'UTC',
+        planned_for timestamptz,
+        schedule_start_at timestamptz,
+        schedule_interval text check (schedule_interval in ('daily','weekly','monthly')),
+        cta_url text,
+        custom_user_ids uuid[] not null default '{}'::uuid[],
+        run_count integer not null default 0,
+        created_by uuid,
+        updated_by uuid,
+        last_run_at timestamptz,
+        next_run_at timestamptz,
+        last_run_summary jsonb,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now(),
+        deleted_at timestamptz
+      );
+    `
+    await sql`create index if not exists notification_campaigns_next_run_idx on public.notification_campaigns (next_run_at) where deleted_at is null;`
+    await sql`create index if not exists notification_campaigns_state_idx on public.notification_campaigns (state);`
+
+    await sql`
+      create table if not exists public.user_notifications (
+        id uuid primary key default gen_random_uuid(),
+        campaign_id uuid references public.notification_campaigns(id) on delete set null,
+        iteration integer not null default 1,
+        user_id uuid not null references auth.users(id) on delete cascade,
+        title text,
+        message text not null,
+        payload jsonb not null default '{}'::jsonb,
+        cta_url text,
+        scheduled_for timestamptz not null default now(),
+        delivered_at timestamptz,
+        delivery_status text not null default 'pending' check (delivery_status in ('pending','sent','failed','cancelled')),
+        delivery_attempts integer not null default 0,
+        delivery_error text,
+        seen_at timestamptz,
+        cancelled_at timestamptz,
+        created_at timestamptz not null default now()
+      );
+    `
+    await sql`create index if not exists user_notifications_user_idx on public.user_notifications (user_id, scheduled_for desc);`
+    await sql`create index if not exists user_notifications_campaign_idx on public.user_notifications (campaign_id);`
+    await sql`create unique index if not exists user_notifications_unique_delivery on public.user_notifications (campaign_id, iteration, user_id);`
+
+    await sql`
+      create table if not exists public.user_push_subscriptions (
+        id uuid primary key default gen_random_uuid(),
+        user_id uuid not null references auth.users(id) on delete cascade,
+        endpoint text not null,
+        auth_key text,
+        p256dh_key text,
+        user_agent text,
+        subscription jsonb not null,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now(),
+        last_used_at timestamptz
+      );
+    `
+    await sql`create unique index if not exists user_push_subscriptions_endpoint_idx on public.user_push_subscriptions (endpoint);`
+    await sql`create index if not exists user_push_subscriptions_user_idx on public.user_push_subscriptions (user_id);`
+    notificationTablesEnsured = true
+  } catch (err) {
+    console.error('[schema] failed to ensure notification tables', err)
+  }
+}
+
+const notificationAudienceValues = ['all', 'tasks_open', 'inactive_week', 'admins', 'custom']
+const notificationModeValues = ['send_now', 'planned', 'scheduled']
+const notificationIntervalValues = ['daily', 'weekly', 'monthly']
+const notificationInputSchema = z.object({
+  title: z.string().min(3).max(160),
+  description: z
+    .string()
+    .max(2000)
+    .optional()
+    .transform((value) => (value && value.trim().length > 0 ? value.trim() : null)),
+  deliveryMode: z.enum(notificationModeValues),
+  audience: z.enum(notificationAudienceValues),
+  messageVariants: z.array(z.string().min(1).max(400)).min(1),
+  randomize: z.boolean().optional(),
+  timezone: z
+    .string()
+    .max(64)
+    .optional()
+    .transform((value) => (value && value.trim().length > 0 ? value.trim() : null)),
+  plannedFor: z
+    .string()
+    .datetime({ offset: true })
+    .optional()
+    .transform((value) => (value && value.trim().length > 0 ? value : null)),
+  scheduleStartAt: z
+    .string()
+    .datetime({ offset: true })
+    .optional()
+    .transform((value) => (value && value.trim().length > 0 ? value : null)),
+  scheduleInterval: z
+    .enum(notificationIntervalValues)
+    .optional()
+    .transform((value) => (value && value.trim().length > 0 ? value : null)),
+  ctaUrl: z
+    .string()
+    .url()
+    .optional()
+    .transform((value) => (value && value.trim().length > 0 ? value.trim() : null)),
+  customUserIds: z.array(z.string().uuid()).optional(),
+})
+const notificationStateSchema = z.object({
+  state: z.enum(['paused', 'scheduled']),
+})
+
 async function ensureRequestedPlantsSchema() {
   if (!sql) return
   const ddl = `
@@ -3538,6 +3688,314 @@ app.options('/api/admin/media/:id', (_req, res) => {
   res.setHeader('Access-Control-Allow-Methods', 'DELETE,OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
   res.status(204).end()
+})
+
+app.get('/api/admin/notifications', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  await ensureNotificationTables()
+  try {
+    const rows = await sql`
+      select n.*, stats.total_recipients, stats.sent_count, stats.failed_count, stats.pending_count,
+             creator.display_name as created_by_name
+      from public.notification_campaigns n
+      left join lateral (
+        select
+          count(*)::bigint as total_recipients,
+          count(*) filter (where delivery_status = 'sent')::bigint as sent_count,
+          count(*) filter (where delivery_status = 'failed')::bigint as failed_count,
+          count(*) filter (where delivery_status = 'pending')::bigint as pending_count
+        from public.user_notifications un
+        where un.campaign_id = n.id
+      ) stats on true
+      left join public.profiles creator on creator.id = n.created_by
+      where n.deleted_at is null
+      order by coalesce(n.next_run_at, n.created_at) desc
+      limit 200
+    `
+    const notifications = (rows || [])
+      .map((row) => normalizeNotificationCampaign(row))
+      .filter(Boolean)
+    res.json({ notifications, pushConfigured: pushNotificationsEnabled })
+  } catch (err) {
+    console.error('[notifications] failed to load campaigns', err)
+    res.status(500).json({ error: err?.message || 'Failed to load notifications' })
+  }
+})
+
+app.post('/api/admin/notifications', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  await ensureNotificationTables()
+  let parsed
+  try {
+    parsed = notificationInputSchema.parse(req.body || {})
+  } catch (err) {
+    res.status(400).json({ error: err?.errors?.[0]?.message || 'Invalid payload' })
+    return
+  }
+  const messageVariants = (parsed.messageVariants || [])
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0)
+  if (!messageVariants.length) {
+    res.status(400).json({ error: 'At least one message variant is required' })
+    return
+  }
+  const deliveryMode = parsed.deliveryMode
+  const plannedFor = parsed.plannedFor && parsed.plannedFor.length ? new Date(parsed.plannedFor).toISOString() : null
+  const scheduleStartAt =
+    parsed.scheduleStartAt && parsed.scheduleStartAt.length
+      ? new Date(parsed.scheduleStartAt).toISOString()
+      : null
+  const nextRunAt = determineInitialNextRunAt({
+    deliveryMode,
+    plannedFor,
+    scheduleStartAt,
+  })
+  const audience = parsed.audience
+  const customIds = audience === 'custom' ? parsed.customUserIds || [] : []
+  const scheduleInterval = deliveryMode === 'scheduled' ? parsed.scheduleInterval || 'daily' : null
+  const timezone = parsed.timezone || 'UTC'
+  const state = deliveryMode === 'scheduled' ? 'scheduled' : 'draft'
+  try {
+    const rows = await sql`
+      insert into public.notification_campaigns (
+        title, description, delivery_mode, state, audience, filters, message_variants,
+        randomize, timezone, planned_for, schedule_start_at, schedule_interval, cta_url,
+        custom_user_ids, run_count, created_by, updated_by, next_run_at, created_at, updated_at
+      )
+      values (
+        ${parsed.title.trim()},
+        ${parsed.description},
+        ${deliveryMode},
+        ${state},
+        ${audience},
+        '{}'::jsonb,
+        ${sql.array(messageVariants)},
+        ${parsed.randomize !== false},
+        ${timezone},
+        ${deliveryMode === 'planned' ? plannedFor : null},
+        ${deliveryMode === 'scheduled' ? (scheduleStartAt || nextRunAt) : null},
+        ${scheduleInterval},
+        ${parsed.ctaUrl || null},
+        ${customIds.length ? sql.array(customIds) : sql.array([])},
+        0,
+        ${adminId},
+        ${adminId},
+        ${nextRunAt},
+        now(),
+        now()
+      )
+      returning *
+    `
+    const notification = normalizeNotificationCampaign(rows?.[0])
+    res.json({ notification, pushConfigured: pushNotificationsEnabled })
+    runNotificationWorkerTick().catch(() => {})
+  } catch (err) {
+    console.error('[notifications] failed to create campaign', err)
+    res.status(500).json({ error: err?.message || 'Failed to create notification' })
+  }
+})
+
+app.put('/api/admin/notifications/:id', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  await ensureNotificationTables()
+  const notificationId = String(req.params?.id || '').trim()
+  if (!notificationId) {
+    res.status(400).json({ error: 'Missing notification id' })
+    return
+  }
+  let parsed
+  try {
+    parsed = notificationInputSchema.parse(req.body || {})
+  } catch (err) {
+    res.status(400).json({ error: err?.errors?.[0]?.message || 'Invalid payload' })
+    return
+  }
+  const messageVariants = (parsed.messageVariants || [])
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0)
+  if (!messageVariants.length) {
+    res.status(400).json({ error: 'At least one message variant is required' })
+    return
+  }
+  const existingRows = await sql`
+    select * from public.notification_campaigns where id = ${notificationId} and deleted_at is null limit 1
+  `
+  if (!existingRows || !existingRows.length) {
+    res.status(404).json({ error: 'Notification not found' })
+    return
+  }
+  const deliveryMode = parsed.deliveryMode
+  const plannedFor = parsed.plannedFor && parsed.plannedFor.length ? new Date(parsed.plannedFor).toISOString() : null
+  const scheduleStartAt =
+    parsed.scheduleStartAt && parsed.scheduleStartAt.length
+      ? new Date(parsed.scheduleStartAt).toISOString()
+      : null
+  const nextRunAt = determineInitialNextRunAt({
+    deliveryMode,
+    plannedFor,
+    scheduleStartAt,
+  })
+  const audience = parsed.audience
+  const customIds = audience === 'custom' ? parsed.customUserIds || [] : []
+  const scheduleInterval = deliveryMode === 'scheduled' ? parsed.scheduleInterval || 'daily' : null
+  const timezone = parsed.timezone || 'UTC'
+  const nextState = deliveryMode === 'scheduled' ? (existingRows[0].state === 'paused' ? 'paused' : 'scheduled') : 'draft'
+  try {
+    const rows = await sql`
+      update public.notification_campaigns
+      set title = ${parsed.title.trim()},
+          description = ${parsed.description},
+          delivery_mode = ${deliveryMode},
+          state = ${nextState},
+          audience = ${audience},
+          message_variants = ${sql.array(messageVariants)},
+          randomize = ${parsed.randomize !== false},
+          timezone = ${timezone},
+          planned_for = ${deliveryMode === 'planned' ? plannedFor : null},
+          schedule_start_at = ${deliveryMode === 'scheduled' ? (scheduleStartAt || nextRunAt) : null},
+          schedule_interval = ${scheduleInterval},
+          cta_url = ${parsed.ctaUrl || null},
+          custom_user_ids = ${customIds.length ? sql.array(customIds) : sql.array([])},
+          updated_by = ${adminId},
+          next_run_at = ${nextRunAt},
+          updated_at = now()
+      where id = ${notificationId}
+      returning *
+    `
+    const notification = normalizeNotificationCampaign(rows?.[0])
+    res.json({ notification })
+  } catch (err) {
+    console.error('[notifications] failed to update campaign', err)
+    res.status(500).json({ error: err?.message || 'Failed to update notification' })
+  }
+})
+
+app.delete('/api/admin/notifications/:id', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  await ensureNotificationTables()
+  const notificationId = String(req.params?.id || '').trim()
+  if (!notificationId) {
+    res.status(400).json({ error: 'Missing notification id' })
+    return
+  }
+  try {
+    const rows = await sql`
+      update public.notification_campaigns
+      set deleted_at = now(),
+          state = 'cancelled',
+          updated_by = ${adminId},
+          updated_at = now()
+      where id = ${notificationId}
+      returning *
+    `
+    if (!rows || !rows.length) {
+      res.status(404).json({ error: 'Notification not found' })
+      return
+    }
+    const notification = normalizeNotificationCampaign(rows[0])
+    res.json({ notification })
+  } catch (err) {
+    console.error('[notifications] failed to delete campaign', err)
+    res.status(500).json({ error: err?.message || 'Failed to delete notification' })
+  }
+})
+
+app.post('/api/admin/notifications/:id/trigger', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  await ensureNotificationTables()
+  const notificationId = String(req.params?.id || '').trim()
+  if (!notificationId) {
+    res.status(400).json({ error: 'Missing notification id' })
+    return
+  }
+  try {
+    const rows = await sql`
+      update public.notification_campaigns
+      set next_run_at = now(),
+          state = case when delivery_mode = 'scheduled' then 'scheduled' else 'draft' end,
+          updated_by = ${adminId},
+          updated_at = now()
+      where id = ${notificationId} and deleted_at is null
+      returning *
+    `
+    if (!rows || !rows.length) {
+      res.status(404).json({ error: 'Notification not found' })
+      return
+    }
+    const notification = normalizeNotificationCampaign(rows[0])
+    res.json({ notification })
+    runNotificationWorkerTick().catch(() => {})
+  } catch (err) {
+    console.error('[notifications] failed to trigger campaign', err)
+    res.status(500).json({ error: err?.message || 'Failed to trigger notification' })
+  }
+})
+
+app.post('/api/admin/notifications/:id/state', async (req, res) => {
+  const adminId = await ensureAdmin(req, res)
+  if (!adminId) return
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  await ensureNotificationTables()
+  const notificationId = String(req.params?.id || '').trim()
+  if (!notificationId) {
+    res.status(400).json({ error: 'Missing notification id' })
+    return
+  }
+  let parsed
+  try {
+    parsed = notificationStateSchema.parse(req.body || {})
+  } catch (err) {
+    res.status(400).json({ error: err?.errors?.[0]?.message || 'Invalid payload' })
+    return
+  }
+  try {
+    const rows = await sql`
+      update public.notification_campaigns
+      set state = ${parsed.state},
+          next_run_at = case when ${parsed.state} = 'scheduled' and next_run_at is null then now() else next_run_at end,
+          updated_by = ${adminId},
+          updated_at = now()
+      where id = ${notificationId} and deleted_at is null
+      returning *
+    `
+    if (!rows || !rows.length) {
+      res.status(404).json({ error: 'Notification not found' })
+      return
+    }
+    const notification = normalizeNotificationCampaign(rows[0])
+    res.json({ notification })
+  } catch (err) {
+    console.error('[notifications] failed to update state', err)
+    res.status(500).json({ error: err?.message || 'Failed to update notification state' })
+  }
 })
 
   // Admin: global stats (bypass RLS via server connection)
@@ -7601,6 +8059,566 @@ app.delete('/api/admin/broadcast', async (req, res) => {
   }
 })
 
+app.get('/api/notifications', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return
+  }
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  await ensureNotificationTables()
+  try {
+    const rows = await sql`
+      select id::text as id, title, message, delivery_status, delivered_at, scheduled_for, seen_at, cta_url, payload
+      from public.user_notifications
+      where user_id = ${user.id}
+      order by coalesce(delivered_at, scheduled_for) desc
+      limit 50
+    `
+    const notifications = (rows || []).map((row) => ({
+      id: row.id,
+      title: row.title || null,
+      message: row.message || null,
+      status: row.delivery_status || 'pending',
+      deliveredAt: isoOrNull(row.delivered_at),
+      scheduledFor: isoOrNull(row.scheduled_for),
+      seenAt: isoOrNull(row.seen_at),
+      ctaUrl: row.cta_url || null,
+      payload: row.payload && typeof row.payload === 'object' ? row.payload : {},
+    }))
+    res.json({ notifications })
+  } catch (err) {
+    console.error('[notifications] failed to load user notifications', err)
+    res.status(500).json({ error: err?.message || 'Failed to load notifications' })
+  }
+})
+
+app.post('/api/notifications/:id/read', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return
+  }
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  await ensureNotificationTables()
+  const notificationId = String(req.params?.id || '').trim()
+  if (!notificationId) {
+    res.status(400).json({ error: 'Missing notification id' })
+    return
+  }
+  try {
+    await sql`
+      update public.user_notifications
+      set seen_at = now()
+      where id = ${notificationId} and user_id = ${user.id}
+    `
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[notifications] failed to update notification', err)
+    res.status(500).json({ error: err?.message || 'Failed to update notification' })
+  }
+})
+
+app.post('/api/push/subscribe', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return
+  }
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  await ensureNotificationTables()
+  const subscription = req.body?.subscription
+  if (!subscription || typeof subscription !== 'object' || !subscription.endpoint) {
+    res.status(400).json({ error: 'Invalid subscription payload' })
+    return
+  }
+  const authKey = subscription.keys?.auth || subscription.auth_key || null
+  const p256dhKey = subscription.keys?.p256dh || subscription.p256dh_key || null
+  const userAgent = req.get('user-agent') || null
+  try {
+    await sql`
+      insert into public.user_push_subscriptions (user_id, endpoint, auth_key, p256dh_key, user_agent, subscription, updated_at, last_used_at)
+      values (${user.id}, ${subscription.endpoint}, ${authKey}, ${p256dhKey}, ${userAgent}, ${subscription}, now(), now())
+      on conflict (endpoint) do update
+      set user_id = excluded.user_id,
+          auth_key = excluded.auth_key,
+          p256dh_key = excluded.p256dh_key,
+          user_agent = excluded.user_agent,
+          subscription = excluded.subscription,
+          updated_at = now(),
+          last_used_at = now()
+    `
+    res.json({ ok: true, pushConfigured: pushNotificationsEnabled })
+  } catch (err) {
+    console.error('[notifications] failed to store push subscription', err)
+    res.status(500).json({ error: err?.message || 'Failed to store subscription' })
+  }
+})
+
+app.delete('/api/push/subscribe', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return
+  }
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  await ensureNotificationTables()
+  const endpoint =
+    (req.body?.endpoint || req.query?.endpoint || req.body?.subscription?.endpoint || '')
+      .toString()
+      .trim()
+  if (!endpoint) {
+    res.status(400).json({ error: 'Missing endpoint' })
+    return
+  }
+  try {
+    await sql`
+      delete from public.user_push_subscriptions
+      where endpoint = ${endpoint} or (user_id = ${user.id} and endpoint = ${endpoint})
+    `
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[notifications] failed to remove subscription', err)
+    res.status(500).json({ error: err?.message || 'Failed to remove subscription' })
+  }
+})
+
+const notificationWorkerIntervalMs = Math.max(15000, Number(process.env.NOTIFICATION_WORKER_INTERVAL_MS || 60000))
+let notificationWorkerTimer = null
+let notificationWorkerBusy = false
+
+function isoOrNull(value) {
+  if (!value) return null
+  try {
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return null
+    return date.toISOString()
+  } catch {
+    return null
+  }
+}
+
+function toStringArray(value) {
+  if (!value) return []
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => (entry == null ? null : String(entry)))
+      .filter((entry) => entry && entry.trim().length > 0)
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    return trimmed ? [trimmed] : []
+  }
+  return []
+}
+
+function toUuidArray(value) {
+  return toStringArray(value)
+}
+
+function normalizeNotificationCampaign(row) {
+  if (!row) return null
+  const stats = {
+    total: Number(row.total_recipients || 0),
+    sent: Number(row.sent_count || 0),
+    pending: Number(row.pending_count || 0),
+    failed: Number(row.failed_count || 0),
+  }
+  const filters =
+    row.filters && typeof row.filters === 'object' && !Array.isArray(row.filters)
+      ? row.filters
+      : {}
+  return {
+    id: row.id || null,
+    title: row.title || '',
+    description: row.description || null,
+    audience: row.audience || 'all',
+    deliveryMode: row.delivery_mode || 'send_now',
+    state: row.state || 'draft',
+    filters,
+    messageVariants: toStringArray(row.message_variants),
+    randomize: row.randomize !== false,
+    timezone: row.timezone || 'UTC',
+    plannedFor: isoOrNull(row.planned_for),
+    scheduleStartAt: isoOrNull(row.schedule_start_at),
+    scheduleInterval: row.schedule_interval || null,
+    ctaUrl: row.cta_url || null,
+    customUserIds: toUuidArray(row.custom_user_ids),
+    runCount: Number(row.run_count || 0),
+    createdBy: row.created_by || null,
+    createdByName: row.created_by_name || null,
+    updatedBy: row.updated_by || null,
+    lastRunAt: isoOrNull(row.last_run_at),
+    nextRunAt: isoOrNull(row.next_run_at),
+    lastRunSummary: row.last_run_summary || null,
+    createdAt: isoOrNull(row.created_at),
+    updatedAt: isoOrNull(row.updated_at),
+    stats,
+  }
+}
+
+function determineInitialNextRunAt(payload) {
+  const now = new Date()
+  if (!payload || !payload.deliveryMode) return now.toISOString()
+  if (payload.deliveryMode === 'send_now') return now.toISOString()
+  if (payload.deliveryMode === 'planned' && payload.plannedFor) {
+    const date = new Date(payload.plannedFor)
+    if (!Number.isNaN(date.getTime())) return date.toISOString()
+  }
+  if (payload.deliveryMode === 'scheduled' && payload.scheduleStartAt) {
+    const date = new Date(payload.scheduleStartAt)
+    if (!Number.isNaN(date.getTime())) return date.toISOString()
+  }
+  return now.toISOString()
+}
+
+function computeNextScheduledRun(campaign) {
+  const interval = campaign.scheduleInterval || 'daily'
+  const baseIso = campaign.nextRunAt || campaign.scheduleStartAt || new Date().toISOString()
+  const base = new Date(baseIso)
+  if (Number.isNaN(base.getTime())) return new Date(Date.now() + 24 * 3600 * 1000).toISOString()
+  const next = new Date(base.getTime())
+  if (interval === 'weekly') {
+    next.setUTCDate(next.getUTCDate() + 7)
+  } else if (interval === 'monthly') {
+    const originalDay = base.getUTCDate()
+    next.setUTCDate(1)
+    next.setUTCMonth(next.getUTCMonth() + 1)
+    const daysInMonth = new Date(next.getUTCFullYear(), next.getUTCMonth() + 1, 0).getUTCDate()
+    next.setUTCDate(Math.min(originalDay, daysInMonth))
+  } else {
+    next.setUTCDate(next.getUTCDate() + 1)
+  }
+  return next.toISOString()
+}
+
+function pickNotificationMessage(campaign, index) {
+  const variants =
+    campaign.messageVariants && campaign.messageVariants.length > 0
+      ? campaign.messageVariants
+      : [campaign.description || 'You have a new update waiting in Aphylia.']
+  if (variants.length === 1) return variants[0]
+  if (campaign.randomize) {
+    const randomIndex = Math.floor(Math.random() * variants.length)
+    return variants[randomIndex]
+  }
+  const idx = index % variants.length
+  return variants[idx]
+}
+
+function chunkArray(list, size) {
+  const chunks = []
+  for (let i = 0; i < list.length; i += size) {
+    chunks.push(list.slice(i, i + size))
+  }
+  return chunks
+}
+
+async function resolveNotificationAudience(campaign) {
+  if (!sql) return []
+  const recipients = new Set()
+  const addRows = (rows, field = 'id') => {
+    for (const row of rows || []) {
+      const value = row?.[field]
+      if (value) recipients.add(String(value))
+    }
+  }
+  if (campaign.audience === 'all') {
+    const rows = await sql`select id::text as id from public.profiles where id is not null`
+    addRows(rows, 'id')
+  } else if (campaign.audience === 'tasks_open') {
+    const today = new Date().toISOString().slice(0, 10)
+    const rows = await sql`
+      select distinct user_id::text as user_id
+      from public.user_task_daily_cache
+      where cache_date = ${today} and gardens_with_remaining_tasks > 0 and user_id is not null
+    `
+    addRows(rows, 'user_id')
+  } else if (campaign.audience === 'inactive_week') {
+    const rows = await sql`
+      select user_id::text as user_id
+      from public.web_visits
+      where user_id is not null
+      group by user_id
+      having max(occurred_at) < now() - interval '7 days'
+    `
+    addRows(rows, 'user_id')
+  } else if (campaign.audience === 'admins') {
+    const rows = await sql`select id::text as id from public.profiles where is_admin = true`
+    addRows(rows, 'id')
+  } else if (campaign.audience === 'custom') {
+    for (const userId of campaign.customUserIds || []) {
+      if (userId) recipients.add(String(userId))
+    }
+  } else {
+    const rows = await sql`select id::text as id from public.profiles where id is not null`
+    addRows(rows, 'id')
+  }
+  return Array.from(recipients)
+}
+
+async function insertNotificationDeliveries(campaign, recipients, iteration, scheduledFor) {
+  if (!sql || !recipients.length) return []
+  const insertedRows = []
+  let processedCount = 0
+  const chunks = chunkArray(recipients, 200)
+  for (const chunk of chunks) {
+    const payload = chunk.map((userId, index) => ({
+      campaign_id: campaign.id,
+      iteration,
+      user_id: userId,
+      title: campaign.title,
+      message: pickNotificationMessage(campaign, processedCount + index),
+      payload: { ctaUrl: campaign.ctaUrl || null },
+      cta_url: campaign.ctaUrl || null,
+      scheduled_for: scheduledFor,
+      delivery_status: 'pending',
+      delivery_attempts: 0,
+      delivery_error: null,
+    }))
+    const inserted = await sql`
+      insert into public.user_notifications ${sql(
+        payload,
+        'campaign_id',
+        'iteration',
+        'user_id',
+        'title',
+        'message',
+        'payload',
+        'cta_url',
+        'scheduled_for',
+        'delivery_status',
+        'delivery_attempts',
+        'delivery_error',
+      )}
+      on conflict (campaign_id, iteration, user_id)
+      do update set
+        title = excluded.title,
+        message = excluded.message,
+        payload = excluded.payload,
+        cta_url = excluded.cta_url,
+        scheduled_for = excluded.scheduled_for,
+        delivery_status = 'pending',
+        delivery_attempts = 0,
+        delivery_error = null,
+        delivered_at = null,
+        seen_at = null,
+        cancelled_at = null
+      returning id::text as id, user_id::text as user_id, title, message, payload, cta_url
+    `
+    insertedRows.push(...inserted)
+    processedCount += chunk.length
+  }
+  return insertedRows
+}
+
+async function deliverPushNotifications(notifications, campaign) {
+  if (!sql || !notifications.length) return { sent: 0, failed: 0 }
+  if (!pushNotificationsEnabled) {
+    const ids = notifications.map((row) => row.id)
+    await sql`
+      update public.user_notifications
+      set delivery_status = 'failed',
+          delivered_at = now(),
+          delivery_attempts = delivery_attempts + 1,
+          delivery_error = 'PUSH_DISABLED'
+      where id = any(${ids}::uuid[])
+    `
+    return { sent: 0, failed: notifications.length }
+  }
+  const userIds = Array.from(new Set(notifications.map((row) => row.user_id).filter(Boolean)))
+  if (!userIds.length) return { sent: 0, failed: notifications.length }
+  const subscriptions = await sql`
+    select id::text as id, user_id::text as user_id, endpoint, subscription
+    from public.user_push_subscriptions
+    where user_id = any(${userIds})
+  `
+  const subsByUser = new Map()
+  for (const sub of subscriptions || []) {
+    const list = subsByUser.get(sub.user_id) || []
+    list.push(sub)
+    subsByUser.set(sub.user_id, list)
+  }
+  const deliveredIds = []
+  const failedIds = []
+  const staleSubscriptionIds = new Set()
+  const usedSubscriptionIds = new Set()
+  for (const notification of notifications) {
+    const subs = subsByUser.get(notification.user_id) || []
+    if (subs.length === 0) {
+      failedIds.push(notification.id)
+      continue
+    }
+    let delivered = false
+    for (const sub of subs) {
+      try {
+        const payload =
+          sub.subscription && typeof sub.subscription === 'string'
+            ? JSON.parse(sub.subscription)
+            : sub.subscription
+        await webpush.sendNotification(
+          payload,
+          JSON.stringify({
+            title: notification.title || campaign.title || 'Aphylia',
+            body: notification.message,
+            tag: campaign.id,
+            data: {
+              campaignId: campaign.id,
+              notificationId: notification.id,
+              ctaUrl: notification.cta_url || null,
+            },
+          }),
+        )
+        delivered = true
+        usedSubscriptionIds.add(sub.id)
+      } catch (err) {
+        const statusCode = err?.statusCode || err?.statuscode
+        if (statusCode === 404 || statusCode === 410) {
+          staleSubscriptionIds.add(sub.id)
+        }
+        console.warn('[notifications] push delivery failed', err?.message || err)
+      }
+    }
+    if (delivered) {
+      deliveredIds.push(notification.id)
+    } else {
+      failedIds.push(notification.id)
+    }
+  }
+  if (staleSubscriptionIds.size) {
+    await sql`
+      delete from public.user_push_subscriptions
+      where id = any(${Array.from(staleSubscriptionIds)}::uuid[])
+    `
+  }
+  if (usedSubscriptionIds.size) {
+    await sql`
+      update public.user_push_subscriptions
+      set last_used_at = now()
+      where id = any(${Array.from(usedSubscriptionIds)}::uuid[])
+    `
+  }
+  if (deliveredIds.length) {
+    await sql`
+      update public.user_notifications
+      set delivery_status = 'sent',
+          delivered_at = now(),
+          delivery_attempts = delivery_attempts + 1,
+          delivery_error = null
+      where id = any(${deliveredIds}::uuid[])
+    `
+  }
+  if (failedIds.length) {
+    await sql`
+      update public.user_notifications
+      set delivery_status = 'failed',
+          delivered_at = now(),
+          delivery_attempts = delivery_attempts + 1,
+          delivery_error = coalesce(delivery_error, 'FAILED')
+      where id = any(${failedIds}::uuid[])
+    `
+  }
+  return { sent: deliveredIds.length, failed: failedIds.length }
+}
+
+async function runNotificationCampaign(row) {
+  if (!sql) return
+  const claimed = await sql`
+    update public.notification_campaigns
+    set state = 'processing', updated_at = now()
+    where id = ${row.id}
+      and deleted_at is null
+      and state <> 'cancelled'
+    returning *
+  `
+  if (!claimed || !claimed.length) return
+  const campaign = normalizeNotificationCampaign(claimed[0])
+  if (!campaign) return
+  const iteration = (campaign.runCount || 0) + 1
+  const recipients = await resolveNotificationAudience(campaign)
+  const scheduledFor = new Date().toISOString()
+  const inserted = await insertNotificationDeliveries(campaign, recipients, iteration, scheduledFor)
+  const deliveryStats = await deliverPushNotifications(inserted, campaign)
+  const summary = {
+    recipients: recipients.length,
+    sent: deliveryStats.sent,
+    failed: deliveryStats.failed,
+    completedAt: new Date().toISOString(),
+  }
+  let nextState = 'completed'
+  let nextRunAt = null
+  if (campaign.deliveryMode === 'scheduled') {
+    nextRunAt = computeNextScheduledRun(campaign)
+    nextState = campaign.state === 'paused' ? 'paused' : 'scheduled'
+  }
+  await sql`
+    update public.notification_campaigns
+    set state = ${nextState},
+        run_count = run_count + 1,
+        last_run_at = now(),
+        next_run_at = ${nextRunAt},
+        last_run_summary = ${summary},
+        updated_at = now()
+    where id = ${campaign.id}
+  `
+}
+
+async function processDueNotificationCampaigns() {
+  if (!sql) return
+  await ensureNotificationTables()
+  const due = await sql`
+    select *
+    from public.notification_campaigns
+    where deleted_at is null
+      and state not in ('cancelled','completed','paused')
+      and next_run_at is not null
+      and next_run_at <= now()
+    order by next_run_at asc
+    limit 5
+  `
+  for (const row of due || []) {
+    try {
+      await runNotificationCampaign(row)
+    } catch (err) {
+      console.error('[notifications] campaign run failed', err)
+    }
+  }
+}
+
+async function runNotificationWorkerTick() {
+  if (notificationWorkerBusy) return
+  notificationWorkerBusy = true
+  try {
+    await processDueNotificationCampaigns()
+  } catch (err) {
+    console.error('[notifications] worker tick error', err)
+  } finally {
+    notificationWorkerBusy = false
+  }
+}
+
+function scheduleNotificationWorker() {
+  if (!sql) return
+  if (notificationWorkerTimer) return
+  const tick = () => {
+    runNotificationWorkerTick().catch(() => {})
+    notificationWorkerTimer = setTimeout(tick, notificationWorkerIntervalMs)
+  }
+  notificationWorkerTimer = setTimeout(tick, 2000)
+}
+
 // Static assets
 const distDir = path.resolve(__dirname, 'dist')
 const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365
@@ -7679,7 +8697,12 @@ if (shouldListen) {
     // Best-effort ensure ban tables are present at startup
     ensureBanTables().catch(() => {})
     ensureBroadcastTable().catch(() => {})
+    ensureNotificationTables().catch(() => {})
+    scheduleNotificationWorker()
   })
+} else {
+  ensureNotificationTables().catch(() => {})
+  scheduleNotificationWorker()
 }
 
 // Export app for testing and tooling

@@ -4613,3 +4613,125 @@ END $$;
 -- Initialize cache for all gardens and users (runs automatically when script executes)
 -- This ensures cache is populated immediately after schema setup
 SELECT initialize_all_task_cache();
+
+-- ========== Notification campaigns & delivery infrastructure ==========
+create table if not exists public.notification_campaigns (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  description text,
+  delivery_mode text not null default 'send_now' check (delivery_mode in ('send_now','planned','scheduled')),
+  state text not null default 'draft' check (state in ('draft','scheduled','processing','paused','completed','cancelled')),
+  audience text not null default 'all' check (audience in ('all','tasks_open','inactive_week','admins','custom')),
+  filters jsonb not null default '{}'::jsonb,
+  message_variants text[] not null default '{}',
+  randomize boolean not null default true,
+  timezone text default 'UTC',
+  planned_for timestamptz,
+  schedule_start_at timestamptz,
+  schedule_interval text check (schedule_interval in ('daily','weekly','monthly')),
+  cta_url text,
+  custom_user_ids uuid[] not null default '{}',
+  run_count integer not null default 0,
+  created_by uuid references public.profiles(id),
+  updated_by uuid references public.profiles(id),
+  last_run_at timestamptz,
+  next_run_at timestamptz,
+  last_run_summary jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz
+);
+create index if not exists notification_campaigns_next_run_idx
+  on public.notification_campaigns (next_run_at)
+  where deleted_at is null;
+create index if not exists notification_campaigns_state_idx on public.notification_campaigns (state);
+alter table public.notification_campaigns enable row level security;
+do $$ begin
+  if exists (
+    select 1 from pg_policies
+    where schemaname='public' and tablename='notification_campaigns' and policyname='notification_campaigns_admins'
+  ) then
+    drop policy notification_campaigns_admins on public.notification_campaigns;
+  end if;
+  create policy notification_campaigns_admins on public.notification_campaigns
+    for all to authenticated
+    using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true))
+    with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
+end $$;
+
+create table if not exists public.user_notifications (
+  id uuid primary key default gen_random_uuid(),
+  campaign_id uuid references public.notification_campaigns(id) on delete set null,
+  iteration integer not null default 1,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  title text,
+  message text not null,
+  payload jsonb not null default '{}'::jsonb,
+  cta_url text,
+  scheduled_for timestamptz not null default now(),
+  delivered_at timestamptz,
+  delivery_status text not null default 'pending' check (delivery_status in ('pending','sent','failed','cancelled')),
+  delivery_attempts integer not null default 0,
+  delivery_error text,
+  seen_at timestamptz,
+  cancelled_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create index if not exists user_notifications_user_idx on public.user_notifications (user_id, scheduled_for desc);
+create index if not exists user_notifications_campaign_idx on public.user_notifications (campaign_id);
+create unique index if not exists user_notifications_unique_delivery
+  on public.user_notifications (campaign_id, iteration, user_id);
+grant select, insert, update, delete on public.user_notifications to authenticated;
+alter table public.user_notifications enable row level security;
+do $$ begin
+  if exists (
+    select 1 from pg_policies
+    where schemaname='public' and tablename='user_notifications' and policyname='user_notifications_select_self'
+  ) then
+    drop policy user_notifications_select_self on public.user_notifications;
+  end if;
+  create policy user_notifications_select_self on public.user_notifications
+    for select to authenticated
+    using (user_id = (select auth.uid()));
+  if exists (
+    select 1 from pg_policies
+    where schemaname='public' and tablename='user_notifications' and policyname='user_notifications_update_self'
+  ) then
+    drop policy user_notifications_update_self on public.user_notifications;
+  end if;
+  create policy user_notifications_update_self on public.user_notifications
+    for update to authenticated
+    using (user_id = (select auth.uid()))
+    with check (user_id = (select auth.uid()));
+end $$;
+
+create table if not exists public.user_push_subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  endpoint text not null,
+  auth_key text,
+  p256dh_key text,
+  user_agent text,
+  subscription jsonb not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  last_used_at timestamptz
+);
+create unique index if not exists user_push_subscriptions_endpoint_idx
+  on public.user_push_subscriptions (endpoint);
+create index if not exists user_push_subscriptions_user_idx
+  on public.user_push_subscriptions (user_id);
+grant select, insert, update, delete on public.user_push_subscriptions to authenticated;
+alter table public.user_push_subscriptions enable row level security;
+do $$ begin
+  if exists (
+    select 1 from pg_policies
+    where schemaname='public' and tablename='user_push_subscriptions' and policyname='user_push_subscriptions_self'
+  ) then
+    drop policy user_push_subscriptions_self on public.user_push_subscriptions;
+  end if;
+  create policy user_push_subscriptions_self on public.user_push_subscriptions
+    for all to authenticated
+    using (user_id = (select auth.uid()))
+    with check (user_id = (select auth.uid()));
+end $$;
