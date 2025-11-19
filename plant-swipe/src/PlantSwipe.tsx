@@ -428,6 +428,10 @@ export default function PlantSwipe() {
     link.rel = "preload"
     link.as = "image"
     link.href = href
+    try {
+      (link as HTMLLinkElement & { fetchPriority?: string }).fetchPriority = "high"
+    } catch {}
+    link.setAttribute("fetchpriority", "high")
     link.setAttribute("data-aphylia-preload", "hero")
     document.head.appendChild(link)
     return () => {
