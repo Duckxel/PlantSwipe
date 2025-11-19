@@ -173,10 +173,10 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                   <motion.div
                     key={`${current.id}-${index}`}
                     drag
-                    dragElastic={0.28}
+                    dragElastic={{ left: 0.28, right: 0.28, top: 0.28, bottom: 0 }}
                     dragMomentum={false}
                     style={{ x, y }}
-                    dragConstraints={{ left: -500, right: 500, top: -500, bottom: 500 }}
+                    dragConstraints={{ left: -500, right: 500, top: -500, bottom: 0 }}
                     onDragEnd={onDragEnd}
                     initial={{ scale: 0.94, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
@@ -230,13 +230,14 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                           <Heart className={`h-5 w-5 ${liked ? "fill-current" : ""}`} />
                         </button>
                       </div>
-                        {isDesktop && <PlantMetaRail plant={current} variant="sidebar" />}
+                        {current && (
+                          <PlantMetaRail
+                            plant={current}
+                            variant="sidebar"
+                            disableHoverActivation={!isDesktop}
+                          />
+                        )}
                       <div className="absolute bottom-0 left-0 right-0 z-20 p-6 pb-8 text-white">
-                          {!isDesktop && (
-                            <div className="mb-3 -mx-1">
-                              <PlantMetaRail plant={current} variant="inline" />
-                            </div>
-                          )}
                         <div className="mb-3 flex flex-wrap items-center gap-2">
                           <Badge className={`${rarityTone[rarityKey]} backdrop-blur bg-opacity-90`}>{current?.rarity ?? "Common"}</Badge>
                           {seasons.map((s) => {
@@ -403,7 +404,11 @@ const useSupportsHover = () => {
   return supportsHover
 }
 
-const PlantMetaRail: React.FC<{ plant: Plant; variant: "sidebar" | "inline" }> = ({ plant, variant }) => {
+const PlantMetaRail: React.FC<{
+  plant: Plant
+  variant: "sidebar" | "inline"
+  disableHoverActivation?: boolean
+}> = ({ plant, variant, disableHoverActivation = false }) => {
   const { t } = useTranslation("common")
   const [activeKey, setActiveKey] = React.useState<string | null>(null)
   const items = React.useMemo(() => buildIndicatorItems(plant, t), [plant, t])
@@ -427,6 +432,7 @@ const PlantMetaRail: React.FC<{ plant: Plant; variant: "sidebar" | "inline" }> =
             onDeactivate={() => setActiveKey((prev) => (prev === item.key ? null : prev))}
             supportsHover={supportsHover}
             variant="inline"
+            disableHoverActivation={disableHoverActivation}
           />
         ))}
       </div>
@@ -444,6 +450,7 @@ const PlantMetaRail: React.FC<{ plant: Plant; variant: "sidebar" | "inline" }> =
           onDeactivate={() => setActiveKey((prev) => (prev === item.key ? null : prev))}
           supportsHover={supportsHover}
           variant="sidebar"
+          disableHoverActivation={disableHoverActivation}
         />
       ))}
     </div>
@@ -475,12 +482,22 @@ interface IndicatorPillProps {
   onDeactivate: () => void
   supportsHover: boolean
   variant: "sidebar" | "inline"
+  disableHoverActivation?: boolean
 }
 
-const IndicatorPill: React.FC<IndicatorPillProps> = ({ item, active, onActivate, onDeactivate, supportsHover, variant }) => {
+const IndicatorPill: React.FC<IndicatorPillProps> = ({
+  item,
+  active,
+  onActivate,
+  onDeactivate,
+  supportsHover,
+  variant,
+  disableHoverActivation = false,
+}) => {
   const isColorVariant = item.variant === "color" && (item.colors?.length ?? 0) > 0
   const ariaLabel = `${item.description ?? ""}${item.description ? ": " : ""}${item.ariaValue ?? item.label}`.trim()
   const isSidebarVariant = variant === "sidebar"
+  const allowHover = supportsHover && !disableHoverActivation
 
   const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation()
@@ -511,8 +528,8 @@ const IndicatorPill: React.FC<IndicatorPillProps> = ({ item, active, onActivate,
         aria-label={ariaLabel || undefined}
         aria-expanded={active}
         aria-pressed={active}
-        onMouseEnter={supportsHover ? onActivate : undefined}
-        onMouseLeave={supportsHover ? onDeactivate : undefined}
+        onMouseEnter={allowHover ? onActivate : undefined}
+        onMouseLeave={allowHover ? onDeactivate : undefined}
         onFocus={onActivate}
         onBlur={onDeactivate}
         onClick={handleClick}

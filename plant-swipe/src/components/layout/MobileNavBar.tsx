@@ -12,20 +12,6 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 const MOBILE_NAV_ATTR = "data-mobile-nav-root"
 
 let portalHost: HTMLElement | null = null
-let portalUsers = 0
-
-const isStandaloneDisplayMode = () => {
-  if (typeof window === "undefined") return false
-  if ((window.navigator as Navigator & { standalone?: boolean }).standalone) return true
-  if (typeof window.matchMedia === "function") {
-    try {
-      return window.matchMedia("(display-mode: standalone)").matches
-    } catch {
-      return false
-    }
-  }
-  return false
-}
 
 const ensurePortalHost = () => {
   if (typeof document === "undefined") return null
@@ -37,13 +23,27 @@ const ensurePortalHost = () => {
     portalHost = existing
     return existing
   }
-  const node = document.createElement('div')
+  const node = document.createElement("div")
   node.setAttribute(MOBILE_NAV_ATTR, "true")
   node.style.position = "relative"
   node.style.zIndex = "60"
   node.style.width = "100%"
+  node.style.setProperty("contain", "layout paint")
+  node.style.setProperty("will-change", "transform")
   document.body.appendChild(node)
   portalHost = node
+  return node
+}
+
+const createPortalContainer = () => {
+  if (typeof document === "undefined") return null
+  const host = ensurePortalHost()
+  if (!host) return null
+  const node = document.createElement("div")
+  node.setAttribute("data-mobile-nav-instance", "true")
+  node.style.position = "relative"
+  node.style.width = "100%"
+  host.appendChild(node)
   return node
 }
 
@@ -62,8 +62,8 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
   const { t } = useTranslation("common")
   const [profileMenuOpen, setProfileMenuOpen] = React.useState(false)
   const canUseDOM = typeof document !== "undefined"
-  const [portalContainer, setPortalContainer] = React.useState<HTMLElement | null>(() => (canUseDOM ? ensurePortalHost() : null))
-  const [isStandalone, setIsStandalone] = React.useState(() => (typeof window !== "undefined" ? isStandaloneDisplayMode() : false))
+  const [portalContainer] = React.useState<HTMLElement | null>(() => (canUseDOM ? createPortalContainer() : null))
+  const navRef = React.useRef<HTMLElement | null>(null)
   
   const currentView: "discovery" | "gardens" | "search" | "create" | "profile" =
     pathWithoutLang === "/" ? "discovery" :
@@ -78,9 +78,11 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
 
   const navElement = (
     <nav
+      ref={navRef}
       className="fixed bottom-0 left-0 right-0 md:hidden z-50 border-t border-stone-200 dark:border-[#3e3e42] bg-white/70 dark:bg-[#252526]/90 backdrop-blur-xl supports-[backdrop-filter]:bg-white/50 dark:supports-[backdrop-filter]:bg-[#252526]/80 shadow-[0_-8px_30px_rgba(0,0,0,0.08)] dark:shadow-[0_-8px_30px_rgba(0,0,0,0.3)] pb-[max(env(safe-area-inset-bottom),0px)]"
       role="navigation"
       aria-label="Primary"
+      style={{ transform: "translateZ(0)", contain: "layout paint" }}
     >
       <div className="relative mx-auto max-w-6xl px-6 pt-3 pb-3">
         {/* Center floating create button */}
@@ -200,54 +202,19 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
     </Sheet>
   )
 
-  React.useEffect(() => {
-    if (!canUseDOM || typeof window === "undefined") return
-    if ((window.navigator as Navigator & { standalone?: boolean }).standalone) {
-      setIsStandalone(true)
-    }
-    if (typeof window.matchMedia !== "function") return
-    let mq: MediaQueryList | null = null
-    try {
-      mq = window.matchMedia("(display-mode: standalone)")
-    } catch {
-      mq = null
-    }
-    if (!mq) return
-    const handleChange = () => {
-      setIsStandalone(isStandaloneDisplayMode())
-    }
-    handleChange()
-    if (typeof mq.addEventListener === "function") {
-      mq.addEventListener("change", handleChange)
-    } else if (typeof mq.addListener === "function") {
-      mq.addListener(handleChange)
-    }
-    return () => {
-      if (!mq) return
-      if (typeof mq.removeEventListener === "function") {
-        mq.removeEventListener("change", handleChange)
-      } else if (typeof mq.removeListener === "function") {
-        mq.removeListener(handleChange)
-      }
-    }
-  }, [canUseDOM])
-
   React.useLayoutEffect(() => {
-    if (!canUseDOM) return
-    const node = ensurePortalHost()
-    if (!node) return
-    portalUsers += 1
-    setPortalContainer(node)
+    const node = portalContainer
     return () => {
-      portalUsers = Math.max(0, portalUsers - 1)
-      if (!isStandalone && portalUsers === 0 && node.parentNode) {
+      if (!node) return
+      if (node.parentNode) {
         node.parentNode.removeChild(node)
-        if (portalHost === node) {
-          portalHost = null
-        }
+      }
+      if (portalHost && portalHost.childElementCount === 0 && portalHost.parentNode) {
+        portalHost.parentNode.removeChild(portalHost)
+        portalHost = null
       }
     }
-  }, [canUseDOM, isStandalone])
+  }, [portalContainer])
 
   React.useEffect(() => {
     if (!canUseDOM || typeof document === "undefined") return
