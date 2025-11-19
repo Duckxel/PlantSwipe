@@ -17,24 +17,10 @@ import BroadcastToast from "@/components/layout/BroadcastToast";
 import MobileNavBar from "@/components/layout/MobileNavBar";
 import { RequestPlantDialog } from "@/components/plant/RequestPlantDialog";
 // GardenListPage and GardenDashboardPage are lazy loaded below
-import { SearchPage } from "@/pages/SearchPage";
-import { SwipePage } from "@/pages/SwipePage";
-import { CreatePlantPage } from "@/pages/CreatePlantPage";
-import { EditPlantPage } from "@/pages/EditPlantPage";
 import type { Plant } from "@/types/plant";
-// PlantDetails imported in PlantInfoPage route component
-import PlantInfoPage from "@/pages/PlantInfoPage";
 import { useAuth } from "@/context/AuthContext";
 import { AuthActionsProvider } from "@/context/AuthActionsContext";
-import PublicProfilePage from "@/pages/PublicProfilePage";
 import RequireAdmin from "@/pages/RequireAdmin";
-import { FriendsPage } from "@/pages/FriendsPage";
-import SettingsPage from "@/pages/SettingsPage";
-import ContactUsPage from "@/pages/ContactUsPage";
-import AboutPage from "@/pages/AboutPage";
-import DownloadPage from "@/pages/DownloadPage";
-import TermsPage from "@/pages/TermsPage";
-import { ErrorPage } from "@/pages/ErrorPage";
 import { supabase } from "@/lib/supabaseClient";
 import { useLanguage } from "@/lib/i18nRouting";
 import { loadPlantsWithTranslations } from "@/lib/plantTranslationLoader";
@@ -44,17 +30,69 @@ import { formatClassificationLabel } from "@/constants/classification";
 import { useTranslation } from "react-i18next";
 
 // Lazy load heavy pages for code splitting
-const AdminPage = lazy(() => import("@/pages/AdminPage").then(module => ({ default: module.AdminPage })));
-const GardenDashboardPage = lazy(() => import("@/pages/GardenDashboardPage").then(module => ({ default: module.GardenDashboardPage })));
-const GardenListPage = lazy(() => import("@/pages/GardenListPage").then(module => ({ default: module.GardenListPage })));
+const AdminPage = lazy(() => import("@/pages/AdminPage").then(module => ({ default: module.AdminPage })))
+const GardenDashboardPage = lazy(() => import("@/pages/GardenDashboardPage").then(module => ({ default: module.GardenDashboardPage })))
+const GardenListPage = lazy(() => import("@/pages/GardenListPage").then(module => ({ default: module.GardenListPage })))
+const SwipePageLazy = lazy(() => import("@/pages/SwipePage").then(module => ({ default: module.SwipePage })))
+const SearchPageLazy = lazy(() => import("@/pages/SearchPage").then(module => ({ default: module.SearchPage })))
+const CreatePlantPageLazy = lazy(() => import("@/pages/CreatePlantPage").then(module => ({ default: module.CreatePlantPage })))
+const EditPlantPageLazy = lazy(() => import("@/pages/EditPlantPage").then(module => ({ default: module.EditPlantPage })))
+const PlantInfoPageLazy = lazy(() => import("@/pages/PlantInfoPage"))
+const PublicProfilePageLazy = lazy(() => import("@/pages/PublicProfilePage"))
+const FriendsPageLazy = lazy(() => import("@/pages/FriendsPage").then(module => ({ default: module.FriendsPage })))
+const SettingsPageLazy = lazy(() => import("@/pages/SettingsPage"))
+const ContactUsPageLazy = lazy(() => import("@/pages/ContactUsPage"))
+const AboutPageLazy = lazy(() => import("@/pages/AboutPage"))
+const DownloadPageLazy = lazy(() => import("@/pages/DownloadPage"))
+const TermsPageLazy = lazy(() => import("@/pages/TermsPage"))
+const ErrorPageLazy = lazy(() => import("@/pages/ErrorPage").then(module => ({ default: module.ErrorPage })))
 
 type SearchSortMode = "default" | "newest" | "popular" | "favorites"
+
+type ExtendedWindow = Window & {
+  requestIdleCallback?: (callback: (...args: any[]) => void, options?: { timeout?: number }) => number
+  cancelIdleCallback?: (handle: number) => void
+}
+
+const scheduleIdleTask = (task: () => void, timeout = 1500): (() => void) => {
+  if (typeof window === "undefined") {
+    return () => {}
+  }
+  const extendedWindow = window as ExtendedWindow
+  let cancelled = false
+  let timeoutId: number | null = null
+  let idleHandle: number | null = null
+
+  const run = () => {
+    if (cancelled) return
+    task()
+  }
+
+  if (typeof extendedWindow.requestIdleCallback === "function") {
+    idleHandle = extendedWindow.requestIdleCallback(() => run(), { timeout })
+  } else {
+    timeoutId = window.setTimeout(run, timeout)
+  }
+
+  return () => {
+    cancelled = true
+    if (idleHandle !== null && typeof extendedWindow.cancelIdleCallback === "function") {
+      extendedWindow.cancelIdleCallback(idleHandle)
+    }
+    if (timeoutId !== null) {
+      clearTimeout(timeoutId)
+    }
+  }
+}
 
 // --- Main Component ---
 export default function PlantSwipe() {
   const { user, signIn, signUp, signOut, profile, refreshProfile } = useAuth()
   const currentLang = useLanguage()
   const { t } = useTranslation('common')
+  const routeLoadingFallback = (
+    <div className="p-8 text-center text-sm opacity-60">{t('common.loading')}</div>
+  )
   const [query, setQuery] = useState("")
   const [seasonFilter, setSeasonFilter] = useState<string | null>(null)
   const [colorFilter, setColorFilter] = useState<string | null>(null)
@@ -159,6 +197,7 @@ export default function PlantSwipe() {
   // Global presence tracking so Admin can see "currently online" users
   const presenceRef = React.useRef<ReturnType<typeof supabase.channel> | null>(null)
   React.useEffect(() => {
+    if (typeof window === 'undefined') return
     // Track SPA route changes to server for visit analytics
     const sendVisit = async (path: string) => {
       try {
@@ -204,12 +243,11 @@ export default function PlantSwipe() {
       } catch {}
     }
 
-    // Initial on mount and on subsequent route changes
-    sendVisit(location.pathname + location.search).catch(() => {})
-    const unlisten = () => {
-      // react-router v6 provides useLocation, so listen via effect dependency
-    }
-    return () => { unlisten() }
+    const cancelIdleVisit = scheduleIdleTask(() => {
+      sendVisit(location.pathname + location.search).catch(() => {})
+    }, 2000)
+
+    return () => { cancelIdleVisit() }
   }, [location.pathname, location.search, user?.id])
 
   // Heartbeat: periodically record a lightweight visit so Admin "online" stays fresh
@@ -908,98 +946,210 @@ export default function PlantSwipe() {
 
           {/* Use background location for primary routes so overlays render on top */}
           <Routes location={(backgroundLocation as any) || location}>
-                <Route path="/gardens" element={
-                  <Suspense fallback={<div className="p-8 text-center text-sm opacity-60">{t('common.loading')}</div>}>
-                    <GardenListPage />
-                  </Suspense>
-                } />
-                <Route path="/garden/:id/*" element={
-                  <Suspense fallback={<div className="p-8 text-center text-sm opacity-60">{t('common.loading')}</div>}>
-                    <GardenDashboardPage />
-                  </Suspense>
-                } />
-                <Route
-                  path="/search"
-                    element={
-                      <SearchPage
-                        plants={sortedSearchResults}
-                        openInfo={(p) => navigate(`/plants/${p.id}`, { state: { backgroundLocation: location } })}
-                        likedIds={likedIds}
-                      />
-                      }
+            <Route
+              path="/gardens"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <GardenListPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/garden/:id/*"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <GardenDashboardPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/search"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <SearchPageLazy
+                    plants={sortedSearchResults}
+                    openInfo={(p) => navigate(`/plants/${p.id}`, { state: { backgroundLocation: location } })}
+                    likedIds={likedIds}
                   />
-                  <Route
-                    path="/profile"
-                    element={user ? (profile?.display_name ? <Navigate to={`/u/${encodeURIComponent(profile.display_name)}`} replace /> : <Navigate to="/u/_me" replace />) : <Navigate to="/" replace />}
-                  />
-                  <Route path="/u/:username" element={<PublicProfilePage />} />
-                    <Route path="/friends" element={user ? <FriendsPage /> : <Navigate to="/" replace />} />
-                    <Route path="/settings" element={user ? <SettingsPage /> : <Navigate to="/" replace />} />
-                    <Route path="/contact/business" element={<ContactUsPage defaultChannel="business" />} />
-                    <Route path="/contact" element={<ContactUsPage defaultChannel="support" />} />
-                    <Route path="/about" element={<AboutPage />} />
-                    <Route path="/download" element={<DownloadPage />} />
-                    <Route path="/terms" element={<TermsPage />} />
-                <Route path="/admin" element={
-                  <RequireAdmin>
-                    <Suspense fallback={<div className="p-8 text-center text-sm opacity-60">Loading admin panel...</div>}>
-                      <AdminPage />
-                    </Suspense>
-                  </RequireAdmin>
-                } />
-                <Route path="/create" element={user ? (
-                  <CreatePlantPage
+                </Suspense>
+              }
+            />
+            <Route
+              path="/profile"
+              element={user ? (profile?.display_name ? <Navigate to={`/u/${encodeURIComponent(profile.display_name)}`} replace /> : <Navigate to="/u/_me" replace />) : <Navigate to="/" replace />}
+            />
+            <Route
+              path="/u/:username"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <PublicProfilePageLazy />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/friends"
+              element={user ? (
+                <Suspense fallback={routeLoadingFallback}>
+                  <FriendsPageLazy />
+                </Suspense>
+              ) : (
+                <Navigate to="/" replace />
+              )}
+            />
+            <Route
+              path="/settings"
+              element={user ? (
+                <Suspense fallback={routeLoadingFallback}>
+                  <SettingsPageLazy />
+                </Suspense>
+              ) : (
+                <Navigate to="/" replace />
+              )}
+            />
+            <Route
+              path="/contact/business"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <ContactUsPageLazy defaultChannel="business" />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/contact"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <ContactUsPageLazy defaultChannel="support" />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/about"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <AboutPageLazy />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/download"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <DownloadPageLazy />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/terms"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <TermsPageLazy />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/admin"
+              element={
+                <RequireAdmin>
+                  <Suspense fallback={<div className="p-8 text-center text-sm opacity-60">Loading admin panel...</div>}>
+                    <AdminPage />
+                  </Suspense>
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="/create"
+              element={user ? (
+                <Suspense fallback={routeLoadingFallback}>
+                  <CreatePlantPageLazy
                     onCancel={() => navigate('/')}
-                    onSaved={async () => { await loadPlants(); navigate('/search') }}
+                    onSaved={async () => {
+                      await loadPlants()
+                      navigate('/search')
+                    }}
                   />
-                ) : (
-                  <Navigate to="/" replace />
-                )} />
-                <Route path="/plants/:id/edit" element={user ? (
-                  <EditPlantPage
+                </Suspense>
+              ) : (
+                <Navigate to="/" replace />
+              )}
+            />
+            <Route
+              path="/plants/:id/edit"
+              element={user ? (
+                <Suspense fallback={routeLoadingFallback}>
+                  <EditPlantPageLazy
                     onCancel={() => navigate('/search')}
-                    onSaved={async () => { await loadPlants(); navigate('/search') }}
+                    onSaved={async () => {
+                      await loadPlants()
+                      navigate('/search')
+                    }}
                   />
-                ) : (
-                  <Navigate to="/" replace />
-                )} />
-                  <Route path="/plants/:id" element={<PlantInfoPage />} />
-                  <Route
-                    path="/"
-                    element={plants.length > 0 ? (
-                        <SwipePage
-                        current={current}
-                        index={index}
-                        setIndex={setIndex}
-                        x={x}
-                        y={y}
-                        onDragEnd={onDragEnd}
-                        handleInfo={handleInfo}
-                        handlePass={handlePass}
-                        handlePrevious={handlePrevious}
-                        liked={current ? likedIds.includes(current.id) : false}
-                        onToggleLike={() => { if (current) toggleLiked(current.id) }}
-                          boostImagePriority={boostImagePriority}
-                      />
-                    ) : (
+                </Suspense>
+              ) : (
+                <Navigate to="/" replace />
+              )}
+            />
+            <Route
+              path="/plants/:id"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <PlantInfoPageLazy />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/"
+              element={plants.length > 0 ? (
+                <Suspense fallback={routeLoadingFallback}>
+                  <SwipePageLazy
+                    current={current}
+                    index={index}
+                    setIndex={setIndex}
+                    x={x}
+                    y={y}
+                    onDragEnd={onDragEnd}
+                    handleInfo={handleInfo}
+                    handlePass={handlePass}
+                    handlePrevious={handlePrevious}
+                    liked={current ? likedIds.includes(current.id) : false}
+                    onToggleLike={() => {
+                      if (current) toggleLiked(current.id)
+                    }}
+                    boostImagePriority={boostImagePriority}
+                  />
+                </Suspense>
+              ) : (
+                <>
+                  {loading && <div className="p-8 text-center text-sm opacity-60">{t('common.loading')}</div>}
+                  {loadError && <div className="p-8 text-center text-sm text-red-600">{t('common.error')}: {loadError}</div>}
+                  {!loading && !loadError && (
                     <>
-                      {loading && <div className="p-8 text-center text-sm opacity-60">{t('common.loading')}</div>}
-                      {loadError && <div className="p-8 text-center text-sm text-red-600">{t('common.error')}: {loadError}</div>}
-                      {!loading && !loadError && (
-                        <>
-                          {plants.length === 0 && !query && !loadError && !loading && (
-                            <div className="p-8 text-center text-sm opacity-60">
-                              {t('plant.noResults')}
-                            </div>
-                          )}
-                        </>
+                      {plants.length === 0 && !query && !loadError && !loading && (
+                        <div className="p-8 text-center text-sm opacity-60">
+                          {t('plant.noResults')}
+                        </div>
                       )}
                     </>
                   )}
-                />
-                  <Route path="/error/:code" element={<ErrorPage />} />
-                  <Route path="*" element={<ErrorPage code="404" />} />
-              </Routes>
+                </>
+              )}
+            />
+            <Route
+              path="/error/:code"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <ErrorPageLazy />
+                </Suspense>
+              }
+            />
+            <Route
+              path="*"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <ErrorPageLazy code="404" />
+                </Suspense>
+              }
+            />
+          </Routes>
               {/* When a background location is set, also render the overlay route on top */}
               {backgroundLocation && (
                 <Routes>
@@ -1105,6 +1255,7 @@ function getPlantUsageLabels(classification?: Plant["classification"]): string[]
 
 function PlantInfoOverlay() {
   const navigate = useLanguageNavigate()
+  const { t } = useTranslation('common')
   return (
     <Sheet open onOpenChange={(o) => { if (!o) navigate(-1) }}>
       <SheetContent
@@ -1115,9 +1266,11 @@ function PlantInfoOverlay() {
           <SheetTitle className="sr-only">Plant Information</SheetTitle>
           <SheetDescription className="sr-only">View detailed information about this plant</SheetDescription>
         </SheetHeader>
-        <div className="max-w-4xl mx-auto w-full">
-          <PlantInfoPage />
-        </div>
+        <Suspense fallback={<div className="p-4 text-center text-sm opacity-60">{t('common.loading')}</div>}>
+          <div className="max-w-4xl mx-auto w-full">
+            <PlantInfoPageLazy />
+          </div>
+        </Suspense>
       </SheetContent>
     </Sheet>
   )
