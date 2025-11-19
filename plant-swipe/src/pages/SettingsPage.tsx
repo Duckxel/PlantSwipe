@@ -9,8 +9,9 @@ import { Label } from "@/components/ui/label"
 import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
 import { useTheme } from "@/context/ThemeContext"
-import { Settings, Mail, Lock, Trash2, AlertTriangle, Check, ChevronDown, ChevronUp, Globe, Monitor, Sun, Moon } from "lucide-react"
+import { Settings, Mail, Lock, Trash2, AlertTriangle, Check, ChevronDown, ChevronUp, Globe, Monitor, Sun, Moon, Bell } from "lucide-react"
 import { SUPPORTED_LANGUAGES } from "@/lib/i18n"
+import usePushSubscription from "@/hooks/usePushSubscription"
 
 export default function SettingsPage() {
   const { user, profile, refreshProfile, deleteAccount, signOut } = useAuth()
@@ -19,6 +20,16 @@ export default function SettingsPage() {
   const currentLang = useLanguage()
   const { t } = useTranslation('common')
   const { theme, setTheme } = useTheme()
+  const {
+    supported: pushSupported,
+    permission: pushPermission,
+    subscribed: pushSubscribed,
+    loading: pushLoading,
+    error: pushError,
+    enable: enablePush,
+    disable: disablePush,
+    refresh: refreshPush
+  } = usePushSubscription(user?.id ?? null)
 
   const [email, setEmail] = React.useState("")
   const [newEmail, setNewEmail] = React.useState("")
@@ -541,6 +552,87 @@ export default function SettingsPage() {
               </select>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Push Notifications */}
+      <Card className={`${glassCard} mb-4`}>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Bell className="h-5 w-5" />
+            {t('settings.notifications.title', { defaultValue: 'Push notifications' })}
+          </CardTitle>
+          <CardDescription>
+            {t('settings.notifications.description', {
+              defaultValue: 'Choose who can ping your device and manage reminders.',
+            })}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {!pushSupported ? (
+            <p className="text-sm opacity-80">
+              {t('settings.notifications.unsupported', {
+                defaultValue: 'Your browser does not support push notifications.',
+              })}
+            </p>
+          ) : (
+            <>
+              <div className="flex flex-col gap-2 rounded-2xl border border-stone-200/70 bg-white/80 p-4 text-sm dark:border-[#3e3e42]/70 dark:bg-[#1c1c1f] md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="font-semibold">
+                    {pushSubscribed
+                      ? t('settings.notifications.enabledLabel', { defaultValue: 'Notifications are enabled' })
+                      : t('settings.notifications.disabledLabel', { defaultValue: 'Notifications are disabled' })}
+                  </p>
+                  <p className="mt-1 text-xs opacity-70">
+                    {t('settings.notifications.permissionStatus', { defaultValue: 'Browser permission:' })}{' '}
+                    <span className="font-semibold capitalize">
+                      {pushPermission === 'default'
+                        ? t('settings.notifications.permissionDefault', { defaultValue: 'Not granted yet' })
+                        : pushPermission}
+                    </span>
+                  </p>
+                </div>
+                <span
+                  className={`inline-flex items-center justify-center rounded-full px-3 py-1 text-xs font-semibold ${
+                    pushSubscribed
+                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200'
+                      : 'bg-stone-200 text-stone-700 dark:bg-[#2d2d30] dark:text-stone-200'
+                  }`}
+                >
+                  {pushSubscribed
+                    ? t('settings.notifications.statusOn', { defaultValue: 'Enabled' })
+                    : t('settings.notifications.statusOff', { defaultValue: 'Disabled' })}
+                </span>
+              </div>
+              {pushError && (
+                <p className="text-sm text-red-600 dark:text-red-400">
+                  {pushError}
+                </p>
+              )}
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  onClick={pushSubscribed ? disablePush : enablePush}
+                  disabled={pushLoading}
+                  className="rounded-2xl"
+                >
+                  {pushLoading
+                    ? t('settings.notifications.loading', { defaultValue: 'Working…' })
+                    : pushSubscribed
+                    ? t('settings.notifications.disable', { defaultValue: 'Disable push' })
+                    : t('settings.notifications.enable', { defaultValue: 'Enable push' })}
+                </Button>
+                <Button
+                  onClick={refreshPush}
+                  variant="outline"
+                  disabled={pushLoading}
+                  className="rounded-2xl"
+                >
+                  {t('settings.notifications.refresh', { defaultValue: 'Refresh status' })}
+                </Button>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 
