@@ -162,8 +162,8 @@ export const SwipePage: React.FC<SwipePageProps> = ({
         transition={{ duration: 0.5, ease: "easeOut" }}
           className="relative overflow-visible md:overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-white via-emerald-50/60 to-stone-100 dark:from-[#1e1e1e] dark:via-[#252526] dark:to-[#171717] shadow-[0_30px_80px_-40px_rgba(16,185,129,0.45)]"
       >
-        <div className="absolute inset-x-12 -top-24 h-56 rounded-full bg-emerald-200/40 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
-        <div className="absolute inset-x-0 bottom-[-40%] h-72 rounded-full bg-emerald-100/50 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
+        <div className="pointer-events-none absolute inset-x-12 -top-24 h-56 rounded-full bg-emerald-200/40 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
+        <div className="pointer-events-none absolute inset-x-0 bottom-[-40%] h-72 rounded-full bg-emerald-100/50 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
           <div className="relative p-2 sm:p-6 md:p-12 space-y-6">
             <div
               className="relative mx-auto w-full max-w-none md:max-w-3xl min-h-[520px]"
