@@ -159,44 +159,28 @@ end $$;
   -- ========== Plants (catalog) ==========
   create table if not exists public.plants (
     id text primary key,
-    -- Legacy name field for backward compatibility and easy querying
+    -- Plant primary name (unique)
     name text not null,
-    -- New structured format using JSONB
-    identifiers jsonb,
-    traits jsonb,
-    dimensions jsonb,
-    phenology jsonb,
-    environment jsonb,
-    care jsonb,
-    propagation jsonb,
+    plant_type text check (plant_type in ('plant','flower','bamboo','shrub','tree')),
+    utility text[] not null default '{}'::text[] check (utility <@ array['comestible','ornemental','produce_fruit','aromatic','medicinal','odorous','climbing','cereal','spice']),
+    comestible_part text[] not null default '{}'::text[] check (comestible_part <@ array['flower','fruit','seed','leaf','stem','root','bulb','bark','wood']),
+    fruit_type text[] not null default '{}'::text[] check (fruit_type <@ array['nut','seed','stone']),
+    identity jsonb,
+    plant_care jsonb,
+    growth jsonb,
     usage jsonb,
     ecology jsonb,
-    commerce jsonb,
-    problems jsonb,
-    planting jsonb,
+    danger jsonb,
+    miscellaneous jsonb,
     meta jsonb,
-    photos jsonb,
-    classification jsonb,
-  -- Legacy fields for backward compatibility (will be migrated to JSONB)
-  scientific_name text,
-  colors text[] not null default '{}',
-  seasons text[] not null default '{}',
-  rarity text not null default 'Common' check (rarity in ('Common','Uncommon','Rare','Legendary')),
-  meaning text,
-  description text,
-  image_url text,
-  care_sunlight text not null default 'Low' check (care_sunlight in ('Low','Medium','High')),
-  care_water text not null default 'Low' check (care_water in ('Low','Medium','High')),
-  care_soil text,
-  care_difficulty text not null default 'Easy' check (care_difficulty in ('Easy','Moderate','Hard')),
-  seeds_available boolean not null default false,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  water_freq_unit text check (water_freq_unit in ('day','week','month','year')),
-  water_freq_value integer,
-  water_freq_period text,
-  water_freq_amount integer
-);
+    -- Legacy/new compatibility fields
+    description text,
+    colors text[] not null default '{}',
+    seasons text[] not null default '{}',
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+  );
+  create unique index if not exists plants_name_unique on public.plants (lower(name));
 -- Ensure new JSONB columns exist
 alter table if exists public.plants add column if not exists identifiers jsonb;
 alter table if exists public.plants add column if not exists traits jsonb;
@@ -208,11 +192,22 @@ alter table if exists public.plants add column if not exists propagation jsonb;
 alter table if exists public.plants add column if not exists usage jsonb;
   alter table if exists public.plants add column if not exists ecology jsonb;
   alter table if exists public.plants add column if not exists commerce jsonb;
-  alter table if exists public.plants add column if not exists problems jsonb;
-  alter table if exists public.plants add column if not exists planting jsonb;
+alter table if exists public.plants add column if not exists problems jsonb;
+alter table if exists public.plants add column if not exists planting jsonb;
 alter table if exists public.plants add column if not exists meta jsonb;
 alter table if exists public.plants add column if not exists photos jsonb;
   alter table if exists public.plants add column if not exists classification jsonb;
+alter table if exists public.plants add column if not exists plant_type text check (plant_type in ('plant','flower','bamboo','shrub','tree'));
+alter table if exists public.plants add column if not exists utility text[] not null default '{}'::text[] check (utility <@ array['comestible','ornemental','produce_fruit','aromatic','medicinal','odorous','climbing','cereal','spice']);
+alter table if exists public.plants add column if not exists comestible_part text[] not null default '{}'::text[] check (comestible_part <@ array['flower','fruit','seed','leaf','stem','root','bulb','bark','wood']);
+alter table if exists public.plants add column if not exists fruit_type text[] not null default '{}'::text[] check (fruit_type <@ array['nut','seed','stone']);
+alter table if exists public.plants add column if not exists identity jsonb;
+alter table if exists public.plants add column if not exists plant_care jsonb;
+alter table if exists public.plants add column if not exists growth jsonb;
+alter table if exists public.plants add column if not exists usage jsonb;
+alter table if exists public.plants add column if not exists ecology jsonb;
+alter table if exists public.plants add column if not exists danger jsonb;
+alter table if exists public.plants add column if not exists miscellaneous jsonb;
 -- Ensure columns present for legacy/compat fields
 alter table if exists public.plants add column if not exists colors text[] not null default '{}';
 alter table if exists public.plants add column if not exists seasons text[] not null default '{}';
@@ -222,30 +217,6 @@ alter table if exists public.plants add column if not exists water_freq_amount i
 alter table if exists public.plants add column if not exists water_freq_unit text;
 alter table if exists public.plants add column if not exists water_freq_value integer;
 alter table if exists public.plants add column if not exists updated_at timestamptz not null default now();
-alter table if exists public.plants alter column care_sunlight set default 'Low';
-update public.plants set care_sunlight = 'Low' where care_sunlight is null;
-alter table if exists public.plants alter column care_sunlight set not null;
--- Relax NOT NULL constraints to support Simplified Add Plant flow
-alter table if exists public.plants alter column scientific_name drop not null;
-alter table if exists public.plants alter column care_soil drop not null;
--- Allow omitting care_water from inserts; keep sane default
-alter table if exists public.plants alter column care_water drop not null;
-alter table if exists public.plants alter column care_water set default 'Low';
--- Ensure watering frequency fields are optional (some DBs may still have NOT NULL)
-do $$ begin
-  begin
-    alter table if exists public.plants alter column water_freq_period drop not null;
-  exception when undefined_column then null; end;
-  begin
-    alter table if exists public.plants alter column water_freq_amount drop not null;
-  exception when undefined_column then null; end;
-  begin
-    alter table if exists public.plants alter column water_freq_unit drop not null;
-  exception when undefined_column then null; end;
-  begin
-    alter table if exists public.plants alter column water_freq_value drop not null;
-  exception when undefined_column then null; end;
-end $$;
 alter table public.plants enable row level security;
 -- Clean up legacy duplicate read policies if present
 do $$ begin
@@ -279,6 +250,62 @@ do $$ begin
   create policy plants_insert on public.plants for insert to authenticated with check (true);
   create policy plants_update on public.plants for update to authenticated using (true) with check (true);
   create policy plants_delete on public.plants for delete to authenticated using (true);
+end $$;
+
+-- ========== Plant images ==========
+create table if not exists public.plant_images (
+  id uuid primary key default gen_random_uuid(),
+  plant_id text not null references public.plants(id) on delete cascade,
+  link text not null,
+  use text not null default 'other' check (use in ('primary','discovery','other')),
+  created_at timestamptz not null default now(),
+  unique (link)
+);
+create unique index if not exists plant_images_use_unique on public.plant_images (plant_id, use);
+alter table public.plant_images enable row level security;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_images' and policyname='plant_images_select') then
+    drop policy plant_images_select on public.plant_images;
+  end if;
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_images' and policyname='plant_images_modify') then
+    drop policy plant_images_modify on public.plant_images;
+  end if;
+  create policy plant_images_select on public.plant_images for select to authenticated, anon using (true);
+  create policy plant_images_modify on public.plant_images for all to authenticated using (true) with check (true);
+end $$;
+
+-- ========== Color catalog and plant links ==========
+create table if not exists public.colors (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  hex_code text not null unique,
+  created_at timestamptz not null default now()
+);
+create table if not exists public.plant_colors (
+  plant_id text not null references public.plants(id) on delete cascade,
+  color_id uuid not null references public.colors(id) on delete cascade,
+  added_at timestamptz not null default now(),
+  primary key (plant_id, color_id)
+);
+alter table public.colors enable row level security;
+alter table public.plant_colors enable row level security;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='colors' and policyname='colors_read_all') then
+    drop policy colors_read_all on public.colors;
+  end if;
+  create policy colors_read_all on public.colors for select to authenticated, anon using (true);
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='colors' and policyname='colors_modify') then
+    drop policy colors_modify on public.colors;
+  end if;
+  create policy colors_modify on public.colors for all to authenticated using (true) with check (true);
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_colors' and policyname='plant_colors_all') then
+    drop policy plant_colors_all on public.plant_colors;
+  end if;
+  create policy plant_colors_all on public.plant_colors for all to authenticated using (true) with check (true);
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_colors' and policyname='plant_colors_read') then
+    drop policy plant_colors_read on public.plant_colors;
+  end if;
+  create policy plant_colors_read on public.plant_colors for select to authenticated, anon using (true);
 end $$;
 
 -- ========== Plant translations (multi-language support) ==========

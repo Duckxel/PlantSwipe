@@ -1,27 +1,66 @@
 import React from 'react'
 import { useParams, useLocation } from 'react-router-dom'
 import { PlantDetails } from '@/components/plant/PlantDetails'
-import { RequestPlantDialog } from '@/components/plant/RequestPlantDialog'
 import type { Plant } from '@/types/plant'
 import { useAuth } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabaseClient'
 import { useTranslation } from 'react-i18next'
 import { useLanguage, useLanguageNavigate } from '@/lib/i18nRouting'
-import { mergePlantWithTranslation } from '@/lib/plantTranslationLoader'
 import { usePageMetadata } from '@/hooks/usePageMetadata'
+
+async function fetchPlantWithRelations(id: string): Promise<Plant | null> {
+  const { data, error } = await supabase
+    .from('plants')
+    .select('id,name,plant_type,utility,comestible_part,fruit_type,identity,plant_care,growth,usage,ecology,danger,miscellaneous,meta,colors,seasons,description')
+    .eq('id', id)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  if (!data) return null
+  const { data: images } = await supabase.from('plant_images').select('id,link,use').eq('plant_id', id)
+  const { data: colorLinks } = await supabase.from('plant_colors').select('color_id, colors:color_id (id,name,hex_code)').eq('plant_id', id)
+  const plant: Plant = {
+    id: data.id,
+    name: data.name,
+    plantType: data.plant_type || undefined,
+    utility: data.utility || [],
+    comestiblePart: data.comestible_part || [],
+    fruitType: data.fruit_type || [],
+    identity: data.identity || {},
+    plantCare: data.plant_care || {},
+    growth: data.growth || {},
+    usage: data.usage || {},
+    ecology: data.ecology || {},
+    danger: data.danger || {},
+    miscellaneous: data.miscellaneous || {},
+    meta: data.meta || {},
+    colors: data.colors || [],
+    seasons: data.seasons || [],
+    description: data.description || undefined,
+    images: images || [],
+  }
+  if ((colorLinks || []).length) {
+    plant.identity = {
+      ...(plant.identity || {}),
+      colors: colorLinks?.map((c: any) => ({ id: c.colors?.id, name: c.colors?.name, hexCode: c.colors?.hex_code })) || [],
+    }
+  }
+  return plant
+}
 
 export const PlantInfoPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
-    const navigate = useLanguageNavigate()
-    const location = useLocation()
-    const { user, profile, refreshProfile } = useAuth()
-    const { t } = useTranslation('common')
-    const currentLang = useLanguage()
-    const [plant, setPlant] = React.useState<Plant | null>(null)
-    const [loading, setLoading] = React.useState(true)
-    const [error, setError] = React.useState<string | null>(null)
-    const [likedIds, setLikedIds] = React.useState<string[]>([])
-  const [requestDialogOpen, setRequestDialogOpen] = React.useState(false)
+  const navigate = useLanguageNavigate()
+  const location = useLocation()
+  const { user, profile, refreshProfile } = useAuth()
+  const { t } = useTranslation('common')
+  const currentLang = useLanguage()
+  const [plant, setPlant] = React.useState<Plant | null>(null)
+  const [loading, setLoading] = React.useState(true)
+  const [error, setError] = React.useState<string | null>(null)
+  const [likedIds, setLikedIds] = React.useState<string[]>([])
+  const state = location.state as { backgroundLocation?: any } | null
+  const isOverlayMode = !!state?.backgroundLocation
+
   const fallbackTitle = t('seo.plant.fallbackTitle', { defaultValue: 'Plant encyclopedia entry' })
   const fallbackDescription = t('seo.plant.fallbackDescription', {
     defaultValue: 'Explore care notes, traits, and lore for every species in Aphylia.',
@@ -29,8 +68,7 @@ export const PlantInfoPage: React.FC = () => {
   const resolvedTitle = plant?.name
     ? t('seo.plant.title', { name: plant.name, defaultValue: `${plant.name} plant profile` })
     : fallbackTitle
-  const plantDescription =
-    typeof plant?.description === 'string' && plant.description.trim().length > 0 ? plant.description : null
+  const plantDescription = plant?.description || plant?.identity?.overview
   const resolvedDescription =
     plantDescription ||
     (plant?.name
@@ -40,10 +78,6 @@ export const PlantInfoPage: React.FC = () => {
         })
       : fallbackDescription)
   usePageMetadata({ title: resolvedTitle, description: resolvedDescription })
-  
-  // Check if we're in overlay mode (has backgroundLocation) or full page mode
-  const state = location.state as { backgroundLocation?: any } | null
-  const isOverlayMode = !!state?.backgroundLocation
 
   React.useEffect(() => {
     const arr = Array.isArray((profile as any)?.liked_plant_ids)
@@ -59,64 +93,8 @@ export const PlantInfoPage: React.FC = () => {
       setLoading(true)
       setError(null)
       try {
-        // Load base plant data
-            const { data, error } = await supabase
-              .from('plants')
-            .select(`
-              id,
-              name,
-              scientific_name,
-              colors,
-              seasons,
-              rarity,
-              meaning,
-              description,
-              image_url,
-              photos,
-              care_sunlight,
-              care_water,
-              care_soil,
-              care_difficulty,
-              seeds_available,
-              water_freq_unit,
-              water_freq_value,
-              water_freq_period,
-              water_freq_amount,
-              classification,
-              identifiers,
-              traits,
-              dimensions,
-              phenology,
-              environment,
-              care,
-              propagation,
-              usage,
-              ecology,
-              commerce,
-              problems,
-              planting,
-              meta
-            `)
-            .eq('id', id)
-            .maybeSingle()
-        if (error) throw new Error(error.message)
-        if (!data) {
-          setPlant(null)
-        } else {
-          // Always load translation for current language (if available)
-          // This ensures plants created in one language display correctly in another
-          const { data: transData } = await supabase
-            .from('plant_translations')
-            .select('*')
-            .eq('plant_id', id)
-            .eq('language', currentLang)
-            .maybeSingle()
-          const translation = transData
-          
-          // Merge translation with base plant data
-          const mergedPlant = mergePlantWithTranslation(data, translation)
-          if (!ignore) setPlant(mergedPlant)
-        }
+        const record = await fetchPlantWithRelations(id)
+        if (!ignore) setPlant(record)
       } catch (e: any) {
         if (!ignore) setError(e?.message || t('plantInfo.failedToLoad'))
       } finally {
@@ -134,10 +112,7 @@ export const PlantInfoPage: React.FC = () => {
       const next = has ? prev.filter((x) => x !== id) : [...prev, id]
       ;(async () => {
         try {
-          const { error } = await supabase
-            .from('profiles')
-            .update({ liked_plant_ids: next })
-            .eq('id', user.id)
+          const { error } = await supabase.from('profiles').update({ liked_plant_ids: next }).eq('id', user.id)
           if (error) setLikedIds(prev)
           else refreshProfile().catch(() => {})
         } catch {
@@ -150,10 +125,8 @@ export const PlantInfoPage: React.FC = () => {
 
   const handleClose = () => {
     if (isOverlayMode) {
-      // In overlay mode, go back to previous page
       navigate(-1)
     } else {
-      // In full page mode (shared link), navigate to home
       navigate('/')
     }
   }
@@ -170,9 +143,8 @@ export const PlantInfoPage: React.FC = () => {
         liked={likedIds.includes(plant.id)}
         onToggleLike={toggleLiked}
         isOverlayMode={isOverlayMode}
-        onRequestPlant={user ? () => setRequestDialogOpen(true) : undefined}
+        onRequestPlant={user ? () => {} : undefined}
       />
-      <RequestPlantDialog open={requestDialogOpen} onOpenChange={setRequestDialogOpen} />
     </div>
   )
 }

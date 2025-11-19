@@ -1,266 +1,269 @@
-/**
- * Plant data structure matching PLANT-INFO-SCHEMA.json
- */
+export type PlantType = "plant" | "flower" | "bamboo" | "shrub" | "tree"
+export type PlantUtility =
+  | "comestible"
+  | "ornemental"
+  | "produce_fruit"
+  | "aromatic"
+  | "medicinal"
+  | "odorous"
+  | "climbing"
+  | "cereal"
+  | "spice"
+
+export type PlantComestiblePart =
+  | "flower"
+  | "fruit"
+  | "seed"
+  | "leaf"
+  | "stem"
+  | "root"
+  | "bulb"
+  | "bark"
+  | "wood"
+
+export type PlantFruitType = "nut" | "seed" | "stone"
 
 export type PlantSeason = "Spring" | "Summer" | "Autumn" | "Winter"
 
-export interface PlantIdentifiers {
-  scientificName?: string
-  canonicalName?: string
-  synonyms?: string[]
-  commonNames?: string[]
-  taxonRank?: "species" | "subspecies" | "variety" | "form" | "cultivar" | "hybrid"
-  cultivarGroup?: string
-  cultivar?: string
-  family?: string
-  genus?: string
-  externalIds?: {
-    gbif?: string
-    powo?: string
-    ipni?: string
-    itis?: string
-    wiki?: string
-    kindwise?: string
-    other?: Record<string, string>
-  }
+export interface PlantImage {
+  id?: string
+  link: string
+  use: "primary" | "discovery" | "other"
 }
 
-export interface PlantTraits {
-  lifeCycle?: "annual" | "biennial" | "perennial"
-  habit?: ("tree" | "shrub" | "vine" | "climber" | "herbaceous" | "succulent" | "grass" | "fern" | "aquatic")[]
-  deciduousEvergreen?: "deciduous" | "evergreen" | "semi-evergreen"
-  growthRate?: "slow" | "moderate" | "fast"
-  thornsSpines?: boolean
-  fragrance?: "none" | "light" | "moderate" | "strong"
-  toxicity?: {
-    toHumans?: "non-toxic" | "mild" | "moderate" | "severe"
-    toPets?: "non-toxic" | "mild" | "moderate" | "severe"
-  }
-  dogFriendly?: boolean
-  catFriendly?: boolean
-  allergenicity?: "low" | "medium" | "high"
-  invasiveness?: {
-    status?: "not invasive" | "regional risk" | "invasive"
-    regions?: string[]
-  }
-}
-
-export interface PlantDimensions {
-  height?: {
-    minCm?: number
-    maxCm?: number
-  }
-  spread?: {
-    minCm?: number
-    maxCm?: number
-  }
-  spacing?: {
-    rowCm?: number
-    plantCm?: number
-  }
-  containerFriendly?: boolean
-}
-
-export interface ColorInfo {
+export interface PlantColor {
+  id?: string
   name: string
-  hex?: string
+  hexCode?: string
 }
 
-export interface PlantPhoto {
-  url: string
-  isPrimary?: boolean
-  isVertical?: boolean
+export interface PlantIdentity {
+  givenNames?: string[]
+  scientificName?: string
+  family?: string
+  overview?: string
+  promotionMonth?: number
+  lifeCycle?: "Annual" | "Biennials" | "Perenials" | "Ephemerals" | "Monocarpic" | "Polycarpic"
+  season?: PlantSeason[]
+  foliagePersistance?: "Deciduous" | "Evergreen" | "Semi-Evergreen" | "Marcescent"
+  spiked?: boolean
+  toxicityHuman?: "Non-Toxic" | "Midly Irritating" | "Highly Toxic" | "Lethally Toxic"
+  toxicityPets?: "Non-Toxic" | "Midly Irritating" | "Highly Toxic" | "Lethally Toxic"
+  allergens?: string[]
+  colors?: PlantColor[]
+  scent?: boolean
+  symbolism?: string[]
+  livingSpace?: "Indoor" | "Outdoor" | "Both"
+  composition?: ("Flowerbed" | "Path" | "Hedge" | "Ground Cover" | "Pot")[]
+  maintenanceLevel?: "None" | "Low" | "Moderate" | "Heavy"
 }
 
-export interface PlantPhenology {
-  flowerColors?: ColorInfo[]
-  leafColors?: ColorInfo[]
-  floweringMonths?: number[]
-  fruitingMonths?: number[]
-  scentNotes?: string[]
+export interface PlantCareWatering {
+  season?: string
+  quantity?: string
+  timePeriod?: "week" | "month" | "year"
 }
-
-export interface PlantEnvironment {
-  sunExposure?: "full sun" | "partial sun" | "partial shade" | "full shade"
-  lightIntensity?: "very high" | "high" | "medium" | "low"
-  hardiness?: {
-    usdaZones?: number[]
-    rhsH?: string
-  }
-  climatePref?: ("tropical" | "subtropical" | "temperate" | "Mediterranean" | "arid" | "continental" | "oceanic")[]
-  temperature?: {
-    minC?: number
-    maxC?: number
-  }
-  humidityPref?: "low" | "moderate" | "high"
-  windTolerance?: "low" | "moderate" | "high"
-  soil?: {
-    texture?: ("sandy" | "loamy" | "silty" | "clayey")[]
-    drainage?: "free-draining" | "moderate" | "poor"
-    fertility?: "low" | "medium" | "high"
-    pH?: {
-      min?: number
-      max?: number
-    }
-  }
-}
-
-export type PlantCareDifficulty =
-  | "easy"
-  | "moderate"
-  | "advanced"
-  | "Easy"
-  | "Moderate"
-  | "Hard"
-  | "Difficult"
-  | "Beginner"
-  | "Intermediate"
-  | "Expert"
 
 export interface PlantCare {
-  sunlight?: "Low" | "Medium" | "High" | "Full Sun" | "Partial Sun" | string
-  water?: "Low" | "Medium" | "High" | string
-  soil?: string
-  difficulty?: PlantCareDifficulty
-  maintenanceLevel?: "low" | "medium" | "high"
-  watering?: {
-    frequency?: {
-      winter?: string
-      spring?: string
-      summer?: string
-      autumn?: string
-    }
-    method?: "at soil" | "bottom water" | "soak and dry" | "drip" | "none (aquatic)"
-    depthCm?: number
-  }
-  fertilizing?: {
-    type?: "balanced NPK" | "high K" | "organic compost" | "slow-release" | "foliar"
-    schedule?: string
-  }
-  pruning?: {
-    bestMonths?: number[]
-    method?: "light trim" | "hard prune" | "deadheading" | "thinning" | "renewal"
-  }
-  mulching?: {
-    recommended?: boolean
-    material?: string
-  }
-  stakingSupport?: boolean
-  repottingIntervalYears?: number
+  origin?: string[]
+  habitat?: ("Aquatic" | "Semi-Aquatic" | "Wetland" | "Tropical" | "Temperate" | "Arid" | "Mediterranean" | "Mountain" | "Grassland" | "Forest" | "Coastal" | "Urban")[]
+  temperatureMax?: number
+  temperatureMin?: number
+  temperatureIdeal?: number
+  levelSun?: "Low Light" | "Shade" | "Partial Sun" | "Full Sun"
+  hygrometry?: number
+  watering?: PlantCareWatering
+  wateringType?: ("surface" | "buried" | "hose" | "drop" | "drench")[]
+  division?: ("Seed" | "Cutting" | "Division" | "Layering" | "Grafting" | "Tissue Separation" | "Bulb separation")[]
+  soil?: (
+    | "Vermiculite"
+    | "Perlite"
+    | "Sphagnum moss"
+    | "rock wool"
+    | "Sand"
+    | "Gravel"
+    | "Potting Soil"
+    | "Peat"
+    | "Clay pebbles"
+    | "coconut fiber"
+    | "Bark"
+    | "Wood Chips"
+  )[]
+  adviceSoil?: string
+  mulching?: (
+    | "Wood Chips"
+    | "Bark"
+    | "Green Manure"
+    | "Cocoa Bean Hulls"
+    | "Buckwheat Hulls"
+    | "Cereal Straw"
+    | "Hemp Straw"
+    | "Woven Fabric"
+    | "Pozzolana"
+    | "Crushed Slate"
+    | "Clay Pellets"
+  )[]
+  adviceMulching?: string
+  nutritionNeed?: (
+    | "Nitrogen"
+    | "Phosphorus"
+    | "Potassium"
+    | "Calcium"
+    | "Magnesium"
+    | "Sulfur"
+    | "Iron"
+    | "Boron"
+    | "Manganese"
+    | "Molybene"
+    | "Chlorine"
+    | "Copper"
+    | "Zinc"
+    | "Nitrate"
+    | "Phosphate"
+  )[]
+  fertilizer?: (
+    | "Granular fertilizer"
+    | "Liquid Fertilizer"
+    | "Meat Flour"
+    | "Fish flour"
+    | "Crushed bones"
+    | "Crushed Horns"
+    | "Slurry"
+    | "Manure"
+    | "Animal excrement"
+    | "Sea Fertilizer"
+    | "Yurals"
+    | "Wine"
+    | "guano"
+    | "Coffee Grounds"
+    | "Banana peel"
+    | "Eggshell"
+    | "Vegetable cooking water"
+    | "Urine"
+    | "Grass Clippings"
+    | "Vegetable Waste"
+    | "Natural Mulch"
+  )[]
+  adviceFertilizer?: string
 }
 
-export interface PlantPropagation {
-  methods?: ("seed" | "cuttings" | "division" | "layering" | "grafting" | "tissue culture")[]
-  seed?: {
-    stratification?: "none" | "cold-moist" | "warm" | "scarification"
-    germinationDays?: {
-      min?: number
-      max?: number
-    }
-  }
+export interface PlantGrowth {
+  sowingMonth?: number[]
+  floweringMonth?: number[]
+  fruitingMonth?: number[]
+  height?: number
+  wingspan?: number
+  tutoring?: boolean
+  adviceTutoring?: string
+  sowType?: ("Direct" | "Indoor" | "Row" | "Hill" | "Broadcast" | "Seed Tray" | "Cell" | "Pot")[]
+  separation?: number
+  transplanting?: boolean
+  adviceSowing?: string
+  cut?: string
 }
 
 export interface PlantUsage {
-  gardenUses?: ("border" | "mass planting" | "hedge" | "groundcover" | "specimen" | "container" | "climber" | "wildlife garden" | "cut flower" | "fragrance")[]
-  indoorOutdoor?: "outdoor" | "indoor" | "both"
-  edibleParts?: ("none" | "leaf" | "flower" | "fruit" | "seed" | "root" | "stem")[]
-  culinaryUses?: string[]
-  medicinalUses?: string[]
+  adviceMedicinal?: string
+  nutritionalIntake?: string[]
+  infusion?: boolean
+  adviceInfusion?: string
+  infusionMix?: Record<string, string>
+  recipesIdeas?: string[]
+  aromatherapy?: boolean
+  spiceMixes?: string[]
 }
 
 export interface PlantEcology {
-  nativeRange?: string[]
-  pollinators?: string[]
-  wildlifeValue?: string[]
-  conservationStatus?: "NE" | "DD" | "LC" | "NT" | "VU" | "EN" | "CR" | "EW" | "EX"
+  melliferous?: boolean
+  polenizer?: (
+    | "Bee"
+    | "Wasp"
+    | "Ant"
+    | "Butterfly"
+    | "Bird"
+    | "Mosquito"
+    | "Fly"
+    | "Beetle"
+    | "ladybug"
+    | "Stagbeetle"
+    | "Cockchafer"
+    | "dungbeetle"
+    | "weevil"
+  )[]
+  beFertilizer?: boolean
+  groundEffect?: string
+  conservationStatus?: "Safe" | "At Risk" | "Vulnerable" | "Endangered" | "Critically Endangered" | "Extinct"
 }
 
-export interface PlantCommerce {
-  seedsAvailable?: boolean
-}
-
-export interface PlantProblems {
+export interface PlantDanger {
   pests?: string[]
   diseases?: string[]
-  hazards?: string[]
 }
 
-export interface PlantPlanting {
-  calendar?: {
-    hemisphere?: "north" | "south" | "equatorial"
-    sowingMonths?: number[]
-    plantingOutMonths?: number[]
-    promotionMonth?: number
-  }
-  sitePrep?: string[]
-  companionPlants?: string[]
-  avoidNear?: string[]
+export interface PlantMiscellaneous {
+  companions?: string[]
+  tags?: string[]
+  source?: Record<string, string>
 }
 
 export interface PlantMeta {
-  rarity?: "common" | "uncommon" | "rare" | "very rare"
-  tags?: string[]
-  funFact?: string
-  sourceReferences?: string[]
-  authorNotes?: string
-  createdAt?: string
-  updatedAt?: string
+  status?: "In Progres" | "Rework" | "Review" | "Approved"
+  adminCommentary?: string
   createdBy?: string
+  createdTime?: string
   updatedBy?: string
-}
-
-export type PlantTypeValue = "plant" | "bambu" | "shrub" | "tree" | "other"
-export type PlantSubclassValue = "flower" | "vegetable" | "cereal" | "spice"
-export type PlantSubSubclassValue = "fruit" | "seed" | "root" | "leaf" | "flower"
-export type PlantActivityValue = "ornemental" | "comestible" | "aromatic" | "medicinal"
-export type PlantSubActivityValue = "climbing" | "hedge" | "massif" | "ground cover" | "seed" | "hull" | "core"
-
-export interface PlantClassification {
-  type?: PlantTypeValue
-  subclass?: PlantSubclassValue
-  subSubclass?: PlantSubSubclassValue
-  activities?: PlantActivityValue[]
-  subActivities?: Partial<Record<PlantActivityValue, PlantSubActivityValue[]>>
-}
-
-export interface PlantPopularity {
-  likes?: number
-  rank?: number
-  isTopPick?: boolean
+  updatedTime?: string
 }
 
 export interface Plant {
   id: string
-  // Legacy name field for backward compatibility
   name: string
-  image?: string
-  photos?: PlantPhoto[]
-  // New structured format
-  identifiers?: PlantIdentifiers
-  traits?: PlantTraits
-  dimensions?: PlantDimensions
-  phenology?: PlantPhenology
-  environment?: PlantEnvironment
-  care?: PlantCare
-  propagation?: PlantPropagation
+  plantType?: PlantType
+  utility?: PlantUtility[]
+  comestiblePart?: PlantComestiblePart[]
+  fruitType?: PlantFruitType[]
+  images?: PlantImage[]
+  identity?: PlantIdentity
+  plantCare?: PlantCare
+  growth?: PlantGrowth
   usage?: PlantUsage
   ecology?: PlantEcology
-  commerce?: PlantCommerce
-  problems?: PlantProblems
-  planting?: PlantPlanting
+  danger?: PlantDanger
+  miscellaneous?: PlantMiscellaneous
   meta?: PlantMeta
-  classification?: PlantClassification
-  // Legacy fields for backward compatibility
-  scientificName?: string
-  colors: string[]
-  seasons: PlantSeason[]
-  rarity?: "Common" | "Uncommon" | "Rare" | "Legendary"
-  meaning?: string
+  // Legacy structured properties retained for backward compatibility
+  identifiers?: PlantIdentity
+  traits?: Record<string, unknown>
+  dimensions?: Record<string, unknown>
+  phenology?: Record<string, unknown>
+  environment?: Record<string, unknown>
+  care?: Record<string, unknown>
+  propagation?: Record<string, unknown>
+  usageLegacy?: Record<string, unknown>
+  commerce?: Record<string, unknown>
+  problems?: Record<string, unknown>
+  planting?: Record<string, unknown>
+  classification?: Record<string, unknown>
+  colors?: string[]
+  seasons?: PlantSeason[]
   description?: string
-  seedsAvailable?: boolean
-  waterFreqUnit?: 'day' | 'week' | 'month' | 'year'
-  waterFreqValue?: number | null
-  waterFreqPeriod?: 'week' | 'month' | 'year'
-  waterFreqAmount?: number | null
-  popularity?: PlantPopularity
+  photos?: PlantImage[]
 }
+
+// Legacy compatibility aliases (older components still import these names)
+export type PlantIdentifiers = PlantIdentity
+export type PlantTraits = Record<string, unknown>
+export type PlantDimensions = Record<string, unknown>
+export type PlantPhenology = Record<string, unknown>
+export type PlantEnvironment = Record<string, unknown>
+export type PlantPropagation = Record<string, unknown>
+export type PlantUsageLegacy = Record<string, unknown>
+export type PlantEcologyLegacy = Record<string, unknown>
+export type PlantCommerce = Record<string, unknown>
+export type PlantProblems = Record<string, unknown>
+export type PlantPlanting = Record<string, unknown>
+export type PlantMetaLegacy = Record<string, unknown>
+export type PlantClassification = Record<string, unknown>
+export type PlantPhoto = PlantImage
+export type PlantActivityValue = string
+export type PlantSubActivityValue = string
