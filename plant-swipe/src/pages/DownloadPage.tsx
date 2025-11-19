@@ -1,93 +1,79 @@
 import { motion } from "framer-motion"
 import { useTranslation } from "react-i18next"
-import { Smartphone, Apple, MonitorDown, Sparkles, Download, ShieldCheck, RefreshCw } from "lucide-react"
+import { Smartphone, MonitorDown, Sparkles, Download, Apple, Store, Heart, ShieldCheck } from "lucide-react"
+
 import { Badge } from "@/components/ui/badge"
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Link } from "@/components/i18n/Link"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
 
-const platformGuides = [
+const deviceGuides = [
   {
-    key: "ios",
-    title: "iOS & iPadOS",
-    badge: "Safari",
-    icon: Apple,
-    steps: [
-      "Open Aphylia in Safari on your iPhone or iPad.",
-      "Tap the Share icon, then choose “Add to Home Screen”.",
-      "Confirm the name (Aphylia) and tap Add. The PWA opens full screen like a native app."
-    ],
-    helper: "Requires iOS 16+ for the best offline support."
-  },
-  {
-    key: "android",
-    title: "Android",
-    badge: "Chrome / Edge / Brave",
+    title: "Phones",
     icon: Smartphone,
     steps: [
-      "Visit Aphylia in your preferred Chromium-based browser.",
-      "Look for the Install banner or open the ⋮ menu and tap “Add to Home screen”.",
-      "Confirm Install. A launcher icon appears alongside your native apps."
+      "Open Aphylia in your mobile browser.",
+      "Tap the share or menu icon and choose Add to Home Screen.",
+      "Look for the Aphylia leaf icon on your home screen and launch it like any other app.",
     ],
-    helper: "If you miss the banner, clear the tab and revisit once to trigger it again."
+    helper: "This takes less than a minute and keeps you logged in.",
   },
   {
-    key: "desktop",
-    title: "Desktop",
-    badge: "Chrome / Edge",
+    title: "Tablets",
+    icon: Heart,
+    steps: [
+      "Visit Aphylia on your tablet and tap the share/menu button.",
+      "Pick Add to Home Screen so the shortcut lands next to your favorite apps.",
+      "Enjoy the app in full-screen mode with bigger photos and cards.",
+    ],
+    helper: "Perfect for greenhouse check-ins or planning on the couch.",
+  },
+  {
+    title: "Computers",
     icon: MonitorDown,
     steps: [
-      "Open Aphylia on your laptop or desktop browser.",
-      "Click the Install icon in the address bar (looks like a monitor with a download arrow).",
-        "Accept the prompt. Aphylia opens in its own window and can auto-start on login."
+      "Open Aphylia in Chrome or Edge on your laptop or desktop.",
+      "Click the install icon in the address bar and confirm.",
+      "Aphylia will now have its own window, just like a native desktop app.",
     ],
-    helper: "Perfect for kiosks or internal QA devices."
-  }
+    helper: "Great for wide screens, photo reviews, and admin work.",
+  },
 ] as const
 
-const releaseTracks = [
+const friendlyReminders = [
   {
-    title: "Preview builds",
-    description: "Spin up as many environments as you need (e.g., staging, QA, beta). Each clone of the repo can run its own `setup.sh` + nginx site so different squads can dogfood upcoming features."
+    title: "No downloads needed",
+    description:
+      "The PWA updates itself. Add it once and it will always pick up the freshest version when you come back.",
   },
   {
-    title: "Production",
-    description: "When you are happy with a build, run `scripts/refresh-plant-swipe.sh` on the production host. The script rebuilds the PWA, reloads nginx, and gently asks active users to refresh."
+    title: "Works offline",
+    description:
+      "If you lose connection for a moment, Aphylia keeps running. Your changes sync as soon as you are back online.",
   },
   {
-    title: "Device refresh cadence",
-    description: "Installed PWAs automatically fetch updates. Testers just tap the in-app “Reload now” prompt whenever you ship a new bundle."
-  }
-] as const
-
-const supportTips = [
-  {
-    title: "Stay on HTTPS",
-    description: "Both iOS and Android require secure origins for installation banners and offline caching. Keep your internal domains behind valid certificates (Let’s Encrypt works great)."
+    title: "Looks and feels native",
+    description:
+      "Launch Aphylia from your home screen icon and it opens full screen without any browser chrome in the way.",
   },
-  {
-    title: "Clear older builds",
-    description: "If someone can’t see the install banner, ask them to clear the card from their recent apps, close the tab, and try again. Browsers cache the decision for a short period."
-  },
-  {
-    title: "Use the refresh helper",
-    description: "The `Refresh` button in your admin tools should call `scripts/refresh-plant-swipe.sh`. That ensures `npm run build` runs every time, so the service worker packages the latest assets."
-  }
 ] as const
 
 export default function DownloadPage() {
   const { t } = useTranslation("common")
   const seoTitle = t("seo.download.title", { defaultValue: "Download the Aphylia PWA" })
   const seoDescription = t("seo.download.description", {
-    defaultValue: "Follow install guides for iOS, Android, and desktop so every tester stays up to date.",
+    defaultValue: "Learn how to add the Aphylia app to your phone, tablet, or computer in just a few taps.",
   })
   usePageMetadata({ title: seoTitle, description: seoDescription })
 
   return (
-    <div className="max-w-5xl mx-auto mt-8 px-4 pb-16 space-y-12">
+    <div className="max-w-4xl mx-auto mt-8 px-4 pb-16 space-y-12">
       <section className="relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50 via-white to-stone-100 dark:from-[#252526] dark:via-[#1e1e1e] dark:to-[#171717]">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,_129,_0.12),_transparent_60%)] dark:bg-[radial-gradient(circle_at_top,_rgba(16,_185,_129,_0.18),_transparent_65%)]" aria-hidden="true" />
+        <div
+          className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,_129,_0.12),_transparent_60%)] dark:bg-[radial-gradient(circle_at_top,_rgba(16,_185,_129,_0.18),_transparent_65%)]"
+          aria-hidden="true"
+        />
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
@@ -96,7 +82,7 @@ export default function DownloadPage() {
         >
           <Badge className="rounded-2xl px-4 py-1 bg-white/70 dark:bg-[#2d2d30]/70 backdrop-blur flex items-center gap-2 w-fit">
             <Sparkles className="h-4 w-4 text-emerald-500" />
-            {t("downloadPage.hero.eyebrow", { defaultValue: "Ready for install" })}
+            {t("downloadPage.hero.eyebrow", { defaultValue: "Install Aphylia in a minute" })}
           </Badge>
           <motion.h1
             initial={{ opacity: 0, y: 20 }}
@@ -104,7 +90,7 @@ export default function DownloadPage() {
             transition={{ delay: 0.1, duration: 0.6 }}
             className="text-3xl md:text-4xl font-semibold tracking-tight"
           >
-            {t("downloadPage.hero.title", { defaultValue: "Download Aphylia to every device" })}
+            {t("downloadPage.hero.title", { defaultValue: "Make Aphylia part of your daily routine" })}
           </motion.h1>
           <motion.p
             initial={{ opacity: 0, y: 20 }}
@@ -112,7 +98,10 @@ export default function DownloadPage() {
             transition={{ delay: 0.2, duration: 0.6 }}
             className="text-base md:text-lg max-w-2xl text-stone-600 dark:text-stone-300"
           >
-            {t("downloadPage.hero.subtitle", { defaultValue: "Our PWA installs in seconds on phones, tablets, and desktops. Follow the guides below to equip your testers, growers, and teammates with the latest internal build." })}
+            {t("downloadPage.hero.subtitle", {
+              defaultValue:
+                "Adding the PWA puts Aphylia beside your other apps so you can check on plants, share updates, and log photos without digging through tabs.",
+            })}
           </motion.p>
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -123,13 +112,13 @@ export default function DownloadPage() {
             <Button asChild className="rounded-2xl">
               <Link to="/contact">
                 <Download className="h-4 w-4 mr-2" />
-                {t("downloadPage.hero.ctaPrimary", { defaultValue: "Need install help?" })}
+                {t("downloadPage.hero.ctaPrimary", { defaultValue: "Need a quick walkthrough?" })}
               </Link>
             </Button>
             <Button asChild variant="outline" className="rounded-2xl">
-              <Link to="/terms">
+              <Link to="/faq">
                 <ShieldCheck className="h-4 w-4 mr-2" />
-                {t("downloadPage.hero.ctaSecondary", { defaultValue: "Review terms" })}
+                {t("downloadPage.hero.ctaSecondary", { defaultValue: "FAQ" })}
               </Link>
             </Button>
           </motion.div>
@@ -138,18 +127,17 @@ export default function DownloadPage() {
 
       <section className="space-y-6">
         <div>
-          <h2 className="text-2xl font-semibold">{t("downloadPage.platforms.title", { defaultValue: "Choose your platform" })}</h2>
+          <h2 className="text-2xl font-semibold">{t("downloadPage.steps.title", { defaultValue: "Your device, your flow" })}</h2>
           <p className="text-sm text-stone-600 dark:text-stone-400 max-w-2xl">
-            {t("downloadPage.platforms.subtitle", { defaultValue: "Each platform uses its own Add to Home Screen flow. Share these steps with your testers." })}
+            {t("downloadPage.steps.subtitle", {
+              defaultValue: "Follow the short guide for the device you have in hand. No tech experience required.",
+            })}
           </p>
         </div>
         <div className="grid gap-4 md:grid-cols-3">
-          {platformGuides.map(({ key, title, badge, icon: Icon, steps, helper }) => (
-            <Card key={key} className="rounded-3xl h-full border-stone-200/70 dark:border-[#3e3e42]/70">
+          {deviceGuides.map(({ title, icon: Icon, steps, helper }) => (
+            <Card key={title} className="rounded-3xl h-full border-stone-200/70 dark:border-[#3e3e42]/70">
               <CardHeader className="space-y-3">
-                <Badge variant="secondary" className="rounded-2xl w-fit bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200">
-                  {badge}
-                </Badge>
                 <div className="flex items-center gap-3">
                   <div className="h-10 w-10 rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center">
                     <Icon className="h-5 w-5 text-emerald-600 dark:text-emerald-300" />
@@ -172,40 +160,10 @@ export default function DownloadPage() {
         </div>
       </section>
 
-      <section className="space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <h2 className="text-2xl font-semibold">{t("downloadPage.releases.title", { defaultValue: "Internal release tracks" })}</h2>
-            <p className="text-sm text-stone-600 dark:text-stone-400 max-w-3xl">
-              {t("downloadPage.releases.subtitle", { defaultValue: "Keep development, QA, and production worlds separate while reusing the same install experience." })}
-            </p>
-          </div>
-          <Badge variant="outline" className="rounded-2xl border-dashed">
-            <RefreshCw className="h-4 w-4 mr-1" />
-            {t("downloadPage.releases.badge", { defaultValue: "One build command" })}
-          </Badge>
-        </div>
-          <div className="grid gap-4 md:grid-cols-3">
-            {releaseTracks.map(({ title, description }) => (
-            <Card key={title} className="rounded-3xl h-full border-stone-200/70 dark:border-[#3e3e42]/70">
-              <CardHeader>
-                <CardTitle>{title}</CardTitle>
-                <CardDescription>{description}</CardDescription>
-              </CardHeader>
-            </Card>
-          ))}
-        </div>
-      </section>
-
-      <section className="space-y-6">
-        <div>
-          <h2 className="text-2xl font-semibold">{t("downloadPage.support.title", { defaultValue: "Troubleshooting tips" })}</h2>
-          <p className="text-sm text-stone-600 dark:text-stone-400">
-            {t("downloadPage.support.subtitle", { defaultValue: "Most install hiccups stem from caching or certificate issues. Start here before filing bugs." })}
-          </p>
-        </div>
+      <section className="space-y-4">
+        <h2 className="text-2xl font-semibold">{t("downloadPage.reminders.title", { defaultValue: "Why install the PWA?" })}</h2>
         <div className="grid gap-4 md:grid-cols-3">
-          {supportTips.map(({ title, description }) => (
+          {friendlyReminders.map(({ title, description }) => (
             <Card key={title} className="rounded-3xl h-full border-stone-200/70 dark:border-[#3e3e42]/70">
               <CardHeader className="space-y-2">
                 <CardTitle className="text-base">{title}</CardTitle>
@@ -213,6 +171,63 @@ export default function DownloadPage() {
               </CardHeader>
             </Card>
           ))}
+        </div>
+      </section>
+
+      <section className="space-y-6">
+        <div className="flex flex-col gap-2">
+          <h2 className="text-2xl font-semibold">{t("downloadPage.storePreview.title", { defaultValue: "Native store listings" })}</h2>
+          <p className="text-sm text-stone-600 dark:text-stone-400 max-w-2xl">
+            {t("downloadPage.storePreview.subtitle", {
+              defaultValue: "Prefer a classic download? We are preparing official listings so you can grab Aphylia just like any other app.",
+            })}
+          </p>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          <Card className="rounded-3xl h-full border-stone-200/70 dark:border-[#3e3e42]/70">
+            <CardHeader className="space-y-3">
+              <Badge variant="secondary" className="rounded-2xl w-fit bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200">
+                Coming soon
+              </Badge>
+              <CardTitle className="flex items-center gap-2">
+                <Apple className="h-5 w-5" />
+                App Store
+              </CardTitle>
+              <CardDescription className="text-sm text-stone-600 dark:text-stone-400">
+                We are polishing the App Store build. Until it ships, add the PWA to your home screen to enjoy the same smooth experience.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button asChild className="rounded-2xl w-full">
+                <a href="https://www.apple.com/app-store/" target="_blank" rel="noreferrer">
+                  <Apple className="h-4 w-4 mr-2" />
+                  App Store · Coming soon
+                </a>
+              </Button>
+            </CardContent>
+          </Card>
+          <Card className="rounded-3xl h-full border-stone-200/70 dark:border-[#3e3e42]/70">
+            <CardHeader className="space-y-3">
+              <Badge variant="secondary" className="rounded-2xl w-fit bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200">
+                Coming soon
+              </Badge>
+              <CardTitle className="flex items-center gap-2">
+                <Store className="h-5 w-5" />
+                Google Play
+              </CardTitle>
+              <CardDescription className="text-sm text-stone-600 dark:text-stone-400">
+                The Google Play listing is in review. You can still save the PWA to your Android device with just a couple taps.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button asChild variant="outline" className="rounded-2xl w-full">
+                <a href="https://play.google.com/store/apps" target="_blank" rel="noreferrer">
+                  <Store className="h-4 w-4 mr-2" />
+                  Google Play · Coming soon
+                </a>
+              </Button>
+            </CardContent>
+          </Card>
         </div>
       </section>
     </div>
