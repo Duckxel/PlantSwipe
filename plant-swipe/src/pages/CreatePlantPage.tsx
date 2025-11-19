@@ -93,7 +93,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         miscellaneous: plant.miscellaneous || {},
         meta: {
           ...(plant.meta || {}),
-          createdBy: plant.meta?.createdBy || profile?.full_name || undefined,
+          createdBy: plant.meta?.createdBy || (profile as any)?.full_name || undefined,
         },
         description: plant.identity?.overview || null,
         colors: (plant.identity?.colors || []).map((c) => c.name),

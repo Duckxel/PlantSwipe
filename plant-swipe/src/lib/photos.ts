@@ -75,16 +75,18 @@ export function normalizePlantPhotos(raw: unknown, fallbackUrl?: string | null):
   return sanitized
 }
 
+const safeTrim = (value?: string) => (typeof value === "string" ? value.trim() : "")
+
 export function getPrimaryPhotoUrl(photos: PlantPhoto[]): string {
-  const primary = photos.find((photo) => photo.isPrimary && photo.url.trim())
-  if (primary) return primary.url.trim()
-  const first = photos.find((photo) => photo.url.trim())
-  return first ? first.url.trim() : ""
+  const primary = photos.find((photo) => photo.isPrimary && safeTrim(photo.url))
+  if (primary) return safeTrim(primary.url)
+  const first = photos.find((photo) => safeTrim(photo.url))
+  return first ? safeTrim(first.url) : ""
 }
 
 export function getVerticalPhotoUrl(photos: PlantPhoto[]): string {
-  const vertical = photos.find((photo) => photo.isVertical && photo.url.trim())
-  if (vertical) return vertical.url.trim()
+  const vertical = photos.find((photo) => photo.isVertical && safeTrim(photo.url))
+  if (vertical) return safeTrim(vertical.url)
   return ""
 }
 

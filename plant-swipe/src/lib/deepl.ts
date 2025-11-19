@@ -244,7 +244,7 @@ export async function translatePlantFields(
   }
   if (fields.care) {
     const translatedCare: TranslationFields['care'] = {}
-    if (fields.care.watering?.frequency) {
+    if (fields.care.watering?.frequency && typeof fields.care.watering.frequency === 'object') {
       const freq = fields.care.watering.frequency
       translatedCare.watering = {
         ...fields.care.watering,

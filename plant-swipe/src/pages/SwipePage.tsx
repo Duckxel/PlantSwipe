@@ -682,8 +682,8 @@ const WATER_ACCENTS: Record<IndicatorLevel, string> = {
 
 const buildIndicatorItems = (plant: Plant, t: TFunction<"common">): IndicatorItem[] => {
   const items: IndicatorItem[] = []
-  const sunSource = plant.environment?.sunExposure || plant.care?.sunlight
-  const sunLevel = resolveSunLevel(sunSource)
+  const sunSource = (plant.environment?.sunExposure || plant.care?.sunlight || plant.plantCare?.sunlight) ?? undefined
+  const sunLevel = resolveSunLevel(typeof sunSource === 'string' ? sunSource : undefined)
   if (sunSource && sunLevel) {
     items.push({
       key: "sun",
@@ -698,8 +698,8 @@ const buildIndicatorItems = (plant: Plant, t: TFunction<"common">): IndicatorIte
   const freqAmountRaw = plant.waterFreqAmount ?? plant.waterFreqValue
   const freqAmount = typeof freqAmountRaw === "number" ? freqAmountRaw : Number(freqAmountRaw || 0)
   const freqPeriod = (plant.waterFreqPeriod || plant.waterFreqUnit) as "day" | "week" | "month" | "year" | undefined
-  const derivedWater = deriveWaterLevelFromFrequency(freqPeriod, freqAmount) || plant.care?.water
-  const waterLevel = resolveWaterLevel(derivedWater)
+  const derivedWater = (deriveWaterLevelFromFrequency(freqPeriod, freqAmount) || plant.care?.water || plant.plantCare?.water) ?? undefined
+  const waterLevel = resolveWaterLevel(typeof derivedWater === 'string' ? derivedWater : undefined)
   if (derivedWater && waterLevel) {
     items.push({
       key: "water",

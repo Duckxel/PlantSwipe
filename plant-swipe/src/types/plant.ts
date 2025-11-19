@@ -17,7 +17,7 @@ export interface PlantClassification {
   subclass?: PlantSubclassValue
   subSubclass?: PlantSubSubclassValue
   activities?: PlantActivityValue[]
-  subActivities?: PlantSubActivityValue[]
+  subActivities?: Partial<Record<PlantActivityValue, PlantSubActivityValue[]>>
   [key: string]: any
 }
 export type PlantUtility =
@@ -48,8 +48,8 @@ export type PlantSeason = "Spring" | "Summer" | "Autumn" | "Winter"
 
 export interface PlantImage {
   id?: string
-  link: string
-  use: "primary" | "discovery" | "other"
+  link?: string
+  use?: "primary" | "discovery" | "other"
   // Legacy/compatibility fields
   url?: string
   isPrimary?: boolean
@@ -95,7 +95,7 @@ export interface PlantIdentity {
   livingSpace?: "Indoor" | "Outdoor" | "Both"
   composition?: ("Flowerbed" | "Path" | "Hedge" | "Ground Cover" | "Pot")[]
   maintenanceLevel?: "None" | "Low" | "Moderate" | "Heavy"
-  externalIds?: Record<string, string | number>
+  externalIds?: Record<string, string | Record<string, string>>
   [key: string]: any
 }
 
@@ -103,7 +103,7 @@ export interface PlantCareWatering {
   season?: string
   quantity?: string
   timePeriod?: "week" | "month" | "year"
-  frequency?: string
+  frequency?: string | { winter?: string; spring?: string; summer?: string; autumn?: string }
   method?: string
   depthCm?: number
   [key: string]: any
@@ -135,19 +135,6 @@ export interface PlantCare {
     | "Wood Chips"
   )[]
   adviceSoil?: string
-  mulching?: (
-    | "Wood Chips"
-    | "Bark"
-    | "Green Manure"
-    | "Cocoa Bean Hulls"
-    | "Buckwheat Hulls"
-    | "Cereal Straw"
-    | "Hemp Straw"
-    | "Woven Fabric"
-    | "Pozzolana"
-    | "Crushed Slate"
-    | "Clay Pellets"
-  )[]
   adviceMulching?: string
   nutritionNeed?: (
     | "Nitrogen"
@@ -319,6 +306,10 @@ export interface Plant {
   images?: PlantImage[]
   identity?: PlantIdentity
   plantCare?: PlantCare
+  care?: PlantCare
+  phenology?: PlantPhenology
+  environment?: PlantEnvironment
+  planting?: PlantPlanting & { calendar?: PlantPlanting }
   growth?: PlantGrowth
   usage?: PlantUsage
   ecology?: PlantEcology
@@ -343,29 +334,72 @@ export interface Plant {
   identifiers?: PlantIdentity
   traits?: Record<string, unknown>
   dimensions?: Record<string, unknown>
-  phenology?: Record<string, unknown>
-  environment?: Record<string, unknown>
-  care?: Record<string, unknown>
   propagation?: Record<string, unknown>
   usageLegacy?: Record<string, unknown>
   commerce?: Record<string, unknown>
   problems?: Record<string, unknown>
-  planting?: Record<string, unknown>
   classificationLegacy?: Record<string, unknown>
 }
 
 // Legacy compatibility aliases (older components still import these names)
 export type PlantIdentifiers = PlantIdentity
-export type PlantTraits = Record<string, unknown>
-export type PlantDimensions = Record<string, unknown>
-export type PlantPhenology = Record<string, unknown>
-export type PlantEnvironment = Record<string, unknown>
-export type PlantPropagation = Record<string, unknown>
-export type PlantUsageLegacy = Record<string, unknown>
-export type PlantEcologyLegacy = Record<string, unknown>
-export type PlantCommerce = Record<string, unknown>
-export type PlantProblems = Record<string, unknown>
-export type PlantPlanting = Record<string, unknown>
-export type PlantMetaLegacy = Record<string, unknown>
-export type PlantClassificationLegacy = Record<string, unknown>
+export interface PlantTraits {
+  dogFriendly?: boolean
+  catFriendly?: boolean
+  toxicity?: { toHumans?: string; toPets?: string }
+  [key: string]: any
+}
+export interface PlantDimensions {
+  height?: { minCm?: number; maxCm?: number }
+  spread?: { minCm?: number; maxCm?: number }
+  spacing?: { rowCm?: number; plantCm?: number }
+  [key: string]: any
+}
+export interface PlantPhenology {
+  bloomMonths?: string[]
+  fruitMonths?: string[]
+  seasons?: string[]
+  flowerColors?: ColorInfo[]
+  leafColors?: ColorInfo[]
+  scentNotes?: string[]
+  [key: string]: any
+}
+export interface PlantEnvironment {
+  soil?: { texture?: string[]; drainage?: string[]; fertility?: string[]; pH?: { min?: number; max?: number } }
+  climate?: { usdaZones?: string[]; rhsH?: string[] }
+  moisture?: { min?: number; max?: number }
+  light?: string
+  sunExposure?: string
+  [key: string]: any
+}
+export interface PlantPropagation {
+  methods?: string[]
+  stratification?: string
+  germination?: { germinationDays?: { min?: number; max?: number } }
+  [key: string]: any
+}
+export type PlantUsageLegacy = PlantUsage
+export type PlantEcologyLegacy = PlantEcology
+export interface PlantCommerce {
+  availabilityRegions?: string[]
+  distributors?: string[]
+  [key: string]: any
+}
+export interface PlantProblems {
+  pests?: string[]
+  diseases?: string[]
+  [key: string]: any
+}
+export interface PlantPlanting {
+  hemisphere?: string
+  sowingMonths?: number[]
+  plantingOutMonths?: number[]
+  promotionMonth?: number
+  sitePrep?: string[]
+  companionPlants?: string[]
+  avoidNear?: string[]
+  [key: string]: any
+}
+export type PlantMetaLegacy = PlantMeta
+export type PlantClassificationLegacy = PlantClassification
 export type PlantPhoto = PlantImage

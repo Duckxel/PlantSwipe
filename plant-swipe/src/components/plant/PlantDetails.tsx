@@ -37,9 +37,9 @@ const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title
   </Card>
 )
 
-const InfoPill: React.FC<{ label: string }> = ({ label }) => (
+const InfoPill: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <span className="inline-flex items-center rounded-full bg-emerald-100/80 dark:bg-emerald-900/50 px-3 py-1 text-xs font-medium text-emerald-900 dark:text-emerald-50">
-    {label}
+    {children}
   </span>
 )
 

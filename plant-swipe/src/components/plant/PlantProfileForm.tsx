@@ -214,10 +214,10 @@ const metaFields: FieldConfig[] = [
   { key: "meta.updatedTime", label: "Updated Time", description: "Last update time", type: "text" },
 ]
 
-const utilityOptions = ["comestible","ornemental","produce_fruit","aromatic","medicinal","odorous","climbing","cereal","spice"]
-const comestibleOptions = ["flower","fruit","seed","leaf","stem","root","bulb","bark","wood"]
-const fruitOptions = ["nut","seed","stone"]
-const plantTypeOptions = ["plant","flower","bamboo","shrub","tree"]
+const utilityOptions = ["comestible","ornemental","produce_fruit","aromatic","medicinal","odorous","climbing","cereal","spice"] as const
+const comestibleOptions = ["flower","fruit","seed","leaf","stem","root","bulb","bark","wood"] as const
+const fruitOptions = ["nut","seed","stone"] as const
+const plantTypeOptions = ["plant","flower","bamboo","shrub","tree"] as const
 
 function renderField(plant: Plant, onChange: (path: string, value: any) => void, field: FieldConfig) {
   const value = getValue(plant, field.key)
