@@ -1,5 +1,4 @@
 import React from "react"
-import { createPortal } from "react-dom"
 import { Link } from "@/components/i18n/Link"
 import { usePathWithoutLanguage, useLanguageNavigate } from "@/lib/i18nRouting"
 import { Sparkles, Sprout, Search, Plus, User, Shield, HeartHandshake, Settings, LogOut } from "lucide-react"
@@ -8,47 +7,6 @@ import { useAuth } from "@/context/AuthContext"
 import { useTaskNotification } from "@/hooks/useTaskNotification"
 import { useTranslation } from "react-i18next"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
-
-const MOBILE_NAV_ATTR = "data-mobile-nav-root"
-
-let portalHost: HTMLElement | null = null
-let mountedInstances = 0
-
-const useIsomorphicLayoutEffect = typeof window !== "undefined" ? React.useLayoutEffect : React.useEffect
-
-const ensurePortalHost = () => {
-  if (typeof document === "undefined") return null
-  if (portalHost && document.body.contains(portalHost)) {
-    return portalHost
-  }
-  const existing = document.querySelector<HTMLElement>(`[${MOBILE_NAV_ATTR}]`)
-  if (existing) {
-    portalHost = existing
-    return existing
-  }
-  const node = document.createElement("div")
-  node.setAttribute(MOBILE_NAV_ATTR, "true")
-  node.style.position = "relative"
-  node.style.zIndex = "60"
-  node.style.width = "100%"
-  node.style.setProperty("contain", "layout paint")
-  node.style.setProperty("will-change", "transform")
-  document.body.appendChild(node)
-  portalHost = node
-  return node
-}
-
-const createPortalContainer = () => {
-  if (typeof document === "undefined") return null
-  const host = ensurePortalHost()
-  if (!host) return null
-  const node = document.createElement("div")
-  node.setAttribute("data-mobile-nav-instance", "true")
-  node.style.position = "relative"
-  node.style.width = "100%"
-  host.appendChild(node)
-  return node
-}
 
 interface MobileNavBarProps {
   canCreate?: boolean
@@ -64,9 +22,15 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
   const { hasUnfinished } = useTaskNotification(user?.id ?? null, { channelKey: "mobile" })
   const { t } = useTranslation("common")
   const [profileMenuOpen, setProfileMenuOpen] = React.useState(false)
-  const canUseDOM = typeof document !== "undefined"
-  const [portalContainer, setPortalContainer] = React.useState<HTMLElement | null>(null)
   const navRef = React.useRef<HTMLElement | null>(null)
+
+  React.useEffect(() => {
+    if (typeof document === "undefined") return undefined
+    document.body.classList.add("mobile-nav-mounted")
+    return () => {
+      document.body.classList.remove("mobile-nav-mounted")
+    }
+  }, [])
   
   const currentView: "discovery" | "gardens" | "search" | "create" | "profile" =
     pathWithoutLang === "/" ? "discovery" :
@@ -79,8 +43,9 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
   const displayName = profile?.display_name || null
   const label = displayName && displayName.trim().length > 0 ? displayName : t('common.profile')
 
-  const navElement = (
-    <nav
+  return (
+    <>
+      <nav
       ref={navRef}
       className="fixed bottom-0 left-0 right-0 md:hidden z-50 border-t border-stone-200 dark:border-[#3e3e42] bg-white/70 dark:bg-[#252526]/90 backdrop-blur-xl supports-[backdrop-filter]:bg-white/50 dark:supports-[backdrop-filter]:bg-[#252526]/80 shadow-[0_-8px_30px_rgba(0,0,0,0.08)] dark:shadow-[0_-8px_30px_rgba(0,0,0,0.3)] pb-[max(env(safe-area-inset-bottom),0px)]"
       role="navigation"
@@ -107,7 +72,7 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
           </Button>
           <div className="relative overflow-visible">
             <Button asChild variant={"secondary"} size={"icon"} className={currentView === 'gardens' ? "h-12 w-12 rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90" : "h-12 w-12 rounded-2xl bg-white dark:bg-[#2d2d30] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#3e3e42]"}>
-              <Link to="/gardens" aria-label="Garden" className="no-underline flex items-center justify-center">
+            <Link to="/gardens" aria-label="Garden" className="no-underline flex items-center justify-center">
                 <Sprout className="h-6 w-6" />
               </Link>
             </Button>
@@ -123,10 +88,10 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
               <Search className="h-6 w-6" />
             </Link>
           </Button>
-            {user ? (
-            <Button 
-              variant={"secondary"} 
-              size={"icon"} 
+          {user ? (
+            <Button
+              variant={"secondary"}
+              size={"icon"}
               className={currentView === 'profile' ? "h-12 w-12 rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90" : "h-12 w-12 rounded-2xl bg-white dark:bg-[#2d2d30] text-black dark:text-white hover:bg-stone-100 dark:hover:bg-[#3e3e42]"}
               onClick={() => setProfileMenuOpen(true)}
               aria-label="Profile"
@@ -153,100 +118,74 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
           )}
         </div>
       </div>
-    </nav>
-  )
-
-  const sheetElement = (
-    <Sheet open={profileMenuOpen} onOpenChange={setProfileMenuOpen}>
+      </nav>
+      <Sheet open={profileMenuOpen} onOpenChange={setProfileMenuOpen}>
       <SheetContent side="bottom" className="rounded-t-3xl">
         <SheetHeader>
           <SheetTitle>{label}</SheetTitle>
         </SheetHeader>
         <div className="mt-6 space-y-2">
           {profile?.is_admin && (
-            <button 
-              onClick={() => { setProfileMenuOpen(false); navigate('/admin') }} 
+            <button
+              onClick={() => {
+                setProfileMenuOpen(false)
+                navigate("/admin")
+              }}
               className="w-full text-left px-4 py-3 rounded-2xl hover:bg-stone-100 dark:hover:bg-[#2d2d30] flex items-center gap-3"
             >
-              <Shield className="h-5 w-5" /> 
-              <span>{t('common.admin')}</span>
+              <Shield className="h-5 w-5" />
+              <span>{t("common.admin")}</span>
             </button>
           )}
-          <button 
-            onClick={() => { setProfileMenuOpen(false); if (onProfile) { onProfile(); } else { navigate('/profile'); } }} 
+          <button
+            onClick={() => {
+              setProfileMenuOpen(false)
+              if (onProfile) {
+                onProfile()
+              } else {
+                navigate("/profile")
+              }
+            }}
             className="w-full text-left px-4 py-3 rounded-2xl hover:bg-stone-100 dark:hover:bg-[#2d2d30] flex items-center gap-3"
           >
-            <User className="h-5 w-5" /> 
-            <span>{t('common.profile')}</span>
+            <User className="h-5 w-5" />
+            <span>{t("common.profile")}</span>
           </button>
-          <button 
-            onClick={() => { setProfileMenuOpen(false); navigate('/friends') }} 
+          <button
+            onClick={() => {
+              setProfileMenuOpen(false)
+              navigate("/friends")
+            }}
             className="w-full text-left px-4 py-3 rounded-2xl hover:bg-stone-100 dark:hover:bg-[#2d2d30] flex items-center gap-3"
           >
-            <HeartHandshake className="h-5 w-5" /> 
-            <span>{t('common.friends')}</span>
+            <HeartHandshake className="h-5 w-5" />
+            <span>{t("common.friends")}</span>
           </button>
-          <button 
-            onClick={() => { setProfileMenuOpen(false); navigate('/settings') }} 
+          <button
+            onClick={() => {
+              setProfileMenuOpen(false)
+              navigate("/settings")
+            }}
             className="w-full text-left px-4 py-3 rounded-2xl hover:bg-stone-100 dark:hover:bg-[#2d2d30] flex items-center gap-3"
           >
-            <Settings className="h-5 w-5" /> 
-            <span>{t('common.settings')}</span>
+            <Settings className="h-5 w-5" />
+            <span>{t("common.settings")}</span>
           </button>
-          <button 
-            onClick={() => { setProfileMenuOpen(false); if (onLogout) { onLogout() } }} 
+          <button
+            onClick={() => {
+              setProfileMenuOpen(false)
+              if (onLogout) {
+                onLogout()
+              }
+            }}
             className="w-full text-left px-4 py-3 rounded-2xl hover:bg-stone-100 dark:hover:bg-[#2d2d30] text-red-600 dark:text-red-400 flex items-center gap-3"
           >
-            <LogOut className="h-5 w-5" /> 
-            <span>{t('common.logout')}</span>
+            <LogOut className="h-5 w-5" />
+            <span>{t("common.logout")}</span>
           </button>
         </div>
       </SheetContent>
     </Sheet>
-  )
-
-  useIsomorphicLayoutEffect(() => {
-    if (!canUseDOM || typeof document === "undefined") return undefined
-
-    const node = createPortalContainer()
-    if (!node) return undefined
-
-    setPortalContainer(node)
-    mountedInstances += 1
-    if (mountedInstances === 1) {
-      document.body.classList.add("mobile-nav-mounted")
-    }
-
-    return () => {
-      if (node.parentNode) {
-        node.parentNode.removeChild(node)
-      }
-
-      mountedInstances = Math.max(0, mountedInstances - 1)
-      if (mountedInstances === 0 && typeof document !== "undefined") {
-        document.body.classList.remove("mobile-nav-mounted")
-      }
-
-      if (mountedInstances === 0 && portalHost && portalHost.parentNode) {
-        portalHost.parentNode.removeChild(portalHost)
-        portalHost = null
-      }
-    }
-  }, [canUseDOM])
-
-  if (!canUseDOM || !portalContainer) {
-    return (
-      <>
-        {navElement}
-        {sheetElement}
-      </>
-    )
-  }
-
-  return (
-    <>
-      {createPortal(navElement, portalContainer)}
-      {sheetElement}
     </>
   )
 }

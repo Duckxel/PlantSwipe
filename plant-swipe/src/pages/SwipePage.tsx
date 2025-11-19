@@ -111,6 +111,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
 
   const desktopCardHeight = "min(720px, calc(100vh - 12rem))"
   const mobileCardHeight = "calc(100vh - 13rem)"
+  const prefersCoarsePointer = usePrefersCoarsePointer()
 
   const rarityKey = current?.rarity && rarityTone[current.rarity] ? current.rarity : "Common"
   const seasons = (current?.seasons ?? []) as PlantSeason[]
@@ -172,11 +173,11 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                 {current ? (
                   <motion.div
                     key={`${current.id}-${index}`}
-                    drag
-                    dragElastic={{ left: 0.28, right: 0.28, top: 0.28, bottom: 0 }}
+                    drag="x"
+                    dragElastic={{ left: 0.28, right: 0.28 }}
                     dragMomentum={false}
                     style={{ x, y }}
-                    dragConstraints={{ left: -500, right: 500, top: -500, bottom: 0 }}
+                    dragConstraints={{ left: -500, right: 500 }}
                     onDragEnd={onDragEnd}
                     initial={{ scale: 0.94, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
@@ -234,7 +235,7 @@ export const SwipePage: React.FC<SwipePageProps> = ({
                           <PlantMetaRail
                             plant={current}
                             variant="sidebar"
-                            disableHoverActivation={!isDesktop}
+                            disableHoverActivation={prefersCoarsePointer}
                           />
                         )}
                       <div className="absolute bottom-0 left-0 right-0 z-20 p-6 pb-8 text-white">
@@ -402,6 +403,42 @@ const useSupportsHover = () => {
   }, [])
 
   return supportsHover
+}
+
+const usePrefersCoarsePointer = () => {
+  const [isCoarse, setIsCoarse] = React.useState<boolean>(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return false
+    }
+    return window.matchMedia("(pointer: coarse)").matches
+  })
+
+  React.useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return undefined
+    }
+
+    const mediaQuery = window.matchMedia("(pointer: coarse)")
+    const handleChange = (event: MediaQueryListEvent) => {
+      setIsCoarse(event.matches)
+    }
+
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", handleChange)
+    } else if (typeof mediaQuery.addListener === "function") {
+      mediaQuery.addListener(handleChange)
+    }
+
+    return () => {
+      if (typeof mediaQuery.removeEventListener === "function") {
+        mediaQuery.removeEventListener("change", handleChange)
+      } else if (typeof mediaQuery.removeListener === "function") {
+        mediaQuery.removeListener(handleChange)
+      }
+    }
+  }, [])
+
+  return isCoarse
 }
 
 const PlantMetaRail: React.FC<{
