@@ -12,6 +12,9 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 const MOBILE_NAV_ATTR = "data-mobile-nav-root"
 
 let portalHost: HTMLElement | null = null
+let mountedInstances = 0
+
+const useIsomorphicLayoutEffect = typeof window !== "undefined" ? React.useLayoutEffect : React.useEffect
 
 const ensurePortalHost = () => {
   if (typeof document === "undefined") return null
@@ -62,7 +65,7 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
   const { t } = useTranslation("common")
   const [profileMenuOpen, setProfileMenuOpen] = React.useState(false)
   const canUseDOM = typeof document !== "undefined"
-  const [portalContainer] = React.useState<HTMLElement | null>(() => (canUseDOM ? createPortalContainer() : null))
+  const [portalContainer, setPortalContainer] = React.useState<HTMLElement | null>(null)
   const navRef = React.useRef<HTMLElement | null>(null)
   
   const currentView: "discovery" | "gardens" | "search" | "create" | "profile" =
@@ -202,25 +205,32 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
     </Sheet>
   )
 
-  React.useLayoutEffect(() => {
-    const node = portalContainer
+  useIsomorphicLayoutEffect(() => {
+    if (!canUseDOM || typeof document === "undefined") return undefined
+
+    const node = createPortalContainer()
+    if (!node) return undefined
+
+    setPortalContainer(node)
+    mountedInstances += 1
+    if (mountedInstances === 1) {
+      document.body.classList.add("mobile-nav-mounted")
+    }
+
     return () => {
-      if (!node) return
       if (node.parentNode) {
         node.parentNode.removeChild(node)
       }
-      if (portalHost && portalHost.childElementCount === 0 && portalHost.parentNode) {
+
+      mountedInstances = Math.max(0, mountedInstances - 1)
+      if (mountedInstances === 0 && typeof document !== "undefined") {
+        document.body.classList.remove("mobile-nav-mounted")
+      }
+
+      if (mountedInstances === 0 && portalHost && portalHost.parentNode) {
         portalHost.parentNode.removeChild(portalHost)
         portalHost = null
       }
-    }
-  }, [portalContainer])
-
-  React.useEffect(() => {
-    if (!canUseDOM || typeof document === "undefined") return
-    document.body.classList.add("mobile-nav-mounted")
-    return () => {
-      document.body.classList.remove("mobile-nav-mounted")
     }
   }, [canUseDOM])
 
