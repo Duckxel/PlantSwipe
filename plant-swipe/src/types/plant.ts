@@ -1,4 +1,25 @@
 export type PlantType = "plant" | "flower" | "bamboo" | "shrub" | "tree"
+export type PlantTypeValue = "plant" | "bambu" | "shrub" | "tree" | "other"
+export type PlantSubclassValue = "flower" | "vegetable" | "cereal" | "spice"
+export type PlantSubSubclassValue = "fruit" | "seed" | "root" | "leaf" | "flower"
+export type PlantActivityValue = "ornemental" | "comestible" | "aromatic" | "medicinal"
+export type PlantSubActivityValue =
+  | "climbing"
+  | "hedge"
+  | "massif"
+  | "ground cover"
+  | "seed"
+  | "hull"
+  | "core"
+
+export interface PlantClassification {
+  type?: PlantTypeValue
+  subclass?: PlantSubclassValue
+  subSubclass?: PlantSubSubclassValue
+  activities?: PlantActivityValue[]
+  subActivities?: PlantSubActivityValue[]
+  [key: string]: any
+}
 export type PlantUtility =
   | "comestible"
   | "ornemental"
@@ -29,6 +50,11 @@ export interface PlantImage {
   id?: string
   link: string
   use: "primary" | "discovery" | "other"
+  // Legacy/compatibility fields
+  url?: string
+  isPrimary?: boolean
+  isVertical?: boolean
+  [key: string]: any
 }
 
 export interface PlantColor {
@@ -37,10 +63,23 @@ export interface PlantColor {
   hexCode?: string
 }
 
+export interface ColorInfo {
+  id?: string
+  name: string
+  hex?: string
+}
+
 export interface PlantIdentity {
   givenNames?: string[]
   scientificName?: string
+  canonicalName?: string
+  synonyms?: string[]
+  commonNames?: string[]
   family?: string
+  taxonRank?: string
+  cultivarGroup?: string
+  cultivar?: string
+  genus?: string
   overview?: string
   promotionMonth?: number
   lifeCycle?: "Annual" | "Biennials" | "Perenials" | "Ephemerals" | "Monocarpic" | "Polycarpic"
@@ -56,12 +95,18 @@ export interface PlantIdentity {
   livingSpace?: "Indoor" | "Outdoor" | "Both"
   composition?: ("Flowerbed" | "Path" | "Hedge" | "Ground Cover" | "Pot")[]
   maintenanceLevel?: "None" | "Low" | "Moderate" | "Heavy"
+  externalIds?: Record<string, string | number>
+  [key: string]: any
 }
 
 export interface PlantCareWatering {
   season?: string
   quantity?: string
   timePeriod?: "week" | "month" | "year"
+  frequency?: string
+  method?: string
+  depthCm?: number
+  [key: string]: any
 }
 
 export interface PlantCare {
@@ -145,6 +190,30 @@ export interface PlantCare {
     | "Natural Mulch"
   )[]
   adviceFertilizer?: string
+  fertilizing?: {
+    type?: string
+    schedule?: string
+    [key: string]: any
+  }
+  pruning?: {
+    bestMonths?: number[]
+    method?: string
+    [key: string]: any
+  }
+  mulching?: {
+    recommended?: boolean
+    material?: string
+    [key: string]: any
+  }
+  stakingSupport?: boolean
+  repottingIntervalYears?: number
+  sunlight?: string
+  water?: string
+  difficulty?: string
+  maintenanceLevel?: string
+  fertilizingNotes?: string
+  pruningNotes?: string
+  [key: string]: any
 }
 
 export interface PlantGrowth {
@@ -160,6 +229,10 @@ export interface PlantGrowth {
   transplanting?: boolean
   adviceSowing?: string
   cut?: string
+  sowingMonths?: number[]
+  plantingOutMonths?: number[]
+  hemisphere?: string
+  [key: string]: any
 }
 
 export interface PlantUsage {
@@ -171,6 +244,12 @@ export interface PlantUsage {
   recipesIdeas?: string[]
   aromatherapy?: boolean
   spiceMixes?: string[]
+  gardenUses?: string[]
+  indoorOutdoor?: string
+  edibleParts?: string[]
+  culinaryUses?: string[]
+  medicinalUses?: string[]
+  [key: string]: any
 }
 
 export interface PlantEcology {
@@ -193,6 +272,11 @@ export interface PlantEcology {
   beFertilizer?: boolean
   groundEffect?: string
   conservationStatus?: "Safe" | "At Risk" | "Vulnerable" | "Endangered" | "Critically Endangered" | "Extinct"
+  nativeRange?: string[]
+  pollinators?: string[]
+  wildlifeValue?: string[]
+  hemisphere?: string
+  [key: string]: any
 }
 
 export interface PlantDanger {
@@ -204,6 +288,7 @@ export interface PlantMiscellaneous {
   companions?: string[]
   tags?: string[]
   source?: Record<string, string>
+  [key: string]: any
 }
 
 export interface PlantMeta {
@@ -213,11 +298,20 @@ export interface PlantMeta {
   createdTime?: string
   updatedBy?: string
   updatedTime?: string
+  createdAt?: string
+  rarity?: string
+  tags?: string[]
+  funFact?: string
+  sourceReferences?: string[]
+  authorNotes?: string
+  [key: string]: any
 }
 
 export interface Plant {
   id: string
   name: string
+  scientificName?: string
+  meaning?: string
   plantType?: PlantType
   utility?: PlantUtility[]
   comestiblePart?: PlantComestiblePart[]
@@ -231,6 +325,20 @@ export interface Plant {
   danger?: PlantDanger
   miscellaneous?: PlantMiscellaneous
   meta?: PlantMeta
+  classification?: PlantClassification
+  colors?: string[]
+  seasons?: PlantSeason[]
+  description?: string
+  photos?: PlantImage[]
+  image?: string
+  seedsAvailable?: boolean
+  popularity?: { likes?: number; [key: string]: any }
+  rarity?: string
+  waterFreqAmount?: number
+  waterFreqValue?: string
+  waterFreqPeriod?: string
+  waterFreqUnit?: string
+  [key: string]: any
   // Legacy structured properties retained for backward compatibility
   identifiers?: PlantIdentity
   traits?: Record<string, unknown>
@@ -243,11 +351,7 @@ export interface Plant {
   commerce?: Record<string, unknown>
   problems?: Record<string, unknown>
   planting?: Record<string, unknown>
-  classification?: Record<string, unknown>
-  colors?: string[]
-  seasons?: PlantSeason[]
-  description?: string
-  photos?: PlantImage[]
+  classificationLegacy?: Record<string, unknown>
 }
 
 // Legacy compatibility aliases (older components still import these names)
@@ -263,7 +367,5 @@ export type PlantCommerce = Record<string, unknown>
 export type PlantProblems = Record<string, unknown>
 export type PlantPlanting = Record<string, unknown>
 export type PlantMetaLegacy = Record<string, unknown>
-export type PlantClassification = Record<string, unknown>
+export type PlantClassificationLegacy = Record<string, unknown>
 export type PlantPhoto = PlantImage
-export type PlantActivityValue = string
-export type PlantSubActivityValue = string

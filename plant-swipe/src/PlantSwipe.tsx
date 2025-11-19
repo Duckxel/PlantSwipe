@@ -17,7 +17,7 @@ import BroadcastToast from "@/components/layout/BroadcastToast";
 import MobileNavBar from "@/components/layout/MobileNavBar";
 import { RequestPlantDialog } from "@/components/plant/RequestPlantDialog";
 // GardenListPage and GardenDashboardPage are lazy loaded below
-import type { Plant } from "@/types/plant";
+import type { Plant, PlantSeason } from "@/types/plant";
 import { useAuth } from "@/context/AuthContext";
 import { AuthActionsProvider } from "@/context/AuthActionsContext";
 import RequireAdmin from "@/pages/RequireAdmin";
@@ -326,7 +326,7 @@ export default function PlantSwipe() {
       const matchesQ = `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")}`
         .toLowerCase()
         .includes(lowerQuery)
-      const matchesSeason = seasonFilter ? seasons.includes(seasonFilter as Plant['seasons'][number]) : true
+      const matchesSeason = seasonFilter ? seasons.includes(seasonFilter as PlantSeason) : true
       const matchesColor = colorFilter ? colors.map((c: string) => c.toLowerCase()).includes(colorFilter.toLowerCase()) : true
       const matchesSeeds = onlySeeds ? Boolean(p.seedsAvailable) : true
       const matchesFav = onlyFavorites ? likedSet.has(p.id) : true
