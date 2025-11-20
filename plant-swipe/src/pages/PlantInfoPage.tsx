@@ -11,7 +11,7 @@ import { usePageMetadata } from '@/hooks/usePageMetadata'
 async function fetchPlantWithRelations(id: string): Promise<Plant | null> {
   const { data, error } = await supabase
     .from('plants')
-    .select('id,name,plant_type,utility,comestible_part,fruit_type,given_names,scientific_name,family,overview,promotion_month,life_cycle,season,foliage_persistance,spiked,toxicity_human,toxicity_pets,allergens,scent,symbolism,living_space,composition,maintenance_level,multicolor,bicolor,origin,habitat,temperature_max,temperature_min,temperature_ideal,level_sun,hygrometry,watering_type,division,soil,advice_soil,mulching,advice_mulching,nutrition_need,fertilizer,advice_fertilizer,sowing_month,flowering_month,fruiting_month,height_cm,wingspan_cm,tutoring,advice_tutoring,sow_type,separation_cm,transplanting,advice_sowing,cut,advice_medicinal,nutritional_intake,infusion,advice_infusion,infusion_mix,recipes_ideas,aromatherapy,spice_mixes,melliferous,polenizer,be_fertilizer,ground_effect,conservation_status,pests,diseases,companions,tags,source_name,source_url,status,admin_commentary,created_by,created_time,updated_by,updated_time')
+    .select('id,name,plant_type,utility,comestible_part,fruit_type,given_names,scientific_name,family,overview,promotion_month,life_cycle,season,foliage_persistance,spiked,toxicity_human,toxicity_pets,allergens,scent,symbolism,living_space,composition,maintenance_level,multicolor,bicolor,origin,habitat,temperature_max,temperature_min,temperature_ideal,level_sun,hygrometry,watering_type,division,soil,advice_soil,mulching,advice_mulching,nutrition_need,fertilizer,advice_fertilizer,sowing_month,flowering_month,fruiting_month,height_cm,wingspan_cm,tutoring,advice_tutoring,sow_type,separation_cm,transplanting,advice_sowing,cut,advice_medicinal,nutritional_intake,infusion,advice_infusion,recipes_ideas,aromatherapy,spice_mixes,melliferous,polenizer,be_fertilizer,ground_effect,conservation_status,pests,diseases,companions,tags,source_name,source_url,status,admin_commentary,created_by,created_time,updated_by,updated_time')
     .eq('id', id)
     .maybeSingle()
   if (error) throw new Error(error.message)
@@ -19,7 +19,12 @@ async function fetchPlantWithRelations(id: string): Promise<Plant | null> {
   const { data: colorLinks } = await supabase.from('plant_colors').select('color_id, colors:color_id (id,name,hex_code)').eq('plant_id', id)
   const { data: images } = await supabase.from('plant_images').select('id,link,use').eq('plant_id', id)
   const { data: schedules } = await supabase.from('plant_watering_schedules').select('season,quantity,time_period').eq('plant_id', id)
+  const { data: infusionMixRows } = await supabase.from('plant_infusion_mixes').select('mix_name,benefit').eq('plant_id', id)
   const colors = (colorLinks || []).map((c: any) => ({ id: c.colors?.id, name: c.colors?.name, hexCode: c.colors?.hex_code }))
+  const infusionMix = (infusionMixRows || []).reduce((acc: Record<string, string>, row: any) => {
+    if (row?.mix_name) acc[row.mix_name] = row?.benefit || ''
+    return acc
+  }, {})
   return {
     id: data.id,
     name: data.name,
@@ -93,7 +98,7 @@ async function fetchPlantWithRelations(id: string): Promise<Plant | null> {
       nutritionalIntake: data.nutritional_intake || [],
       infusion: data.infusion || false,
       adviceInfusion: data.advice_infusion || undefined,
-      infusionMix: data.infusion_mix || [],
+      infusionMix,
       recipesIdeas: data.recipes_ideas || [],
       aromatherapy: data.aromatherapy || false,
       spiceMixes: data.spice_mixes || [],
@@ -115,9 +120,9 @@ async function fetchPlantWithRelations(id: string): Promise<Plant | null> {
       status: data.status || undefined,
       adminCommentary: data.admin_commentary || undefined,
       createdBy: data.created_by || undefined,
-      createdAt: data.created_time || undefined,
+      createdTime: data.created_time || undefined,
       updatedBy: data.updated_by || undefined,
-      updatedAt: data.updated_time || undefined,
+      updatedTime: data.updated_time || undefined,
     },
     multicolor: data.multicolor || false,
     bicolor: data.bicolor || false,
