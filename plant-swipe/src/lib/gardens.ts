@@ -887,6 +887,43 @@ export async function getGardenInventory(gardenId: string): Promise<Array<{ plan
     const wateringType = Array.isArray(p.watering_type) ? (p.watering_type as string[]) : undefined
     const soilTypes = Array.isArray(p.soil) ? (p.soil as string[]) : undefined
 
+    const levelSun =
+      typeof p.level_sun === 'string'
+        ? ({
+            'low light': 'Low Light',
+            shade: 'Shade',
+            'partial sun': 'Partial Sun',
+            'full sun': 'Full Sun',
+          }[p.level_sun.toLowerCase()] as Plant['plantCare']['levelSun'])
+        : undefined
+
+    const wateringType = Array.isArray(p.watering_type)
+      ? (p.watering_type.filter((entry: unknown): entry is NonNullable<Plant['plantCare']['wateringType']>[number] =>
+          typeof entry === 'string' &&
+          ['surface', 'buried', 'hose', 'drop', 'drench'].includes(entry)) as Plant['plantCare']['wateringType'])
+      : undefined
+
+    const soilTypes = Array.isArray(p.soil)
+      ? (p.soil.filter((entry: unknown): entry is NonNullable<Plant['plantCare']['soil']>[number] =>
+          typeof entry === 'string' &&
+          [
+            'Vermiculite',
+            'Perlite',
+            'Sphagnum moss',
+            'rock wool',
+            'Sand',
+            'Gravel',
+            'Potting Soil',
+            'Peat',
+            'Clay pebbles',
+            'coconut fiber',
+            'Bark',
+            'Wood Chips',
+          ].includes(entry)) as Plant['plantCare']['soil'])
+      : undefined
+
+    const maintenanceLevel = typeof p.maintenance_level === 'string' ? p.maintenance_level : undefined
+
     idToPlant[String(p.id)] = {
       id: String(p.id),
       name: String(p.name || ''),
@@ -899,11 +936,11 @@ export async function getGardenInventory(gardenId: string): Promise<Array<{ plan
       photos: Array.isArray(p.photos) ? p.photos : undefined,
       image: getPrimaryPhotoUrl(Array.isArray(p.photos) ? p.photos : []) || p.image_url || '',
       care: {
-        levelSun: typeof p.level_sun === 'string' ? p.level_sun : undefined,
+        levelSun,
         wateringType,
         soil: soilTypes,
-        maintenanceLevel: typeof p.maintenance_level === 'string' ? p.maintenance_level : undefined,
-        difficulty: typeof p.maintenance_level === 'string' ? p.maintenance_level : undefined,
+        maintenanceLevel,
+        difficulty: maintenanceLevel,
       },
       seedsAvailable: Boolean(p.seeds_available ?? false),
       classification: typeof p.classification === 'string'
