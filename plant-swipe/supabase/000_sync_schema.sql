@@ -246,10 +246,8 @@ create table if not exists public.plants (
   updated_time timestamptz not null default now()
 );
 create unique index if not exists plants_name_unique on public.plants (lower(name));
-alter table if exists public.plants alter column status set default 'in progres';
-update public.plants set status = 'in progres' where status is null;
 
--- Ensure meta columns exist on older deployments
+-- Ensure meta columns exist on older deployments (add columns before referencing them)
 alter table if exists public.plants add column if not exists status text check (status in ('in progres','rework','review','approved'));
 alter table if exists public.plants add column if not exists admin_commentary text;
 alter table if exists public.plants add column if not exists given_names text[] not null default '{}';
@@ -257,7 +255,9 @@ alter table if exists public.plants add column if not exists created_by text;
 alter table if exists public.plants add column if not exists created_time timestamptz not null default now();
 alter table if exists public.plants add column if not exists updated_by text;
 alter table if exists public.plants add column if not exists updated_time timestamptz not null default now();
+
 alter table if exists public.plants alter column status set default 'in progres';
+update public.plants set status = 'in progres' where status is null;
 
 -- Drop obsolete JSON columns from earlier iterations
 alter table if exists public.plants drop column if exists identity;
