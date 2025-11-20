@@ -19,7 +19,7 @@ import { plantSchema } from "@/lib/plantSchema"
 const DISALLOWED_FIELDS = new Set(['name', 'image', 'imageurl', 'image_url', 'imageURL'])
 const IN_PROGRESS_STATUS: PlantMeta['status'] = 'In Progres'
 const SECTION_LOG_LIMIT = 12
-const OPTIONAL_FIELD_EXCEPTIONS = new Set<string>(['images'])
+const OPTIONAL_FIELD_EXCEPTIONS = new Set<string>()
 const MONTH_SLUGS = [
   'january',
   'february',
@@ -468,6 +468,11 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       ].filter((key) => !DISALLOWED_FIELDS.has(key) && !DISALLOWED_FIELDS.has(key.toLowerCase())),
     [],
   )
+  const basicFieldOrder = React.useMemo(() => ['plantType', 'utility', 'comestiblePart', 'fruitType', 'identity'], [])
+  const mandatoryFieldOrder = React.useMemo(() => {
+    const remaining = targetFields.filter((key) => !basicFieldOrder.includes(key))
+    return [...basicFieldOrder, ...remaining]
+  }, [basicFieldOrder, targetFields])
   const categoryLabels = React.useMemo(() => ({
     basics: t('plantAdmin.categories.basics', 'Basics'),
     identity: t('plantAdmin.categories.identity', 'Identity'),
@@ -736,7 +741,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       return false
     }
     const ensureMandatoryFields = async () => {
-      for (const fieldKey of targetFields) {
+      for (const fieldKey of mandatoryFieldOrder) {
         if (!requiresFieldCompletion(fieldKey)) continue
         const latestSnapshot = finalPlant || plant
         if (!latestSnapshot) break
