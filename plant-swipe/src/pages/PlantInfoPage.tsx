@@ -233,14 +233,15 @@ export const PlantInfoPage: React.FC = () => {
   if (!plant) return <div className="max-w-4xl mx-auto mt-8 px-4">{t('plantInfo.plantNotFound')}</div>
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-b from-emerald-200/20 via-white to-emerald-50 dark:from-[#050607] dark:via-[#07090d] dark:to-[#0b1110]">
+    <div className="relative min-h-screen bg-gradient-to-b from-emerald-50/70 via-white to-emerald-100/60 dark:from-[#0b1115] dark:via-[#0f151a] dark:to-[#0f1819]">
       <div className="pointer-events-none absolute inset-0 opacity-60">
-        <div className="absolute -left-24 top-16 h-72 w-72 rounded-full bg-emerald-300/30 blur-3xl dark:bg-emerald-500/10" />
-        <div className="absolute right-0 bottom-0 h-80 w-80 rounded-full bg-amber-200/25 blur-3xl dark:bg-amber-500/10" />
+        <div className="absolute -left-24 top-16 h-72 w-72 rounded-full bg-emerald-200/40 blur-3xl dark:bg-emerald-500/15" />
+        <div className="absolute right-0 bottom-0 h-80 w-80 rounded-full bg-emerald-100/50 blur-3xl dark:bg-emerald-700/10" />
       </div>
       <div className="relative max-w-6xl mx-auto mt-6 px-4 lg:px-6 pb-16 space-y-6">
         <div className="flex flex-wrap items-center gap-3 justify-between">
           <Button
+              type="button"
             variant="ghost"
             className="flex items-center gap-2 rounded-2xl border border-white/40 bg-white/70 px-4 py-2 text-sm shadow-sm dark:border-transparent dark:bg-white/10"
             onClick={handleGoBack}
@@ -248,16 +249,17 @@ export const PlantInfoPage: React.FC = () => {
             <ChevronLeft className="h-4 w-4" />
             {t('common.back', { defaultValue: 'Back' })}
           </Button>
-          {profile?.is_admin && plant && (
-            <Button
-              variant="outline"
-              className="flex items-center gap-2 rounded-2xl border-emerald-200/60 bg-white/80 px-4 py-2 shadow-sm dark:border-emerald-500/30 dark:bg-[#0d0f15]"
-              onClick={handleEdit}
-            >
-              <Pencil className="h-4 w-4" />
-              {t('common.edit', { defaultValue: 'Edit' })}
-            </Button>
-          )}
+            {profile?.is_admin && plant && (
+              <Button
+                type="button"
+                variant="outline"
+                className="flex items-center gap-2 rounded-2xl border-emerald-200/60 bg-white/80 px-4 py-2 shadow-sm dark:border-emerald-500/30 dark:bg-[#0d0f15]"
+                onClick={handleEdit}
+              >
+                <Pencil className="h-4 w-4" />
+                {t('common.edit', { defaultValue: 'Edit' })}
+              </Button>
+            )}
         </div>
         <PlantDetails
           plant={plant}

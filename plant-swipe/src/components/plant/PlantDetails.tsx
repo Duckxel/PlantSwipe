@@ -20,6 +20,14 @@ import {
   ZoomIn,
   ZoomOut,
   RefreshCw,
+  Fingerprint,
+  Droplet,
+  Sprout,
+  ChefHat,
+  ShieldAlert,
+  Layers,
+  Info,
+  Users,
 } from "lucide-react"
 import {
   Bar,
@@ -39,10 +47,12 @@ interface PlantDetailsProps {
   onToggleLike?: () => void
 }
 
-const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
+const Section: React.FC<{ title: string; children: React.ReactNode; icon: React.ReactNode }> = ({ title, children, icon }) => (
   <section className="rounded-[28px] border border-stone-200/70 dark:border-[#1e1f25] bg-gradient-to-br from-white/95 via-white to-emerald-50/70 dark:from-[#0e0f13] dark:via-[#0b0c10] dark:to-[#10171a] shadow-[0_35px_80px_-45px_rgba(16,185,129,0.55)] backdrop-blur">
     <div className="flex items-center gap-2 border-b border-white/70/60 dark:border-white/5 px-6 py-4">
-      <Sparkles className="h-4 w-4 text-amber-500" />
+      <span className="rounded-full bg-emerald-100/70 p-2 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-300">
+        {icon}
+      </span>
       <CardTitle className="text-lg font-semibold text-foreground">{title}</CardTitle>
     </div>
     <CardContent className="p-6">{children}</CardContent>
@@ -54,6 +64,25 @@ const InfoPill: React.FC<{ children: React.ReactNode }> = ({ children }) => (
     {children}
   </span>
 )
+
+const formatTimestamp = (value?: string | null) => {
+  if (!value) return undefined
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return undefined
+  return date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
+}
+
+const hasMeaningfulValue = (value: unknown): boolean => {
+  if (value === null || value === undefined) return false
+  if (typeof value === "boolean") return value
+  if (typeof value === "number") return true
+  if (typeof value === "string") return value.trim().length > 0
+  if (Array.isArray(value)) return value.some(hasMeaningfulValue)
+  if (typeof value === "object") return Object.values(value as Record<string, unknown>).some(hasMeaningfulValue)
+  return true
+}
+
+const hasSectionData = (...values: unknown[]) => values.some((value) => hasMeaningfulValue(value))
 
 const CompanionCard: React.FC<{ id: string; name: string; image?: string }> = ({ id, name, image }) => (
   <Link
@@ -320,6 +349,91 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
   const shareFeedback =
     shareStatus === "copied" ? "Link copied" : shareStatus === "shared" ? "Shared!" : shareStatus === "error" ? "Share unavailable" : ""
 
+  const identityHasContent = hasSectionData(
+    plant.identity?.givenNames,
+    plant.identity?.scientificName,
+    plant.identity?.family,
+    plant.identity?.promotionMonth,
+    plant.identity?.lifeCycle,
+    seasons,
+    plant.identity?.foliagePersistance,
+    plant.identity?.toxicityHuman,
+    plant.identity?.toxicityPets,
+    plant.identity?.allergens,
+    plant.identity?.symbolism,
+    plant.identity?.livingSpace,
+    plant.identity?.composition,
+    plant.identity?.maintenanceLevel,
+    plant.identity?.spiked,
+    plant.identity?.scent,
+  )
+  const plantCareHasContent = hasSectionData(
+    plant.plantCare?.origin,
+    plant.plantCare?.habitat,
+    plant.plantCare?.temperatureMax,
+    plant.plantCare?.temperatureMin,
+    plant.plantCare?.temperatureIdeal,
+    plant.plantCare?.levelSun,
+    plant.plantCare?.hygrometry,
+    plant.plantCare?.watering?.schedules,
+    plant.plantCare?.wateringType,
+    plant.plantCare?.division,
+    plant.plantCare?.soil,
+    plant.plantCare?.mulching,
+    plant.plantCare?.nutritionNeed,
+    plant.plantCare?.fertilizer,
+    plant.plantCare?.adviceSoil,
+    plant.plantCare?.adviceMulching,
+    plant.plantCare?.adviceFertilizer,
+  )
+  const growthHasContent = hasSectionData(
+    plant.growth?.sowingMonth,
+    plant.growth?.floweringMonth,
+    plant.growth?.fruitingMonth,
+    plant.growth?.height,
+    plant.growth?.wingspan,
+    plant.growth?.tutoring,
+    plant.growth?.adviceTutoring,
+    plant.growth?.sowType,
+    plant.growth?.separation,
+    plant.growth?.transplanting,
+    plant.growth?.adviceSowing,
+    plant.growth?.cut,
+  )
+  const usageHasContent = hasSectionData(
+    plant.usage?.adviceMedicinal,
+    plant.usage?.nutritionalIntake,
+    plant.usage?.infusion,
+    plant.usage?.adviceInfusion,
+    plant.usage?.infusionMix,
+    plant.usage?.recipesIdeas,
+    plant.usage?.aromatherapy,
+    plant.usage?.spiceMixes,
+  )
+  const ecologyHasContent = hasSectionData(
+    plant.ecology?.melliferous,
+    plant.ecology?.polenizer,
+    plant.ecology?.beFertilizer,
+    plant.ecology?.groundEffect,
+    plant.ecology?.conservationStatus,
+  )
+  const dangerHasContent = hasSectionData(plant.danger?.pests, plant.danger?.diseases)
+  const miscHasContent = hasSectionData(
+    companionDetails.length ? companionDetails : plant.miscellaneous?.companions,
+    plant.miscellaneous?.tags,
+    plant.miscellaneous?.sources,
+  )
+  const createdAtDisplay = formatTimestamp((plant.meta as any)?.createdTime || (plant.meta as any)?.createdAt)
+  const updatedAtDisplay = formatTimestamp((plant.meta as any)?.updatedTime || (plant.meta as any)?.updatedAt)
+  const metaHasContent = hasSectionData(
+    plant.meta?.adminCommentary,
+    plant.meta?.createdBy,
+    plant.meta?.updatedBy,
+    createdAtDisplay,
+    updatedAtDisplay,
+  )
+  const galleryHasContent = Boolean(plant.images?.length)
+
   useEffect(() => {
     let ignore = false
     const loadCompanions = async () => {
@@ -376,6 +490,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
             <div className="absolute top-4 right-4 z-20 flex flex-col items-end gap-2 sm:gap-3 pointer-events-auto">
             {onToggleLike && (
               <Button
+                type="button"
                 size="lg"
                 variant={liked ? "default" : "secondary"}
                 className="rounded-full px-6 py-3 text-base shadow-lg"
@@ -387,6 +502,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
             )}
             <div className="flex flex-col items-end gap-1">
               <Button
+                type="button"
                 size="lg"
                 variant="outline"
                 className="rounded-full px-5 py-3 text-base shadow-lg"
@@ -536,6 +652,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
               </div>
               <div className="mt-4 flex flex-wrap items-center gap-3 text-white">
                 <Button
+                  type="button"
                   variant="secondary"
                   size="sm"
                   onClick={(event) => {
@@ -547,6 +664,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
                   Zoom in
                 </Button>
                 <Button
+                  type="button"
                   variant="secondary"
                   size="sm"
                   onClick={(event) => {
@@ -558,6 +676,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
                   Zoom out
                 </Button>
                 <Button
+                  type="button"
                   variant="secondary"
                   size="sm"
                   onClick={(event) => {
@@ -622,8 +741,8 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        {(plant.identity && Object.values(plant.identity).some((v) => v !== undefined && v !== null && v !== "" && (Array.isArray(v) ? v.length : true))) && (
-          <Section title="Identity">
+        {identityHasContent && (
+          <Section title="Identity" icon={<Fingerprint className="h-4 w-4" />}>
             <div className="grid gap-3 sm:grid-cols-2">
               <FieldRow label="Given Names" value={safeJoin(plant.identity?.givenNames)} />
               <FieldRow label="Family" value={plant.identity?.family} />
@@ -644,8 +763,8 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
           </Section>
         )}
 
-        {(plant.plantCare && Object.values(plant.plantCare).some((v) => v !== undefined && v !== null && (Array.isArray(v) ? v.length : true))) && (
-          <Section title="Plant Care">
+        {plantCareHasContent && (
+          <Section title="Plant Care" icon={<Droplet className="h-4 w-4" />}>
             <div className="grid gap-3 sm:grid-cols-2">
               <FieldRow label="Origin" value={listOrTags(plant.plantCare?.origin)} />
               <FieldRow label="Habitat" value={listOrTags(plant.plantCare?.habitat as string[])} />
@@ -738,8 +857,8 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        {(plant.growth && Object.values(plant.growth).some((v) => v !== undefined && v !== null && (Array.isArray(v) ? v.length : true))) && (
-          <Section title="Growth">
+        {growthHasContent && (
+          <Section title="Growth" icon={<Sprout className="h-4 w-4" />}>
             <div className="grid gap-3 sm:grid-cols-2">
               <FieldRow label="Sowing Month" value={monthsToBadges(plant.growth?.sowingMonth)} />
               <FieldRow label="Flowering Month" value={monthsToBadges(plant.growth?.floweringMonth)} />
@@ -755,8 +874,8 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
           </Section>
         )}
 
-        {(plant.usage && Object.values(plant.usage).some((v) => v !== undefined && v !== null && (Array.isArray(v) ? v.length : true))) && (
-          <Section title="Usage">
+        {usageHasContent && (
+          <Section title="Usage" icon={<ChefHat className="h-4 w-4" />}>
             <div className="grid gap-3 sm:grid-cols-2">
               <FieldRow label="Advice Medicinal" value={plant.usage?.adviceMedicinal} />
               <FieldRow label="Nutritional Intake" value={listOrTags(plant.usage?.nutritionalIntake)} />
@@ -772,8 +891,8 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        {(plant.ecology && Object.values(plant.ecology).some((v) => v !== undefined && v !== null && (Array.isArray(v) ? v.length : true))) && (
-          <Section title="Ecology">
+        {ecologyHasContent && (
+          <Section title="Ecology" icon={<Leaf className="h-4 w-4" />}>
             <div className="grid gap-3 sm:grid-cols-2">
               <FieldRow label="Melliferous" value={booleanText(plant.ecology?.melliferous)} />
               <FieldRow label="Polenizer" value={listOrTags(plant.ecology?.polenizer as string[])} />
@@ -784,8 +903,8 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
           </Section>
         )}
 
-        {(plant.danger && Object.values(plant.danger).some((v) => v !== undefined && v !== null && (Array.isArray(v) ? v.length : true))) && (
-          <Section title="Danger">
+        {dangerHasContent && (
+          <Section title="Danger" icon={<ShieldAlert className="h-4 w-4" />}>
             <div className="grid gap-3 sm:grid-cols-2">
               <FieldRow label="Pests" value={listOrTags(plant.danger?.pests)} />
               <FieldRow label="Diseases" value={listOrTags(plant.danger?.diseases)} />
@@ -795,8 +914,8 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        {(plant.miscellaneous && Object.values(plant.miscellaneous).some((v) => v !== undefined && v !== null && (Array.isArray(v) ? v.length : true))) && (
-          <Section title="Companions & Tags">
+        {miscHasContent && (
+          <Section title="Companions & Tags" icon={<Users className="h-4 w-4" />}>
             <div className="space-y-4">
               {companionDetails.length > 0 ? (
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -831,22 +950,21 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
           </Section>
         )}
 
-        {(plant.meta && Object.values(plant.meta).some((v) => v !== undefined && v !== null && (Array.isArray(v) ? v.length : true))) && (
-          <Section title="Meta">
+        {metaHasContent && (
+          <Section title="Meta" icon={<Info className="h-4 w-4" />}>
             <div className="grid gap-3 sm:grid-cols-2">
-              <FieldRow label="Status" value={plant.meta?.status} />
+              <FieldRow label="Author" value={plant.meta?.createdBy} />
+              <FieldRow label="Created" value={createdAtDisplay} />
+              <FieldRow label="Last Editor" value={plant.meta?.updatedBy} />
+              <FieldRow label="Last Updated" value={updatedAtDisplay} />
               <FieldRow label="Admin Commentary" value={plant.meta?.adminCommentary} />
-              <FieldRow label="Created By" value={plant.meta?.createdBy} />
-              <FieldRow label="Created Time" value={plant.meta?.createdTime} />
-              <FieldRow label="Updated By" value={plant.meta?.updatedBy} />
-              <FieldRow label="Updated Time" value={plant.meta?.updatedTime} />
             </div>
           </Section>
         )}
       </div>
 
-      {plant.images?.length ? (
-        <Section title="Gallery">
+      {galleryHasContent ? (
+        <Section title="Gallery" icon={<Layers className="h-4 w-4" />}>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
             {plant.images.map((img) => (
               <div key={img.id || img.link} className="relative overflow-hidden rounded-xl border border-muted/60 bg-white/80 shadow-sm">
