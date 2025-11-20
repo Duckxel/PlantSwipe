@@ -416,7 +416,25 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, onClose, like
             <div className="grid gap-3 sm:grid-cols-2">
               <FieldRow label="Companions" value={listOrTags(plant.miscellaneous?.companions)} />
               <FieldRow label="Tags" value={listOrTags(plant.miscellaneous?.tags)} />
-              <FieldRow label="Source" value={plant.miscellaneous?.source ? <DictionaryList value={plant.miscellaneous.source} /> : undefined} />
+              <FieldRow
+                label="Source"
+                value={plant.miscellaneous?.sources?.length
+                  ? (
+                    <ul className="list-disc pl-5 space-y-1">
+                      {plant.miscellaneous.sources.map((s, idx) => (
+                        <li key={`${s.name}-${idx}`} className="text-sm">
+                          <span className="font-medium">{s.name}</span>
+                          {s.url && (
+                            <a href={s.url} target="_blank" rel="noreferrer" className="ml-2 text-blue-600 underline">
+                              {s.url}
+                            </a>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )
+                  : (plant.miscellaneous?.source ? <DictionaryList value={plant.miscellaneous.source} /> : undefined)}
+              />
             </div>
           </Section>
         )}

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { useTranslation } from "react-i18next"
 import { plantFormCategoryOrder, type PlantFormCategory } from "@/lib/plantFormCategories"
-import type { Plant, PlantColor, PlantImage, PlantType } from "@/types/plant"
+import type { Plant, PlantColor, PlantImage, PlantSource, PlantType } from "@/types/plant"
 import { supabase } from "@/lib/supabaseClient"
 
 export type PlantProfileFormProps = {
@@ -27,6 +27,9 @@ type FieldType =
   | "multiselect"
   | "dict"
   | "watering"
+  | "companions"
+  | "sources"
+  | "readonly"
 
 interface FieldConfig {
   key: string
@@ -66,6 +69,99 @@ const TagInput: React.FC<{ value: string[]; onChange: (v: string[]) => void; pla
   )
 }
 
+const CompanionSelector: React.FC<{ value: string[]; onChange: (ids: string[]) => void }> = ({ value, onChange }) => {
+  const [companions, setCompanions] = React.useState<{ id: string; name: string }[]>([])
+  const [open, setOpen] = React.useState(false)
+  const [search, setSearch] = React.useState("")
+  const [results, setResults] = React.useState<{ id: string; name: string }[]>([])
+  const [loading, setLoading] = React.useState(false)
+
+  React.useEffect(() => {
+    setCompanions((prev) => prev.filter((c) => value.includes(c.id)))
+  }, [value])
+
+  React.useEffect(() => {
+    const missing = value.filter((id) => !companions.find((c) => c.id === id))
+    if (!missing.length) return
+    const loadMissing = async () => {
+      const { data } = await supabase.from('plants').select('id,name').in('id', missing)
+      if (data) {
+        setCompanions((prev) => [...prev, ...data.map((p) => ({ id: p.id as string, name: (p as any).name as string }))])
+      }
+    }
+    loadMissing()
+  }, [companions, value])
+
+  const searchPlants = async () => {
+    setLoading(true)
+    const query = supabase.from('plants').select('id,name').order('name').limit(20)
+    if (search.trim()) query.ilike('name', `%${search.trim()}%`)
+    const { data } = await query
+    setResults((data || []).map((p) => ({ id: p.id as string, name: (p as any).name as string })))
+    setLoading(false)
+  }
+
+  React.useEffect(() => {
+    if (open) searchPlants()
+  }, [open])
+
+  const addCompanion = (plant: { id: string; name: string }) => {
+    if (value.includes(plant.id)) { setOpen(false); return }
+    onChange([...value, plant.id])
+    setCompanions((prev) => [...prev, plant])
+    setOpen(false)
+  }
+
+  const removeCompanion = (id: string) => {
+    onChange(value.filter((c) => c !== id))
+    setCompanions((prev) => prev.filter((c) => c.id !== id))
+  }
+
+  return (
+    <div className="grid gap-2">
+      <div className="flex flex-wrap gap-2">
+        {value.length === 0 && <span className="text-sm text-muted-foreground">No companions added yet.</span>}
+        {companions.map((c) => (
+          <span key={c.id} className="px-2 py-1 bg-stone-100 dark:bg-[#2d2d30] rounded text-sm flex items-center gap-1">
+            {c.name || c.id}
+            <button type="button" className="text-red-600" onClick={() => removeCompanion(c.id)}>×</button>
+          </span>
+        ))}
+      </div>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogTrigger asChild>
+          <Button type="button" variant="outline">Add Companion</Button>
+        </DialogTrigger>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Select a companion plant</DialogTitle>
+          </DialogHeader>
+          <div className="flex gap-2 items-center">
+            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search plants by name" />
+            <Button type="button" onClick={searchPlants} disabled={loading}>{loading ? 'Searching...' : 'Search'}</Button>
+          </div>
+          <div className="max-h-80 overflow-y-auto space-y-2 mt-3">
+            {(results || []).map((plant) => (
+              <button
+                key={plant.id}
+                type="button"
+                className="w-full text-left rounded border px-3 py-2 hover:bg-muted"
+                onClick={() => addCompanion(plant)}
+              >
+                <div className="font-semibold">{plant.name}</div>
+                <div className="text-xs text-muted-foreground">{plant.id}</div>
+              </button>
+            ))}
+            {!results.length && !loading && (
+              <div className="text-sm text-muted-foreground">No plants found.</div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
 const WateringScheduleEditor: React.FC<{
   value: { season: string; quantity?: string; timePeriod?: "week" | "month" | "year" }[] | undefined
   onChange: (schedules: { season: string; quantity?: string; timePeriod?: "week" | "month" | "year" }[]) => void
@@ -73,8 +169,8 @@ const WateringScheduleEditor: React.FC<{
   const schedules = Array.isArray(value) ? value : []
   const [draft, setDraft] = React.useState<{ season: string; quantity?: string; timePeriod?: "week" | "month" | "year" }>({ season: "", quantity: "", timePeriod: undefined })
   const addDraft = () => {
-    if (!draft.season.trim()) return
-    onChange([...schedules, { season: draft.season.trim(), quantity: draft.quantity?.trim() || undefined, timePeriod: draft.timePeriod }])
+    if (!(draft.season?.trim() || draft.quantity?.trim() || draft.timePeriod)) return
+    onChange([...schedules, { season: draft.season?.trim() || "", quantity: draft.quantity?.trim() || undefined, timePeriod: draft.timePeriod }])
     setDraft({ season: "", quantity: "", timePeriod: draft.timePeriod })
   }
   const update = (idx: number, patch: Partial<{ season: string; quantity?: string; timePeriod?: "week" | "month" | "year" }>) => {
@@ -89,10 +185,9 @@ const WateringScheduleEditor: React.FC<{
         <div key={`${schedule.season}-${idx}`} className="grid gap-2 rounded border p-3">
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <Input
-              placeholder="Season (required)"
+              placeholder="Season (optional)"
               value={schedule.season}
               onChange={(e) => update(idx, { season: e.target.value })}
-              required
             />
             <Input
               placeholder="Quantity"
@@ -122,10 +217,9 @@ const WateringScheduleEditor: React.FC<{
       <div className="grid gap-2 rounded border border-dashed p-3">
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           <Input
-            placeholder="Season (required)"
+            placeholder="Season (optional)"
             value={draft.season}
             onChange={(e) => setDraft((d) => ({ ...d, season: e.target.value }))}
-            required
           />
           <Input
             placeholder="Quantity"
@@ -146,8 +240,8 @@ const WateringScheduleEditor: React.FC<{
           </select>
         </div>
         <div className="flex justify-between text-sm text-muted-foreground">
-          <span>Season is required. Add as many watering schedules as needed.</span>
-          <Button type="button" onClick={addDraft} disabled={!draft.season.trim()}>
+          <span>Season is optional. Add as many watering schedules as needed.</span>
+          <Button type="button" onClick={addDraft} disabled={!(draft.season?.trim() || draft.quantity?.trim() || draft.timePeriod)}>
             Add schedule
           </Button>
         </div>
@@ -182,6 +276,40 @@ const KeyValueList: React.FC<{ value: Record<string, string>; onChange: (v: Reco
               delete copy[key]
               onChange(copy)
             }}>Remove</button>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+const SourceList: React.FC<{ value: PlantSource[]; onChange: (v: PlantSource[]) => void }> = ({ value, onChange }) => {
+  const [name, setName] = React.useState("")
+  const [url, setUrl] = React.useState("")
+  const add = () => {
+    if (!name.trim()) return
+    onChange([...(value || []), { name: name.trim(), url: url.trim() || undefined }])
+    setName("")
+    setUrl("")
+  }
+  const remove = (idx: number) => {
+    onChange((value || []).filter((_, i) => i !== idx))
+  }
+  return (
+    <div className="grid gap-2">
+      <div className="flex flex-col md:flex-row gap-2">
+        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Source name" />
+        <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Source URL" />
+        <Button type="button" onClick={add}>Add</Button>
+      </div>
+      <div className="space-y-1">
+        {(value || []).map((s, idx) => (
+          <div key={`${s.name}-${idx}`} className="flex items-center justify-between rounded border px-3 py-2 text-sm">
+            <div className="space-y-0.5">
+              <div className="font-medium">{s.name}</div>
+              {s.url && <div className="text-muted-foreground text-xs">{s.url}</div>}
+            </div>
+            <button type="button" className="text-red-600" onClick={() => remove(idx)}>Remove</button>
           </div>
         ))}
       </div>
@@ -286,17 +414,18 @@ const dangerFields: FieldConfig[] = [
 ]
 
 const miscFields: FieldConfig[] = [
-  { key: "miscellaneous.companions", label: "Companions", description: "Companion plant IDs", type: "tags" },
+  { key: "miscellaneous.companions", label: "Companions", description: "Companion plants", type: "companions" },
   { key: "miscellaneous.tags", label: "Tags", description: "Search tags", type: "tags" },
+  { key: "miscellaneous.sources", label: "Sources", description: "Reference sources", type: "sources" },
 ]
 
 const metaFields: FieldConfig[] = [
   { key: "meta.status", label: "Status", description: "Editorial status", type: "select", options: ["In Progres","Rework","Review","Approved"] },
   { key: "meta.adminCommentary", label: "Admin Commentary", description: "Moderator feedback", type: "textarea" },
-  { key: "meta.createdBy", label: "Created By", description: "Author name", type: "text" },
-  { key: "meta.createdTime", label: "Created Time", description: "Creation time", type: "text" },
-  { key: "meta.updatedBy", label: "Updated By", description: "Last editor", type: "text" },
-  { key: "meta.updatedTime", label: "Updated Time", description: "Last update time", type: "text" },
+  { key: "meta.createdBy", label: "Created By", description: "Author name", type: "readonly" },
+  { key: "meta.createdTime", label: "Created Time", description: "Creation time", type: "readonly" },
+  { key: "meta.updatedBy", label: "Updated By", description: "Last editor", type: "readonly" },
+  { key: "meta.updatedTime", label: "Updated Time", description: "Last update time", type: "readonly" },
 ]
 
 const utilityOptions = ["comestible","ornemental","produce_fruit","aromatic","medicinal","odorous","climbing","cereal","spice"] as const
@@ -440,6 +569,30 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
           <div className="grid gap-2">
             <Label>{field.label}</Label>
             <WateringScheduleEditor value={value as any} onChange={(v) => onChange(field.key, v)} />
+            <p className="text-xs text-muted-foreground">{field.description}</p>
+          </div>
+        )
+      case "companions":
+        return (
+          <div className="grid gap-2">
+            <Label>{field.label}</Label>
+            <CompanionSelector value={Array.isArray(value) ? value : []} onChange={(v) => onChange(field.key, v)} />
+            <p className="text-xs text-muted-foreground">{field.description}</p>
+          </div>
+        )
+      case "sources":
+        return (
+          <div className="grid gap-2">
+            <Label>{field.label}</Label>
+            <SourceList value={(value as PlantSource[]) || []} onChange={(v) => onChange(field.key, v)} />
+            <p className="text-xs text-muted-foreground">{field.description}</p>
+          </div>
+        )
+      case "readonly":
+        return (
+          <div className="grid gap-2">
+            <Label>{field.label}</Label>
+            <Input value={(value as string) || ""} readOnly />
             <p className="text-xs text-muted-foreground">{field.description}</p>
           </div>
         )

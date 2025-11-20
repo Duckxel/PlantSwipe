@@ -315,11 +315,24 @@ end $$;
 create table if not exists public.plant_watering_schedules (
   id uuid primary key default gen_random_uuid(),
   plant_id text not null references public.plants(id) on delete cascade,
-  season text not null check (season in ('spring','summer','autumn','winter')),
-  quantity text not null,
-  time_period text not null check (time_period in ('week','month','year')),
+  season text check (season is null or season in ('spring','summer','autumn','winter')),
+  quantity text,
+  time_period text check (time_period is null or time_period in ('week','month','year')),
   created_at timestamptz not null default now()
 );
+alter table public.plant_watering_schedules alter column season drop not null;
+alter table public.plant_watering_schedules alter column quantity drop not null;
+alter table public.plant_watering_schedules alter column time_period drop not null;
+do $$ begin
+  if exists (select 1 from information_schema.constraint_column_usage where table_name='plant_watering_schedules' and constraint_name='plant_watering_schedules_season_check') then
+    alter table public.plant_watering_schedules drop constraint plant_watering_schedules_season_check;
+  end if;
+  if exists (select 1 from information_schema.constraint_column_usage where table_name='plant_watering_schedules' and constraint_name='plant_watering_schedules_time_period_check') then
+    alter table public.plant_watering_schedules drop constraint plant_watering_schedules_time_period_check;
+  end if;
+  alter table public.plant_watering_schedules add constraint plant_watering_schedules_season_check check (season is null or season in ('spring','summer','autumn','winter'));
+  alter table public.plant_watering_schedules add constraint plant_watering_schedules_time_period_check check (time_period is null or time_period in ('week','month','year'));
+end $$;
 create index if not exists plant_watering_schedules_plant_id_idx on public.plant_watering_schedules(plant_id);
 alter table public.plant_watering_schedules enable row level security;
 do $$ begin
@@ -327,6 +340,29 @@ do $$ begin
     drop policy plant_watering_schedules_select_all on public.plant_watering_schedules;
   end if;
   create policy plant_watering_schedules_select_all on public.plant_watering_schedules for select to authenticated, anon using (true);
+end $$;
+
+-- ========== Plant sources ==========
+create table if not exists public.plant_sources (
+  id uuid primary key default gen_random_uuid(),
+  plant_id text not null references public.plants(id) on delete cascade,
+  name text not null,
+  url text,
+  created_at timestamptz not null default now()
+);
+create index if not exists plant_sources_plant_id_idx on public.plant_sources(plant_id);
+alter table public.plant_sources enable row level security;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_sources' and policyname='plant_sources_select_all') then
+    drop policy plant_sources_select_all on public.plant_sources;
+  end if;
+  create policy plant_sources_select_all on public.plant_sources for select to authenticated, anon using (true);
+end $$;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_sources' and policyname='plant_sources_all') then
+    drop policy plant_sources_all on public.plant_sources;
+  end if;
+  create policy plant_sources_all on public.plant_sources for all to authenticated using (true) with check (true);
 end $$;
 do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_watering_schedules' and policyname='plant_watering_schedules_all') then

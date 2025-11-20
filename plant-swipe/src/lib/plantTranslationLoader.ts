@@ -313,7 +313,7 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
     const [plantsResponse, topLikedResponse] = await Promise.all([
       supabase
         .from('plants')
-        .select('*, plant_images (link,use), plant_colors (colors (id,name,hex_code))')
+        .select('*, plant_images (link,use), plant_colors (colors (id,name,hex_code)), plant_watering_schedules (season,quantity,time_period), plant_sources (name,url)')
         .order('name', { ascending: true }),
       supabase.rpc('top_liked_plants', { limit_count: TOP_LIKED_LIMIT }),
     ])
@@ -371,6 +371,18 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
         link: img?.link,
         use: img?.use,
       }))
+      const schedules = ((basePlant.plant_watering_schedules as any[]) || []).map((row) => {
+        const seasonValue = row?.season ? toTitleCase(row.season) : undefined
+        return {
+          season: seasonValue || '',
+          quantity: row?.quantity || undefined,
+          timePeriod: row?.time_period || undefined,
+        }
+      }).filter((entry) => entry.season || entry.quantity || entry.timePeriod)
+      const sources = ((basePlant.plant_sources as any[]) || []).map((s) => ({
+        name: s?.name as string,
+        url: (s?.url as string) || undefined,
+      })).filter((s) => s.name)
       const primaryImage = images.find((i) => i.use === 'primary')?.link
         || images.find((i) => i.use === 'discovery')?.link
         || images[0]?.link
@@ -424,7 +436,7 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
           fertilizer: basePlant.fertilizer || [],
           adviceFertilizer: translation.advice_fertilizer || basePlant.advice_fertilizer || undefined,
           watering: {
-            schedules: Array.isArray(basePlant.watering) ? basePlant.watering : [],
+            schedules,
           },
         },
         growth: {
@@ -465,7 +477,8 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
         miscellaneous: {
           companions: basePlant.companions || [],
           tags: basePlant.tags || [],
-          source: { name: basePlant.source_name || undefined, url: basePlant.source_url || undefined },
+          sources,
+          source: { name: basePlant.source_name || sources[0]?.name || undefined, url: basePlant.source_url || sources[0]?.url || undefined },
         },
         meta: {
           status: basePlant.status || undefined,
