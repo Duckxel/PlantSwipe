@@ -675,9 +675,9 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
 
   return (
     <div className="max-w-6xl mx-auto px-4 pb-12 space-y-6">
-      <div className="relative overflow-hidden rounded-[32px] border border-stone-200/70 dark:border-[#1f2937] bg-gradient-to-br from-emerald-50 via-white to-amber-50 dark:from-[#0b1220] dark:via-[#0a0f1a] dark:to-[#05080f] shadow-xl">
-        <div className="absolute -left-20 -top-24 h-64 w-64 rounded-full bg-emerald-200/40 dark:bg-emerald-500/5 blur-3xl" aria-hidden="true" />
-        <div className="absolute -right-12 bottom-[-30%] h-72 w-72 rounded-full bg-amber-100/40 dark:bg-amber-400/5 blur-3xl" aria-hidden="true" />
+      <div className="relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50 via-white to-stone-100 dark:from-[#1b2a21] dark:via-[#101712] dark:to-[#0c120e] shadow-[0_24px_80px_-40px_rgba(16,185,129,0.45)] dark:shadow-[0_28px_90px_-50px_rgba(34,197,94,0.35)]">
+        <div className="absolute -left-20 -top-24 h-64 w-64 rounded-full bg-emerald-200/40 dark:bg-emerald-500/15 blur-3xl" aria-hidden="true" />
+        <div className="absolute -right-12 bottom-[-30%] h-72 w-72 rounded-full bg-emerald-100/40 dark:bg-emerald-600/10 blur-3xl" aria-hidden="true" />
         <div className="relative p-6 sm:p-8 flex flex-col gap-6">
           <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
             <div className="space-y-2">
@@ -689,7 +689,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
               </p>
             </div>
             <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-              <div className="flex items-center gap-2 rounded-full bg-white/70 dark:bg-[#111] px-3 py-1.5 shadow-inner">
+              <div className="flex items-center gap-2 rounded-full bg-white/80 dark:bg-[#151b15]/80 border border-stone-200/70 dark:border-stone-700/60 px-3 py-1.5 shadow-inner shadow-emerald-100/40 dark:shadow-[inset_0_1px_0_rgba(16,185,129,0.25)]">
                 <label className="text-sm font-medium" htmlFor="create-language">{t('plantAdmin.languageLabel', 'Language')}</label>
                 <select
                   id="create-language"
