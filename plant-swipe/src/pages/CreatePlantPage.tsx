@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next"
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/lib/i18n"
 import { saveLanguagePreference } from "@/lib/i18nRouting"
 import { applyAiFieldToPlant, getCategoryForField } from "@/lib/applyAiField"
+import { translateArray, translateText } from "@/lib/deepl"
 import { buildCategoryProgress, createEmptyCategoryProgress, plantFormCategoryOrder, type CategoryProgress } from "@/lib/plantFormCategories"
 import { useParams } from "react-router-dom"
 
@@ -189,11 +190,13 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     ? (i18n.language as SupportedLanguage)
     : 'en'
   const [language, setLanguage] = React.useState<SupportedLanguage>(initialLanguage)
+  const [translationTarget, setTranslationTarget] = React.useState<SupportedLanguage>(initialLanguage === 'en' ? 'fr' : 'en')
   const [plant, setPlant] = React.useState<Plant>(() => ({ ...emptyPlant, name: initialName || "", id: id || emptyPlant.id }))
   const [loading, setLoading] = React.useState<boolean>(!!id)
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [aiWorking, setAiWorking] = React.useState(false)
+  const [translating, setTranslating] = React.useState(false)
   const [aiProgress, setAiProgress] = React.useState<CategoryProgress>(() => createEmptyCategoryProgress())
   const targetFields = React.useMemo(() => Object.keys(plantSchema as Record<string, unknown>).filter((key) => !DISALLOWED_FIELDS.has(key) && !DISALLOWED_FIELDS.has(key.toLowerCase())), [])
   const categoryLabels = React.useMemo(() => ({
@@ -391,6 +394,120 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
 
   const descriptionPreview = plant.identity?.overview || plant.description
 
+  const translatePlant = async () => {
+    if (translationTarget === language) {
+      setError(t('plantAdmin.translationLanguageMismatch', 'Choose a different target language for translation.'))
+      return
+    }
+    setTranslating(true)
+    setError(null)
+    try {
+      const sourceLang = language
+      const translatedName = await translateText(plant.name || '', translationTarget, sourceLang)
+      const translatedGivenNames = await translateArray(plant.identity?.givenNames || [], translationTarget, sourceLang)
+      const translateArraySafe = (arr?: string[]) => translateArray(arr || [], translationTarget, sourceLang)
+      const translatedInfusionMix = plant.usage?.infusionMix
+        ? Object.fromEntries(
+            await Promise.all(
+              Object.entries(plant.usage.infusionMix).map(async ([mixName, benefit]) => [
+                await translateText(mixName, translationTarget, sourceLang),
+                await translateText(benefit, translationTarget, sourceLang),
+              ])
+            )
+          )
+        : undefined
+      const translatedSourceName = plant.miscellaneous?.source?.name
+        ? await translateText(plant.miscellaneous.source.name, translationTarget, sourceLang)
+        : undefined
+      const translatedSource: Record<string, string> = {}
+      if (translatedSourceName) translatedSource.name = translatedSourceName
+      if (plant.miscellaneous?.source?.url) translatedSource.url = plant.miscellaneous.source.url
+
+      const translated: Plant = {
+        ...plant,
+        name: translatedName,
+        identity: {
+          ...plant.identity,
+          givenNames: translatedGivenNames,
+          scientificName: plant.identity?.scientificName,
+          family: plant.identity?.family
+            ? await translateText(plant.identity.family, translationTarget, sourceLang)
+            : plant.identity?.family,
+          overview: plant.identity?.overview
+            ? await translateText(plant.identity.overview, translationTarget, sourceLang)
+            : plant.identity?.overview,
+          allergens: await translateArraySafe(plant.identity?.allergens),
+          symbolism: await translateArraySafe(plant.identity?.symbolism),
+        },
+        plantCare: {
+          ...plant.plantCare,
+          origin: await translateArraySafe(plant.plantCare?.origin),
+          adviceSoil: plant.plantCare?.adviceSoil
+            ? await translateText(plant.plantCare.adviceSoil, translationTarget, sourceLang)
+            : plant.plantCare?.adviceSoil,
+          adviceMulching: plant.plantCare?.adviceMulching
+            ? await translateText(plant.plantCare.adviceMulching, translationTarget, sourceLang)
+            : plant.plantCare?.adviceMulching,
+          adviceFertilizer: plant.plantCare?.adviceFertilizer
+            ? await translateText(plant.plantCare.adviceFertilizer, translationTarget, sourceLang)
+            : plant.plantCare?.adviceFertilizer,
+        },
+        growth: {
+          ...plant.growth,
+          adviceTutoring: plant.growth?.adviceTutoring
+            ? await translateText(plant.growth.adviceTutoring, translationTarget, sourceLang)
+            : plant.growth?.adviceTutoring,
+          adviceSowing: plant.growth?.adviceSowing
+            ? await translateText(plant.growth.adviceSowing, translationTarget, sourceLang)
+            : plant.growth?.adviceSowing,
+          cut: plant.growth?.cut
+            ? await translateText(plant.growth.cut, translationTarget, sourceLang)
+            : plant.growth?.cut,
+        },
+        usage: {
+          ...plant.usage,
+          adviceMedicinal: plant.usage?.adviceMedicinal
+            ? await translateText(plant.usage.adviceMedicinal, translationTarget, sourceLang)
+            : plant.usage?.adviceMedicinal,
+          adviceInfusion: plant.usage?.adviceInfusion
+            ? await translateText(plant.usage.adviceInfusion, translationTarget, sourceLang)
+            : plant.usage?.adviceInfusion,
+          infusionMix: translatedInfusionMix,
+          recipesIdeas: await translateArraySafe(plant.usage?.recipesIdeas),
+          spiceMixes: await translateArraySafe(plant.usage?.spiceMixes),
+        },
+        ecology: {
+          ...plant.ecology,
+          groundEffect: plant.ecology?.groundEffect
+            ? await translateText(plant.ecology.groundEffect, translationTarget, sourceLang)
+            : plant.ecology?.groundEffect,
+        },
+        danger: {
+          pests: await translateArraySafe(plant.danger?.pests),
+          diseases: await translateArraySafe(plant.danger?.diseases),
+        },
+        miscellaneous: {
+          ...plant.miscellaneous,
+          companions: plant.miscellaneous?.companions || [],
+          tags: await translateArraySafe(plant.miscellaneous?.tags),
+          source: translatedSource,
+        },
+        meta: {
+          ...plant.meta,
+          adminCommentary: plant.meta?.adminCommentary
+            ? await translateText(plant.meta.adminCommentary, translationTarget, sourceLang)
+            : plant.meta?.adminCommentary,
+        },
+      }
+      setPlant(translated)
+      setLanguage(translationTarget)
+    } catch (e: any) {
+      setError(e?.message || 'Translation failed')
+    } finally {
+      setTranslating(false)
+    }
+  }
+
   return (
     <div className="max-w-6xl mx-auto px-4 pb-10 space-y-4">
       <div className="flex items-center justify-between">
@@ -407,7 +524,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             </p>
           )}
         </div>
-        <div className="flex gap-3 items-center">
+        <div className="flex gap-4 items-start flex-col sm:flex-row sm:items-center">
           <div className="flex items-center gap-2">
             <label className="text-sm font-medium" htmlFor="create-language">{t('plantAdmin.languageLabel', 'Language')}</label>
             <select
@@ -420,6 +537,23 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                 <option key={lang} value={lang}>{lang.toUpperCase()}</option>
               ))}
             </select>
+          </div>
+          <div className="flex flex-wrap gap-2 items-center">
+            <label className="text-sm font-medium" htmlFor="translate-target">{t('plantAdmin.translationTarget', 'Translate to')}</label>
+            <select
+              id="translate-target"
+              className="border rounded px-2 py-1 text-sm bg-background"
+              value={translationTarget}
+              onChange={(e) => setTranslationTarget(e.target.value as SupportedLanguage)}
+            >
+              {SUPPORTED_LANGUAGES.map((lang) => (
+                <option key={lang} value={lang}>{lang.toUpperCase()}</option>
+              ))}
+            </select>
+            <Button type="button" onClick={translatePlant} disabled={translating}>
+              {translating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {t('plantAdmin.deeplTranslate', 'DeepL translate')}
+            </Button>
           </div>
           <div className="flex gap-2">
             <Button variant="secondary" onClick={onCancel}>Cancel</Button>

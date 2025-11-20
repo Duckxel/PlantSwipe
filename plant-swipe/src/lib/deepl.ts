@@ -44,7 +44,11 @@ export interface TranslatedFields extends TranslationFields {}
 /**
  * Translate text using DeepL API via backend endpoint
  */
-async function translateText(text: string, targetLang: SupportedLanguage, sourceLang: SupportedLanguage = DEFAULT_LANGUAGE): Promise<string> {
+export async function translateText(
+  text: string,
+  targetLang: SupportedLanguage,
+  sourceLang: SupportedLanguage = DEFAULT_LANGUAGE
+): Promise<string> {
   if (!text || text.trim() === '') return text
   
   // If source and target are the same, return original
@@ -81,7 +85,7 @@ async function translateText(text: string, targetLang: SupportedLanguage, source
 /**
  * Translate array of strings
  */
-async function translateArray(
+export async function translateArray(
   items: string[],
   targetLang: SupportedLanguage,
   sourceLang: SupportedLanguage = DEFAULT_LANGUAGE

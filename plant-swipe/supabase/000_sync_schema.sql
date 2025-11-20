@@ -414,11 +414,35 @@ do $$ begin
   create policy plant_colors_read on public.plant_colors for select to authenticated, anon using (true);
 end $$;
 
+-- Language catalog for translations
+create table if not exists public.translation_languages (
+  code text primary key,
+  label text
+);
+
+insert into public.translation_languages (code, label)
+values
+  ('en', 'English'),
+  ('fr', 'Français')
+on conflict (code) do update set label = excluded.label;
+
+alter table public.translation_languages enable row level security;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='translation_languages' and policyname='translation_languages_all') then
+    drop policy translation_languages_all on public.translation_languages;
+  end if;
+  create policy translation_languages_all on public.translation_languages for all to authenticated using (true) with check (true);
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='translation_languages' and policyname='translation_languages_read') then
+    drop policy translation_languages_read on public.translation_languages;
+  end if;
+  create policy translation_languages_read on public.translation_languages for select to authenticated, anon using (true);
+end $$;
+
 -- ========== Plant translations (multi-language support) ==========
 create table if not exists public.plant_translations (
   id uuid primary key default gen_random_uuid(),
   plant_id text not null references public.plants(id) on delete cascade,
-  language text not null check (language in ('en','fr')),
+  language text not null references public.translation_languages(code),
   name text not null,
   overview text,
   family text,
@@ -450,6 +474,8 @@ create table if not exists public.plant_translations (
   updated_at timestamptz not null default now(),
   unique (plant_id, language)
 );
+
+alter table if exists public.plant_translations drop constraint if exists plant_translations_language_check;
 
 -- Index for faster lookups
 create index if not exists plant_translations_plant_id_idx on public.plant_translations(plant_id);

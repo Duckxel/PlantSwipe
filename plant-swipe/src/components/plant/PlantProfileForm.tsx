@@ -15,6 +15,8 @@ export type PlantProfileFormProps = {
   onChange: (plant: Plant) => void
 }
 
+const neuCardClass = "border border-white/10 bg-muted/40 shadow-[8px_8px_16px_rgba(0,0,0,0.12),-8px_-8px_16px_rgba(255,255,255,0.6)]"
+
 type FieldType =
   | "text"
   | "textarea"
@@ -630,48 +632,72 @@ export function PlantProfileForm({ value, onChange }: PlantProfileFormProps) {
   const scrollToCategory = (category: PlantFormCategory) => {
     setSelectedCategory(category)
   }
+  const categoriesWithoutBasics = plantFormCategoryOrder.filter((cat) => cat !== 'basics')
   const setPath = (path: string, val: any) => onChange(setValue(value, path, val))
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div ref={(node) => { sectionRefs.current.basics = node }} className="flex-1">
-          <Card>
-            <CardHeader>
-              <CardTitle>{categoryLabels.basics}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-2">
-                <Label>Name</Label>
-                <Input value={value.name} required onChange={(e) => onChange({ ...value, name: e.target.value })} placeholder="Unique plant name" />
-                <p className="text-xs text-muted-foreground">Name of the Plant (unique and mandatory)</p>
+      <div ref={(node) => { sectionRefs.current.basics = node }} className="flex-1">
+        <Card className={neuCardClass}>
+          <CardHeader>
+            <CardTitle>{categoryLabels.basics}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-2">
+              <Label>Name</Label>
+              <Input value={value.name} required onChange={(e) => onChange({ ...value, name: e.target.value })} placeholder="Unique plant name" />
+              <p className="text-xs text-muted-foreground">Name of the Plant (unique and mandatory)</p>
+            </div>
+            <div className="grid gap-2">
+              <Label>Plant Type</Label>
+              <select
+                className="h-9 rounded-md border px-2 text-sm"
+                value={value.plantType || ""}
+                onChange={(e) => onChange({ ...value, plantType: (e.target.value || undefined) as PlantType | undefined })}
+              >
+                <option value="">Select type</option>
+                {plantTypeOptions.map((opt) => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground">Primary plant type</p>
+            </div>
+            <div className="grid gap-2">
+              <Label>Utility</Label>
+              <div className="flex flex-wrap gap-2">
+                {utilityOptions.map((opt) => {
+                  const selected = value.utility?.includes(opt)
+                  return (
+                    <button
+                      key={opt}
+                      type="button"
+                      onClick={() => {
+                        const current = value.utility || []
+                        const next = selected ? current.filter((v) => v !== opt) : [...current, opt]
+                        onChange({ ...value, utility: next })
+                      }}
+                      className={`px-3 py-1 rounded-full border text-sm transition ${selected ? "bg-black text-white dark:bg-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"}`}
+                    >
+                      {opt}
+                    </button>
+                  )
+                })}
               </div>
+              <p className="text-xs text-muted-foreground">Select all utilities that apply</p>
+            </div>
+            {value.utility?.includes("comestible") && (
               <div className="grid gap-2">
-                <Label>Plant Type</Label>
-                <select
-                  className="h-9 rounded-md border px-2 text-sm"
-                  value={value.plantType || ""}
-                  onChange={(e) => onChange({ ...value, plantType: (e.target.value || undefined) as PlantType | undefined })}
-                >
-                  <option value="">Select type</option>
-                  {plantTypeOptions.map((opt) => (
-                    <option key={opt} value={opt}>{opt}</option>
-                  ))}
-                </select>
-                <p className="text-xs text-muted-foreground">Primary plant type</p>
-              </div>
-              <div className="grid gap-2">
-                <Label>Utility</Label>
+                <Label>Comestible Part</Label>
                 <div className="flex flex-wrap gap-2">
-                  {utilityOptions.map((opt) => {
-                    const selected = value.utility?.includes(opt)
+                  {comestibleOptions.map((opt) => {
+                    const selected = value.comestiblePart?.includes(opt)
                     return (
                       <button
                         key={opt}
                         type="button"
                         onClick={() => {
-                          const current = value.utility || []
+                          const current = value.comestiblePart || []
                           const next = selected ? current.filter((v) => v !== opt) : [...current, opt]
-                          onChange({ ...value, utility: next })
+                          onChange({ ...value, comestiblePart: next })
                         }}
                         className={`px-3 py-1 rounded-full border text-sm transition ${selected ? "bg-black text-white dark:bg-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"}`}
                       >
@@ -680,91 +706,52 @@ export function PlantProfileForm({ value, onChange }: PlantProfileFormProps) {
                     )
                   })}
                 </div>
-                <p className="text-xs text-muted-foreground">Select all utilities that apply</p>
+                <p className="text-xs text-muted-foreground">Edible parts (only if comestible)</p>
               </div>
-              {value.utility?.includes("comestible") && (
-                <div className="grid gap-2">
-                  <Label>Comestible Part</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {comestibleOptions.map((opt) => {
-                      const selected = value.comestiblePart?.includes(opt)
-                      return (
-                        <button
-                          key={opt}
-                          type="button"
-                          onClick={() => {
-                            const current = value.comestiblePart || []
-                            const next = selected ? current.filter((v) => v !== opt) : [...current, opt]
-                            onChange({ ...value, comestiblePart: next })
-                          }}
-                          className={`px-3 py-1 rounded-full border text-sm transition ${selected ? "bg-black text-white dark:bg-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"}`}
-                        >
-                          {opt}
-                        </button>
-                      )
-                    })}
-                  </div>
-                  <p className="text-xs text-muted-foreground">Edible parts (only if comestible)</p>
+            )}
+            {value.utility?.includes("produce_fruit") && (
+              <div className="grid gap-2">
+                <Label>Fruit Type</Label>
+                <div className="flex flex-wrap gap-2">
+                  {fruitOptions.map((opt) => {
+                    const selected = value.fruitType?.includes(opt)
+                    return (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => {
+                          const current = value.fruitType || []
+                          const next = selected ? current.filter((v) => v !== opt) : [...current, opt]
+                          onChange({ ...value, fruitType: next })
+                        }}
+                        className={`px-3 py-1 rounded-full border text-sm transition ${selected ? "bg-black text-white dark:bg-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"}`}
+                      >
+                        {opt}
+                      </button>
+                    )
+                  })}
                 </div>
-              )}
-              {value.utility?.includes("produce_fruit") && (
-                <div className="grid gap-2">
-                  <Label>Fruit Type</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {fruitOptions.map((opt) => {
-                      const selected = value.fruitType?.includes(opt)
-                      return (
-                        <button
-                          key={opt}
-                          type="button"
-                          onClick={() => {
-                            const current = value.fruitType || []
-                            const next = selected ? current.filter((v) => v !== opt) : [...current, opt]
-                            onChange({ ...value, fruitType: next })
-                          }}
-                          className={`px-3 py-1 rounded-full border text-sm transition ${selected ? "bg-black text-white dark:bg-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"}`}
-                        >
-                          {opt}
-                        </button>
-                      )
-                    })}
-                  </div>
-                  <p className="text-xs text-muted-foreground">Fruit classification (if produce fruit)</p>
-                </div>
-              )}
-              <ImageEditor images={value.images || []} onChange={(imgs) => onChange({ ...value, images: imgs })} />
-            </CardContent>
-          </Card>
-        </div>
-        <div className="sm:w-64 space-y-3">
-          <div className="rounded-lg border bg-muted/40 p-3">
-            <div className="text-sm font-medium mb-2">{t('plantAdmin.categoryMenuTitle', 'Quick category menu')}</div>
-            <div className="flex flex-col gap-2">
-              <label className="text-xs text-muted-foreground" htmlFor="category-select">{t('plantAdmin.categorySelectLabel', 'Show category')}</label>
-              <select
-                id="category-select"
-                className="h-9 rounded-md border px-2 text-sm"
-                value={selectedCategory}
-                onChange={(e) => scrollToCategory(e.target.value as PlantFormCategory)}
-              >
-                {plantFormCategoryOrder.map((key) => (
-                  <option key={key} value={key}>{categoryLabels[key]}</option>
-                ))}
-              </select>
-              <div className="flex flex-wrap gap-2">
-                {plantFormCategoryOrder.map((key) => (
-                  <Button
-                    key={key}
-                    size="sm"
-                    variant={selectedCategory === key ? 'default' : 'outline'}
-                    onClick={() => scrollToCategory(key)}
-                  >
-                    {categoryLabels[key]}
-                  </Button>
-                ))}
+                <p className="text-xs text-muted-foreground">Fruit classification (if produce fruit)</p>
               </div>
-            </div>
-          </div>
+            )}
+            <ImageEditor images={value.images || []} onChange={(imgs) => onChange({ ...value, images: imgs })} />
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className={`${neuCardClass} rounded-lg p-3`}>
+        <div className="text-sm font-medium mb-2">{t('plantAdmin.categoryMenuTitle', 'Quick category menu')}</div>
+        <div className="flex flex-wrap gap-2">
+          {categoriesWithoutBasics.map((key) => (
+            <Button
+              key={key}
+              size="sm"
+              variant={selectedCategory === key ? 'default' : 'outline'}
+              onClick={() => scrollToCategory(key)}
+            >
+              {categoryLabels[key]}
+            </Button>
+          ))}
         </div>
       </div>
 
@@ -786,9 +773,9 @@ export function PlantProfileForm({ value, onChange }: PlantProfileFormProps) {
           }
           return (
             <div key={cat} ref={refSetter}>
-              <Card>
+              <Card className={neuCardClass}>
                 <CardHeader><CardTitle>{categoryLabels[cat]}</CardTitle></CardHeader>
-                <CardContent className="grid gap-4 md:grid-cols-2">
+                <CardContent className="grid gap-4">
                   {fieldGroups[cat].map((f) => renderField(value, setPath, f))}
                   {cat === 'identity' && (
                     <div className="md:col-span-2">
