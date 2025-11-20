@@ -101,6 +101,12 @@ export interface PlantIdentity {
   [key: string]: any
 }
 
+export interface PlantWateringSchedule {
+  season: string
+  quantity?: string
+  timePeriod?: "week" | "month" | "year"
+}
+
 export interface PlantCareWatering {
   season?: string
   quantity?: string
@@ -108,6 +114,7 @@ export interface PlantCareWatering {
   frequency?: string | { winter?: string; spring?: string; summer?: string; autumn?: string }
   method?: string
   depthCm?: number
+  schedules?: PlantWateringSchedule[]
   [key: string]: any
 }
 

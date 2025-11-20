@@ -271,7 +271,24 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, onClose, like
             <div className="grid gap-3 sm:grid-cols-2">
               <FieldRow label="Origin" value={listOrTags(plant.plantCare?.origin)} />
               <FieldRow label="Habitat" value={listOrTags(plant.plantCare?.habitat as string[])} />
-              <FieldRow label="Watering" value={plant.plantCare?.watering ? `${[plant.plantCare.watering.season, plant.plantCare.watering.quantity].filter(Boolean).join(" • ")} ${plant.plantCare.watering.timePeriod ? `/ ${plant.plantCare.watering.timePeriod}` : ""}` : undefined} />
+              <FieldRow
+                label="Watering"
+                value={(() => {
+                  const schedules = plant.plantCare?.watering && Array.isArray(plant.plantCare.watering.schedules)
+                    ? plant.plantCare.watering.schedules
+                    : []
+                  if (schedules.length) {
+                    return schedules
+                      .filter((s) => s.season)
+                      .map((s) => `${s.season}${s.quantity ? ` • ${s.quantity}` : ""}${s.timePeriod ? ` / ${s.timePeriod}` : ""}`)
+                      .join(" | ")
+                  }
+                  if (plant.plantCare?.watering) {
+                    return `${[plant.plantCare.watering.season, plant.plantCare.watering.quantity].filter(Boolean).join(" • ")} ${plant.plantCare.watering.timePeriod ? `/ ${plant.plantCare.watering.timePeriod}` : ""}`.trim()
+                  }
+                  return undefined
+                })()}
+              />
               <FieldRow label="Watering Type" value={listOrTags(plant.plantCare?.wateringType as string[])} />
               <FieldRow label="Division" value={listOrTags(plant.plantCare?.division as string[])} />
               <FieldRow label="Soil" value={listOrTags(plant.plantCare?.soil as string[])} />

@@ -24,6 +24,7 @@ type FieldType =
   | "select"
   | "multiselect"
   | "dict"
+  | "watering"
 
 interface FieldConfig {
   key: string
@@ -68,6 +69,96 @@ const TagInput: React.FC<{ value: string[]; onChange: (v: string[]) => void; pla
             <button type="button" className="text-red-600" onClick={() => onChange(value.filter((_, i) => i !== idx))}>×</button>
           </span>
         ))}
+      </div>
+    </div>
+  )
+}
+
+const WateringScheduleEditor: React.FC<{
+  value: { season: string; quantity?: string; timePeriod?: "week" | "month" | "year" }[] | undefined
+  onChange: (schedules: { season: string; quantity?: string; timePeriod?: "week" | "month" | "year" }[]) => void
+}> = ({ value, onChange }) => {
+  const schedules = Array.isArray(value) ? value : []
+  const [draft, setDraft] = React.useState<{ season: string; quantity?: string; timePeriod?: "week" | "month" | "year" }>({ season: "", quantity: "", timePeriod: undefined })
+  const addDraft = () => {
+    if (!draft.season.trim()) return
+    onChange([...schedules, { season: draft.season.trim(), quantity: draft.quantity?.trim() || undefined, timePeriod: draft.timePeriod }])
+    setDraft({ season: "", quantity: "", timePeriod: draft.timePeriod })
+  }
+  const update = (idx: number, patch: Partial<{ season: string; quantity?: string; timePeriod?: "week" | "month" | "year" }>) => {
+    onChange(
+      schedules.map((s, i) => (i === idx ? { ...s, ...patch } : s)).filter((s) => s.season.trim())
+    )
+  }
+  const remove = (idx: number) => onChange(schedules.filter((_, i) => i !== idx))
+  return (
+    <div className="grid gap-3">
+      {schedules.map((schedule, idx) => (
+        <div key={`${schedule.season}-${idx}`} className="grid gap-2 rounded border p-3">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <Input
+              placeholder="Season (required)"
+              value={schedule.season}
+              onChange={(e) => update(idx, { season: e.target.value })}
+              required
+            />
+            <Input
+              placeholder="Quantity"
+              value={schedule.quantity || ""}
+              onChange={(e) => update(idx, { quantity: e.target.value || undefined })}
+            />
+            <select
+              className="h-9 rounded-md border px-2 text-sm"
+              value={schedule.timePeriod || ""}
+              onChange={(e) => update(idx, { timePeriod: e.target.value ? (e.target.value as any) : undefined })}
+            >
+              <option value="">Time period</option>
+              {(["week", "month", "year"] as const).map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex justify-end">
+            <Button variant="ghost" type="button" onClick={() => remove(idx)} className="text-red-600">
+              Remove
+            </Button>
+          </div>
+        </div>
+      ))}
+      <div className="grid gap-2 rounded border border-dashed p-3">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <Input
+            placeholder="Season (required)"
+            value={draft.season}
+            onChange={(e) => setDraft((d) => ({ ...d, season: e.target.value }))}
+            required
+          />
+          <Input
+            placeholder="Quantity"
+            value={draft.quantity || ""}
+            onChange={(e) => setDraft((d) => ({ ...d, quantity: e.target.value }))}
+          />
+          <select
+            className="h-9 rounded-md border px-2 text-sm"
+            value={draft.timePeriod || ""}
+            onChange={(e) => setDraft((d) => ({ ...d, timePeriod: e.target.value ? (e.target.value as any) : undefined }))}
+          >
+            <option value="">Time period</option>
+            {(["week", "month", "year"] as const).map((opt) => (
+              <option key={opt} value={opt}>
+                {opt}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex justify-between text-sm text-muted-foreground">
+          <span>Season is required. Add as many watering schedules as needed.</span>
+          <Button type="button" onClick={addDraft} disabled={!draft.season.trim()}>
+            Add schedule
+          </Button>
+        </div>
       </div>
     </div>
   )
@@ -151,9 +242,7 @@ const careFields: FieldConfig[] = [
   { key: "plantCare.temperatureIdeal", label: "Temperature Ideal", description: "Ideal temperature (°C)", type: "number" },
   { key: "plantCare.levelSun", label: "Level Sun", description: "Sun exposure level", type: "select", options: ["Low Light","Shade","Partial Sun","Full Sun"] },
   { key: "plantCare.hygrometry", label: "Hygrometry", description: "Ideal humidity percentage", type: "number" },
-  { key: "plantCare.watering.season", label: "Watering Season", description: "Season for watering guidance", type: "text" },
-  { key: "plantCare.watering.quantity", label: "Watering Quantity", description: "Quantity to water", type: "text" },
-  { key: "plantCare.watering.timePeriod", label: "Watering Time Period", description: "Time period (week/month/year)", type: "select", options: ["week","month","year"] },
+  { key: "plantCare.watering.schedules", label: "Watering Schedule", description: "Seasonal watering (season + quantity + period)", type: "watering" },
   { key: "plantCare.wateringType", label: "Watering Type", description: "Watering methods", type: "multiselect", options: ["surface","buried","hose","drop","drench"] },
   { key: "plantCare.division", label: "Division", description: "Propagation techniques", type: "multiselect", options: ["Seed","Cutting","Division","Layering","Grafting","Tissue Separation","Bulb separation"] },
   { key: "plantCare.soil", label: "Soil", description: "Soil options", type: "multiselect", options: ["Vermiculite","Perlite","Sphagnum moss","rock wool","Sand","Gravel","Potting Soil","Peat","Clay pebbles","coconut fiber","Bark","Wood Chips"] },
@@ -226,89 +315,143 @@ const plantTypeOptions = ["plant","flower","bamboo","shrub","tree"] as const
 function renderField(plant: Plant, onChange: (path: string, value: any) => void, field: FieldConfig) {
   const value = getValue(plant, field.key)
   const id = field.key.replace(/\./g, "-")
-  switch (field.type) {
-    case "text":
+  const isAdvice = field.label.toLowerCase().includes("advice")
+
+  const body = (() => {
+    if (field.key === "meta.status") {
+      const statusColors: Record<string, string> = {
+        "In Progres": "#f59e0b",
+        Rework: "#ef4444",
+        Review: "#0ea5e9",
+        Approved: "#10b981",
+      }
       return (
-        <div className="grid gap-2" key={field.key}>
-          <Label htmlFor={id}>{field.label}</Label>
-          <Input id={id} value={value ?? ""} onChange={(e) => onChange(field.key, e.target.value)} placeholder={field.description} />
-          <p className="text-xs text-muted-foreground">{field.description}</p>
-        </div>
-      )
-    case "textarea":
-      return (
-        <div className="grid gap-2" key={field.key}>
-          <Label htmlFor={id}>{field.label}</Label>
-          <Textarea id={id} value={value ?? ""} onChange={(e) => onChange(field.key, e.target.value)} placeholder={field.description} />
-          <p className="text-xs text-muted-foreground">{field.description}</p>
-        </div>
-      )
-    case "number":
-      return (
-        <div className="grid gap-2" key={field.key}>
-          <Label htmlFor={id}>{field.label}</Label>
-          <Input id={id} type="number" value={value ?? ""} onChange={(e) => onChange(field.key, e.target.value === "" ? undefined : Number(e.target.value))} placeholder={field.description} />
-          <p className="text-xs text-muted-foreground">{field.description}</p>
-        </div>
-      )
-    case "boolean":
-      return (
-        <div className="grid gap-2" key={field.key}>
+        <div className="grid gap-2">
           <Label>{field.label}</Label>
-          <div className="flex gap-2">
-            <TogglePill selected={value === true} onClick={() => onChange(field.key, true)}>Yes</TogglePill>
-            <TogglePill selected={value === false} onClick={() => onChange(field.key, false)}>No</TogglePill>
-          </div>
-          <p className="text-xs text-muted-foreground">{field.description}</p>
-        </div>
-      )
-    case "select":
-      return (
-        <div className="grid gap-2" key={field.key}>
-          <Label>{field.label}</Label>
-          <div className="flex flex-wrap gap-2">
+          <select
+            className="h-9 rounded-md border px-3 text-sm"
+            value={value || ""}
+            onChange={(e) => onChange(field.key, e.target.value)}
+          >
+            <option value="">Select status</option>
             {(field.options || []).map((opt) => (
-              <TogglePill key={opt} selected={value === opt} onClick={() => onChange(field.key, opt)}>{opt}</TogglePill>
+              <option key={opt} value={opt} style={{ color: statusColors[opt] || "inherit" }}>
+                ● {opt}
+              </option>
             ))}
+          </select>
+          <p className="text-xs text-muted-foreground">{field.description}</p>
+        </div>
+      )
+    }
+
+    switch (field.type) {
+      case "text":
+        return (
+          <div className="grid gap-2">
+            <Label htmlFor={id}>{field.label}</Label>
+            <Input id={id} value={value ?? ""} onChange={(e) => onChange(field.key, e.target.value)} placeholder={field.description} />
+            <p className="text-xs text-muted-foreground">{field.description}</p>
           </div>
-          <p className="text-xs text-muted-foreground">{field.description}</p>
-        </div>
-      )
-    case "multiselect":
-      return (
-        <div className="grid gap-2" key={field.key}>
-          <Label>{field.label}</Label>
-          <div className="flex flex-wrap gap-2">
-            {(field.options || []).map((opt) => {
-              const selected = Array.isArray(value) ? value.includes(opt) : false
-              return <TogglePill key={opt} selected={selected} onClick={() => {
-                const current: string[] = Array.isArray(value) ? value : []
-                onChange(field.key, selected ? current.filter((v) => v !== opt) : [...current, opt])
-              }}>{opt}</TogglePill>
-            })}
+        )
+      case "textarea":
+        return (
+          <div className="grid gap-2">
+            <Label htmlFor={id}>{field.label}</Label>
+            <Textarea id={id} value={value ?? ""} onChange={(e) => onChange(field.key, e.target.value)} placeholder={field.description} />
+            <p className="text-xs text-muted-foreground">{field.description}</p>
           </div>
-          <p className="text-xs text-muted-foreground">{field.description}</p>
-        </div>
-      )
-    case "tags":
-      return (
-        <div className="grid gap-2" key={field.key}>
-          <Label>{field.label}</Label>
-          <TagInput value={Array.isArray(value) ? value : []} onChange={(v) => onChange(field.key, v)} />
-          <p className="text-xs text-muted-foreground">{field.description}</p>
-        </div>
-      )
-    case "dict":
-      return (
-        <div className="grid gap-2" key={field.key}>
-          <Label>{field.label}</Label>
-          <KeyValueList value={(value as Record<string, string>) || {}} onChange={(v) => onChange(field.key, v)} />
-          <p className="text-xs text-muted-foreground">{field.description}</p>
-        </div>
-      )
-    default:
-      return null
+        )
+      case "number":
+        return (
+          <div className="grid gap-2">
+            <Label htmlFor={id}>{field.label}</Label>
+            <Input id={id} type="number" value={value ?? ""} onChange={(e) => onChange(field.key, e.target.value === "" ? undefined : Number(e.target.value))} placeholder={field.description} />
+            <p className="text-xs text-muted-foreground">{field.description}</p>
+          </div>
+        )
+      case "boolean":
+        return (
+          <div className="grid gap-2">
+            <Label className="inline-flex items-center gap-2 text-sm font-medium">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border"
+                checked={Boolean(value)}
+                onChange={(e) => onChange(field.key, e.target.checked)}
+              />
+              {field.label}
+            </Label>
+            <p className="text-xs text-muted-foreground">{field.description}</p>
+          </div>
+        )
+      case "select":
+        return (
+          <div className="grid gap-2">
+            <Label>{field.label}</Label>
+            <div className="flex flex-wrap gap-2">
+              {(field.options || []).map((opt) => (
+                <TogglePill key={opt} selected={value === opt} onClick={() => onChange(field.key, opt)}>{opt}</TogglePill>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">{field.description}</p>
+          </div>
+        )
+      case "multiselect":
+        return (
+          <div className="grid gap-2">
+            <Label>{field.label}</Label>
+            <div className="flex flex-wrap gap-2">
+              {(field.options || []).map((opt) => {
+                const selected = Array.isArray(value) ? value.includes(opt) : false
+                return <TogglePill key={opt} selected={selected} onClick={() => {
+                  const current: string[] = Array.isArray(value) ? value : []
+                  onChange(field.key, selected ? current.filter((v) => v !== opt) : [...current, opt])
+                }}>{opt}</TogglePill>
+              })}
+            </div>
+            <p className="text-xs text-muted-foreground">{field.description}</p>
+          </div>
+        )
+      case "tags":
+        return (
+          <div className="grid gap-2">
+            <Label>{field.label}</Label>
+            <TagInput value={Array.isArray(value) ? value : []} onChange={(v) => onChange(field.key, v)} />
+            <p className="text-xs text-muted-foreground">{field.description}</p>
+          </div>
+        )
+      case "dict":
+        return (
+          <div className="grid gap-2">
+            <Label>{field.label}</Label>
+            <KeyValueList value={(value as Record<string, string>) || {}} onChange={(v) => onChange(field.key, v)} />
+            <p className="text-xs text-muted-foreground">{field.description}</p>
+          </div>
+        )
+      case "watering":
+        return (
+          <div className="grid gap-2">
+            <Label>{field.label}</Label>
+            <WateringScheduleEditor value={value as any} onChange={(v) => onChange(field.key, v)} />
+            <p className="text-xs text-muted-foreground">{field.description}</p>
+          </div>
+        )
+      default:
+        return null
+    }
+  })()
+
+  if (isAdvice) {
+    return (
+      <details key={field.key} className="rounded border bg-muted/20 p-3" open={false}>
+        <summary className="cursor-pointer text-sm font-semibold">{field.label} (optional)</summary>
+        <div className="mt-3">{body}</div>
+      </details>
+    )
   }
+
+  return <div key={field.key}>{body}</div>
 }
 
 function ImageEditor({ images, onChange }: { images: PlantImage[]; onChange: (v: PlantImage[]) => void }) {
