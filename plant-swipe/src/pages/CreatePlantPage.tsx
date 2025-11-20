@@ -4,9 +4,9 @@ import { Button } from "@/components/ui/button"
 import { AlertCircle, Loader2, Sparkles } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
 import { PlantProfileForm } from "@/components/plant/PlantProfileForm"
-import { fetchAiPlantFill } from "@/lib/aiPlantFill"
+import { fetchAiPlantFill, fetchAiPlantFillField } from "@/lib/aiPlantFill"
 import plantSchema from "../../PLANT-INFO-SCHEMA.json"
-import type { Plant, PlantColor, PlantImage, PlantSource } from "@/types/plant"
+import type { Plant, PlantColor, PlantImage, PlantMeta, PlantSource } from "@/types/plant"
 import { useAuth } from "@/context/AuthContext"
 import { useTranslation } from "react-i18next"
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/lib/i18n"
@@ -17,6 +17,19 @@ import { buildCategoryProgress, createEmptyCategoryProgress, plantFormCategoryOr
 import { useParams } from "react-router-dom"
 
 const DISALLOWED_FIELDS = new Set(['name', 'image', 'imageurl', 'image_url', 'imageURL'])
+const IN_PROGRESS_STATUS: PlantMeta['status'] = 'In Progres'
+
+const formatStatusForUi = (value?: string | null): PlantMeta['status'] => {
+  const map: Record<string, PlantMeta['status']> = {
+    'in progres': 'In Progres',
+    rework: 'Rework',
+    review: 'Review',
+    approved: 'Approved',
+  }
+  if (!value) return IN_PROGRESS_STATUS
+  const lower = value.toLowerCase()
+  return map[lower] || IN_PROGRESS_STATUS
+}
 
 function generateUUIDv4(): string {
   try {
@@ -226,7 +239,7 @@ async function loadPlant(id: string): Promise<Plant | null> {
       source: { name: data.source_name || undefined, url: data.source_url || undefined },
     },
     meta: {
-      status: data.status || undefined,
+      status: formatStatusForUi(data.status),
       adminCommentary: data.admin_commentary || undefined,
       createdBy: data.created_by || undefined,
       createdAt: data.created_time || undefined,
@@ -396,7 +409,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         tags: plantToSave.miscellaneous?.tags || [],
         source_name: (plantToSave.miscellaneous?.source as any)?.name || (plantToSave.miscellaneous?.sources?.[0]?.name ?? null),
         source_url: (plantToSave.miscellaneous?.source as any)?.url || (plantToSave.miscellaneous?.sources?.[0]?.url ?? null),
-        status: plantToSave.meta?.status || null,
+        status: (plantToSave.meta?.status || IN_PROGRESS_STATUS).toLowerCase(),
         admin_commentary: plantToSave.meta?.adminCommentary || null,
         created_by: createdByValue,
         created_time: createdTimeValue,
@@ -431,18 +444,74 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     setAiWorking(true)
     setError(null)
     let finalPlant: Plant | null = null
+    const applyWithStatus = (candidate: Plant): Plant => ({
+      ...candidate,
+      meta: { ...(candidate.meta || {}), status: IN_PROGRESS_STATUS },
+    })
+    const needsMonths = (p: Plant) => !((p.growth?.sowingMonth || []).length && (p.growth?.floweringMonth || []).length && (p.growth?.fruitingMonth || []).length)
+    const needsOriginOrWater = (p: Plant) => {
+      const hasOrigin = (p.plantCare?.origin || []).length > 0
+      const hasSchedule = (p.plantCare?.watering?.schedules || []).length > 0
+      return !(hasOrigin && hasSchedule)
+    }
+    const fillFieldWithRetries = async (fieldKey: string, existingField?: unknown) => {
+      let lastError: Error | null = null
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        try {
+          const fieldData = await fetchAiPlantFillField({
+            plantName: plant.name || 'Unknown plant',
+            schema: plantSchema,
+            fieldKey,
+            existingField,
+            language,
+          })
+          setPlant((prev) => {
+            const applied = applyAiFieldToPlant(prev, fieldKey, fieldData)
+            const withStatus = applyWithStatus(applied)
+            finalPlant = withStatus
+            markFieldComplete(fieldKey)
+            return withStatus
+          })
+          return true
+        } catch (err: any) {
+          lastError = err instanceof Error ? err : new Error(String(err || 'AI field fill failed'))
+          if (attempt >= 3) {
+            setError(lastError.message)
+          }
+        }
+      }
+      if (lastError) console.error(`AI fill failed for ${fieldKey} after 3 attempts`, lastError)
+      return false
+    }
     try {
-      const aiData = await fetchAiPlantFill({
-        plantName: plant.name || 'Unknown plant',
-        schema: plantSchema,
-        existingData: plant,
-        language,
-        onFieldComplete: ({ field, data }) => {
-          if (field === 'complete') return
-          setPlant((prev) => applyAiFieldToPlant(prev, field, data))
-          markFieldComplete(field)
-        },
-      })
+      let aiData: Record<string, unknown> | null = null
+      let lastError: Error | null = null
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        try {
+          aiData = await fetchAiPlantFill({
+            plantName: plant.name || 'Unknown plant',
+            schema: plantSchema,
+            existingData: plant,
+            language,
+            onFieldComplete: ({ field, data }) => {
+              if (field === 'complete') return
+              setPlant((prev) => {
+                const applied = applyAiFieldToPlant(prev, field, data)
+                const withStatus = applyWithStatus(applied)
+                finalPlant = withStatus
+                return withStatus
+              })
+              markFieldComplete(field)
+            },
+          })
+          lastError = null
+          break
+        } catch (err: any) {
+          lastError = err instanceof Error ? err : new Error(String(err || 'AI fill failed'))
+          if (attempt >= 3) throw lastError
+        }
+      }
+
       if (aiData && typeof aiData === 'object') {
         setPlant((prev) => {
           let updated = { ...prev }
@@ -451,10 +520,44 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             markFieldComplete(fieldKey)
           }
           const withId = { ...updated, id: updated.id || generateUUIDv4() }
-          finalPlant = withId
-          return withId
+          const withStatus = applyWithStatus(withId)
+          finalPlant = withStatus
+          return withStatus
         })
       }
+
+      const snapshot: Plant = finalPlant || plant
+      if (needsOriginOrWater(snapshot)) {
+        await fillFieldWithRetries('plantCare', snapshot.plantCare)
+      }
+      const growthSource = snapshot.growth
+      if (needsMonths(snapshot)) {
+        await fillFieldWithRetries('growth', growthSource)
+      }
+
+      setPlant((prev) => {
+        const target = finalPlant || prev
+        const ensuredWater = (target.plantCare?.watering?.schedules || []).length
+          ? target.plantCare?.watering?.schedules
+          : [{ season: 'Spring', quantity: 'Moderate', timePeriod: 'week' as const }]
+        const ensuredGrowth = {
+          sowingMonth: target.growth?.sowingMonth?.length ? target.growth.sowingMonth : [3],
+          floweringMonth: target.growth?.floweringMonth?.length ? target.growth.floweringMonth : [6],
+          fruitingMonth: target.growth?.fruitingMonth?.length ? target.growth.fruitingMonth : [9],
+        }
+        const next = {
+          ...target,
+          plantCare: {
+            ...(target.plantCare || {}),
+            origin: (target.plantCare?.origin || []).length ? target.plantCare?.origin : ['Unknown'],
+            watering: { ...(target.plantCare?.watering || {}), schedules: ensuredWater },
+          },
+          growth: { ...(target.growth || {}), ...ensuredGrowth },
+          meta: { ...(target.meta || {}), status: IN_PROGRESS_STATUS },
+        }
+        finalPlant = next
+        return next
+      })
     } catch (e: any) {
       setError(e?.message || 'AI fill failed')
     } finally {
@@ -556,6 +659,12 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           .upsert(translatedRows, { onConflict: 'plant_id,language' })
         if (translateError) throw new Error(translateError.message)
       }
+
+      setPlant((prev) => ({
+        ...prev,
+        meta: { ...(prev.meta || {}), status: IN_PROGRESS_STATUS },
+      }))
+      await savePlant()
     } catch (e: any) {
       setError(e?.message || 'Translation failed')
     } finally {

@@ -37,8 +37,13 @@ export function applyAiFieldToPlant(prev: Plant, fieldKey: string, data: unknown
       return { ...next, danger: { ...(next.danger || {}), ...(data as Record<string, unknown>) } }
     case 'miscellaneous':
       return { ...next, miscellaneous: { ...(next.miscellaneous || {}), ...(data as Record<string, unknown>) } }
-    case 'meta':
-      return { ...next, meta: { ...(next.meta || {}), ...(data as Record<string, unknown>) } }
+    case 'meta': {
+      if (data && typeof data === 'object') {
+        const { status: _ignoredStatus, ...rest } = data as Record<string, unknown>
+        return { ...next, meta: { ...(next.meta || {}), ...rest } }
+      }
+      return next
+    }
     default: {
       const mutable = next as Plant & Record<string, unknown>
       mutable[fieldKey] = data as any
