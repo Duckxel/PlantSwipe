@@ -1056,54 +1056,60 @@ export default function PlantSwipe() {
                 </RequireAdmin>
               }
             />
-            <Route
-              path="/create"
-              element={user ? (
-                <Suspense fallback={routeLoadingFallback}>
-                  <CreatePlantPageLazy
-                    onCancel={() => navigate('/')}
-                    onSaved={async () => {
-                      await loadPlants()
-                      navigate('/search')
-                    }}
-                  />
-                </Suspense>
-              ) : (
-                <Navigate to="/" replace />
-              )}
-            />
-            <Route
-              path="/create/:id"
-              element={user ? (
-                <Suspense fallback={routeLoadingFallback}>
-                  <CreatePlantPageLazy
-                    onCancel={() => navigate('/')}
-                    onSaved={async () => {
-                      await loadPlants()
-                      navigate('/search')
-                    }}
-                  />
-                </Suspense>
-              ) : (
-                <Navigate to="/" replace />
-              )}
-            />
-            <Route
-              path="/plants/:id/edit"
-              element={user ? (
-                <Suspense fallback={routeLoadingFallback}>
-                  <CreatePlantPageLazy
-                    onCancel={() => navigate('/search')}
-                    onSaved={async () => {
-                      await loadPlants()
-                      navigate('/search')
-                    }}
-                  />
-                </Suspense>
-              ) : (
-                <Navigate to="/" replace />
-              )}
-            />
+              <Route
+                path="/create"
+                element={user ? (
+                  <Suspense fallback={routeLoadingFallback}>
+                    <CreatePlantPageLazy
+                      onCancel={() => navigate('/')}
+                      onSaved={async (savedId) => {
+                        await loadPlants()
+                        if (savedId) {
+                          navigate(`/create/${savedId}`)
+                        }
+                      }}
+                    />
+                  </Suspense>
+                ) : (
+                  <Navigate to="/" replace />
+                )}
+              />
+              <Route
+                path="/create/:id"
+                element={user ? (
+                  <Suspense fallback={routeLoadingFallback}>
+                    <CreatePlantPageLazy
+                      onCancel={() => navigate('/')}
+                      onSaved={async (savedId) => {
+                        await loadPlants()
+                        if (savedId) {
+                          navigate(`/create/${savedId}`)
+                        }
+                      }}
+                    />
+                  </Suspense>
+                ) : (
+                  <Navigate to="/" replace />
+                )}
+              />
+              <Route
+                path="/plants/:id/edit"
+                element={user ? (
+                  <Suspense fallback={routeLoadingFallback}>
+                    <CreatePlantPageLazy
+                      onCancel={() => navigate('/search')}
+                      onSaved={async (savedId) => {
+                        await loadPlants()
+                        if (savedId) {
+                          navigate(`/create/${savedId}`)
+                        }
+                      }}
+                    />
+                  </Suspense>
+                ) : (
+                  <Navigate to="/" replace />
+                )}
+              />
             <Route
               path="/plants/:id"
               element={
