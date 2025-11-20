@@ -14,6 +14,7 @@ import { applyAiFieldToPlant, getCategoryForField } from "@/lib/applyAiField"
 import { translateArray, translateText } from "@/lib/deepl"
 import { buildCategoryProgress, createEmptyCategoryProgress, plantFormCategoryOrder, type CategoryProgress } from "@/lib/plantFormCategories"
 import { useParams } from "react-router-dom"
+import { plantSchema } from "@/lib/plantSchema"
 
 const DISALLOWED_FIELDS = new Set(['name', 'image', 'imageurl', 'image_url', 'imageURL'])
 const IN_PROGRESS_STATUS: PlantMeta['status'] = 'In Progres'
