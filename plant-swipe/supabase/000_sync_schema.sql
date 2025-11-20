@@ -418,39 +418,78 @@ end $$;
 create table if not exists public.plant_translations (
   id uuid primary key default gen_random_uuid(),
   plant_id text not null references public.plants(id) on delete cascade,
-  language text not null check (language in ('en', 'fr')),
+  language text not null check (language in ('en','fr')),
   name text not null,
-  -- Translatable JSONB fields
-  identifiers jsonb,
-  ecology jsonb,
-    usage jsonb,
-    meta jsonb,
-    phenology jsonb,
-    care jsonb,
-    planting jsonb,
-    problems jsonb,
-  -- Legacy fields for backward compatibility
+  overview text,
+  family text,
+  given_names text[] not null default '{}',
   scientific_name text,
-  meaning text,
-  description text,
-  care_soil text,
+  promotion_month text check (promotion_month in ('january','february','march','april','may','june','july','august','september','october','november','december')),
+  life_cycle text check (life_cycle in ('annual','biennials','perenials','ephemerals','monocarpic','polycarpic')),
+  season text[] not null default '{}'::text[] check (season <@ array['spring','summer','autumn','winter']),
+  foliage_persistance text check (foliage_persistance in ('deciduous','evergreen','semi-evergreen','marcescent')),
+  toxicity_human text check (toxicity_human in ('non-toxic','midly irritating','highly toxic','lethally toxic')),
+  toxicity_pets text check (toxicity_pets in ('non-toxic','midly irritating','highly toxic','lethally toxic')),
+  allergens text[] not null default '{}',
+  symbolism text[] not null default '{}',
+  living_space text check (living_space in ('indoor','outdoor','both')),
+  composition text[] not null default '{}'::text[] check (composition <@ array['flowerbed','path','hedge','ground cover','pot']),
+  maintenance_level text check (maintenance_level in ('none','low','moderate','heavy')),
+  origin text[] not null default '{}',
+  habitat text[] not null default '{}'::text[] check (habitat <@ array['aquatic','semi-aquatic','wetland','tropical','temperate','arid','mediterranean','mountain','grassland','forest','coastal','urban']),
+  advice_soil text,
+  advice_mulching text,
+  advice_fertilizer text,
+  advice_tutoring text,
+  advice_sowing text,
+  advice_medicinal text,
+  advice_infusion text,
+  ground_effect text,
+  admin_commentary text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique(plant_id, language)
+  unique (plant_id, language)
 );
 
 -- Index for faster lookups
 create index if not exists plant_translations_plant_id_idx on public.plant_translations(plant_id);
 create index if not exists plant_translations_language_idx on public.plant_translations(language);
 -- Ensure new JSONB translatable columns exist
-alter table if exists public.plant_translations add column if not exists identifiers jsonb;
-alter table if exists public.plant_translations add column if not exists ecology jsonb;
-  alter table if exists public.plant_translations add column if not exists usage jsonb;
-  alter table if exists public.plant_translations add column if not exists meta jsonb;
-  alter table if exists public.plant_translations add column if not exists phenology jsonb;
-  alter table if exists public.plant_translations add column if not exists care jsonb;
-  alter table if exists public.plant_translations add column if not exists planting jsonb;
-  alter table if exists public.plant_translations add column if not exists problems jsonb;
+alter table if exists public.plant_translations drop column if exists identifiers;
+alter table if exists public.plant_translations drop column if exists ecology;
+alter table if exists public.plant_translations drop column if exists usage;
+alter table if exists public.plant_translations drop column if exists meta;
+alter table if exists public.plant_translations drop column if exists phenology;
+alter table if exists public.plant_translations drop column if exists care;
+alter table if exists public.plant_translations drop column if exists planting;
+alter table if exists public.plant_translations drop column if exists problems;
+
+alter table if exists public.plant_translations add column if not exists overview text;
+alter table if exists public.plant_translations add column if not exists family text;
+alter table if exists public.plant_translations add column if not exists given_names text[] not null default '{}';
+alter table if exists public.plant_translations add column if not exists scientific_name text;
+alter table if exists public.plant_translations add column if not exists promotion_month text check (promotion_month in ('january','february','march','april','may','june','july','august','september','october','november','december'));
+alter table if exists public.plant_translations add column if not exists life_cycle text check (life_cycle in ('annual','biennials','perenials','ephemerals','monocarpic','polycarpic'));
+alter table if exists public.plant_translations add column if not exists season text[] not null default '{}'::text[] check (season <@ array['spring','summer','autumn','winter']);
+alter table if exists public.plant_translations add column if not exists foliage_persistance text check (foliage_persistance in ('deciduous','evergreen','semi-evergreen','marcescent'));
+alter table if exists public.plant_translations add column if not exists toxicity_human text check (toxicity_human in ('non-toxic','midly irritating','highly toxic','lethally toxic'));
+alter table if exists public.plant_translations add column if not exists toxicity_pets text check (toxicity_pets in ('non-toxic','midly irritating','highly toxic','lethally toxic'));
+alter table if exists public.plant_translations add column if not exists allergens text[] not null default '{}';
+alter table if exists public.plant_translations add column if not exists symbolism text[] not null default '{}';
+alter table if exists public.plant_translations add column if not exists living_space text check (living_space in ('indoor','outdoor','both'));
+alter table if exists public.plant_translations add column if not exists composition text[] not null default '{}'::text[] check (composition <@ array['flowerbed','path','hedge','ground cover','pot']);
+alter table if exists public.plant_translations add column if not exists maintenance_level text check (maintenance_level in ('none','low','moderate','heavy'));
+alter table if exists public.plant_translations add column if not exists origin text[] not null default '{}';
+alter table if exists public.plant_translations add column if not exists habitat text[] not null default '{}'::text[] check (habitat <@ array['aquatic','semi-aquatic','wetland','tropical','temperate','arid','mediterranean','mountain','grassland','forest','coastal','urban']);
+alter table if exists public.plant_translations add column if not exists advice_soil text;
+alter table if exists public.plant_translations add column if not exists advice_mulching text;
+alter table if exists public.plant_translations add column if not exists advice_fertilizer text;
+alter table if exists public.plant_translations add column if not exists advice_tutoring text;
+alter table if exists public.plant_translations add column if not exists advice_sowing text;
+alter table if exists public.plant_translations add column if not exists advice_medicinal text;
+alter table if exists public.plant_translations add column if not exists advice_infusion text;
+alter table if exists public.plant_translations add column if not exists ground_effect text;
+alter table if exists public.plant_translations add column if not exists admin_commentary text;
 
 -- RLS policies for plant_translations
 alter table public.plant_translations enable row level security;
