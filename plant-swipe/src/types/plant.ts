@@ -90,6 +90,8 @@ export interface PlantIdentity {
   toxicityPets?: "Non-Toxic" | "Midly Irritating" | "Highly Toxic" | "Lethally Toxic"
   allergens?: string[]
   colors?: PlantColor[]
+  multicolor?: boolean
+  bicolor?: boolean
   scent?: boolean
   symbolism?: string[]
   livingSpace?: "Indoor" | "Outdoor" | "Both"
@@ -318,6 +320,8 @@ export interface Plant {
   meta?: PlantMeta
   classification?: PlantClassification
   colors?: string[]
+  multicolor?: boolean
+  bicolor?: boolean
   seasons?: PlantSeason[]
   description?: string
   photos?: PlantImage[]

@@ -177,6 +177,8 @@ end $$;
     description text,
     colors text[] not null default '{}',
     seasons text[] not null default '{}',
+    multicolor boolean default false,
+    bicolor boolean default false,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now()
   );
@@ -211,6 +213,8 @@ alter table if exists public.plants add column if not exists miscellaneous jsonb
 -- Ensure columns present for legacy/compat fields
 alter table if exists public.plants add column if not exists colors text[] not null default '{}';
 alter table if exists public.plants add column if not exists seasons text[] not null default '{}';
+alter table if exists public.plants add column if not exists multicolor boolean default false;
+alter table if exists public.plants add column if not exists bicolor boolean default false;
 alter table if exists public.plants add column if not exists seeds_available boolean not null default false;
 alter table if exists public.plants add column if not exists water_freq_period text;
 alter table if exists public.plants add column if not exists water_freq_amount integer;

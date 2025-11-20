@@ -28,7 +28,7 @@ function generateUUIDv4(): string {
 async function loadPlant(id: string): Promise<Plant | null> {
   const { data, error } = await supabase
     .from('plants')
-    .select('id,name,plant_type,utility,comestible_part,fruit_type,identity,plant_care,growth,usage,ecology,danger,miscellaneous,meta,colors,seasons,description')
+    .select('id,name,plant_type,utility,comestible_part,fruit_type,identity,plant_care,growth,usage,ecology,danger,miscellaneous,meta,colors,seasons,description,multicolor,bicolor')
     .eq('id', id)
     .maybeSingle()
   if (error) throw new Error(error.message)
@@ -52,11 +52,13 @@ async function loadPlant(id: string): Promise<Plant | null> {
     miscellaneous: data.miscellaneous || {},
     meta: data.meta || {},
     colors: data.colors || [],
+    multicolor: data.multicolor || false,
+    bicolor: data.bicolor || false,
     seasons: data.seasons || [],
     description: data.description || undefined,
     images: (images as PlantImage[]) || [],
   }
-  if (colors.length) plant.identity = { ...(plant.identity || {}), colors }
+  if (colors.length || data.multicolor || data.bicolor) plant.identity = { ...(plant.identity || {}), colors, multicolor: data.multicolor, bicolor: data.bicolor }
   return plant
 }
 
@@ -173,6 +175,8 @@ export const EditPlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: stri
         danger: plant.danger || {},
         miscellaneous: plant.miscellaneous || {},
         meta: plant.meta || {},
+        multicolor: plant.identity?.multicolor ?? false,
+        bicolor: plant.identity?.bicolor ?? false,
         description: plant.identity?.overview || plant.description || null,
         colors: (plant.identity?.colors || []).map((c) => c.name),
         seasons: plant.identity?.season || plant.seasons || [],

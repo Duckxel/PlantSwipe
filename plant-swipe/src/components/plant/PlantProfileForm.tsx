@@ -4,9 +4,11 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { useTranslation } from "react-i18next"
 import { plantFormCategoryOrder, type PlantFormCategory } from "@/lib/plantFormCategories"
 import type { Plant, PlantColor, PlantImage } from "@/types/plant"
+import { supabase } from "@/lib/supabaseClient"
 
 export type PlantProfileFormProps = {
   value: Plant
@@ -336,21 +338,58 @@ function ImageEditor({ images, onChange }: { images: PlantImage[]; onChange: (v:
 }
 
 function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v: PlantColor[]) => void }) {
-  const [name, setName] = React.useState("")
-  const [hex, setHex] = React.useState("")
-  const add = () => {
-    if (!name.trim()) return
-    onChange([...(colors || []), { name: name.trim(), hexCode: hex.trim() || undefined }])
-    setName("")
-    setHex("")
+  const [open, setOpen] = React.useState(false)
+  const [available, setAvailable] = React.useState<PlantColor[]>([])
+  const [loading, setLoading] = React.useState(false)
+  const [search, setSearch] = React.useState("")
+  const [insertName, setInsertName] = React.useState("")
+  const [insertHex, setInsertHex] = React.useState("#")
+  const [inserting, setInserting] = React.useState(false)
+
+  const normalizeHex = (hex: string) => {
+    const trimmed = hex.trim()
+    if (!trimmed) return ""
+    return trimmed.startsWith("#") ? trimmed : `#${trimmed}`
   }
+
+  const loadColors = React.useCallback(async (term?: string) => {
+    setLoading(true)
+    const query = supabase.from('colors').select('id,name,hex_code').order('name')
+    if (term?.trim()) query.ilike('name', `%${term.trim()}%`)
+    const { data } = await query
+    setAvailable((data || []).map((row) => ({ id: row.id as string, name: row.name as string, hexCode: (row as any).hex_code as string | undefined })))
+    setLoading(false)
+  }, [])
+
+  React.useEffect(() => {
+    if (open) loadColors(search)
+  }, [open, search, loadColors])
+
+  const alreadyAdded = (candidate: PlantColor) => (colors || []).some((c) => (c.id && candidate.id && c.id === candidate.id) || c.name.toLowerCase() === candidate.name.toLowerCase())
+
+  const addColor = (c: PlantColor) => {
+    if (alreadyAdded(c)) { setOpen(false); return }
+    onChange([...(colors || []), { id: c.id, name: c.name, hexCode: c.hexCode }])
+    setOpen(false)
+  }
+
+  const handleInsert = async () => {
+    if (!insertName.trim()) return
+    setInserting(true)
+    const payload = { name: insertName.trim(), hex_code: normalizeHex(insertHex) || null }
+    const { data, error } = await supabase.from('colors').insert(payload).select('id,name,hex_code').maybeSingle()
+    setInserting(false)
+    if (error) return
+    const newColor: PlantColor = { id: data?.id, name: data?.name ?? insertName.trim(), hexCode: (data as any)?.hex_code || normalizeHex(insertHex) }
+    setAvailable((prev) => [...prev, newColor])
+    if (!alreadyAdded(newColor)) onChange([...(colors || []), newColor])
+    setInsertName("")
+    setInsertHex("#")
+    setOpen(false)
+  }
+
   return (
-    <div className="grid gap-2">
-      <div className="flex flex-col md:flex-row gap-2">
-        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Color name" />
-        <Input value={hex} onChange={(e) => setHex(e.target.value)} placeholder="#hexcode" />
-        <Button type="button" onClick={add}>Add color</Button>
-      </div>
+    <div className="grid gap-3">
       <div className="flex flex-wrap gap-2">
         {(colors || []).map((c, idx) => (
           <span key={`${c.name}-${idx}`} className="px-2 py-1 rounded bg-stone-100 dark:bg-[#2d2d30] text-sm flex items-center gap-2">
@@ -360,7 +399,51 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
           </span>
         ))}
       </div>
-      <p className="text-xs text-muted-foreground">Colors are stored in the color table; add name and hex to create new ones.</p>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogTrigger asChild>
+          <Button type="button" variant="outline">Add color</Button>
+        </DialogTrigger>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Select or add a color</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search colors by name" />
+            <div className="max-h-64 overflow-auto border rounded p-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {loading ? <div className="col-span-full text-center text-sm text-muted-foreground">Loading colors...</div> : (
+                (available || []).map((c) => (
+                  <button
+                    key={c.id || c.name}
+                    type="button"
+                    onClick={() => addColor(c)}
+                    className="flex items-center gap-3 rounded border p-2 hover:bg-muted"
+                  >
+                    <span className="w-6 h-6 rounded-full border" style={{ backgroundColor: c.hexCode || "transparent" }} />
+                    <span className="text-left">
+                      <div className="font-medium text-sm">{c.name}</div>
+                      <div className="text-xs text-muted-foreground">{c.hexCode || "No hex"}</div>
+                    </span>
+                  </button>
+                ))
+              )}
+              {!loading && (available || []).length === 0 && (
+                <div className="col-span-full text-center text-sm text-muted-foreground">No colors found.</div>
+              )}
+            </div>
+            <div className="grid gap-2 border-t pt-3">
+              <div className="font-medium text-sm">Insert a new color</div>
+              <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] items-center">
+                <Input value={insertName} onChange={(e) => setInsertName(e.target.value)} placeholder="Color name" />
+                <div className="flex items-center gap-2">
+                  <Input value={insertHex} onChange={(e) => setInsertHex(e.target.value)} placeholder="#hexcode" />
+                  <span className="w-8 h-8 rounded border" style={{ backgroundColor: normalizeHex(insertHex) || "transparent" }} />
+                </div>
+                <Button type="button" onClick={handleInsert} disabled={inserting || !insertName.trim()}>{inserting ? 'Saving...' : 'Insert'}</Button>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -488,6 +571,25 @@ export function PlantProfileForm({ value, onChange }: PlantProfileFormProps) {
           <div className="md:col-span-2">
             <Label>Colors</Label>
             <ColorPicker colors={value.identity?.colors || []} onChange={(colors) => onChange(setValue(value, "identity.colors", colors))} />
+            <div className="mt-3 flex flex-wrap gap-4 text-sm">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={!!value.identity?.multicolor}
+                  onChange={(e) => onChange(setValue(value, "identity.multicolor", e.target.checked))}
+                />
+                Multicolor
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={!!value.identity?.bicolor}
+                  onChange={(e) => onChange(setValue(value, "identity.bicolor", e.target.checked))}
+                />
+                Bicolor
+              </label>
+            </div>
+            <p className="text-xs text-muted-foreground">Link existing palette colors or insert new ones for this plant.</p>
           </div>
           </CardContent>
         </Card>
