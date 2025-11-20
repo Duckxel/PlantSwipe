@@ -1,12 +1,12 @@
 import React from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { AlertCircle, Loader2, Sparkles } from "lucide-react"
+import { AlertCircle, Check, Loader2, Sparkles } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
 import { PlantProfileForm } from "@/components/plant/PlantProfileForm"
 import { fetchAiPlantFill, fetchAiPlantFillField } from "@/lib/aiPlantFill"
 import plantSchema from "../../PLANT-INFO-SCHEMA.json"
-import type { Plant, PlantColor, PlantImage, PlantMeta, PlantSource } from "@/types/plant"
+import type { Plant, PlantColor, PlantImage, PlantMeta } from "@/types/plant"
 import { useAuth } from "@/context/AuthContext"
 import { useTranslation } from "react-i18next"
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/lib/i18n"
@@ -55,7 +55,7 @@ const emptyPlant: Plant = {
   usage: {},
   ecology: {},
   danger: {},
-  miscellaneous: { sources: [] },
+  miscellaneous: { source: { name: '', url: '' } },
   meta: {},
   seasons: [],
   colors: [],
@@ -121,18 +121,6 @@ async function upsertWateringSchedules(plantId: string, schedules: Plant["plantC
   if (error) throw new Error(error.message)
 }
 
-async function upsertSources(plantId: string, sources: PlantSource[] | undefined) {
-  await supabase.from('plant_sources').delete().eq('plant_id', plantId)
-  const rows = (sources || []).filter((s) => s.name?.trim()).map((s) => ({
-    plant_id: plantId,
-    name: s.name.trim(),
-    url: s.url?.trim() || null,
-  }))
-  if (!rows.length) return
-  const { error } = await supabase.from('plant_sources').insert(rows)
-  if (error) throw new Error(error.message)
-}
-
 async function loadPlant(id: string): Promise<Plant | null> {
   const { data, error } = await supabase
     .from('plants')
@@ -144,7 +132,6 @@ async function loadPlant(id: string): Promise<Plant | null> {
   const { data: colorLinks } = await supabase.from('plant_colors').select('color_id, colors:color_id (id,name,hex_code)').eq('plant_id', id)
   const { data: images } = await supabase.from('plant_images').select('id,link,use').eq('plant_id', id)
   const { data: schedules } = await supabase.from('plant_watering_schedules').select('season,quantity,time_period').eq('plant_id', id)
-  const { data: sources } = await supabase.from('plant_sources').select('name,url').eq('plant_id', id)
   const colors = (colorLinks || []).map((c: any) => ({ id: c.colors?.id, name: c.colors?.name, hexCode: c.colors?.hex_code }))
   const plant: Plant = {
     id: data.id,
@@ -204,8 +191,8 @@ async function loadPlant(id: string): Promise<Plant | null> {
       sowingMonth: data.sowing_month || [],
       floweringMonth: data.flowering_month || [],
       fruitingMonth: data.fruiting_month || [],
-      heightCm: data.height_cm || undefined,
-      wingspanCm: data.wingspan_cm || undefined,
+      height: data.height_cm || undefined,
+      wingspan: data.wingspan_cm || undefined,
       tutoring: data.tutoring || false,
       adviceTutoring: data.advice_tutoring || undefined,
       sowType: data.sow_type || [],
@@ -235,7 +222,6 @@ async function loadPlant(id: string): Promise<Plant | null> {
     miscellaneous: {
       companions: data.companions || [],
       tags: data.tags || [],
-      sources: (sources || []).map((s: any) => ({ name: s.name as string, url: s.url as string | undefined })),
       source: { name: data.source_name || undefined, url: data.source_url || undefined },
     },
     meta: {
@@ -269,6 +255,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [aiWorking, setAiWorking] = React.useState(false)
+  const [aiCompleted, setAiCompleted] = React.useState(false)
   const [translating, setTranslating] = React.useState(false)
   const [aiProgress, setAiProgress] = React.useState<CategoryProgress>(() => createEmptyCategoryProgress())
   const [existingLoaded, setExistingLoaded] = React.useState(false)
@@ -328,8 +315,20 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   }
 
   const savePlant = async (plantOverride?: Plant) => {
-    const plantToSave = plantOverride || plant
+    let plantToSave = plantOverride || plant
     if (!plantToSave.name.trim()) { setError(t('plantAdmin.nameRequired', 'Name is required')); return }
+    const overviewText = plantToSave.identity?.overview?.trim()
+    if (overviewText) {
+      const words = overviewText.split(/\s+/).filter(Boolean)
+      if (words.length < 50) {
+        setError(t('plantAdmin.overviewLength', 'Overview must be between 50 and 300 words.'))
+        return
+      }
+      if (words.length > 300) {
+        const trimmed = words.slice(0, 300).join(' ')
+        plantToSave = { ...plantToSave, identity: { ...(plantToSave.identity || {}), overview: trimmed } }
+      }
+    }
     setSaving(true)
     setError(null)
     try {
@@ -381,8 +380,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         sowing_month: plantToSave.growth?.sowingMonth || [],
         flowering_month: plantToSave.growth?.floweringMonth || [],
         fruiting_month: plantToSave.growth?.fruitingMonth || [],
-        height_cm: plantToSave.growth?.heightCm || null,
-        wingspan_cm: plantToSave.growth?.wingspanCm || null,
+        height_cm: plantToSave.growth?.height || null,
+        wingspan_cm: plantToSave.growth?.wingspan || null,
         tutoring: plantToSave.growth?.tutoring ?? false,
         advice_tutoring: plantToSave.growth?.adviceTutoring || null,
         sow_type: plantToSave.growth?.sowType || [],
@@ -407,8 +406,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         diseases: plantToSave.danger?.diseases || [],
         companions: plantToSave.miscellaneous?.companions || [],
         tags: plantToSave.miscellaneous?.tags || [],
-        source_name: (plantToSave.miscellaneous?.source as any)?.name || (plantToSave.miscellaneous?.sources?.[0]?.name ?? null),
-        source_url: (plantToSave.miscellaneous?.source as any)?.url || (plantToSave.miscellaneous?.sources?.[0]?.url ?? null),
+        source_name: plantToSave.miscellaneous?.source?.name || null,
+        source_url: plantToSave.miscellaneous?.source?.url || null,
         status: (plantToSave.meta?.status || IN_PROGRESS_STATUS).toLowerCase(),
         admin_commentary: plantToSave.meta?.adminCommentary || null,
         created_by: createdByValue,
@@ -427,7 +426,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       await linkColors(savedId, colorIds)
       await upsertImages(savedId, plantToSave.images || [])
       await upsertWateringSchedules(savedId, plantToSave.plantCare)
-      await upsertSources(savedId, plantToSave.miscellaneous?.sources)
       setPlant({ ...plantToSave, id: savedId, meta: { ...plantToSave.meta, createdBy: createdByValue || undefined, createdAt: createdTimeValue || undefined, updatedBy: (profile as any)?.full_name || plantToSave.meta?.updatedBy, updatedAt: payload.updated_time } })
       if (!existingLoaded) setExistingLoaded(true)
       onSaved?.(savedId)
@@ -441,8 +439,10 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   const runAiFill = async () => {
     if (!plant.name.trim()) { setError(t('plantAdmin.aiNameRequired', 'Please enter a name before using AI fill.')); return }
     initializeCategoryProgress()
+    setAiCompleted(false)
     setAiWorking(true)
     setError(null)
+    let aiSucceeded = false
     let finalPlant: Plant | null = null
     const applyWithStatus = (candidate: Plant): Plant => ({
       ...candidate,
@@ -558,16 +558,17 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         finalPlant = next
         return next
       })
+      aiSucceeded = true
     } catch (e: any) {
       setError(e?.message || 'AI fill failed')
     } finally {
       setAiWorking(false)
+      setAiProgress(createEmptyCategoryProgress())
+      if (aiSucceeded) setAiCompleted(true)
       const targetPlant = finalPlant || plant
       if (targetPlant) await savePlant(targetPlant)
     }
   }
-
-  const descriptionPreview = plant.identity?.overview || plant.description
 
   const translatePlant = async () => {
     const targets = SUPPORTED_LANGUAGES.filter((lang) => lang !== language)
@@ -674,9 +675,9 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
 
   return (
     <div className="max-w-6xl mx-auto px-4 pb-12 space-y-6">
-      <div className="relative overflow-hidden rounded-[32px] border border-stone-200/70 dark:border-[#2f2f33] bg-gradient-to-br from-emerald-50 via-white to-amber-50 dark:from-[#1f1f1f] dark:via-[#18181b] dark:to-[#0f172a] shadow-xl">
-        <div className="absolute -left-20 -top-24 h-64 w-64 rounded-full bg-emerald-200/40 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
-        <div className="absolute -right-12 bottom-[-30%] h-72 w-72 rounded-full bg-amber-100/40 dark:bg-amber-400/10 blur-3xl" aria-hidden="true" />
+      <div className="relative overflow-hidden rounded-[32px] border border-stone-200/70 dark:border-[#1f2937] bg-gradient-to-br from-emerald-50 via-white to-amber-50 dark:from-[#0b1220] dark:via-[#0a0f1a] dark:to-[#05080f] shadow-xl">
+        <div className="absolute -left-20 -top-24 h-64 w-64 rounded-full bg-emerald-200/40 dark:bg-emerald-500/5 blur-3xl" aria-hidden="true" />
+        <div className="absolute -right-12 bottom-[-30%] h-72 w-72 rounded-full bg-amber-100/40 dark:bg-amber-400/5 blur-3xl" aria-hidden="true" />
         <div className="relative p-6 sm:p-8 flex flex-col gap-6">
           <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
             <div className="space-y-2">
@@ -686,11 +687,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
               <p className="text-sm text-muted-foreground max-w-2xl">
                 {t('plantAdmin.createSubtitle', 'Fill every field with the supplied descriptions or let AI help.')}
               </p>
-              {(plant.name || descriptionPreview) && (
-                <p className="text-sm font-medium text-foreground/90">
-                  {plant.name ? `${plant.name}${descriptionPreview ? ':' : ''}` : t('plantAdmin.nameRequired', 'Name is required')}{descriptionPreview || ''}
-                </p>
-              )}
             </div>
             <div className="flex flex-col sm:flex-row sm:items-center gap-3">
               <div className="flex items-center gap-2 rounded-full bg-white/70 dark:bg-[#111] px-3 py-1.5 shadow-inner">
@@ -734,17 +730,20 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       <div className="flex flex-col gap-3">
         <div className="flex gap-3 flex-col sm:flex-row sm:items-center sm:justify-between">
           <div className="flex gap-2">
-            <Button type="button" onClick={runAiFill} disabled={aiWorking || !plant.name.trim()}>
-              {aiWorking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-              {t('plantAdmin.aiFill', 'AI fill all fields')}
+            <Button
+              type="button"
+              onClick={aiCompleted ? undefined : runAiFill}
+              disabled={aiWorking || !plant.name.trim() || aiCompleted}
+            >
+              {aiWorking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : aiCompleted ? <Check className="mr-2 h-4 w-4" /> : <Sparkles className="mr-2 h-4 w-4" />}
+              {aiCompleted ? t('plantAdmin.aiFilled', 'AI Filled') : t('plantAdmin.aiFill', 'AI fill all fields')}
             </Button>
             {!plant.name.trim() && (
               <span className="text-xs text-muted-foreground self-center">{t('plantAdmin.aiNameRequired', 'Please enter a name before using AI fill.')}</span>
             )}
           </div>
-          <p className="text-sm text-muted-foreground self-center sm:self-start">{t('plantAdmin.aiFillHelper', 'AI will try to populate almost every field based on the provided schema and selected language.')} ({language.toUpperCase()})</p>
         </div>
-        {Object.values(aiProgress).some((p) => p.total > 0) && (
+        {aiWorking && Object.values(aiProgress).some((p) => p.total > 0) && (
           <Card>
             <CardContent className="space-y-3 pt-4">
               <div className="font-medium text-sm">{t('plantAdmin.categoryProgressTitle', 'Category fill progress')}</div>

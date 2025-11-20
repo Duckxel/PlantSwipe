@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { useTranslation } from "react-i18next"
 import { plantFormCategoryOrder, type PlantFormCategory } from "@/lib/plantFormCategories"
-import type { Plant, PlantColor, PlantImage, PlantSource, PlantType } from "@/types/plant"
+import type { Plant, PlantColor, PlantImage, PlantType } from "@/types/plant"
 import { supabase } from "@/lib/supabaseClient"
 
 export type PlantProfileFormProps = {
@@ -283,40 +283,6 @@ const KeyValueList: React.FC<{ value: Record<string, string>; onChange: (v: Reco
   )
 }
 
-const SourceList: React.FC<{ value: PlantSource[]; onChange: (v: PlantSource[]) => void }> = ({ value, onChange }) => {
-  const [name, setName] = React.useState("")
-  const [url, setUrl] = React.useState("")
-  const add = () => {
-    if (!name.trim()) return
-    onChange([...(value || []), { name: name.trim(), url: url.trim() || undefined }])
-    setName("")
-    setUrl("")
-  }
-  const remove = (idx: number) => {
-    onChange((value || []).filter((_, i) => i !== idx))
-  }
-  return (
-    <div className="grid gap-2">
-      <div className="flex flex-col md:flex-row gap-2">
-        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Source name" />
-        <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Source URL" />
-        <Button type="button" onClick={add}>Add</Button>
-      </div>
-      <div className="space-y-1">
-        {(value || []).map((s, idx) => (
-          <div key={`${s.name}-${idx}`} className="flex items-center justify-between rounded border px-3 py-2 text-sm">
-            <div className="space-y-0.5">
-              <div className="font-medium">{s.name}</div>
-              {s.url && <div className="text-muted-foreground text-xs">{s.url}</div>}
-            </div>
-            <button type="button" className="text-red-600" onClick={() => remove(idx)}>Remove</button>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
 function getValue(obj: any, path: string): any {
   return path.split('.').reduce((acc, key) => (acc ? acc[key] : undefined), obj)
 }
@@ -416,16 +382,11 @@ const dangerFields: FieldConfig[] = [
 const miscFields: FieldConfig[] = [
   { key: "miscellaneous.companions", label: "Companions", description: "Companion plants", type: "companions" },
   { key: "miscellaneous.tags", label: "Tags", description: "Search tags", type: "tags" },
-  { key: "miscellaneous.sources", label: "Sources", description: "Reference sources", type: "sources" },
 ]
 
 const metaFields: FieldConfig[] = [
   { key: "meta.status", label: "Status", description: "Editorial status", type: "select", options: ["In Progres","Rework","Review","Approved"] },
   { key: "meta.adminCommentary", label: "Admin Commentary", description: "Moderator feedback", type: "textarea" },
-  { key: "meta.createdBy", label: "Created By", description: "Author name", type: "readonly" },
-  { key: "meta.createdTime", label: "Created Time", description: "Creation time", type: "readonly" },
-  { key: "meta.updatedBy", label: "Updated By", description: "Last editor", type: "readonly" },
-  { key: "meta.updatedTime", label: "Updated Time", description: "Last update time", type: "readonly" },
 ]
 
 const utilityOptions = ["comestible","ornemental","produce_fruit","aromatic","medicinal","odorous","climbing","cereal","spice"] as const
@@ -577,14 +538,6 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
           <div className="grid gap-2">
             <Label>{field.label}</Label>
             <CompanionSelector value={Array.isArray(value) ? value : []} onChange={(v) => onChange(field.key, v)} />
-            <p className="text-xs text-muted-foreground">{field.description}</p>
-          </div>
-        )
-      case "sources":
-        return (
-          <div className="grid gap-2">
-            <Label>{field.label}</Label>
-            <SourceList value={(value as PlantSource[]) || []} onChange={(v) => onChange(field.key, v)} />
             <p className="text-xs text-muted-foreground">{field.description}</p>
           </div>
         )
@@ -999,10 +952,24 @@ export function PlantProfileForm({ value, onChange }: PlantProfileFormProps) {
                     </div>
                   )}
                   {cat === 'miscellaneous' && (
-                    <div className="md:col-span-2">
-                      <Label>Source</Label>
-                      <KeyValueList value={(value.miscellaneous?.source as Record<string, string>) || {}} onChange={(v) => onChange(setValue(value, "miscellaneous.source", v))} keyLabel="Name" valueLabel="URL" />
-                      <p className="text-xs text-muted-foreground">Source {'{name // url}'}</p>
+                    <div className="grid gap-3">
+                      <div className="grid gap-2">
+                        <Label>Source Name</Label>
+                        <Input
+                          value={value.miscellaneous?.source?.name || ""}
+                          onChange={(e) => onChange(setValue(value, "miscellaneous.source", { ...(value.miscellaneous?.source || {}), name: e.target.value }))}
+                          placeholder="Source name"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label>Source URL</Label>
+                        <Input
+                          value={value.miscellaneous?.source?.url || ""}
+                          onChange={(e) => onChange(setValue(value, "miscellaneous.source", { ...(value.miscellaneous?.source || {}), url: e.target.value }))}
+                          placeholder="https://example.com"
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground">Provide a single reference source (name and optional link).</p>
                     </div>
                   )}
                 </CardContent>

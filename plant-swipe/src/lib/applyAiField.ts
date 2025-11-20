@@ -4,6 +4,11 @@ import { mapFieldToCategory, type PlantFormCategory } from "./plantFormCategorie
 export function applyAiFieldToPlant(prev: Plant, fieldKey: string, data: unknown): Plant {
   const next: Plant = { ...prev }
 
+  const shouldIgnore = ['colors', 'identity.colors', 'miscellaneous.source', 'source', 'sources'].some(
+    (blocked) => fieldKey.toLowerCase() === blocked.toLowerCase(),
+  )
+  if (shouldIgnore) return next
+
   switch (fieldKey) {
     case 'id':
       return { ...next, id: typeof data === 'string' ? data : next.id }
@@ -23,8 +28,11 @@ export function applyAiFieldToPlant(prev: Plant, fieldKey: string, data: unknown
       return { ...next, seasons: Array.isArray(data) ? (data as any) : next.seasons }
     case 'description':
       return { ...next, description: typeof data === 'string' ? data : next.description }
-    case 'identity':
-      return { ...next, identity: { ...(next.identity || {}), ...(data as Record<string, unknown>) } }
+    case 'identity': {
+      const payload = { ...(data as Record<string, unknown>) }
+      delete (payload as any).colors
+      return { ...next, identity: { ...(next.identity || {}), ...payload } }
+    }
     case 'plantCare':
       return { ...next, plantCare: { ...(next.plantCare || {}), ...(data as Record<string, unknown>) } }
     case 'growth':
@@ -35,8 +43,12 @@ export function applyAiFieldToPlant(prev: Plant, fieldKey: string, data: unknown
       return { ...next, ecology: { ...(next.ecology || {}), ...(data as Record<string, unknown>) } }
     case 'danger':
       return { ...next, danger: { ...(next.danger || {}), ...(data as Record<string, unknown>) } }
-    case 'miscellaneous':
-      return { ...next, miscellaneous: { ...(next.miscellaneous || {}), ...(data as Record<string, unknown>) } }
+    case 'miscellaneous': {
+      const payload = { ...(data as Record<string, unknown>) }
+      delete (payload as any).source
+      delete (payload as any).sources
+      return { ...next, miscellaneous: { ...(next.miscellaneous || {}), ...payload } }
+    }
     case 'meta': {
       if (data && typeof data === 'object') {
         const { status: _ignoredStatus, ...rest } = data as Record<string, unknown>

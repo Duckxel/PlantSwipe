@@ -19,7 +19,6 @@ async function fetchPlantWithRelations(id: string): Promise<Plant | null> {
   const { data: colorLinks } = await supabase.from('plant_colors').select('color_id, colors:color_id (id,name,hex_code)').eq('plant_id', id)
   const { data: images } = await supabase.from('plant_images').select('id,link,use').eq('plant_id', id)
   const { data: schedules } = await supabase.from('plant_watering_schedules').select('season,quantity,time_period').eq('plant_id', id)
-  const { data: sources } = await supabase.from('plant_sources').select('name,url').eq('plant_id', id)
   const colors = (colorLinks || []).map((c: any) => ({ id: c.colors?.id, name: c.colors?.name, hexCode: c.colors?.hex_code }))
   return {
     id: data.id,
@@ -79,8 +78,8 @@ async function fetchPlantWithRelations(id: string): Promise<Plant | null> {
       sowingMonth: data.sowing_month || [],
       floweringMonth: data.flowering_month || [],
       fruitingMonth: data.fruiting_month || [],
-      heightCm: data.height_cm || undefined,
-      wingspanCm: data.wingspan_cm || undefined,
+      height: data.height_cm || undefined,
+      wingspan: data.wingspan_cm || undefined,
       tutoring: data.tutoring || false,
       adviceTutoring: data.advice_tutoring || undefined,
       sowType: data.sow_type || [],
@@ -110,7 +109,6 @@ async function fetchPlantWithRelations(id: string): Promise<Plant | null> {
     miscellaneous: {
       companions: data.companions || [],
       tags: data.tags || [],
-      sources: (sources || []).map((s: any) => ({ name: s.name as string, url: s.url as string | undefined })),
       source: { name: data.source_name || undefined, url: data.source_url || undefined },
     },
     meta: {

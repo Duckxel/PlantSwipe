@@ -313,7 +313,7 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
     const [plantsResponse, topLikedResponse] = await Promise.all([
       supabase
         .from('plants')
-        .select('*, plant_images (link,use), plant_colors (colors (id,name,hex_code)), plant_watering_schedules (season,quantity,time_period), plant_sources (name,url)')
+        .select('*, plant_images (link,use), plant_colors (colors (id,name,hex_code)), plant_watering_schedules (season,quantity,time_period)')
         .order('name', { ascending: true }),
       supabase.rpc('top_liked_plants', { limit_count: TOP_LIKED_LIMIT }),
     ])
@@ -379,10 +379,6 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
           timePeriod: row?.time_period || undefined,
         }
       }).filter((entry) => entry.season || entry.quantity || entry.timePeriod)
-      const sources = ((basePlant.plant_sources as any[]) || []).map((s) => ({
-        name: s?.name as string,
-        url: (s?.url as string) || undefined,
-      })).filter((s) => s.name)
       const primaryImage = images.find((i) => i.use === 'primary')?.link
         || images.find((i) => i.use === 'discovery')?.link
         || images[0]?.link
@@ -443,8 +439,8 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
           sowingMonth: basePlant.sowing_month || [],
           floweringMonth: basePlant.flowering_month || [],
           fruitingMonth: basePlant.fruiting_month || [],
-          heightCm: basePlant.height_cm || undefined,
-          wingspanCm: basePlant.wingspan_cm || undefined,
+          height: basePlant.height_cm || undefined,
+          wingspan: basePlant.wingspan_cm || undefined,
           tutoring: basePlant.tutoring || false,
           adviceTutoring: translation.advice_tutoring || basePlant.advice_tutoring || undefined,
           sowType: basePlant.sow_type || [],
@@ -477,8 +473,10 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
         miscellaneous: {
           companions: basePlant.companions || [],
           tags: basePlant.tags || [],
-          sources,
-          source: { name: basePlant.source_name || sources[0]?.name || undefined, url: basePlant.source_url || sources[0]?.url || undefined },
+          source: {
+            name: translation.source_name || basePlant.source_name || undefined,
+            url: translation.source_url || basePlant.source_url || undefined,
+          },
         },
         meta: {
           status: basePlant.status || undefined,

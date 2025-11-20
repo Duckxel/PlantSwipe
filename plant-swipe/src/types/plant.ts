@@ -280,16 +280,13 @@ export interface PlantDanger {
   diseases?: string[]
 }
 
-export interface PlantSource {
-  name: string
-  url?: string
-}
-
 export interface PlantMiscellaneous {
   companions?: string[]
   tags?: string[]
-  sources?: PlantSource[]
-  source?: Record<string, string>
+  source?: {
+    name?: string
+    url?: string
+  }
   [key: string]: any
 }
 

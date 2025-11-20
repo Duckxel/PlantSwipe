@@ -134,8 +134,8 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, onClose, like
 
   return (
     <div className="space-y-6 pb-16">
-      <div className="relative overflow-hidden rounded-3xl border border-muted/50 bg-gradient-to-br from-emerald-50 via-white to-amber-50 dark:from-slate-900 dark:via-slate-950 dark:to-emerald-950 shadow-lg">
-        <div className="absolute inset-0 opacity-40 blur-3xl" style={{ background: "radial-gradient(circle at 20% 20%, #34d39933, transparent 40%), radial-gradient(circle at 80% 10%, #fb718533, transparent 35%), radial-gradient(circle at 60% 80%, #22d3ee33, transparent 45%)" }} />
+      <div className="relative overflow-hidden rounded-3xl border border-muted/50 bg-gradient-to-br from-emerald-50 via-white to-amber-50 dark:from-[#0b1220] dark:via-[#0a0f1a] dark:to-[#05080f] shadow-lg">
+        <div className="absolute inset-0 opacity-25 blur-3xl" style={{ background: "radial-gradient(circle at 20% 20%, #34d39926, transparent 40%), radial-gradient(circle at 80% 10%, #fb718526, transparent 35%), radial-gradient(circle at 60% 80%, #22d3ee26, transparent 45%)" }} />
         <div className="relative flex flex-col lg:flex-row gap-4 p-4 sm:p-6 lg:p-8">
           <div className="flex-1 space-y-4">
             <div className="flex flex-wrap items-center gap-2">
@@ -279,8 +279,13 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, onClose, like
                     : []
                   if (schedules.length) {
                     return schedules
-                      .filter((s) => s.season)
-                      .map((s) => `${s.season}${s.quantity ? ` • ${s.quantity}` : ""}${s.timePeriod ? ` / ${s.timePeriod}` : ""}`)
+                      .filter((s) => s.season || s.quantity || s.timePeriod)
+                      .map((s) => {
+                        const seasonLabel = s.season ? `${s.season}` : "Any season"
+                        const quantityLabel = s.quantity ? ` • ${s.quantity}` : ""
+                        const periodLabel = s.timePeriod ? ` / ${s.timePeriod}` : ""
+                        return `${seasonLabel}${quantityLabel}${periodLabel}`
+                      })
                       .join(" | ")
                   }
                   if (plant.plantCare?.watering) {
@@ -418,22 +423,21 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, onClose, like
               <FieldRow label="Tags" value={listOrTags(plant.miscellaneous?.tags)} />
               <FieldRow
                 label="Source"
-                value={plant.miscellaneous?.sources?.length
-                  ? (
-                    <ul className="list-disc pl-5 space-y-1">
-                      {plant.miscellaneous.sources.map((s, idx) => (
-                        <li key={`${s.name}-${idx}`} className="text-sm">
-                          <span className="font-medium">{s.name}</span>
-                          {s.url && (
-                            <a href={s.url} target="_blank" rel="noreferrer" className="ml-2 text-blue-600 underline">
-                              {s.url}
-                            </a>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  )
-                  : (plant.miscellaneous?.source ? <DictionaryList value={plant.miscellaneous.source} /> : undefined)}
+                value={plant.miscellaneous?.source?.name ? (
+                  <div className="space-y-1 text-sm">
+                    <div className="font-medium">{plant.miscellaneous.source.name}</div>
+                    {plant.miscellaneous.source.url && (
+                      <a
+                        href={plant.miscellaneous.source.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-blue-600 underline"
+                      >
+                        {plant.miscellaneous.source.url}
+                      </a>
+                    )}
+                  </div>
+                ) : undefined}
               />
             </div>
           </Section>
