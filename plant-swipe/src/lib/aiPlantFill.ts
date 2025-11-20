@@ -36,6 +36,7 @@ interface PlantFillRequest {
   onFieldComplete?: (info: { field: string; data: unknown }) => void
   onFieldError?: (info: { field: string; error: string }) => void
   signal?: AbortSignal
+  language?: string
   continueOnFieldError?: boolean
 }
 
@@ -47,6 +48,7 @@ export async function fetchAiPlantFill({
   onFieldComplete,
   onFieldError,
   signal,
+  language,
   continueOnFieldError = false,
 }: PlantFillRequest) {
   const headers = await buildAuthHeaders()
@@ -65,7 +67,7 @@ export async function fetchAiPlantFill({
     const response = await fetch('/api/admin/ai/plant-fill', {
       method: 'POST',
       headers,
-      body: JSON.stringify({ plantName, schema, existingData }),
+      body: JSON.stringify({ plantName, schema, existingData, language }),
       signal,
     })
 
@@ -115,6 +117,7 @@ export async function fetchAiPlantFill({
               existingData && typeof existingData === 'object' && !Array.isArray(existingData)
                 ? existingData[fieldKey]
                 : undefined,
+            language,
           }),
           signal,
         })
@@ -168,6 +171,7 @@ interface PlantFillFieldRequest {
   existingField?: unknown
   onFieldComplete?: (info: { field: string; data: unknown }) => void
   signal?: AbortSignal
+  language?: string
 }
 
 export async function fetchAiPlantFillField({
@@ -177,6 +181,7 @@ export async function fetchAiPlantFillField({
   existingField,
   onFieldComplete,
   signal,
+  language,
 }: PlantFillFieldRequest) {
   const headers = await buildAuthHeaders()
 
@@ -188,6 +193,7 @@ export async function fetchAiPlantFillField({
       schema,
       fieldKey,
       existingField,
+      language,
     }),
     signal,
   })

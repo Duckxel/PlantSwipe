@@ -8,6 +8,13 @@ import { fetchAiPlantFill } from "@/lib/aiPlantFill"
 import plantSchema from "../../PLANT-INFO-SCHEMA.json"
 import type { Plant, PlantColor } from "@/types/plant"
 import { useAuth } from "@/context/AuthContext"
+import { useTranslation } from "react-i18next"
+import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/lib/i18n"
+import { saveLanguagePreference } from "@/lib/i18nRouting"
+import { applyAiFieldToPlant, getCategoryForField } from "@/lib/applyAiField"
+import { buildCategoryProgress, createEmptyCategoryProgress, plantFormCategoryOrder, type CategoryProgress } from "@/lib/plantFormCategories"
+
+const DISALLOWED_FIELDS = new Set(['name', 'image', 'imageurl', 'image_url', 'imageURL'])
 
 function generateUUIDv4(): string {
   try {
@@ -65,14 +72,57 @@ async function upsertImages(plantId: string, images: Plant["images"]) {
 }
 
 export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: string) => void; initialName?: string }> = ({ onCancel, onSaved, initialName }) => {
+  const { t, i18n } = useTranslation('common')
   const { profile } = useAuth()
+  const initialLanguage = SUPPORTED_LANGUAGES.includes(i18n.language as SupportedLanguage)
+    ? (i18n.language as SupportedLanguage)
+    : 'en'
+  const [language, setLanguage] = React.useState<SupportedLanguage>(initialLanguage)
   const [plant, setPlant] = React.useState<Plant>(() => ({ ...emptyPlant, name: initialName || "" }))
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [aiWorking, setAiWorking] = React.useState(false)
+  const [aiProgress, setAiProgress] = React.useState<CategoryProgress>(() => createEmptyCategoryProgress())
+  const targetFields = React.useMemo(() => Object.keys(plantSchema as Record<string, unknown>).filter((key) => !DISALLOWED_FIELDS.has(key) && !DISALLOWED_FIELDS.has(key.toLowerCase())), [])
+  const categoryLabels = React.useMemo(() => ({
+    basics: t('plantAdmin.categories.basics', 'Basics'),
+    identity: t('plantAdmin.categories.identity', 'Identity'),
+    plantCare: t('plantAdmin.categories.plantCare', 'Plant Care'),
+    growth: t('plantAdmin.categories.growth', 'Growth'),
+    usage: t('plantAdmin.categories.usage', 'Usage'),
+    ecology: t('plantAdmin.categories.ecology', 'Ecology'),
+    danger: t('plantAdmin.categories.danger', 'Danger'),
+    miscellaneous: t('plantAdmin.categories.miscellaneous', 'Miscellaneous'),
+    meta: t('plantAdmin.categories.meta', 'Meta'),
+  }), [t])
+  React.useEffect(() => {
+    i18n.changeLanguage(language)
+    saveLanguagePreference(language)
+  }, [language, i18n])
+  const initializeCategoryProgress = () => {
+    const progress = buildCategoryProgress(targetFields)
+    setAiProgress(progress)
+    return progress
+  }
+  const markFieldComplete = (fieldKey: string) => {
+    const category = getCategoryForField(fieldKey)
+    setAiProgress((prev) => {
+      const current = prev[category] || { total: 0, completed: 0, status: 'idle' }
+      const total = current.total || 1
+      const completed = Math.min((current.completed || 0) + 1, total)
+      return {
+        ...prev,
+        [category]: {
+          total,
+          completed,
+          status: completed >= total ? 'done' : 'filling',
+        },
+      }
+    })
+  }
 
   const savePlant = async () => {
-    if (!plant.name.trim()) { setError('Name is required'); return }
+    if (!plant.name.trim()) { setError(t('plantAdmin.nameRequired', 'Name is required')); return }
     setSaving(true)
     setError(null)
     try {
@@ -119,12 +169,31 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   }
 
   const runAiFill = async () => {
+    if (!plant.name.trim()) { setError(t('plantAdmin.aiNameRequired', 'Please enter a name before using AI fill.')); return }
+    initializeCategoryProgress()
     setAiWorking(true)
     setError(null)
     try {
-      const aiData = await fetchAiPlantFill({ plantName: plant.name || 'Unknown plant', schema: plantSchema })
+      const aiData = await fetchAiPlantFill({
+        plantName: plant.name || 'Unknown plant',
+        schema: plantSchema,
+        existingData: plant,
+        language,
+        onFieldComplete: ({ field, data }) => {
+          if (field === 'complete') return
+          setPlant((prev) => applyAiFieldToPlant(prev, field, data))
+          markFieldComplete(field)
+        },
+      })
       if (aiData && typeof aiData === 'object') {
-        setPlant((prev) => ({ ...prev, ...(aiData as any), id: prev.id || generateUUIDv4() }))
+        setPlant((prev) => {
+          let updated = { ...prev }
+          for (const [fieldKey, data] of Object.entries(aiData as Record<string, unknown>)) {
+            updated = applyAiFieldToPlant(updated, fieldKey, data)
+            markFieldComplete(fieldKey)
+          }
+          return { ...updated, id: updated.id || generateUUIDv4() }
+        })
       }
     } catch (e: any) {
       setError(e?.message || 'AI fill failed')
@@ -137,15 +206,30 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     <div className="max-w-6xl mx-auto px-4 pb-10 space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Create Plant</h1>
-          <p className="text-sm text-muted-foreground">Fill every field with the supplied descriptions or let AI help.</p>
+          <h1 className="text-2xl font-semibold">{t('plantAdmin.createTitle', 'Create Plant')}</h1>
+          <p className="text-sm text-muted-foreground">{t('plantAdmin.createSubtitle', 'Fill every field with the supplied descriptions or let AI help.')}</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="secondary" onClick={onCancel}>Cancel</Button>
-          <Button onClick={savePlant} disabled={saving || aiWorking}>
-            {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Save Plant
-          </Button>
+        <div className="flex gap-3 items-center">
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium" htmlFor="create-language">{t('plantAdmin.languageLabel', 'Language')}</label>
+            <select
+              id="create-language"
+              className="border rounded px-2 py-1 text-sm bg-background"
+              value={language}
+              onChange={(e) => setLanguage(e.target.value as SupportedLanguage)}
+            >
+              {SUPPORTED_LANGUAGES.map((lang) => (
+                <option key={lang} value={lang}>{lang.toUpperCase()}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={onCancel}>Cancel</Button>
+            <Button onClick={savePlant} disabled={saving || aiWorking}>
+              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Save Plant
+            </Button>
+          </div>
         </div>
       </div>
       {error && (
@@ -156,12 +240,47 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           </CardContent>
         </Card>
       )}
-      <div className="flex gap-3">
-        <Button type="button" onClick={runAiFill} disabled={aiWorking}>
-          {aiWorking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-          AI fill all fields
-        </Button>
-        <p className="text-sm text-muted-foreground self-center">AI will try to populate almost every field based on the provided schema.</p>
+      <div className="flex flex-col gap-3">
+        <div className="flex gap-3 flex-col sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex gap-2">
+            <Button type="button" onClick={runAiFill} disabled={aiWorking || !plant.name.trim()}>
+              {aiWorking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+              {t('plantAdmin.aiFill', 'AI fill all fields')}
+            </Button>
+            {!plant.name.trim() && (
+              <span className="text-xs text-muted-foreground self-center">{t('plantAdmin.aiNameRequired', 'Please enter a name before using AI fill.')}</span>
+            )}
+          </div>
+          <p className="text-sm text-muted-foreground self-center sm:self-start">{t('plantAdmin.aiFillHelper', 'AI will try to populate almost every field based on the provided schema and selected language.')} ({language.toUpperCase()})</p>
+        </div>
+        {Object.values(aiProgress).some((p) => p.total > 0) && (
+          <Card>
+            <CardContent className="space-y-3 pt-4">
+              <div className="font-medium text-sm">{t('plantAdmin.categoryProgressTitle', 'Category fill progress')}</div>
+              <div className="grid gap-2">
+                {plantFormCategoryOrder.map((cat) => {
+                  const info = aiProgress[cat]
+                  if (!info?.total) return null
+                  const percent = info.total ? Math.round((info.completed / info.total) * 100) : 0
+                  return (
+                    <div key={cat} className="space-y-1">
+                      <div className="flex items-center justify-between text-sm">
+                        <span>{categoryLabels[cat]}</span>
+                        <span className="text-muted-foreground">{info.completed}/{info.total}</span>
+                      </div>
+                      <div className="h-2 w-full rounded bg-muted overflow-hidden">
+                        <div
+                          className={`h-2 transition-all ${info.status === 'done' ? 'bg-green-500' : 'bg-blue-500'}`}
+                          style={{ width: `${Math.min(100, Math.max(percent, info.status === 'done' ? 100 : percent))}%` }}
+                        />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
       <PlantProfileForm value={plant} onChange={setPlant} />
     </div>

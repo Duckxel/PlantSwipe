@@ -4,6 +4,8 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
+import { useTranslation } from "react-i18next"
+import { plantFormCategoryOrder, type PlantFormCategory } from "@/lib/plantFormCategories"
 import type { Plant, PlantColor, PlantImage } from "@/types/plant"
 
 export type PlantProfileFormProps = {
@@ -364,17 +366,47 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
 }
 
 export function PlantProfileForm({ value, onChange }: PlantProfileFormProps) {
+  const { t } = useTranslation('common')
+  const sectionRefs = React.useRef<Record<PlantFormCategory, HTMLDivElement | null>>({
+    basics: null,
+    identity: null,
+    plantCare: null,
+    growth: null,
+    usage: null,
+    ecology: null,
+    danger: null,
+    miscellaneous: null,
+    meta: null,
+  })
+  const categoryLabels: Record<PlantFormCategory, string> = {
+    basics: t('plantAdmin.categories.basics', 'Basics'),
+    identity: t('plantAdmin.categories.identity', 'Identity'),
+    plantCare: t('plantAdmin.categories.plantCare', 'Plant Care'),
+    growth: t('plantAdmin.categories.growth', 'Growth'),
+    usage: t('plantAdmin.categories.usage', 'Usage'),
+    ecology: t('plantAdmin.categories.ecology', 'Ecology'),
+    danger: t('plantAdmin.categories.danger', 'Danger'),
+    miscellaneous: t('plantAdmin.categories.miscellaneous', 'Miscellaneous'),
+    meta: t('plantAdmin.categories.meta', 'Meta'),
+  }
+  const scrollToCategory = (category: PlantFormCategory) => {
+    const node = sectionRefs.current[category]
+    if (node) {
+      node.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
   const setPath = (path: string, val: any) => onChange(setValue(value, path, val))
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Identity & Basics</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <div ref={(node) => { sectionRefs.current.basics = node }}>
+        <Card>
+          <CardHeader>
+            <CardTitle>{categoryLabels.basics}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
           <div className="grid gap-2">
             <Label>Name</Label>
-            <Input value={value.name} onChange={(e) => onChange({ ...value, name: e.target.value })} placeholder="Unique plant name" />
+            <Input value={value.name} required onChange={(e) => onChange({ ...value, name: e.target.value })} placeholder="Unique plant name" />
             <p className="text-xs text-muted-foreground">Name of the Plant (unique and mandatory)</p>
           </div>
           <div className="grid gap-2">
@@ -433,73 +465,101 @@ export function PlantProfileForm({ value, onChange }: PlantProfileFormProps) {
             </div>
           )}
           <ImageEditor images={value.images || []} onChange={(imgs) => onChange({ ...value, images: imgs })} />
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
 
-      <Card>
-        <CardHeader><CardTitle>Identity</CardTitle></CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2">
+      <div className="rounded-lg border bg-muted/40 p-3">
+        <div className="text-sm font-medium mb-2">{t('plantAdmin.categoryMenuTitle', 'Quick category menu')}</div>
+        <div className="flex flex-wrap gap-2">
+          {plantFormCategoryOrder.filter((key) => key !== 'basics').map((key) => (
+            <Button key={key} size="sm" variant="outline" onClick={() => scrollToCategory(key)}>
+              {categoryLabels[key]}
+            </Button>
+          ))}
+        </div>
+      </div>
+
+      <div ref={(node) => { sectionRefs.current.identity = node }}>
+        <Card>
+          <CardHeader><CardTitle>{categoryLabels.identity}</CardTitle></CardHeader>
+          <CardContent className="grid gap-4 md:grid-cols-2">
           {identityFields.map((f) => renderField(value, setPath, f))}
           <div className="md:col-span-2">
             <Label>Colors</Label>
             <ColorPicker colors={value.identity?.colors || []} onChange={(colors) => onChange(setValue(value, "identity.colors", colors))} />
           </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
 
-      <Card>
-        <CardHeader><CardTitle>Plant Care</CardTitle></CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2">
+      <div ref={(node) => { sectionRefs.current.plantCare = node }}>
+        <Card>
+          <CardHeader><CardTitle>{categoryLabels.plantCare}</CardTitle></CardHeader>
+          <CardContent className="grid gap-4 md:grid-cols-2">
           {careFields.map((f) => renderField(value, setPath, f))}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
 
-      <Card>
-        <CardHeader><CardTitle>Growth</CardTitle></CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2">
+      <div ref={(node) => { sectionRefs.current.growth = node }}>
+        <Card>
+          <CardHeader><CardTitle>{categoryLabels.growth}</CardTitle></CardHeader>
+          <CardContent className="grid gap-4 md:grid-cols-2">
           {growthFields.map((f) => renderField(value, setPath, f))}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
 
-      <Card>
-        <CardHeader><CardTitle>Usage</CardTitle></CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2">
+      <div ref={(node) => { sectionRefs.current.usage = node }}>
+        <Card>
+          <CardHeader><CardTitle>{categoryLabels.usage}</CardTitle></CardHeader>
+          <CardContent className="grid gap-4 md:grid-cols-2">
           {usageFields.map((f) => renderField(value, setPath, f))}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
 
-      <Card>
-        <CardHeader><CardTitle>Ecology</CardTitle></CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2">
+      <div ref={(node) => { sectionRefs.current.ecology = node }}>
+        <Card>
+          <CardHeader><CardTitle>{categoryLabels.ecology}</CardTitle></CardHeader>
+          <CardContent className="grid gap-4 md:grid-cols-2">
           {ecologyFields.map((f) => renderField(value, setPath, f))}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
 
-      <Card>
-        <CardHeader><CardTitle>Danger</CardTitle></CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2">
+      <div ref={(node) => { sectionRefs.current.danger = node }}>
+        <Card>
+          <CardHeader><CardTitle>{categoryLabels.danger}</CardTitle></CardHeader>
+          <CardContent className="grid gap-4 md:grid-cols-2">
           {dangerFields.map((f) => renderField(value, setPath, f))}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
 
-      <Card>
-        <CardHeader><CardTitle>Miscellaneous</CardTitle></CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2">
+      <div ref={(node) => { sectionRefs.current.miscellaneous = node }}>
+        <Card>
+          <CardHeader><CardTitle>{categoryLabels.miscellaneous}</CardTitle></CardHeader>
+          <CardContent className="grid gap-4 md:grid-cols-2">
           {miscFields.map((f) => renderField(value, setPath, f))}
           <div className="md:col-span-2">
             <Label>Source</Label>
             <KeyValueList value={(value.miscellaneous?.source as Record<string, string>) || {}} onChange={(v) => onChange(setValue(value, "miscellaneous.source", v))} keyLabel="Name" valueLabel="URL" />
             <p className="text-xs text-muted-foreground">Source {"{name // url}"}</p>
           </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
 
-      <Card>
-        <CardHeader><CardTitle>Meta</CardTitle></CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2">
+      <div ref={(node) => { sectionRefs.current.meta = node }}>
+        <Card>
+          <CardHeader><CardTitle>{categoryLabels.meta}</CardTitle></CardHeader>
+          <CardContent className="grid gap-4 md:grid-cols-2">
           {metaFields.map((f) => renderField(value, setPath, f))}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }
