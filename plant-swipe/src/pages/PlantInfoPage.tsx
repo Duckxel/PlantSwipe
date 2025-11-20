@@ -7,6 +7,8 @@ import { supabase } from '@/lib/supabaseClient'
 import { useTranslation } from 'react-i18next'
 import { useLanguage, useLanguageNavigate } from '@/lib/i18nRouting'
 import { usePageMetadata } from '@/hooks/usePageMetadata'
+import { Button } from '@/components/ui/button'
+import { ChevronLeft, Pencil } from 'lucide-react'
 
 type WaterSchedules = PlantWateringSchedule[]
 
@@ -214,26 +216,59 @@ export const PlantInfoPage: React.FC = () => {
     })
   }
 
-    const handleClose = () => {
-      navigate('/')
+  const handleGoBack = React.useCallback(() => {
+    if (typeof window !== 'undefined' && window.history.length > 2) {
+      navigate(-1)
+    } else {
+      navigate('/search')
     }
+  }, [navigate])
+
+  const handleClose = () => {
+    handleGoBack()
+  }
+
+  const handleEdit = () => {
+    if (!plant) return
+    navigate(`/plants/${plant.id}/edit`)
+  }
 
   if (loading) return <div className="max-w-4xl mx-auto mt-8 px-4">{t('common.loading')}</div>
   if (error) return <div className="max-w-4xl mx-auto mt-8 px-4 text-red-600 text-sm">{error}</div>
   if (!plant) return <div className="max-w-4xl mx-auto mt-8 px-4">{t('plantInfo.plantNotFound')}</div>
 
-  return (
-    <div className="max-w-6xl mx-auto mt-6 px-4 lg:px-6 pb-14">
-      <PlantDetails
-        plant={plant}
-        onClose={handleClose}
-        liked={likedIds.includes(plant.id)}
-        onToggleLike={toggleLiked}
-        isOverlayMode={isOverlayMode}
-        onRequestPlant={user ? () => {} : undefined}
-      />
-    </div>
-  )
+    return (
+      <div className="max-w-6xl mx-auto mt-6 px-4 lg:px-6 pb-14 space-y-4">
+        <div className="flex flex-wrap items-center gap-3 justify-between">
+          <Button
+            variant="ghost"
+            className="flex items-center gap-2"
+            onClick={handleGoBack}
+          >
+            <ChevronLeft className="h-4 w-4" />
+            {t('common.back', { defaultValue: 'Back' })}
+          </Button>
+          {profile?.is_admin && plant && (
+            <Button
+              variant="outline"
+              className="flex items-center gap-2"
+              onClick={handleEdit}
+            >
+              <Pencil className="h-4 w-4" />
+              {t('common.edit', { defaultValue: 'Edit' })}
+            </Button>
+          )}
+        </div>
+        <PlantDetails
+          plant={plant}
+          onClose={handleClose}
+          liked={likedIds.includes(plant.id)}
+          onToggleLike={toggleLiked}
+          isOverlayMode={isOverlayMode}
+          onRequestPlant={user ? () => {} : undefined}
+        />
+      </div>
+    )
 }
 
 export default PlantInfoPage
