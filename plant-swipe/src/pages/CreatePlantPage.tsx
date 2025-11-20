@@ -19,6 +19,7 @@ import { plantSchema } from "@/lib/plantSchema"
 const DISALLOWED_FIELDS = new Set(['name', 'image', 'imageurl', 'image_url', 'imageURL'])
 const IN_PROGRESS_STATUS: PlantMeta['status'] = 'In Progres'
 const SECTION_LOG_LIMIT = 12
+const OPTIONAL_FIELD_EXCEPTIONS = new Set<string>(['images'])
 
 const formatStatusForUi = (value?: string | null): PlantMeta['status'] => {
   const map: Record<string, PlantMeta['status']> = {
@@ -30,6 +31,62 @@ const formatStatusForUi = (value?: string | null): PlantMeta['status'] => {
   if (!value) return IN_PROGRESS_STATUS
   const lower = value.toLowerCase()
   return map[lower] || IN_PROGRESS_STATUS
+}
+
+const getFieldValueForKey = (plant: Plant, fieldKey: string): unknown => {
+  switch (fieldKey) {
+    case 'plantType':
+      return plant.plantType
+    case 'utility':
+      return plant.utility
+    case 'comestiblePart':
+      return plant.comestiblePart
+    case 'fruitType':
+      return plant.fruitType
+    case 'images':
+      return plant.images
+    case 'identity':
+      return plant.identity
+    case 'plantCare':
+      return plant.plantCare
+    case 'growth':
+      return plant.growth
+    case 'usage':
+      return plant.usage
+    case 'ecology':
+      return plant.ecology
+    case 'danger':
+      return plant.danger
+    case 'miscellaneous':
+      return plant.miscellaneous
+    case 'meta':
+      return plant.meta
+    case 'seasons':
+      return plant.seasons
+    case 'description':
+      return plant.description
+    default:
+      return (plant as any)[fieldKey]
+  }
+}
+
+const hasMeaningfulContent = (value: unknown): boolean => {
+  if (value === null || value === undefined) return false
+  if (typeof value === 'string') return value.trim().length > 0
+  if (typeof value === 'number') return true
+  if (typeof value === 'boolean') return value === true
+  if (Array.isArray(value)) return value.some((entry) => hasMeaningfulContent(entry))
+  if (typeof value === 'object') {
+    return Object.values(value as Record<string, unknown>).some((entry) => hasMeaningfulContent(entry))
+  }
+  return false
+}
+
+const requiresFieldCompletion = (fieldKey: string) => !OPTIONAL_FIELD_EXCEPTIONS.has(fieldKey)
+
+const isFieldMissingForPlant = (plant: Plant, fieldKey: string): boolean => {
+  if (!requiresFieldCompletion(fieldKey)) return false
+  return !hasMeaningfulContent(getFieldValueForKey(plant, fieldKey))
 }
 
 function generateUUIDv4(): string {
@@ -635,6 +692,15 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       if (lastError) console.error(`AI fill failed for ${fieldKey} after 3 attempts`, lastError)
       return false
     }
+    const ensureMandatoryFields = async () => {
+      for (const fieldKey of targetFields) {
+        if (!requiresFieldCompletion(fieldKey)) continue
+        const latestSnapshot = finalPlant || plant
+        if (!latestSnapshot) break
+        if (!isFieldMissingForPlant(latestSnapshot, fieldKey)) continue
+        await fillFieldWithRetries(fieldKey, getFieldValueForKey(latestSnapshot, fieldKey))
+      }
+    }
     try {
       let aiData: Record<string, unknown> | null = null
       let lastError: Error | null = null
@@ -716,12 +782,12 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         finalPlant = next
         return next
       })
+      await ensureMandatoryFields()
       aiSucceeded = true
     } catch (e: any) {
       setError(e?.message || 'AI fill failed')
     } finally {
       setAiWorking(false)
-      setAiProgress(createEmptyCategoryProgress())
       if (aiSucceeded) setAiCompleted(true)
       const targetPlant = finalPlant || plant
       if (targetPlant) await savePlant(targetPlant)
