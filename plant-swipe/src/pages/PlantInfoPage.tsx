@@ -1,5 +1,5 @@
 import React from 'react'
-import { useParams, useLocation } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { PlantDetails } from '@/components/plant/PlantDetails'
 import type { Plant, PlantImage, PlantWateringSchedule } from '@/types/plant'
 import { useAuth } from '@/context/AuthContext'
@@ -143,7 +143,6 @@ async function fetchPlantWithRelations(id: string): Promise<Plant | null> {
 export const PlantInfoPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
   const navigate = useLanguageNavigate()
-  const location = useLocation()
   const { user, profile, refreshProfile } = useAuth()
   const { t } = useTranslation('common')
   const currentLang = useLanguage()
@@ -151,8 +150,7 @@ export const PlantInfoPage: React.FC = () => {
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [likedIds, setLikedIds] = React.useState<string[]>([])
-  const state = location.state as { backgroundLocation?: any } | null
-  const isOverlayMode = !!state?.backgroundLocation
+  const isOverlayMode = false
 
   const fallbackTitle = t('seo.plant.fallbackTitle', { defaultValue: 'Plant encyclopedia entry' })
   const fallbackDescription = t('seo.plant.fallbackDescription', {
@@ -216,13 +214,9 @@ export const PlantInfoPage: React.FC = () => {
     })
   }
 
-  const handleClose = () => {
-    if (isOverlayMode) {
-      navigate(-1)
-    } else {
+    const handleClose = () => {
       navigate('/')
     }
-  }
 
   if (loading) return <div className="max-w-4xl mx-auto mt-8 px-4">{t('common.loading')}</div>
   if (error) return <div className="max-w-4xl mx-auto mt-8 px-4 text-red-600 text-sm">{error}</div>

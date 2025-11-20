@@ -4,9 +4,7 @@ import { useLanguageNavigate, usePathWithoutLanguage, addLanguagePrefix } from "
 import { Navigate } from "@/components/i18n/Navigate";
 import { useMotionValue, animate } from "framer-motion";
 import { Search, ChevronDown, ChevronUp, ListFilter, MessageSquarePlus, Plus } from "lucide-react";
-// Sheet is used for plant info overlay
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -114,8 +112,6 @@ export default function PlantSwipe() {
   const initialCardBoostRef = React.useRef(true)
 
   const location = useLocation()
-  const state = location.state as { backgroundLocation?: any } | null
-  const backgroundLocation = state?.backgroundLocation
   const navigate = useLanguageNavigate()
   const pathWithoutLang = usePathWithoutLanguage()
   const currentView: "discovery" | "gardens" | "search" | "profile" | "create" =
@@ -462,7 +458,7 @@ export default function PlantSwipe() {
   }
 
   const handleInfo = () => {
-    if (current) navigate(`/plants/${current.id}`, { state: { backgroundLocation: location } })
+    if (current) navigate(`/plants/${current.id}`)
   }
 
   // Swipe logic
@@ -949,8 +945,7 @@ export default function PlantSwipe() {
               </div>
             )}
 
-          {/* Use background location for primary routes so overlays render on top */}
-          <Routes location={(backgroundLocation as any) || location}>
+          <Routes>
             <Route
               path="/gardens"
               element={
@@ -973,7 +968,7 @@ export default function PlantSwipe() {
                 <Suspense fallback={routeLoadingFallback}>
                   <SearchPageLazy
                     plants={sortedSearchResults}
-                    openInfo={(p) => navigate(`/plants/${p.id}`, { state: { backgroundLocation: location } })}
+                    openInfo={(p) => navigate(`/plants/${p.id}`)}
                     likedIds={likedIds}
                   />
                 </Suspense>
@@ -1171,15 +1166,6 @@ export default function PlantSwipe() {
               }
             />
           </Routes>
-              {/* When a background location is set, also render the overlay route on top */}
-              {backgroundLocation && (
-                <Routes>
-                  <Route
-                    path="/plants/:id"
-                    element={<PlantInfoOverlay />}
-                  />
-                </Routes>
-              )}
         </main>
       </div>
 
@@ -1272,28 +1258,5 @@ function getPlantUsageLabels(classification?: Plant["classification"]): string[]
   return classification.activities
     .map((activity) => formatClassificationLabel(activity))
     .filter((label): label is string => Boolean(label))
-}
-
-function PlantInfoOverlay() {
-  const navigate = useLanguageNavigate()
-  const { t } = useTranslation('common')
-  return (
-    <Sheet open onOpenChange={(o) => { if (!o) navigate(-1) }}>
-      <SheetContent
-        side="bottom"
-        className="rounded-t-2xl max-h-[85vh] overflow-y-auto p-4 md:p-6"
-      >
-        <SheetHeader>
-          <SheetTitle className="sr-only">Plant Information</SheetTitle>
-          <SheetDescription className="sr-only">View detailed information about this plant</SheetDescription>
-        </SheetHeader>
-        <Suspense fallback={<div className="p-4 text-center text-sm opacity-60">{t('common.loading')}</div>}>
-          <div className="max-w-4xl mx-auto w-full">
-            <PlantInfoPageLazy />
-          </div>
-        </Suspense>
-      </SheetContent>
-    </Sheet>
-  )
 }
 

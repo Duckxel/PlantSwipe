@@ -2395,14 +2395,11 @@ export const GardenDashboardPage: React.FC = () => {
                           }}
                         >
                           <div className="absolute top-2 right-2 z-10">
-                            <button
-                              onClick={(e: any) => {
-                                e.stopPropagation();
-                                if (gp?.plant)
-                                  navigate(`/plants/${gp.plant.id}`, {
-                                    state: { backgroundLocation: location },
-                                  });
-                              }}
+                              <button
+                                onClick={(e: any) => {
+                                  e.stopPropagation();
+                                  if (gp?.plant) navigate(`/plants/${gp.plant.id}`);
+                                }}
                               onMouseDown={(e: any) => e.stopPropagation()}
                               onTouchStart={(e: any) => e.stopPropagation()}
                               aria-label={t(
