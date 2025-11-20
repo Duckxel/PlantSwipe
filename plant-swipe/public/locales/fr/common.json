@@ -985,5 +985,34 @@
       "nameRequired": "Le nom de la plante est requis",
       "mustBeLoggedIn": "Vous devez être connecté pour demander une plante"
     }
+  },
+  "plantAdmin": {
+    "languageLabel": "Langue",
+    "languageHelper": "L'IA répond dans la langue sélectionnée.",
+    "createTitle": "Créer une plante",
+    "createSubtitle": "Renseignez chaque champ grâce aux descriptions ou laissez l'IA aider.",
+    "editTitle": "Modifier la plante",
+    "editSubtitle": "Mettez la fiche à jour pour respecter la nouvelle structure de base de données.",
+      "translationNoTargets": "Aucune autre langue configurée pour la traduction.",
+      "deeplTranslate": "Traduction DeepL",
+    "aiFill": "Remplir avec l'IA",
+    "aiFilled": "Rempli par l'IA",
+    "overviewLength": "La présentation doit contenir entre 50 et 300 mots.",
+    "aiNameRequired": "Saisissez un nom avant d'utiliser le remplissage IA.",
+    "nameRequired": "Le nom est obligatoire",
+    "loadingPlant": "Chargement de la plante...",
+    "categoryProgressTitle": "Progression par catégorie",
+    "categoryMenuTitle": "Menu rapide des catégories",
+    "categories": {
+      "basics": "Bases",
+      "identity": "Identité",
+      "plantCare": "Entretien",
+      "growth": "Croissance",
+      "usage": "Usage",
+      "ecology": "Écologie",
+      "danger": "Danger",
+      "miscellaneous": "Divers",
+      "meta": "Méta"
+    }
   }
 }

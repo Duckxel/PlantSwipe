@@ -17,7 +17,7 @@ import BroadcastToast from "@/components/layout/BroadcastToast";
 import MobileNavBar from "@/components/layout/MobileNavBar";
 import { RequestPlantDialog } from "@/components/plant/RequestPlantDialog";
 // GardenListPage and GardenDashboardPage are lazy loaded below
-import type { Plant } from "@/types/plant";
+import type { Plant, PlantSeason } from "@/types/plant";
 import { useAuth } from "@/context/AuthContext";
 import { AuthActionsProvider } from "@/context/AuthActionsContext";
 import RequireAdmin from "@/pages/RequireAdmin";
@@ -36,7 +36,6 @@ const GardenListPage = lazy(() => import("@/pages/GardenListPage").then(module =
 const SwipePageLazy = lazy(() => import("@/pages/SwipePage").then(module => ({ default: module.SwipePage })))
 const SearchPageLazy = lazy(() => import("@/pages/SearchPage").then(module => ({ default: module.SearchPage })))
 const CreatePlantPageLazy = lazy(() => import("@/pages/CreatePlantPage").then(module => ({ default: module.CreatePlantPage })))
-const EditPlantPageLazy = lazy(() => import("@/pages/EditPlantPage").then(module => ({ default: module.EditPlantPage })))
 const PlantInfoPageLazy = lazy(() => import("@/pages/PlantInfoPage"))
 const PublicProfilePageLazy = lazy(() => import("@/pages/PublicProfilePage"))
 const FriendsPageLazy = lazy(() => import("@/pages/FriendsPage").then(module => ({ default: module.FriendsPage })))
@@ -326,7 +325,7 @@ export default function PlantSwipe() {
       const matchesQ = `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")}`
         .toLowerCase()
         .includes(lowerQuery)
-      const matchesSeason = seasonFilter ? seasons.includes(seasonFilter as Plant['seasons'][number]) : true
+      const matchesSeason = seasonFilter ? seasons.includes(seasonFilter as PlantSeason) : true
       const matchesColor = colorFilter ? colors.map((c: string) => c.toLowerCase()).includes(colorFilter.toLowerCase()) : true
       const matchesSeeds = onlySeeds ? Boolean(p.seedsAvailable) : true
       const matchesFav = onlyFavorites ? likedSet.has(p.id) : true
@@ -1079,10 +1078,26 @@ export default function PlantSwipe() {
               )}
             />
             <Route
+              path="/create/:id"
+              element={user ? (
+                <Suspense fallback={routeLoadingFallback}>
+                  <CreatePlantPageLazy
+                    onCancel={() => navigate('/')}
+                    onSaved={async () => {
+                      await loadPlants()
+                      navigate('/search')
+                    }}
+                  />
+                </Suspense>
+              ) : (
+                <Navigate to="/" replace />
+              )}
+            />
+            <Route
               path="/plants/:id/edit"
               element={user ? (
                 <Suspense fallback={routeLoadingFallback}>
-                  <EditPlantPageLazy
+                  <CreatePlantPageLazy
                     onCancel={() => navigate('/search')}
                     onSaved={async () => {
                       await loadPlants()

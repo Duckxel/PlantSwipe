@@ -5,7 +5,7 @@
 
 import { supabase } from './supabaseClient'
 import type { SupportedLanguage } from './i18n'
-import type { Plant } from '@/types/plant'
+import type { Plant, PlantImage, PlantSeason } from '@/types/plant'
 import { getPrimaryPhotoUrl, normalizePlantPhotos } from '@/lib/photos'
 
 const sanitizeStringValue = (value: string): string | undefined => {
@@ -311,11 +311,9 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
   try {
     const TOP_LIKED_LIMIT = 5
     const [plantsResponse, topLikedResponse] = await Promise.all([
-        supabase
-          .from('plants')
-          .select(
-              'id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, photos, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount, classification, identifiers, traits, dimensions, phenology, environment, care, propagation, usage, ecology, commerce, problems, planting, meta, created_at, updated_at'
-          )
+      supabase
+        .from('plants')
+        .select('*, plant_images (link,use), plant_colors (colors (id,name,hex_code)), plant_watering_schedules (season,quantity,time_period), plant_sources (id,name,url)')
         .order('name', { ascending: true }),
       supabase.rpc('top_liked_plants', { limit_count: TOP_LIKED_LIMIT }),
     ])
@@ -341,43 +339,204 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
       })
     }
 
-    // Always load translations for the specified language (including English)
-    // This ensures plants created in one language display correctly in another
-    const plantIds = plants.map(p => p.id)
+    const plantIds = plants.map((p) => p.id)
     const { data: translations } = await supabase
       .from('plant_translations')
       .select('*')
       .eq('language', language)
       .in('plant_id', plantIds)
-    
-    // Create a map of translations by plant_id
-    const translationMap = new Map()
+
+    const translationMap = new Map<string, any>()
     if (translations) {
-      translations.forEach(t => {
-        translationMap.set(t.plant_id, t)
-      })
+      translations.forEach((t) => translationMap.set(t.plant_id, t))
     }
-    
-    // Merge translations with base plants
-    // If a translation exists, it will override the base plant data
-    return plants.map((plant) => {
-      const translation = translationMap.get(plant.id)
-      const merged = mergePlantWithTranslation(plant, translation)
-      const popularity = popularityMap.get(String(plant.id))
-      if (!popularity) {
-        return merged
+
+    const toTitleCase = (val: string | null | undefined): string | undefined => {
+      if (!val) return undefined
+      return val.charAt(0).toUpperCase() + val.slice(1)
+    }
+
+    return plants.map((basePlant: any) => {
+      const translation = translationMap.get(basePlant.id) || {}
+      const colorObjects = ((basePlant.plant_colors as any[]) || []).map((pc) => ({
+        id: pc?.colors?.id,
+        name: pc?.colors?.name,
+        hexCode: pc?.colors?.hex_code,
+      })).filter((c) => c.name)
+      const seasonsRaw = translation.season ?? basePlant.season ?? []
+      const seasons: PlantSeason[] = Array.isArray(seasonsRaw)
+        ? seasonsRaw.map((s: string) => toTitleCase(s) as PlantSeason).filter(Boolean)
+        : []
+      const images: PlantImage[] = ((basePlant.plant_images as any[]) || []).map((img) => ({
+        link: img?.link,
+        use: img?.use,
+      }))
+      const schedules = ((basePlant.plant_watering_schedules as any[]) || []).map((row) => {
+        const seasonValue = row?.season ? toTitleCase(row.season) : undefined
+        const quantityValue = row?.quantity !== null && row?.quantity !== undefined ? Number(row.quantity) : undefined
+        return {
+          season: seasonValue,
+          quantity: quantityValue,
+          timePeriod: row?.time_period || undefined,
+        }
+      }).filter((entry) => entry.season || entry.quantity !== undefined || entry.timePeriod)
+      const sources = ((basePlant.plant_sources as any[]) || []).map((src) => ({
+        id: src?.id,
+        name: src?.name,
+        url: src?.url,
+      })).filter((src) => src.name)
+      if (!sources.length && (translation.source_name || basePlant.source_name)) {
+        sources.push({ name: translation.source_name || basePlant.source_name, url: translation.source_url || basePlant.source_url })
       }
-      return {
-        ...merged,
-        popularity: {
-          likes: popularity.likes,
-          rank: popularity.rank,
-          isTopPick: popularity.rank <= TOP_LIKED_LIMIT,
+      const primaryImage = images.find((i) => i.use === 'primary')?.link
+        || images.find((i) => i.use === 'discovery')?.link
+        || images[0]?.link
+
+      const plant: Plant = {
+        id: String(basePlant.id),
+        name: translation.name || basePlant.name || '',
+        plantType: basePlant.plant_type || undefined,
+        utility: basePlant.utility || [],
+        comestiblePart: basePlant.comestible_part || [],
+        fruitType: basePlant.fruit_type || [],
+        images,
+        image: primaryImage,
+        identity: {
+          givenNames: translation.given_names || basePlant.given_names || [],
+          scientificName: translation.scientific_name || basePlant.scientific_name || undefined,
+          family: translation.family || basePlant.family || undefined,
+          overview: translation.overview || basePlant.overview || undefined,
+          promotionMonth: translation.promotion_month || basePlant.promotion_month || undefined,
+          lifeCycle: translation.life_cycle || basePlant.life_cycle || undefined,
+          season: seasons,
+          foliagePersistance: translation.foliage_persistance || basePlant.foliage_persistance || undefined,
+          spiked: basePlant.spiked ?? false,
+          toxicityHuman: translation.toxicity_human || basePlant.toxicity_human || undefined,
+          toxicityPets: translation.toxicity_pets || basePlant.toxicity_pets || undefined,
+          allergens: translation.allergens || basePlant.allergens || [],
+          scent: basePlant.scent ?? false,
+          symbolism: translation.symbolism || basePlant.symbolism || [],
+          livingSpace: translation.living_space || basePlant.living_space || undefined,
+          composition: translation.composition || basePlant.composition || [],
+          maintenanceLevel: translation.maintenance_level || basePlant.maintenance_level || undefined,
+          colors: colorObjects,
+          multicolor: basePlant.multicolor ?? false,
+          bicolor: basePlant.bicolor ?? false,
         },
+        plantCare: {
+          origin: translation.origin || basePlant.origin || [],
+          habitat: translation.habitat || basePlant.habitat || [],
+          temperatureMax: basePlant.temperature_max || undefined,
+          temperatureMin: basePlant.temperature_min || undefined,
+          temperatureIdeal: basePlant.temperature_ideal || undefined,
+          levelSun: basePlant.level_sun || undefined,
+          hygrometry: basePlant.hygrometry || undefined,
+          wateringType: basePlant.watering_type || [],
+          division: basePlant.division || [],
+          soil: basePlant.soil || [],
+          adviceSoil: translation.advice_soil || basePlant.advice_soil || undefined,
+          mulching: basePlant.mulching || [],
+          adviceMulching: translation.advice_mulching || basePlant.advice_mulching || undefined,
+          nutritionNeed: basePlant.nutrition_need || [],
+          fertilizer: basePlant.fertilizer || [],
+          adviceFertilizer: translation.advice_fertilizer || basePlant.advice_fertilizer || undefined,
+          watering: {
+            schedules,
+          },
+        },
+        growth: {
+          sowingMonth: basePlant.sowing_month || [],
+          floweringMonth: basePlant.flowering_month || [],
+          fruitingMonth: basePlant.fruiting_month || [],
+          height: basePlant.height_cm || undefined,
+          wingspan: basePlant.wingspan_cm || undefined,
+          tutoring: basePlant.tutoring || false,
+          adviceTutoring: translation.advice_tutoring || basePlant.advice_tutoring || undefined,
+          sowType: basePlant.sow_type || [],
+          separation: basePlant.separation_cm || undefined,
+          transplanting: basePlant.transplanting || undefined,
+          adviceSowing: translation.advice_sowing || basePlant.advice_sowing || undefined,
+          cut: basePlant.cut || undefined,
+        },
+        usage: {
+          adviceMedicinal: translation.advice_medicinal || basePlant.advice_medicinal || undefined,
+          nutritionalIntake: basePlant.nutritional_intake || [],
+          infusion: basePlant.infusion || false,
+          adviceInfusion: translation.advice_infusion || basePlant.advice_infusion || undefined,
+          infusionMix: basePlant.infusion_mix || [],
+          recipesIdeas: basePlant.recipes_ideas || [],
+          aromatherapy: basePlant.aromatherapy || false,
+          spiceMixes: basePlant.spice_mixes || [],
+        },
+        ecology: {
+          melliferous: basePlant.melliferous || false,
+          polenizer: basePlant.polenizer || [],
+          beFertilizer: basePlant.be_fertilizer || false,
+          groundEffect: translation.ground_effect || basePlant.ground_effect || undefined,
+          conservationStatus: basePlant.conservation_status || undefined,
+        },
+        danger: {
+          pests: basePlant.pests || [],
+          diseases: basePlant.diseases || [],
+        },
+        miscellaneous: {
+          companions: basePlant.companions || [],
+          tags: basePlant.tags || [],
+          sources,
+        },
+        meta: {
+          status: basePlant.status || undefined,
+          adminCommentary: translation.admin_commentary || basePlant.admin_commentary || undefined,
+          createdBy: basePlant.created_by || undefined,
+          createdAt: basePlant.created_time || basePlant.created_at || undefined,
+          updatedBy: basePlant.updated_by || undefined,
+          updatedAt: basePlant.updated_time || basePlant.updated_at || undefined,
+        },
+        seasons,
+        colors: colorObjects.map((c) => c.name as string),
+        multicolor: basePlant.multicolor ?? false,
+        bicolor: basePlant.bicolor ?? false,
+        description: translation.overview || basePlant.overview || '',
+        rarity: (basePlant.rarity || 'Common') as Plant['rarity'],
+        classification: basePlant.plant_type ? { type: basePlant.plant_type } : undefined,
+        popularity: popularityMap.get(String(basePlant.id)),
       }
+
+      return sanitizeDeep(plant) as Plant
     })
   } catch (error) {
     console.error('Failed to load plants with translations:', error)
-    throw error
+    try {
+      const { data: fallbackPlants } = await supabase
+        .from('plants')
+        .select('id,name,scientific_name,plant_type,overview,season,plant_images (link,use), plant_colors (colors (name,hex_code)), plant_sources (name,url)')
+        .order('name', { ascending: true })
+      if (!fallbackPlants) return []
+      return fallbackPlants.map((row: any) => {
+        const images: PlantImage[] = ((row.plant_images as any[]) || []).map((img) => ({ link: img?.link, use: img?.use }))
+        const primaryImage = images.find((i) => i.use === 'primary')?.link || images.find((i) => i.use === 'discovery')?.link || images[0]?.link
+        const colors = ((row.plant_colors as any[]) || []).map((c) => c?.colors?.name).filter(Boolean) as string[]
+        const sources = ((row.plant_sources as any[]) || []).map((src) => ({ name: src?.name, url: src?.url })).filter((s) => s.name)
+        const seasonsRaw = row.season || []
+        const seasons: PlantSeason[] = Array.isArray(seasonsRaw)
+          ? seasonsRaw.map((s: string) => (s ? (s.charAt(0).toUpperCase() + s.slice(1)) as PlantSeason : undefined)).filter(Boolean) as PlantSeason[]
+          : []
+        return {
+          id: String(row.id),
+          name: row.name || '',
+          identity: { scientificName: row.scientific_name || undefined, season: seasons },
+          miscellaneous: { sources },
+          plantType: row.plant_type || undefined,
+          description: row.overview || '',
+          images,
+          image: primaryImage,
+          colors,
+          seasons,
+        } as Plant
+      })
+    } catch (fallbackError) {
+      console.error('Fallback plant load failed', fallbackError)
+      return []
+    }
   }
 }

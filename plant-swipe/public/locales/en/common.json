@@ -985,5 +985,34 @@
       "nameRequired": "Plant name is required",
       "mustBeLoggedIn": "You must be logged in to request a plant"
     }
+  },
+  "plantAdmin": {
+    "languageLabel": "Language",
+    "languageHelper": "AI responses follow the selected language.",
+    "createTitle": "Create Plant",
+    "createSubtitle": "Fill every field with the supplied descriptions or let AI help.",
+    "editTitle": "Edit Plant",
+    "editSubtitle": "Update the record to match the new database structure.",
+      "translationNoTargets": "No other languages configured for translation.",
+      "deeplTranslate": "DeepL Translation",
+    "aiFill": "AI fill all fields",
+    "aiFilled": "AI Filled",
+    "overviewLength": "Overview must be between 50 and 300 words.",
+    "aiNameRequired": "Please enter a name before using AI fill.",
+    "nameRequired": "Name is required",
+    "loadingPlant": "Loading plant...",
+    "categoryProgressTitle": "Category fill progress",
+    "categoryMenuTitle": "Quick category menu",
+    "categories": {
+      "basics": "Basics",
+      "identity": "Identity",
+      "plantCare": "Plant Care",
+      "growth": "Growth",
+      "usage": "Usage",
+      "ecology": "Ecology",
+      "danger": "Danger",
+      "miscellaneous": "Miscellaneous",
+      "meta": "Meta"
+    }
   }
 }

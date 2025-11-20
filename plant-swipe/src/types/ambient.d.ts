@@ -7,4 +7,6 @@ declare module 'url' {
   export const fileURLToPath: any
   export const pathToFileURL: any
 }
+
+declare module 'dompurify'
 // No longer exposing db.js

@@ -44,7 +44,11 @@ export interface TranslatedFields extends TranslationFields {}
 /**
  * Translate text using DeepL API via backend endpoint
  */
-async function translateText(text: string, targetLang: SupportedLanguage, sourceLang: SupportedLanguage = DEFAULT_LANGUAGE): Promise<string> {
+export async function translateText(
+  text: string,
+  targetLang: SupportedLanguage,
+  sourceLang: SupportedLanguage = DEFAULT_LANGUAGE
+): Promise<string> {
   if (!text || text.trim() === '') return text
   
   // If source and target are the same, return original
@@ -81,7 +85,7 @@ async function translateText(text: string, targetLang: SupportedLanguage, source
 /**
  * Translate array of strings
  */
-async function translateArray(
+export async function translateArray(
   items: string[],
   targetLang: SupportedLanguage,
   sourceLang: SupportedLanguage = DEFAULT_LANGUAGE
@@ -244,7 +248,7 @@ export async function translatePlantFields(
   }
   if (fields.care) {
     const translatedCare: TranslationFields['care'] = {}
-    if (fields.care.watering?.frequency) {
+    if (fields.care.watering?.frequency && typeof fields.care.watering.frequency === 'object') {
       const freq = fields.care.watering.frequency
       translatedCare.watering = {
         ...fields.care.watering,
