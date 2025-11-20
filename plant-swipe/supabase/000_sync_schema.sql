@@ -752,6 +752,8 @@ create table if not exists public.plant_translations (
   advice_infusion text,
   ground_effect text,
   admin_commentary text,
+  source_name text,
+  source_url text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (plant_id, language)
@@ -798,6 +800,8 @@ alter table if exists public.plant_translations add column if not exists advice_
 alter table if exists public.plant_translations add column if not exists advice_infusion text;
 alter table if exists public.plant_translations add column if not exists ground_effect text;
 alter table if exists public.plant_translations add column if not exists admin_commentary text;
+alter table if exists public.plant_translations add column if not exists source_name text;
+alter table if exists public.plant_translations add column if not exists source_url text;
 
 -- RLS policies for plant_translations
 alter table public.plant_translations enable row level security;

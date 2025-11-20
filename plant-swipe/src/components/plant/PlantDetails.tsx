@@ -1,9 +1,24 @@
-import React, { useMemo } from "react"
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import type { Plant } from "@/types/plant"
-import { Flame, Sparkles, SunMedium, Droplets, Thermometer, Heart, Leaf } from "lucide-react"
+import {
+  Flame,
+  Sparkles,
+  SunMedium,
+  Droplets,
+  Thermometer,
+  Heart,
+  Leaf,
+  Share2,
+  ChevronLeft,
+  ChevronRight,
+  X,
+  ZoomIn,
+  ZoomOut,
+  RefreshCw,
+} from "lucide-react"
 import {
   Bar,
   BarChart,
@@ -18,11 +33,8 @@ import {
 
 interface PlantDetailsProps {
   plant: Plant
-  onClose?: () => void
   liked?: boolean
   onToggleLike?: () => void
-  isOverlayMode?: boolean
-  onRequestPlant?: () => void
 }
 
 const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
@@ -109,8 +121,157 @@ const listOrTags = (values?: string[]) =>
     </div>
   ) : undefined
 
-export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, onClose, liked, onToggleLike, onRequestPlant }) => {
-  const primaryImage = plant.images?.find((img) => img.use === "primary") || plant.images?.[0]
+export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onToggleLike }) => {
+  const images = (plant.images || []).filter((img): img is NonNullable<typeof img> & { link: string } => Boolean(img?.link))
+  const [activeImageIndex, setActiveImageIndex] = useState(0)
+  const activeImage = images[activeImageIndex] || null
+  const [shareStatus, setShareStatus] = useState<"idle" | "copied" | "shared" | "error">("idle")
+  const shareTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [viewerOpen, setViewerOpen] = useState(false)
+  const [viewerZoom, setViewerZoom] = useState(1)
+  const [viewerOffset, setViewerOffset] = useState({ x: 0, y: 0 })
+  const [isPanning, setIsPanning] = useState(false)
+  const panStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
+  const touchStartRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    setActiveImageIndex(0)
+  }, [plant.id])
+
+  useEffect(() => {
+    if (activeImageIndex >= images.length && images.length > 0) {
+      setActiveImageIndex(0)
+    }
+  }, [images.length, activeImageIndex])
+
+  useEffect(() => {
+    return () => {
+      if (shareTimeoutRef.current) clearTimeout(shareTimeoutRef.current)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!viewerOpen) {
+      setViewerZoom(1)
+      setViewerOffset({ x: 0, y: 0 })
+      setIsPanning(false)
+      return
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault()
+        setViewerOpen(false)
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [viewerOpen])
+
+  const heroColors = useMemo(() => plant.identity?.colors?.filter((c) => c.hexCode) || [], [plant.identity?.colors])
+
+  const goToNextImage = useCallback(() => {
+    if (!images.length) return
+    setActiveImageIndex((idx) => (idx + 1) % images.length)
+  }, [images.length])
+
+  const goToPrevImage = useCallback(() => {
+    if (!images.length) return
+    setActiveImageIndex((idx) => (idx - 1 + images.length) % images.length)
+  }, [images.length])
+
+  const handleTouchStart = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    touchStartRef.current = event.touches[0]?.clientX ?? null
+  }, [])
+
+  const handleTouchEnd = useCallback(
+    (event: React.TouchEvent<HTMLDivElement>) => {
+      if (touchStartRef.current === null) return
+      const delta = (event.changedTouches[0]?.clientX ?? 0) - touchStartRef.current
+      touchStartRef.current = null
+      if (Math.abs(delta) < 40) return
+      if (delta > 0) goToPrevImage()
+      else goToNextImage()
+    },
+    [goToNextImage, goToPrevImage],
+  )
+
+  const handleShare = useCallback(async () => {
+    if (typeof window === "undefined") return
+    const shareUrl = window.location.href
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: plant.name,
+          text: plant.identity?.overview || undefined,
+          url: shareUrl,
+        })
+        setShareStatus("shared")
+      } else if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl)
+        setShareStatus("copied")
+      } else {
+        setShareStatus("error")
+      }
+    } catch {
+      setShareStatus("error")
+    }
+    if (shareTimeoutRef.current) clearTimeout(shareTimeoutRef.current)
+    shareTimeoutRef.current = setTimeout(() => setShareStatus("idle"), 2500)
+  }, [plant.identity?.overview, plant.name])
+
+  const openViewer = useCallback(() => {
+    if (!activeImage) return
+    setViewerOpen(true)
+  }, [activeImage])
+
+  const closeViewer = useCallback(() => {
+    setViewerOpen(false)
+  }, [])
+
+  const adjustZoom = useCallback((delta: number) => {
+    setViewerZoom((prev) => Math.min(4, Math.max(1, parseFloat((prev + delta).toFixed(2)))))
+  }, [])
+
+  const resetViewer = useCallback(() => {
+    setViewerZoom(1)
+    setViewerOffset({ x: 0, y: 0 })
+  }, [])
+
+  const handleViewerWheel = useCallback(
+    (event: React.WheelEvent<HTMLDivElement>) => {
+      event.preventDefault()
+      adjustZoom(event.deltaY < 0 ? 0.15 : -0.15)
+    },
+    [adjustZoom],
+  )
+
+  const handleViewerPointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      event.preventDefault()
+      setIsPanning(true)
+      event.currentTarget.setPointerCapture(event.pointerId)
+      panStartRef.current = { x: event.clientX - viewerOffset.x, y: event.clientY - viewerOffset.y }
+    },
+    [viewerOffset.x, viewerOffset.y],
+  )
+
+  const handleViewerPointerMove = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (!isPanning) return
+      setViewerOffset({
+        x: event.clientX - panStartRef.current.x,
+        y: event.clientY - panStartRef.current.y,
+      })
+    },
+    [isPanning],
+  )
+
+  const handleViewerPointerUp = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    setIsPanning(false)
+  }, [])
 
   const temperatureData = useMemo(() => {
     const rows = [
@@ -126,18 +287,43 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, onClose, like
     return plant.plantCare.wateringType.map((type, idx) => ({ name: type, value: 1, fill: colorPalette[idx % colorPalette.length] }))
   }, [plant.plantCare?.wateringType])
 
-  const heroColors = useMemo(() => plant.identity?.colors?.filter((c) => c.hexCode) || [], [plant.identity?.colors])
-
   const utilityBadges = plant.utility?.length ? plant.utility : []
 
   const seasons = plant.identity?.season || plant.seasons || []
+  const shareFeedback =
+    shareStatus === "copied" ? "Link copied" : shareStatus === "shared" ? "Shared!" : shareStatus === "error" ? "Share unavailable" : ""
 
   return (
     <div className="space-y-6 pb-16">
-      <div className="relative overflow-hidden rounded-3xl border border-muted/50 bg-gradient-to-br from-emerald-50 via-white to-amber-50 dark:from-[#0b1220] dark:via-[#0a0f1a] dark:to-[#05080f] shadow-lg">
-        <div className="absolute inset-0 opacity-25 blur-3xl" style={{ background: "radial-gradient(circle at 20% 20%, #34d39926, transparent 40%), radial-gradient(circle at 80% 10%, #fb718526, transparent 35%), radial-gradient(circle at 60% 80%, #22d3ee26, transparent 45%)" }} />
-        <div className="relative flex flex-col lg:flex-row gap-4 p-4 sm:p-6 lg:p-8">
-          <div className="flex-1 space-y-4">
+        <div className="relative overflow-hidden rounded-3xl border border-muted/50 bg-gradient-to-br from-emerald-50 via-white to-amber-50 dark:from-[#0b1220] dark:via-[#0a0f1a] dark:to-[#05080f] shadow-lg">
+          <div className="absolute inset-0 opacity-25 blur-3xl" style={{ background: "radial-gradient(circle at 20% 20%, #34d39926, transparent 40%), radial-gradient(circle at 80% 10%, #fb718526, transparent 35%), radial-gradient(circle at 60% 80%, #22d3ee26, transparent 45%)" }} />
+          <div className="absolute top-4 right-4 flex flex-col items-end gap-2 sm:gap-3">
+            {onToggleLike && (
+              <Button
+                size="lg"
+                variant={liked ? "default" : "secondary"}
+                className="rounded-full px-6 py-3 text-base shadow-lg"
+                onClick={onToggleLike}
+              >
+                <Heart className="mr-2 h-5 w-5" fill={liked ? "currentColor" : "none"} />
+                {liked ? "Liked" : "Like"}
+              </Button>
+            )}
+            <div className="flex flex-col items-end gap-1">
+              <Button
+                size="lg"
+                variant="outline"
+                className="rounded-full px-5 py-3 text-base shadow-lg"
+                onClick={handleShare}
+              >
+                <Share2 className="mr-2 h-5 w-5" />
+                Share
+              </Button>
+              {shareFeedback && <span className="text-xs font-medium text-white drop-shadow">{shareFeedback}</span>}
+            </div>
+          </div>
+          <div className="relative flex flex-col gap-4 p-4 pt-16 sm:p-6 lg:flex-row lg:gap-8 lg:p-8">
+            <div className="flex-1 space-y-4">
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="secondary" className="uppercase tracking-wide">{plant.plantType || "Plant"}</Badge>
               {utilityBadges.map((u) => (
@@ -147,33 +333,12 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, onClose, like
               ))}
               {seasons.length > 0 && <Badge variant="outline" className="bg-amber-100/60 text-amber-900 dark:bg-amber-900/30 dark:text-amber-50">{seasons.join(" • ")}</Badge>}
             </div>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h1 className="text-3xl sm:text-4xl font-bold text-foreground">{plant.name}</h1>
                 {plant.identity?.scientificName && (
                   <p className="text-lg text-muted-foreground italic">{plant.identity.scientificName}</p>
                 )}
               </div>
-              <div className="flex flex-wrap gap-2">
-                {onToggleLike && (
-                  <Button size="sm" variant={liked ? "default" : "secondary"} className="rounded-full" onClick={onToggleLike}>
-                    <Heart className="h-4 w-4 mr-2" fill={liked ? "currentColor" : "none"} />
-                    {liked ? "Saved" : "Save"}
-                  </Button>
-                )}
-                {onRequestPlant && (
-                  <Button size="sm" variant="outline" className="rounded-full" onClick={onRequestPlant}>
-                    <Sparkles className="h-4 w-4 mr-2" />
-                    Request update
-                  </Button>
-                )}
-                {onClose && (
-                  <Button size="sm" variant="ghost" className="rounded-full" onClick={onClose}>
-                    Close
-                  </Button>
-                )}
-              </div>
-            </div>
             {plant.identity?.overview && <p className="text-muted-foreground leading-relaxed text-base">{plant.identity.overview}</p>}
 
             {heroColors.length > 0 && (
@@ -188,12 +353,149 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, onClose, like
               </div>
             )}
           </div>
-          {primaryImage && (
-            <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl border border-muted/60 bg-white/60 shadow-inner sm:w-80">
-              <img src={primaryImage.link} alt={plant.name} className="h-full w-full object-cover" loading="lazy" />
-            </div>
-          )}
+            <div className="flex w-full justify-center lg:w-auto">
+              {activeImage ? (
+                <div
+                  className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl border border-muted/60 bg-white/60 shadow-inner sm:w-80 lg:w-96"
+                  onTouchStart={handleTouchStart}
+                  onTouchEnd={handleTouchEnd}
+                >
+                  <img
+                    src={activeImage.link}
+                    alt={plant.name}
+                    className="h-full w-full cursor-zoom-in object-cover transition-transform duration-500"
+                    onClick={openViewer}
+                    draggable={false}
+                    loading="lazy"
+                  />
+                  {images.length > 1 && (
+                    <>
+                      <button
+                        type="button"
+                        className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-2 text-white backdrop-blur hover:bg-black/60"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          goToPrevImage()
+                        }}
+                        aria-label="Previous image"
+                      >
+                        <ChevronLeft className="h-5 w-5" />
+                      </button>
+                      <button
+                        type="button"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-2 text-white backdrop-blur hover:bg-black/60"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          goToNextImage()
+                        }}
+                        aria-label="Next image"
+                      >
+                        <ChevronRight className="h-5 w-5" />
+                      </button>
+                      <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-2">
+                        {images.map((_, idx) => (
+                          <button
+                            key={`dot-${idx}`}
+                            type="button"
+                            className={`h-2.5 w-2.5 rounded-full transition ${
+                              idx === activeImageIndex ? "bg-white" : "bg-white/40"
+                            }`}
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              setActiveImageIndex(idx)
+                            }}
+                            aria-label={`Go to image ${idx + 1}`}
+                          />
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div className="flex aspect-[4/3] w-full items-center justify-center rounded-2xl border border-dashed border-muted/60 bg-white/40 text-sm text-muted-foreground sm:w-80 lg:w-96">
+                  No image yet
+                </div>
+              )}
+          </div>
         </div>
+        {viewerOpen && activeImage && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm"
+            onClick={closeViewer}
+          >
+            <button
+              type="button"
+              className="absolute top-6 right-6 rounded-full bg-white/10 p-2 text-white transition hover:bg-white/20"
+              onClick={(event) => {
+                event.stopPropagation()
+                closeViewer()
+              }}
+              aria-label="Close image viewer"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <div
+              className="flex h-full w-full max-w-5xl flex-col items-center justify-center px-4"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div
+                className="relative max-h-[80vh] w-full overflow-hidden rounded-2xl border border-white/10 bg-black/60"
+                onWheel={handleViewerWheel}
+                onPointerDown={handleViewerPointerDown}
+                onPointerMove={handleViewerPointerMove}
+                onPointerUp={handleViewerPointerUp}
+                onPointerLeave={handleViewerPointerUp}
+              >
+                <img
+                  src={activeImage.link}
+                  alt={plant.name}
+                  draggable={false}
+                  className="h-full w-full select-none object-contain"
+                  style={{
+                    transform: `translate(${viewerOffset.x}px, ${viewerOffset.y}px) scale(${viewerZoom})`,
+                    cursor: isPanning ? "grabbing" : viewerZoom > 1 ? "grab" : "zoom-in",
+                    transition: isPanning ? "none" : "transform 0.2s ease-out",
+                  }}
+                />
+              </div>
+              <div className="mt-4 flex flex-wrap items-center gap-3 text-white">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    adjustZoom(0.2)
+                  }}
+                >
+                  <ZoomIn className="mr-1 h-4 w-4" />
+                  Zoom in
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    adjustZoom(-0.2)
+                  }}
+                >
+                  <ZoomOut className="mr-1 h-4 w-4" />
+                  Zoom out
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    resetViewer()
+                  }}
+                >
+                  <RefreshCw className="mr-1 h-4 w-4" />
+                  Reset
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

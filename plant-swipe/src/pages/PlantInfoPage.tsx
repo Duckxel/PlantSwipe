@@ -152,7 +152,6 @@ export const PlantInfoPage: React.FC = () => {
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [likedIds, setLikedIds] = React.useState<string[]>([])
-  const isOverlayMode = false
 
   const fallbackTitle = t('seo.plant.fallbackTitle', { defaultValue: 'Plant encyclopedia entry' })
   const fallbackDescription = t('seo.plant.fallbackDescription', {
@@ -224,10 +223,6 @@ export const PlantInfoPage: React.FC = () => {
     }
   }, [navigate])
 
-  const handleClose = () => {
-    handleGoBack()
-  }
-
   const handleEdit = () => {
     if (!plant) return
     navigate(`/plants/${plant.id}/edit`)
@@ -261,11 +256,8 @@ export const PlantInfoPage: React.FC = () => {
         </div>
         <PlantDetails
           plant={plant}
-          onClose={handleClose}
           liked={likedIds.includes(plant.id)}
           onToggleLike={toggleLiked}
-          isOverlayMode={isOverlayMode}
-          onRequestPlant={user ? () => {} : undefined}
         />
       </div>
     )
