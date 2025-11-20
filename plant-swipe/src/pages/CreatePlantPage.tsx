@@ -184,11 +184,7 @@ async function upsertInfusionMixes(plantId: string, infusionMix?: Record<string,
 }
 
 async function loadPlant(id: string): Promise<Plant | null> {
-  const { data, error } = await supabase
-    .from('plants')
-    .select('id,name,plant_type,utility,comestible_part,fruit_type,given_names,scientific_name,family,overview,promotion_month,life_cycle,season,foliage_persistance,spiked,toxicity_human,toxicity_pets,allergens,scent,symbolism,living_space,composition,maintenance_level,multicolor,bicolor,origin,habitat,temperature_max,temperature_min,temperature_ideal,level_sun,hygrometry,watering_type,division,soil,advice_soil,mulching,advice_mulching,nutrition_need,fertilizer,advice_fertilizer,sowing_month,flowering_month,fruiting_month,height_cm,wingspan_cm,tutoring,advice_tutoring,sow_type,separation_cm,transplanting,advice_sowing,cut,advice_medicinal,nutritional_intake,infusion,advice_infusion,recipes_ideas,aromatherapy,spice_mixes,melliferous,polenizer,be_fertilizer,ground_effect,conservation_status,pests,diseases,companions,tags,source_name,source_url,status,admin_commentary,created_by,created_time,updated_by,updated_time')
-    .eq('id', id)
-    .maybeSingle()
+  const { data, error } = await supabase.from('plants').select('*').eq('id', id).maybeSingle()
   if (error) throw new Error(error.message)
   if (!data) return null
   const { data: colorLinks } = await supabase.from('plant_colors').select('color_id, colors:color_id (id,name,hex_code)').eq('plant_id', id)
