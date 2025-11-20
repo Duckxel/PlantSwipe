@@ -1,7 +1,7 @@
 /**
  * Complete Advanced Plant Form - All Fields
- * This is a comprehensive form component for the new PLANT-INFO-SCHEMA.json structure
- * 
+ * Comprehensive form component for the structured plant schema.
+ *
  * Due to the extensive nature of this form, it's organized into collapsible sections
  * for better UX. All fields are optional and can be empty.
  */

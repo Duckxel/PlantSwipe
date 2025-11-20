@@ -1,14 +1,14 @@
 import React from 'react'
 import { useParams, useLocation } from 'react-router-dom'
 import { PlantDetails } from '@/components/plant/PlantDetails'
-import type { Plant, PlantImage } from '@/types/plant'
+import type { Plant, PlantImage, PlantWateringSchedule } from '@/types/plant'
 import { useAuth } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabaseClient'
 import { useTranslation } from 'react-i18next'
 import { useLanguage, useLanguageNavigate } from '@/lib/i18nRouting'
 import { usePageMetadata } from '@/hooks/usePageMetadata'
 
-type WaterSchedules = NonNullable<Plant['plantCare']>['watering']['schedules']
+type WaterSchedules = PlantWateringSchedule[]
 
 const normalizeSchedules = (rows?: any[]): WaterSchedules => {
   if (!rows?.length) return []

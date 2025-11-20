@@ -5,7 +5,6 @@ import { AlertCircle, Check, Loader2, Sparkles } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
 import { PlantProfileForm } from "@/components/plant/PlantProfileForm"
 import { fetchAiPlantFill, fetchAiPlantFillField } from "@/lib/aiPlantFill"
-import plantSchema from "../../PLANT-INFO-SCHEMA.json"
 import type { Plant, PlantColor, PlantImage, PlantMeta, PlantSource, PlantWateringSchedule } from "@/types/plant"
 import { useAuth } from "@/context/AuthContext"
 import { useTranslation } from "react-i18next"
@@ -295,7 +294,27 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   const [aiProgress, setAiProgress] = React.useState<CategoryProgress>(() => createEmptyCategoryProgress())
   const [existingLoaded, setExistingLoaded] = React.useState(false)
   const [colorSuggestions, setColorSuggestions] = React.useState<PlantColor[]>([])
-  const targetFields = React.useMemo(() => Object.keys(plantSchema as Record<string, unknown>).filter((key) => !DISALLOWED_FIELDS.has(key) && !DISALLOWED_FIELDS.has(key.toLowerCase())), [])
+  const targetFields = React.useMemo(
+    () =>
+      [
+        'plantType',
+        'utility',
+        'comestiblePart',
+        'fruitType',
+        'images',
+        'identity',
+        'plantCare',
+        'growth',
+        'usage',
+        'ecology',
+        'danger',
+        'miscellaneous',
+        'meta',
+        'seasons',
+        'description',
+      ].filter((key) => !DISALLOWED_FIELDS.has(key) && !DISALLOWED_FIELDS.has(key.toLowerCase())),
+    [],
+  )
   const categoryLabels = React.useMemo(() => ({
     basics: t('plantAdmin.categories.basics', 'Basics'),
     identity: t('plantAdmin.categories.identity', 'Identity'),
