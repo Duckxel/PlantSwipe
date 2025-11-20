@@ -7,7 +7,9 @@ import { getPrimaryPhotoUrl } from '@/lib/photos'
 import type { SupportedLanguage } from './i18n'
 import { mergePlantWithTranslation } from './plantTranslationLoader'
 
-const LEVEL_SUN_MAP: Record<string, Plant['plantCare']['levelSun']> = {
+type PlantCareShape = NonNullable<Plant['plantCare']>
+
+const LEVEL_SUN_MAP: Record<string, PlantCareShape['levelSun']> = {
   'low light': 'Low Light',
   shade: 'Shade',
   'partial sun': 'Partial Sun',
@@ -33,13 +35,13 @@ const SOIL_TYPE_VALUES = [
 ] as const
 type SoilTypeValue = (typeof SOIL_TYPE_VALUES)[number]
 
-function normalizeLevelSun(value: unknown): Plant['plantCare']['levelSun'] | undefined {
+function normalizeLevelSun(value: unknown): PlantCareShape['levelSun'] | undefined {
   if (typeof value !== 'string') return undefined
   const mapped = LEVEL_SUN_MAP[value.toLowerCase()]
   return mapped
 }
 
-function normalizeWateringTypes(value: unknown): Plant['plantCare']['wateringType'] | undefined {
+function normalizeWateringTypes(value: unknown): PlantCareShape['wateringType'] | undefined {
   if (!Array.isArray(value)) return undefined
   const filtered = value.filter(
     (entry): entry is WateringTypeValue =>
@@ -48,7 +50,7 @@ function normalizeWateringTypes(value: unknown): Plant['plantCare']['wateringTyp
   return filtered.length ? filtered : undefined
 }
 
-function normalizeSoilTypes(value: unknown): Plant['plantCare']['soil'] | undefined {
+function normalizeSoilTypes(value: unknown): PlantCareShape['soil'] | undefined {
   if (!Array.isArray(value)) return undefined
   const filtered = value.filter(
     (entry): entry is SoilTypeValue =>
