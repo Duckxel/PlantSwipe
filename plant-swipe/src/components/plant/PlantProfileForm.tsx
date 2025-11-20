@@ -9,6 +9,7 @@ import { useTranslation } from "react-i18next"
 import { plantFormCategoryOrder, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
 import type { Plant, PlantColor, PlantImage, PlantSource, PlantType, PlantWateringSchedule } from "@/types/plant"
 import { supabase } from "@/lib/supabaseClient"
+import { Sparkles } from "lucide-react"
 
 export type PlantProfileFormProps = {
   value: Plant
@@ -21,6 +22,13 @@ const neuCardClass =
   "rounded-2xl border border-emerald-100/80 dark:border-emerald-900/50 bg-gradient-to-br " +
   "from-emerald-50/80 via-emerald-100/70 to-white/80 dark:from-[#0f1a12] dark:via-[#0c140f] dark:to-[#0a120d] " +
   "shadow-[0_18px_50px_-26px_rgba(16,185,129,0.35)] dark:shadow-[0_22px_65px_-40px_rgba(0,0,0,0.65)]"
+
+const normalizeHex = (hex?: string) => {
+  if (!hex) return ""
+  const trimmed = hex.trim()
+  if (!trimmed) return ""
+  return trimmed.startsWith("#") ? trimmed : `#${trimmed}`
+}
 
 type FieldType =
   | "text"
@@ -800,12 +808,6 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
   const [insertHex, setInsertHex] = React.useState("#")
   const [inserting, setInserting] = React.useState(false)
 
-  const normalizeHex = (hex: string) => {
-    const trimmed = hex.trim()
-    if (!trimmed) return ""
-    return trimmed.startsWith("#") ? trimmed : `#${trimmed}`
-  }
-
   const loadColors = React.useCallback(async (term?: string) => {
     setLoading(true)
     const query = supabase.from('colors').select('id,name,hex_code').order('name')
@@ -916,6 +918,7 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, categoryPr
     meta: null,
   })
   const [selectedCategory, setSelectedCategory] = React.useState<PlantFormCategory>('identity')
+  const [showColorRecommendations, setShowColorRecommendations] = React.useState(false)
   const categoryLabels: Record<PlantFormCategory, string> = {
     basics: t('plantAdmin.categories.basics', 'Basics'),
     identity: t('plantAdmin.categories.identity', 'Identity'),
@@ -930,6 +933,30 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, categoryPr
   const scrollToCategory = (category: PlantFormCategory) => {
     setSelectedCategory(category)
   }
+  React.useEffect(() => {
+    if (!colorSuggestions?.length) {
+      setShowColorRecommendations(false)
+    }
+  }, [colorSuggestions?.length])
+  const addSuggestedColor = React.useCallback(
+    (suggestion: PlantColor | { name?: string; hexCode?: string; hex?: string; label?: string }) => {
+      const current = value.identity?.colors || []
+      const name = suggestion.name || (suggestion as any)?.label || suggestion.hexCode || (suggestion as any)?.hex || t('plantAdmin.colorFallback', 'Color')
+      const hex = normalizeHex(suggestion.hexCode || (suggestion as any)?.hex || '')
+      const alreadyAdded = current.some((color) => {
+        const colorName = color.name?.toLowerCase()
+        const colorHex = normalizeHex(color.hexCode || '')
+        return (
+          (name && colorName === name.toLowerCase()) ||
+          (hex && colorHex && colorHex === hex)
+        )
+      })
+      if (alreadyAdded) return
+      const next: PlantColor = hex ? { name, hexCode: hex } : { name }
+      onChange(setValue(value, 'identity.colors', [...current, next]))
+    },
+    [onChange, t, value],
+  )
   const categoriesWithoutBasics = plantFormCategoryOrder.filter((cat) => cat !== 'basics')
   const setPath = (path: string, val: any) => onChange(setValue(value, path, val))
   return (
@@ -1106,54 +1133,95 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, categoryPr
                   </CardHeader>
                   <CardContent className="flex flex-col gap-4">
                     {fieldGroups[cat].map((f) => renderField(value, setPath, f))}
-                  {cat === 'identity' && (
-                    <div className="md:col-span-2">
-                      <Label>Colors</Label>
-                      {colorSuggestions?.length ? (
-                        <div className="mt-2 mb-3 rounded-xl border border-emerald-100/70 dark:border-emerald-900/50 bg-gradient-to-r from-emerald-50/70 via-white/80 to-emerald-100/70 dark:from-[#0f1a12] dark:via-[#0c140f] dark:to-[#0a120d] px-4 py-3 shadow-inner">
-                          <div className="text-sm font-semibold mb-2">AI suggested palettes (review before adding)</div>
-                          <div className="flex flex-wrap gap-2">
-                            {colorSuggestions.map((c, idx) => (
-                              <div key={`${c.name || c.hexCode || idx}-${idx}`} className="flex items-center gap-2 rounded-lg bg-white/80 dark:bg-[#1a1f1a] px-3 py-2 shadow-sm">
-                                <span
-                                  className="h-4 w-4 rounded-full border"
-                                  style={{ backgroundColor: c.hexCode || (c as any).hex || undefined }}
-                                />
-                                <div className="flex flex-col leading-tight">
-                                  <span className="text-sm font-medium">{c.name || c.hexCode || (c as any).hex || 'Color'}</span>
-                                  {(c.hexCode || (c as any).hex) && (
-                                    <span className="text-xs text-muted-foreground">{c.hexCode || (c as any).hex}</span>
-                                  )}
+                    {cat === 'identity' && (
+                      <div className="md:col-span-2">
+                        {colorSuggestions?.length ? (
+                          <div className="mb-3">
+                            <button
+                              type="button"
+                              className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-300"
+                              onClick={() => setShowColorRecommendations((prev) => !prev)}
+                            >
+                              <Sparkles className="h-4 w-4" />
+                              {showColorRecommendations
+                                ? t('plantAdmin.hideColorSuggestions', 'Hide AI color suggestions')
+                                : t('plantAdmin.showColorSuggestions', 'Show AI color suggestions')}
+                            </button>
+                            {showColorRecommendations && (
+                              <div className="mt-2 rounded-xl border border-emerald-100/70 dark:border-emerald-900/50 bg-gradient-to-r from-emerald-50/70 via-white/80 to-emerald-100/70 dark:from-[#0f1a12] dark:via-[#0c140f] dark:to-[#0a120d] px-4 py-3 shadow-inner space-y-3">
+                                <div className="text-xs text-muted-foreground">
+                                  {t('plantAdmin.colorSuggestionsReview', 'Review and add the colors you like to your palette.')}
+                                </div>
+                                <div className="flex flex-wrap gap-3">
+                                  {colorSuggestions.map((c, idx) => {
+                                    const name = c.name || (c as any)?.label || c.hexCode || (c as any)?.hex || t('plantAdmin.colorFallback', 'Color')
+                                    const hex = normalizeHex(c.hexCode || (c as any)?.hex || '')
+                                    const alreadyAdded = (value.identity?.colors || []).some((color) => {
+                                      const colorName = color.name?.toLowerCase()
+                                      const colorHex = normalizeHex(color.hexCode || '')
+                                      return (
+                                        (name && colorName === name.toLowerCase()) ||
+                                        (hex && colorHex && colorHex === hex)
+                                      )
+                                    })
+                                    return (
+                                      <div
+                                        key={`${name}-${hex || idx}`}
+                                        className="flex items-center gap-3 rounded-lg bg-white/80 dark:bg-[#111611] px-3 py-2 shadow-sm border border-emerald-100/60 dark:border-emerald-900/40"
+                                      >
+                                        <span
+                                          className="h-5 w-5 rounded-full border border-stone-200 dark:border-stone-700"
+                                          style={{ backgroundColor: hex || undefined }}
+                                        />
+                                        <div className="flex flex-col leading-tight min-w-[90px]">
+                                          <span className="text-sm font-medium text-emerald-900 dark:text-emerald-200">{name}</span>
+                                          {hex && <span className="text-xs text-muted-foreground">{hex}</span>}
+                                        </div>
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant={alreadyAdded ? 'secondary' : 'default'}
+                                          disabled={alreadyAdded}
+                                          onClick={() => addSuggestedColor(c)}
+                                        >
+                                          {alreadyAdded ? t('plantAdmin.colorAdded', 'Added') : t('plantAdmin.addColor', 'Add')}
+                                        </Button>
+                                      </div>
+                                    )
+                                  })}
                                 </div>
                               </div>
-                            ))}
+                            )}
                           </div>
+                        ) : null}
+                        <Label>{t('plantAdmin.colorsLabel', 'Colors')}</Label>
+                        {!colorSuggestions?.length && (
+                          <p className="text-xs text-muted-foreground mb-2">
+                            {t('plantAdmin.colorSuggestionPlaceholder', 'AI recommendations will show up here when available.')}
+                          </p>
+                        )}
+                        <ColorPicker colors={value.identity?.colors || []} onChange={(colors) => onChange(setValue(value, "identity.colors", colors))} />
+                        <div className="mt-3 flex flex-wrap gap-4 text-sm">
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={!!value.identity?.multicolor}
+                              onChange={(e) => onChange(setValue(value, "identity.multicolor", e.target.checked))}
+                            />
+                            Multicolor
+                          </label>
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={!!value.identity?.bicolor}
+                              onChange={(e) => onChange(setValue(value, "identity.bicolor", e.target.checked))}
+                            />
+                            Bicolor
+                          </label>
                         </div>
-                      ) : (
-                        <p className="text-xs text-muted-foreground mb-2">AI suggestions will appear here without changing your palette.</p>
-                      )}
-                      <ColorPicker colors={value.identity?.colors || []} onChange={(colors) => onChange(setValue(value, "identity.colors", colors))} />
-                      <div className="mt-3 flex flex-wrap gap-4 text-sm">
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={!!value.identity?.multicolor}
-                            onChange={(e) => onChange(setValue(value, "identity.multicolor", e.target.checked))}
-                          />
-                          Multicolor
-                        </label>
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={!!value.identity?.bicolor}
-                            onChange={(e) => onChange(setValue(value, "identity.bicolor", e.target.checked))}
-                          />
-                          Bicolor
-                        </label>
+                        <p className="text-xs text-muted-foreground">Link existing palette colors or insert new ones for this plant.</p>
                       </div>
-                      <p className="text-xs text-muted-foreground">Link existing palette colors or insert new ones for this plant.</p>
-                    </div>
-                  )}
+                    )}
                 </CardContent>
               </Card>
             </div>
