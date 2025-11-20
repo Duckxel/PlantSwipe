@@ -1056,9 +1056,10 @@ export default function PlantSwipe() {
                 </RequireAdmin>
               }
             />
-              <Route
-                path="/create"
-                element={user ? (
+            <Route
+              path="/create"
+              element={
+                <RequireAdmin>
                   <Suspense fallback={routeLoadingFallback}>
                     <CreatePlantPageLazy
                       onCancel={() => navigate('/')}
@@ -1070,13 +1071,13 @@ export default function PlantSwipe() {
                       }}
                     />
                   </Suspense>
-                ) : (
-                  <Navigate to="/" replace />
-                )}
-              />
-              <Route
-                path="/create/:id"
-                element={user ? (
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="/create/:id"
+              element={
+                <RequireAdmin>
                   <Suspense fallback={routeLoadingFallback}>
                     <CreatePlantPageLazy
                       onCancel={() => navigate('/')}
@@ -1088,13 +1089,13 @@ export default function PlantSwipe() {
                       }}
                     />
                   </Suspense>
-                ) : (
-                  <Navigate to="/" replace />
-                )}
-              />
-              <Route
-                path="/plants/:id/edit"
-                element={user ? (
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="/plants/:id/edit"
+              element={
+                <RequireAdmin>
                   <Suspense fallback={routeLoadingFallback}>
                     <CreatePlantPageLazy
                       onCancel={() => navigate('/search')}
@@ -1106,10 +1107,9 @@ export default function PlantSwipe() {
                       }}
                     />
                   </Suspense>
-                ) : (
-                  <Navigate to="/" replace />
-                )}
-              />
+                </RequireAdmin>
+              }
+            />
             <Route
               path="/plants/:id"
               element={

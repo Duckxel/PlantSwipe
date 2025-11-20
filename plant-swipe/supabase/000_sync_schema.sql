@@ -7,6 +7,63 @@ create extension if not exists pgcrypto;
 -- Optional: scheduling support
 create extension if not exists pg_cron;
 
+-- ========== Public schema hard cleanup (drops rogue tables) ==========
+do $$ declare
+  allowed_tables constant text[] := array[
+    'profiles',
+    'plants',
+    'plant_watering_schedules',
+    'plant_sources',
+    'plant_infusion_mixes',
+    'plant_images',
+    'colors',
+    'plant_colors',
+    'translation_languages',
+    'plant_translations',
+    'requested_plants',
+    'admin_media_uploads',
+    'plant_request_users',
+    'gardens',
+    'garden_members',
+    'garden_plants',
+    'garden_plant_events',
+    'garden_inventory',
+    'garden_instance_inventory',
+    'garden_transactions',
+    'garden_tasks',
+    'garden_plant_schedule',
+    'garden_watering_schedule',
+    'garden_plant_tasks',
+    'garden_plant_task_occurrences',
+    'garden_task_user_completions',
+    'web_visits',
+    'banned_accounts',
+    'banned_ips',
+    'broadcast_messages',
+    'profile_admin_notes',
+    'admin_activity_logs',
+    'garden_activity_logs',
+    'friend_requests',
+    'friends',
+    'notification_campaigns',
+    'user_notifications',
+    'user_push_subscriptions'
+  ];
+  rec record;
+begin
+  for rec in
+    select tablename
+    from pg_tables
+    where schemaname = 'public'
+      and tablename not like 'pg_%'
+      and tablename not like 'sql_%'
+  loop
+    if not (rec.tablename = any(allowed_tables)) then
+      execute format('drop table if exists public.%I cascade', rec.tablename);
+    end if;
+  end loop;
+end $$;
+
 -- ========== Profiles (user profiles) ==========
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
@@ -358,6 +415,102 @@ alter table if exists public.plants drop column if exists water_freq_amount;
 alter table if exists public.plants drop column if exists water_freq_unit;
 alter table if exists public.plants drop column if exists water_freq_value;
 alter table if exists public.plants drop column if exists updated_at;
+
+-- Strict column whitelist for plants (drops anything not declared above)
+do $$ declare
+  allowed_columns constant text[] := array[
+    'id',
+    'name',
+    'plant_type',
+    'utility',
+    'comestible_part',
+    'fruit_type',
+    'given_names',
+    'scientific_name',
+    'family',
+    'overview',
+    'promotion_month',
+    'life_cycle',
+    'season',
+    'foliage_persistance',
+    'spiked',
+    'toxicity_human',
+    'toxicity_pets',
+    'allergens',
+    'scent',
+    'symbolism',
+    'living_space',
+    'composition',
+    'maintenance_level',
+    'multicolor',
+    'bicolor',
+    'origin',
+    'habitat',
+    'temperature_max',
+    'temperature_min',
+    'temperature_ideal',
+    'level_sun',
+    'hygrometry',
+    'watering_type',
+    'division',
+    'soil',
+    'advice_soil',
+    'mulching',
+    'advice_mulching',
+    'nutrition_need',
+    'fertilizer',
+    'advice_fertilizer',
+    'sowing_month',
+    'flowering_month',
+    'fruiting_month',
+    'height_cm',
+    'wingspan_cm',
+    'tutoring',
+    'advice_tutoring',
+    'sow_type',
+    'separation_cm',
+    'transplanting',
+    'advice_sowing',
+    'cut',
+    'advice_medicinal',
+    'nutritional_intake',
+    'infusion',
+    'advice_infusion',
+    'recipes_ideas',
+    'aromatherapy',
+    'spice_mixes',
+    'melliferous',
+    'polenizer',
+    'be_fertilizer',
+    'ground_effect',
+    'conservation_status',
+    'pests',
+    'diseases',
+    'companions',
+    'tags',
+    'source_name',
+    'source_url',
+    'status',
+    'admin_commentary',
+    'created_by',
+    'created_time',
+    'updated_by',
+    'updated_time'
+  ];
+  rec record;
+begin
+  for rec in
+    select column_name
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'plants'
+  loop
+    if not (rec.column_name = any(allowed_columns)) then
+      execute format('alter table public.%I drop column %I cascade', 'plants', rec.column_name);
+    end if;
+  end loop;
+end $$;
+
 alter table public.plants enable row level security;
 -- Clean up legacy duplicate read policies if present
 do $$ begin
@@ -599,6 +752,8 @@ create table if not exists public.plant_translations (
   advice_infusion text,
   ground_effect text,
   admin_commentary text,
+  source_name text,
+  source_url text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (plant_id, language)
@@ -645,6 +800,8 @@ alter table if exists public.plant_translations add column if not exists advice_
 alter table if exists public.plant_translations add column if not exists advice_infusion text;
 alter table if exists public.plant_translations add column if not exists ground_effect text;
 alter table if exists public.plant_translations add column if not exists admin_commentary text;
+alter table if exists public.plant_translations add column if not exists source_name text;
+alter table if exists public.plant_translations add column if not exists source_url text;
 
 -- RLS policies for plant_translations
 alter table public.plant_translations enable row level security;

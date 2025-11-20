@@ -12,12 +12,55 @@ import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/lib/i18n"
 import { saveLanguagePreference } from "@/lib/i18nRouting"
 import { applyAiFieldToPlant, getCategoryForField } from "@/lib/applyAiField"
 import { translateArray, translateText } from "@/lib/deepl"
-import { buildCategoryProgress, createEmptyCategoryProgress, plantFormCategoryOrder, type CategoryProgress } from "@/lib/plantFormCategories"
+import { buildCategoryProgress, createEmptyCategoryProgress, plantFormCategoryOrder, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
 import { useParams } from "react-router-dom"
 import { plantSchema } from "@/lib/plantSchema"
 
 const DISALLOWED_FIELDS = new Set(['name', 'image', 'imageurl', 'image_url', 'imageURL'])
 const IN_PROGRESS_STATUS: PlantMeta['status'] = 'In Progres'
+const SECTION_LOG_LIMIT = 12
+const OPTIONAL_FIELD_EXCEPTIONS = new Set<string>()
+const MONTH_SLUGS = [
+  'january',
+  'february',
+  'march',
+  'april',
+  'may',
+  'june',
+  'july',
+  'august',
+  'september',
+  'october',
+  'november',
+  'december',
+] as const
+
+const monthNumberToSlug = (value?: number | null): string | null => {
+  if (!value) return null
+  const index = value - 1
+  if (index < 0 || index >= MONTH_SLUGS.length) return null
+  return MONTH_SLUGS[index]
+}
+
+const monthNumbersToSlugs = (values?: number[] | null): string[] =>
+  Array.isArray(values)
+    ? values
+        .map((entry) => monthNumberToSlug(entry))
+        .filter((entry): entry is string => Boolean(entry))
+    : []
+
+const monthSlugToNumber = (slug?: string | null): number | null => {
+  if (!slug) return null
+  const index = MONTH_SLUGS.indexOf(slug.toLowerCase() as (typeof MONTH_SLUGS)[number])
+  return index === -1 ? null : index + 1
+}
+
+const monthSlugsToNumbers = (values?: string[] | null): number[] =>
+  Array.isArray(values)
+    ? values
+        .map((entry) => monthSlugToNumber(entry))
+        .filter((entry): entry is number => typeof entry === 'number')
+    : []
 
 const formatStatusForUi = (value?: string | null): PlantMeta['status'] => {
   const map: Record<string, PlantMeta['status']> = {
@@ -29,6 +72,62 @@ const formatStatusForUi = (value?: string | null): PlantMeta['status'] => {
   if (!value) return IN_PROGRESS_STATUS
   const lower = value.toLowerCase()
   return map[lower] || IN_PROGRESS_STATUS
+}
+
+const getFieldValueForKey = (plant: Plant, fieldKey: string): unknown => {
+  switch (fieldKey) {
+    case 'plantType':
+      return plant.plantType
+    case 'utility':
+      return plant.utility
+    case 'comestiblePart':
+      return plant.comestiblePart
+    case 'fruitType':
+      return plant.fruitType
+    case 'images':
+      return plant.images
+    case 'identity':
+      return plant.identity
+    case 'plantCare':
+      return plant.plantCare
+    case 'growth':
+      return plant.growth
+    case 'usage':
+      return plant.usage
+    case 'ecology':
+      return plant.ecology
+    case 'danger':
+      return plant.danger
+    case 'miscellaneous':
+      return plant.miscellaneous
+    case 'meta':
+      return plant.meta
+    case 'seasons':
+      return plant.seasons
+    case 'description':
+      return plant.description
+    default:
+      return (plant as any)[fieldKey]
+  }
+}
+
+const hasMeaningfulContent = (value: unknown): boolean => {
+  if (value === null || value === undefined) return false
+  if (typeof value === 'string') return value.trim().length > 0
+  if (typeof value === 'number') return true
+  if (typeof value === 'boolean') return value === true
+  if (Array.isArray(value)) return value.some((entry) => hasMeaningfulContent(entry))
+  if (typeof value === 'object') {
+    return Object.values(value as Record<string, unknown>).some((entry) => hasMeaningfulContent(entry))
+  }
+  return false
+}
+
+const requiresFieldCompletion = (fieldKey: string) => !OPTIONAL_FIELD_EXCEPTIONS.has(fieldKey)
+
+const isFieldMissingForPlant = (plant: Plant, fieldKey: string): boolean => {
+  if (!requiresFieldCompletion(fieldKey)) return false
+  return !hasMeaningfulContent(getFieldValueForKey(plant, fieldKey))
 }
 
 function generateUUIDv4(): string {
@@ -74,6 +173,23 @@ function normalizeSchedules(entries?: PlantWateringSchedule[]): PlantWateringSch
       }
     })
     .filter((entry) => entry.season || entry.quantity !== undefined || entry.timePeriod)
+}
+
+function coerceBoolean(value: unknown, fallback: boolean | null = false): boolean | null {
+  if (value === null || value === undefined) return fallback
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'number') {
+    if (Number.isNaN(value)) return fallback
+    return value !== 0
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase()
+    if (!normalized) return fallback
+    if (['true', '1', 'yes', 'y', 'on'].includes(normalized)) return true
+    if (['false', '0', 'no', 'n', 'off'].includes(normalized)) return false
+    return fallback
+  }
+  return fallback
 }
 
 async function upsertColors(colors: PlantColor[]) {
@@ -258,9 +374,9 @@ async function loadPlant(id: string): Promise<Plant | null> {
       },
     },
     growth: {
-      sowingMonth: data.sowing_month || [],
-      floweringMonth: data.flowering_month || [],
-      fruitingMonth: data.fruiting_month || [],
+        sowingMonth: monthSlugsToNumbers(data.sowing_month),
+        floweringMonth: monthSlugsToNumbers(data.flowering_month),
+        fruitingMonth: monthSlugsToNumbers(data.fruiting_month),
       height: data.height_cm || undefined,
       wingspan: data.wingspan_cm || undefined,
       tutoring: data.tutoring || false,
@@ -328,6 +444,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   const [aiCompleted, setAiCompleted] = React.useState(false)
   const [translating, setTranslating] = React.useState(false)
   const [aiProgress, setAiProgress] = React.useState<CategoryProgress>(() => createEmptyCategoryProgress())
+  const [aiSectionLog, setAiSectionLog] = React.useState<Array<{ category: PlantFormCategory; label: string; timestamp: number }>>([])
   const [existingLoaded, setExistingLoaded] = React.useState(false)
   const [colorSuggestions, setColorSuggestions] = React.useState<PlantColor[]>([])
   const targetFields = React.useMemo(
@@ -349,6 +466,15 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         'seasons',
         'description',
       ].filter((key) => !DISALLOWED_FIELDS.has(key) && !DISALLOWED_FIELDS.has(key.toLowerCase())),
+    [],
+  )
+  const basicFieldOrder = React.useMemo(() => ['plantType', 'utility', 'comestiblePart', 'fruitType', 'identity'], [])
+  const mandatoryFieldOrder = React.useMemo(() => {
+    const remaining = targetFields.filter((key) => !basicFieldOrder.includes(key))
+    return [...basicFieldOrder, ...remaining]
+  }, [basicFieldOrder, targetFields])
+  const aiCategoryOrder = React.useMemo(
+    () => ['identity', 'plantCare', 'growth', 'usage', 'ecology', 'danger', 'miscellaneous', 'meta'],
     [],
   )
   const categoryLabels = React.useMemo(() => ({
@@ -406,9 +532,12 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       watering: { ...(candidate.plantCare?.watering || {}), schedules: normalizeSchedules(candidate.plantCare?.watering?.schedules) },
     },
   })
+  const hasAiProgress = React.useMemo(() => Object.values(aiProgress).some((p) => p.total > 0), [aiProgress])
+  const recentSectionLog = React.useMemo(() => aiSectionLog.slice(-5).reverse(), [aiSectionLog])
   const initializeCategoryProgress = () => {
     const progress = buildCategoryProgress(targetFields)
     setAiProgress(progress)
+    setAiSectionLog([])
     return progress
   }
   const markFieldComplete = (fieldKey: string) => {
@@ -417,12 +546,25 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       const current = prev[category] || { total: 0, completed: 0, status: 'idle' }
       const total = current.total || 1
       const completed = Math.min((current.completed || 0) + 1, total)
+      const nextStatus = completed >= total ? 'done' : 'filling'
+      if (nextStatus === 'done' && current.status !== 'done') {
+        const typedCategory = category as PlantFormCategory
+        const entry = {
+          category: typedCategory,
+          label: categoryLabels[typedCategory] || typedCategory,
+          timestamp: Date.now(),
+        }
+        setAiSectionLog((log) => {
+          const nextLog = [...log, entry]
+          return nextLog.length > SECTION_LOG_LIMIT ? nextLog.slice(nextLog.length - SECTION_LOG_LIMIT) : nextLog
+        })
+      }
       return {
         ...prev,
         [category]: {
           total,
           completed,
-          status: completed >= total ? 'done' : 'filling',
+          status: nextStatus,
         },
       }
     })
@@ -455,17 +597,17 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         life_cycle: plantToSave.identity?.lifeCycle || null,
         season: plantToSave.identity?.season ? plantToSave.identity.season.map((s) => s.toString().toLowerCase()) : [],
         foliage_persistance: plantToSave.identity?.foliagePersistance || null,
-        spiked: plantToSave.identity?.spiked ?? false,
+        spiked: coerceBoolean(plantToSave.identity?.spiked, false),
         toxicity_human: plantToSave.identity?.toxicityHuman || null,
         toxicity_pets: plantToSave.identity?.toxicityPets || null,
         allergens: plantToSave.identity?.allergens || [],
-        scent: plantToSave.identity?.scent ?? false,
+        scent: coerceBoolean(plantToSave.identity?.scent, false),
         symbolism: plantToSave.identity?.symbolism || [],
         living_space: plantToSave.identity?.livingSpace || null,
         composition: plantToSave.identity?.composition || [],
         maintenance_level: plantToSave.identity?.maintenanceLevel || null,
-        multicolor: plantToSave.identity?.multicolor ?? false,
-        bicolor: plantToSave.identity?.bicolor ?? false,
+        multicolor: coerceBoolean(plantToSave.identity?.multicolor, false),
+        bicolor: coerceBoolean(plantToSave.identity?.bicolor, false),
         origin: plantToSave.plantCare?.origin || [],
         habitat: plantToSave.plantCare?.habitat || [],
         temperature_max: plantToSave.plantCare?.temperatureMax || null,
@@ -482,28 +624,28 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         nutrition_need: plantToSave.plantCare?.nutritionNeed || [],
         fertilizer: plantToSave.plantCare?.fertilizer || [],
         advice_fertilizer: plantToSave.plantCare?.adviceFertilizer || null,
-        sowing_month: plantToSave.growth?.sowingMonth || [],
-        flowering_month: plantToSave.growth?.floweringMonth || [],
-        fruiting_month: plantToSave.growth?.fruitingMonth || [],
+        sowing_month: monthNumbersToSlugs(plantToSave.growth?.sowingMonth),
+        flowering_month: monthNumbersToSlugs(plantToSave.growth?.floweringMonth),
+        fruiting_month: monthNumbersToSlugs(plantToSave.growth?.fruitingMonth),
         height_cm: plantToSave.growth?.height || null,
         wingspan_cm: plantToSave.growth?.wingspan || null,
-        tutoring: plantToSave.growth?.tutoring ?? false,
+        tutoring: coerceBoolean(plantToSave.growth?.tutoring, false),
         advice_tutoring: plantToSave.growth?.adviceTutoring || null,
         sow_type: plantToSave.growth?.sowType || [],
         separation_cm: plantToSave.growth?.separation || null,
-        transplanting: plantToSave.growth?.transplanting ?? null,
+        transplanting: coerceBoolean(plantToSave.growth?.transplanting, null),
         advice_sowing: plantToSave.growth?.adviceSowing || null,
         cut: plantToSave.growth?.cut || null,
         advice_medicinal: plantToSave.usage?.adviceMedicinal || null,
         nutritional_intake: plantToSave.usage?.nutritionalIntake || [],
-        infusion: plantToSave.usage?.infusion ?? false,
+        infusion: coerceBoolean(plantToSave.usage?.infusion, false),
         advice_infusion: plantToSave.usage?.adviceInfusion || null,
         recipes_ideas: plantToSave.usage?.recipesIdeas || [],
-        aromatherapy: plantToSave.usage?.aromatherapy ?? false,
+        aromatherapy: coerceBoolean(plantToSave.usage?.aromatherapy, false),
         spice_mixes: plantToSave.usage?.spiceMixes || [],
-        melliferous: plantToSave.ecology?.melliferous ?? false,
+        melliferous: coerceBoolean(plantToSave.ecology?.melliferous, false),
         polenizer: plantToSave.ecology?.polenizer || [],
-        be_fertilizer: plantToSave.ecology?.beFertilizer ?? false,
+        be_fertilizer: coerceBoolean(plantToSave.ecology?.beFertilizer, false),
         ground_effect: plantToSave.ecology?.groundEffect || null,
         conservation_status: plantToSave.ecology?.conservationStatus || null,
         pests: plantToSave.danger?.pests || [],
@@ -552,7 +694,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   }
 
   const runAiFill = async () => {
-    if (!plant.name.trim()) { setError(t('plantAdmin.aiNameRequired', 'Please enter a name before using AI fill.')); return }
+    const trimmedName = plant.name.trim()
+    if (!trimmedName) { setError(t('plantAdmin.aiNameRequired', 'Please enter a name before using AI fill.')); return }
     initializeCategoryProgress()
     setAiCompleted(false)
     setAiWorking(true)
@@ -560,7 +703,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     setError(null)
     let aiSucceeded = false
     let finalPlant: Plant | null = null
-    const applyWithStatus = (candidate: Plant): Plant => ({
+    const plantNameForAi = trimmedName
+      const applyWithStatus = (candidate: Plant): Plant => ({
       ...candidate,
       meta: { ...(candidate.meta || {}), status: IN_PROGRESS_STATUS },
     })
@@ -575,7 +719,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       for (let attempt = 1; attempt <= 3; attempt += 1) {
         try {
           const fieldData = await fetchAiPlantFillField({
-            plantName: plant.name || 'Unknown plant',
+            plantName: plantNameForAi,
             schema: plantSchema,
             fieldKey,
             existingField,
@@ -600,15 +744,25 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       if (lastError) console.error(`AI fill failed for ${fieldKey} after 3 attempts`, lastError)
       return false
     }
+    const ensureMandatoryFields = async () => {
+      for (const fieldKey of mandatoryFieldOrder) {
+        if (!requiresFieldCompletion(fieldKey)) continue
+        const latestSnapshot = finalPlant || plant
+        if (!latestSnapshot) break
+        if (!isFieldMissingForPlant(latestSnapshot, fieldKey)) continue
+        await fillFieldWithRetries(fieldKey, getFieldValueForKey(latestSnapshot, fieldKey))
+      }
+    }
     try {
       let aiData: Record<string, unknown> | null = null
       let lastError: Error | null = null
       for (let attempt = 1; attempt <= 3; attempt += 1) {
         try {
           aiData = await fetchAiPlantFill({
-            plantName: plant.name || 'Unknown plant',
+            plantName: plantNameForAi,
             schema: plantSchema,
             existingData: plant,
+            fields: aiCategoryOrder,
             language,
             onFieldComplete: ({ field, data }) => {
               if (field === 'complete') return
@@ -681,13 +835,17 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         finalPlant = next
         return next
       })
+      await ensureMandatoryFields()
       aiSucceeded = true
     } catch (e: any) {
       setError(e?.message || 'AI fill failed')
     } finally {
       setAiWorking(false)
-      setAiProgress(createEmptyCategoryProgress())
-      if (aiSucceeded) setAiCompleted(true)
+      if (aiSucceeded) {
+        setAiCompleted(true)
+        setAiProgress(createEmptyCategoryProgress())
+        setAiSectionLog([])
+      }
       const targetPlant = finalPlant || plant
       if (targetPlant) await savePlant(targetPlant)
     }
@@ -869,10 +1027,19 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             </div>
           )}
         </div>
-        {aiWorking && Object.values(aiProgress).some((p) => p.total > 0) && (
+        {(aiWorking || hasAiProgress) && (
           <Card>
-            <CardContent className="space-y-3 pt-4">
-              <div className="font-medium text-sm">{t('plantAdmin.categoryProgressTitle', 'Category fill progress')}</div>
+            <CardContent className="space-y-4 pt-4">
+              <div className="flex items-center justify-between text-sm font-medium">
+                <span>
+                  {aiWorking
+                    ? t('plantAdmin.categoryProgressTitle', 'Category fill progress')
+                    : t('plantAdmin.categoryProgressSummary', 'Latest AI fill summary')}
+                </span>
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  {aiWorking ? <Loader2 className="h-4 w-4 animate-spin" /> : aiCompleted ? <Check className="h-4 w-4 text-emerald-500" /> : null}
+                </div>
+              </div>
               <div className="grid gap-2">
                 {plantFormCategoryOrder.map((cat) => {
                   const info = aiProgress[cat]
@@ -881,12 +1048,23 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                   return (
                     <div key={cat} className="space-y-1">
                       <div className="flex items-center justify-between text-sm">
-                        <span>{categoryLabels[cat]}</span>
+                        <div className="flex items-center gap-2">
+                          <span>{categoryLabels[cat]}</span>
+                          <span
+                            className={`text-xs font-medium ${
+                              info.status === 'done' ? 'text-emerald-600 dark:text-emerald-400' : 'text-blue-600 dark:text-blue-300'
+                            }`}
+                          >
+                            {info.status === 'done'
+                              ? t('plantAdmin.sectionFilled', 'Filled')
+                              : t('plantAdmin.sectionInProgress', 'Filling')}
+                          </span>
+                        </div>
                         <span className="text-muted-foreground">{info.completed}/{info.total}</span>
                       </div>
                       <div className="h-2 w-full rounded bg-muted overflow-hidden">
                         <div
-                          className={`h-2 transition-all ${info.status === 'done' ? 'bg-green-500' : 'bg-blue-500'}`}
+                          className={`h-2 transition-all ${info.status === 'done' ? 'bg-emerald-500' : 'bg-blue-500'}`}
                           style={{ width: `${Math.min(100, Math.max(percent, info.status === 'done' ? 100 : percent))}%` }}
                         />
                       </div>
@@ -894,6 +1072,29 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                   )
                 })}
               </div>
+              {recentSectionLog.length > 0 && (
+                <div className="border-t border-dashed pt-3 space-y-2">
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                    {t('plantAdmin.sectionLogTitle', 'Sections completed')}
+                  </div>
+                  <div className="space-y-1.5">
+                    {recentSectionLog.map((entry) => (
+                      <div
+                        key={`${entry.category}-${entry.timestamp}`}
+                        className="flex items-center justify-between rounded-xl bg-emerald-50/80 dark:bg-emerald-500/10 px-3 py-2 text-sm"
+                      >
+                        <span className="flex items-center gap-2 font-medium text-emerald-700 dark:text-emerald-200">
+                          <Check className="h-4 w-4" />
+                          {entry.label}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
@@ -905,9 +1106,14 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             {t('plantAdmin.loadingPlant', 'Loading plant...')}
           </CardContent>
         </Card>
-      ) : (
-        <PlantProfileForm value={plant} onChange={setPlant} colorSuggestions={colorSuggestions} />
-      )}
+        ) : (
+          <PlantProfileForm
+            value={plant}
+            onChange={setPlant}
+            colorSuggestions={colorSuggestions}
+            categoryProgress={hasAiProgress ? aiProgress : undefined}
+          />
+        )}
     </div>
   )
 }

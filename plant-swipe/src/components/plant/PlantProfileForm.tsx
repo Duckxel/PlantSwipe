@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { useTranslation } from "react-i18next"
-import { plantFormCategoryOrder, type PlantFormCategory } from "@/lib/plantFormCategories"
+import { plantFormCategoryOrder, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
 import type { Plant, PlantColor, PlantImage, PlantSource, PlantType, PlantWateringSchedule } from "@/types/plant"
 import { supabase } from "@/lib/supabaseClient"
 
@@ -14,6 +14,7 @@ export type PlantProfileFormProps = {
   value: Plant
   onChange: (plant: Plant) => void
   colorSuggestions?: PlantColor[]
+  categoryProgress?: CategoryProgress
 }
 
 const neuCardClass =
@@ -643,33 +644,28 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
 }
 
 function ImageEditor({ images, onChange }: { images: PlantImage[]; onChange: (v: PlantImage[]) => void }) {
-  React.useEffect(() => {
-    const list: PlantImage[] = images && images.length ? images : [{ link: "", use: "primary" }]
-    let next: PlantImage[] = list
-    const primaryIndex = list.findIndex((img) => img.use === "primary")
-    const discoveryIndex = list.findIndex((img) => img.use === "discovery")
-    if (primaryIndex === -1) {
-      next = [{ ...list[0], use: "primary" }, ...list.slice(1)]
-    }
-    if (discoveryIndex !== -1) {
-      let firstDiscoverySeen = false
-      next = next.map((img) => {
-        if (img.use !== "discovery") return img
-        if (firstDiscoverySeen) return { ...img, use: "other" }
-        firstDiscoverySeen = true
-        return img
-      })
-    }
-    if (next !== images) onChange(next)
-  }, [images, onChange])
+  const list = Array.isArray(images) ? images : []
+  const [previewErrors, setPreviewErrors] = React.useState<Record<string, boolean>>({})
+
+  const getPreviewKey = (img: PlantImage, idx: number) => img.id || img.link || `idx-${idx}`
 
   const updateImage = (idx: number, patch: Partial<PlantImage>) => {
-    const next = images.map((img, i) => i === idx ? { ...img, ...patch } : img)
+    const next = list.map((img, i) => (i === idx ? { ...img, ...patch } : img))
     onChange(next)
+    if (Object.prototype.hasOwnProperty.call(patch, 'link')) {
+      const key = getPreviewKey(list[idx], idx)
+      setPreviewErrors((prev) => {
+        if (!prev[key]) return prev
+        const clone = { ...prev }
+        delete clone[key]
+        return clone
+      })
+    }
   }
+
   const setUse = (idx: number, use: "primary" | "discovery" | "other") => {
     onChange(
-      images.map((img, i) => {
+      list.map((img, i) => {
         if (i === idx) return { ...img, use }
         if (use === "primary" && img.use === "primary") return { ...img, use: "other" }
         if (use === "discovery" && img.use === "discovery") return { ...img, use: "other" }
@@ -677,43 +673,120 @@ function ImageEditor({ images, onChange }: { images: PlantImage[]; onChange: (v:
       }),
     )
   }
+
   const addImage = () => {
-    const hasPrimary = images.some((img) => img.use === "primary")
-    onChange([...images, { link: "", use: hasPrimary ? "other" : "primary" }])
+    const hasPrimary = list.some((img) => img.use === "primary")
+    onChange([...list, { link: "", use: hasPrimary ? "other" : "primary" }])
   }
+
   const removeImage = (idx: number) => {
-    const next = images.filter((_, i) => i !== idx)
-    if (!next.length) {
-      onChange([{ link: "", use: "primary" }])
-      return
-    }
-    if (!next.some((img) => img.use === "primary")) {
-      next[0] = { ...next[0], use: "primary" }
-    }
+    const next = list.filter((_, i) => i !== idx)
     onChange(next)
   }
+
+  const moveImage = (idx: number, direction: -1 | 1) => {
+    const target = idx + direction
+    if (target < 0 || target >= list.length) return
+    const next = [...list]
+    const [item] = next.splice(idx, 1)
+    next.splice(target, 0, item)
+    onChange(next)
+  }
+
   return (
-    <div className="grid gap-3">
-      {images.map((img, idx) => (
-        <div key={idx} className="rounded border p-3 space-y-2">
-          <Input value={img.link} onChange={(e) => updateImage(idx, { link: e.target.value })} placeholder="Image link" />
-          <div className="flex gap-2 items-center">
-            <Label className="text-sm">Use</Label>
-            {(["primary","discovery","other"] as const).map((opt) => (
-              <button
-                key={opt}
-                type="button"
-                onClick={() => setUse(idx, opt)}
-                className={`px-3 py-1 rounded-full border text-sm transition ${img.use === opt ? "bg-black text-white dark:bg-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"}`}
-              >
-                {opt}
-              </button>
-            ))}
-          </div>
-          <Button variant="ghost" type="button" onClick={() => removeImage(idx)} className="text-red-600">Remove image</Button>
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <Label className="font-semibold">Images</Label>
+          <p className="text-xs text-muted-foreground">Primary appears on detail pages; Discovery on list cards.</p>
         </div>
-      ))}
-      <Button type="button" onClick={addImage}>Add image</Button>
+        <Button type="button" variant="outline" onClick={addImage}>
+          Add image
+        </Button>
+      </div>
+      {!list.length && (
+        <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+          No images yet. Click "Add image" to start.
+        </div>
+      )}
+      <div className="space-y-3">
+        {list.map((img, idx) => {
+          const previewKey = getPreviewKey(img, idx)
+          const hasError = previewErrors[previewKey]
+          return (
+            <div key={previewKey} className="rounded-xl border p-3 space-y-3">
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <div className="sm:w-48">
+                  <div className="relative h-32 rounded-lg border bg-muted/30 flex items-center justify-center overflow-hidden">
+                    {img.link && !hasError ? (
+                      <img
+                        src={img.link}
+                        alt={`Plant image ${idx + 1}`}
+                        className="h-full w-full object-cover"
+                        onError={() => setPreviewErrors((prev) => ({ ...prev, [previewKey]: true }))}
+                        onLoad={() =>
+                          setPreviewErrors((prev) => {
+                            if (!prev[previewKey]) return prev
+                            const clone = { ...prev }
+                            delete clone[previewKey]
+                            return clone
+                          })
+                        }
+                      />
+                    ) : (
+                      <span className="px-4 text-center text-xs text-muted-foreground">
+                        {img.link && hasError ? 'Preview failed - double-check the URL.' : 'Preview appears after entering a valid URL.'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex-1 space-y-3">
+                  <Input
+                    value={img.link || ""}
+                    onChange={(e) => updateImage(idx, { link: e.target.value })}
+                    placeholder="https://example.com/photo.jpg"
+                  />
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <span className="text-muted-foreground">Usage</span>
+                    {(["primary","discovery","other"] as const).map((opt) => (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => setUse(idx, opt)}
+                        className={`px-3 py-1 rounded-full border text-xs uppercase tracking-wide ${
+                          (img.use || 'other') === opt ? "bg-black text-white dark:bg-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"
+                        }`}
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {img.use === 'primary'
+                      ? 'Shown as the hero/detail image.'
+                      : img.use === 'discovery'
+                        ? 'Used in discovery cards and lists.'
+                        : 'Supports the gallery.'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex gap-2">
+                  <Button type="button" variant="ghost" onClick={() => moveImage(idx, -1)} disabled={idx === 0}>
+                    Move up
+                  </Button>
+                  <Button type="button" variant="ghost" onClick={() => moveImage(idx, 1)} disabled={idx === list.length - 1}>
+                    Move down
+                  </Button>
+                </div>
+                <Button type="button" variant="ghost" className="text-red-600" onClick={() => removeImage(idx)}>
+                  Remove
+                </Button>
+              </div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -829,7 +902,7 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
   )
 }
 
-export function PlantProfileForm({ value, onChange, colorSuggestions }: PlantProfileFormProps) {
+export function PlantProfileForm({ value, onChange, colorSuggestions, categoryProgress }: PlantProfileFormProps) {
   const { t } = useTranslation('common')
   const sectionRefs = React.useRef<Record<PlantFormCategory, HTMLDivElement | null>>({
     basics: null,
@@ -964,45 +1037,75 @@ export function PlantProfileForm({ value, onChange, colorSuggestions }: PlantPro
         </Card>
       </div>
 
-      <div className={`${neuCardClass} rounded-2xl p-4`}>
-        <div className="text-sm font-medium mb-2">{t('plantAdmin.categoryMenuTitle', 'Quick category menu')}</div>
-        <div className="flex flex-wrap gap-3">
-          {categoriesWithoutBasics.map((key) => (
-            <Button
-              key={key}
-              size="lg"
-              className="min-w-[110px] px-4 py-2 text-sm sm:text-base shadow-sm"
-              variant={selectedCategory === key ? 'default' : 'outline'}
-              onClick={() => scrollToCategory(key)}
-            >
-              {categoryLabels[key]}
-            </Button>
-          ))}
+        <div className={`${neuCardClass} rounded-2xl p-4`}>
+          <div className="text-sm font-medium mb-2">{t('plantAdmin.categoryMenuTitle', 'Quick category menu')}</div>
+          <div className="flex flex-wrap gap-3">
+            {categoriesWithoutBasics.map((key) => {
+              const info = categoryProgress?.[key]
+              return (
+                <div key={key} className="relative">
+                  <Button
+                    size="lg"
+                    className="min-w-[110px] px-4 py-2 text-sm sm:text-base shadow-sm"
+                    variant={selectedCategory === key ? 'default' : 'outline'}
+                    onClick={() => scrollToCategory(key)}
+                  >
+                    {categoryLabels[key]}
+                  </Button>
+                  {info?.total ? (
+                    <span
+                      className={`absolute -top-2 -right-2 rounded-full px-1.5 py-0.5 text-[10px] font-semibold text-white ${
+                        info.status === 'done' ? 'bg-emerald-500' : 'bg-blue-500'
+                      }`}
+                    >
+                      {info.status === 'done' ? t('plantAdmin.sectionFilled', 'Filled') : `${info.completed}/${info.total}`}
+                    </span>
+                  ) : null}
+                </div>
+              )
+            })}
+          </div>
         </div>
-      </div>
 
-      <div className="space-y-6">
-        {(['identity','plantCare','growth','usage','ecology','danger','miscellaneous','meta'] as PlantFormCategory[]).map((cat) => {
-          const visible = selectedCategory === cat
-          if (!visible) return null
-          const refSetter = (node: HTMLDivElement | null) => { sectionRefs.current[cat] = node }
-          const fieldGroups: Record<PlantFormCategory, FieldConfig[]> = {
-            basics: [],
-            identity: identityFields,
-            plantCare: careFields,
-            growth: growthFields,
-            usage: usageFields,
-            ecology: ecologyFields,
-            danger: dangerFields,
-            miscellaneous: miscFields,
-            meta: metaFields,
-          }
-          return (
-            <div key={cat} ref={refSetter}>
-              <Card className={neuCardClass}>
-                <CardHeader><CardTitle>{categoryLabels[cat]}</CardTitle></CardHeader>
-                <CardContent className="flex flex-col gap-4">
-                  {fieldGroups[cat].map((f) => renderField(value, setPath, f))}
+        <div className="space-y-6">
+          {(['identity','plantCare','growth','usage','ecology','danger','miscellaneous','meta'] as PlantFormCategory[]).map((cat) => {
+            if (selectedCategory !== cat) return null
+            const refSetter = (node: HTMLDivElement | null) => { sectionRefs.current[cat] = node }
+            const fieldGroups: Record<PlantFormCategory, FieldConfig[]> = {
+              basics: [],
+              identity: identityFields,
+              plantCare: careFields,
+              growth: growthFields,
+              usage: usageFields,
+              ecology: ecologyFields,
+              danger: dangerFields,
+              miscellaneous: miscFields,
+              meta: metaFields,
+            }
+            const progressInfo = categoryProgress?.[cat]
+            return (
+              <div key={cat} ref={refSetter}>
+                <Card className={neuCardClass}>
+                  <CardHeader>
+                    <CardTitle className="flex items-center justify-between gap-4">
+                      <span>{categoryLabels[cat]}</span>
+                      {progressInfo?.total ? (
+                        <span
+                          className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                            progressInfo.status === 'done'
+                              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200'
+                              : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-200'
+                          }`}
+                        >
+                          {progressInfo.status === 'done'
+                            ? t('plantAdmin.sectionFilled', 'Filled')
+                            : `${progressInfo.completed}/${progressInfo.total}`}
+                        </span>
+                      ) : null}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="flex flex-col gap-4">
+                    {fieldGroups[cat].map((f) => renderField(value, setPath, f))}
                   {cat === 'identity' && (
                     <div className="md:col-span-2">
                       <Label>Colors</Label>
