@@ -160,7 +160,11 @@ async function loadPlant(id: string): Promise<Plant | null> {
   const colors = (colorLinks || []).map((c: any) => ({ id: c.colors?.id, name: c.colors?.name, hexCode: c.colors?.hex_code }))
   const sourceList = (sources || []).map((s) => ({ id: s.id, name: s.name, url: s.url }))
   if (!sourceList.length && (data.source_name || data.source_url)) {
-    sourceList.push({ name: data.source_name || 'Source', url: data.source_url || undefined })
+    sourceList.push({
+      id: `${data.id}-legacy-source`,
+      name: data.source_name || 'Source',
+      url: data.source_url || undefined,
+    })
   }
   const plant: Plant = {
     id: data.id,

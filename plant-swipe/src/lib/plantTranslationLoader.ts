@@ -386,7 +386,11 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
         url: src?.url,
       })).filter((src) => src.name)
       if (!sources.length && (translation.source_name || basePlant.source_name)) {
-        sources.push({ name: translation.source_name || basePlant.source_name, url: translation.source_url || basePlant.source_url })
+        sources.push({
+          id: `${basePlant.id}-legacy-source-${sources.length}`,
+          name: translation.source_name || basePlant.source_name,
+          url: translation.source_url || basePlant.source_url,
+        })
       }
       const primaryImage = images.find((i) => i.use === 'primary')?.link
         || images.find((i) => i.use === 'discovery')?.link

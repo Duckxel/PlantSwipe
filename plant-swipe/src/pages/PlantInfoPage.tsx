@@ -8,7 +8,9 @@ import { useTranslation } from 'react-i18next'
 import { useLanguage, useLanguageNavigate } from '@/lib/i18nRouting'
 import { usePageMetadata } from '@/hooks/usePageMetadata'
 
-const normalizeSchedules = (rows?: any[]): Plant['plantCare']['watering']['schedules'] => {
+type WaterSchedules = NonNullable<Plant['plantCare']>['watering']['schedules']
+
+const normalizeSchedules = (rows?: any[]): WaterSchedules => {
   if (!rows?.length) return []
   return rows.map((row) => ({
     season: row.season || undefined,
@@ -37,7 +39,7 @@ async function fetchPlantWithRelations(id: string): Promise<Plant | null> {
   }, {})
   const sourceList = (sources || []).map((s) => ({ id: s.id, name: s.name, url: s.url }))
   if (!sourceList.length && (data.source_name || data.source_url)) {
-    sourceList.push({ name: data.source_name || 'Source', url: data.source_url || undefined })
+    sourceList.push({ id: `${data.id}-legacy-source`, name: data.source_name || 'Source', url: data.source_url || undefined })
   }
   return {
     id: data.id,
@@ -86,7 +88,7 @@ async function fetchPlantWithRelations(id: string): Promise<Plant | null> {
       fertilizer: data.fertilizer || [],
       adviceFertilizer: data.advice_fertilizer || undefined,
       watering: {
-        schedules: normalizeSchedules(schedules),
+        schedules: normalizeSchedules(schedules || []),
       },
     },
     growth: {
