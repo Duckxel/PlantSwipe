@@ -145,10 +145,48 @@ async function upsertSources(plantId: string, sources?: PlantSource[]) {
   if (error) throw new Error(error.message)
 }
 
+function mapInfusionMixRows(rows?: Array<{ mix_name?: string | null; benefit?: string | null }> | null) {
+  const result: Record<string, string> = {}
+  if (!rows) return result
+  for (const row of rows) {
+    const key = row?.mix_name?.trim()
+    if (!key) continue
+    const value = row?.benefit?.trim()
+    result[key] = value || ''
+  }
+  return result
+}
+
+async function fetchInfusionMixes(plantId: string) {
+  const { data, error } = await supabase.from('plant_infusion_mixes').select('mix_name,benefit').eq('plant_id', plantId)
+  if (error) throw new Error(error.message)
+  return mapInfusionMixRows(data || [])
+}
+
+async function upsertInfusionMixes(plantId: string, infusionMix?: Record<string, string | undefined>) {
+  await supabase.from('plant_infusion_mixes').delete().eq('plant_id', plantId)
+  if (!infusionMix) return
+  const rows = Object.entries(infusionMix)
+    .map(([mix, benefit]) => {
+      const trimmedName = mix?.trim()
+      if (!trimmedName) return null
+      const trimmedBenefit = benefit?.trim()
+      return {
+        plant_id: plantId,
+        mix_name: trimmedName,
+        benefit: trimmedBenefit || null,
+      }
+    })
+    .filter((row): row is { plant_id: string; mix_name: string; benefit: string | null } => Boolean(row))
+  if (!rows.length) return
+  const { error } = await supabase.from('plant_infusion_mixes').insert(rows)
+  if (error) throw new Error(error.message)
+}
+
 async function loadPlant(id: string): Promise<Plant | null> {
   const { data, error } = await supabase
     .from('plants')
-    .select('id,name,plant_type,utility,comestible_part,fruit_type,given_names,scientific_name,family,overview,promotion_month,life_cycle,season,foliage_persistance,spiked,toxicity_human,toxicity_pets,allergens,scent,symbolism,living_space,composition,maintenance_level,multicolor,bicolor,origin,habitat,temperature_max,temperature_min,temperature_ideal,level_sun,hygrometry,watering_type,division,soil,advice_soil,mulching,advice_mulching,nutrition_need,fertilizer,advice_fertilizer,sowing_month,flowering_month,fruiting_month,height_cm,wingspan_cm,tutoring,advice_tutoring,sow_type,separation_cm,transplanting,advice_sowing,cut,advice_medicinal,nutritional_intake,infusion,advice_infusion,infusion_mix,recipes_ideas,aromatherapy,spice_mixes,melliferous,polenizer,be_fertilizer,ground_effect,conservation_status,pests,diseases,companions,tags,source_name,source_url,status,admin_commentary,created_by,created_time,updated_by,updated_time')
+    .select('id,name,plant_type,utility,comestible_part,fruit_type,given_names,scientific_name,family,overview,promotion_month,life_cycle,season,foliage_persistance,spiked,toxicity_human,toxicity_pets,allergens,scent,symbolism,living_space,composition,maintenance_level,multicolor,bicolor,origin,habitat,temperature_max,temperature_min,temperature_ideal,level_sun,hygrometry,watering_type,division,soil,advice_soil,mulching,advice_mulching,nutrition_need,fertilizer,advice_fertilizer,sowing_month,flowering_month,fruiting_month,height_cm,wingspan_cm,tutoring,advice_tutoring,sow_type,separation_cm,transplanting,advice_sowing,cut,advice_medicinal,nutritional_intake,infusion,advice_infusion,recipes_ideas,aromatherapy,spice_mixes,melliferous,polenizer,be_fertilizer,ground_effect,conservation_status,pests,diseases,companions,tags,source_name,source_url,status,admin_commentary,created_by,created_time,updated_by,updated_time')
     .eq('id', id)
     .maybeSingle()
   if (error) throw new Error(error.message)
@@ -157,6 +195,7 @@ async function loadPlant(id: string): Promise<Plant | null> {
   const { data: images } = await supabase.from('plant_images').select('id,link,use').eq('plant_id', id)
   const { data: schedules } = await supabase.from('plant_watering_schedules').select('season,quantity,time_period').eq('plant_id', id)
   const { data: sources } = await supabase.from('plant_sources').select('id,name,url').eq('plant_id', id)
+  const infusionMix = await fetchInfusionMixes(id)
   const colors = (colorLinks || []).map((c: any) => ({ id: c.colors?.id, name: c.colors?.name, hexCode: c.colors?.hex_code }))
   const sourceList = (sources || []).map((s) => ({ id: s.id, name: s.name, url: s.url }))
   if (!sourceList.length && (data.source_name || data.source_url)) {
@@ -241,7 +280,7 @@ async function loadPlant(id: string): Promise<Plant | null> {
       nutritionalIntake: data.nutritional_intake || [],
       infusion: data.infusion || false,
       adviceInfusion: data.advice_infusion || undefined,
-      infusionMix: data.infusion_mix || [],
+      infusionMix,
       recipesIdeas: data.recipes_ideas || [],
       aromatherapy: data.aromatherapy || false,
       spiceMixes: data.spice_mixes || [],
@@ -463,7 +502,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         nutritional_intake: plantToSave.usage?.nutritionalIntake || [],
         infusion: plantToSave.usage?.infusion ?? false,
         advice_infusion: plantToSave.usage?.adviceInfusion || null,
-        infusion_mix: plantToSave.usage?.infusionMix || [],
         recipes_ideas: plantToSave.usage?.recipesIdeas || [],
         aromatherapy: plantToSave.usage?.aromatherapy ?? false,
         spice_mixes: plantToSave.usage?.spiceMixes || [],
@@ -485,18 +523,22 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         updated_by: (profile as any)?.full_name || plantToSave.meta?.updatedBy || null,
         updated_time: new Date().toISOString(),
       }
-      const { data, error: insertError } = await supabase
-        .from('plants')
-        .upsert(payload)
-        .select('id')
-        .maybeSingle()
-      if (insertError) throw new Error(insertError.message)
-      const savedId = data?.id || plantId
-      const colorIds = await upsertColors(plantToSave.identity?.colors || [])
-      await linkColors(savedId, colorIds)
-      await upsertImages(savedId, plantToSave.images || [])
-      await upsertWateringSchedules(savedId, { ...(plantToSave.plantCare || {}), watering: { ...(plantToSave.plantCare?.watering || {}), schedules: normalizedSchedules } })
-      await upsertSources(savedId, sources)
+        const { data, error: insertError } = await supabase
+          .from('plants')
+          .upsert(payload)
+          .select('id')
+          .maybeSingle()
+        if (insertError) throw new Error(insertError.message)
+        const savedId = data?.id || plantId
+        const colorIds = await upsertColors(plantToSave.identity?.colors || [])
+        await linkColors(savedId, colorIds)
+        await upsertImages(savedId, plantToSave.images || [])
+        await upsertWateringSchedules(savedId, {
+          ...(plantToSave.plantCare || {}),
+          watering: { ...(plantToSave.plantCare?.watering || {}), schedules: normalizedSchedules },
+        })
+        await upsertSources(savedId, sources)
+        await upsertInfusionMixes(savedId, plantToSave.usage?.infusionMix)
       setPlant({
         ...plantToSave,
         plantCare: { ...(plantToSave.plantCare || {}), watering: { ...(plantToSave.plantCare?.watering || {}), schedules: normalizedSchedules } },

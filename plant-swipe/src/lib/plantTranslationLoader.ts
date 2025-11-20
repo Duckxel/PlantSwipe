@@ -308,15 +308,15 @@ export function mergePlantWithTranslation(
  * This ensures plants created in one language display correctly when viewed in another language.
  */
 export async function loadPlantsWithTranslations(language: SupportedLanguage): Promise<Plant[]> {
-  try {
-    const TOP_LIKED_LIMIT = 5
-    const [plantsResponse, topLikedResponse] = await Promise.all([
-      supabase
-        .from('plants')
-        .select('*, plant_images (link,use), plant_colors (colors (id,name,hex_code)), plant_watering_schedules (season,quantity,time_period), plant_sources (id,name,url)')
-        .order('name', { ascending: true }),
-      supabase.rpc('top_liked_plants', { limit_count: TOP_LIKED_LIMIT }),
-    ])
+    try {
+      const TOP_LIKED_LIMIT = 5
+      const [plantsResponse, topLikedResponse] = await Promise.all([
+        supabase
+          .from('plants')
+          .select('*, plant_images (link,use), plant_colors (colors (id,name,hex_code)), plant_watering_schedules (season,quantity,time_period), plant_sources (id,name,url), plant_infusion_mixes (mix_name,benefit)')
+          .order('name', { ascending: true }),
+        supabase.rpc('top_liked_plants', { limit_count: TOP_LIKED_LIMIT }),
+      ])
     const { data: plants, error } = plantsResponse
     const { data: topLiked, error: topLikedError } = topLikedResponse
 
@@ -364,14 +364,14 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
         hexCode: pc?.colors?.hex_code,
       })).filter((c) => c.name)
       const seasonsRaw = translation.season ?? basePlant.season ?? []
-      const seasons: PlantSeason[] = Array.isArray(seasonsRaw)
-        ? seasonsRaw.map((s: string) => toTitleCase(s) as PlantSeason).filter(Boolean)
-        : []
-      const images: PlantImage[] = ((basePlant.plant_images as any[]) || []).map((img) => ({
-        link: img?.link,
-        use: img?.use,
-      }))
-      const schedules = ((basePlant.plant_watering_schedules as any[]) || []).map((row) => {
+        const seasons: PlantSeason[] = Array.isArray(seasonsRaw)
+          ? seasonsRaw.map((s: string) => toTitleCase(s) as PlantSeason).filter(Boolean)
+          : []
+        const images: PlantImage[] = ((basePlant.plant_images as any[]) || []).map((img) => ({
+          link: img?.link,
+          use: img?.use,
+        }))
+        const schedules = ((basePlant.plant_watering_schedules as any[]) || []).map((row) => {
         const seasonValue = row?.season ? toTitleCase(row.season) : undefined
         const quantityValue = row?.quantity !== null && row?.quantity !== undefined ? Number(row.quantity) : undefined
         return {
@@ -380,11 +380,13 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
           timePeriod: row?.time_period || undefined,
         }
       }).filter((entry) => entry.season || entry.quantity !== undefined || entry.timePeriod)
-      const sources = ((basePlant.plant_sources as any[]) || []).map((src) => ({
-        id: src?.id,
-        name: src?.name,
-        url: src?.url,
-      })).filter((src) => src.name)
+        const sources = ((basePlant.plant_sources as any[]) || [])
+          .map((src) => ({
+            id: src?.id,
+            name: src?.name,
+            url: src?.url,
+          }))
+          .filter((src) => src.name)
       if (!sources.length && (translation.source_name || basePlant.source_name)) {
         sources.push({
           id: `${basePlant.id}-legacy-source-${sources.length}`,
@@ -396,7 +398,15 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
         || images.find((i) => i.use === 'discovery')?.link
         || images[0]?.link
 
-      const plant: Plant = {
+        const infusionMixRows = ((basePlant.plant_infusion_mixes as any[]) || [])
+        const infusionMix = infusionMixRows.reduce((acc: Record<string, string>, row) => {
+          const key = row?.mix_name?.trim()
+          if (!key) return acc
+          acc[key] = row?.benefit?.trim() || ''
+          return acc
+        }, {} as Record<string, string>)
+
+        const plant: Plant = {
         id: String(basePlant.id),
         name: translation.name || basePlant.name || '',
         plantType: basePlant.plant_type || undefined,
@@ -462,12 +472,12 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
           adviceSowing: translation.advice_sowing || basePlant.advice_sowing || undefined,
           cut: basePlant.cut || undefined,
         },
-        usage: {
+          usage: {
           adviceMedicinal: translation.advice_medicinal || basePlant.advice_medicinal || undefined,
           nutritionalIntake: basePlant.nutritional_intake || [],
           infusion: basePlant.infusion || false,
           adviceInfusion: translation.advice_infusion || basePlant.advice_infusion || undefined,
-          infusionMix: basePlant.infusion_mix || [],
+            infusionMix,
           recipesIdeas: basePlant.recipes_ideas || [],
           aromatherapy: basePlant.aromatherapy || false,
           spiceMixes: basePlant.spice_mixes || [],
