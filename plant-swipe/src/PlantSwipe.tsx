@@ -36,7 +36,6 @@ const GardenListPage = lazy(() => import("@/pages/GardenListPage").then(module =
 const SwipePageLazy = lazy(() => import("@/pages/SwipePage").then(module => ({ default: module.SwipePage })))
 const SearchPageLazy = lazy(() => import("@/pages/SearchPage").then(module => ({ default: module.SearchPage })))
 const CreatePlantPageLazy = lazy(() => import("@/pages/CreatePlantPage").then(module => ({ default: module.CreatePlantPage })))
-const EditPlantPageLazy = lazy(() => import("@/pages/EditPlantPage").then(module => ({ default: module.EditPlantPage })))
 const PlantInfoPageLazy = lazy(() => import("@/pages/PlantInfoPage"))
 const PublicProfilePageLazy = lazy(() => import("@/pages/PublicProfilePage"))
 const FriendsPageLazy = lazy(() => import("@/pages/FriendsPage").then(module => ({ default: module.FriendsPage })))
@@ -1079,10 +1078,26 @@ export default function PlantSwipe() {
               )}
             />
             <Route
+              path="/create/:id"
+              element={user ? (
+                <Suspense fallback={routeLoadingFallback}>
+                  <CreatePlantPageLazy
+                    onCancel={() => navigate('/')}
+                    onSaved={async () => {
+                      await loadPlants()
+                      navigate('/search')
+                    }}
+                  />
+                </Suspense>
+              ) : (
+                <Navigate to="/" replace />
+              )}
+            />
+            <Route
               path="/plants/:id/edit"
               element={user ? (
                 <Suspense fallback={routeLoadingFallback}>
-                  <EditPlantPageLazy
+                  <CreatePlantPageLazy
                     onCancel={() => navigate('/search')}
                     onSaved={async () => {
                       await loadPlants()

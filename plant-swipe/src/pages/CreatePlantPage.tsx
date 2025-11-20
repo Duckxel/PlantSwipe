@@ -6,13 +6,14 @@ import { supabase } from "@/lib/supabaseClient"
 import { PlantProfileForm } from "@/components/plant/PlantProfileForm"
 import { fetchAiPlantFill } from "@/lib/aiPlantFill"
 import plantSchema from "../../PLANT-INFO-SCHEMA.json"
-import type { Plant, PlantColor } from "@/types/plant"
+import type { Plant, PlantColor, PlantImage } from "@/types/plant"
 import { useAuth } from "@/context/AuthContext"
 import { useTranslation } from "react-i18next"
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/lib/i18n"
 import { saveLanguagePreference } from "@/lib/i18nRouting"
 import { applyAiFieldToPlant, getCategoryForField } from "@/lib/applyAiField"
 import { buildCategoryProgress, createEmptyCategoryProgress, plantFormCategoryOrder, type CategoryProgress } from "@/lib/plantFormCategories"
+import { useParams } from "react-router-dom"
 
 const DISALLOWED_FIELDS = new Set(['name', 'image', 'imageurl', 'image_url', 'imageURL'])
 
@@ -71,14 +72,53 @@ async function upsertImages(plantId: string, images: Plant["images"]) {
   if (error) throw new Error(error.message)
 }
 
+async function loadPlant(id: string): Promise<Plant | null> {
+  const { data, error } = await supabase
+    .from('plants')
+    .select('id,name,plant_type,utility,comestible_part,fruit_type,identity,plant_care,growth,usage,ecology,danger,miscellaneous,meta,colors,seasons,description,multicolor,bicolor')
+    .eq('id', id)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  if (!data) return null
+  const { data: colorLinks } = await supabase.from('plant_colors').select('color_id, colors:color_id (id,name,hex_code)').eq('plant_id', id)
+  const { data: images } = await supabase.from('plant_images').select('id,link,use').eq('plant_id', id)
+  const colors = (colorLinks || []).map((c: any) => ({ id: c.colors?.id, name: c.colors?.name, hexCode: c.colors?.hex_code }))
+  const plant: Plant = {
+    id: data.id,
+    name: data.name,
+    plantType: data.plant_type || undefined,
+    utility: data.utility || [],
+    comestiblePart: data.comestible_part || [],
+    fruitType: data.fruit_type || [],
+    identity: data.identity || {},
+    plantCare: data.plant_care || {},
+    growth: data.growth || {},
+    usage: data.usage || {},
+    ecology: data.ecology || {},
+    danger: data.danger || {},
+    miscellaneous: data.miscellaneous || {},
+    meta: data.meta || {},
+    colors: data.colors || [],
+    multicolor: data.multicolor || false,
+    bicolor: data.bicolor || false,
+    seasons: data.seasons || [],
+    description: data.description || undefined,
+    images: (images as PlantImage[]) || [],
+  }
+  if (colors.length || data.multicolor || data.bicolor) plant.identity = { ...(plant.identity || {}), colors, multicolor: data.multicolor, bicolor: data.bicolor }
+  return plant
+}
+
 export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: string) => void; initialName?: string }> = ({ onCancel, onSaved, initialName }) => {
   const { t, i18n } = useTranslation('common')
+  const { id } = useParams<{ id?: string }>()
   const { profile } = useAuth()
   const initialLanguage = SUPPORTED_LANGUAGES.includes(i18n.language as SupportedLanguage)
     ? (i18n.language as SupportedLanguage)
     : 'en'
   const [language, setLanguage] = React.useState<SupportedLanguage>(initialLanguage)
-  const [plant, setPlant] = React.useState<Plant>(() => ({ ...emptyPlant, name: initialName || "" }))
+  const [plant, setPlant] = React.useState<Plant>(() => ({ ...emptyPlant, name: initialName || "", id: id || emptyPlant.id }))
+  const [loading, setLoading] = React.useState<boolean>(!!id)
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [aiWorking, setAiWorking] = React.useState(false)
@@ -99,6 +139,23 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     i18n.changeLanguage(language)
     saveLanguagePreference(language)
   }, [language, i18n])
+
+  React.useEffect(() => {
+    if (!id) { setLoading(false); return }
+    let ignore = false
+    const fetchPlant = async () => {
+      try {
+        const loaded = await loadPlant(id)
+        if (!ignore && loaded) setPlant(loaded)
+      } catch (e: any) {
+        if (!ignore) setError(e?.message || 'Failed to load plant')
+      } finally {
+        if (!ignore) setLoading(false)
+      }
+    }
+    fetchPlant()
+    return () => { ignore = true }
+  }, [id])
   const initializeCategoryProgress = () => {
     const progress = buildCategoryProgress(targetFields)
     setAiProgress(progress)
@@ -126,7 +183,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     setSaving(true)
     setError(null)
     try {
-      const plantId = plant.id || generateUUIDv4()
+      const plantId = plant.id || id || generateUUIDv4()
       const payload = {
         id: plantId,
         name: plant.name.trim(),
@@ -204,12 +261,23 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     }
   }
 
+  const descriptionPreview = plant.identity?.overview || plant.description
+
   return (
     <div className="max-w-6xl mx-auto px-4 pb-10 space-y-4">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">{t('plantAdmin.createTitle', 'Create Plant')}</h1>
-          <p className="text-sm text-muted-foreground">{t('plantAdmin.createSubtitle', 'Fill every field with the supplied descriptions or let AI help.')}</p>
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold">
+            {id ? t('plantAdmin.editTitle', 'Edit Plant') : t('plantAdmin.createTitle', 'Create Plant')}
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            {t('plantAdmin.createSubtitle', 'Fill every field with the supplied descriptions or let AI help.')}
+          </p>
+          {(plant.name || descriptionPreview) && (
+            <p className="text-sm font-medium text-foreground/90">
+              {plant.name ? `${plant.name}${descriptionPreview ? ':' : ''}` : t('plantAdmin.nameRequired', 'Name is required')} {descriptionPreview || ''}
+            </p>
+          )}
         </div>
         <div className="flex gap-3 items-center">
           <div className="flex items-center gap-2">
@@ -284,7 +352,16 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           </Card>
         )}
       </div>
-      <PlantProfileForm value={plant} onChange={setPlant} />
+      {loading ? (
+        <Card>
+          <CardContent className="py-6 text-center text-sm text-muted-foreground flex items-center justify-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            {t('plantAdmin.loadingPlant', 'Loading plant...')}
+          </CardContent>
+        </Card>
+      ) : (
+        <PlantProfileForm value={plant} onChange={setPlant} />
+      )}
     </div>
   )
 }
