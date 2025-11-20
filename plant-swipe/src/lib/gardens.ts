@@ -7,6 +7,56 @@ import { getPrimaryPhotoUrl } from '@/lib/photos'
 import type { SupportedLanguage } from './i18n'
 import { mergePlantWithTranslation } from './plantTranslationLoader'
 
+const LEVEL_SUN_MAP: Record<string, Plant['plantCare']['levelSun']> = {
+  'low light': 'Low Light',
+  shade: 'Shade',
+  'partial sun': 'Partial Sun',
+  'full sun': 'Full Sun',
+}
+
+const WATERING_TYPE_VALUES = ['surface', 'buried', 'hose', 'drop', 'drench'] as const
+type WateringTypeValue = (typeof WATERING_TYPE_VALUES)[number]
+
+const SOIL_TYPE_VALUES = [
+  'Vermiculite',
+  'Perlite',
+  'Sphagnum moss',
+  'rock wool',
+  'Sand',
+  'Gravel',
+  'Potting Soil',
+  'Peat',
+  'Clay pebbles',
+  'coconut fiber',
+  'Bark',
+  'Wood Chips',
+] as const
+type SoilTypeValue = (typeof SOIL_TYPE_VALUES)[number]
+
+function normalizeLevelSun(value: unknown): Plant['plantCare']['levelSun'] | undefined {
+  if (typeof value !== 'string') return undefined
+  const mapped = LEVEL_SUN_MAP[value.toLowerCase()]
+  return mapped
+}
+
+function normalizeWateringTypes(value: unknown): Plant['plantCare']['wateringType'] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const filtered = value.filter(
+    (entry): entry is WateringTypeValue =>
+      typeof entry === 'string' && WATERING_TYPE_VALUES.includes(entry as WateringTypeValue),
+  )
+  return filtered.length ? filtered : undefined
+}
+
+function normalizeSoilTypes(value: unknown): Plant['plantCare']['soil'] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const filtered = value.filter(
+    (entry): entry is SoilTypeValue =>
+      typeof entry === 'string' && SOIL_TYPE_VALUES.includes(entry as SoilTypeValue),
+  )
+  return filtered.length ? filtered : undefined
+}
+
 const missingSupabaseRpcs = new Set<string>()
 const missingSupabaseTablesOrViews = new Set<string>()
 let taskCachesDisabled = false
@@ -884,44 +934,9 @@ export async function getGardenInventory(gardenId: string): Promise<Array<{ plan
     .in('id', plantIds)
   const idToPlant: Record<string, Plant> = {}
   for (const p of plantRows || []) {
-    const wateringType = Array.isArray(p.watering_type) ? (p.watering_type as string[]) : undefined
-    const soilTypes = Array.isArray(p.soil) ? (p.soil as string[]) : undefined
-
-    const levelSun =
-      typeof p.level_sun === 'string'
-        ? ({
-            'low light': 'Low Light',
-            shade: 'Shade',
-            'partial sun': 'Partial Sun',
-            'full sun': 'Full Sun',
-          }[p.level_sun.toLowerCase()] as Plant['plantCare']['levelSun'])
-        : undefined
-
-    const wateringType = Array.isArray(p.watering_type)
-      ? (p.watering_type.filter((entry: unknown): entry is NonNullable<Plant['plantCare']['wateringType']>[number] =>
-          typeof entry === 'string' &&
-          ['surface', 'buried', 'hose', 'drop', 'drench'].includes(entry)) as Plant['plantCare']['wateringType'])
-      : undefined
-
-    const soilTypes = Array.isArray(p.soil)
-      ? (p.soil.filter((entry: unknown): entry is NonNullable<Plant['plantCare']['soil']>[number] =>
-          typeof entry === 'string' &&
-          [
-            'Vermiculite',
-            'Perlite',
-            'Sphagnum moss',
-            'rock wool',
-            'Sand',
-            'Gravel',
-            'Potting Soil',
-            'Peat',
-            'Clay pebbles',
-            'coconut fiber',
-            'Bark',
-            'Wood Chips',
-          ].includes(entry)) as Plant['plantCare']['soil'])
-      : undefined
-
+    const levelSun = normalizeLevelSun(p.level_sun)
+    const wateringTypes = normalizeWateringTypes(p.watering_type)
+    const soilTypes = normalizeSoilTypes(p.soil)
     const maintenanceLevel = typeof p.maintenance_level === 'string' ? p.maintenance_level : undefined
 
     idToPlant[String(p.id)] = {
@@ -937,7 +952,7 @@ export async function getGardenInventory(gardenId: string): Promise<Array<{ plan
       image: getPrimaryPhotoUrl(Array.isArray(p.photos) ? p.photos : []) || p.image_url || '',
       care: {
         levelSun,
-        wateringType,
+        wateringType: wateringTypes,
         soil: soilTypes,
         maintenanceLevel,
         difficulty: maintenanceLevel,
