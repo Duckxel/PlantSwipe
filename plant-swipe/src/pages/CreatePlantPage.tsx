@@ -232,7 +232,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     ? (i18n.language as SupportedLanguage)
     : 'en'
   const [language, setLanguage] = React.useState<SupportedLanguage>(initialLanguage)
-  const [translationTarget, setTranslationTarget] = React.useState<SupportedLanguage>(initialLanguage === 'en' ? 'fr' : 'en')
   const [plant, setPlant] = React.useState<Plant>(() => ({ ...emptyPlant, name: initialName || "", id: id || emptyPlant.id }))
   const [loading, setLoading] = React.useState<boolean>(!!id)
   const [saving, setSaving] = React.useState(false)
@@ -449,113 +448,95 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   const descriptionPreview = plant.identity?.overview || plant.description
 
   const translatePlant = async () => {
-    if (translationTarget === language) {
-      setError(t('plantAdmin.translationLanguageMismatch', 'Choose a different target language for translation.'))
+    const targets = SUPPORTED_LANGUAGES.filter((lang) => lang !== language)
+    if (!targets.length) {
+      setError(t('plantAdmin.translationNoTargets', 'No other languages configured for translation.'))
       return
     }
+    if (!plant.name.trim()) {
+      setError(t('plantAdmin.nameRequired', 'Name is required'))
+      return
+    }
+    await savePlant()
     setTranslating(true)
     setError(null)
     try {
       const sourceLang = language
-      const translatedName = await translateText(plant.name || '', translationTarget, sourceLang)
-      const translatedGivenNames = await translateArray(plant.identity?.givenNames || [], translationTarget, sourceLang)
-      const translateArraySafe = (arr?: string[]) => translateArray(arr || [], translationTarget, sourceLang)
-      const translatedInfusionMix = plant.usage?.infusionMix
-        ? Object.fromEntries(
-            await Promise.all(
-              Object.entries(plant.usage.infusionMix).map(async ([mixName, benefit]) => [
-                await translateText(mixName, translationTarget, sourceLang),
-                await translateText(benefit, translationTarget, sourceLang),
-              ])
-            )
-          )
-        : undefined
-      const translatedSourceName = plant.miscellaneous?.source?.name
-        ? await translateText(plant.miscellaneous.source.name, translationTarget, sourceLang)
-        : undefined
-      const translatedSource: Record<string, string> = {}
-      if (translatedSourceName) translatedSource.name = translatedSourceName
-      if (plant.miscellaneous?.source?.url) translatedSource.url = plant.miscellaneous.source.url
+      const translatedRows = [] as any[]
+      for (const target of targets) {
+        const translatedName = await translateText(plant.name || '', target, sourceLang)
+        const translatedGivenNames = await translateArray(plant.identity?.givenNames || [], target, sourceLang)
+        const translateArraySafe = (arr?: string[]) => translateArray(arr || [], target, sourceLang)
+        const translatedSourceName = plant.miscellaneous?.source?.name
+          ? await translateText(plant.miscellaneous.source.name, target, sourceLang)
+          : undefined
+        const translatedSource: Record<string, string> = {}
+        if (translatedSourceName) translatedSource.name = translatedSourceName
+        if (plant.miscellaneous?.source?.url) translatedSource.url = plant.miscellaneous.source.url
 
-      const translated: Plant = {
-        ...plant,
-        name: translatedName,
-        identity: {
-          ...plant.identity,
-          givenNames: translatedGivenNames,
-          scientificName: plant.identity?.scientificName,
+        translatedRows.push({
+          plant_id: plant.id,
+          language: target,
+          name: translatedName,
+          given_names: translatedGivenNames,
+          scientific_name: plant.identity?.scientificName || null,
           family: plant.identity?.family
-            ? await translateText(plant.identity.family, translationTarget, sourceLang)
-            : plant.identity?.family,
+            ? await translateText(plant.identity.family, target, sourceLang)
+            : plant.identity?.family || null,
           overview: plant.identity?.overview
-            ? await translateText(plant.identity.overview, translationTarget, sourceLang)
-            : plant.identity?.overview,
+            ? await translateText(plant.identity.overview, target, sourceLang)
+            : plant.identity?.overview || null,
+          promotion_month: plant.identity?.promotionMonth || null,
+          life_cycle: plant.identity?.lifeCycle || null,
+          season: plant.identity?.season ? plant.identity.season.map((s) => s.toString().toLowerCase()) : [],
+          foliage_persistance: plant.identity?.foliagePersistance || null,
+          toxicity_human: plant.identity?.toxicityHuman || null,
+          toxicity_pets: plant.identity?.toxicityPets || null,
           allergens: await translateArraySafe(plant.identity?.allergens),
           symbolism: await translateArraySafe(plant.identity?.symbolism),
-        },
-        plantCare: {
-          ...plant.plantCare,
+          living_space: plant.identity?.livingSpace || null,
+          composition: plant.identity?.composition || [],
+          maintenance_level: plant.identity?.maintenanceLevel || null,
           origin: await translateArraySafe(plant.plantCare?.origin),
-          adviceSoil: plant.plantCare?.adviceSoil
-            ? await translateText(plant.plantCare.adviceSoil, translationTarget, sourceLang)
-            : plant.plantCare?.adviceSoil,
-          adviceMulching: plant.plantCare?.adviceMulching
-            ? await translateText(plant.plantCare.adviceMulching, translationTarget, sourceLang)
-            : plant.plantCare?.adviceMulching,
-          adviceFertilizer: plant.plantCare?.adviceFertilizer
-            ? await translateText(plant.plantCare.adviceFertilizer, translationTarget, sourceLang)
-            : plant.plantCare?.adviceFertilizer,
-        },
-        growth: {
-          ...plant.growth,
-          adviceTutoring: plant.growth?.adviceTutoring
-            ? await translateText(plant.growth.adviceTutoring, translationTarget, sourceLang)
-            : plant.growth?.adviceTutoring,
-          adviceSowing: plant.growth?.adviceSowing
-            ? await translateText(plant.growth.adviceSowing, translationTarget, sourceLang)
-            : plant.growth?.adviceSowing,
-          cut: plant.growth?.cut
-            ? await translateText(plant.growth.cut, translationTarget, sourceLang)
-            : plant.growth?.cut,
-        },
-        usage: {
-          ...plant.usage,
-          adviceMedicinal: plant.usage?.adviceMedicinal
-            ? await translateText(plant.usage.adviceMedicinal, translationTarget, sourceLang)
-            : plant.usage?.adviceMedicinal,
-          adviceInfusion: plant.usage?.adviceInfusion
-            ? await translateText(plant.usage.adviceInfusion, translationTarget, sourceLang)
-            : plant.usage?.adviceInfusion,
-          infusionMix: translatedInfusionMix,
-          recipesIdeas: await translateArraySafe(plant.usage?.recipesIdeas),
-          spiceMixes: await translateArraySafe(plant.usage?.spiceMixes),
-        },
-        ecology: {
-          ...plant.ecology,
-          groundEffect: plant.ecology?.groundEffect
-            ? await translateText(plant.ecology.groundEffect, translationTarget, sourceLang)
-            : plant.ecology?.groundEffect,
-        },
-        danger: {
-          pests: await translateArraySafe(plant.danger?.pests),
-          diseases: await translateArraySafe(plant.danger?.diseases),
-        },
-        miscellaneous: {
-          ...plant.miscellaneous,
-          companions: plant.miscellaneous?.companions || [],
-          tags: await translateArraySafe(plant.miscellaneous?.tags),
-          source: translatedSource,
-        },
-        meta: {
-          ...plant.meta,
-          adminCommentary: plant.meta?.adminCommentary
-            ? await translateText(plant.meta.adminCommentary, translationTarget, sourceLang)
-            : plant.meta?.adminCommentary,
-        },
+          habitat: plant.plantCare?.habitat || [],
+          advice_soil: plant.plantCare?.adviceSoil
+            ? await translateText(plant.plantCare.adviceSoil, target, sourceLang)
+            : plant.plantCare?.adviceSoil || null,
+          advice_mulching: plant.plantCare?.adviceMulching
+            ? await translateText(plant.plantCare.adviceMulching, target, sourceLang)
+            : plant.plantCare?.adviceMulching || null,
+          advice_fertilizer: plant.plantCare?.adviceFertilizer
+            ? await translateText(plant.plantCare.adviceFertilizer, target, sourceLang)
+            : plant.plantCare?.adviceFertilizer || null,
+          advice_tutoring: plant.growth?.adviceTutoring
+            ? await translateText(plant.growth.adviceTutoring, target, sourceLang)
+            : plant.growth?.adviceTutoring || null,
+          advice_sowing: plant.growth?.adviceSowing
+            ? await translateText(plant.growth.adviceSowing, target, sourceLang)
+            : plant.growth?.adviceSowing || null,
+          advice_medicinal: plant.usage?.adviceMedicinal
+            ? await translateText(plant.usage.adviceMedicinal, target, sourceLang)
+            : plant.usage?.adviceMedicinal || null,
+          advice_infusion: plant.usage?.adviceInfusion
+            ? await translateText(plant.usage.adviceInfusion, target, sourceLang)
+            : plant.usage?.adviceInfusion || null,
+          ground_effect: plant.ecology?.groundEffect
+            ? await translateText(plant.ecology.groundEffect, target, sourceLang)
+            : plant.ecology?.groundEffect || null,
+          admin_commentary: plant.meta?.adminCommentary
+            ? await translateText(plant.meta.adminCommentary, target, sourceLang)
+            : plant.meta?.adminCommentary || null,
+          source_name: translatedSource.name || null,
+          source_url: translatedSource.url || null,
+        })
       }
-      setPlant(translated)
-      setLanguage(translationTarget)
-      await savePlant(translated)
+
+      if (translatedRows.length) {
+        const { error: translateError } = await supabase
+          .from('plant_translations')
+          .upsert(translatedRows, { onConflict: 'plant_id,language' })
+        if (translateError) throw new Error(translateError.message)
+      }
     } catch (e: any) {
       setError(e?.message || 'Translation failed')
     } finally {
@@ -594,20 +575,9 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             </select>
           </div>
           <div className="flex flex-wrap gap-2 items-center">
-            <label className="text-sm font-medium" htmlFor="translate-target">{t('plantAdmin.translationTarget', 'Translate to')}</label>
-            <select
-              id="translate-target"
-              className="border rounded px-2 py-1 text-sm bg-background"
-              value={translationTarget}
-              onChange={(e) => setTranslationTarget(e.target.value as SupportedLanguage)}
-            >
-              {SUPPORTED_LANGUAGES.map((lang) => (
-                <option key={lang} value={lang}>{lang.toUpperCase()}</option>
-              ))}
-            </select>
             <Button type="button" onClick={translatePlant} disabled={translating}>
               {translating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {t('plantAdmin.deeplTranslate', 'DeepL translate')}
+              {t('plantAdmin.deeplTranslate', 'DeepL translate other languages')}
             </Button>
           </div>
           <div className="flex gap-2">
