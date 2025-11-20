@@ -1,7 +1,13 @@
 const DB_VALUES = ['flowerbed', 'path', 'hedge', 'ground cover', 'pot'] as const
-const DB_VALUE_SET = new Set(DB_VALUES)
+const UI_VALUES = ['Flowerbed', 'Path', 'Hedge', 'Ground Cover', 'Pot'] as const
 
-const DB_TO_UI_MAP: Record<(typeof DB_VALUES)[number], string> = {
+export type CompositionDbValue = typeof DB_VALUES[number]
+export type CompositionUiValue = typeof UI_VALUES[number]
+
+const DB_VALUE_SET = new Set<string>(DB_VALUES)
+const UI_VALUE_SET = new Set<string>(UI_VALUES)
+
+const DB_TO_UI_MAP: Record<CompositionDbValue, CompositionUiValue> = {
   flowerbed: 'Flowerbed',
   path: 'Path',
   hedge: 'Hedge',
@@ -9,44 +15,52 @@ const DB_TO_UI_MAP: Record<(typeof DB_VALUES)[number], string> = {
   pot: 'Pot',
 }
 
-const UI_TO_DB_ENTRIES = Object.entries(DB_TO_UI_MAP).map(([db, ui]) => [ui.toLowerCase(), db]) as Array<[string, string]>
-const UI_TO_DB_MAP: Record<string, string> = UI_TO_DB_ENTRIES.reduce((acc, [uiLower, db]) => {
-  acc[uiLower] = db
-  return acc
-}, {} as Record<string, string>)
+const UI_TO_DB_MAP = Object.entries(DB_TO_UI_MAP).reduce(
+  (acc, [db, ui]) => {
+    acc[ui as CompositionUiValue] = db as CompositionDbValue
+    return acc
+  },
+  {} as Record<CompositionUiValue, CompositionDbValue>,
+)
 
-export function normalizeCompositionForDb(values?: string[] | null): string[] {
+const UI_LOWER_TO_DB_MAP = UI_VALUES.reduce((acc, ui) => {
+  acc[ui.toLowerCase()] = UI_TO_DB_MAP[ui]
+  return acc
+}, {} as Record<string, CompositionDbValue>)
+
+function coerceDbValue(raw?: string | null): CompositionDbValue | null {
+  if (!raw) return null
+  const trimmed = raw.trim()
+  if (!trimmed) return null
+  const lower = trimmed.toLowerCase()
+  if (DB_VALUE_SET.has(lower)) {
+    return lower as CompositionDbValue
+  }
+  if (UI_VALUE_SET.has(trimmed)) {
+    const mapped = UI_TO_DB_MAP[trimmed as CompositionUiValue]
+    return mapped ?? null
+  }
+  return UI_LOWER_TO_DB_MAP[lower] || null
+}
+
+export function normalizeCompositionForDb(values?: string[] | null): CompositionDbValue[] {
   if (!values?.length) return []
-  const result: string[] = []
+  const result: CompositionDbValue[] = []
   for (const raw of values) {
-    if (!raw) continue
-    const trimmed = raw.trim()
-    if (!trimmed) continue
-    const lower = trimmed.toLowerCase()
-    let dbValue: string | undefined
-    if (DB_VALUE_SET.has(trimmed as (typeof DB_VALUES)[number])) {
-      dbValue = trimmed.toLowerCase()
-    } else if (DB_VALUE_SET.has(lower as (typeof DB_VALUES)[number])) {
-      dbValue = lower
-    } else if (UI_TO_DB_MAP[lower]) {
-      dbValue = UI_TO_DB_MAP[lower]
-    }
+    const dbValue = coerceDbValue(raw)
     if (!dbValue) continue
-    if (!result.includes(dbValue)) {
-      result.push(dbValue)
-    }
+    if (!result.includes(dbValue)) result.push(dbValue)
   }
   return result
 }
 
-export function expandCompositionFromDb(values?: string[] | null): string[] {
+export function expandCompositionFromDb(values?: string[] | null): CompositionUiValue[] {
   if (!values?.length) return []
-  const result: string[] = []
+  const result: CompositionUiValue[] = []
   for (const raw of values) {
-    if (!raw) continue
-    const lower = raw.trim().toLowerCase()
-    if (!lower) continue
-    const uiValue = DB_TO_UI_MAP[lower as (typeof DB_VALUES)[number]]
+    const trimmed = raw?.trim().toLowerCase()
+    if (!trimmed) continue
+    const uiValue = DB_TO_UI_MAP[trimmed as CompositionDbValue]
     if (uiValue && !result.includes(uiValue)) {
       result.push(uiValue)
     }

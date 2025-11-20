@@ -63,7 +63,7 @@ async function fetchPlantWithRelations(id: string): Promise<Plant | null> {
       scent: data.scent || false,
       symbolism: data.symbolism || [],
         livingSpace: data.living_space || undefined,
-        composition: expandCompositionFromDb(data.composition),
+        composition: expandCompositionFromDb(data.composition) as Plant["identity"]["composition"],
       maintenanceLevel: data.maintenance_level || undefined,
       multicolor: data.multicolor || false,
       bicolor: data.bicolor || false,
