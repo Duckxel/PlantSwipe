@@ -473,6 +473,10 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     const remaining = targetFields.filter((key) => !basicFieldOrder.includes(key))
     return [...basicFieldOrder, ...remaining]
   }, [basicFieldOrder, targetFields])
+  const aiCategoryOrder = React.useMemo(
+    () => ['identity', 'plantCare', 'growth', 'usage', 'ecology', 'danger', 'miscellaneous', 'meta'],
+    [],
+  )
   const categoryLabels = React.useMemo(() => ({
     basics: t('plantAdmin.categories.basics', 'Basics'),
     identity: t('plantAdmin.categories.identity', 'Identity'),
@@ -700,7 +704,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     let aiSucceeded = false
     let finalPlant: Plant | null = null
     const plantNameForAi = trimmedName
-    const applyWithStatus = (candidate: Plant): Plant => ({
+      const applyWithStatus = (candidate: Plant): Plant => ({
       ...candidate,
       meta: { ...(candidate.meta || {}), status: IN_PROGRESS_STATUS },
     })
@@ -758,7 +762,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             plantName: plantNameForAi,
             schema: plantSchema,
             existingData: plant,
-            fields: mandatoryFieldOrder,
+            fields: aiCategoryOrder,
             language,
             onFieldComplete: ({ field, data }) => {
               if (field === 'complete') return
