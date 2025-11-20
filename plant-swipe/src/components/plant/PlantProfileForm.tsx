@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { useTranslation } from "react-i18next"
 import { plantFormCategoryOrder, type PlantFormCategory } from "@/lib/plantFormCategories"
-import type { Plant, PlantColor, PlantImage } from "@/types/plant"
+import type { Plant, PlantColor, PlantImage, PlantType } from "@/types/plant"
 import { supabase } from "@/lib/supabaseClient"
 
 export type PlantProfileFormProps = {
@@ -37,16 +37,6 @@ interface FieldConfig {
 const monthOptions = [
   "January","February","March","April","May","June","July","August","September","October","November","December"
 ]
-
-const TogglePill: React.FC<{ selected: boolean; onClick: () => void; children: React.ReactNode }> = ({ selected, onClick, children }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    className={`px-3 py-1 rounded-full border text-sm transition ${selected ? "bg-black text-white dark:bg-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"}`}
-  >
-    {children}
-  </button>
-)
 
 const TagInput: React.FC<{ value: string[]; onChange: (v: string[]) => void; placeholder?: string }> = ({ value, onChange, placeholder }) => {
   const [input, setInput] = React.useState("")
@@ -389,11 +379,16 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
         return (
           <div className="grid gap-2">
             <Label>{field.label}</Label>
-            <div className="flex flex-wrap gap-2">
+            <select
+              className="h-9 rounded-md border px-2 text-sm"
+              value={value || ""}
+              onChange={(e) => onChange(field.key, e.target.value || undefined)}
+            >
+              <option value="">Select option</option>
               {(field.options || []).map((opt) => (
-                <TogglePill key={opt} selected={value === opt} onClick={() => onChange(field.key, opt)}>{opt}</TogglePill>
+                <option key={opt} value={opt}>{opt}</option>
               ))}
-            </div>
+            </select>
             <p className="text-xs text-muted-foreground">{field.description}</p>
           </div>
         )
@@ -404,10 +399,19 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
             <div className="flex flex-wrap gap-2">
               {(field.options || []).map((opt) => {
                 const selected = Array.isArray(value) ? value.includes(opt) : false
-                return <TogglePill key={opt} selected={selected} onClick={() => {
-                  const current: string[] = Array.isArray(value) ? value : []
-                  onChange(field.key, selected ? current.filter((v) => v !== opt) : [...current, opt])
-                }}>{opt}</TogglePill>
+                return (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={() => {
+                      const current: string[] = Array.isArray(value) ? value : []
+                      onChange(field.key, selected ? current.filter((v) => v !== opt) : [...current, opt])
+                    }}
+                    className={`px-3 py-1 rounded-full border text-sm transition ${selected ? "bg-black text-white dark:bg-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"}`}
+                  >
+                    {opt}
+                  </button>
+                )
               })}
             </div>
             <p className="text-xs text-muted-foreground">{field.description}</p>
@@ -469,7 +473,14 @@ function ImageEditor({ images, onChange }: { images: PlantImage[]; onChange: (v:
           <div className="flex gap-2 items-center">
             <Label className="text-sm">Use</Label>
             {(["primary","discovery","other"] as const).map((opt) => (
-              <TogglePill key={opt} selected={img.use === opt} onClick={() => updateImage(idx, { use: opt })}>{opt}</TogglePill>
+              <button
+                key={opt}
+                type="button"
+                onClick={() => updateImage(idx, { use: opt })}
+                className={`px-3 py-1 rounded-full border text-sm transition ${img.use === opt ? "bg-black text-white dark:bg-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"}`}
+              >
+                {opt}
+              </button>
             ))}
           </div>
           <Button variant="ghost" type="button" onClick={() => removeImage(idx)} className="text-red-600">Remove image</Button>
@@ -604,6 +615,7 @@ export function PlantProfileForm({ value, onChange }: PlantProfileFormProps) {
     miscellaneous: null,
     meta: null,
   })
+  const [selectedCategory, setSelectedCategory] = React.useState<PlantFormCategory>('identity')
   const categoryLabels: Record<PlantFormCategory, string> = {
     basics: t('plantAdmin.categories.basics', 'Basics'),
     identity: t('plantAdmin.categories.identity', 'Identity'),
@@ -616,194 +628,205 @@ export function PlantProfileForm({ value, onChange }: PlantProfileFormProps) {
     meta: t('plantAdmin.categories.meta', 'Meta'),
   }
   const scrollToCategory = (category: PlantFormCategory) => {
-    const node = sectionRefs.current[category]
-    if (node) {
-      node.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }
+    setSelectedCategory(category)
   }
   const setPath = (path: string, val: any) => onChange(setValue(value, path, val))
   return (
     <div className="space-y-6">
-      <div ref={(node) => { sectionRefs.current.basics = node }}>
-        <Card>
-          <CardHeader>
-            <CardTitle>{categoryLabels.basics}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-          <div className="grid gap-2">
-            <Label>Name</Label>
-            <Input value={value.name} required onChange={(e) => onChange({ ...value, name: e.target.value })} placeholder="Unique plant name" />
-            <p className="text-xs text-muted-foreground">Name of the Plant (unique and mandatory)</p>
-          </div>
-          <div className="grid gap-2">
-            <Label>Plant Type</Label>
-            <div className="flex flex-wrap gap-2">
-              {plantTypeOptions.map((opt) => (
-                <TogglePill key={opt} selected={value.plantType === opt} onClick={() => onChange({ ...value, plantType: opt })}>{opt}</TogglePill>
-              ))}
-            </div>
-            <p className="text-xs text-muted-foreground">Primary plant type</p>
-          </div>
-          <div className="grid gap-2">
-            <Label>Utility</Label>
-            <div className="flex flex-wrap gap-2">
-              {utilityOptions.map((opt) => {
-                const selected = value.utility?.includes(opt)
-                return <TogglePill key={opt} selected={!!selected} onClick={() => {
-                  const current = value.utility || []
-                  const next = selected ? current.filter((v) => v !== opt) : [...current, opt]
-                  onChange({ ...value, utility: next })
-                }}>{opt}</TogglePill>
-              })}
-            </div>
-            <p className="text-xs text-muted-foreground">Select all utilities that apply</p>
-          </div>
-          {value.utility?.includes("comestible") && (
-            <div className="grid gap-2">
-              <Label>Comestible Part</Label>
-              <div className="flex flex-wrap gap-2">
-                {comestibleOptions.map((opt) => {
-                  const selected = value.comestiblePart?.includes(opt)
-                  return <TogglePill key={opt} selected={!!selected} onClick={() => {
-                    const current = value.comestiblePart || []
-                    const next = selected ? current.filter((v) => v !== opt) : [...current, opt]
-                    onChange({ ...value, comestiblePart: next })
-                  }}>{opt}</TogglePill>
-                })}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div ref={(node) => { sectionRefs.current.basics = node }} className="flex-1">
+          <Card>
+            <CardHeader>
+              <CardTitle>{categoryLabels.basics}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-2">
+                <Label>Name</Label>
+                <Input value={value.name} required onChange={(e) => onChange({ ...value, name: e.target.value })} placeholder="Unique plant name" />
+                <p className="text-xs text-muted-foreground">Name of the Plant (unique and mandatory)</p>
               </div>
-              <p className="text-xs text-muted-foreground">Edible parts (only if comestible)</p>
-            </div>
-          )}
-          {value.utility?.includes("produce_fruit") && (
-            <div className="grid gap-2">
-              <Label>Fruit Type</Label>
-              <div className="flex flex-wrap gap-2">
-                {fruitOptions.map((opt) => {
-                  const selected = value.fruitType?.includes(opt)
-                  return <TogglePill key={opt} selected={!!selected} onClick={() => {
-                    const current = value.fruitType || []
-                    const next = selected ? current.filter((v) => v !== opt) : [...current, opt]
-                    onChange({ ...value, fruitType: next })
-                  }}>{opt}</TogglePill>
-                })}
+              <div className="grid gap-2">
+                <Label>Plant Type</Label>
+                <select
+                  className="h-9 rounded-md border px-2 text-sm"
+                  value={value.plantType || ""}
+                  onChange={(e) => onChange({ ...value, plantType: (e.target.value || undefined) as PlantType | undefined })}
+                >
+                  <option value="">Select type</option>
+                  {plantTypeOptions.map((opt) => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground">Primary plant type</p>
               </div>
-              <p className="text-xs text-muted-foreground">Fruit classification (if produce fruit)</p>
+              <div className="grid gap-2">
+                <Label>Utility</Label>
+                <div className="flex flex-wrap gap-2">
+                  {utilityOptions.map((opt) => {
+                    const selected = value.utility?.includes(opt)
+                    return (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => {
+                          const current = value.utility || []
+                          const next = selected ? current.filter((v) => v !== opt) : [...current, opt]
+                          onChange({ ...value, utility: next })
+                        }}
+                        className={`px-3 py-1 rounded-full border text-sm transition ${selected ? "bg-black text-white dark:bg-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"}`}
+                      >
+                        {opt}
+                      </button>
+                    )
+                  })}
+                </div>
+                <p className="text-xs text-muted-foreground">Select all utilities that apply</p>
+              </div>
+              {value.utility?.includes("comestible") && (
+                <div className="grid gap-2">
+                  <Label>Comestible Part</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {comestibleOptions.map((opt) => {
+                      const selected = value.comestiblePart?.includes(opt)
+                      return (
+                        <button
+                          key={opt}
+                          type="button"
+                          onClick={() => {
+                            const current = value.comestiblePart || []
+                            const next = selected ? current.filter((v) => v !== opt) : [...current, opt]
+                            onChange({ ...value, comestiblePart: next })
+                          }}
+                          className={`px-3 py-1 rounded-full border text-sm transition ${selected ? "bg-black text-white dark:bg-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"}`}
+                        >
+                          {opt}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Edible parts (only if comestible)</p>
+                </div>
+              )}
+              {value.utility?.includes("produce_fruit") && (
+                <div className="grid gap-2">
+                  <Label>Fruit Type</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {fruitOptions.map((opt) => {
+                      const selected = value.fruitType?.includes(opt)
+                      return (
+                        <button
+                          key={opt}
+                          type="button"
+                          onClick={() => {
+                            const current = value.fruitType || []
+                            const next = selected ? current.filter((v) => v !== opt) : [...current, opt]
+                            onChange({ ...value, fruitType: next })
+                          }}
+                          className={`px-3 py-1 rounded-full border text-sm transition ${selected ? "bg-black text-white dark:bg-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"}`}
+                        >
+                          {opt}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Fruit classification (if produce fruit)</p>
+                </div>
+              )}
+              <ImageEditor images={value.images || []} onChange={(imgs) => onChange({ ...value, images: imgs })} />
+            </CardContent>
+          </Card>
+        </div>
+        <div className="sm:w-64 space-y-3">
+          <div className="rounded-lg border bg-muted/40 p-3">
+            <div className="text-sm font-medium mb-2">{t('plantAdmin.categoryMenuTitle', 'Quick category menu')}</div>
+            <div className="flex flex-col gap-2">
+              <label className="text-xs text-muted-foreground" htmlFor="category-select">{t('plantAdmin.categorySelectLabel', 'Show category')}</label>
+              <select
+                id="category-select"
+                className="h-9 rounded-md border px-2 text-sm"
+                value={selectedCategory}
+                onChange={(e) => scrollToCategory(e.target.value as PlantFormCategory)}
+              >
+                {plantFormCategoryOrder.map((key) => (
+                  <option key={key} value={key}>{categoryLabels[key]}</option>
+                ))}
+              </select>
+              <div className="flex flex-wrap gap-2">
+                {plantFormCategoryOrder.map((key) => (
+                  <Button
+                    key={key}
+                    size="sm"
+                    variant={selectedCategory === key ? 'default' : 'outline'}
+                    onClick={() => scrollToCategory(key)}
+                  >
+                    {categoryLabels[key]}
+                  </Button>
+                ))}
+              </div>
             </div>
-          )}
-          <ImageEditor images={value.images || []} onChange={(imgs) => onChange({ ...value, images: imgs })} />
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="rounded-lg border bg-muted/40 p-3">
-        <div className="text-sm font-medium mb-2">{t('plantAdmin.categoryMenuTitle', 'Quick category menu')}</div>
-        <div className="flex flex-wrap gap-2">
-          {plantFormCategoryOrder.filter((key) => key !== 'basics').map((key) => (
-            <Button key={key} size="sm" variant="outline" onClick={() => scrollToCategory(key)}>
-              {categoryLabels[key]}
-            </Button>
-          ))}
+          </div>
         </div>
       </div>
 
-      <div ref={(node) => { sectionRefs.current.identity = node }}>
-        <Card>
-          <CardHeader><CardTitle>{categoryLabels.identity}</CardTitle></CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-2">
-          {identityFields.map((f) => renderField(value, setPath, f))}
-          <div className="md:col-span-2">
-            <Label>Colors</Label>
-            <ColorPicker colors={value.identity?.colors || []} onChange={(colors) => onChange(setValue(value, "identity.colors", colors))} />
-            <div className="mt-3 flex flex-wrap gap-4 text-sm">
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={!!value.identity?.multicolor}
-                  onChange={(e) => onChange(setValue(value, "identity.multicolor", e.target.checked))}
-                />
-                Multicolor
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={!!value.identity?.bicolor}
-                  onChange={(e) => onChange(setValue(value, "identity.bicolor", e.target.checked))}
-                />
-                Bicolor
-              </label>
+      <div className="space-y-6">
+        {(['identity','plantCare','growth','usage','ecology','danger','miscellaneous','meta'] as PlantFormCategory[]).map((cat) => {
+          const visible = selectedCategory === cat
+          if (!visible) return null
+          const refSetter = (node: HTMLDivElement | null) => { sectionRefs.current[cat] = node }
+          const fieldGroups: Record<PlantFormCategory, FieldConfig[]> = {
+            basics: [],
+            identity: identityFields,
+            plantCare: careFields,
+            growth: growthFields,
+            usage: usageFields,
+            ecology: ecologyFields,
+            danger: dangerFields,
+            miscellaneous: miscFields,
+            meta: metaFields,
+          }
+          return (
+            <div key={cat} ref={refSetter}>
+              <Card>
+                <CardHeader><CardTitle>{categoryLabels[cat]}</CardTitle></CardHeader>
+                <CardContent className="grid gap-4 md:grid-cols-2">
+                  {fieldGroups[cat].map((f) => renderField(value, setPath, f))}
+                  {cat === 'identity' && (
+                    <div className="md:col-span-2">
+                      <Label>Colors</Label>
+                      <ColorPicker colors={value.identity?.colors || []} onChange={(colors) => onChange(setValue(value, "identity.colors", colors))} />
+                      <div className="mt-3 flex flex-wrap gap-4 text-sm">
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={!!value.identity?.multicolor}
+                            onChange={(e) => onChange(setValue(value, "identity.multicolor", e.target.checked))}
+                          />
+                          Multicolor
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={!!value.identity?.bicolor}
+                            onChange={(e) => onChange(setValue(value, "identity.bicolor", e.target.checked))}
+                          />
+                          Bicolor
+                        </label>
+                      </div>
+                      <p className="text-xs text-muted-foreground">Link existing palette colors or insert new ones for this plant.</p>
+                    </div>
+                  )}
+                  {cat === 'miscellaneous' && (
+                    <div className="md:col-span-2">
+                      <Label>Source</Label>
+                      <KeyValueList value={(value.miscellaneous?.source as Record<string, string>) || {}} onChange={(v) => onChange(setValue(value, "miscellaneous.source", v))} keyLabel="Name" valueLabel="URL" />
+                      <p className="text-xs text-muted-foreground">Source {'{name // url}'}</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </div>
-            <p className="text-xs text-muted-foreground">Link existing palette colors or insert new ones for this plant.</p>
-          </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div ref={(node) => { sectionRefs.current.plantCare = node }}>
-        <Card>
-          <CardHeader><CardTitle>{categoryLabels.plantCare}</CardTitle></CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-2">
-          {careFields.map((f) => renderField(value, setPath, f))}
-          </CardContent>
-        </Card>
-      </div>
-
-      <div ref={(node) => { sectionRefs.current.growth = node }}>
-        <Card>
-          <CardHeader><CardTitle>{categoryLabels.growth}</CardTitle></CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-2">
-          {growthFields.map((f) => renderField(value, setPath, f))}
-          </CardContent>
-        </Card>
-      </div>
-
-      <div ref={(node) => { sectionRefs.current.usage = node }}>
-        <Card>
-          <CardHeader><CardTitle>{categoryLabels.usage}</CardTitle></CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-2">
-          {usageFields.map((f) => renderField(value, setPath, f))}
-          </CardContent>
-        </Card>
-      </div>
-
-      <div ref={(node) => { sectionRefs.current.ecology = node }}>
-        <Card>
-          <CardHeader><CardTitle>{categoryLabels.ecology}</CardTitle></CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-2">
-          {ecologyFields.map((f) => renderField(value, setPath, f))}
-          </CardContent>
-        </Card>
-      </div>
-
-      <div ref={(node) => { sectionRefs.current.danger = node }}>
-        <Card>
-          <CardHeader><CardTitle>{categoryLabels.danger}</CardTitle></CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-2">
-          {dangerFields.map((f) => renderField(value, setPath, f))}
-          </CardContent>
-        </Card>
-      </div>
-
-      <div ref={(node) => { sectionRefs.current.miscellaneous = node }}>
-        <Card>
-          <CardHeader><CardTitle>{categoryLabels.miscellaneous}</CardTitle></CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-2">
-          {miscFields.map((f) => renderField(value, setPath, f))}
-          <div className="md:col-span-2">
-            <Label>Source</Label>
-            <KeyValueList value={(value.miscellaneous?.source as Record<string, string>) || {}} onChange={(v) => onChange(setValue(value, "miscellaneous.source", v))} keyLabel="Name" valueLabel="URL" />
-            <p className="text-xs text-muted-foreground">Source {"{name // url}"}</p>
-          </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div ref={(node) => { sectionRefs.current.meta = node }}>
-        <Card>
-          <CardHeader><CardTitle>{categoryLabels.meta}</CardTitle></CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-2">
-          {metaFields.map((f) => renderField(value, setPath, f))}
-          </CardContent>
-        </Card>
+          )
+        })}
       </div>
     </div>
   )
