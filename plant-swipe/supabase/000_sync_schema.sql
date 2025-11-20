@@ -329,15 +329,6 @@ alter table if exists public.plants add column if not exists companions text[] n
 alter table if exists public.plants add column if not exists tags text[] not null default '{}';
 alter table if exists public.plants add column if not exists source_name text;
 alter table if exists public.plants add column if not exists source_url text;
-alter table if exists public.plants add column if not exists care_sunlight text;
-alter table if exists public.plants add column if not exists care_water text;
-alter table if exists public.plants add column if not exists care_soil text;
-alter table if exists public.plants add column if not exists care_difficulty text;
-alter table if exists public.plants alter column care_sunlight drop not null;
-alter table if exists public.plants alter column care_water drop not null;
-alter table if exists public.plants alter column care_soil drop not null;
-alter table if exists public.plants alter column care_difficulty drop not null;
-
 -- Drop obsolete JSON columns from earlier iterations
 alter table if exists public.plants drop column if exists identity;
 alter table if exists public.plants drop column if exists plant_care;

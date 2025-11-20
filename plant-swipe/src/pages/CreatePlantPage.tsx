@@ -76,58 +76,6 @@ function normalizeSchedules(entries?: PlantWateringSchedule[]): PlantWateringSch
     .filter((entry) => entry.season || entry.quantity !== undefined || entry.timePeriod)
 }
 
-const toTitleCase = (value?: string | null): string | null => {
-  if (!value) return null
-  return value
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ')
-}
-
-const formatCareSunlight = (level?: string | null) => toTitleCase(level)
-
-const formatCareWater = (plant: Plant): string | null => {
-  const types = plant.plantCare?.wateringType
-  if (types?.length) {
-    return types
-      .map((type) => toTitleCase(type) || type)
-      .filter(Boolean)
-      .join(', ')
-  }
-  const schedules = plant.plantCare?.watering?.schedules
-  if (schedules?.length) {
-    return schedules
-      .map((schedule) => {
-        const parts: string[] = []
-        if (schedule.quantity !== undefined && schedule.quantity !== null) parts.push(String(schedule.quantity))
-        if (schedule.timePeriod) parts.push(schedule.timePeriod)
-        if (schedule.season) parts.push(toTitleCase(schedule.season) || schedule.season)
-        return parts.join(' ').trim()
-      })
-      .filter(Boolean)
-      .join('; ')
-  }
-  return null
-}
-
-const formatCareSoil = (plant: Plant): string | null => {
-  const soils = plant.plantCare?.soil
-  return soils?.length ? soils.join(', ') : null
-}
-
-const formatCareDifficulty = (maintenanceLevel?: string | null): string | null => {
-  if (!maintenanceLevel) return null
-  const map: Record<string, string> = {
-    none: 'Easy',
-    low: 'Easy',
-    moderate: 'Moderate',
-    heavy: 'Hard',
-  }
-  const normalized = maintenanceLevel.toLowerCase()
-  return map[normalized] || maintenanceLevel
-}
-
 async function upsertColors(colors: PlantColor[]) {
   if (!colors?.length) return [] as string[]
   const upsertPayload = colors.map((c) => ({ name: c.name, hex_code: c.hexCode || null }))
@@ -531,13 +479,9 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         advice_soil: plantToSave.plantCare?.adviceSoil || null,
         mulching: plantToSave.plantCare?.mulching || [],
         advice_mulching: plantToSave.plantCare?.adviceMulching || null,
-          nutrition_need: plantToSave.plantCare?.nutritionNeed || [],
-          fertilizer: plantToSave.plantCare?.fertilizer || [],
-          advice_fertilizer: plantToSave.plantCare?.adviceFertilizer || null,
-          care_sunlight: formatCareSunlight(plantToSave.plantCare?.levelSun),
-          care_water: formatCareWater(plantToSave),
-          care_soil: formatCareSoil(plantToSave),
-          care_difficulty: formatCareDifficulty(plantToSave.identity?.maintenanceLevel || null),
+        nutrition_need: plantToSave.plantCare?.nutritionNeed || [],
+        fertilizer: plantToSave.plantCare?.fertilizer || [],
+        advice_fertilizer: plantToSave.plantCare?.adviceFertilizer || null,
         sowing_month: plantToSave.growth?.sowingMonth || [],
         flowering_month: plantToSave.growth?.floweringMonth || [],
         fruiting_month: plantToSave.growth?.fruitingMonth || [],

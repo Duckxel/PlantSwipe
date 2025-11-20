@@ -172,23 +172,16 @@ export function mergePlantWithTranslation(
           : undefined),
         scentNotes: translationPhenology?.scentNotes || phenology?.scentNotes || undefined,
       },
-      environment: {
-        ...environment,
-        sunExposure: environment?.sunExposure || (basePlant.care_sunlight === 'High' ? 'full sun'
-          : basePlant.care_sunlight === 'Medium' ? 'partial sun'
-          : basePlant.care_sunlight === 'Low' ? 'partial shade'
-          : undefined),
-        soil: {
-          ...environment?.soil,
-          texture: environment?.soil?.texture || (basePlant.care_soil ? [basePlant.care_soil] : undefined),
+        environment: {
+          ...environment,
+          sunExposure: environment?.sunExposure || basePlant.level_sun || undefined,
+          soil: {
+            ...environment?.soil,
+            texture: environment?.soil?.texture || (Array.isArray(basePlant.soil) ? basePlant.soil : undefined),
+          },
         },
-      },
       care: (() => {
-        const fallbackFrequency = care?.watering?.frequency || {
-          spring: basePlant.water_freq_period && basePlant.water_freq_amount
-            ? `${basePlant.water_freq_amount} times per ${basePlant.water_freq_period}`
-            : undefined,
-        }
+          const fallbackFrequency = care?.watering?.frequency || {}
 
         const mergedWatering = {
           ...care?.watering,
@@ -199,13 +192,21 @@ export function mergePlantWithTranslation(
           },
         }
 
-        const mergedCare = {
+          const difficultyMap: Record<string, string> = {
+            none: 'easy',
+            low: 'easy',
+            moderate: 'moderate',
+            heavy: 'advanced',
+          }
+
+          const normalizedDifficulty = typeof basePlant.maintenance_level === 'string'
+            ? basePlant.maintenance_level.toLowerCase()
+            : undefined
+
+          const mergedCare = {
           ...care,
-          ...translationCare,
-          difficulty: care?.difficulty || (basePlant.care_difficulty === 'Easy' ? 'easy'
-            : basePlant.care_difficulty === 'Moderate' ? 'moderate'
-            : basePlant.care_difficulty === 'Hard' ? 'advanced'
-            : undefined),
+            ...translationCare,
+            difficulty: care?.difficulty || (normalizedDifficulty ? (difficultyMap[normalizedDifficulty] || normalizedDifficulty) : undefined),
           watering: mergedWatering,
         }
 

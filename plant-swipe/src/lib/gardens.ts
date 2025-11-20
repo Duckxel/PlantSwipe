@@ -322,8 +322,8 @@ export async function getGardenPlants(gardenId: string, language?: SupportedLang
   const plantIds = Array.from(new Set(rows.map(r => r.plant_id)))
     const { data: plantRows } = await supabase
       .from('plants')
-      .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, photos, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount, classification, identifiers, traits, dimensions, phenology, environment, care, propagation, usage, ecology, commerce, problems, planting, meta')
-    .in('id', plantIds)
+      .select('*')
+      .in('id', plantIds)
   
   // Always load translations for the specified language (including English)
   // This ensures plants created in one language display correctly in another
@@ -878,10 +878,10 @@ export async function getGardenInventory(gardenId: string): Promise<Array<{ plan
   const rows = (data || []) as Array<{ plant_id: string; seeds_on_hand: number; plants_on_hand: number }>
   if (rows.length === 0) return []
   const plantIds = rows.map(r => String(r.plant_id))
-  const { data: plantRows } = await supabase
-    .from('plants')
-    .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, photos, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, classification')
-    .in('id', plantIds)
+    const { data: plantRows } = await supabase
+      .from('plants')
+      .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, photos, seeds_available, level_sun, watering_type, soil, maintenance_level')
+      .in('id', plantIds)
   const idToPlant: Record<string, Plant> = {}
   for (const p of plantRows || []) {
     idToPlant[String(p.id)] = {
@@ -895,7 +895,12 @@ export async function getGardenInventory(gardenId: string): Promise<Array<{ plan
       description: p.description || '',
       photos: Array.isArray(p.photos) ? p.photos : undefined,
       image: getPrimaryPhotoUrl(Array.isArray(p.photos) ? p.photos : []) || p.image_url || '',
-      care: { sunlight: p.care_sunlight || 'Low', water: p.care_water || 'Low', soil: p.care_soil || '', difficulty: p.care_difficulty || 'Easy' },
+      care: {
+        sunlight: p.level_sun || null,
+        water: Array.isArray(p.watering_type) ? p.watering_type.join(', ') : null,
+        soil: Array.isArray(p.soil) ? p.soil.join(', ') : null,
+        difficulty: p.maintenance_level || null,
+      },
       seedsAvailable: Boolean(p.seeds_available ?? false),
       classification: typeof p.classification === 'string' ? JSON.parse(p.classification) : p.classification || undefined,
     }

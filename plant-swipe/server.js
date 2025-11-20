@@ -3035,8 +3035,7 @@ create table if not exists public.plant_translations (
   problems jsonb,
   scientific_name text,
   meaning text,
-  description text,
-  care_soil text,
+    description text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique(plant_id, language)
@@ -5549,11 +5548,11 @@ app.post('/api/admin/ban', async (req, res) => {
 // Helper: load plants via Supabase anon client when SQL is unavailable
 async function loadPlantsViaSupabase() {
   if (!supabaseServer) return null
-  try {
+    try {
       const { data, error } = await supabaseServer
         .from('plants')
-        .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, photos, care_sunlight, care_water, care_soil, care_difficulty, seeds_available, water_freq_unit, water_freq_value, water_freq_period, water_freq_amount')
-      .order('name', { ascending: true })
+        .select('*')
+        .order('name', { ascending: true })
     if (error) return null
       return (Array.isArray(data) ? data : []).map((r) => {
         const photos = Array.isArray(r.photos) ? r.photos : undefined
@@ -5569,17 +5568,12 @@ async function loadPlantsViaSupabase() {
           photos,
           image: pickPrimaryPhotoUrlFromArray(photos, r.image_url ?? ''),
           care: {
-            sunlight: r.care_sunlight,
-            water: r.care_water,
-            soil: r.care_soil,
-            difficulty: r.care_difficulty,
+            sunlight: r.level_sun || null,
+            water: Array.isArray(r.watering_type) ? r.watering_type.join(', ') : null,
+            soil: Array.isArray(r.soil) ? r.soil.join(', ') : null,
+            difficulty: r.maintenance_level || null,
           },
           seedsAvailable: r.seeds_available === true,
-          // Optional frequency fields (tolerated by client)
-          waterFreqUnit: r.water_freq_unit ?? undefined,
-          waterFreqValue: r.water_freq_value ?? null,
-          waterFreqPeriod: r.water_freq_period ?? undefined,
-          waterFreqAmount: r.water_freq_amount ?? null,
         }
       })
   } catch {
@@ -5703,10 +5697,10 @@ app.get('/api/plants', async (_req, res) => {
               photos,
               image: pickPrimaryPhotoUrlFromArray(photos, r.image_url ?? ''),
               care: {
-                sunlight: r.care_sunlight,
-                water: r.care_water,
-                soil: r.care_soil,
-                difficulty: r.care_difficulty,
+                sunlight: r.level_sun || null,
+                water: Array.isArray(r.watering_type) ? r.watering_type.join(', ') : null,
+                soil: Array.isArray(r.soil) ? r.soil.join(', ') : null,
+                difficulty: r.maintenance_level || null,
               },
               seedsAvailable: r.seeds_available === true,
             }
@@ -7518,43 +7512,39 @@ app.get('/api/garden/:id/overview', async (req, res) => {
       `
       garden = Array.isArray(gRows) && gRows[0] ? gRows[0] : null
 
-      const gpRows = await sql`
+        const gpRows = await sql`
           select
-          gp.id::text as id,
-          gp.garden_id::text as garden_id,
-          gp.plant_id::text as plant_id,
-          gp.nickname,
-          gp.seeds_planted::int as seeds_planted,
-          gp.planted_at,
-          gp.expected_bloom_date,
-          gp.override_water_freq_unit,
-          gp.override_water_freq_value::int as override_water_freq_value,
-          gp.plants_on_hand::int as plants_on_hand,
-          gp.sort_index::int as sort_index,
-          p.id as p_id,
-          p.name as p_name,
-          p.scientific_name as p_scientific_name,
-          p.colors as p_colors,
-          p.seasons as p_seasons,
-          p.rarity as p_rarity,
-          p.meaning as p_meaning,
-          p.description as p_description,
-          p.image_url as p_image_url,
-          p.photos as p_photos,
-          p.care_sunlight as p_care_sunlight,
-          p.care_water as p_care_water,
-          p.care_soil as p_care_soil,
-          p.care_difficulty as p_care_difficulty,
-          p.seeds_available as p_seeds_available,
-          p.water_freq_unit as p_water_freq_unit,
-          p.water_freq_value as p_water_freq_value,
-          p.water_freq_period as p_water_freq_period,
-          p.water_freq_amount as p_water_freq_amount
-        from public.garden_plants gp
-        left join public.plants p on p.id = gp.plant_id
-        where gp.garden_id = ${gardenId}
-        order by gp.sort_index asc nulls last
-      `
+            gp.id::text as id,
+            gp.garden_id::text as garden_id,
+            gp.plant_id::text as plant_id,
+            gp.nickname,
+            gp.seeds_planted::int as seeds_planted,
+            gp.planted_at,
+            gp.expected_bloom_date,
+            gp.override_water_freq_unit,
+            gp.override_water_freq_value::int as override_water_freq_value,
+            gp.plants_on_hand::int as plants_on_hand,
+            gp.sort_index::int as sort_index,
+            p.id as p_id,
+            p.name as p_name,
+            p.scientific_name as p_scientific_name,
+            p.colors as p_colors,
+            p.seasons as p_seasons,
+            p.rarity as p_rarity,
+            p.meaning as p_meaning,
+            p.description as p_description,
+            p.image_url as p_image_url,
+            p.photos as p_photos,
+            p.level_sun as p_level_sun,
+            p.watering_type as p_watering_type,
+            p.soil as p_soil,
+            p.maintenance_level as p_maintenance_level,
+            p.seeds_available as p_seeds_available
+          from public.garden_plants gp
+          left join public.plants p on p.id = gp.plant_id
+          where gp.garden_id = ${gardenId}
+          order by gp.sort_index asc nulls last
+        `
         plants = (gpRows || []).map((r) => {
           const plantPhotos = Array.isArray(r.p_photos) ? r.p_photos : undefined
           const plantImage = pickPrimaryPhotoUrlFromArray(plantPhotos, r.p_image_url || '')
@@ -7581,12 +7571,13 @@ app.get('/api/garden/:id/overview', async (req, res) => {
               description: r.p_description || '',
               photos: plantPhotos,
               image: plantImage,
-              care: { sunlight: r.p_care_sunlight || 'Low', water: r.p_care_water || 'Low', soil: r.p_care_soil || '', difficulty: r.p_care_difficulty || 'Easy' },
+                care: {
+                  sunlight: r.p_level_sun || null,
+                  water: Array.isArray(r.p_watering_type) ? r.p_watering_type.join(', ') : null,
+                  soil: Array.isArray(r.p_soil) ? r.p_soil.join(', ') : null,
+                  difficulty: r.p_maintenance_level || null,
+                },
               seedsAvailable: Boolean(r.p_seeds_available ?? false),
-              waterFreqUnit: r.p_water_freq_unit || undefined,
-              waterFreqValue: r.p_water_freq_value ?? null,
-              waterFreqPeriod: r.p_water_freq_period || undefined,
-              waterFreqAmount: r.p_water_freq_amount ?? null,
             } : null,
           }
         })
@@ -7632,7 +7623,7 @@ app.get('/api/garden/:id/overview', async (req, res) => {
       let plantsMap = {}
       if (plantIds.length > 0) {
         const inParam = plantIds.map((id) => encodeURIComponent(String(id))).join(',')
-      const pUrl = `${supabaseUrlEnv}/rest/v1/plants?id=in.(${inParam})&select=id,name,scientific_name,colors,seasons,rarity,meaning,description,image_url,photos,care_sunlight,care_water,care_soil,care_difficulty,seeds_available,water_freq_unit,water_freq_value,water_freq_period,water_freq_amount`
+        const pUrl = `${supabaseUrlEnv}/rest/v1/plants?id=in.(${inParam})&select=*`
         const pResp = await fetch(pUrl, { headers })
         const pRows = pResp.ok ? (await pResp.json().catch(() => [])) : []
         for (const p of pRows) {
@@ -7646,14 +7637,15 @@ app.get('/api/garden/:id/overview', async (req, res) => {
             rarity: p.rarity,
             meaning: p.meaning || '',
             description: p.description || '',
-              photos: plantPhotos,
-              image: pickPrimaryPhotoUrlFromArray(plantPhotos, p.image_url || ''),
-            care: { sunlight: p.care_sunlight || 'Low', water: p.care_water || 'Low', soil: p.care_soil || '', difficulty: p.care_difficulty || 'Easy' },
+            photos: plantPhotos,
+            image: pickPrimaryPhotoUrlFromArray(plantPhotos, p.image_url || ''),
+            care: {
+              sunlight: p.level_sun || null,
+              water: Array.isArray(p.watering_type) ? p.watering_type.join(', ') : null,
+              soil: Array.isArray(p.soil) ? p.soil.join(', ') : null,
+              difficulty: p.maintenance_level || null,
+            },
             seedsAvailable: Boolean(p.seeds_available ?? false),
-            waterFreqUnit: p.water_freq_unit || undefined,
-            waterFreqValue: p.water_freq_value ?? null,
-            waterFreqPeriod: p.water_freq_period || undefined,
-            waterFreqAmount: p.water_freq_amount ?? null,
           }
         }
       }
