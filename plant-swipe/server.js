@@ -53,6 +53,16 @@ preferEnv('ADMIN_STATIC_TOKEN', ['VITE_ADMIN_STATIC_TOKEN'])
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
+let aiFieldPromptsTemplate = {}
+try {
+  const promptPath = path.join(__dirname, 'src', 'lib', 'aiFieldPrompts.json')
+  const promptContents = fsSync.readFileSync(promptPath, 'utf-8')
+  aiFieldPromptsTemplate = JSON.parse(promptContents)
+} catch (err) {
+  console.warn('[server] Failed to load AI field prompts JSON:', err?.message || err)
+  aiFieldPromptsTemplate = {}
+}
+
 // Resolve the real Git repository root, even when running under a symlinked
 // deployment directory like /var/www/PlantSwipe/plant-swipe.
 async function getRepoRoot() {
@@ -853,6 +863,24 @@ function collectFieldHints(node, path, hints = new Set()) {
   return hints
 }
 
+function renderFieldPromptFromTemplate(fieldKey, plantName) {
+  const template = aiFieldPromptsTemplate?.[fieldKey]
+  if (!template) return null
+
+  let segments = []
+  if (Array.isArray(template)) {
+    segments = template
+  } else if (typeof template === 'string') {
+    segments = [template]
+  } else if (template && Array.isArray(template.instructions)) {
+    segments = template.instructions
+  }
+
+  if (!segments.length) return null
+  const compiled = segments.join('\n')
+  return compiled.replace(/\{\{\s*plantName\s*\}\}/gi, plantName)
+}
+
 function inferExpectedKind(node) {
   if (Array.isArray(node)) return 'array'
   if (!node || typeof node !== 'object') {
@@ -995,42 +1023,9 @@ async function generateFieldData(options) {
     `Field definition (for reference):\n${JSON.stringify(fieldSchema, null, 2)}`,
   ]
 
-  if (fieldKey === 'description') {
-    promptSections.push(
-      'Write a cohesive botanical description between 100 and 400 words. Use complete sentences and paragraph-style prose, highlight appearance, growth habit, seasonal interest, and growing requirements. Do not use bullet lists, headings, or markdown. Stay factual and avoid repetition.'
-    )
-  }
-
-  if (fieldKey === 'plantType') {
-    promptSections.push('Return a single lowercase string selecting the dominant growth habit. Choose from ["plant","flower","bamboo","shrub","tree"].')
-  }
-
-  if (fieldKey === 'utility') {
-    promptSections.push('Return an array of lowercase usage tags chosen from ["comestible","ornemental","produce_fruit","aromatic","medicinal","odorous","climbing","cereal","spice"]. Include every role that clearly applies to the plant.')
-  }
-
-  if (fieldKey === 'comestiblePart') {
-    promptSections.push('Return an array of edible plant parts using these lowercase tokens only: ["flower","fruit","seed","leaf","stem","root","bulb","bark","wood"].')
-  }
-
-  if (fieldKey === 'fruitType') {
-    promptSections.push('Return an array describing the fruit category, limited to ["nut","seed","stone"]. Use the most accurate options and omit the array if fruiting is irrelevant.')
-  }
-
-  if (fieldKey === 'seasons') {
-    promptSections.push('Return an array of capitalized seasons that describe when the plant looks its best. Choose from ["Spring","Summer","Autumn","Winter"].')
-  }
-
-  if (fieldKey === 'meta') {
-    promptSections.push(
-      'When filling meta.funFact, write one or two concise sentences (under 40 words total) that share a distinct trivia, historical note, or surprising usage. Do not repeat symbolism information covered in the meaning field. Avoid lists, markdown, or restating care guidance.'
-    )
-  }
-
-  if (fieldKey === 'meaning') {
-    promptSections.push(
-      'Return a single string under 50 words that concentrates on the plant’s symbolism—highlight key themes such as emotions, rites, or values (e.g., love, marriage, protection). Mention cultural or historical contexts only when they reinforce the symbolism. Do not include care advice, botanical traits, bullet characters, or markdown.'
-    )
+  const templatePrompt = renderFieldPromptFromTemplate(fieldKey, plantName)
+  if (templatePrompt) {
+    promptSections.push(templatePrompt)
   }
 
   if (hintList.length > 0) {
