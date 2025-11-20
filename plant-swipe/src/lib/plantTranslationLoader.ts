@@ -7,6 +7,7 @@ import { supabase } from './supabaseClient'
 import type { SupportedLanguage } from './i18n'
 import type { Plant, PlantImage, PlantSeason } from '@/types/plant'
 import { getPrimaryPhotoUrl, normalizePlantPhotos } from '@/lib/photos'
+import { expandCompositionFromDb } from '@/lib/composition'
 
 const sanitizeStringValue = (value: string): string | undefined => {
   const trimmed = value.trim()
@@ -416,7 +417,7 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
         fruitType: basePlant.fruit_type || [],
         images,
         image: primaryImage,
-        identity: {
+          identity: {
           givenNames: translation.given_names || basePlant.given_names || [],
           scientificName: translation.scientific_name || basePlant.scientific_name || undefined,
           family: translation.family || basePlant.family || undefined,
@@ -432,7 +433,7 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
           scent: basePlant.scent ?? false,
           symbolism: translation.symbolism || basePlant.symbolism || [],
           livingSpace: translation.living_space || basePlant.living_space || undefined,
-          composition: translation.composition || basePlant.composition || [],
+            composition: expandCompositionFromDb(translation.composition || basePlant.composition || []),
           maintenanceLevel: translation.maintenance_level || basePlant.maintenance_level || undefined,
           colors: colorObjects,
           multicolor: basePlant.multicolor ?? false,

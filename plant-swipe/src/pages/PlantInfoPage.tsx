@@ -9,6 +9,7 @@ import { useLanguage, useLanguageNavigate } from '@/lib/i18nRouting'
 import { usePageMetadata } from '@/hooks/usePageMetadata'
 import { Button } from '@/components/ui/button'
 import { ChevronLeft, Pencil } from 'lucide-react'
+import { expandCompositionFromDb } from '@/lib/composition'
 
 type WaterSchedules = PlantWateringSchedule[]
 
@@ -61,8 +62,8 @@ async function fetchPlantWithRelations(id: string): Promise<Plant | null> {
       allergens: data.allergens || [],
       scent: data.scent || false,
       symbolism: data.symbolism || [],
-      livingSpace: data.living_space || undefined,
-      composition: data.composition || [],
+        livingSpace: data.living_space || undefined,
+        composition: expandCompositionFromDb(data.composition),
       maintenanceLevel: data.maintenance_level || undefined,
       multicolor: data.multicolor || false,
       bicolor: data.bicolor || false,
