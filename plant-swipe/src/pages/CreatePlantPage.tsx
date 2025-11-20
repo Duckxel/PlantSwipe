@@ -12,12 +12,13 @@ import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/lib/i18n"
 import { saveLanguagePreference } from "@/lib/i18nRouting"
 import { applyAiFieldToPlant, getCategoryForField } from "@/lib/applyAiField"
 import { translateArray, translateText } from "@/lib/deepl"
-import { buildCategoryProgress, createEmptyCategoryProgress, plantFormCategoryOrder, type CategoryProgress } from "@/lib/plantFormCategories"
+import { buildCategoryProgress, createEmptyCategoryProgress, plantFormCategoryOrder, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
 import { useParams } from "react-router-dom"
 import { plantSchema } from "@/lib/plantSchema"
 
 const DISALLOWED_FIELDS = new Set(['name', 'image', 'imageurl', 'image_url', 'imageURL'])
 const IN_PROGRESS_STATUS: PlantMeta['status'] = 'In Progres'
+const SECTION_LOG_LIMIT = 12
 
 const formatStatusForUi = (value?: string | null): PlantMeta['status'] => {
   const map: Record<string, PlantMeta['status']> = {
@@ -74,6 +75,23 @@ function normalizeSchedules(entries?: PlantWateringSchedule[]): PlantWateringSch
       }
     })
     .filter((entry) => entry.season || entry.quantity !== undefined || entry.timePeriod)
+}
+
+function coerceBoolean(value: unknown, fallback: boolean | null = false): boolean | null {
+  if (value === null || value === undefined) return fallback
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'number') {
+    if (Number.isNaN(value)) return fallback
+    return value !== 0
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase()
+    if (!normalized) return fallback
+    if (['true', '1', 'yes', 'y', 'on'].includes(normalized)) return true
+    if (['false', '0', 'no', 'n', 'off'].includes(normalized)) return false
+    return fallback
+  }
+  return fallback
 }
 
 async function upsertColors(colors: PlantColor[]) {
@@ -328,6 +346,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   const [aiCompleted, setAiCompleted] = React.useState(false)
   const [translating, setTranslating] = React.useState(false)
   const [aiProgress, setAiProgress] = React.useState<CategoryProgress>(() => createEmptyCategoryProgress())
+  const [aiSectionLog, setAiSectionLog] = React.useState<Array<{ category: PlantFormCategory; label: string; timestamp: number }>>([])
   const [existingLoaded, setExistingLoaded] = React.useState(false)
   const [colorSuggestions, setColorSuggestions] = React.useState<PlantColor[]>([])
   const targetFields = React.useMemo(
@@ -406,9 +425,12 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       watering: { ...(candidate.plantCare?.watering || {}), schedules: normalizeSchedules(candidate.plantCare?.watering?.schedules) },
     },
   })
+  const hasAiProgress = React.useMemo(() => Object.values(aiProgress).some((p) => p.total > 0), [aiProgress])
+  const recentSectionLog = React.useMemo(() => aiSectionLog.slice(-5).reverse(), [aiSectionLog])
   const initializeCategoryProgress = () => {
     const progress = buildCategoryProgress(targetFields)
     setAiProgress(progress)
+    setAiSectionLog([])
     return progress
   }
   const markFieldComplete = (fieldKey: string) => {
@@ -417,12 +439,25 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       const current = prev[category] || { total: 0, completed: 0, status: 'idle' }
       const total = current.total || 1
       const completed = Math.min((current.completed || 0) + 1, total)
+      const nextStatus = completed >= total ? 'done' : 'filling'
+      if (nextStatus === 'done' && current.status !== 'done') {
+        const typedCategory = category as PlantFormCategory
+        const entry = {
+          category: typedCategory,
+          label: categoryLabels[typedCategory] || typedCategory,
+          timestamp: Date.now(),
+        }
+        setAiSectionLog((log) => {
+          const nextLog = [...log, entry]
+          return nextLog.length > SECTION_LOG_LIMIT ? nextLog.slice(nextLog.length - SECTION_LOG_LIMIT) : nextLog
+        })
+      }
       return {
         ...prev,
         [category]: {
           total,
           completed,
-          status: completed >= total ? 'done' : 'filling',
+          status: nextStatus,
         },
       }
     })
@@ -455,17 +490,17 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         life_cycle: plantToSave.identity?.lifeCycle || null,
         season: plantToSave.identity?.season ? plantToSave.identity.season.map((s) => s.toString().toLowerCase()) : [],
         foliage_persistance: plantToSave.identity?.foliagePersistance || null,
-        spiked: plantToSave.identity?.spiked ?? false,
+          spiked: coerceBoolean(plantToSave.identity?.spiked, false),
         toxicity_human: plantToSave.identity?.toxicityHuman || null,
         toxicity_pets: plantToSave.identity?.toxicityPets || null,
         allergens: plantToSave.identity?.allergens || [],
-        scent: plantToSave.identity?.scent ?? false,
+          scent: coerceBoolean(plantToSave.identity?.scent, false),
         symbolism: plantToSave.identity?.symbolism || [],
         living_space: plantToSave.identity?.livingSpace || null,
         composition: plantToSave.identity?.composition || [],
         maintenance_level: plantToSave.identity?.maintenanceLevel || null,
-        multicolor: plantToSave.identity?.multicolor ?? false,
-        bicolor: plantToSave.identity?.bicolor ?? false,
+          multicolor: coerceBoolean(plantToSave.identity?.multicolor, false),
+          bicolor: coerceBoolean(plantToSave.identity?.bicolor, false),
         origin: plantToSave.plantCare?.origin || [],
         habitat: plantToSave.plantCare?.habitat || [],
         temperature_max: plantToSave.plantCare?.temperatureMax || null,
@@ -487,23 +522,23 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         fruiting_month: plantToSave.growth?.fruitingMonth || [],
         height_cm: plantToSave.growth?.height || null,
         wingspan_cm: plantToSave.growth?.wingspan || null,
-        tutoring: plantToSave.growth?.tutoring ?? false,
+          tutoring: coerceBoolean(plantToSave.growth?.tutoring, false),
         advice_tutoring: plantToSave.growth?.adviceTutoring || null,
         sow_type: plantToSave.growth?.sowType || [],
         separation_cm: plantToSave.growth?.separation || null,
-        transplanting: plantToSave.growth?.transplanting ?? null,
+          transplanting: coerceBoolean(plantToSave.growth?.transplanting, null),
         advice_sowing: plantToSave.growth?.adviceSowing || null,
         cut: plantToSave.growth?.cut || null,
         advice_medicinal: plantToSave.usage?.adviceMedicinal || null,
         nutritional_intake: plantToSave.usage?.nutritionalIntake || [],
-        infusion: plantToSave.usage?.infusion ?? false,
+          infusion: coerceBoolean(plantToSave.usage?.infusion, false),
         advice_infusion: plantToSave.usage?.adviceInfusion || null,
         recipes_ideas: plantToSave.usage?.recipesIdeas || [],
-        aromatherapy: plantToSave.usage?.aromatherapy ?? false,
+          aromatherapy: coerceBoolean(plantToSave.usage?.aromatherapy, false),
         spice_mixes: plantToSave.usage?.spiceMixes || [],
-        melliferous: plantToSave.ecology?.melliferous ?? false,
+          melliferous: coerceBoolean(plantToSave.ecology?.melliferous, false),
         polenizer: plantToSave.ecology?.polenizer || [],
-        be_fertilizer: plantToSave.ecology?.beFertilizer ?? false,
+          be_fertilizer: coerceBoolean(plantToSave.ecology?.beFertilizer, false),
         ground_effect: plantToSave.ecology?.groundEffect || null,
         conservation_status: plantToSave.ecology?.conservationStatus || null,
         pests: plantToSave.danger?.pests || [],
@@ -869,10 +904,19 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             </div>
           )}
         </div>
-        {aiWorking && Object.values(aiProgress).some((p) => p.total > 0) && (
+        {(aiWorking || hasAiProgress) && (
           <Card>
-            <CardContent className="space-y-3 pt-4">
-              <div className="font-medium text-sm">{t('plantAdmin.categoryProgressTitle', 'Category fill progress')}</div>
+            <CardContent className="space-y-4 pt-4">
+              <div className="flex items-center justify-between text-sm font-medium">
+                <span>
+                  {aiWorking
+                    ? t('plantAdmin.categoryProgressTitle', 'Category fill progress')
+                    : t('plantAdmin.categoryProgressSummary', 'Latest AI fill summary')}
+                </span>
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  {aiWorking ? <Loader2 className="h-4 w-4 animate-spin" /> : aiCompleted ? <Check className="h-4 w-4 text-emerald-500" /> : null}
+                </div>
+              </div>
               <div className="grid gap-2">
                 {plantFormCategoryOrder.map((cat) => {
                   const info = aiProgress[cat]
@@ -881,12 +925,23 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                   return (
                     <div key={cat} className="space-y-1">
                       <div className="flex items-center justify-between text-sm">
-                        <span>{categoryLabels[cat]}</span>
+                        <div className="flex items-center gap-2">
+                          <span>{categoryLabels[cat]}</span>
+                          <span
+                            className={`text-xs font-medium ${
+                              info.status === 'done' ? 'text-emerald-600 dark:text-emerald-400' : 'text-blue-600 dark:text-blue-300'
+                            }`}
+                          >
+                            {info.status === 'done'
+                              ? t('plantAdmin.sectionFilled', 'Filled')
+                              : t('plantAdmin.sectionInProgress', 'Filling')}
+                          </span>
+                        </div>
                         <span className="text-muted-foreground">{info.completed}/{info.total}</span>
                       </div>
                       <div className="h-2 w-full rounded bg-muted overflow-hidden">
                         <div
-                          className={`h-2 transition-all ${info.status === 'done' ? 'bg-green-500' : 'bg-blue-500'}`}
+                          className={`h-2 transition-all ${info.status === 'done' ? 'bg-emerald-500' : 'bg-blue-500'}`}
                           style={{ width: `${Math.min(100, Math.max(percent, info.status === 'done' ? 100 : percent))}%` }}
                         />
                       </div>
@@ -894,6 +949,29 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                   )
                 })}
               </div>
+              {recentSectionLog.length > 0 && (
+                <div className="border-t border-dashed pt-3 space-y-2">
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                    {t('plantAdmin.sectionLogTitle', 'Sections completed')}
+                  </div>
+                  <div className="space-y-1.5">
+                    {recentSectionLog.map((entry) => (
+                      <div
+                        key={`${entry.category}-${entry.timestamp}`}
+                        className="flex items-center justify-between rounded-xl bg-emerald-50/80 dark:bg-emerald-500/10 px-3 py-2 text-sm"
+                      >
+                        <span className="flex items-center gap-2 font-medium text-emerald-700 dark:text-emerald-200">
+                          <Check className="h-4 w-4" />
+                          {entry.label}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
@@ -905,9 +983,14 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             {t('plantAdmin.loadingPlant', 'Loading plant...')}
           </CardContent>
         </Card>
-      ) : (
-        <PlantProfileForm value={plant} onChange={setPlant} colorSuggestions={colorSuggestions} />
-      )}
+        ) : (
+          <PlantProfileForm
+            value={plant}
+            onChange={setPlant}
+            colorSuggestions={colorSuggestions}
+            categoryProgress={hasAiProgress ? aiProgress : undefined}
+          />
+        )}
     </div>
   )
 }
