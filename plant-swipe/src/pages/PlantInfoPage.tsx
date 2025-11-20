@@ -11,6 +11,8 @@ import { Button } from '@/components/ui/button'
 import { ChevronLeft, Pencil } from 'lucide-react'
 import { expandCompositionFromDb } from '@/lib/composition'
 
+type IdentityComposition = NonNullable<Plant["identity"]>["composition"]
+
 type WaterSchedules = PlantWateringSchedule[]
 
 const normalizeSchedules = (rows?: any[]): WaterSchedules => {
@@ -63,7 +65,7 @@ async function fetchPlantWithRelations(id: string): Promise<Plant | null> {
       scent: data.scent || false,
       symbolism: data.symbolism || [],
         livingSpace: data.living_space || undefined,
-        composition: expandCompositionFromDb(data.composition) as Plant["identity"]["composition"],
+        composition: expandCompositionFromDb(data.composition) as IdentityComposition,
       maintenanceLevel: data.maintenance_level || undefined,
       multicolor: data.multicolor || false,
       bicolor: data.bicolor || false,

@@ -17,6 +17,8 @@ import { useParams } from "react-router-dom"
 import { plantSchema } from "@/lib/plantSchema"
 import { expandCompositionFromDb, normalizeCompositionForDb } from "@/lib/composition"
 
+type IdentityComposition = NonNullable<Plant["identity"]>["composition"]
+
 const AI_EXCLUDED_FIELDS = new Set(['name', 'image', 'imageurl', 'image_url', 'imageURL', 'images', 'meta'])
 const IN_PROGRESS_STATUS: PlantMeta['status'] = 'In Progres'
 const SECTION_LOG_LIMIT = 12
@@ -341,7 +343,7 @@ async function loadPlant(id: string): Promise<Plant | null> {
       scent: data.scent || false,
       symbolism: data.symbolism || [],
       livingSpace: data.living_space || undefined,
-        composition: expandCompositionFromDb(data.composition) as Plant["identity"]["composition"],
+        composition: expandCompositionFromDb(data.composition) as IdentityComposition,
       maintenanceLevel: data.maintenance_level || undefined,
       multicolor: data.multicolor || false,
       bicolor: data.bicolor || false,

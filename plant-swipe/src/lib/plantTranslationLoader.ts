@@ -9,6 +9,8 @@ import type { Plant, PlantImage, PlantSeason } from '@/types/plant'
 import { getPrimaryPhotoUrl, normalizePlantPhotos } from '@/lib/photos'
 import { expandCompositionFromDb } from '@/lib/composition'
 
+type IdentityComposition = NonNullable<Plant["identity"]>["composition"]
+
 const sanitizeStringValue = (value: string): string | undefined => {
   const trimmed = value.trim()
   if (!trimmed) return undefined
@@ -433,7 +435,7 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
           scent: basePlant.scent ?? false,
           symbolism: translation.symbolism || basePlant.symbolism || [],
             livingSpace: translation.living_space || basePlant.living_space || undefined,
-            composition: expandCompositionFromDb(translation.composition || basePlant.composition || []) as Plant["identity"]["composition"],
+            composition: expandCompositionFromDb(translation.composition || basePlant.composition || []) as IdentityComposition,
           maintenanceLevel: translation.maintenance_level || basePlant.maintenance_level || undefined,
           colors: colorObjects,
           multicolor: basePlant.multicolor ?? false,
