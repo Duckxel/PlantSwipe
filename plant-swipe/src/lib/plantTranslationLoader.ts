@@ -502,6 +502,35 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
     })
   } catch (error) {
     console.error('Failed to load plants with translations:', error)
-    throw error
+    try {
+      const { data: fallbackPlants } = await supabase
+        .from('plants')
+        .select('id,name,scientific_name,plant_type,overview,season,plant_images (link,use), plant_colors (colors (name,hex_code))')
+        .order('name', { ascending: true })
+      if (!fallbackPlants) return []
+      return fallbackPlants.map((row: any) => {
+        const images: PlantImage[] = ((row.plant_images as any[]) || []).map((img) => ({ link: img?.link, use: img?.use }))
+        const primaryImage = images.find((i) => i.use === 'primary')?.link || images.find((i) => i.use === 'discovery')?.link || images[0]?.link
+        const colors = ((row.plant_colors as any[]) || []).map((c) => c?.colors?.name).filter(Boolean) as string[]
+        const seasonsRaw = row.season || []
+        const seasons: PlantSeason[] = Array.isArray(seasonsRaw)
+          ? seasonsRaw.map((s: string) => (s ? (s.charAt(0).toUpperCase() + s.slice(1)) as PlantSeason : undefined)).filter(Boolean) as PlantSeason[]
+          : []
+        return {
+          id: String(row.id),
+          name: row.name || '',
+          identity: { scientificName: row.scientific_name || undefined, season: seasons },
+          plantType: row.plant_type || undefined,
+          description: row.overview || '',
+          images,
+          image: primaryImage,
+          colors,
+          seasons,
+        } as Plant
+      })
+    } catch (fallbackError) {
+      console.error('Fallback plant load failed', fallbackError)
+      return []
+    }
   }
 }

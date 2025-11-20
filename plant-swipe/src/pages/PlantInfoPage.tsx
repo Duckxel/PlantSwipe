@@ -1,7 +1,7 @@
 import React from 'react'
 import { useParams, useLocation } from 'react-router-dom'
 import { PlantDetails } from '@/components/plant/PlantDetails'
-import type { Plant } from '@/types/plant'
+import type { Plant, PlantImage } from '@/types/plant'
 import { useAuth } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabaseClient'
 import { useTranslation } from 'react-i18next'
@@ -11,40 +11,122 @@ import { usePageMetadata } from '@/hooks/usePageMetadata'
 async function fetchPlantWithRelations(id: string): Promise<Plant | null> {
   const { data, error } = await supabase
     .from('plants')
-    .select('id,name,plant_type,utility,comestible_part,fruit_type,identity,plant_care,growth,usage,ecology,danger,miscellaneous,meta,colors,seasons,description')
+    .select('id,name,plant_type,utility,comestible_part,fruit_type,given_names,scientific_name,family,overview,promotion_month,life_cycle,season,foliage_persistance,spiked,toxicity_human,toxicity_pets,allergens,scent,symbolism,living_space,composition,maintenance_level,multicolor,bicolor,origin,habitat,temperature_max,temperature_min,temperature_ideal,level_sun,hygrometry,watering_type,division,soil,advice_soil,mulching,advice_mulching,nutrition_need,fertilizer,advice_fertilizer,sowing_month,flowering_month,fruiting_month,height_cm,wingspan_cm,tutoring,advice_tutoring,sow_type,separation_cm,transplanting,advice_sowing,cut,advice_medicinal,nutritional_intake,infusion,advice_infusion,infusion_mix,recipes_ideas,aromatherapy,spice_mixes,melliferous,polenizer,be_fertilizer,ground_effect,conservation_status,pests,diseases,companions,tags,source_name,source_url,status,admin_commentary,created_by,created_time,updated_by,updated_time')
     .eq('id', id)
     .maybeSingle()
   if (error) throw new Error(error.message)
   if (!data) return null
-  const { data: images } = await supabase.from('plant_images').select('id,link,use').eq('plant_id', id)
   const { data: colorLinks } = await supabase.from('plant_colors').select('color_id, colors:color_id (id,name,hex_code)').eq('plant_id', id)
-  const plant: Plant = {
+  const { data: images } = await supabase.from('plant_images').select('id,link,use').eq('plant_id', id)
+  const { data: schedules } = await supabase.from('plant_watering_schedules').select('season,quantity,time_period').eq('plant_id', id)
+  const { data: sources } = await supabase.from('plant_sources').select('name,url').eq('plant_id', id)
+  const colors = (colorLinks || []).map((c: any) => ({ id: c.colors?.id, name: c.colors?.name, hexCode: c.colors?.hex_code }))
+  return {
     id: data.id,
     name: data.name,
     plantType: data.plant_type || undefined,
     utility: data.utility || [],
     comestiblePart: data.comestible_part || [],
     fruitType: data.fruit_type || [],
-    identity: data.identity || {},
-    plantCare: data.plant_care || {},
-    growth: data.growth || {},
-    usage: data.usage || {},
-    ecology: data.ecology || {},
-    danger: data.danger || {},
-    miscellaneous: data.miscellaneous || {},
-    meta: data.meta || {},
-    colors: data.colors || [],
-    seasons: data.seasons || [],
-    description: data.description || undefined,
-    images: images || [],
+    identity: {
+      givenNames: data.given_names || [],
+      scientificName: data.scientific_name || undefined,
+      family: data.family || undefined,
+      overview: data.overview || undefined,
+      promotionMonth: data.promotion_month || undefined,
+      lifeCycle: data.life_cycle || undefined,
+      season: (data.season || []).map((s: string) => s.charAt(0).toUpperCase() + s.slice(1)) as Plant['seasons'],
+      foliagePersistance: data.foliage_persistance || undefined,
+      spiked: data.spiked || false,
+      toxicityHuman: data.toxicity_human || undefined,
+      toxicityPets: data.toxicity_pets || undefined,
+      allergens: data.allergens || [],
+      scent: data.scent || false,
+      symbolism: data.symbolism || [],
+      livingSpace: data.living_space || undefined,
+      composition: data.composition || [],
+      maintenanceLevel: data.maintenance_level || undefined,
+      multicolor: data.multicolor || false,
+      bicolor: data.bicolor || false,
+      colors,
+    },
+    plantCare: {
+      origin: data.origin || [],
+      habitat: data.habitat || [],
+      temperatureMax: data.temperature_max || undefined,
+      temperatureMin: data.temperature_min || undefined,
+      temperatureIdeal: data.temperature_ideal || undefined,
+      levelSun: data.level_sun || undefined,
+      hygrometry: data.hygrometry || undefined,
+      wateringType: data.watering_type || [],
+      division: data.division || [],
+      soil: data.soil || [],
+      adviceSoil: data.advice_soil || undefined,
+      mulching: data.mulching || [],
+      adviceMulching: data.advice_mulching || undefined,
+      nutritionNeed: data.nutrition_need || [],
+      fertilizer: data.fertilizer || [],
+      adviceFertilizer: data.advice_fertilizer || undefined,
+      watering: {
+        schedules: (schedules || []).map((row: any) => ({
+          season: row.season ? (row.season as string) : "",
+          quantity: row.quantity || undefined,
+          timePeriod: row.time_period || undefined,
+        })),
+      },
+    },
+    growth: {
+      sowingMonth: data.sowing_month || [],
+      floweringMonth: data.flowering_month || [],
+      fruitingMonth: data.fruiting_month || [],
+      heightCm: data.height_cm || undefined,
+      wingspanCm: data.wingspan_cm || undefined,
+      tutoring: data.tutoring || false,
+      adviceTutoring: data.advice_tutoring || undefined,
+      sowType: data.sow_type || [],
+      separation: data.separation_cm || undefined,
+      transplanting: data.transplanting || undefined,
+      adviceSowing: data.advice_sowing || undefined,
+      cut: data.cut || undefined,
+    },
+    usage: {
+      adviceMedicinal: data.advice_medicinal || undefined,
+      nutritionalIntake: data.nutritional_intake || [],
+      infusion: data.infusion || false,
+      adviceInfusion: data.advice_infusion || undefined,
+      infusionMix: data.infusion_mix || [],
+      recipesIdeas: data.recipes_ideas || [],
+      aromatherapy: data.aromatherapy || false,
+      spiceMixes: data.spice_mixes || [],
+    },
+    ecology: {
+      melliferous: data.melliferous || false,
+      polenizer: data.polenizer || [],
+      beFertilizer: data.be_fertilizer || false,
+      groundEffect: data.ground_effect || undefined,
+      conservationStatus: data.conservation_status || undefined,
+    },
+    danger: { pests: data.pests || [], diseases: data.diseases || [] },
+    miscellaneous: {
+      companions: data.companions || [],
+      tags: data.tags || [],
+      sources: (sources || []).map((s: any) => ({ name: s.name as string, url: s.url as string | undefined })),
+      source: { name: data.source_name || undefined, url: data.source_url || undefined },
+    },
+    meta: {
+      status: data.status || undefined,
+      adminCommentary: data.admin_commentary || undefined,
+      createdBy: data.created_by || undefined,
+      createdAt: data.created_time || undefined,
+      updatedBy: data.updated_by || undefined,
+      updatedAt: data.updated_time || undefined,
+    },
+    multicolor: data.multicolor || false,
+    bicolor: data.bicolor || false,
+    seasons: (data.season || []).map((s: string) => s.charAt(0).toUpperCase() + s.slice(1)) as Plant['seasons'],
+    description: data.overview || undefined,
+    images: (images as PlantImage[]) || [],
   }
-  if ((colorLinks || []).length) {
-    plant.identity = {
-      ...(plant.identity || {}),
-      colors: colorLinks?.map((c: any) => ({ id: c.colors?.id, name: c.colors?.name, hexCode: c.colors?.hex_code })) || [],
-    }
-  }
-  return plant
 }
 
 export const PlantInfoPage: React.FC = () => {

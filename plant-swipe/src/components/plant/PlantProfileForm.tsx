@@ -183,7 +183,7 @@ const WateringScheduleEditor: React.FC<{
     <div className="grid gap-3">
       {schedules.map((schedule, idx) => (
         <div key={`${schedule.season}-${idx}`} className="grid gap-2 rounded border p-3">
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-2">
             <Input
               placeholder="Season (optional)"
               value={schedule.season}
@@ -214,8 +214,8 @@ const WateringScheduleEditor: React.FC<{
           </div>
         </div>
       ))}
-      <div className="grid gap-2 rounded border border-dashed p-3">
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="grid gap-2 rounded border border-dashed p-3">
+          <div className="grid grid-cols-1 gap-2">
           <Input
             placeholder="Season (optional)"
             value={draft.season}
@@ -614,12 +614,55 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
 }
 
 function ImageEditor({ images, onChange }: { images: PlantImage[]; onChange: (v: PlantImage[]) => void }) {
+  React.useEffect(() => {
+    const list: PlantImage[] = images && images.length ? images : [{ link: "", use: "primary" }]
+    let next: PlantImage[] = list
+    const primaryIndex = list.findIndex((img) => img.use === "primary")
+    const discoveryIndex = list.findIndex((img) => img.use === "discovery")
+    if (primaryIndex === -1) {
+      next = [{ ...list[0], use: "primary" }, ...list.slice(1)]
+    }
+    if (discoveryIndex !== -1) {
+      let firstDiscoverySeen = false
+      next = next.map((img) => {
+        if (img.use !== "discovery") return img
+        if (firstDiscoverySeen) return { ...img, use: "other" }
+        firstDiscoverySeen = true
+        return img
+      })
+    }
+    if (next !== images) onChange(next)
+  }, [images, onChange])
+
   const updateImage = (idx: number, patch: Partial<PlantImage>) => {
     const next = images.map((img, i) => i === idx ? { ...img, ...patch } : img)
     onChange(next)
   }
-  const addImage = () => onChange([...images, { link: "", use: "other" }])
-  const removeImage = (idx: number) => onChange(images.filter((_, i) => i !== idx))
+  const setUse = (idx: number, use: "primary" | "discovery" | "other") => {
+    onChange(
+      images.map((img, i) => {
+        if (i === idx) return { ...img, use }
+        if (use === "primary" && img.use === "primary") return { ...img, use: "other" }
+        if (use === "discovery" && img.use === "discovery") return { ...img, use: "other" }
+        return img
+      }),
+    )
+  }
+  const addImage = () => {
+    const hasPrimary = images.some((img) => img.use === "primary")
+    onChange([...images, { link: "", use: hasPrimary ? "other" : "primary" }])
+  }
+  const removeImage = (idx: number) => {
+    const next = images.filter((_, i) => i !== idx)
+    if (!next.length) {
+      onChange([{ link: "", use: "primary" }])
+      return
+    }
+    if (!next.some((img) => img.use === "primary")) {
+      next[0] = { ...next[0], use: "primary" }
+    }
+    onChange(next)
+  }
   return (
     <div className="grid gap-3">
       {images.map((img, idx) => (
@@ -631,7 +674,7 @@ function ImageEditor({ images, onChange }: { images: PlantImage[]; onChange: (v:
               <button
                 key={opt}
                 type="button"
-                onClick={() => updateImage(idx, { use: opt })}
+                onClick={() => setUse(idx, opt)}
                 className={`px-3 py-1 rounded-full border text-sm transition ${img.use === opt ? "bg-black text-white dark:bg-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"}`}
               >
                 {opt}
@@ -928,7 +971,7 @@ export function PlantProfileForm({ value, onChange }: PlantProfileFormProps) {
             <div key={cat} ref={refSetter}>
               <Card className={neuCardClass}>
                 <CardHeader><CardTitle>{categoryLabels[cat]}</CardTitle></CardHeader>
-                <CardContent className="grid gap-4">
+                <CardContent className="flex flex-col gap-4">
                   {fieldGroups[cat].map((f) => renderField(value, setPath, f))}
                   {cat === 'identity' && (
                     <div className="md:col-span-2">

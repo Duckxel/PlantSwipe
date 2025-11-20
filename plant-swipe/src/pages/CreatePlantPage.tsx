@@ -65,9 +65,28 @@ async function linkColors(plantId: string, colorIds: string[]) {
 }
 
 async function upsertImages(plantId: string, images: Plant["images"]) {
+  const normalized = (() => {
+    const list = images && images.length ? images : []
+    let primaryUsed = false
+    let discoveryUsed = false
+    const mapped = list.map((img, idx) => {
+      let use = img.use || (idx === 0 ? 'primary' : 'other')
+      if (use === 'primary') {
+        if (primaryUsed) use = 'other'
+        primaryUsed = true
+      }
+      if (use === 'discovery') {
+        if (discoveryUsed) use = 'other'
+        discoveryUsed = true
+      }
+      return { ...img, use }
+    })
+    if (!primaryUsed && mapped.length) mapped[0] = { ...mapped[0], use: 'primary' }
+    return mapped
+  })()
   await supabase.from('plant_images').delete().eq('plant_id', plantId)
-  if (!images?.length) return
-  const inserts = images.filter((img) => img.link).map((img) => ({ plant_id: plantId, link: img.link, use: img.use || 'other' }))
+  if (!normalized?.length) return
+  const inserts = normalized.filter((img) => img.link).map((img) => ({ plant_id: plantId, link: img.link, use: img.use || 'other' }))
   if (inserts.length === 0) return
   const { error } = await supabase.from('plant_images').insert(inserts)
   if (error) throw new Error(error.message)
@@ -545,47 +564,53 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-4 pb-10 space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold">
-            {id ? t('plantAdmin.editTitle', 'Edit Plant') : t('plantAdmin.createTitle', 'Create Plant')}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {t('plantAdmin.createSubtitle', 'Fill every field with the supplied descriptions or let AI help.')}
-          </p>
-          {(plant.name || descriptionPreview) && (
-            <p className="text-sm font-medium text-foreground/90">
-              {plant.name ? `${plant.name}${descriptionPreview ? ':' : ''}` : t('plantAdmin.nameRequired', 'Name is required')} {descriptionPreview || ''}
-            </p>
-          )}
-        </div>
-        <div className="flex gap-4 items-start flex-col sm:flex-row sm:items-center">
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-medium" htmlFor="create-language">{t('plantAdmin.languageLabel', 'Language')}</label>
-            <select
-              id="create-language"
-              className="border rounded px-2 py-1 text-sm bg-background"
-              value={language}
-              onChange={(e) => setLanguage(e.target.value as SupportedLanguage)}
-            >
-              {SUPPORTED_LANGUAGES.map((lang) => (
-                <option key={lang} value={lang}>{lang.toUpperCase()}</option>
-              ))}
-            </select>
-          </div>
-          <div className="flex flex-wrap gap-2 items-center">
-            <Button type="button" onClick={translatePlant} disabled={translating}>
-              {translating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {t('plantAdmin.deeplTranslate', 'DeepL translate other languages')}
-            </Button>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="secondary" onClick={onCancel}>Cancel</Button>
-            <Button onClick={() => savePlant()} disabled={saving || aiWorking}>
-              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Save Plant
-            </Button>
+    <div className="max-w-6xl mx-auto px-4 pb-12 space-y-6">
+      <div className="relative overflow-hidden rounded-[32px] border border-stone-200/70 dark:border-[#2f2f33] bg-gradient-to-br from-emerald-50 via-white to-amber-50 dark:from-[#1f1f1f] dark:via-[#18181b] dark:to-[#0f172a] shadow-xl">
+        <div className="absolute -left-20 -top-24 h-64 w-64 rounded-full bg-emerald-200/40 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
+        <div className="absolute -right-12 bottom-[-30%] h-72 w-72 rounded-full bg-amber-100/40 dark:bg-amber-400/10 blur-3xl" aria-hidden="true" />
+        <div className="relative p-6 sm:p-8 flex flex-col gap-6">
+          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
+            <div className="space-y-2">
+              <h1 className="text-3xl font-semibold tracking-tight">
+                {id ? t('plantAdmin.editTitle', 'Edit Plant') : t('plantAdmin.createTitle', 'Create Plant')}
+              </h1>
+              <p className="text-sm text-muted-foreground max-w-2xl">
+                {t('plantAdmin.createSubtitle', 'Fill every field with the supplied descriptions or let AI help.')}
+              </p>
+              {(plant.name || descriptionPreview) && (
+                <p className="text-sm font-medium text-foreground/90">
+                  {plant.name ? `${plant.name}${descriptionPreview ? ':' : ''}` : t('plantAdmin.nameRequired', 'Name is required')}{descriptionPreview || ''}
+                </p>
+              )}
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <div className="flex items-center gap-2 rounded-full bg-white/70 dark:bg-[#111] px-3 py-1.5 shadow-inner">
+                <label className="text-sm font-medium" htmlFor="create-language">{t('plantAdmin.languageLabel', 'Language')}</label>
+                <select
+                  id="create-language"
+                  className="border rounded px-2 py-1 text-sm bg-background"
+                  value={language}
+                  onChange={(e) => setLanguage(e.target.value as SupportedLanguage)}
+                >
+                  {SUPPORTED_LANGUAGES.map((lang) => (
+                    <option key={lang} value={lang}>{lang.toUpperCase()}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-wrap gap-2 items-center">
+                <Button type="button" onClick={translatePlant} disabled={translating} className="rounded-2xl shadow-md">
+                  {translating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  {t('plantAdmin.deeplTranslate', 'DeepL translate other languages')}
+                </Button>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="secondary" onClick={onCancel} className="rounded-2xl">Cancel</Button>
+                <Button onClick={() => savePlant()} disabled={saving || aiWorking} className="rounded-2xl shadow-md">
+                  {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Save Plant
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
