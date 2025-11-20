@@ -32,6 +32,7 @@ interface PlantFillRequest {
   plantName: string
   schema: unknown
   existingData?: Record<string, unknown>
+  fields?: string[]
   onProgress?: (info: { field: string; completed: number; total: number }) => void
   onFieldComplete?: (info: { field: string; data: unknown }) => void
   onFieldError?: (info: { field: string; error: string }) => void
@@ -44,6 +45,7 @@ export async function fetchAiPlantFill({
   plantName,
   schema,
   existingData,
+  fields,
   onProgress,
   onFieldComplete,
   onFieldError,
@@ -90,7 +92,12 @@ export async function fetchAiPlantFill({
   }
 
   const disallowedFields = new Set(['name', 'image', 'imageurl', 'image_url', 'imageURL'])
-  const fieldEntries = Object.keys(schemaObject).filter(
+  const allowedSet = Array.isArray(fields) && fields.length ? new Set(fields) : null
+  const schemaKeys = Object.keys(schemaObject)
+  const filteredKeys = allowedSet
+    ? fields!.filter((key) => schemaObject.hasOwnProperty(key))
+    : schemaKeys
+  const fieldEntries = filteredKeys.filter(
     (key) => !disallowedFields.has(key) && !disallowedFields.has(key.toLowerCase())
   )
   const totalFields = fieldEntries.length

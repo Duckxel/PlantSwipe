@@ -758,6 +758,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             plantName: plantNameForAi,
             schema: plantSchema,
             existingData: plant,
+            fields: mandatoryFieldOrder,
             language,
             onFieldComplete: ({ field, data }) => {
               if (field === 'complete') return
