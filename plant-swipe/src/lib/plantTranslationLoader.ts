@@ -7,7 +7,7 @@ import { supabase } from './supabaseClient'
 import type { SupportedLanguage } from './i18n'
 import type { Plant, PlantImage, PlantSeason } from '@/types/plant'
 import { getPrimaryPhotoUrl, normalizePlantPhotos } from '@/lib/photos'
-import { expandCompositionFromDb } from '@/lib/composition'
+import { expandCompositionFromDb, expandFoliagePersistanceFromDb } from '@/lib/composition'
 
 type IdentityComposition = NonNullable<Plant["identity"]>["composition"]
 
@@ -427,7 +427,7 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
           promotionMonth: translation.promotion_month || basePlant.promotion_month || undefined,
           lifeCycle: translation.life_cycle || basePlant.life_cycle || undefined,
           season: seasons,
-          foliagePersistance: translation.foliage_persistance || basePlant.foliage_persistance || undefined,
+            foliagePersistance: expandFoliagePersistanceFromDb(translation.foliage_persistance || basePlant.foliage_persistance),
           spiked: basePlant.spiked ?? false,
           toxicityHuman: translation.toxicity_human || basePlant.toxicity_human || undefined,
           toxicityPets: translation.toxicity_pets || basePlant.toxicity_pets || undefined,

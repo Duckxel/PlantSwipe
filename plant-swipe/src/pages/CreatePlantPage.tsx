@@ -15,7 +15,7 @@ import { translateArray, translateText } from "@/lib/deepl"
 import { buildCategoryProgress, createEmptyCategoryProgress, plantFormCategoryOrder, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
 import { useParams } from "react-router-dom"
 import { plantSchema } from "@/lib/plantSchema"
-import { expandCompositionFromDb, normalizeCompositionForDb } from "@/lib/composition"
+import { expandCompositionFromDb, normalizeCompositionForDb, expandFoliagePersistanceFromDb, normalizeFoliagePersistanceForDb } from "@/lib/composition"
 
 type IdentityComposition = NonNullable<Plant["identity"]>["composition"]
 
@@ -335,7 +335,7 @@ async function loadPlant(id: string): Promise<Plant | null> {
       promotionMonth: data.promotion_month || undefined,
       lifeCycle: data.life_cycle || undefined,
       season: (data.season || []).map((s: string) => s.charAt(0).toUpperCase() + s.slice(1)) as Plant["seasons"],
-      foliagePersistance: data.foliage_persistance || undefined,
+        foliagePersistance: expandFoliagePersistanceFromDb(data.foliage_persistance),
       spiked: data.spiked || false,
       toxicityHuman: data.toxicity_human || undefined,
       toxicityPets: data.toxicity_pets || undefined,
@@ -598,7 +598,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           promotion_month: plantToSave.identity?.promotionMonth || null,
           life_cycle: plantToSave.identity?.lifeCycle || null,
           season: plantToSave.identity?.season ? plantToSave.identity.season.map((s) => s.toString().toLowerCase()) : [],
-          foliage_persistance: plantToSave.identity?.foliagePersistance || null,
+          foliage_persistance: normalizeFoliagePersistanceForDb(plantToSave.identity?.foliagePersistance),
           spiked: coerceBoolean(plantToSave.identity?.spiked, false),
           toxicity_human: plantToSave.identity?.toxicityHuman || null,
           toxicity_pets: plantToSave.identity?.toxicityPets || null,
@@ -905,7 +905,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           promotion_month: plant.identity?.promotionMonth || null,
           life_cycle: plant.identity?.lifeCycle || null,
             season: plant.identity?.season ? plant.identity.season.map((s) => s.toString().toLowerCase()) : [],
-            foliage_persistance: plant.identity?.foliagePersistance || null,
+            foliage_persistance: normalizeFoliagePersistanceForDb(plant.identity?.foliagePersistance),
             toxicity_human: plant.identity?.toxicityHuman || null,
             toxicity_pets: plant.identity?.toxicityPets || null,
             allergens: await translateArraySafe(plant.identity?.allergens),

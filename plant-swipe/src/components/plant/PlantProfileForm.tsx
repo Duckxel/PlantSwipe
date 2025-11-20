@@ -44,17 +44,63 @@ type FieldType =
   | "sources"
   | "readonly"
 
+type FieldOption = string | { label: string; value: string | number }
+
 interface FieldConfig {
   key: string
   label: string
   description: string
   type: FieldType
-  options?: string[]
+  options?: FieldOption[]
 }
 
 const monthOptions = [
-  "January","February","March","April","May","June","July","August","September","October","November","December"
-]
+  { label: "January", value: 1 },
+  { label: "February", value: 2 },
+  { label: "March", value: 3 },
+  { label: "April", value: 4 },
+  { label: "May", value: 5 },
+  { label: "June", value: 6 },
+  { label: "July", value: 7 },
+  { label: "August", value: 8 },
+  { label: "September", value: 9 },
+  { label: "October", value: 10 },
+  { label: "November", value: 11 },
+  { label: "December", value: 12 },
+] as const
+
+const monthLookup = monthOptions.reduce((acc, option) => {
+  const lower = option.label.toLowerCase()
+  acc[lower] = option.value
+  acc[lower.slice(0, 3)] = option.value
+  acc[String(option.value)] = option.value
+  acc[option.value.toString().padStart(2, '0')] = option.value
+  return acc
+}, {} as Record<string, number>)
+
+const normalizeMonthValue = (input: unknown): number | null => {
+  if (typeof input === "number" && Number.isFinite(input)) {
+    const int = Math.round(input)
+    if (int >= 1 && int <= 12) return int
+  }
+  if (typeof input === "string") {
+    const trimmed = input.trim().toLowerCase()
+    if (!trimmed) return null
+    if (monthLookup[trimmed]) return monthLookup[trimmed]
+  }
+  return null
+}
+
+const normalizeMonthArray = (value: unknown): number[] => {
+  if (value === null || value === undefined) return []
+  const source = Array.isArray(value) ? value : [value]
+  const result: number[] = []
+  for (const entry of source) {
+    const normalized = normalizeMonthValue(entry)
+    if (normalized && !result.includes(normalized)) result.push(normalized)
+  }
+  return result
+}
 
 const TagInput: React.FC<{ value: string[]; onChange: (v: string[]) => void; placeholder?: string }> = ({ value, onChange, placeholder }) => {
   const [input, setInput] = React.useState("")
@@ -471,10 +517,17 @@ const comestibleOptions = ["flower","fruit","seed","leaf","stem","root","bulb","
 const fruitOptions = ["nut","seed","stone"] as const
 const plantTypeOptions = ["plant","flower","bamboo","shrub","tree"] as const
 
-function renderField(plant: Plant, onChange: (path: string, value: any) => void, field: FieldConfig) {
-  const value = getValue(plant, field.key)
-  const id = field.key.replace(/\./g, "-")
-  const isAdvice = field.label.toLowerCase().includes("advice")
+  function renderField(plant: Plant, onChange: (path: string, value: any) => void, field: FieldConfig) {
+    const value = getValue(plant, field.key)
+    const id = field.key.replace(/\./g, "-")
+    const isAdvice = field.label.toLowerCase().includes("advice")
+    const isMonthMultiField = field.key.startsWith("growth.") && field.key.toLowerCase().includes("month")
+    const isPromotionMonthField = field.key === "identity.promotionMonth"
+    const normalizedOptions = (field.options || []).map((opt) =>
+      typeof opt === "string"
+        ? { label: opt, value: opt, key: opt }
+        : { label: opt.label, value: opt.value, key: String(opt.value) },
+    )
 
   const body = (() => {
     if (field.key === "meta.status") {
@@ -484,6 +537,7 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
         Review: "#0ea5e9",
         Approved: "#10b981",
       }
+        const statusOptions = (field.options || []).map((opt) => (typeof opt === "string" ? opt : String(opt.value)))
       return (
         <div className="grid gap-2">
           <Label>{field.label}</Label>
@@ -493,9 +547,9 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
             onChange={(e) => onChange(field.key, e.target.value)}
           >
             <option value="">Select status</option>
-            {(field.options || []).map((opt) => (
-              <option key={opt} value={opt} style={{ color: statusColors[opt] || "inherit" }}>
-                ● {opt}
+              {statusOptions.map((opt) => (
+                <option key={opt} value={opt} style={{ color: statusColors[opt] || "inherit" }}>
+                  ● {opt}
               </option>
             ))}
           </select>
@@ -544,48 +598,66 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
             <p className="text-xs text-muted-foreground">{field.description}</p>
           </div>
         )
-      case "select":
-        return (
-          <div className="grid gap-2">
-            <Label>{field.label}</Label>
-            <select
-              className="h-9 rounded-md border px-2 text-sm"
-              value={value || ""}
-              onChange={(e) => onChange(field.key, e.target.value || undefined)}
-            >
-              <option value="">Select option</option>
-              {(field.options || []).map((opt) => (
-                <option key={opt} value={opt}>{opt}</option>
-              ))}
-            </select>
-            <p className="text-xs text-muted-foreground">{field.description}</p>
-          </div>
-        )
-      case "multiselect":
-        return (
-          <div className="grid gap-2">
-            <Label>{field.label}</Label>
-            <div className="flex flex-wrap gap-2">
-              {(field.options || []).map((opt) => {
-                const selected = Array.isArray(value) ? value.includes(opt) : false
-                return (
-                  <button
-                    key={opt}
-                    type="button"
-                    onClick={() => {
-                      const current: string[] = Array.isArray(value) ? value : []
-                      onChange(field.key, selected ? current.filter((v) => v !== opt) : [...current, opt])
-                    }}
-                    className={`px-3 py-1 rounded-full border text-sm transition ${selected ? "bg-black text-white dark:bg-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"}`}
-                  >
-                    {opt}
-                  </button>
-                )
-              })}
+        case "select": {
+          const selectValue = isPromotionMonthField ? normalizeMonthValue(value) ?? value : value
+          const valueKey =
+            normalizedOptions.find((opt) => Object.is(opt.value, selectValue))?.key ??
+            (selectValue === null || selectValue === undefined ? "" : String(selectValue))
+          return (
+            <div className="grid gap-2">
+              <Label>{field.label}</Label>
+              <select
+                className="h-9 rounded-md border px-2 text-sm"
+                value={valueKey}
+                onChange={(e) => {
+                  if (!e.target.value) {
+                    onChange(field.key, undefined)
+                    return
+                  }
+                  const selectedOption = normalizedOptions.find((opt) => opt.key === e.target.value)
+                  onChange(field.key, selectedOption ? selectedOption.value : undefined)
+                }}
+              >
+                <option value="">Select option</option>
+                {normalizedOptions.map((opt) => (
+                  <option key={opt.key} value={opt.key}>{opt.label}</option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground">{field.description}</p>
             </div>
-            <p className="text-xs text-muted-foreground">{field.description}</p>
-          </div>
-        )
+          )
+        }
+        case "multiselect": {
+          const currentValues = isMonthMultiField ? normalizeMonthArray(value) : (Array.isArray(value) ? [...value] : [])
+          const includesValue = (candidate: unknown) =>
+            currentValues.some((entry) => Object.is(entry, candidate) || (typeof entry === "string" && typeof candidate === "string" && entry === candidate))
+          return (
+            <div className="grid gap-2">
+              <Label>{field.label}</Label>
+              <div className="flex flex-wrap gap-2">
+                {normalizedOptions.map((opt) => {
+                  const selected = includesValue(opt.value)
+                  return (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      onClick={() => {
+                        const nextValues = selected
+                          ? currentValues.filter((entry) => !(Object.is(entry, opt.value) || (typeof entry === "string" && typeof opt.value === "string" && entry === opt.value)))
+                          : [...currentValues, opt.value]
+                        onChange(field.key, nextValues)
+                      }}
+                      className={`px-3 py-1 rounded-full border text-sm transition ${selected ? "bg-black text-white dark:bg-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"}`}
+                    >
+                      {opt.label}
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="text-xs text-muted-foreground">{field.description}</p>
+            </div>
+          )
+        }
       case "tags":
         return (
           <div className="grid gap-2">
@@ -639,14 +711,32 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
     }
   })()
 
-  if (isAdvice) {
-    return (
-      <details key={field.key} className="rounded border bg-muted/20 p-3" open={false}>
-        <summary className="cursor-pointer text-sm font-semibold">{field.label} (optional)</summary>
-        <div className="mt-3">{body}</div>
-      </details>
-    )
-  }
+    const adviceHasValue = (() => {
+      if (!isAdvice) return false
+      if (typeof value === "string") return value.trim().length > 0
+      if (Array.isArray(value)) return value.some((entry) => (typeof entry === "string" ? entry.trim().length > 0 : entry !== null && entry !== undefined))
+      if (value && typeof value === "object") return Object.values(value as Record<string, unknown>).some((entry) => {
+        if (typeof entry === "string") return entry.trim().length > 0
+        return entry !== null && entry !== undefined
+      })
+      return false
+    })()
+
+    if (isAdvice) {
+      if (adviceHasValue) {
+        return (
+          <div key={field.key} className="rounded border border-emerald-200/60 dark:border-emerald-900/40 bg-white/80 dark:bg-[#101610] p-3">
+            {body}
+          </div>
+        )
+      }
+      return (
+        <details key={field.key} className="rounded border bg-muted/20 p-3" open={false}>
+          <summary className="cursor-pointer text-sm font-semibold">{field.label} (optional)</summary>
+          <div className="mt-3">{body}</div>
+        </details>
+      )
+    }
 
   return <div key={field.key}>{body}</div>
 }

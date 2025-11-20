@@ -1,3 +1,5 @@
+import type { Plant } from "@/types/plant"
+
 const DB_VALUES = ['flowerbed', 'path', 'hedge', 'ground cover', 'pot'] as const
 const UI_VALUES = ['Flowerbed', 'Path', 'Hedge', 'Ground Cover', 'Pot'] as const
 
@@ -66,4 +68,45 @@ export function expandCompositionFromDb(values?: string[] | null): CompositionUi
     }
   }
   return result
+}
+
+const FOLIAGE_DB_VALUES = ['deciduous', 'evergreen', 'semi-evergreen', 'marcescent'] as const
+type FoliageDbValue = typeof FOLIAGE_DB_VALUES[number]
+type FoliageUiValue = NonNullable<NonNullable<Plant["identity"]>["foliagePersistance"]>
+const FOLIAGE_DB_SET = new Set<string>(FOLIAGE_DB_VALUES)
+
+const FOLIAGE_DB_TO_UI: Record<FoliageDbValue, FoliageUiValue> = {
+  deciduous: 'Deciduous',
+  evergreen: 'Evergreen',
+  'semi-evergreen': 'Semi-Evergreen',
+  marcescent: 'Marcescent',
+}
+
+const FOLIAGE_UI_TO_DB = Object.entries(FOLIAGE_DB_TO_UI).reduce(
+  (acc, [db, ui]) => {
+    acc[ui.toLowerCase()] = db as FoliageDbValue
+    return acc
+  },
+  {} as Record<string, FoliageDbValue>,
+)
+
+function coerceFoliageDbValue(raw?: string | null): FoliageDbValue | null {
+  if (!raw) return null
+  const trimmed = raw.trim()
+  if (!trimmed) return null
+  const lower = trimmed.toLowerCase()
+  if (FOLIAGE_DB_SET.has(lower)) {
+    return lower as FoliageDbValue
+  }
+  return FOLIAGE_UI_TO_DB[lower] || null
+}
+
+export function normalizeFoliagePersistanceForDb(value?: string | null): FoliageDbValue | null {
+  return coerceFoliageDbValue(value)
+}
+
+export function expandFoliagePersistanceFromDb(value?: string | null): FoliageUiValue | undefined {
+  const dbValue = coerceFoliageDbValue(value)
+  if (!dbValue) return undefined
+  return FOLIAGE_DB_TO_UI[dbValue]
 }

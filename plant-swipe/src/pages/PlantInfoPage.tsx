@@ -9,7 +9,7 @@ import { useLanguage, useLanguageNavigate } from '@/lib/i18nRouting'
 import { usePageMetadata } from '@/hooks/usePageMetadata'
 import { Button } from '@/components/ui/button'
 import { ChevronLeft, Pencil } from 'lucide-react'
-import { expandCompositionFromDb } from '@/lib/composition'
+import { expandCompositionFromDb, expandFoliagePersistanceFromDb } from '@/lib/composition'
 
 type IdentityComposition = NonNullable<Plant["identity"]>["composition"]
 
@@ -57,7 +57,7 @@ async function fetchPlantWithRelations(id: string): Promise<Plant | null> {
       promotionMonth: data.promotion_month || undefined,
       lifeCycle: data.life_cycle || undefined,
       season: (data.season || []).map((s: string) => s.charAt(0).toUpperCase() + s.slice(1)) as Plant['seasons'],
-      foliagePersistance: data.foliage_persistance || undefined,
+        foliagePersistance: expandFoliagePersistanceFromDb(data.foliage_persistance),
       spiked: data.spiked || false,
       toxicityHuman: data.toxicity_human || undefined,
       toxicityPets: data.toxicity_pets || undefined,
