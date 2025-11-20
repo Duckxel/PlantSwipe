@@ -15,7 +15,10 @@ export type PlantProfileFormProps = {
   onChange: (plant: Plant) => void
 }
 
-const neuCardClass = "border border-white/10 bg-muted/40 shadow-[8px_8px_16px_rgba(0,0,0,0.12),-8px_-8px_16px_rgba(255,255,255,0.6)]"
+const neuCardClass =
+  "rounded-2xl border border-emerald-100/70 dark:border-emerald-900/40 bg-gradient-to-br " +
+  "from-emerald-50/70 via-white to-stone-50 dark:from-[#0f1510] dark:via-[#0b120d] dark:to-[#0a100c] " +
+  "shadow-[0_18px_50px_-30px_rgba(16,185,129,0.4)] dark:shadow-[0_24px_60px_-40px_rgba(34,197,94,0.35)]"
 
 type FieldType =
   | "text"
