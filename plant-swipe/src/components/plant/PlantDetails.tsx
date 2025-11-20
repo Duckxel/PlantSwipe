@@ -3,6 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import type { Plant } from "@/types/plant"
+import { Link } from "react-router-dom"
+import { supabase } from "@/lib/supabaseClient"
 import {
   Flame,
   Sparkles,
@@ -51,6 +53,30 @@ const InfoPill: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <span className="inline-flex items-center rounded-full bg-emerald-100/80 dark:bg-emerald-900/50 px-3 py-1 text-xs font-medium text-emerald-900 dark:text-emerald-50">
     {children}
   </span>
+)
+
+const CompanionCard: React.FC<{ id: string; name: string; image?: string }> = ({ id, name, image }) => (
+  <Link
+    to={`/plants/${id}`}
+    className="group rounded-2xl border border-white/60 bg-white/90 p-3 shadow-[0_20px_45px_-35px_rgba(16,185,129,0.9)] transition hover:-translate-y-1 hover:shadow-[0_35px_65px_-35px_rgba(16,185,129,0.55)] dark:border-white/10 dark:bg-[#12151c]"
+  >
+    <div className="relative mb-3 overflow-hidden rounded-xl bg-emerald-50/80 dark:bg-emerald-500/10">
+      {image ? (
+        <img src={image} alt={name} className="h-36 w-full object-cover transition duration-500 group-hover:scale-105" loading="lazy" />
+      ) : (
+        <div className="flex h-36 items-center justify-center text-xs uppercase tracking-wide text-emerald-700/60 dark:text-emerald-200/80">
+          No photo yet
+        </div>
+      )}
+    </div>
+    <div className="flex items-center justify-between gap-2">
+      <div>
+        <p className="text-sm font-semibold text-stone-900 dark:text-white">{name}</p>
+        <p className="text-xs text-muted-foreground">Companion plant</p>
+      </div>
+      <ChevronRight className="h-4 w-4 text-emerald-500 transition group-hover:translate-x-1" />
+    </div>
+  </Link>
 )
 
 const FieldRow: React.FC<{ label: string; value?: React.ReactNode }> = ({ label, value }) => {
@@ -285,17 +311,69 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
       return plant.plantCare.wateringType.map((type, idx) => ({ name: type, value: 1, fill: colorPalette[idx % colorPalette.length] }))
     }, [plant.plantCare?.wateringType])
 
-    const utilityBadges = plant.utility?.length ? plant.utility : []
+  const utilityBadges = plant.utility?.length ? plant.utility : []
 
-    const seasons = plant.identity?.season || plant.seasons || []
-    const shareFeedback =
-      shareStatus === "copied" ? "Link copied" : shareStatus === "shared" ? "Shared!" : shareStatus === "error" ? "Share unavailable" : ""
+  const seasons = plant.identity?.season || plant.seasons || []
+  const companions = plant.miscellaneous?.companions?.filter(Boolean) ?? []
+  const companionsKey = companions.join('|')
+  const [companionDetails, setCompanionDetails] = useState<Array<{ id: string; name: string; image?: string }>>([])
+  const shareFeedback =
+    shareStatus === "copied" ? "Link copied" : shareStatus === "shared" ? "Shared!" : shareStatus === "error" ? "Share unavailable" : ""
+
+  useEffect(() => {
+    let ignore = false
+    const loadCompanions = async () => {
+      if (!companions.length) {
+        setCompanionDetails([])
+        return
+      }
+      try {
+        const { data: plantsData } = await supabase
+          .from('plants')
+          .select('id,name')
+          .in('id', companions)
+        const ids = plantsData?.map((row) => row.id) ?? []
+        let cover: Record<string, string | undefined> = {}
+        if (ids.length) {
+          const { data: imagesData } = await supabase
+            .from('plant_images')
+            .select('plant_id,link,use')
+            .in('plant_id', ids)
+          cover = (imagesData || []).reduce<Record<string, string | undefined>>((acc, row: any) => {
+            const key = row?.plant_id as string
+            if (!key) return acc
+            if (row?.use === 'primary') {
+              acc[key] = row?.link || acc[key]
+              return acc
+            }
+            if (!acc[key]) acc[key] = row?.link || undefined
+            return acc
+          }, {})
+        }
+        if (!ignore) {
+          setCompanionDetails(
+            (plantsData || []).map((row) => ({
+              id: row.id as string,
+              name: row.name as string,
+              image: cover[row.id as string],
+            })),
+          )
+        }
+      } catch {
+        if (!ignore) setCompanionDetails([])
+      }
+    }
+    loadCompanions()
+    return () => {
+      ignore = true
+    }
+  }, [companionsKey])
 
     return (
       <div className="space-y-6 pb-16">
         <div className="relative overflow-hidden rounded-3xl border border-muted/50 bg-gradient-to-br from-emerald-50 via-white to-amber-50 dark:from-[#0b1220] dark:via-[#0a0f1a] dark:to-[#05080f] shadow-lg">
           <div className="absolute inset-0 opacity-25 blur-3xl" style={{ background: "radial-gradient(circle at 20% 20%, #34d39926, transparent 40%), radial-gradient(circle at 80% 10%, #fb718526, transparent 35%), radial-gradient(circle at 60% 80%, #22d3ee26, transparent 45%)" }} />
-          <div className="absolute top-4 right-4 flex flex-col items-end gap-2 sm:gap-3">
+            <div className="absolute top-4 right-4 z-20 flex flex-col items-end gap-2 sm:gap-3 pointer-events-auto">
             {onToggleLike && (
               <Button
                 size="lg"
@@ -354,7 +432,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
             <div className="flex w-full justify-center lg:w-auto">
               {activeImage ? (
                 <div
-                  className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl border border-muted/60 bg-white/60 shadow-inner sm:w-80 lg:w-96"
+                  className="relative z-0 aspect-[4/3] w-full overflow-hidden rounded-2xl border border-muted/60 bg-white/60 shadow-inner sm:w-80 lg:w-96"
                   onTouchStart={handleTouchStart}
                   onTouchEnd={handleTouchEnd}
                 >
@@ -719,26 +797,36 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
       <div className="grid gap-6 xl:grid-cols-2">
         {(plant.miscellaneous && Object.values(plant.miscellaneous).some((v) => v !== undefined && v !== null && (Array.isArray(v) ? v.length : true))) && (
           <Section title="Companions & Tags">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <FieldRow label="Companions" value={listOrTags(plant.miscellaneous?.companions)} />
-              <FieldRow label="Tags" value={listOrTags(plant.miscellaneous?.tags)} />
-              <FieldRow
-                label="Sources"
-                value={(plant.miscellaneous?.sources || []).length ? (
-                  <div className="space-y-2 text-sm">
-                    {(plant.miscellaneous?.sources || []).map((src, idx) => (
-                      <div key={`${src.name}-${idx}`} className="flex flex-col rounded border px-3 py-2 bg-white/70 dark:bg-[#151b15]">
-                        <div className="font-medium">{src.name}</div>
-                        {src.url && (
-                          <a href={src.url} target="_blank" rel="noreferrer" className="text-blue-600 underline break-all">
-                            {src.url}
-                          </a>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : undefined}
-              />
+            <div className="space-y-4">
+              {companionDetails.length > 0 ? (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {companionDetails.map((companion) => (
+                    <CompanionCard key={companion.id} id={companion.id} name={companion.name} image={companion.image} />
+                  ))}
+                </div>
+              ) : (
+                <FieldRow label="Companions" value={listOrTags(plant.miscellaneous?.companions)} />
+              )}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <FieldRow label="Tags" value={listOrTags(plant.miscellaneous?.tags)} />
+                <FieldRow
+                  label="Sources"
+                  value={(plant.miscellaneous?.sources || []).length ? (
+                    <div className="space-y-2 text-sm">
+                      {(plant.miscellaneous?.sources || []).map((src, idx) => (
+                        <div key={`${src.name}-${idx}`} className="flex flex-col rounded border px-3 py-2 bg-white/70 dark:bg-[#151b15]">
+                          <div className="font-medium">{src.name}</div>
+                          {src.url && (
+                            <a href={src.url} target="_blank" rel="noreferrer" className="text-blue-600 underline break-all">
+                              {src.url}
+                            </a>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : undefined}
+                />
+              </div>
             </div>
           </Section>
         )}
