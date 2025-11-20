@@ -183,29 +183,65 @@ const WateringScheduleEditor: React.FC<{
     )
   }
   const remove = (idx: number) => onChange(schedules.filter((_, i) => i !== idx))
-  return (
-    <div className="grid gap-3">
-      {schedules.map((schedule, idx) => (
-        <div key={`${schedule.season}-${idx}`} className="grid gap-2 rounded border p-3">
+    return (
+      <div className="grid gap-3">
+        {schedules.map((schedule, idx) => (
+          <div key={`${schedule.season}-${idx}`} className="grid gap-2 rounded border p-3">
+            <div className="grid grid-cols-1 gap-2">
+              <Input
+                placeholder="Season (optional)"
+                value={schedule.season || ""}
+                onChange={(e) => update(idx, { season: e.target.value })}
+              />
+              <Input
+                placeholder="Quantity"
+                type="number"
+                value={schedule.quantity ?? ""}
+                onChange={(e) => {
+                  const nextVal = e.target.value === "" ? undefined : parseInt(e.target.value, 10)
+                  update(idx, { quantity: Number.isFinite(nextVal as number) ? nextVal : undefined })
+                }}
+              />
+              <select
+                className="h-9 rounded-md border px-2 text-sm"
+                value={schedule.timePeriod || ""}
+                onChange={(e) => update(idx, { timePeriod: e.target.value ? (e.target.value as any) : undefined })}
+              >
+                <option value="">Time period</option>
+                {(["week", "month", "year"] as const).map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex justify-end">
+              <Button variant="ghost" type="button" onClick={() => remove(idx)} className="text-red-600">
+                Remove
+              </Button>
+            </div>
+          </div>
+        ))}
+        <div className="grid gap-2 rounded border border-dashed p-3">
           <div className="grid grid-cols-1 gap-2">
             <Input
               placeholder="Season (optional)"
-              value={schedule.season || ""}
-              onChange={(e) => update(idx, { season: e.target.value })}
+              value={draft.season}
+              onChange={(e) => setDraft((d) => ({ ...d, season: e.target.value }))}
             />
             <Input
               placeholder="Quantity"
               type="number"
-              value={schedule.quantity ?? ""}
+              value={draft.quantity ?? ""}
               onChange={(e) => {
                 const nextVal = e.target.value === "" ? undefined : parseInt(e.target.value, 10)
-                update(idx, { quantity: Number.isFinite(nextVal as number) ? nextVal : undefined })
-              }}
-            />
+                setDraft((d) => ({ ...d, quantity: Number.isFinite(nextVal as number) ? nextVal : undefined }))
+                }}
+              />
             <select
               className="h-9 rounded-md border px-2 text-sm"
-              value={schedule.timePeriod || ""}
-              onChange={(e) => update(idx, { timePeriod: e.target.value ? (e.target.value as any) : undefined })}
+              value={draft.timePeriod || ""}
+              onChange={(e) => setDraft((d) => ({ ...d, timePeriod: e.target.value ? (e.target.value as any) : undefined }))}
             >
               <option value="">Time period</option>
               {(["week", "month", "year"] as const).map((opt) => (
@@ -215,51 +251,19 @@ const WateringScheduleEditor: React.FC<{
               ))}
             </select>
           </div>
-          <div className="flex justify-end">
-            <Button variant="ghost" type="button" onClick={() => remove(idx)} className="text-red-600">
-              Remove
+          <div className="flex justify-between text-sm text-muted-foreground">
+            <span>Season is optional. Add as many watering schedules as needed.</span>
+            <Button
+              type="button"
+              onClick={addDraft}
+              disabled={!(draft.season?.trim() || draft.quantity !== undefined || draft.timePeriod)}
+            >
+              Add schedule
             </Button>
           </div>
         </div>
-      ))}
-        <div className="grid gap-2 rounded border border-dashed p-3">
-          <div className="grid grid-cols-1 gap-2">
-          <Input
-            placeholder="Season (optional)"
-            value={draft.season}
-            onChange={(e) => setDraft((d) => ({ ...d, season: e.target.value }))}
-          />
-          <Input
-            placeholder="Quantity"
-            type="number"
-            value={draft.quantity ?? ""}
-            onChange={(e) => {
-              const nextVal = e.target.value === "" ? undefined : parseInt(e.target.value, 10)
-              setDraft((d) => ({ ...d, quantity: Number.isFinite(nextVal as number) ? nextVal : undefined }))
-            })}
-          />
-          <select
-            className="h-9 rounded-md border px-2 text-sm"
-            value={draft.timePeriod || ""}
-            onChange={(e) => setDraft((d) => ({ ...d, timePeriod: e.target.value ? (e.target.value as any) : undefined }))}
-          >
-            <option value="">Time period</option>
-            {(["week", "month", "year"] as const).map((opt) => (
-              <option key={opt} value={opt}>
-                {opt}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="flex justify-between text-sm text-muted-foreground">
-          <span>Season is optional. Add as many watering schedules as needed.</span>
-          <Button type="button" onClick={addDraft} disabled={!(draft.season?.trim() || draft.quantity !== undefined || draft.timePeriod)}>
-            Add schedule
-          </Button>
-        </div>
       </div>
-    </div>
-  )
+    )
 }
 
 const KeyValueList: React.FC<{ value: Record<string, string>; onChange: (v: Record<string, string>) => void; keyLabel?: string; valueLabel?: string }> = ({ value, onChange, keyLabel, valueLabel }) => {
