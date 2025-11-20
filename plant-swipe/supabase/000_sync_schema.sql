@@ -157,70 +157,125 @@ do $$ begin
 end $$;
 
   -- ========== Plants (catalog) ==========
-  create table if not exists public.plants (
-    id text primary key,
-    -- Plant primary name (unique)
-    name text not null,
-    plant_type text check (plant_type in ('plant','flower','bamboo','shrub','tree')),
-    utility text[] not null default '{}'::text[] check (utility <@ array['comestible','ornemental','produce_fruit','aromatic','medicinal','odorous','climbing','cereal','spice']),
-    comestible_part text[] not null default '{}'::text[] check (comestible_part <@ array['flower','fruit','seed','leaf','stem','root','bulb','bark','wood']),
-    fruit_type text[] not null default '{}'::text[] check (fruit_type <@ array['nut','seed','stone']),
-    identity jsonb,
-    plant_care jsonb,
-    growth jsonb,
-    usage jsonb,
-    ecology jsonb,
-    danger jsonb,
-    miscellaneous jsonb,
-    meta jsonb,
-    -- Legacy/new compatibility fields
-    description text,
-    colors text[] not null default '{}',
-    seasons text[] not null default '{}',
-    multicolor boolean default false,
-    bicolor boolean default false,
-    created_at timestamptz not null default now(),
-    updated_at timestamptz not null default now()
-  );
-  create unique index if not exists plants_name_unique on public.plants (lower(name));
--- Ensure new JSONB columns exist
-alter table if exists public.plants add column if not exists identifiers jsonb;
-alter table if exists public.plants add column if not exists traits jsonb;
-alter table if exists public.plants add column if not exists dimensions jsonb;
-alter table if exists public.plants add column if not exists phenology jsonb;
-alter table if exists public.plants add column if not exists environment jsonb;
-alter table if exists public.plants add column if not exists care jsonb;
-alter table if exists public.plants add column if not exists propagation jsonb;
-alter table if exists public.plants add column if not exists usage jsonb;
-  alter table if exists public.plants add column if not exists ecology jsonb;
-  alter table if exists public.plants add column if not exists commerce jsonb;
-alter table if exists public.plants add column if not exists problems jsonb;
-alter table if exists public.plants add column if not exists planting jsonb;
-alter table if exists public.plants add column if not exists meta jsonb;
-alter table if exists public.plants add column if not exists photos jsonb;
-  alter table if exists public.plants add column if not exists classification jsonb;
-alter table if exists public.plants add column if not exists plant_type text check (plant_type in ('plant','flower','bamboo','shrub','tree'));
-alter table if exists public.plants add column if not exists utility text[] not null default '{}'::text[] check (utility <@ array['comestible','ornemental','produce_fruit','aromatic','medicinal','odorous','climbing','cereal','spice']);
-alter table if exists public.plants add column if not exists comestible_part text[] not null default '{}'::text[] check (comestible_part <@ array['flower','fruit','seed','leaf','stem','root','bulb','bark','wood']);
-alter table if exists public.plants add column if not exists fruit_type text[] not null default '{}'::text[] check (fruit_type <@ array['nut','seed','stone']);
-alter table if exists public.plants add column if not exists identity jsonb;
-alter table if exists public.plants add column if not exists plant_care jsonb;
-alter table if exists public.plants add column if not exists growth jsonb;
-alter table if exists public.plants add column if not exists usage jsonb;
-alter table if exists public.plants add column if not exists ecology jsonb;
-alter table if exists public.plants add column if not exists danger jsonb;
-alter table if exists public.plants add column if not exists miscellaneous jsonb;
--- Ensure columns present for legacy/compat fields
-alter table if exists public.plants add column if not exists colors text[] not null default '{}';
-alter table if exists public.plants add column if not exists seasons text[] not null default '{}';
-alter table if exists public.plants add column if not exists multicolor boolean default false;
-alter table if exists public.plants add column if not exists bicolor boolean default false;
-alter table if exists public.plants add column if not exists seeds_available boolean not null default false;
-alter table if exists public.plants add column if not exists water_freq_period text;
-alter table if exists public.plants add column if not exists water_freq_amount integer;
-alter table if exists public.plants add column if not exists water_freq_unit text;
-alter table if exists public.plants add column if not exists water_freq_value integer;
-alter table if exists public.plants add column if not exists updated_at timestamptz not null default now();
+create table if not exists public.plants (
+  id text primary key,
+  -- Plant primary name (unique)
+  name text not null,
+  plant_type text check (plant_type in ('plant','flower','bamboo','shrub','tree')),
+  utility text[] not null default '{}'::text[] check (utility <@ array['comestible','ornemental','produce_fruit','aromatic','medicinal','odorous','climbing','cereal','spice']),
+  comestible_part text[] not null default '{}'::text[] check (comestible_part <@ array['flower','fruit','seed','leaf','stem','root','bulb','bark','wood']),
+  fruit_type text[] not null default '{}'::text[] check (fruit_type <@ array['nut','seed','stone']),
+  -- Identity
+  given_names text[] not null default '{}',
+  scientific_name text,
+  family text,
+  overview text,
+  promotion_month text check (promotion_month in ('january','february','march','april','may','june','july','august','september','october','november','december')),
+  life_cycle text check (life_cycle in ('annual','biennials','perenials','ephemerals','monocarpic','polycarpic')),
+  season text[] not null default '{}'::text[] check (season <@ array['spring','summer','autumn','winter']),
+  foliage_persistance text check (foliage_persistance in ('deciduous','evergreen','semi-evergreen','marcescent')),
+  spiked boolean default false,
+  toxicity_human text check (toxicity_human in ('non-toxic','midly irritating','highly toxic','lethally toxic')),
+  toxicity_pets text check (toxicity_pets in ('non-toxic','midly irritating','highly toxic','lethally toxic')),
+  allergens text[] not null default '{}',
+  scent boolean default false,
+  symbolism text[] not null default '{}',
+  living_space text check (living_space in ('indoor','outdoor','both')),
+  composition text[] not null default '{}'::text[] check (composition <@ array['flowerbed','path','hedge','ground cover','pot']),
+  maintenance_level text check (maintenance_level in ('none','low','moderate','heavy')),
+  multicolor boolean default false,
+  bicolor boolean default false,
+  -- Plant care
+  origin text[] not null default '{}',
+  habitat text[] not null default '{}'::text[] check (habitat <@ array['aquatic','semi-aquatic','wetland','tropical','temperate','arid','mediterranean','mountain','grassland','forest','coastal','urban']),
+  temperature_max integer,
+  temperature_min integer,
+  temperature_ideal integer,
+  level_sun text check (level_sun in ('low light','shade','partial sun','full sun')),
+  hygrometry integer,
+  watering_type text[] not null default '{}'::text[] check (watering_type <@ array['surface','buried','hose','drop','drench']),
+  division text[] not null default '{}'::text[] check (division <@ array['seed','cutting','division','layering','grafting','tissue separation','bulb separation']),
+  soil text[] not null default '{}'::text[] check (soil <@ array['vermiculite','perlite','sphagnum moss','rock wool','sand','gravel','potting soil','peat','clay pebbles','coconut fiber','bark','wood chips']),
+  advice_soil text,
+  mulching text[] not null default '{}'::text[] check (mulching <@ array['wood chips','bark','green manure','cocoa bean hulls','buckwheat hulls','cereal straw','hemp straw','woven fabric','pozzolana','crushed slate','clay pellets']),
+  advice_mulching text,
+  nutrition_need text[] not null default '{}'::text[] check (nutrition_need <@ array['nitrogen','phosphorus','potassium','calcium','magnesium','sulfur','iron','boron','manganese','molybene','chlorine','copper','zinc','nitrate','phosphate']),
+  fertilizer text[] not null default '{}'::text[] check (fertilizer <@ array['granular fertilizer','liquid fertilizer','meat flour','fish flour','crushed bones','crushed horns','slurry','manure','animal excrement','sea fertilizer','yurals','wine','guano','coffee grounds','banana peel','eggshell','vegetable cooking water','urine','grass clippings','vegetable waste','natural mulch']),
+  advice_fertilizer text,
+  -- Growth
+  sowing_month text[] not null default '{}'::text[] check (sowing_month <@ array['january','february','march','april','may','june','july','august','september','october','november','december']),
+  flowering_month text[] not null default '{}'::text[] check (flowering_month <@ array['january','february','march','april','may','june','july','august','september','october','november','december']),
+  fruiting_month text[] not null default '{}'::text[] check (fruiting_month <@ array['january','february','march','april','may','june','july','august','september','october','november','december']),
+  height_cm integer,
+  wingspan_cm integer,
+  tutoring boolean default false,
+  advice_tutoring text,
+  sow_type text[] not null default '{}'::text[] check (sow_type <@ array['direct','indoor','row','hill','broadcast','seed tray','cell','pot']),
+  separation_cm integer,
+  transplanting boolean,
+  advice_sowing text,
+  cut text,
+  -- Usage
+  advice_medicinal text,
+  nutritional_intake text[] not null default '{}',
+  infusion boolean default false,
+  advice_infusion text,
+  recipes_ideas text[] not null default '{}',
+  aromatherapy boolean default false,
+  spice_mixes text[] not null default '{}',
+  -- Ecology
+  melliferous boolean default false,
+  polenizer text[] not null default '{}'::text[] check (polenizer <@ array['bee','wasp','ant','butterfly','bird','mosquito','fly','beetle','ladybug','stagbeetle','cockchafer','dungbeetle','weevil']),
+  be_fertilizer boolean default false,
+  ground_effect text,
+  conservation_status text check (conservation_status in ('safe','at risk','vulnerable','endangered','critically endangered','extinct')),
+  -- Danger
+  pests text[] not null default '{}',
+  diseases text[] not null default '{}',
+  -- Miscellaneous
+  companions text[] not null default '{}',
+  tags text[] not null default '{}',
+  source_name text,
+  source_url text,
+  -- Meta
+  status text check (status in ('in progres','rework','review','approved')),
+  admin_commentary text,
+  created_by text,
+  created_time timestamptz not null default now(),
+  updated_by text,
+  updated_time timestamptz not null default now()
+);
+create unique index if not exists plants_name_unique on public.plants (lower(name));
+
+-- Drop obsolete JSON columns from earlier iterations
+alter table if exists public.plants drop column if exists identity;
+alter table if exists public.plants drop column if exists plant_care;
+alter table if exists public.plants drop column if exists growth;
+alter table if exists public.plants drop column if exists usage;
+alter table if exists public.plants drop column if exists ecology;
+alter table if exists public.plants drop column if exists danger;
+alter table if exists public.plants drop column if exists miscellaneous;
+alter table if exists public.plants drop column if exists meta;
+alter table if exists public.plants drop column if exists identifiers;
+alter table if exists public.plants drop column if exists traits;
+alter table if exists public.plants drop column if exists dimensions;
+alter table if exists public.plants drop column if exists phenology;
+alter table if exists public.plants drop column if exists environment;
+alter table if exists public.plants drop column if exists care;
+alter table if exists public.plants drop column if exists propagation;
+alter table if exists public.plants drop column if exists commerce;
+alter table if exists public.plants drop column if exists problems;
+alter table if exists public.plants drop column if exists planting;
+alter table if exists public.plants drop column if exists photos;
+alter table if exists public.plants drop column if exists classification;
+alter table if exists public.plants drop column if exists description;
+alter table if exists public.plants drop column if exists seasons;
+alter table if exists public.plants drop column if exists seeds_available;
+alter table if exists public.plants drop column if exists water_freq_period;
+alter table if exists public.plants drop column if exists water_freq_amount;
+alter table if exists public.plants drop column if exists water_freq_unit;
+alter table if exists public.plants drop column if exists water_freq_value;
+alter table if exists public.plants drop column if exists updated_at;
 alter table public.plants enable row level security;
 -- Clean up legacy duplicate read policies if present
 do $$ begin
@@ -254,6 +309,53 @@ do $$ begin
   create policy plants_insert on public.plants for insert to authenticated with check (true);
   create policy plants_update on public.plants for update to authenticated using (true) with check (true);
   create policy plants_delete on public.plants for delete to authenticated using (true);
+end $$;
+
+-- ========== Plant watering schedules ==========
+create table if not exists public.plant_watering_schedules (
+  id uuid primary key default gen_random_uuid(),
+  plant_id text not null references public.plants(id) on delete cascade,
+  season text not null check (season in ('spring','summer','autumn','winter')),
+  quantity text not null,
+  time_period text not null check (time_period in ('week','month','year')),
+  created_at timestamptz not null default now()
+);
+create index if not exists plant_watering_schedules_plant_id_idx on public.plant_watering_schedules(plant_id);
+alter table public.plant_watering_schedules enable row level security;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_watering_schedules' and policyname='plant_watering_schedules_select_all') then
+    drop policy plant_watering_schedules_select_all on public.plant_watering_schedules;
+  end if;
+  create policy plant_watering_schedules_select_all on public.plant_watering_schedules for select to authenticated, anon using (true);
+end $$;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_watering_schedules' and policyname='plant_watering_schedules_all') then
+    drop policy plant_watering_schedules_all on public.plant_watering_schedules;
+  end if;
+  create policy plant_watering_schedules_all on public.plant_watering_schedules for all to authenticated using (true) with check (true);
+end $$;
+
+-- ========== Plant infusion mixes ==========
+create table if not exists public.plant_infusion_mixes (
+  id uuid primary key default gen_random_uuid(),
+  plant_id text not null references public.plants(id) on delete cascade,
+  mix_name text not null,
+  benefit text,
+  created_at timestamptz not null default now()
+);
+create index if not exists plant_infusion_mixes_plant_id_idx on public.plant_infusion_mixes(plant_id);
+alter table public.plant_infusion_mixes enable row level security;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_infusion_mixes' and policyname='plant_infusion_mixes_select_all') then
+    drop policy plant_infusion_mixes_select_all on public.plant_infusion_mixes;
+  end if;
+  create policy plant_infusion_mixes_select_all on public.plant_infusion_mixes for select to authenticated, anon using (true);
+end $$;
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_infusion_mixes' and policyname='plant_infusion_mixes_all') then
+    drop policy plant_infusion_mixes_all on public.plant_infusion_mixes;
+  end if;
+  create policy plant_infusion_mixes_all on public.plant_infusion_mixes for all to authenticated using (true) with check (true);
 end $$;
 
 -- ========== Plant images ==========
