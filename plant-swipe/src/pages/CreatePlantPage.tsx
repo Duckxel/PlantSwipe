@@ -16,7 +16,7 @@ import { buildCategoryProgress, createEmptyCategoryProgress, plantFormCategoryOr
 import { useParams } from "react-router-dom"
 import { plantSchema } from "@/lib/plantSchema"
 
-const DISALLOWED_FIELDS = new Set(['name', 'image', 'imageurl', 'image_url', 'imageURL'])
+const AI_EXCLUDED_FIELDS = new Set(['name', 'image', 'imageurl', 'image_url', 'imageURL', 'images', 'meta'])
 const IN_PROGRESS_STATUS: PlantMeta['status'] = 'In Progres'
 const SECTION_LOG_LIMIT = 12
 const OPTIONAL_FIELD_EXCEPTIONS = new Set<string>()
@@ -454,7 +454,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         'utility',
         'comestiblePart',
         'fruitType',
-        'images',
+        'seasons',
+        'description',
         'identity',
         'plantCare',
         'growth',
@@ -462,21 +463,19 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         'ecology',
         'danger',
         'miscellaneous',
-        'meta',
-        'seasons',
-        'description',
-      ].filter((key) => !DISALLOWED_FIELDS.has(key) && !DISALLOWED_FIELDS.has(key.toLowerCase())),
+      ].filter((key) => !AI_EXCLUDED_FIELDS.has(key) && !AI_EXCLUDED_FIELDS.has(key.toLowerCase())),
     [],
   )
-  const basicFieldOrder = React.useMemo(() => ['plantType', 'utility', 'comestiblePart', 'fruitType', 'identity'], [])
-  const mandatoryFieldOrder = React.useMemo(() => {
-    const remaining = targetFields.filter((key) => !basicFieldOrder.includes(key))
-    return [...basicFieldOrder, ...remaining]
+  const basicFieldOrder = React.useMemo(
+    () => ['plantType', 'utility', 'comestiblePart', 'fruitType', 'seasons', 'description', 'identity'],
+    [],
+  )
+  const aiFieldOrder = React.useMemo(() => {
+    const prioritized = basicFieldOrder.filter((key) => targetFields.includes(key))
+    const remaining = targetFields.filter((key) => !prioritized.includes(key))
+    return [...prioritized, ...remaining]
   }, [basicFieldOrder, targetFields])
-  const aiCategoryOrder = React.useMemo(
-    () => ['identity', 'plantCare', 'growth', 'usage', 'ecology', 'danger', 'miscellaneous', 'meta'],
-    [],
-  )
+  const mandatoryFieldOrder = aiFieldOrder
   const categoryLabels = React.useMemo(() => ({
     basics: t('plantAdmin.categories.basics', 'Basics'),
     identity: t('plantAdmin.categories.identity', 'Identity'),
@@ -695,25 +694,32 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
 
   const runAiFill = async () => {
     const trimmedName = plant.name.trim()
-    if (!trimmedName) { setError(t('plantAdmin.aiNameRequired', 'Please enter a name before using AI fill.')); return }
+    if (!trimmedName) {
+      setError(t('plantAdmin.aiNameRequired', 'Please enter a name before using AI fill.'))
+      return
+    }
+
     initializeCategoryProgress()
     setAiCompleted(false)
     setAiWorking(true)
     setColorSuggestions([])
     setError(null)
+
     let aiSucceeded = false
     let finalPlant: Plant | null = null
     const plantNameForAi = trimmedName
-      const applyWithStatus = (candidate: Plant): Plant => ({
+    const applyWithStatus = (candidate: Plant): Plant => ({
       ...candidate,
       meta: { ...(candidate.meta || {}), status: IN_PROGRESS_STATUS },
     })
-    const needsMonths = (p: Plant) => !((p.growth?.sowingMonth || []).length && (p.growth?.floweringMonth || []).length && (p.growth?.fruitingMonth || []).length)
+    const needsMonths = (p: Plant) =>
+      !((p.growth?.sowingMonth || []).length && (p.growth?.floweringMonth || []).length && (p.growth?.fruitingMonth || []).length)
     const needsOriginOrWater = (p: Plant) => {
       const hasOrigin = (p.plantCare?.origin || []).length > 0
       const hasSchedule = (p.plantCare?.watering?.schedules || []).length > 0
       return !(hasOrigin && hasSchedule)
     }
+
     const fillFieldWithRetries = async (fieldKey: string, existingField?: unknown) => {
       let lastError: Error | null = null
       for (let attempt = 1; attempt <= 3; attempt += 1) {
@@ -744,6 +750,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       if (lastError) console.error(`AI fill failed for ${fieldKey} after 3 attempts`, lastError)
       return false
     }
+
     const ensureMandatoryFields = async () => {
       for (const fieldKey of mandatoryFieldOrder) {
         if (!requiresFieldCompletion(fieldKey)) continue
@@ -753,6 +760,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         await fillFieldWithRetries(fieldKey, getFieldValueForKey(latestSnapshot, fieldKey))
       }
     }
+
     try {
       let aiData: Record<string, unknown> | null = null
       let lastError: Error | null = null
@@ -762,7 +770,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             plantName: plantNameForAi,
             schema: plantSchema,
             existingData: plant,
-            fields: aiCategoryOrder,
+            fields: aiFieldOrder,
             language,
             onFieldComplete: ({ field, data }) => {
               if (field === 'complete') return
@@ -807,9 +815,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       if (needsOriginOrWater(snapshot)) {
         await fillFieldWithRetries('plantCare', snapshot.plantCare)
       }
-      const growthSource = snapshot.growth
       if (needsMonths(snapshot)) {
-        await fillFieldWithRetries('growth', growthSource)
+        await fillFieldWithRetries('growth', snapshot.growth)
       }
 
       setPlant((prev) => {
@@ -835,6 +842,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         finalPlant = next
         return next
       })
+
       await ensureMandatoryFields()
       aiSucceeded = true
     } catch (e: any) {

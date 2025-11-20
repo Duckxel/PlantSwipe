@@ -982,11 +982,11 @@ async function generateFieldData(options) {
 
   const hintList = Array.from(collectFieldHints(fieldSchema, fieldKey)).slice(0, 50)
   const commonInstructions = [
-    'You fill plant data for individual fields.',
-    'Respond only with valid JSON containing the requested field.',
-    'Never include explanations, markdown, or extra prose.',
-    'Never output null; use empty strings, empty arrays, or omit keys instead.',
-    'Reuse any existing data when it is already suitable.',
+    `Act as a horticulture researcher filling structured data for the plant named "${plantName}".`,
+    'Work only in concise English and rely on reputable botanical sources.',
+    'Respond strictly with valid JSON containing the requested field and nothing else.',
+    'Populate every possible sub-value; if data is missing, return an empty string or array instead of null.',
+    'Reuse suitable existing data and never fabricate meta/status/image information.',
   ].join('\n')
 
   const promptSections = [
@@ -999,6 +999,26 @@ async function generateFieldData(options) {
     promptSections.push(
       'Write a cohesive botanical description between 100 and 400 words. Use complete sentences and paragraph-style prose, highlight appearance, growth habit, seasonal interest, and growing requirements. Do not use bullet lists, headings, or markdown. Stay factual and avoid repetition.'
     )
+  }
+
+  if (fieldKey === 'plantType') {
+    promptSections.push('Return a single lowercase string selecting the dominant growth habit. Choose from ["plant","flower","bamboo","shrub","tree"].')
+  }
+
+  if (fieldKey === 'utility') {
+    promptSections.push('Return an array of lowercase usage tags chosen from ["comestible","ornemental","produce_fruit","aromatic","medicinal","odorous","climbing","cereal","spice"]. Include every role that clearly applies to the plant.')
+  }
+
+  if (fieldKey === 'comestiblePart') {
+    promptSections.push('Return an array of edible plant parts using these lowercase tokens only: ["flower","fruit","seed","leaf","stem","root","bulb","bark","wood"].')
+  }
+
+  if (fieldKey === 'fruitType') {
+    promptSections.push('Return an array describing the fruit category, limited to ["nut","seed","stone"]. Use the most accurate options and omit the array if fruiting is irrelevant.')
+  }
+
+  if (fieldKey === 'seasons') {
+    promptSections.push('Return an array of capitalized seasons that describe when the plant looks its best. Choose from ["Spring","Summer","Autumn","Winter"].')
   }
 
   if (fieldKey === 'meta') {
