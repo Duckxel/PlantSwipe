@@ -38,15 +38,13 @@ interface PlantDetailsProps {
 }
 
 const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
-  <Card className="overflow-hidden border border-muted/40 shadow-sm">
-    <CardHeader className="bg-gradient-to-r from-emerald-100/60 via-white to-amber-50 dark:from-emerald-900/30 dark:via-gray-900 dark:to-amber-900/20">
-      <CardTitle className="text-lg font-semibold text-foreground flex items-center gap-2">
-        <Sparkles className="h-4 w-4 text-amber-500" />
-        {title}
-      </CardTitle>
-    </CardHeader>
-    <CardContent className="p-4 sm:p-6">{children}</CardContent>
-  </Card>
+  <section className="rounded-[28px] border border-stone-200/70 dark:border-[#1e1f25] bg-gradient-to-br from-white/95 via-white to-emerald-50/70 dark:from-[#0e0f13] dark:via-[#0b0c10] dark:to-[#10171a] shadow-[0_35px_80px_-45px_rgba(16,185,129,0.55)] backdrop-blur">
+    <div className="flex items-center gap-2 border-b border-white/70/60 dark:border-white/5 px-6 py-4">
+      <Sparkles className="h-4 w-4 text-amber-500" />
+      <CardTitle className="text-lg font-semibold text-foreground">{title}</CardTitle>
+    </div>
+    <CardContent className="p-6">{children}</CardContent>
+  </section>
 )
 
 const InfoPill: React.FC<{ children: React.ReactNode }> = ({ children }) => (
@@ -95,7 +93,7 @@ const monthsToBadges = (months?: number[]) =>
       )
     : undefined
 
-const booleanText = (value?: boolean) => (value === undefined ? undefined : value ? "Yes" : "No")
+const booleanText = (value?: boolean) => (value ? "Yes" : undefined)
 
 const DictionaryList: React.FC<{ value?: Record<string, string> }>
   = ({ value }) => {
@@ -282,19 +280,19 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
     return rows
   }, [plant.plantCare?.temperatureIdeal, plant.plantCare?.temperatureMax, plant.plantCare?.temperatureMin])
 
-  const wateringPieData = useMemo(() => {
-    if (!plant.plantCare?.wateringType?.length) return []
-    return plant.plantCare.wateringType.map((type, idx) => ({ name: type, value: 1, fill: colorPalette[idx % colorPalette.length] }))
-  }, [plant.plantCare?.wateringType])
+    const wateringPieData = useMemo(() => {
+      if (!plant.plantCare?.wateringType?.length) return []
+      return plant.plantCare.wateringType.map((type, idx) => ({ name: type, value: 1, fill: colorPalette[idx % colorPalette.length] }))
+    }, [plant.plantCare?.wateringType])
 
-  const utilityBadges = plant.utility?.length ? plant.utility : []
+    const utilityBadges = plant.utility?.length ? plant.utility : []
 
-  const seasons = plant.identity?.season || plant.seasons || []
-  const shareFeedback =
-    shareStatus === "copied" ? "Link copied" : shareStatus === "shared" ? "Shared!" : shareStatus === "error" ? "Share unavailable" : ""
+    const seasons = plant.identity?.season || plant.seasons || []
+    const shareFeedback =
+      shareStatus === "copied" ? "Link copied" : shareStatus === "shared" ? "Shared!" : shareStatus === "error" ? "Share unavailable" : ""
 
-  return (
-    <div className="space-y-6 pb-16">
+    return (
+      <div className="space-y-6 pb-16">
         <div className="relative overflow-hidden rounded-3xl border border-muted/50 bg-gradient-to-br from-emerald-50 via-white to-amber-50 dark:from-[#0b1220] dark:via-[#0a0f1a] dark:to-[#05080f] shadow-lg">
           <div className="absolute inset-0 opacity-25 blur-3xl" style={{ background: "radial-gradient(circle at 20% 20%, #34d39926, transparent 40%), radial-gradient(circle at 80% 10%, #fb718526, transparent 35%), radial-gradient(circle at 60% 80%, #22d3ee26, transparent 45%)" }} />
           <div className="absolute top-4 right-4 flex flex-col items-end gap-2 sm:gap-3">

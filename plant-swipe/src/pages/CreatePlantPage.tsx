@@ -20,6 +20,47 @@ const DISALLOWED_FIELDS = new Set(['name', 'image', 'imageurl', 'image_url', 'im
 const IN_PROGRESS_STATUS: PlantMeta['status'] = 'In Progres'
 const SECTION_LOG_LIMIT = 12
 const OPTIONAL_FIELD_EXCEPTIONS = new Set<string>(['images'])
+const MONTH_SLUGS = [
+  'january',
+  'february',
+  'march',
+  'april',
+  'may',
+  'june',
+  'july',
+  'august',
+  'september',
+  'october',
+  'november',
+  'december',
+] as const
+
+const monthNumberToSlug = (value?: number | null): string | null => {
+  if (!value) return null
+  const index = value - 1
+  if (index < 0 || index >= MONTH_SLUGS.length) return null
+  return MONTH_SLUGS[index]
+}
+
+const monthNumbersToSlugs = (values?: number[] | null): string[] =>
+  Array.isArray(values)
+    ? values
+        .map((entry) => monthNumberToSlug(entry))
+        .filter((entry): entry is string => Boolean(entry))
+    : []
+
+const monthSlugToNumber = (slug?: string | null): number | null => {
+  if (!slug) return null
+  const index = MONTH_SLUGS.indexOf(slug.toLowerCase() as (typeof MONTH_SLUGS)[number])
+  return index === -1 ? null : index + 1
+}
+
+const monthSlugsToNumbers = (values?: string[] | null): number[] =>
+  Array.isArray(values)
+    ? values
+        .map((entry) => monthSlugToNumber(entry))
+        .filter((entry): entry is number => typeof entry === 'number')
+    : []
 
 const formatStatusForUi = (value?: string | null): PlantMeta['status'] => {
   const map: Record<string, PlantMeta['status']> = {
@@ -333,9 +374,9 @@ async function loadPlant(id: string): Promise<Plant | null> {
       },
     },
     growth: {
-      sowingMonth: data.sowing_month || [],
-      floweringMonth: data.flowering_month || [],
-      fruitingMonth: data.fruiting_month || [],
+        sowingMonth: monthSlugsToNumbers(data.sowing_month),
+        floweringMonth: monthSlugsToNumbers(data.flowering_month),
+        fruitingMonth: monthSlugsToNumbers(data.fruiting_month),
       height: data.height_cm || undefined,
       wingspan: data.wingspan_cm || undefined,
       tutoring: data.tutoring || false,
@@ -547,17 +588,17 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         life_cycle: plantToSave.identity?.lifeCycle || null,
         season: plantToSave.identity?.season ? plantToSave.identity.season.map((s) => s.toString().toLowerCase()) : [],
         foliage_persistance: plantToSave.identity?.foliagePersistance || null,
-          spiked: coerceBoolean(plantToSave.identity?.spiked, false),
+        spiked: coerceBoolean(plantToSave.identity?.spiked, false),
         toxicity_human: plantToSave.identity?.toxicityHuman || null,
         toxicity_pets: plantToSave.identity?.toxicityPets || null,
         allergens: plantToSave.identity?.allergens || [],
-          scent: coerceBoolean(plantToSave.identity?.scent, false),
+        scent: coerceBoolean(plantToSave.identity?.scent, false),
         symbolism: plantToSave.identity?.symbolism || [],
         living_space: plantToSave.identity?.livingSpace || null,
         composition: plantToSave.identity?.composition || [],
         maintenance_level: plantToSave.identity?.maintenanceLevel || null,
-          multicolor: coerceBoolean(plantToSave.identity?.multicolor, false),
-          bicolor: coerceBoolean(plantToSave.identity?.bicolor, false),
+        multicolor: coerceBoolean(plantToSave.identity?.multicolor, false),
+        bicolor: coerceBoolean(plantToSave.identity?.bicolor, false),
         origin: plantToSave.plantCare?.origin || [],
         habitat: plantToSave.plantCare?.habitat || [],
         temperature_max: plantToSave.plantCare?.temperatureMax || null,
@@ -574,28 +615,28 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         nutrition_need: plantToSave.plantCare?.nutritionNeed || [],
         fertilizer: plantToSave.plantCare?.fertilizer || [],
         advice_fertilizer: plantToSave.plantCare?.adviceFertilizer || null,
-        sowing_month: plantToSave.growth?.sowingMonth || [],
-        flowering_month: plantToSave.growth?.floweringMonth || [],
-        fruiting_month: plantToSave.growth?.fruitingMonth || [],
+        sowing_month: monthNumbersToSlugs(plantToSave.growth?.sowingMonth),
+        flowering_month: monthNumbersToSlugs(plantToSave.growth?.floweringMonth),
+        fruiting_month: monthNumbersToSlugs(plantToSave.growth?.fruitingMonth),
         height_cm: plantToSave.growth?.height || null,
         wingspan_cm: plantToSave.growth?.wingspan || null,
-          tutoring: coerceBoolean(plantToSave.growth?.tutoring, false),
+        tutoring: coerceBoolean(plantToSave.growth?.tutoring, false),
         advice_tutoring: plantToSave.growth?.adviceTutoring || null,
         sow_type: plantToSave.growth?.sowType || [],
         separation_cm: plantToSave.growth?.separation || null,
-          transplanting: coerceBoolean(plantToSave.growth?.transplanting, null),
+        transplanting: coerceBoolean(plantToSave.growth?.transplanting, null),
         advice_sowing: plantToSave.growth?.adviceSowing || null,
         cut: plantToSave.growth?.cut || null,
         advice_medicinal: plantToSave.usage?.adviceMedicinal || null,
         nutritional_intake: plantToSave.usage?.nutritionalIntake || [],
-          infusion: coerceBoolean(plantToSave.usage?.infusion, false),
+        infusion: coerceBoolean(plantToSave.usage?.infusion, false),
         advice_infusion: plantToSave.usage?.adviceInfusion || null,
         recipes_ideas: plantToSave.usage?.recipesIdeas || [],
-          aromatherapy: coerceBoolean(plantToSave.usage?.aromatherapy, false),
+        aromatherapy: coerceBoolean(plantToSave.usage?.aromatherapy, false),
         spice_mixes: plantToSave.usage?.spiceMixes || [],
-          melliferous: coerceBoolean(plantToSave.ecology?.melliferous, false),
+        melliferous: coerceBoolean(plantToSave.ecology?.melliferous, false),
         polenizer: plantToSave.ecology?.polenizer || [],
-          be_fertilizer: coerceBoolean(plantToSave.ecology?.beFertilizer, false),
+        be_fertilizer: coerceBoolean(plantToSave.ecology?.beFertilizer, false),
         ground_effect: plantToSave.ecology?.groundEffect || null,
         conservation_status: plantToSave.ecology?.conservationStatus || null,
         pests: plantToSave.danger?.pests || [],
@@ -644,7 +685,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   }
 
   const runAiFill = async () => {
-    if (!plant.name.trim()) { setError(t('plantAdmin.aiNameRequired', 'Please enter a name before using AI fill.')); return }
+    const trimmedName = plant.name.trim()
+    if (!trimmedName) { setError(t('plantAdmin.aiNameRequired', 'Please enter a name before using AI fill.')); return }
     initializeCategoryProgress()
     setAiCompleted(false)
     setAiWorking(true)
@@ -652,6 +694,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     setError(null)
     let aiSucceeded = false
     let finalPlant: Plant | null = null
+    const plantNameForAi = trimmedName
     const applyWithStatus = (candidate: Plant): Plant => ({
       ...candidate,
       meta: { ...(candidate.meta || {}), status: IN_PROGRESS_STATUS },
@@ -667,7 +710,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       for (let attempt = 1; attempt <= 3; attempt += 1) {
         try {
           const fieldData = await fetchAiPlantFillField({
-            plantName: plant.name || 'Unknown plant',
+            plantName: plantNameForAi,
             schema: plantSchema,
             fieldKey,
             existingField,
@@ -707,7 +750,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       for (let attempt = 1; attempt <= 3; attempt += 1) {
         try {
           aiData = await fetchAiPlantFill({
-            plantName: plant.name || 'Unknown plant',
+            plantName: plantNameForAi,
             schema: plantSchema,
             existingData: plant,
             language,
@@ -788,7 +831,11 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       setError(e?.message || 'AI fill failed')
     } finally {
       setAiWorking(false)
-      if (aiSucceeded) setAiCompleted(true)
+      if (aiSucceeded) {
+        setAiCompleted(true)
+        setAiProgress(createEmptyCategoryProgress())
+        setAiSectionLog([])
+      }
       const targetPlant = finalPlant || plant
       if (targetPlant) await savePlant(targetPlant)
     }
