@@ -878,31 +878,37 @@ export async function getGardenInventory(gardenId: string): Promise<Array<{ plan
   const rows = (data || []) as Array<{ plant_id: string; seeds_on_hand: number; plants_on_hand: number }>
   if (rows.length === 0) return []
   const plantIds = rows.map(r => String(r.plant_id))
-    const { data: plantRows } = await supabase
-      .from('plants')
-      .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, photos, seeds_available, level_sun, watering_type, soil, maintenance_level')
-      .in('id', plantIds)
+  const { data: plantRows } = await supabase
+    .from('plants')
+    .select('id, name, scientific_name, colors, seasons, rarity, meaning, description, image_url, photos, seeds_available, level_sun, watering_type, soil, maintenance_level, classification')
+    .in('id', plantIds)
   const idToPlant: Record<string, Plant> = {}
   for (const p of plantRows || []) {
+    const wateringType = Array.isArray(p.watering_type) ? (p.watering_type as string[]) : undefined
+    const soilTypes = Array.isArray(p.soil) ? (p.soil as string[]) : undefined
+
     idToPlant[String(p.id)] = {
       id: String(p.id),
-      name: String(p.name),
+      name: String(p.name || ''),
       scientificName: String(p.scientific_name || ''),
       colors: Array.isArray(p.colors) ? p.colors.map(String) : [],
-      seasons: Array.isArray(p.seasons) ? p.seasons.map(String) as any : [],
-      rarity: p.rarity,
+      seasons: Array.isArray(p.seasons) ? (p.seasons as unknown[]).map((s) => String(s)) as Plant['seasons'] : [],
+      rarity: p.rarity || undefined,
       meaning: p.meaning || '',
       description: p.description || '',
       photos: Array.isArray(p.photos) ? p.photos : undefined,
       image: getPrimaryPhotoUrl(Array.isArray(p.photos) ? p.photos : []) || p.image_url || '',
       care: {
-        sunlight: p.level_sun || null,
-        water: Array.isArray(p.watering_type) ? p.watering_type.join(', ') : null,
-        soil: Array.isArray(p.soil) ? p.soil.join(', ') : null,
-        difficulty: p.maintenance_level || null,
+        levelSun: typeof p.level_sun === 'string' ? p.level_sun : undefined,
+        wateringType,
+        soil: soilTypes,
+        maintenanceLevel: typeof p.maintenance_level === 'string' ? p.maintenance_level : undefined,
+        difficulty: typeof p.maintenance_level === 'string' ? p.maintenance_level : undefined,
       },
       seedsAvailable: Boolean(p.seeds_available ?? false),
-      classification: typeof p.classification === 'string' ? JSON.parse(p.classification) : p.classification || undefined,
+      classification: typeof p.classification === 'string'
+        ? JSON.parse(p.classification)
+        : (p.classification as Plant['classification']) || undefined,
     }
   }
   return rows.map(r => ({
