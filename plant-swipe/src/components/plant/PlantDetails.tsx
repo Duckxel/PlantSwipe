@@ -1,17 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import type { Plant } from "@/types/plant"
-import { Link } from "react-router-dom"
-import { supabase } from "@/lib/supabaseClient"
-import { cn } from "@/lib/utils"
 import {
   SunMedium,
   Droplets,
   Thermometer,
   Heart,
-  Leaf,
   Share2,
   ChevronLeft,
   ChevronRight,
@@ -19,166 +15,14 @@ import {
   ZoomIn,
   ZoomOut,
   RefreshCw,
-  Fingerprint,
   Droplet,
-  Sprout,
-  ChefHat,
-  ShieldAlert,
-  Layers,
-  Info,
-  Users,
 } from "lucide-react"
-import {
-  Bar,
-  BarChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-  Cell,
-  PieChart,
-  Pie,
-} from "recharts"
 
 interface PlantDetailsProps {
   plant: Plant
   liked?: boolean
   onToggleLike?: () => void
 }
-
-type DetailPanel = {
-  id: string
-  label: string
-  icon: React.ReactNode
-  content: React.ReactNode
-}
-
-const Section: React.FC<{ title: string; children: React.ReactNode; icon: React.ReactNode }> = ({ title, children, icon }) => (
-  <section className="rounded-[28px] border border-stone-200/70 dark:border-[#1e1f25] bg-gradient-to-br from-white/95 via-white to-emerald-50/70 dark:from-[#0e0f13] dark:via-[#0b0c10] dark:to-[#10171a] shadow-[0_35px_80px_-45px_rgba(16,185,129,0.55)] backdrop-blur">
-    <div className="flex items-center gap-2 border-b border-white/70/60 dark:border-white/5 px-6 py-4">
-      <span className="rounded-full bg-emerald-100/70 p-2 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-300">
-        {icon}
-      </span>
-      <CardTitle className="text-lg font-semibold text-foreground">{title}</CardTitle>
-    </div>
-    <CardContent className="p-6">{children}</CardContent>
-  </section>
-)
-
-const InfoPill: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <span className="inline-flex items-center rounded-full bg-emerald-100/80 dark:bg-emerald-900/50 px-3 py-1 text-xs font-medium text-emerald-900 dark:text-emerald-50">
-    {children}
-  </span>
-)
-
-const formatTimestamp = (value?: string | null) => {
-  if (!value) return undefined
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return undefined
-  return date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
-}
-
-const hasMeaningfulValue = (value: unknown): boolean => {
-  if (value === null || value === undefined) return false
-  if (typeof value === "boolean") return value
-  if (typeof value === "number") return true
-  if (typeof value === "string") return value.trim().length > 0
-  if (Array.isArray(value)) return value.some(hasMeaningfulValue)
-  if (typeof value === "object") return Object.values(value as Record<string, unknown>).some(hasMeaningfulValue)
-  return true
-}
-
-const hasSectionData = (...values: unknown[]) => values.some((value) => hasMeaningfulValue(value))
-
-const CompanionCard: React.FC<{ id: string; name: string; image?: string }> = ({ id, name, image }) => (
-  <Link
-    to={`/plants/${id}`}
-    className="group rounded-2xl border border-white/60 bg-white/90 p-3 shadow-[0_20px_45px_-35px_rgba(16,185,129,0.9)] transition hover:-translate-y-1 hover:shadow-[0_35px_65px_-35px_rgba(16,185,129,0.55)] dark:border-white/10 dark:bg-[#12151c]"
-  >
-    <div className="relative mb-3 overflow-hidden rounded-xl bg-emerald-50/80 dark:bg-emerald-500/10">
-      {image ? (
-        <img src={image} alt={name} className="h-36 w-full object-cover transition duration-500 group-hover:scale-105" loading="lazy" />
-      ) : (
-        <div className="flex h-36 items-center justify-center text-xs uppercase tracking-wide text-emerald-700/60 dark:text-emerald-200/80">
-          No photo yet
-        </div>
-      )}
-    </div>
-    <div className="flex items-center justify-between gap-2">
-      <div>
-        <p className="text-sm font-semibold text-stone-900 dark:text-white">{name}</p>
-        <p className="text-xs text-muted-foreground">Companion plant</p>
-      </div>
-      <ChevronRight className="h-4 w-4 text-emerald-500 transition group-hover:translate-x-1" />
-    </div>
-  </Link>
-)
-
-const FieldRow: React.FC<{ label: string; value?: React.ReactNode }> = ({ label, value }) => {
-  if (value === undefined || value === null || value === "") return null
-  return (
-    <div className="flex flex-col gap-1 rounded-lg border border-muted/50 bg-muted/30 p-3 text-sm">
-      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className="text-foreground leading-relaxed">{value}</div>
-    </div>
-  )
-}
-
-const colorPalette = ["#34d399", "#22d3ee", "#fbbf24", "#fb7185", "#c084fc", "#38bdf8"]
-
-const safeJoin = (value?: string[]) => (Array.isArray(value) && value.length ? value.join(", ") : undefined)
-
-const monthLookup = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-]
-
-const monthsToBadges = (months?: number[]) =>
-  Array.isArray(months) && months.length
-    ? (
-        <div className="flex flex-wrap gap-2">
-          {months.map((m) => (
-            <InfoPill key={m}>{monthLookup[m - 1] || m}</InfoPill>
-          ))}
-        </div>
-      )
-    : undefined
-
-const booleanText = (value?: boolean) => (value ? "Yes" : undefined)
-
-const DictionaryList: React.FC<{ value?: Record<string, string> }>
-  = ({ value }) => {
-    if (!value || !Object.keys(value).length) return null
-    return (
-      <div className="flex flex-wrap gap-2">
-        {Object.entries(value).map(([k, v]) => (
-          <div key={k} className="rounded-md bg-white/60 dark:bg-slate-800/50 px-3 py-2 shadow-sm ring-1 ring-muted/60">
-            <div className="text-[11px] uppercase text-muted-foreground">{k}</div>
-            <div className="text-sm text-foreground">{v}</div>
-          </div>
-        ))}
-      </div>
-    )
-  }
-
-const listOrTags = (values?: string[]) =>
-  Array.isArray(values) && values.length ? (
-    <div className="flex flex-wrap gap-2">
-      {values.map((v) => (
-        <InfoPill key={v}>{v}</InfoPill>
-      ))}
-    </div>
-  ) : undefined
 
 export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onToggleLike }) => {
   const images = (plant.images || []).filter((img): img is NonNullable<typeof img> & { link: string } => Boolean(img?.link))
@@ -192,14 +36,9 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
   const [isPanning, setIsPanning] = useState(false)
   const panStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
   const touchStartRef = useRef<number | null>(null)
-  const [selectedPanel, setSelectedPanel] = useState<string | null>(null)
 
   useEffect(() => {
     setActiveImageIndex(0)
-  }, [plant.id])
-
-  useEffect(() => {
-    setSelectedPanel(null)
   }, [plant.id])
 
   useEffect(() => {
@@ -213,23 +52,6 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
       if (shareTimeoutRef.current) clearTimeout(shareTimeoutRef.current)
     }
   }, [])
-
-  useEffect(() => {
-    if (!viewerOpen) {
-      setViewerZoom(1)
-      setViewerOffset({ x: 0, y: 0 })
-      setIsPanning(false)
-      return
-    }
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault()
-        setViewerOpen(false)
-      }
-    }
-    window.addEventListener("keydown", handleKeyDown)
-    return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [viewerOpen])
 
   const heroColors = useMemo(() => plant.identity?.colors?.filter((c) => c.hexCode) || [], [plant.identity?.colors])
 
@@ -337,495 +159,139 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
     setIsPanning(false)
   }, [])
 
-  const temperatureData = useMemo(() => {
-    const rows = [
-      { label: "Min", value: plant.plantCare?.temperatureMin },
-      { label: "Ideal", value: plant.plantCare?.temperatureIdeal },
-      { label: "Max", value: plant.plantCare?.temperatureMax },
-    ].filter((r) => typeof r.value === "number") as { label: string; value: number }[]
-    return rows
-  }, [plant.plantCare?.temperatureIdeal, plant.plantCare?.temperatureMax, plant.plantCare?.temperatureMin])
-
-    const wateringPieData = useMemo(() => {
-      if (!plant.plantCare?.wateringType?.length) return []
-      return plant.plantCare.wateringType.map((type, idx) => ({ name: type, value: 1, fill: colorPalette[idx % colorPalette.length] }))
-    }, [plant.plantCare?.wateringType])
+  useEffect(() => {
+    if (!viewerOpen) {
+      setViewerZoom(1)
+      setViewerOffset({ x: 0, y: 0 })
+      setIsPanning(false)
+      return
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault()
+        setViewerOpen(false)
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [viewerOpen])
 
   const utilityBadges = plant.utility?.length ? plant.utility : []
-
   const seasons = plant.identity?.season || plant.seasons || []
-  const companions = plant.miscellaneous?.companions?.filter(Boolean) ?? []
-  const companionsKey = companions.join('|')
-  const [companionDetails, setCompanionDetails] = useState<Array<{ id: string; name: string; image?: string }>>([])
   const shareFeedback =
-    shareStatus === "copied" ? "Link copied" : shareStatus === "shared" ? "Shared!" : shareStatus === "error" ? "Share unavailable" : ""
+    shareStatus === "copied"
+      ? "Link copied"
+      : shareStatus === "shared"
+      ? "Shared!"
+      : shareStatus === "error"
+      ? "Share unavailable"
+      : ""
 
-  const identityHasContent = hasSectionData(
-    plant.identity?.givenNames,
-    plant.identity?.scientificName,
-    plant.identity?.family,
-    plant.identity?.lifeCycle,
-    seasons,
-    plant.identity?.foliagePersistance,
-    plant.identity?.toxicityHuman,
-    plant.identity?.toxicityPets,
-    plant.identity?.allergens,
-    plant.identity?.symbolism,
-    plant.identity?.livingSpace,
-    plant.identity?.composition,
-    plant.identity?.maintenanceLevel,
-    plant.identity?.spiked,
-    plant.identity?.scent,
-  )
-  const plantCareHasContent = hasSectionData(
-    plant.plantCare?.origin,
-    plant.plantCare?.habitat,
-    plant.plantCare?.temperatureMax,
-    plant.plantCare?.temperatureMin,
-    plant.plantCare?.temperatureIdeal,
-    plant.plantCare?.levelSun,
-    plant.plantCare?.hygrometry,
-    plant.plantCare?.watering?.schedules,
-    plant.plantCare?.wateringType,
-    plant.plantCare?.division,
-    plant.plantCare?.soil,
-    plant.plantCare?.mulching,
-    plant.plantCare?.nutritionNeed,
-    plant.plantCare?.fertilizer,
-    plant.plantCare?.adviceSoil,
-    plant.plantCare?.adviceMulching,
-    plant.plantCare?.adviceFertilizer,
-  )
-  const growthHasContent = hasSectionData(
-    plant.growth?.sowingMonth,
-    plant.growth?.floweringMonth,
-    plant.growth?.fruitingMonth,
-    plant.growth?.height,
-    plant.growth?.wingspan,
-    plant.growth?.tutoring,
-    plant.growth?.adviceTutoring,
-    plant.growth?.sowType,
-    plant.growth?.separation,
-    plant.growth?.transplanting,
-    plant.growth?.adviceSowing,
-    plant.growth?.cut,
-  )
-  const usageHasContent = hasSectionData(
-    plant.usage?.adviceMedicinal,
-    plant.usage?.nutritionalIntake,
-    plant.usage?.infusion,
-    plant.usage?.adviceInfusion,
-    plant.usage?.infusionMix,
-    plant.usage?.recipesIdeas,
-    plant.usage?.aromatherapy,
-    plant.usage?.spiceMixes,
-  )
-  const ecologyHasContent = hasSectionData(
-    plant.ecology?.melliferous,
-    plant.ecology?.polenizer,
-    plant.ecology?.beFertilizer,
-    plant.ecology?.groundEffect,
-    plant.ecology?.conservationStatus,
-  )
-  const dangerHasContent = hasSectionData(plant.danger?.pests, plant.danger?.diseases)
-  const hasCompanions = companionDetails.length > 0 || (plant.miscellaneous?.companions?.filter(Boolean) ?? []).length > 0
-  const miscHasContent = hasSectionData(
-    plant.miscellaneous?.tags,
-    plant.miscellaneous?.sources,
-  )
-  const createdAtDisplay = formatTimestamp((plant.meta as any)?.createdTime || (plant.meta as any)?.createdAt)
-  const updatedAtDisplay = formatTimestamp((plant.meta as any)?.updatedTime || (plant.meta as any)?.updatedAt)
-  const metaHasContent = hasSectionData(
-    plant.meta?.adminCommentary,
-    plant.meta?.createdBy,
-    plant.meta?.updatedBy,
-    createdAtDisplay,
-    updatedAtDisplay,
-  )
-  const galleryHasContent = Boolean(plant.images?.length)
+  const stats = [
+    {
+      label: "Sun Level",
+      value: plant.plantCare?.levelSun || "Adaptive",
+      gradient: "from-amber-400/90 to-orange-600",
+      icon: <SunMedium className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80" />,
+      visible: Boolean(plant.plantCare?.levelSun),
+    },
+    {
+      label: "Watering Need",
+      value: plant.plantCare?.watering?.schedules?.length
+        ? `${plant.plantCare.watering.schedules.length} plan${plant.plantCare.watering.schedules.length === 1 ? "" : "s"}`
+        : "Flexible",
+      gradient: "from-blue-400/90 to-cyan-600",
+      icon: <Droplet className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80" />,
+      visible: Boolean(plant.plantCare?.watering?.schedules?.length),
+    },
+    {
+      label: "Humidity",
+      value: plant.plantCare?.hygrometry !== undefined ? `${plant.plantCare.hygrometry}%` : "Ambient",
+      gradient: "from-cyan-400/90 to-teal-600",
+      icon: <Droplets className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80" />,
+      visible: plant.plantCare?.hygrometry !== undefined,
+    },
+    {
+      label: "Temperature",
+      value:
+        plant.plantCare?.temperatureMin !== undefined && plant.plantCare?.temperatureMax !== undefined
+          ? `${plant.plantCare.temperatureMin}°-${plant.plantCare.temperatureMax}°C`
+          : plant.plantCare?.temperatureIdeal !== undefined
+          ? `${plant.plantCare.temperatureIdeal}°C`
+          : "Stable",
+      gradient: "from-red-400/90 to-pink-600",
+      icon: <Thermometer className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80" />,
+      visible:
+        plant.plantCare?.temperatureMin !== undefined ||
+        plant.plantCare?.temperatureMax !== undefined ||
+        plant.plantCare?.temperatureIdeal !== undefined,
+    },
+  ]
 
-  const identitySection = identityHasContent ? (
-    <Section title="Identity" icon={<Fingerprint className="h-4 w-4" />}>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <FieldRow label="Given Names" value={safeJoin(plant.identity?.givenNames)} />
-        <FieldRow label="Family" value={plant.identity?.family} />
-        <FieldRow label="Life Cycle" value={plant.identity?.lifeCycle} />
-        <FieldRow label="Seasons" value={seasons.length ? seasons.join(" • ") : undefined} />
-        <FieldRow label="Foliage Persistance" value={plant.identity?.foliagePersistance} />
-        <FieldRow label="Spiked" value={booleanText(plant.identity?.spiked)} />
-        <FieldRow label="Toxicity (Human)" value={plant.identity?.toxicityHuman} />
-        <FieldRow label="Toxicity (Pets)" value={plant.identity?.toxicityPets} />
-        <FieldRow label="Allergens" value={listOrTags(plant.identity?.allergens)} />
-        <FieldRow label="Scent" value={booleanText(plant.identity?.scent)} />
-        <FieldRow label="Symbolism" value={listOrTags(plant.identity?.symbolism)} />
-        <FieldRow label="Living Space" value={plant.identity?.livingSpace} />
-        <FieldRow label="Composition" value={listOrTags(plant.identity?.composition as string[])} />
-        <FieldRow label="Maintenance Level" value={plant.identity?.maintenanceLevel} />
-      </div>
-    </Section>
-  ) : null
-
-  const plantCareSection = plantCareHasContent ? (
-    <div className="space-y-6">
-      <Section title="Plant Care" icon={<Droplet className="h-4 w-4" />}>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <FieldRow label="Origin" value={listOrTags(plant.plantCare?.origin)} />
-          <FieldRow label="Habitat" value={listOrTags(plant.plantCare?.habitat as string[])} />
-          <FieldRow
-            label="Watering"
-            value={(() => {
-              const schedules = plant.plantCare?.watering && Array.isArray(plant.plantCare.watering.schedules)
-                ? plant.plantCare.watering.schedules
-                : []
-              if (schedules.length) {
-                return schedules
-                  .filter((s) => s.season || s.quantity !== undefined || s.timePeriod)
-                  .map((s) => {
-                    const seasonLabel = s.season ? `${s.season}` : "Any season"
-                    const qtyPart = s.quantity !== undefined ? `${s.quantity}` : ""
-                    const periodPart = s.timePeriod ? `${qtyPart ? " / " : ""}${s.timePeriod}` : ""
-                    const suffix = qtyPart || periodPart ? ` • ${qtyPart}${periodPart}` : ""
-                    return `${seasonLabel}${suffix}`
-                  })
-                  .join(" | ")
-              }
-              if (plant.plantCare?.watering) {
-                return `${[plant.plantCare.watering.season, plant.plantCare.watering.quantity].filter(Boolean).join(" • ")} ${plant.plantCare.watering.timePeriod ? `/ ${plant.plantCare.watering.timePeriod}` : ""}`.trim()
-              }
-              return undefined
-            })()}
-          />
-          <FieldRow label="Watering Type" value={listOrTags(plant.plantCare?.wateringType as string[])} />
-          <FieldRow label="Division" value={listOrTags(plant.plantCare?.division as string[])} />
-          <FieldRow label="Soil" value={listOrTags(plant.plantCare?.soil as string[])} />
-          <FieldRow label="Mulching" value={listOrTags(plant.plantCare?.mulching as string[])} />
-          <FieldRow label="Nutrition Need" value={listOrTags(plant.plantCare?.nutritionNeed as string[])} />
-          <FieldRow label="Fertilizer" value={listOrTags(plant.plantCare?.fertilizer as string[])} />
-          <FieldRow label="Advice Soil" value={plant.plantCare?.adviceSoil} />
-          <FieldRow label="Advice Mulching" value={plant.plantCare?.adviceMulching} />
-          <FieldRow label="Advice Fertilizer" value={plant.plantCare?.adviceFertilizer} />
-        </div>
-      </Section>
-      {(temperatureData.length > 0 || wateringPieData.length > 0) && (
-        <div className="grid gap-4 lg:grid-cols-2">
-          {temperatureData.length > 0 && (
-            <Card className="border border-muted/60 shadow-sm">
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-base font-semibold">
-                  <Thermometer className="h-4 w-4 text-amber-500" />
-                  Temperature window (°C)
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="h-48">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={temperatureData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                    <XAxis dataKey="label" tickLine={false} axisLine={false} />
-                    <YAxis hide domain={["dataMin - 5", "dataMax + 5"]} />
-                    <Tooltip cursor={{ fill: "hsl(var(--muted))" }} />
-                    <Bar dataKey="value" radius={[6, 6, 0, 0]}>
-                      {temperatureData.map((_, idx) => (
-                        <Cell key={idx} fill={colorPalette[idx % colorPalette.length]} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          )}
-
-          {wateringPieData.length > 0 && (
-            <Card className="border border-muted/60 shadow-sm">
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-base font-semibold">
-                  <Droplets className="h-4 w-4 text-sky-500" />
-                  Watering style mix
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="h-48">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={wateringPieData} dataKey="value" nameKey="name" innerRadius={40} outerRadius={70} paddingAngle={2}>
-                      {wateringPieData.map((entry, idx) => (
-                        <Cell key={`cell-${idx}`} fill={entry.fill} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      )}
-    </div>
-  ) : null
-
-  const growthSection = growthHasContent ? (
-    <Section title="Growth" icon={<Sprout className="h-4 w-4" />}>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <FieldRow label="Sowing Month" value={monthsToBadges(plant.growth?.sowingMonth)} />
-        <FieldRow label="Flowering Month" value={monthsToBadges(plant.growth?.floweringMonth)} />
-        <FieldRow label="Fruiting Month" value={monthsToBadges(plant.growth?.fruitingMonth)} />
-        <FieldRow label="Tutoring" value={booleanText(plant.growth?.tutoring)} />
-        <FieldRow label="Advice Tutoring" value={plant.growth?.adviceTutoring} />
-        <FieldRow label="Sow Type" value={listOrTags(plant.growth?.sowType as string[])} />
-        <FieldRow label="Separation" value={plant.growth?.separation ? `${plant.growth.separation} cm` : undefined} />
-        <FieldRow label="Transplanting" value={booleanText(plant.growth?.transplanting)} />
-        <FieldRow label="Advice Sowing" value={plant.growth?.adviceSowing} />
-        <FieldRow label="Cut" value={plant.growth?.cut} />
-      </div>
-    </Section>
-  ) : null
-
-  const usageSection = usageHasContent ? (
-    <Section title="Usage" icon={<ChefHat className="h-4 w-4" />}>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <FieldRow label="Advice Medicinal" value={plant.usage?.adviceMedicinal} />
-        <FieldRow label="Nutritional Intake" value={listOrTags(plant.usage?.nutritionalIntake)} />
-        <FieldRow label="Infusion" value={booleanText(plant.usage?.infusion)} />
-        <FieldRow label="Advice Infusion" value={plant.usage?.adviceInfusion} />
-        <FieldRow label="Infusion Mix" value={plant.usage?.infusionMix ? <DictionaryList value={plant.usage.infusionMix} /> : undefined} />
-        <FieldRow label="Recipes Ideas" value={listOrTags(plant.usage?.recipesIdeas)} />
-        <FieldRow label="Aromatherapy" value={booleanText(plant.usage?.aromatherapy)} />
-        <FieldRow label="Spice Mixes" value={listOrTags(plant.usage?.spiceMixes)} />
-      </div>
-    </Section>
-  ) : null
-
-  const ecologySection = ecologyHasContent ? (
-    <Section title="Ecology" icon={<Leaf className="h-4 w-4" />}>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <FieldRow label="Melliferous" value={booleanText(plant.ecology?.melliferous)} />
-        <FieldRow label="Polenizer" value={listOrTags(plant.ecology?.polenizer as string[])} />
-        <FieldRow label="Be Fertilizer" value={booleanText(plant.ecology?.beFertilizer)} />
-        <FieldRow label="Ground Effect" value={plant.ecology?.groundEffect} />
-        <FieldRow label="Conservation Status" value={plant.ecology?.conservationStatus} />
-      </div>
-    </Section>
-  ) : null
-
-  const dangerSection = dangerHasContent ? (
-    <Section title="Danger" icon={<ShieldAlert className="h-4 w-4" />}>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <FieldRow label="Pests" value={listOrTags(plant.danger?.pests)} />
-        <FieldRow label="Diseases" value={listOrTags(plant.danger?.diseases)} />
-      </div>
-    </Section>
-  ) : null
-
-  const companionsSection = hasCompanions ? (
-    <Section title="Companions" icon={<Users className="h-4 w-4" />}>
-      {companionDetails.length > 0 ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {companionDetails.map((companion) => (
-            <CompanionCard key={companion.id} id={companion.id} name={companion.name} image={companion.image} />
-          ))}
-        </div>
-      ) : (
-        <FieldRow label="Companions" value={listOrTags(plant.miscellaneous?.companions)} />
-      )}
-    </Section>
-  ) : null
-
-  const miscSection = miscHasContent ? (
-    <Section title="Tags & Sources" icon={<Info className="h-4 w-4" />}>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <FieldRow label="Tags" value={listOrTags(plant.miscellaneous?.tags)} />
-        <FieldRow
-          label="Sources"
-          value={(plant.miscellaneous?.sources || []).length ? (
-            <div className="space-y-2 text-sm">
-              {(plant.miscellaneous?.sources || []).map((src, idx) => (
-                <div key={`${src.name}-${idx}`} className="flex flex-col rounded border px-3 py-2 bg-white/70 dark:bg-[#151b15]">
-                  <div className="font-medium">{src.name}</div>
-                  {src.url && (
-                    <a href={src.url} target="_blank" rel="noreferrer" className="text-blue-600 underline break-all">
-                      {src.url}
-                    </a>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : undefined}
+  return (
+    <div className="space-y-4 sm:space-y-6 pb-12 sm:pb-16">
+      <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-muted/50 bg-gradient-to-br from-emerald-50 via-white to-amber-50 dark:from-[#0b1220] dark:via-[#0a0f1a] dark:to-[#05080f] shadow-lg">
+        <div
+          className="absolute inset-0 opacity-25 blur-3xl"
+          style={{
+            background:
+              "radial-gradient(circle at 20% 20%, #34d39926, transparent 40%), radial-gradient(circle at 80% 10%, #fb718526, transparent 35%), radial-gradient(circle at 60% 80%, #22d3ee26, transparent 45%)",
+          }}
         />
-      </div>
-    </Section>
-  ) : null
-
-  const metaSection = metaHasContent ? (
-    <Section title="Meta" icon={<Info className="h-4 w-4" />}>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <FieldRow label="Author" value={plant.meta?.createdBy} />
-        <FieldRow label="Created" value={createdAtDisplay} />
-        <FieldRow label="Last Editor" value={plant.meta?.updatedBy} />
-        <FieldRow label="Last Updated" value={updatedAtDisplay} />
-        <FieldRow label="Admin Commentary" value={plant.meta?.adminCommentary} />
-      </div>
-    </Section>
-  ) : null
-
-  const gallerySection = galleryHasContent ? (
-    <Section title="Gallery" icon={<Layers className="h-4 w-4" />}>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-        {(plant.images ?? []).map((img) => {
-          const imageIndex = images.findIndex((i) => i.id === img.id || i.link === img.link)
-          return (
-            <div
-              key={img.id || img.link}
-              className="relative overflow-hidden rounded-xl border border-muted/60 bg-white/80 shadow-sm cursor-pointer transition hover:scale-105 hover:shadow-md"
-              onClick={() => {
-                if (imageIndex >= 0) {
-                  setActiveImageIndex(imageIndex)
-                  setViewerOpen(true)
-                }
-              }}
+        <div className="absolute top-3 right-3 sm:top-4 sm:right-4 z-20 flex flex-col items-end gap-1.5 sm:gap-2 md:gap-3 pointer-events-auto">
+          {onToggleLike && (
+            <Button
+              type="button"
+              size="lg"
+              variant={liked ? "default" : "secondary"}
+              className="rounded-full px-4 py-2 sm:px-6 sm:py-3 text-sm sm:text-base shadow-lg"
+              onClick={onToggleLike}
             >
-              <img src={img.link} alt={plant.name} className="h-32 w-full object-cover sm:h-40" loading="lazy" />
-              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-2 py-1 text-[11px] uppercase tracking-wide text-white">
-                {img.use}
-              </div>
-            </div>
-          )
-        })}
-      </div>
-    </Section>
-  ) : null
-
-  const detailPanels = [
-    identitySection && { id: "identity", label: "Identity", icon: <Fingerprint className="h-3.5 w-3.5" />, content: identitySection },
-    plantCareSection && { id: "care", label: "Care", icon: <Droplet className="h-3.5 w-3.5" />, content: plantCareSection },
-    growthSection && { id: "growth", label: "Growth", icon: <Sprout className="h-3.5 w-3.5" />, content: growthSection },
-    usageSection && { id: "usage", label: "Usage", icon: <ChefHat className="h-3.5 w-3.5" />, content: usageSection },
-    (ecologySection || dangerSection) && {
-      id: "ecosystem",
-      label: "Ecosystem",
-      icon: <Leaf className="h-3.5 w-3.5" />,
-      content: (
-        <div className="space-y-4">
-          {ecologySection}
-          {dangerSection}
-        </div>
-      ),
-    },
-    (companionsSection || miscSection) && {
-      id: "community",
-      label: "Community",
-      icon: <Users className="h-3.5 w-3.5" />,
-      content: (
-        <div className="space-y-4">
-          {companionsSection}
-          {miscSection}
-        </div>
-      ),
-    },
-    metaSection && { id: "meta", label: "Meta", icon: <Info className="h-3.5 w-3.5" />, content: metaSection },
-    gallerySection && { id: "gallery", label: "Gallery", icon: <Layers className="h-3.5 w-3.5" />, content: gallerySection },
-  ].filter(Boolean) as DetailPanel[]
-
-  const panelIds = detailPanels.map((panel) => panel.id)
-  const activePanelId = selectedPanel && panelIds.includes(selectedPanel) ? selectedPanel : panelIds[0] ?? null
-  const activePanel = detailPanels.find((panel) => panel.id === activePanelId) || null
-
-  useEffect(() => {
-    let ignore = false
-    const loadCompanions = async () => {
-      if (!companions.length) {
-        setCompanionDetails([])
-        return
-      }
-      try {
-        const { data: plantsData } = await supabase
-          .from('plants')
-          .select('id,name')
-          .in('id', companions)
-        const ids = plantsData?.map((row) => row.id) ?? []
-        let cover: Record<string, string | undefined> = {}
-        if (ids.length) {
-          const { data: imagesData } = await supabase
-            .from('plant_images')
-            .select('plant_id,link,use')
-            .in('plant_id', ids)
-          cover = (imagesData || []).reduce<Record<string, string | undefined>>((acc, row: any) => {
-            const key = row?.plant_id as string
-            if (!key) return acc
-            if (row?.use === 'primary') {
-              acc[key] = row?.link || acc[key]
-              return acc
-            }
-            if (!acc[key]) acc[key] = row?.link || undefined
-            return acc
-          }, {})
-        }
-        if (!ignore) {
-          setCompanionDetails(
-            (plantsData || []).map((row) => ({
-              id: row.id as string,
-              name: row.name as string,
-              image: cover[row.id as string],
-            })),
-          )
-        }
-      } catch {
-        if (!ignore) setCompanionDetails([])
-      }
-    }
-    loadCompanions()
-    return () => {
-      ignore = true
-    }
-  }, [companionsKey])
-
-    return (
-      <div className="space-y-4 sm:space-y-6 pb-12 sm:pb-16">
-        <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-muted/50 bg-gradient-to-br from-emerald-50 via-white to-amber-50 dark:from-[#0b1220] dark:via-[#0a0f1a] dark:to-[#05080f] shadow-lg">
-          <div className="absolute inset-0 opacity-25 blur-3xl" style={{ background: "radial-gradient(circle at 20% 20%, #34d39926, transparent 40%), radial-gradient(circle at 80% 10%, #fb718526, transparent 35%), radial-gradient(circle at 60% 80%, #22d3ee26, transparent 45%)" }} />
-            <div className="absolute top-3 right-3 sm:top-4 sm:right-4 z-20 flex flex-col items-end gap-1.5 sm:gap-2 md:gap-3 pointer-events-auto">
-            {onToggleLike && (
-              <Button
-                type="button"
-                size="lg"
-                variant={liked ? "default" : "secondary"}
-                className="rounded-full px-4 py-2 sm:px-6 sm:py-3 text-sm sm:text-base shadow-lg"
-                onClick={onToggleLike}
-              >
-                <Heart className="mr-1.5 sm:mr-2 h-4 w-4 sm:h-5 sm:w-5" fill={liked ? "currentColor" : "none"} />
-                <span className="hidden sm:inline">{liked ? "Liked" : "Like"}</span>
-                <span className="sm:hidden">{liked ? "✓" : "♡"}</span>
-              </Button>
-            )}
-            <div className="flex flex-col items-end gap-1">
-              <Button
-                type="button"
-                size="lg"
-                variant="outline"
-                className="rounded-full px-4 py-2 sm:px-5 sm:py-3 text-sm sm:text-base shadow-lg"
-                onClick={handleShare}
-              >
-                <Share2 className="mr-1.5 sm:mr-2 h-4 w-4 sm:h-5 sm:w-5" />
-                <span className="hidden sm:inline">Share</span>
-              </Button>
-              {shareFeedback && <span className="text-[10px] sm:text-xs font-medium text-white drop-shadow">{shareFeedback}</span>}
-            </div>
+              <Heart className="mr-1.5 sm:mr-2 h-4 w-4 sm:h-5 sm:w-5" fill={liked ? "currentColor" : "none"} />
+              <span className="hidden sm:inline">{liked ? "Liked" : "Like"}</span>
+              <span className="sm:hidden">{liked ? "✓" : "♡"}</span>
+            </Button>
+          )}
+          <div className="flex flex-col items-end gap-1">
+            <Button
+              type="button"
+              size="lg"
+              variant="outline"
+              className="rounded-full px-4 py-2 sm:px-5 sm:py-3 text-sm sm:text-base shadow-lg"
+              onClick={handleShare}
+            >
+              <Share2 className="mr-1.5 sm:mr-2 h-4 w-4 sm:h-5 sm:w-5" />
+              <span className="hidden sm:inline">Share</span>
+            </Button>
+            {shareFeedback && <span className="text-[10px] sm:text-xs font-medium text-white drop-shadow">{shareFeedback}</span>}
           </div>
-          <div className="relative flex flex-col gap-3 sm:gap-4 p-3 pt-14 sm:p-4 sm:pt-16 md:p-6 lg:flex-row lg:gap-8 lg:p-8">
-            <div className="flex-1 space-y-3 sm:space-y-4">
+        </div>
+        <div className="relative flex flex-col gap-3 sm:gap-4 p-3 pt-14 sm:p-4 sm:pt-16 md:p-6 lg:flex-row lg:gap-8 lg:p-8">
+          <div className="flex-1 space-y-3 sm:space-y-4">
             <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-              <Badge variant="secondary" className="uppercase tracking-wide text-[10px] sm:text-xs px-2 sm:px-3 py-0.5 sm:py-1">{plant.plantType || "Plant"}</Badge>
+              <Badge variant="secondary" className="uppercase tracking-wide text-[10px] sm:text-xs px-2 sm:px-3 py-0.5 sm:py-1">
+                {plant.plantType || "Plant"}
+              </Badge>
               {utilityBadges.map((u) => (
                 <Badge key={u} variant="outline" className="bg-white/70 dark:bg-slate-900/70 text-[10px] sm:text-xs px-2 sm:px-3 py-0.5 sm:py-1">
                   {u}
                 </Badge>
               ))}
-              {seasons.length > 0 && <Badge variant="outline" className="bg-amber-100/60 text-amber-900 dark:bg-amber-900/30 dark:text-amber-50 text-[10px] sm:text-xs px-2 sm:px-3 py-0.5 sm:py-1">{seasons.join(" • ")}</Badge>}
+              {seasons.length > 0 && (
+                <Badge variant="outline" className="bg-amber-100/60 text-amber-900 dark:bg-amber-900/30 dark:text-amber-50 text-[10px] sm:text-xs px-2 sm:px-3 py-0.5 sm:py-1">
+                  {seasons.join(" • ")}
+                </Badge>
+              )}
             </div>
-              <div>
-                <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-foreground leading-tight">{plant.name}</h1>
-                {plant.identity?.scientificName && (
-                  <p className="text-sm sm:text-base md:text-lg text-muted-foreground italic mt-1">{plant.identity.scientificName}</p>
-                )}
-              </div>
-            {plant.identity?.overview && <p className="text-muted-foreground leading-relaxed text-sm sm:text-base">{plant.identity.overview}</p>}
-
+            <div>
+              <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-foreground leading-tight">{plant.name}</h1>
+              {plant.identity?.scientificName && (
+                <p className="text-sm sm:text-base md:text-lg text-muted-foreground italic mt-1">{plant.identity.scientificName}</p>
+              )}
+            </div>
+            {plant.identity?.overview && (
+              <p className="text-muted-foreground leading-relaxed text-sm sm:text-base">{plant.identity.overview}</p>
+            )}
             {heroColors.length > 0 && (
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs uppercase tracking-wide text-muted-foreground">Palette</span>
@@ -838,240 +304,88 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
               </div>
             )}
           </div>
-            <div className="flex w-full justify-center lg:w-auto">
-              {activeImage ? (
-                <div
-                  className="relative z-0 aspect-[4/3] w-full overflow-hidden rounded-2xl border border-muted/60 bg-white/60 shadow-inner sm:w-80 lg:w-96"
-                  onTouchStart={handleTouchStart}
-                  onTouchEnd={handleTouchEnd}
-                >
-                  <img
-                    src={activeImage.link}
-                    alt={plant.name}
-                    className="h-full w-full cursor-zoom-in object-cover transition-transform duration-500"
-                    onClick={openViewer}
-                    draggable={false}
-                    loading="lazy"
-                  />
-                  {images.length > 1 && (
-                    <>
-                      <button
-                        type="button"
-                        className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-2 text-white backdrop-blur hover:bg-black/60"
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          goToPrevImage()
-                        }}
-                        aria-label="Previous image"
-                      >
-                        <ChevronLeft className="h-5 w-5" />
-                      </button>
-                      <button
-                        type="button"
-                        className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-2 text-white backdrop-blur hover:bg-black/60"
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          goToNextImage()
-                        }}
-                        aria-label="Next image"
-                      >
-                        <ChevronRight className="h-5 w-5" />
-                      </button>
-                      <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-2">
-                        {images.map((_, idx) => (
-                          <button
-                            key={`dot-${idx}`}
-                            type="button"
-                            className={`h-2.5 w-2.5 rounded-full transition ${
-                              idx === activeImageIndex ? "bg-white" : "bg-white/40"
-                            }`}
-                            onClick={(event) => {
-                              event.stopPropagation()
-                              setActiveImageIndex(idx)
-                            }}
-                            aria-label={`Go to image ${idx + 1}`}
-                          />
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </div>
-              ) : (
-                <div className="flex aspect-[4/3] w-full items-center justify-center rounded-2xl border border-dashed border-muted/60 bg-white/40 text-sm text-muted-foreground sm:w-80 lg:w-96">
-                  No image yet
-                </div>
-              )}
-          </div>
-        </div>
-        {viewerOpen && activeImage && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm"
-            onClick={closeViewer}
-          >
-            <button
-              type="button"
-              className="absolute top-6 right-6 rounded-full bg-white/10 p-2 text-white transition hover:bg-white/20"
-              onClick={(event) => {
-                event.stopPropagation()
-                closeViewer()
-              }}
-              aria-label="Close image viewer"
-            >
-              <X className="h-5 w-5" />
-            </button>
-            <div
-              className="flex h-full w-full max-w-5xl flex-col items-center justify-center px-4"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <div
-                className="relative max-h-[80vh] w-full overflow-hidden rounded-2xl border border-white/10 bg-black/60"
-                onWheel={handleViewerWheel}
-                onPointerDown={handleViewerPointerDown}
-                onPointerMove={handleViewerPointerMove}
-                onPointerUp={handleViewerPointerUp}
-                onPointerLeave={handleViewerPointerUp}
-              >
+          <div className="flex w-full justify-center lg:w-auto">
+            {activeImage ? (
+              <div className="relative z-0 aspect-[4/3] w-full overflow-hidden rounded-2xl border border-muted/60 bg-white/60 shadow-inner sm:w-80 lg:w-96" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
                 <img
                   src={activeImage.link}
                   alt={plant.name}
+                  className="h-full w-full cursor-zoom-in object-cover transition-transform duration-500"
+                  onClick={openViewer}
                   draggable={false}
-                  className="h-full w-full select-none object-contain"
-                  style={{
-                    transform: `translate(${viewerOffset.x}px, ${viewerOffset.y}px) scale(${viewerZoom})`,
-                    cursor: isPanning ? "grabbing" : viewerZoom > 1 ? "grab" : "zoom-in",
-                    transition: isPanning ? "none" : "transform 0.2s ease-out",
-                  }}
+                  loading="lazy"
                 />
+                {images.length > 1 && (
+                  <>
+                    <button type="button" className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-2 text-white backdrop-blur hover:bg-black/60" onClick={(event) => { event.stopPropagation(); goToPrevImage() }} aria-label="Previous image">
+                      <ChevronLeft className="h-5 w-5" />
+                    </button>
+                    <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-2 text-white backdrop-blur hover:bg-black/60" onClick={(event) => { event.stopPropagation(); goToNextImage() }} aria-label="Next image">
+                      <ChevronRight className="h-5 w-5" />
+                    </button>
+                    <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-2">
+                      {images.map((_, idx) => (
+                        <button key={`dot-${idx}`} type="button" className={`h-2.5 w-2.5 rounded-full transition ${idx === activeImageIndex ? "bg-white" : "bg-white/40"}`} onClick={(event) => { event.stopPropagation(); setActiveImageIndex(idx) }} aria-label={`Go to image ${idx + 1}`} />
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
-              <div className="mt-4 flex flex-wrap items-center gap-3 text-white">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    adjustZoom(0.2)
-                  }}
-                >
-                  <ZoomIn className="mr-1 h-4 w-4" />
-                  Zoom in
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    adjustZoom(-0.2)
-                  }}
-                >
-                  <ZoomOut className="mr-1 h-4 w-4" />
-                  Zoom out
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    resetViewer()
-                  }}
-                >
-                  <RefreshCw className="mr-1 h-4 w-4" />
-                  Reset
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="grid gap-3 sm:gap-4 grid-cols-2 sm:grid-cols-2 xl:grid-cols-4">
-        {plant.plantCare?.levelSun && (
-          <Card className="bg-gradient-to-br from-amber-400/90 to-orange-600 text-white shadow-lg">
-            <CardContent className="flex items-center justify-between p-3 sm:p-4">
-              <div className="min-w-0 flex-1">
-                <p className="text-[10px] sm:text-xs uppercase text-white/80 truncate">Sun Level</p>
-                <p className="text-lg sm:text-xl md:text-2xl font-bold leading-tight truncate">{plant.plantCare.levelSun}</p>
-              </div>
-              <SunMedium className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80 flex-shrink-0 ml-2" />
-            </CardContent>
-          </Card>
-        )}
-        {plant.plantCare?.watering?.schedules && plant.plantCare.watering.schedules.length > 0 && (
-          <Card className="bg-gradient-to-br from-blue-400/90 to-cyan-600 text-white shadow-lg">
-            <CardContent className="flex items-center justify-between p-3 sm:p-4">
-              <div className="min-w-0 flex-1">
-                <p className="text-[10px] sm:text-xs uppercase text-white/80 truncate">Watering Need</p>
-                <p className="text-lg sm:text-xl md:text-2xl font-bold leading-tight">
-                  {plant.plantCare.watering.schedules.length} {plant.plantCare.watering.schedules.length === 1 ? 'schedule' : 'schedules'}
-                </p>
-              </div>
-              <Droplet className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80 flex-shrink-0 ml-2" />
-            </CardContent>
-          </Card>
-        )}
-        {plant.plantCare?.hygrometry !== undefined && (
-          <Card className="bg-gradient-to-br from-cyan-400/90 to-teal-600 text-white shadow-lg">
-            <CardContent className="flex items-center justify-between p-3 sm:p-4">
-              <div className="min-w-0 flex-1">
-                <p className="text-[10px] sm:text-xs uppercase text-white/80 truncate">Humidity</p>
-                <p className="text-xl sm:text-2xl md:text-3xl font-bold">{plant.plantCare.hygrometry}%</p>
-              </div>
-              <Droplets className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80 flex-shrink-0 ml-2" />
-            </CardContent>
-          </Card>
-        )}
-        {(plant.plantCare?.temperatureMin !== undefined || plant.plantCare?.temperatureMax !== undefined || plant.plantCare?.temperatureIdeal !== undefined) && (
-          <Card className="bg-gradient-to-br from-red-400/90 to-pink-600 text-white shadow-lg">
-            <CardContent className="flex items-center justify-between p-3 sm:p-4">
-              <div className="min-w-0 flex-1">
-                <p className="text-[10px] sm:text-xs uppercase text-white/80 truncate">Temperature</p>
-                <p className="text-lg sm:text-xl md:text-2xl font-bold leading-tight">
-                  {plant.plantCare.temperatureMin !== undefined && plant.plantCare.temperatureMax !== undefined
-                    ? `${plant.plantCare.temperatureMin}°-${plant.plantCare.temperatureMax}°C`
-                    : plant.plantCare.temperatureIdeal !== undefined
-                    ? `${plant.plantCare.temperatureIdeal}°C`
-                    : plant.plantCare.temperatureMin !== undefined
-                    ? `Min ${plant.plantCare.temperatureMin}°C`
-                    : plant.plantCare.temperatureMax !== undefined
-                    ? `Max ${plant.plantCare.temperatureMax}°C`
-                    : '—'}
-                </p>
-              </div>
-              <Thermometer className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80 flex-shrink-0 ml-2" />
-            </CardContent>
-          </Card>
-        )}
-      </div>
-
-        {detailPanels.length > 0 && (
-          <div className="mt-8 space-y-4">
-            <div className="flex flex-wrap gap-2 overflow-x-auto rounded-3xl border border-stone-200/70 bg-white/80 p-2 dark:border-white/10 dark:bg-white/5">
-              {detailPanels.map((panel) => (
-                <button
-                  key={panel.id}
-                  type="button"
-                  className={cn(
-                    "flex items-center gap-2 rounded-2xl px-4 py-1.5 text-xs font-semibold tracking-wide transition",
-                    panel.id === activePanelId
-                      ? "bg-emerald-600 text-white shadow-lg shadow-emerald-500/30"
-                      : "bg-transparent text-stone-600 hover:bg-white/80 dark:text-stone-300"
-                  )}
-                  onClick={() => setSelectedPanel(panel.id)}
-                >
-                  <span className="h-4 w-4 text-current">{panel.icon}</span>
-                  {panel.label}
-                </button>
-              ))}
-            </div>
-            {activePanel && (
-              <div className="space-y-6">
-                {activePanel.content}
+            ) : (
+              <div className="flex aspect-[4/3] w-full items-center justify-center rounded-2xl border border-dashed border-muted/60 bg-white/40 text-sm text-muted-foreground sm:w-80 lg:w-96">
+                No image yet
               </div>
             )}
           </div>
+        </div>
+      </div>
+
+      {viewerOpen && activeImage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm" onClick={closeViewer}>
+          <button type="button" className="absolute top-6 right-6 rounded-full bg-white/10 p-2 text-white transition hover:bg-white/20" onClick={(event) => { event.stopPropagation(); closeViewer() }} aria-label="Close image viewer">
+            <X className="h-5 w-5" />
+          </button>
+          <div className="flex h-full w-full max-w-5xl flex-col items-center justify-center px-4" onClick={(event) => event.stopPropagation()}>
+            <div className="relative max-h-[80vh] w-full overflow-hidden rounded-2xl border border-white/10 bg-black/60" onWheel={handleViewerWheel} onPointerDown={handleViewerPointerDown} onPointerMove={handleViewerPointerMove} onPointerUp={handleViewerPointerUp} onPointerLeave={handleViewerPointerUp}>
+              <img src={activeImage.link} alt={plant.name} draggable={false} className="h-full w-full select-none object-contain" style={{ transform: `translate(${viewerOffset.x}px, ${viewerOffset.y}px) scale(${viewerZoom})`, cursor: isPanning ? "grabbing" : viewerZoom > 1 ? "grab" : "zoom-in", transition: isPanning ? "none" : "transform 0.2s ease-out" }} />
+            </div>
+            <div className="mt-4 flex flex-wrap items-center gap-3 text-white">
+              <Button type="button" variant="secondary" size="sm" onClick={(event) => { event.stopPropagation(); adjustZoom(0.2) }}>
+                <ZoomIn className="mr-1 h-4 w-4" />
+                Zoom in
+              </Button>
+              <Button type="button" variant="secondary" size="sm" onClick={(event) => { event.stopPropagation(); adjustZoom(-0.2) }}>
+                <ZoomOut className="mr-1 h-4 w-4" />
+                Zoom out
+              </Button>
+              <Button type="button" variant="secondary" size="sm" onClick={(event) => { event.stopPropagation(); resetViewer() }}>
+                <RefreshCw className="mr-1 h-4 w-4" />
+                Reset
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 sm:grid-cols-2 xl:grid-cols-4">
+        {stats.map((stat) =>
+          stat.visible ? (
+            <Card key={stat.label} className={`bg-gradient-to-br ${stat.gradient} text-white shadow-lg`}>
+              <CardContent className="flex items-center justify-between p-3 sm:p-4">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] sm:text-xs uppercase text-white/80 truncate">{stat.label}</p>
+                  <p className="text-lg sm:text-xl md:text-2xl font-bold leading-tight truncate">{stat.value}</p>
+                </div>
+                <div className="ml-2 flex-shrink-0">{stat.icon}</div>
+              </CardContent>
+            </Card>
+          ) : null,
         )}
+      </div>
+
+      <div className="rounded-3xl border border-dashed border-emerald-200/60 bg-white/70 p-4 text-sm text-stone-600 shadow-inner dark:border-emerald-900/30 dark:bg-emerald-900/10 dark:text-emerald-200">
+        Detailed schema-style notes have been tucked into the immersive explorer below so you can stay in the vibe here.
+      </div>
     </div>
   )
 }
