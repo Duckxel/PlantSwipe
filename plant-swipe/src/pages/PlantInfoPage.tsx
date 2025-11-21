@@ -828,24 +828,6 @@ const DimensionCube: React.FC<{ scale: number }> = ({ scale }) => {
     innerWire.position.set(0, cubeCenterY, 0)
     scene.add(innerWire)
 
-    const sphereGeometry = new THREE.SphereGeometry(0.05, 16, 16)
-    const sphereMaterial = new THREE.MeshStandardMaterial({
-      color: 0xa7f3d0,
-      transparent: true,
-      opacity: 0.9,
-    })
-    const offsets = [-scale / 2, scale / 2]
-    offsets.forEach((x) =>
-      offsets.forEach((y) =>
-        offsets.forEach((z) => {
-          const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial)
-          // Position spheres relative to cube center
-          sphere.position.set(x, y + cubeCenterY, z)
-          scene.add(sphere)
-        }),
-      ),
-    )
-
     const grid = new THREE.GridHelper(6, 18, 0x34f5c6, 0x0f766e)
     const gridMaterial = grid.material as THREE.Material
     gridMaterial.transparent = true
