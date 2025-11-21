@@ -141,14 +141,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }
 
   const deleteAccount: AuthContextValue['deleteAccount'] = async () => {
-    const uid = (await supabase.auth.getUser()).data.user?.id
+    const { data: userData } = await supabase.auth.getUser()
+    const uid = userData.user?.id
     if (!uid) return { error: 'Not authenticated' }
-    // Cannot delete auth user with anon key; require a callable function/edge or admin key.
-    // For demo, we delete profile and sign out.
-    await supabase.from('profiles').delete().eq('id', uid)
-    await supabase.auth.signOut()
+    const { data: sessionData } = await supabase.auth.getSession()
+    const token = sessionData.session?.access_token
+    if (!token) return { error: 'Not authenticated' }
+
+    try {
+      const resp = await fetch('/api/account/delete', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        credentials: 'same-origin',
+      })
+      if (!resp.ok) {
+        let message = 'Failed to delete account'
+        try {
+          const payload = await resp.json()
+          if (payload?.error && typeof payload.error === 'string') {
+            message = payload.error
+          }
+        } catch {}
+        return { error: message }
+      }
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : 'Failed to delete account' }
+    }
+
+    try {
+      localStorage.removeItem('plantswipe.auth')
+      localStorage.removeItem('plantswipe.profile')
+    } catch {}
     setProfile(null)
     setUser(null)
+    try {
+      await supabase.auth.signOut()
+    } catch {}
     return {}
   }
 
