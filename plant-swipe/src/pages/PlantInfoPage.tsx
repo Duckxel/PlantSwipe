@@ -669,8 +669,8 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
   )
 }
 
-const CareChartTooltip: React.FC<TooltipProps<number, string>> = ({ active, payload: tooltipPayload }) => {
-  const dataPoint = tooltipPayload && tooltipPayload.length > 0 ? (tooltipPayload[0].payload as { label: string; value: number }) : null
+const CareChartTooltip = ({ active, payload: tooltipPayload }: TooltipProps<number, string> & { payload?: Array<{ payload?: { label: string; value: number } }> }) => {
+  const dataPoint = tooltipPayload && tooltipPayload.length > 0 ? tooltipPayload[0].payload : null
   if (!active || !dataPoint) return null
   return (
     <div className="rounded-xl border border-emerald-500/30 bg-white/95 px-3 py-2 text-sm text-stone-700 shadow-lg dark:border-emerald-600/40 dark:bg-slate-900/95 dark:text-stone-100">
@@ -680,8 +680,10 @@ const CareChartTooltip: React.FC<TooltipProps<number, string>> = ({ active, payl
   )
 }
 
-const TimelineTooltip: React.FC<TooltipProps<number, string>> = ({ active, payload: tooltipPayload, label }) => {
-  const data = tooltipPayload && tooltipPayload.length > 0 ? (tooltipPayload[0].payload as { flowering: number; fruiting: number; sowing: number }) : null
+const TimelineTooltip = (
+  { active, payload: tooltipPayload, label }: TooltipProps<number, string> & { payload?: Array<{ payload?: { flowering: number; fruiting: number; sowing: number } }> },
+) => {
+  const data = tooltipPayload && tooltipPayload.length > 0 ? tooltipPayload[0].payload : null
   if (!active || !data) return null
   return (
     <div className="rounded-xl border border-sky-400/30 bg-white/95 px-3 py-2 text-xs text-stone-700 shadow-lg dark:border-sky-500/40 dark:bg-slate-900/95 dark:text-stone-100">
