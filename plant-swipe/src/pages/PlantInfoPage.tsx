@@ -31,6 +31,7 @@ import {
   BarChart,
   Bar,
   XAxis,
+  YAxis,
   CartesianGrid,
   Tooltip as RechartsTooltip,
   Cell,
@@ -93,16 +94,71 @@ const SECTION_ANIMATION = {
   viewport: { once: true, amount: 0.1 },
 }
 
-const DEFAULT_MOODBOARD = [
+type MoodboardColor = { label: string; tone: string; category: string }
+const DEFAULT_MOODBOARD: MoodboardColor[] = [
   { label: 'Forest Canopy', tone: '#0f172a', category: 'Foliage' },
   { label: 'Morning Dew', tone: '#1d4ed8', category: 'Highlights' },
   { label: 'Soft Petal', tone: '#fb7185', category: 'Accent' },
   { label: 'Moss Floor', tone: '#166534', category: 'Ground' },
   { label: 'Amber Bloom', tone: '#ea580c', category: 'Flower' },
   { label: 'Cloud Haze', tone: '#94a3b8', category: 'Mist' },
-] as const
+]
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
+
+const mapSunLevel = (value?: string | null) => {
+  switch (value?.toLowerCase()) {
+    case 'full sun':
+      return 5
+    case 'partial sun':
+      return 4
+    case 'shade':
+      return 2
+    case 'low light':
+      return 1.5
+    default:
+      return 3
+  }
+}
+
+const mapWaterScore = (schedules: PlantWateringSchedule[]) => {
+  if (!schedules.length) return 2.5
+  const avg = schedules.reduce((sum, entry) => sum + (entry.quantity ?? 1), 0) / schedules.length
+  return clamp(avg + 1.5, 1, 5)
+}
+
+const buildCareChartData = (plant: Plant) => {
+  const levelSun = plant.plantCare?.levelSun || ''
+  const wateringSchedules = plant.plantCare?.watering?.schedules || []
+  const soilTypes = plant.plantCare?.soil?.length || 0
+  const nutritionNeeds = plant.plantCare?.nutritionNeed?.length || 0
+  const careTraits = [
+    { key: 'sunlight', label: 'Sunlight', value: mapSunLevel(levelSun) },
+    { key: 'water', label: 'Watering', value: mapWaterScore(wateringSchedules) },
+    { key: 'soil', label: 'Soil', value: clamp(soilTypes ? 2 + soilTypes * 0.5 : 2, 1, 5) },
+    { key: 'nutrition', label: 'Nutrition', value: clamp(2 + nutritionNeeds * 0.3, 1.5, 5) },
+    { key: 'climate', label: 'Climate', value: plant.identity?.livingSpace === 'Outdoor' ? 4.5 : 3 },
+  ]
+  return careTraits.map((item, index) => ({
+    ...item,
+    color: CARE_BAR_COLORS[index % CARE_BAR_COLORS.length],
+  }))
+}
+
+const buildTimelineData = (plant: Plant) => {
+  const flowering = plant.growth?.floweringMonth || []
+  const fruiting = plant.growth?.fruitingMonth || []
+  const sowing = plant.growth?.sowingMonth || []
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  return months.map((label, idx) => ({
+    month: label,
+    flowering: flowering.includes(idx + 1) ? 1 : 0,
+    fruiting: fruiting.includes(idx + 1) ? 1 : 0,
+    sowing: sowing.includes(idx + 1) ? 1 : 0,
+  }))
+}
+
+const isPlantColor = (color: PlantColor | MoodboardColor): color is PlantColor => (color as PlantColor).name !== undefined
 
 const normalizeSchedules = (rows?: any[]): WaterSchedules => {
   if (!rows?.length) return []
@@ -306,59 +362,6 @@ export const PlantInfoPage: React.FC = () => {
       return next
     })
   }
-
-const buildCareChartData = (plant: Plant) => {
-  const levelSun = plant.plantCare?.levelSun || ''
-  const wateringSchedules = plant.plantCare?.watering?.schedules || []
-  const soilTypes = plant.plantCare?.soil?.length || 0
-  const nutritionNeeds = plant.plantCare?.nutritionNeed?.length || 0
-  const careTraits = [
-    { key: 'sunlight', label: 'Sunlight', value: mapSunLevel(levelSun) },
-    { key: 'water', label: 'Watering', value: mapWaterScore(wateringSchedules) },
-    { key: 'soil', label: 'Soil', value: clamp(soilTypes ? 2 + soilTypes * 0.5 : 2, 1, 5) },
-    { key: 'nutrition', label: 'Nutrition', value: clamp(2 + nutritionNeeds * 0.3, 1.5, 5) },
-    { key: 'climate', label: 'Climate', value: plant.identity?.livingSpace === 'Outdoor' ? 4.5 : 3 },
-  ]
-  return careTraits.map((item, index) => ({
-    ...item,
-    color: CARE_BAR_COLORS[index % CARE_BAR_COLORS.length],
-  }))
-}
-
-const buildTimelineData = (plant: Plant) => {
-  const flowering = plant.growth?.floweringMonth || []
-  const fruiting = plant.growth?.fruitingMonth || []
-  const sowing = plant.growth?.sowingMonth || []
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-  return months.map((label, idx) => ({
-    month: label,
-    flowering: flowering.includes(idx + 1) ? 1 : 0,
-    fruiting: fruiting.includes(idx + 1) ? 1 : 0,
-    sowing: sowing.includes(idx + 1) ? 1 : 0,
-  }))
-}
-
-const mapSunLevel = (value?: string | null) => {
-  switch (value?.toLowerCase()) {
-    case 'full sun':
-      return 5
-    case 'partial sun':
-      return 4
-    case 'shade':
-      return 2
-    case 'low light':
-      return 1.5
-    default:
-      return 3
-  }
-}
-
-const mapWaterScore = (schedules: PlantWateringSchedule[]) => {
-  if (!schedules.length) return 2.5
-  const avg =
-    schedules.reduce((sum, entry) => sum + (entry.quantity ?? 1), 0) / schedules.length
-  return clamp(avg + 1.5, 1, 5)
-}
 
   const handleGoBack = React.useCallback(() => {
     if (typeof window !== 'undefined' && window.history.length > 2) {
@@ -642,9 +645,10 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
               <span className="text-xs uppercase tracking-widest">Color Moodboard</span>
             </div>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              {palette.map((color, idx) => (
-                <ColorSwatchCard key={`${color.name ?? color.label}-${idx}`} color={color} />
-              ))}
+              {palette.map((color, idx) => {
+                const colorLabel = isPlantColor(color) ? color.name : color.label
+                return <ColorSwatchCard key={`${colorLabel}-${idx}`} color={color} />
+              })}
             </div>
           </div>
         </motion.section>
@@ -665,20 +669,22 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
   )
 }
 
-const CareChartTooltip: React.FC<TooltipProps<number, string>> = ({ active, payload }) => {
-  if (!active || !payload?.length) return null
-  const entry = payload[0].payload as { label: string; value: number }
+const CareChartTooltip: React.FC<TooltipProps<number, string>> = (props) => {
+  const { active, payload } = props
+  const dataPoint = payload && payload.length > 0 ? (payload[0].payload as { label: string; value: number }) : null
+  if (!active || !dataPoint) return null
   return (
     <div className="rounded-xl border border-emerald-500/30 bg-white/95 px-3 py-2 text-sm text-stone-700 shadow-lg dark:border-emerald-600/40 dark:bg-slate-900/95 dark:text-stone-100">
-      <div className="text-xs uppercase tracking-widest text-emerald-600/80 dark:text-emerald-300/80">{entry.label}</div>
-      <div className="text-sm font-semibold">{entry.value.toFixed(1)} / 5</div>
+      <div className="text-xs uppercase tracking-widest text-emerald-600/80 dark:text-emerald-300/80">{dataPoint.label}</div>
+      <div className="text-sm font-semibold">{dataPoint.value.toFixed(1)} / 5</div>
     </div>
   )
 }
 
-const TimelineTooltip: React.FC<TooltipProps<number, string>> = ({ active, payload, label }) => {
-  if (!active || !payload?.length) return null
-  const data = payload[0].payload as { flowering: number; fruiting: number; sowing: number }
+const TimelineTooltip: React.FC<TooltipProps<number, string>> = (props) => {
+  const { active, payload, label } = props
+  const data = payload && payload.length > 0 ? (payload[0].payload as { flowering: number; fruiting: number; sowing: number }) : null
+  if (!active || !data) return null
   return (
     <div className="rounded-xl border border-sky-400/30 bg-white/95 px-3 py-2 text-xs text-stone-700 shadow-lg dark:border-sky-500/40 dark:bg-slate-900/95 dark:text-stone-100">
       <p className="text-[11px] uppercase tracking-widest text-emerald-600/75">{label}</p>
@@ -728,11 +734,12 @@ const InfoItem: React.FC<{ label: string; value: string; icon?: React.ReactNode 
   </div>
 )
 
-const ColorSwatchCard: React.FC<{ color: PlantColor | { label: string; tone: string; category: string } }> = ({ color }) => {
-  const label = 'name' in color ? color.name || 'Palette' : color.label
-  const tone = 'hexCode' in color ? color.hexCode || '#16a34a' : color.tone
-  const category = 'category' in color ? color.category : 'Accent'
-  const gradient = tone ? `linear-gradient(135deg, ${tone}, ${tone})` : 'linear-gradient(135deg,#16a34a,#16a34a)'
+const ColorSwatchCard: React.FC<{ color: PlantColor | MoodboardColor }> = ({ color }) => {
+  const isPlant = isPlantColor(color)
+  const label = isPlant ? color.name || 'Palette' : color.label
+  const tone = isPlant ? color.hexCode || '#16a34a' : color.tone
+  const category = isPlant ? 'Palette' : color.category
+  const gradient = `linear-gradient(135deg, ${tone}, ${tone})`
   return (
     <div className="group relative overflow-hidden rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#2d2d30] p-3 shadow-sm transition hover:-translate-y-1 hover:shadow-md">
       <div className="mb-3 h-16 w-full rounded-xl shadow-inner" style={{ backgroundImage: gradient }} />
