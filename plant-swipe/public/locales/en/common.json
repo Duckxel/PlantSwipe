@@ -390,7 +390,25 @@
       "info": "Info",
       "next": "Next",
       "tryAnotherSearch": "Try another search or adjust your filters.",
-      "reset": "Reset"
+      "reset": "Reset",
+      "classificationType": {
+        "plant": "Plant",
+        "bambu": "Bamboo",
+        "shrub": "Shrub",
+        "tree": "Tree",
+        "other": "Other"
+      },
+      "utility": {
+        "ornemental": "Ornamental",
+        "comestible": "Edible",
+        "produce_fruit": "Fruit Producing",
+        "aromatic": "Aromatic",
+        "medicinal": "Medicinal",
+        "odorous": "Odorous",
+        "climbing": "Climbing",
+        "cereal": "Cereal",
+        "spice": "Spice"
+      }
     },
     "requestPlant": {
       "button": "Request Plant",

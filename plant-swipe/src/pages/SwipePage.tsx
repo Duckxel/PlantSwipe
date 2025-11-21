@@ -741,13 +741,15 @@ const buildIndicatorItems = (plant: Plant, t: TFunction<"common">): IndicatorIte
     })
   }
 
-  const activitySet = new Set(
-    (plant.classification?.activities ?? [])
-      .map((activity) => (typeof activity === "string" ? activity.toLowerCase() : null))
-      .filter((entry): entry is string => Boolean(entry)),
-  )
-
-  if (activitySet.has("comestible")) {
+  // Check utility field for usage indicators - normalize to lowercase for comparison
+  const utilityArray = (plant.utility ?? [])
+    .map((util) => String(util))
+    .filter((util) => util.trim().length > 0)
+  const utilitySet = new Set(utilityArray.map((util) => util.toLowerCase().trim()))
+  
+  // Edible: Only show if utility explicitly has "comestible"
+  // The utility field is the source of truth - comestiblePart is just data, not a display indicator
+  if (utilitySet.has("comestible")) {
     items.push({
       key: "edible",
       label: t("discoveryPage.indicators.edible", { defaultValue: "Edible" }),
@@ -757,7 +759,11 @@ const buildIndicatorItems = (plant: Plant, t: TFunction<"common">): IndicatorIte
     })
   }
 
-  if (activitySet.has("medicinal")) {
+  // Medicinal: Only show if utility explicitly has "medicinal" OR adviceMedicinal has meaningful content
+  const hasMedicinalAdvice = plant.usage?.adviceMedicinal && 
+    typeof plant.usage.adviceMedicinal === "string" && 
+    plant.usage.adviceMedicinal.trim().length > 0
+  if (utilitySet.has("medicinal") || hasMedicinalAdvice) {
     items.push({
       key: "medicinal",
       label: t("discoveryPage.indicators.medicinal", { defaultValue: "Medicinal" }),
@@ -767,7 +773,10 @@ const buildIndicatorItems = (plant: Plant, t: TFunction<"common">): IndicatorIte
     })
   }
 
-  if (activitySet.has("aromatic")) {
+  // Aromatic: Only show if utility explicitly has "aromatic" OR aromatherapy is true OR scent is true
+  const hasAromatherapy = plant.usage?.aromatherapy === true
+  const hasScent = plant.identity?.scent === true
+  if (utilitySet.has("aromatic") || hasAromatherapy || hasScent) {
     items.push({
       key: "aromatic",
       label: t("discoveryPage.indicators.aromatic", { defaultValue: "Aromatic" }),
@@ -944,34 +953,63 @@ const formatIndicatorValue = (value?: string | null): string => {
 }
 
 const buildColorSwatches = (plant: Plant): ColorSwatchDescriptor[] => {
-  const directColors = Array.isArray(plant.colors) ? plant.colors : []
-  const normalizedDirect = directColors.filter((color): color is string => typeof color === "string" && color.trim().length > 0)
-
-  const fallbackColors: string[] = []
-  if (!normalizedDirect.length) {
-    plant.phenology?.flowerColors?.forEach((color) => {
-      if (color?.hex) {
-        fallbackColors.push(color.hex)
-      } else if (color?.name) {
-        fallbackColors.push(color.name)
-      }
-    })
-    plant.phenology?.leafColors?.forEach((color) => {
-      if (color?.hex) {
-        fallbackColors.push(color.hex)
-      } else if (color?.name) {
-        fallbackColors.push(color.name)
+  // Primary source: plant.identity?.colors (array of PlantColor objects)
+  const identityColors: string[] = []
+  if (plant.identity?.colors && Array.isArray(plant.identity.colors)) {
+    plant.identity.colors.forEach((color) => {
+      if (!color || typeof color !== "object") return
+      
+      // Handle PlantColor object with name and hexCode
+      const plantColor = color as { name?: string; hexCode?: string }
+      if (plantColor.hexCode && typeof plantColor.hexCode === "string" && plantColor.hexCode.trim().length > 0) {
+        identityColors.push(plantColor.hexCode.trim())
+      } else if (plantColor.name && typeof plantColor.name === "string" && plantColor.name.trim().length > 0) {
+        identityColors.push(plantColor.name.trim())
       }
     })
   }
 
-  const palette = normalizedDirect.length ? normalizedDirect : fallbackColors
+  // Secondary source: plant.colors (legacy array of strings)
+  const legacyColors: string[] = []
+  if (Array.isArray(plant.colors)) {
+    plant.colors.forEach((color) => {
+      if (typeof color === "string" && color.trim().length > 0) {
+        legacyColors.push(color.trim())
+      }
+    })
+  }
+
+  // Tertiary source: phenology colors (fallback)
+  const fallbackColors: string[] = []
+  if (identityColors.length === 0 && legacyColors.length === 0) {
+    plant.phenology?.flowerColors?.forEach((color) => {
+      if (color?.hex && typeof color.hex === "string" && color.hex.trim().length > 0) {
+        fallbackColors.push(color.hex.trim())
+      } else if (color?.name && typeof color.name === "string" && color.name.trim().length > 0) {
+        fallbackColors.push(color.name.trim())
+      }
+    })
+    plant.phenology?.leafColors?.forEach((color) => {
+      if (color?.hex && typeof color.hex === "string" && color.hex.trim().length > 0) {
+        fallbackColors.push(color.hex.trim())
+      } else if (color?.name && typeof color.name === "string" && color.name.trim().length > 0) {
+        fallbackColors.push(color.name.trim())
+      }
+    })
+  }
+
+  // Use identity colors first, then legacy colors, then fallback
+  const palette = identityColors.length > 0 ? identityColors : (legacyColors.length > 0 ? legacyColors : fallbackColors)
 
   return palette
-    .map((color, index) => ({
-      id: `${color}-${index}`,
-      label: formatIndicatorValue(color),
-      tone: resolveColorValue(color),
-    }))
-    .filter((entry) => entry.label.length > 0 || Boolean(entry.tone))
+    .map((color, index) => {
+      const resolvedTone = resolveColorValue(color)
+      const label = formatIndicatorValue(color)
+      return {
+        id: `${color}-${index}`,
+        label: label || resolvedTone,
+        tone: resolvedTone,
+      }
+    })
+    .filter((entry) => entry.tone && entry.tone.length > 0)
 }
