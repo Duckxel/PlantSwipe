@@ -352,7 +352,6 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
     plant.identity?.givenNames,
     plant.identity?.scientificName,
     plant.identity?.family,
-    plant.identity?.promotionMonth,
     plant.identity?.lifeCycle,
     seasons,
     plant.identity?.foliagePersistance,
@@ -694,25 +693,27 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
       </div>
 
       <div className="grid gap-3 sm:gap-4 grid-cols-2 sm:grid-cols-2 xl:grid-cols-4">
-        {plant.growth?.height !== undefined && (
-          <Card className="bg-gradient-to-br from-emerald-500/90 to-emerald-700 text-white shadow-lg">
+        {plant.plantCare?.levelSun && (
+          <Card className="bg-gradient-to-br from-amber-400/90 to-orange-600 text-white shadow-lg">
             <CardContent className="flex items-center justify-between p-3 sm:p-4">
               <div className="min-w-0 flex-1">
-                <p className="text-[10px] sm:text-xs uppercase text-white/80 truncate">Height</p>
-                <p className="text-xl sm:text-2xl md:text-3xl font-bold">{plant.growth.height} cm</p>
+                <p className="text-[10px] sm:text-xs uppercase text-white/80 truncate">Sun Level</p>
+                <p className="text-lg sm:text-xl md:text-2xl font-bold leading-tight truncate">{plant.plantCare.levelSun}</p>
               </div>
-              <Flame className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80 flex-shrink-0 ml-2" />
+              <SunMedium className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80 flex-shrink-0 ml-2" />
             </CardContent>
           </Card>
         )}
-        {plant.growth?.wingspan !== undefined && (
-          <Card className="bg-gradient-to-br from-sky-400/90 to-blue-600 text-white shadow-lg">
+        {plant.plantCare?.watering?.schedules && plant.plantCare.watering.schedules.length > 0 && (
+          <Card className="bg-gradient-to-br from-blue-400/90 to-cyan-600 text-white shadow-lg">
             <CardContent className="flex items-center justify-between p-3 sm:p-4">
               <div className="min-w-0 flex-1">
-                <p className="text-[10px] sm:text-xs uppercase text-white/80 truncate">Wingspan</p>
-                <p className="text-xl sm:text-2xl md:text-3xl font-bold">{plant.growth.wingspan} cm</p>
+                <p className="text-[10px] sm:text-xs uppercase text-white/80 truncate">Watering Need</p>
+                <p className="text-lg sm:text-xl md:text-2xl font-bold leading-tight">
+                  {plant.plantCare.watering.schedules.length} {plant.plantCare.watering.schedules.length === 1 ? 'schedule' : 'schedules'}
+                </p>
               </div>
-              <Leaf className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80 flex-shrink-0 ml-2" />
+              <Droplet className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80 flex-shrink-0 ml-2" />
             </CardContent>
           </Card>
         )}
@@ -727,14 +728,24 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
             </CardContent>
           </Card>
         )}
-        {plant.plantCare?.levelSun && (
-          <Card className="bg-gradient-to-br from-amber-400/90 to-orange-600 text-white shadow-lg">
+        {(plant.plantCare?.temperatureMin !== undefined || plant.plantCare?.temperatureMax !== undefined || plant.plantCare?.temperatureIdeal !== undefined) && (
+          <Card className="bg-gradient-to-br from-red-400/90 to-pink-600 text-white shadow-lg">
             <CardContent className="flex items-center justify-between p-3 sm:p-4">
               <div className="min-w-0 flex-1">
-                <p className="text-[10px] sm:text-xs uppercase text-white/80 truncate">Sun</p>
-                <p className="text-lg sm:text-xl md:text-2xl font-bold leading-tight truncate">{plant.plantCare.levelSun}</p>
+                <p className="text-[10px] sm:text-xs uppercase text-white/80 truncate">Temperature</p>
+                <p className="text-lg sm:text-xl md:text-2xl font-bold leading-tight">
+                  {plant.plantCare.temperatureMin !== undefined && plant.plantCare.temperatureMax !== undefined
+                    ? `${plant.plantCare.temperatureMin}°-${plant.plantCare.temperatureMax}°C`
+                    : plant.plantCare.temperatureIdeal !== undefined
+                    ? `${plant.plantCare.temperatureIdeal}°C`
+                    : plant.plantCare.temperatureMin !== undefined
+                    ? `Min ${plant.plantCare.temperatureMin}°C`
+                    : plant.plantCare.temperatureMax !== undefined
+                    ? `Max ${plant.plantCare.temperatureMax}°C`
+                    : '—'}
+                </p>
               </div>
-              <SunMedium className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80 flex-shrink-0 ml-2" />
+              <Thermometer className="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 text-white/80 flex-shrink-0 ml-2" />
             </CardContent>
           </Card>
         )}
@@ -746,7 +757,6 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
             <div className="grid gap-3 sm:grid-cols-2">
               <FieldRow label="Given Names" value={safeJoin(plant.identity?.givenNames)} />
               <FieldRow label="Family" value={plant.identity?.family} />
-              <FieldRow label="Promotion Month" value={plant.identity?.promotionMonth ? monthLookup[plant.identity.promotionMonth - 1] || plant.identity.promotionMonth : undefined} />
               <FieldRow label="Life Cycle" value={plant.identity?.lifeCycle} />
               <FieldRow label="Seasons" value={seasons.length ? seasons.join(" • ") : undefined} />
               <FieldRow label="Foliage Persistance" value={plant.identity?.foliagePersistance} />
