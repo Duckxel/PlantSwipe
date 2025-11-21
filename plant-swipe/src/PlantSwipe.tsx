@@ -135,6 +135,8 @@ export default function PlantSwipe() {
   const [plants, setPlants] = useState<Plant[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [colorOptions, setColorOptions] = useState<Array<{ id: string; name: string; hexCode: string }>>([])
+  
   const typeOptions = useMemo(() => {
     const labels = new Set<string>()
     plants.forEach((plant) => {
@@ -181,6 +183,34 @@ export default function PlantSwipe() {
   React.useEffect(() => {
     loadPlants()
   }, [loadPlants])
+
+  // Load colors from database
+  React.useEffect(() => {
+    const loadColors = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('colors')
+          .select('id, name, hex_code')
+          .order('name', { ascending: true })
+        
+        if (error) {
+          console.error('Error loading colors:', error)
+          return
+        }
+        
+        if (data) {
+          setColorOptions(data.map(c => ({
+            id: c.id,
+            name: c.name,
+            hexCode: c.hex_code
+          })))
+        }
+      } catch (e) {
+        console.error('Error loading colors:', e)
+      }
+    }
+    loadColors()
+  }, [])
 
   // Global refresh for plant lists without full reload
   React.useEffect(() => {
@@ -316,7 +346,12 @@ export default function PlantSwipe() {
     const normalizedType = typeFilter?.toLowerCase() ?? null
     const normalizedUsage = usageFilters.map((u) => u.toLowerCase())
     return plants.filter((p: Plant) => {
-      const colors = Array.isArray(p.colors) ? p.colors : []
+      // Extract colors from both legacy format (p.colors) and new format (p.identity?.colors)
+      const legacyColors = Array.isArray(p.colors) ? p.colors.map((c: string) => String(c)) : []
+      const identityColors = Array.isArray(p.identity?.colors) 
+        ? p.identity.colors.map((c) => (typeof c === 'object' && c?.name ? c.name : String(c)))
+        : []
+      const colors = [...legacyColors, ...identityColors]
       const seasons = Array.isArray(p.seasons) ? p.seasons : []
       const matchesQ = `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")}`
         .toLowerCase()
@@ -775,18 +810,28 @@ export default function PlantSwipe() {
         />
         {colorSectionOpen && (
           <div className="mt-3 flex flex-wrap gap-2">
-            {["Red", "Pink", "Yellow", "White", "Purple", "Blue", "Orange", "Green"].map((c) => (
-              <button
-                key={c}
-                onClick={() => setColorFilter((cur) => (cur === c ? null : c))}
-                className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition ${
-                  colorFilter === c ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
-                }`}
-                aria-pressed={colorFilter === c}
-              >
-                {t(`plant.${c.toLowerCase()}`)}
-              </button>
-            ))}
+            {colorOptions.length > 0 ? (
+              colorOptions.map((color) => (
+                <button
+                  key={color.id}
+                  onClick={() => setColorFilter((cur) => (cur === color.name ? null : color.name))}
+                  className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition flex items-center gap-2 ${
+                    colorFilter === color.name ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                  }`}
+                  aria-pressed={colorFilter === color.name}
+                  style={colorFilter === color.name ? {} : { borderColor: color.hexCode }}
+                >
+                  <span
+                    className="w-3 h-3 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: color.hexCode }}
+                    aria-hidden="true"
+                  />
+                  <span>{color.name}</span>
+                </button>
+              ))
+            ) : (
+              <div className="text-sm text-stone-500 dark:text-stone-400">{t("common.loading")}</div>
+            )}
           </div>
         )}
       </div>
