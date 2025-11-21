@@ -599,15 +599,22 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     })
   }
 
-  const savePlant = async (plantOverride?: Plant) => {
-    let plantToSave = plantOverride || plant
-    if (!plantToSave.name.trim()) { setError(t('plantAdmin.nameRequired', 'Name is required')); return }
-    setSaving(true)
-    setError(null)
-    try {
-      const plantId = plantToSave.id || id || generateUUIDv4()
-      const createdByValue = existingLoaded ? plantToSave.meta?.createdBy || null : (plantToSave.meta?.createdBy || (profile as any)?.full_name || null)
-      const createdTimeValue = existingLoaded ? plantToSave.meta?.createdAt || null : (plantToSave.meta?.createdAt || new Date().toISOString())
+    const savePlant = async (plantOverride?: Plant) => {
+      let plantToSave = plantOverride || plant
+      const trimmedName = plantToSave.name.trim()
+      if (!trimmedName) { setError(t('plantAdmin.nameRequired', 'Name is required')); return }
+      const isEnglish = language === 'en'
+      const existingPlantId = plantToSave.id || id
+      if (!isEnglish && !existingPlantId) {
+        setError(t('plantAdmin.translationRequiresBase', 'Save the English version before editing translations.'))
+        return
+      }
+      setSaving(true)
+      setError(null)
+      try {
+        const plantId = existingPlantId || generateUUIDv4()
+        const createdByValue = existingLoaded ? plantToSave.meta?.createdBy || null : (plantToSave.meta?.createdBy || (profile as any)?.full_name || null)
+        const createdTimeValue = existingLoaded ? plantToSave.meta?.createdAt || null : (plantToSave.meta?.createdAt || new Date().toISOString())
         const normalizedSchedules = normalizeSchedules(plantToSave.plantCare?.watering?.schedules)
         const sources = plantToSave.miscellaneous?.sources || []
         const primarySource = sources[0]
@@ -633,108 +640,113 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         const normalizedPolenizer = polenizerEnum.toDbArray(plantToSave.ecology?.polenizer)
         const normalizedConservationStatus = conservationStatusEnum.toDb(plantToSave.ecology?.conservationStatus)
         const normalizedPromotionMonth = monthNumberToSlug(plantToSave.identity?.promotionMonth)
-        const payload = {
-          id: plantId,
-          name: plantToSave.name.trim(),
-          plant_type: normalizedPlantType || null,
-          utility: normalizedUtility,
-          comestible_part: normalizedComestible,
-          fruit_type: normalizedFruit,
-          given_names: plantToSave.identity?.givenNames || [],
-          scientific_name: plantToSave.identity?.scientificName || null,
-          family: plantToSave.identity?.family || null,
-          overview: plantToSave.identity?.overview || null,
-          promotion_month: normalizedPromotionMonth,
-          life_cycle: normalizedLifeCycle || null,
-          season: normalizedIdentitySeasons,
-          foliage_persistance: normalizeFoliagePersistanceForDb(plantToSave.identity?.foliagePersistance),
-          spiked: coerceBoolean(plantToSave.identity?.spiked, false),
-          toxicity_human: normalizedToxicityHuman || null,
-          toxicity_pets: normalizedToxicityPets || null,
-          allergens: plantToSave.identity?.allergens || [],
-          scent: coerceBoolean(plantToSave.identity?.scent, false),
-          symbolism: plantToSave.identity?.symbolism || [],
-          living_space: normalizedLivingSpace || null,
-          composition: normalizeCompositionForDb(plantToSave.identity?.composition),
-        maintenance_level: normalizedMaintenance || null,
-        multicolor: coerceBoolean(plantToSave.identity?.multicolor, false),
-        bicolor: coerceBoolean(plantToSave.identity?.bicolor, false),
-          origin: plantToSave.plantCare?.origin || [],
-          habitat: normalizedHabitat,
-        temperature_max: plantToSave.plantCare?.temperatureMax || null,
-        temperature_min: plantToSave.plantCare?.temperatureMin || null,
-        temperature_ideal: plantToSave.plantCare?.temperatureIdeal || null,
-          level_sun: normalizedLevelSun || null,
-        hygrometry: plantToSave.plantCare?.hygrometry || null,
-          watering_type: normalizedWateringType,
-          division: normalizedDivision,
-          soil: normalizedSoil,
-        advice_soil: plantToSave.plantCare?.adviceSoil || null,
-          mulching: normalizedMulching,
-        advice_mulching: plantToSave.plantCare?.adviceMulching || null,
-          nutrition_need: normalizedNutritionNeed,
-          fertilizer: normalizedFertilizer,
-        advice_fertilizer: plantToSave.plantCare?.adviceFertilizer || null,
-        sowing_month: monthNumbersToSlugs(plantToSave.growth?.sowingMonth),
-        flowering_month: monthNumbersToSlugs(plantToSave.growth?.floweringMonth),
-        fruiting_month: monthNumbersToSlugs(plantToSave.growth?.fruitingMonth),
-        height_cm: plantToSave.growth?.height || null,
-        wingspan_cm: plantToSave.growth?.wingspan || null,
-        tutoring: coerceBoolean(plantToSave.growth?.tutoring, false),
-        advice_tutoring: plantToSave.growth?.adviceTutoring || null,
-          sow_type: normalizedSowType,
-        separation_cm: plantToSave.growth?.separation || null,
-        transplanting: coerceBoolean(plantToSave.growth?.transplanting, null),
-        advice_sowing: plantToSave.growth?.adviceSowing || null,
-        cut: plantToSave.growth?.cut || null,
-        advice_medicinal: plantToSave.usage?.adviceMedicinal || null,
-        nutritional_intake: plantToSave.usage?.nutritionalIntake || [],
-        infusion: coerceBoolean(plantToSave.usage?.infusion, false),
-        advice_infusion: plantToSave.usage?.adviceInfusion || null,
-        recipes_ideas: plantToSave.usage?.recipesIdeas || [],
-        aromatherapy: coerceBoolean(plantToSave.usage?.aromatherapy, false),
-        spice_mixes: plantToSave.usage?.spiceMixes || [],
-        melliferous: coerceBoolean(plantToSave.ecology?.melliferous, false),
-          polenizer: normalizedPolenizer,
-        be_fertilizer: coerceBoolean(plantToSave.ecology?.beFertilizer, false),
-        ground_effect: plantToSave.ecology?.groundEffect || null,
-          conservation_status: normalizedConservationStatus || null,
-        pests: plantToSave.danger?.pests || [],
-        diseases: plantToSave.danger?.diseases || [],
-        companions: plantToSave.miscellaneous?.companions || [],
-        tags: plantToSave.miscellaneous?.tags || [],
-        source_name: primarySource?.name || null,
-        source_url: primarySource?.url || null,
-        status: (plantToSave.meta?.status || IN_PROGRESS_STATUS).toLowerCase(),
-        admin_commentary: plantToSave.meta?.adminCommentary || null,
-        created_by: createdByValue,
-        created_time: createdTimeValue,
-        updated_by: (profile as any)?.full_name || plantToSave.meta?.updatedBy || null,
-        updated_time: new Date().toISOString(),
-      }
-        const { data, error: insertError } = await supabase
-          .from('plants')
-          .upsert(payload)
-          .select('id')
-          .maybeSingle()
-        if (insertError) throw new Error(insertError.message)
-        const savedId = data?.id || plantId
-        const colorIds = await upsertColors(plantToSave.identity?.colors || [])
-        await linkColors(savedId, colorIds)
-        await upsertImages(savedId, plantToSave.images || [])
-        await upsertWateringSchedules(savedId, {
-          ...(plantToSave.plantCare || {}),
-          watering: { ...(plantToSave.plantCare?.watering || {}), schedules: normalizedSchedules },
-        })
-        await upsertSources(savedId, sources)
-        await upsertInfusionMixes(savedId, plantToSave.usage?.infusionMix)
-        
-        // Save current language translation if not English
-        if (language && language !== 'en') {
-          const currentLanguageTranslation = {
+        let savedId = plantId
+        let payloadUpdatedTime: string | null = null
+
+        if (isEnglish) {
+          const payload = {
+            id: plantId,
+            name: trimmedName,
+            plant_type: normalizedPlantType || null,
+            utility: normalizedUtility,
+            comestible_part: normalizedComestible,
+            fruit_type: normalizedFruit,
+            given_names: plantToSave.identity?.givenNames || [],
+            scientific_name: plantToSave.identity?.scientificName || null,
+            family: plantToSave.identity?.family || null,
+            overview: plantToSave.identity?.overview || null,
+            promotion_month: normalizedPromotionMonth,
+            life_cycle: normalizedLifeCycle || null,
+            season: normalizedIdentitySeasons,
+            foliage_persistance: normalizeFoliagePersistanceForDb(plantToSave.identity?.foliagePersistance),
+            spiked: coerceBoolean(plantToSave.identity?.spiked, false),
+            toxicity_human: normalizedToxicityHuman || null,
+            toxicity_pets: normalizedToxicityPets || null,
+            allergens: plantToSave.identity?.allergens || [],
+            scent: coerceBoolean(plantToSave.identity?.scent, false),
+            symbolism: plantToSave.identity?.symbolism || [],
+            living_space: normalizedLivingSpace || null,
+            composition: normalizeCompositionForDb(plantToSave.identity?.composition),
+            maintenance_level: normalizedMaintenance || null,
+            multicolor: coerceBoolean(plantToSave.identity?.multicolor, false),
+            bicolor: coerceBoolean(plantToSave.identity?.bicolor, false),
+            origin: plantToSave.plantCare?.origin || [],
+            habitat: normalizedHabitat,
+            temperature_max: plantToSave.plantCare?.temperatureMax || null,
+            temperature_min: plantToSave.plantCare?.temperatureMin || null,
+            temperature_ideal: plantToSave.plantCare?.temperatureIdeal || null,
+            level_sun: normalizedLevelSun || null,
+            hygrometry: plantToSave.plantCare?.hygrometry || null,
+            watering_type: normalizedWateringType,
+            division: normalizedDivision,
+            soil: normalizedSoil,
+            advice_soil: plantToSave.plantCare?.adviceSoil || null,
+            mulching: normalizedMulching,
+            advice_mulching: plantToSave.plantCare?.adviceMulching || null,
+            nutrition_need: normalizedNutritionNeed,
+            fertilizer: normalizedFertilizer,
+            advice_fertilizer: plantToSave.plantCare?.adviceFertilizer || null,
+            sowing_month: monthNumbersToSlugs(plantToSave.growth?.sowingMonth),
+            flowering_month: monthNumbersToSlugs(plantToSave.growth?.floweringMonth),
+            fruiting_month: monthNumbersToSlugs(plantToSave.growth?.fruitingMonth),
+            height_cm: plantToSave.growth?.height || null,
+            wingspan_cm: plantToSave.growth?.wingspan || null,
+            tutoring: coerceBoolean(plantToSave.growth?.tutoring, false),
+            advice_tutoring: plantToSave.growth?.adviceTutoring || null,
+            sow_type: normalizedSowType,
+            separation_cm: plantToSave.growth?.separation || null,
+            transplanting: coerceBoolean(plantToSave.growth?.transplanting, null),
+            advice_sowing: plantToSave.growth?.adviceSowing || null,
+            cut: plantToSave.growth?.cut || null,
+            advice_medicinal: plantToSave.usage?.adviceMedicinal || null,
+            nutritional_intake: plantToSave.usage?.nutritionalIntake || [],
+            infusion: coerceBoolean(plantToSave.usage?.infusion, false),
+            advice_infusion: plantToSave.usage?.adviceInfusion || null,
+            recipes_ideas: plantToSave.usage?.recipesIdeas || [],
+            aromatherapy: coerceBoolean(plantToSave.usage?.aromatherapy, false),
+            spice_mixes: plantToSave.usage?.spiceMixes || [],
+            melliferous: coerceBoolean(plantToSave.ecology?.melliferous, false),
+            polenizer: normalizedPolenizer,
+            be_fertilizer: coerceBoolean(plantToSave.ecology?.beFertilizer, false),
+            ground_effect: plantToSave.ecology?.groundEffect || null,
+            conservation_status: normalizedConservationStatus || null,
+            pests: plantToSave.danger?.pests || [],
+            diseases: plantToSave.danger?.diseases || [],
+            companions: plantToSave.miscellaneous?.companions || [],
+            tags: plantToSave.miscellaneous?.tags || [],
+            source_name: primarySource?.name || null,
+            source_url: primarySource?.url || null,
+            status: (plantToSave.meta?.status || IN_PROGRESS_STATUS).toLowerCase(),
+            admin_commentary: plantToSave.meta?.adminCommentary || null,
+            created_by: createdByValue,
+            created_time: createdTimeValue,
+            updated_by: (profile as any)?.full_name || plantToSave.meta?.updatedBy || null,
+            updated_time: new Date().toISOString(),
+          }
+          payloadUpdatedTime = payload.updated_time
+          const { data, error: insertError } = await supabase
+            .from('plants')
+            .upsert(payload)
+            .select('id')
+            .maybeSingle()
+          if (insertError) throw new Error(insertError.message)
+          savedId = data?.id || plantId
+          const colorIds = await upsertColors(plantToSave.identity?.colors || [])
+          await linkColors(savedId, colorIds)
+          await upsertImages(savedId, plantToSave.images || [])
+          await upsertWateringSchedules(savedId, {
+            ...(plantToSave.plantCare || {}),
+            watering: { ...(plantToSave.plantCare?.watering || {}), schedules: normalizedSchedules },
+          })
+          await upsertSources(savedId, sources)
+          await upsertInfusionMixes(savedId, plantToSave.usage?.infusionMix)
+        }
+
+        if (!isEnglish) {
+          const translationPayload = {
             plant_id: savedId,
-            language: language,
-            name: plantToSave.name.trim() || null,
+            language,
+            name: trimmedName,
             given_names: plantToSave.identity?.givenNames || [],
             scientific_name: plantToSave.identity?.scientificName || null,
             family: plantToSave.identity?.family || null,
@@ -768,31 +780,35 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             source_url: primarySource?.url || null,
             tags: plantToSave.miscellaneous?.tags || [],
           }
-          
           const { error: translationError } = await supabase
             .from('plant_translations')
-            .upsert(currentLanguageTranslation, { onConflict: 'plant_id,language' })
+            .upsert(translationPayload, { onConflict: 'plant_id,language' })
           if (translationError) {
-            console.error('Failed to save current language translation:', translationError)
-            // Don't throw - allow plant save to succeed even if translation save fails
+            throw new Error(translationError.message)
           }
         }
-        
-      setPlant({
-        ...plantToSave,
-        plantCare: { ...(plantToSave.plantCare || {}), watering: { ...(plantToSave.plantCare?.watering || {}), schedules: normalizedSchedules } },
-        miscellaneous: { ...(plantToSave.miscellaneous || {}), sources },
-        id: savedId,
-        meta: { ...plantToSave.meta, createdBy: createdByValue || undefined, createdAt: createdTimeValue || undefined, updatedBy: (profile as any)?.full_name || plantToSave.meta?.updatedBy, updatedAt: payload.updated_time },
-      })
-      if (!existingLoaded) setExistingLoaded(true)
-      onSaved?.(savedId)
-    } catch (e: any) {
-      setError(e?.message || 'Failed to save plant')
-    } finally {
-      setSaving(false)
+
+        setPlant({
+          ...plantToSave,
+          plantCare: { ...(plantToSave.plantCare || {}), watering: { ...(plantToSave.plantCare?.watering || {}), schedules: normalizedSchedules } },
+          miscellaneous: { ...(plantToSave.miscellaneous || {}), sources },
+          id: savedId,
+          meta: {
+            ...plantToSave.meta,
+            createdBy: createdByValue || undefined,
+            createdAt: createdTimeValue || undefined,
+            updatedBy: isEnglish ? ((profile as any)?.full_name || plantToSave.meta?.updatedBy) : plantToSave.meta?.updatedBy,
+            updatedAt: isEnglish ? payloadUpdatedTime || new Date().toISOString() : plantToSave.meta?.updatedAt,
+          },
+        })
+        if (isEnglish && !existingLoaded) setExistingLoaded(true)
+        onSaved?.(savedId)
+      } catch (e: any) {
+        setError(e?.message || 'Failed to save plant')
+      } finally {
+        setSaving(false)
+      }
     }
-  }
 
   const runAiFill = async () => {
     const trimmedName = plant.name.trim()
