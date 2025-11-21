@@ -95,27 +95,6 @@ const SECTION_ANIMATION = {
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
 
-const mapSunLevel = (value?: string | null) => {
-  switch (value?.toLowerCase()) {
-    case 'full sun':
-      return 5
-    case 'partial sun':
-      return 4
-    case 'shade':
-      return 2
-    case 'low light':
-      return 1.5
-    default:
-      return 3
-  }
-}
-
-const mapWaterScore = (schedules: PlantWateringSchedule[]) => {
-  if (!schedules.length) return 2.5
-  const avg = schedules.reduce((sum, entry) => sum + (entry.quantity ?? 1), 0) / schedules.length
-  return clamp(avg + 1.5, 1, 5)
-}
-
 const buildTimelineData = (plant: Plant) => {
   const flowering = plant.growth?.floweringMonth || []
   const fruiting = plant.growth?.fruitingMonth || []
@@ -878,17 +857,6 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         </div>
       </div>
     </motion.section>
-  )
-}
-
-const CareChartTooltip = ({ active, payload: tooltipPayload }: TooltipProps<number, string> & { payload?: Array<{ payload?: { label: string; value: number } }> }) => {
-  const dataPoint = tooltipPayload && tooltipPayload.length > 0 ? tooltipPayload[0].payload : null
-  if (!active || !dataPoint) return null
-  return (
-    <div className="rounded-xl border border-emerald-500/30 bg-white/95 px-3 py-2 text-sm text-stone-700 shadow-lg dark:border-emerald-600/40 dark:bg-slate-900/95 dark:text-stone-100">
-      <div className="text-xs uppercase tracking-widest text-emerald-600/80 dark:text-emerald-300/80">{dataPoint.label}</div>
-      <div className="text-sm font-semibold">{dataPoint.value.toFixed(1)} / 5</div>
-    </div>
   )
 }
 

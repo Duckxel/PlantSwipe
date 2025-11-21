@@ -208,7 +208,6 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
     return "Scheduled"
   }
 
-    const sunExposure = plant.plantCare?.levelSun || "Adaptive"
     const maintenanceLevel =
       plant.identity?.maintenanceLevel || plant.plantCare?.maintenanceLevel || plant.care?.maintenanceLevel || undefined
 
