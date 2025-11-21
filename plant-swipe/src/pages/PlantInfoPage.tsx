@@ -36,7 +36,6 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip as RechartsTooltip,
-  Cell,
 } from 'recharts'
 import { monthSlugToNumber, monthSlugsToNumbers } from '@/lib/months'
 import {
@@ -73,7 +72,6 @@ type PlantEcologyData = NonNullable<Plant["ecology"]>
 
 type WaterSchedules = PlantWateringSchedule[]
 
-const CARE_BAR_COLORS = ['#16a34a', '#0ea5e9', '#f97316', '#8b5cf6', '#facc15'] as const
 const TIMELINE_COLORS = {
   flowering: '#f97316',
   fruiting: '#22c55e',
@@ -116,24 +114,6 @@ const mapWaterScore = (schedules: PlantWateringSchedule[]) => {
   if (!schedules.length) return 2.5
   const avg = schedules.reduce((sum, entry) => sum + (entry.quantity ?? 1), 0) / schedules.length
   return clamp(avg + 1.5, 1, 5)
-}
-
-const buildCareChartData = (plant: Plant) => {
-  const levelSun = plant.plantCare?.levelSun || ''
-  const wateringSchedules = plant.plantCare?.watering?.schedules || []
-  const soilTypes = plant.plantCare?.soil?.length || 0
-  const nutritionNeeds = plant.plantCare?.nutritionNeed?.length || 0
-  const careTraits = [
-    { key: 'sunlight', label: 'Sunlight', value: mapSunLevel(levelSun) },
-    { key: 'water', label: 'Watering', value: mapWaterScore(wateringSchedules) },
-    { key: 'soil', label: 'Soil', value: clamp(soilTypes ? 2 + soilTypes * 0.5 : 2, 1, 5) },
-    { key: 'nutrition', label: 'Nutrition', value: clamp(2 + nutritionNeeds * 0.3, 1.5, 5) },
-    { key: 'climate', label: 'Climate', value: plant.identity?.livingSpace === 'Outdoor' ? 4.5 : 3 },
-  ]
-  return careTraits.map((item, index) => ({
-    ...item,
-    color: CARE_BAR_COLORS[index % CARE_BAR_COLORS.length],
-  }))
 }
 
 const buildTimelineData = (plant: Plant) => {
@@ -417,7 +397,6 @@ const PlantInfoPage: React.FC = () => {
 }
 
 const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
-  const careData = React.useMemo(() => buildCareChartData(plant), [plant])
   const timelineData = React.useMemo(() => buildTimelineData(plant), [plant])
   const height = plant.growth?.height ?? null
   const wingspan = plant.growth?.wingspan ?? null
@@ -449,7 +428,10 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
     plant.utility?.[0],
     plant.identity?.season?.slice(0, 2).join(' • '),
   ].filter(Boolean) as string[]
-  const palette = plant.identity?.colors?.length ? plant.identity.colors : []
+    const palette = plant.identity?.colors?.length ? plant.identity.colors : []
+    const showPalette = palette.length > 0
+    const dimensionColClass = showPalette ? 'col-span-1' : 'col-span-2'
+    const timelineColClass = showPalette ? 'col-span-2 lg:col-span-1' : 'col-span-2 lg:col-span-2'
     const formatWaterPlans = (schedules: PlantWateringSchedule[] = []) => {
       if (!schedules.length) return 'Flexible'
       return schedules
@@ -714,44 +696,42 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       transition={{ duration: 0.4 }}
       className="space-y-4 sm:space-y-6"
     >
-      <div className="flex flex-col gap-1.5 sm:gap-2">
-        <p className="text-[11px] uppercase tracking-[0.45em] text-emerald-500/80">Immersive overview</p>
-        <h2 className="text-xl sm:text-2xl font-semibold text-stone-900 dark:text-stone-100">Feel the plant before the paragraphs</h2>
-        <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400">
-          Play with the holographic cube, skim the care pulse, and glance at ecology badges—then dive deeper if you want.
-        </p>
-      </div>
+        <div className="flex flex-col gap-1.5 sm:gap-2">
+          <p className="text-[11px] uppercase tracking-[0.45em] text-emerald-500/80">Immersive overview</p>
+          <h2 className="text-xl sm:text-2xl font-semibold text-stone-900 dark:text-stone-100">Feel the plant before the paragraphs</h2>
+          <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400">
+            Play with the holographic cube, skim the seasonal timeline, and glance at ecology badges—then dive deeper if you want.
+          </p>
+        </div>
       
-      {/* Dynamic Grid Layout - More interesting flow */}
-      <div className="grid gap-3 sm:gap-4 lg:grid-cols-3">
-        
-        {/* 3D Dimensions - Compact card in first column */}
-        {(height !== null || wingspan !== null || spacing !== null) && (
-          <motion.section
-            {...SECTION_ANIMATION}
-            transition={{ duration: 0.4, delay: 0.02 }}
-            className="lg:col-span-1 rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-50/70 via-white/60 to-white/10 p-3 sm:p-5 dark:border-emerald-500/30 dark:from-emerald-500/10 dark:via-transparent dark:to-transparent"
-          >
-            <div className="mb-3 space-y-2">
-              <div>
-                <p className="text-[9px] sm:text-[10px] uppercase tracking-[0.2em] text-emerald-700/70 dark:text-emerald-300/70">
-                  3D View
-                </p>
-                <p className="text-base sm:text-lg font-semibold text-stone-900 dark:text-white">Dimensions</p>
-              </div>
-              {highlightBadges.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {highlightBadges.slice(0, 4).map((badge) => (
-                    <Badge
-                      key={badge}
-                      className="rounded-2xl border border-emerald-300/70 bg-white px-3 py-1 text-xs sm:text-sm font-semibold tracking-wide text-emerald-800 dark:border-emerald-500/50 dark:bg-emerald-500/15 dark:text-emerald-100 uppercase shadow-sm"
-                    >
-                      {badge}
-                    </Badge>
-                  ))}
+        {/* Dynamic Grid Layout */}
+        <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-3 items-stretch">
+          {(height !== null || wingspan !== null || spacing !== null) && (
+            <motion.section
+              {...SECTION_ANIMATION}
+              transition={{ duration: 0.4, delay: 0.02 }}
+              className={`${dimensionColClass} lg:col-span-1 rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-50/70 via-white/60 to-white/10 p-3 sm:p-5 dark:border-emerald-500/30 dark:from-emerald-500/10 dark:via-transparent dark:to-transparent`}
+            >
+              <div className="mb-3 space-y-2">
+                <div>
+                  <p className="text-[9px] sm:text-[10px] uppercase tracking-[0.2em] text-emerald-700/70 dark:text-emerald-300/70">
+                    3D View
+                  </p>
+                  <p className="text-base sm:text-lg font-semibold text-stone-900 dark:text-white">Dimensions</p>
                 </div>
-              )}
-            </div>
+                {highlightBadges.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {highlightBadges.slice(0, 4).map((badge) => (
+                      <Badge
+                        key={badge}
+                        className="rounded-2xl border border-emerald-300/70 bg-white px-3 py-1 text-xs sm:text-sm font-semibold tracking-wide text-emerald-800 dark:border-emerald-500/50 dark:bg-emerald-500/15 dark:text-emerald-100 uppercase shadow-sm"
+                      >
+                        {badge}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
               <div className="grid md:grid-cols-2 gap-3 sm:gap-4 items-stretch">
                 <div className="relative rounded-2xl border border-emerald-100/70 bg-white/80 p-2 sm:p-3 dark:border-emerald-500/30 dark:bg-[#0f1f1f]/60 min-h-[260px]">
                   <DimensionCube scale={cubeScale} className="h-full w-full" />
@@ -764,55 +744,14 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                   ))}
                 </div>
               </div>
-          </motion.section>
-        )}
+            </motion.section>
+          )}
 
-        {/* Care Chart - Spans 2 columns if dimensions exist, otherwise 3 */}
-        <motion.section {...SECTION_ANIMATION} transition={{ duration: 0.4, delay: 0.05 }} className={`${(height !== null || wingspan !== null || spacing !== null) ? 'lg:col-span-2' : 'lg:col-span-3'} relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6`}>
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)] dark:bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.18),_transparent_60%)]" />
-          <div className="relative space-y-3 sm:space-y-4">
-            <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-300">
-              <Sun className="h-4 w-4 sm:h-5 sm:w-5" />
-              <span className="text-[10px] sm:text-xs uppercase tracking-widest">Care Chart</span>
-            </div>
-            <div className="h-48 sm:h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={careData} barCategoryGap="20%" barSize={24}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(16,185,129,0.18)" vertical={false} />
-                  <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
-                  <YAxis hide domain={[0, 5]} />
-                  <RechartsTooltip content={<CareChartTooltip />} cursor={{ fill: 'rgba(16,185,129,0.08)' }} />
-                  <Bar dataKey="value" radius={[12, 12, 12, 12]}>
-                    {careData.map((entry) => (
-                      <Cell key={entry.key} fill={entry.color} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="space-y-2 sm:space-y-3">
-              {careData.map((item) => (
-                <div key={item.key} className="flex items-center justify-between text-xs sm:text-sm">
-                  <div className="flex items-center gap-1.5 sm:gap-2 text-stone-600 dark:text-stone-300">
-                    <span className="h-2.5 w-2.5 sm:h-3 sm:w-3 rounded-full flex-shrink-0" style={{ backgroundColor: item.color }} />
-                    <span className="truncate">{item.label}</span>
-                  </div>
-                  <span className="font-semibold text-stone-900 dark:text-stone-100 ml-2 flex-shrink-0">{item.value.toFixed(1)} / 5</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </motion.section>
-      </div>
-
-        {/* Second Row - Color Moodboard beside Seasonal Timeline */}
-        <div className="grid gap-3 sm:gap-4 lg:grid-cols-3">
-          {/* Color Moodboard */}
           {palette.length > 0 && (
             <motion.section
               {...SECTION_ANIMATION}
               transition={{ duration: 0.4, delay: 0.08 }}
-              className="lg:col-span-1 relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-3 sm:p-4"
+              className="col-span-1 lg:col-span-1 relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-3 sm:p-4"
             >
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
               <div className="relative space-y-2 sm:space-y-3">
@@ -830,28 +769,27 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
             </motion.section>
           )}
 
-          {/* Seasonal Timeline */}
-            <motion.section
-              {...SECTION_ANIMATION}
-              transition={{ duration: 0.4, delay: 0.1 }}
-              className={`${palette.length > 0 ? 'lg:col-span-2' : 'lg:col-span-3'} relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6`}
-            >
+          <motion.section
+            {...SECTION_ANIMATION}
+            transition={{ duration: 0.4, delay: 0.1 }}
+            className={`${timelineColClass} relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6`}
+          >
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
             <div className="relative space-y-3 sm:space-y-4">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-300">
-                    <Wind className="h-4 w-4 sm:h-5 sm:w-5" />
-                    <span className="text-[10px] sm:text-xs uppercase tracking-widest">Seasonal Timeline</span>
-                  </div>
-                  {hoveredMonth ? (
-                    <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-200">{hoveredMonth}</span>
-                  ) : (
-                    <span className="text-[10px] uppercase tracking-wide text-stone-400 dark:text-stone-500">Hover a month</span>
-                  )}
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-300">
+                  <Wind className="h-4 w-4 sm:h-5 sm:w-5" />
+                  <span className="text-[10px] sm:text-xs uppercase tracking-widest">Seasonal Timeline</span>
                 </div>
-                <div className="h-52 sm:h-64">
+                {hoveredMonth ? (
+                  <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-200">{hoveredMonth}</span>
+                ) : (
+                  <span className="text-[10px] uppercase tracking-wide text-stone-400 dark:text-stone-500">Hover a month</span>
+                )}
+              </div>
+              <div className="h-52 sm:h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={timelineData} stackOffset="expand" onMouseMove={handleTimelineHover} onMouseLeave={clearTimelineHover}>
+                  <BarChart data={timelineData} stackOffset="expand" onMouseMove={handleTimelineHover} onMouseLeave={clearTimelineHover}>
                     <CartesianGrid stroke="rgba(120,113,108,0.16)" vertical={false} />
                     <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 9 }} />
                     <YAxis hide domain={[0, 3]} />
