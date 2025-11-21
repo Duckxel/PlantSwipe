@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom'
 import { PlantDetails } from '@/components/plant/PlantDetails'
 import { DimensionCube } from '@/components/plant/DimensionCube'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
-import type { Plant, PlantImage, PlantWateringSchedule, PlantColor } from '@/types/plant'
+import type { Plant, PlantImage, PlantWateringSchedule, PlantColor, PlantSource } from '@/types/plant'
 import { useAuth } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabaseClient'
 import { useTranslation } from 'react-i18next'
@@ -462,26 +462,112 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         })
         .join(' • ')
     }
-
-    const usageItems = [
-      { label: 'Utility', value: plant.utility?.join(', ') || 'Ornamental', icon: <Palette className="h-3.5 w-3.5" /> },
-    ]
-    const hasComestibleUtility = plant.utility?.some((u) => u?.toLowerCase() === 'comestible')
-    const comestiblePartsValue = plant.comestiblePart?.length ? plant.comestiblePart.join(', ') : null
-    const shouldShowComestibleParts = hasComestibleUtility || Boolean(comestiblePartsValue)
-    if (shouldShowComestibleParts) {
-      usageItems.push({
-        label: 'Comestible Parts',
-        value: comestiblePartsValue || 'Not specified',
-        icon: <Leaf className="h-3.5 w-3.5" />,
-      })
-    }
-    usageItems.push({
-      label: 'Recipes',
-      value: plant.usage?.recipesIdeas?.slice(0, 2).join(', ') || 'Seasonal teas',
-      icon: <Droplets className="h-3.5 w-3.5" />,
-    })
-
+      const identity = plant.identity ?? {}
+      const plantCare = plant.plantCare ?? {}
+      const growth = plant.growth ?? {}
+      const usage = plant.usage ?? {}
+      const ecology = plant.ecology ?? {}
+      const danger = plant.danger ?? {}
+      const misc = plant.miscellaneous ?? {}
+      const meta = plant.meta ?? {}
+      const soilList = compactStrings(plantCare.soil as string[] | undefined)
+      const originList = compactStrings(plantCare.origin)
+      const wateringTypeList = compactStrings(plantCare.wateringType as string[] | undefined)
+      const divisionList = compactStrings(plantCare.division as string[] | undefined)
+      const nutritionNeeds = compactStrings(plantCare.nutritionNeed as string[] | undefined)
+      const fertilizerList = compactStrings(plantCare.fertilizer as string[] | undefined)
+      const mulchingMaterial = formatTextValue(
+        typeof plantCare.mulching === 'string' ? plantCare.mulching : plantCare.mulching?.material,
+      )
+      const comestiblePartList = compactStrings(plant.comestiblePart as string[] | undefined)
+      const fruitTypeList = compactStrings(plant.fruitType as string[] | undefined)
+      const utilityList = compactStrings(plant.utility as string[] | undefined)
+      const sowTypeList = compactStrings(growth.sowType as string[] | undefined)
+      const pollenizerList = compactStrings(ecology.polenizer as string[] | undefined)
+      const companions = compactStrings(misc.companions)
+      const tagList = compactStrings(misc.tags)
+      const pestList = compactStrings(danger.pests)
+      const diseaseList = compactStrings(danger.diseases)
+      const symbolismList = compactStrings(identity.symbolism)
+      const allergenList = compactStrings(identity.allergens)
+      const compositionList = compactStrings(identity.composition as string[] | undefined)
+      const colorTraitList = [
+        (identity.multicolor ?? plant.multicolor) ? 'Multicolor' : null,
+        (identity.bicolor ?? plant.bicolor) ? 'Bicolor' : null,
+      ].filter(Boolean) as string[]
+      const nutritionalList = compactStrings(usage.nutritionalIntake)
+      const nutritionalLabel = nutritionalList.length ? nutritionalList.join(' • ') : null
+      const spiceMixesList = compactStrings(usage.spiceMixes)
+      const spiceMixesLabel = spiceMixesList.length ? spiceMixesList.join(' • ') : null
+      const infusionMixSummary = formatInfusionMixSummary(usage.infusionMix)
+      const temperatureWindow = formatTemperatureRange(
+        plantCare.temperatureMin,
+        plantCare.temperatureIdeal,
+        plantCare.temperatureMax,
+      )
+      const humidityValue =
+        plantCare.hygrometry !== undefined && plantCare.hygrometry !== null ? `${plantCare.hygrometry}%` : null
+      const soilAdvice = formatTextValue(plantCare.adviceSoil)
+      const mulchingAdvice = formatTextValue(plantCare.adviceMulching)
+      const fertilizerAdvice = formatTextValue(plantCare.adviceFertilizer)
+      const medicinalNotes = formatTextValue(usage.adviceMedicinal)
+      const infusionNotes = formatTextValue(usage.adviceInfusion)
+      const adminCommentary = formatTextValue(meta.adminCommentary)
+      const createdStamp = formatAuditStamp(meta.createdBy, meta.createdAt ?? meta.createdTime)
+      const updatedStamp = formatAuditStamp(meta.updatedBy, meta.updatedAt ?? meta.updatedTime)
+      const aromaDescriptor = formatBooleanDescriptor(usage.aromatherapy, 'Essential oils', 'Not for oils')
+      const infusionDescriptor = formatBooleanDescriptor(usage.infusion, 'Infusion ready', 'Not for infusions')
+      const melliferousDescriptor = formatBooleanDescriptor(
+        ecology.melliferous,
+        'Pollinator magnet',
+        'Not melliferous',
+      )
+      const manureDescriptor = formatBooleanDescriptor(
+        ecology.beFertilizer,
+        'Feeds neighbors',
+        'Neutral ground effect',
+      )
+      const supportDescriptor = formatBooleanDescriptor(growth.tutoring, 'Needs support', 'Self-supporting')
+      const transplantDescriptor = formatBooleanDescriptor(growth.transplanting, 'Transplant recommended', 'No transplant needed')
+      const fragranceDescriptor = formatBooleanDescriptor(identity.scent, 'Fragrant', 'Neutral scent')
+      const spikedDescriptor = formatBooleanDescriptor(identity.spiked, 'Has thorns', 'Smooth stems')
+      const infusionRecipes = formatTextValue(usage.recipesIdeas?.slice(0, 3).join(' • '))
+      const habitatLabel = habitats.length ? habitats.join(' • ') : null
+      const pollenizerLabel = pollenizerList.length ? pollenizerList.join(' • ') : null
+      const nutrientLabel = nutritionNeeds.length ? nutritionNeeds.join(' • ') : null
+      const fertilizerLabel = fertilizerList.length ? fertilizerList.join(' • ') : null
+      const soilLabel = soilList.length ? soilList.join(', ') : null
+      const wateringTypeLabel = wateringTypeList.length ? wateringTypeList.join(' • ') : null
+      const divisionLabel = divisionList.length ? divisionList.join(' • ') : null
+      const originLabel = originList.length ? originList.join(' • ') : null
+      const utilityLabel = utilityList.length ? utilityList.join(' • ') : null
+      const sowTypeLabel = sowTypeList.length ? sowTypeList.join(' • ') : null
+      const companionsLabel = companions.length ? companions.join(' • ') : null
+      const tagLabel = tagList.length ? tagList.join(' • ') : null
+      const pestLabel = pestList.length ? pestList.join(' • ') : null
+      const diseaseLabel = diseaseList.length ? diseaseList.join(' • ') : null
+      const symbolismLabel = symbolismList.length ? symbolismList.join(' • ') : null
+      const allergenLabel = allergenList.length ? allergenList.join(' • ') : null
+      const compositionLabel = compositionList.length ? compositionList.join(' • ') : null
+      const colorTraitLabel = colorTraitList.length ? colorTraitList.join(' • ') : null
+      const comestiblePartsLabel = comestiblePartList.length ? comestiblePartList.join(' • ') : null
+      const fruitTypeLabel = fruitTypeList.length ? fruitTypeList.join(' • ') : null
+      const livingSpaceLabel = identity.livingSpace || null
+      const maintenanceLabel =
+        identity.maintenanceLevel || plantCare.maintenanceLevel || plant.identity?.maintenanceLevel || null
+      const seasonLabel =
+        (identity.season && identity.season.length ? identity.season : plant.seasons)?.join(' • ') || null
+      const conservationLabel = plant.ecology?.conservationStatus || null
+      const identityFamily = formatTextValue(identity.family)
+      const lifeCycleLabel = formatTextValue(identity.lifeCycle)
+      const foliageLabel = formatTextValue(identity.foliagePersistance)
+      const growthCut = formatTextValue(growth.cut)
+      const growthSupportNotes = formatTextValue(growth.adviceTutoring)
+      const growthSowingNotes = formatTextValue(growth.adviceSowing)
+      const heightLabel = growth.height ? `${growth.height} cm` : null
+      const wingspanLabel = growth.wingspan ? `${growth.wingspan} cm` : null
+      const spacingLabel = growth.separation ? `${growth.separation} cm` : null
+      const groundEffectLabel = formatTextValue(ecology.groundEffect)
     const [hoveredMonth, setHoveredMonth] = React.useState<string | null>(null)
 
     const handleTimelineHover = React.useCallback((state: { activeLabel?: string | number } | undefined) => {
@@ -496,44 +582,134 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       setHoveredMonth(null)
     }, [])
 
-    const infoSections = [
-    {
-      title: 'Care Highlights',
-      icon: <Droplets className="h-4 w-4" />,
-      items: [
-          {
-            label: 'Water',
-            value: formatWaterPlans(plant.plantCare?.watering?.schedules || []),
-            icon: <Droplets className="h-3.5 w-3.5" />,
-          },
-        { label: 'Sunlight', value: plant.plantCare?.levelSun || 'Adaptive', icon: <Sun className="h-3.5 w-3.5" /> },
-        { label: 'Soil Mix', value: plant.plantCare?.soil?.join(', ') || 'Loamy blend', icon: <Leaf className="h-3.5 w-3.5" /> },
-      ],
-    },
-    {
-      title: 'Usage & Flavor',
-      icon: <Leaf className="h-4 w-4" />,
-        items: usageItems,
-    },
-    {
-      title: 'Ecology',
-      icon: <Sprout className="h-4 w-4" />,
-      items: [
-        { label: 'Habitat', value: habitats.join(', ') || 'Garden adaptable', icon: <MapPin className="h-3.5 w-3.5" /> },
-        { label: 'Pollinators', value: plant.ecology?.polenizer?.join(', ') || 'Bee friendly', icon: <Wind className="h-3.5 w-3.5" /> },
-        { label: 'Ground Effect', value: plant.ecology?.groundEffect || 'Neutral', icon: <Sprout className="h-3.5 w-3.5" /> },
-      ],
-    },
-    {
-      title: 'Risk & Status',
-      icon: <Flame className="h-4 w-4" />,
-      items: [
-        { label: 'Toxicity (Human)', value: plant.identity?.toxicityHuman || 'Low', icon: <Flame className="h-3.5 w-3.5" /> },
-        { label: 'Toxicity (Pets)', value: plant.identity?.toxicityPets || 'Low', icon: <Leaf className="h-3.5 w-3.5" /> },
-        { label: 'Conservation', value: plant.ecology?.conservationStatus || 'Stable', icon: <Compass className="h-3.5 w-3.5" /> },
-      ],
-    },
-  ]
+      const careHighlights = filterInfoItems([
+        {
+          label: 'Water',
+          value: formatWaterPlans(plant.plantCare?.watering?.schedules || []),
+          icon: <Droplets className="h-3.5 w-3.5" />,
+        },
+        {
+          label: 'Sunlight',
+          value: plantCare.levelSun || 'Adaptive',
+          icon: <Sun className="h-3.5 w-3.5" />,
+        },
+        {
+          label: 'Soil Mix',
+          value: soilLabel || 'Loamy blend',
+          icon: <Leaf className="h-3.5 w-3.5" />,
+        },
+        {
+          label: 'Maintenance',
+          value: maintenanceLabel,
+          icon: <Sprout className="h-3.5 w-3.5" />,
+        },
+        {
+          label: 'Temperature',
+          value: temperatureWindow,
+          icon: <Thermometer className="h-3.5 w-3.5" />,
+        },
+        {
+          label: 'Humidity',
+          value: humidityValue,
+          icon: <Droplets className="h-3.5 w-3.5" />,
+        },
+      ])
+      const careDetails = filterInfoItems([
+        { label: 'Origin', value: originLabel },
+        { label: 'Watering Type', value: wateringTypeLabel },
+        { label: 'Division', value: divisionLabel },
+        { label: 'Mulching', value: mulchingMaterial },
+        { label: 'Nutrition Need', value: nutrientLabel },
+        { label: 'Fertilizer', value: fertilizerLabel },
+        { label: 'Soil Advice', value: soilAdvice },
+        { label: 'Mulching Advice', value: mulchingAdvice },
+        { label: 'Fertilizer Advice', value: fertilizerAdvice },
+      ])
+      const usageFlavor = filterInfoItems([
+        {
+          label: 'Utility',
+          value: utilityLabel || 'Ornamental',
+          icon: <Palette className="h-3.5 w-3.5" />,
+        },
+        { label: 'Comestible Parts', value: comestiblePartsLabel, icon: <Leaf className="h-3.5 w-3.5" /> },
+        { label: 'Fruit Type', value: fruitTypeLabel },
+        { label: 'Medicinal Notes', value: medicinalNotes },
+        { label: 'Nutritional Intake', value: nutritionalLabel },
+        { label: 'Infusion Friendly', value: infusionDescriptor },
+        { label: 'Infusion Notes', value: infusionNotes },
+        { label: 'Infusion Mix', value: infusionMixSummary },
+        { label: 'Aromatherapy', value: aromaDescriptor },
+        { label: 'Spice Mixes', value: spiceMixesLabel },
+        { label: 'Recipes', value: infusionRecipes },
+      ])
+      const ecologyItems = filterInfoItems([
+        { label: 'Habitat', value: habitatLabel || 'Garden adaptable', icon: <MapPin className="h-3.5 w-3.5" /> },
+        { label: 'Pollinators', value: pollenizerLabel || 'Bee friendly', icon: <Wind className="h-3.5 w-3.5" /> },
+        { label: 'Ground Effect', value: groundEffectLabel, icon: <Sprout className="h-3.5 w-3.5" /> },
+        { label: 'Melliferous', value: melliferousDescriptor },
+        { label: 'Green Manure', value: manureDescriptor },
+        { label: 'Companions', value: companionsLabel },
+        { label: 'Tags', value: tagLabel },
+      ])
+      const identityItems = filterInfoItems([
+        { label: 'Family', value: identityFamily },
+        { label: 'Life Cycle', value: lifeCycleLabel },
+        { label: 'Foliage', value: foliageLabel },
+        { label: 'Living Space', value: livingSpaceLabel },
+        { label: 'Seasons', value: seasonLabel },
+        { label: 'Symbolism', value: symbolismLabel },
+        { label: 'Allergens', value: allergenLabel },
+        { label: 'Composition Uses', value: compositionLabel },
+        { label: 'Color Traits', value: colorTraitLabel },
+        { label: 'Fragrance', value: fragranceDescriptor },
+        { label: 'Spiked', value: spikedDescriptor },
+      ])
+      const growthItems = filterInfoItems([
+        { label: 'Height', value: heightLabel },
+        { label: 'Spread', value: wingspanLabel },
+        { label: 'Spacing', value: spacingLabel },
+        { label: 'Sow Type', value: sowTypeLabel },
+        { label: 'Needs Support', value: supportDescriptor },
+        { label: 'Support Notes', value: growthSupportNotes },
+        { label: 'Transplanting', value: transplantDescriptor },
+        { label: 'Sowing Notes', value: growthSowingNotes },
+        { label: 'Cut Type', value: growthCut },
+      ])
+      const riskItems = filterInfoItems([
+        {
+          label: 'Toxicity (Human)',
+          value: plant.identity?.toxicityHuman || 'Low',
+          icon: <Flame className="h-3.5 w-3.5" />,
+        },
+        {
+          label: 'Toxicity (Pets)',
+          value: plant.identity?.toxicityPets || 'Low',
+          icon: <Leaf className="h-3.5 w-3.5" />,
+        },
+        {
+          label: 'Conservation',
+          value: conservationLabel || 'Stable',
+          icon: <Compass className="h-3.5 w-3.5" />,
+        },
+        { label: 'Pests', value: pestLabel },
+        { label: 'Diseases', value: diseaseLabel },
+      ])
+      const recordItems = filterInfoItems([
+        { label: 'Admin Commentary', value: adminCommentary },
+        { label: 'Sources', value: formatSourcesList(misc.sources) },
+        { label: 'Created', value: createdStamp },
+        { label: 'Updated', value: updatedStamp },
+      ])
+      const infoSections = [
+        { title: 'Care Highlights', icon: <Droplets className="h-4 w-4" />, items: careHighlights },
+        { title: 'Care Details', icon: <Thermometer className="h-4 w-4" />, items: careDetails },
+        { title: 'Usage & Flavor', icon: <Leaf className="h-4 w-4" />, items: usageFlavor },
+        { title: 'Ecology', icon: <Sprout className="h-4 w-4" />, items: ecologyItems },
+        { title: 'Identity & Traits', icon: <Palette className="h-4 w-4" />, items: identityItems },
+        { title: 'Growth & Structure', icon: <Wind className="h-4 w-4" />, items: growthItems },
+        { title: 'Risk & Status', icon: <Flame className="h-4 w-4" />, items: riskItems },
+        { title: 'Records & Sources', icon: <Compass className="h-4 w-4" />, items: recordItems },
+      ].filter((section) => section.items.length > 0)
 
   return (
     <motion.section
@@ -830,17 +1006,25 @@ const InfoCard: React.FC<{ title: string; icon: React.ReactNode; children: React
   </Card>
 )
 
-const InfoItem: React.FC<{ label: string; value: string; icon?: React.ReactNode }> = ({ label, value, icon }) => (
-  <div className="flex items-start gap-2 sm:gap-3 py-1 sm:py-1.5">
-    <div className="h-4 w-4 sm:h-5 sm:w-5 rounded-md border border-stone-200 bg-stone-100 flex items-center justify-center flex-shrink-0 mt-0.5 text-stone-600 dark:border-emerald-900/40 dark:bg-[#0f1f28] dark:text-emerald-200">
-      {icon || <Thermometer className="h-3 w-3 sm:h-3.5 sm:w-3.5 opacity-70" />}
+const InfoItem: React.FC<{ label: string; value?: React.ReactNode; icon?: React.ReactNode }> = ({
+  label,
+  value,
+  icon,
+}) => {
+  if (value === undefined || value === null) return null
+  if (typeof value === 'string' && !value.trim()) return null
+  return (
+    <div className="flex items-start gap-2 sm:gap-3 py-1 sm:py-1.5">
+      <div className="h-4 w-4 sm:h-5 sm:w-5 rounded-md border border-stone-200 bg-stone-100 flex items-center justify-center flex-shrink-0 mt-0.5 text-stone-600 dark:border-emerald-900/40 dark:bg-[#0f1f28] dark:text-emerald-200">
+        {icon || <Thermometer className="h-3 w-3 sm:h-3.5 sm:w-3.5 opacity-70" />}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-[10px] sm:text-xs font-medium text-stone-600 dark:text-stone-400 mb-0.5">{label}</div>
+        <div className="text-xs sm:text-sm text-stone-900 dark:text-stone-100 break-words leading-relaxed">{value}</div>
+      </div>
     </div>
-    <div className="flex-1 min-w-0">
-      <div className="text-[10px] sm:text-xs font-medium text-stone-600 dark:text-stone-400 mb-0.5">{label}</div>
-      <div className="text-xs sm:text-sm text-stone-900 dark:text-stone-100 break-words leading-relaxed">{value}</div>
-    </div>
-  </div>
-)
+  )
+}
 
 const ColorSwatchCard: React.FC<{ color: PlantColor }> = ({ color }) => {
   const label = color.name || 'Palette'
@@ -854,5 +1038,117 @@ const ColorSwatchCard: React.FC<{ color: PlantColor }> = ({ color }) => {
       <div className="text-[10px] sm:text-[11px] font-semibold text-stone-900 dark:text-stone-100 truncate">{label}</div>
     </div>
   )
+
+interface InfoItemConfig {
+  label: string
+  value?: React.ReactNode
+  icon?: React.ReactNode
 }
 
+const filterInfoItems = (items: InfoItemConfig[]) =>
+  items.filter((item) => {
+    if (item.value === undefined || item.value === null) return false
+    return typeof item.value === 'string' ? Boolean(item.value.trim()) : true
+  })
+
+const NON_VALUE_TOKENS = new Set([
+  'none',
+  'no',
+  'n/a',
+  'na',
+  'not applicable',
+  'not specified',
+  'unknown',
+  'unspecified',
+  'not provided',
+  'not available',
+  'aucun',
+  'aucune',
+  'sin datos',
+  'none noted',
+])
+
+const isMeaningfulString = (value?: string | null) => {
+  if (!value) return false
+  const trimmed = value.trim()
+  if (!trimmed) return false
+  return !NON_VALUE_TOKENS.has(trimmed.toLowerCase())
+}
+
+const formatTextValue = (value?: string | null) => (isMeaningfulString(value) ? value!.trim() : null)
+
+const compactStrings = (values?: (string | null | undefined)[]) => {
+  if (!values) return []
+  return values
+    .map((value) => (typeof value === 'string' ? value.trim() : ''))
+    .filter((value) => Boolean(value) && isMeaningfulString(value))
+}
+
+const formatBooleanDescriptor = (value: boolean | null | undefined, positive: string, negative: string) => {
+  if (value === undefined || value === null) return null
+  return value ? positive : negative
+}
+
+const formatTemperatureRange = (min?: number | null, ideal?: number | null, max?: number | null) => {
+  const parts: string[] = []
+  if (typeof min === 'number') parts.push(`${min}°C`)
+  if (typeof max === 'number') parts.push(`${max}°C`)
+  const range =
+    parts.length === 2 ? `${parts[0]} to ${parts[1]}` : parts.length === 1 ? `From ${parts[0]}` : null
+  if (typeof ideal === 'number') {
+    return range ? `${range} (ideal ${ideal}°C)` : `Ideal ${ideal}°C`
+  }
+  return range
+}
+
+const formatInfusionMixSummary = (mix?: Record<string, string> | null) => {
+  if (!mix) return null
+  const entries = Object.entries(mix)
+    .map(([name, benefit]) => {
+      const safeName = formatTextValue(name)
+      const safeBenefit = formatTextValue(benefit)
+      if (safeName && safeBenefit) return `${safeName}: ${safeBenefit}`
+      return safeName || safeBenefit || ''
+    })
+    .filter(Boolean)
+  return entries.length ? entries.join(' • ') : null
+}
+
+const formatSourcesList = (sources?: PlantSource[] | null) => {
+  const list = (sources ?? []).filter((source): source is PlantSource => Boolean(source?.name))
+  if (!list.length) return null
+  return (
+    <ul className="space-y-1">
+      {list.map((source, idx) => (
+        <li key={source.id ?? `${source.name}-${idx}`}>
+          {source.url ? (
+            <a
+              href={source.url}
+              target="_blank"
+              rel="noreferrer"
+              className="text-emerald-600 hover:underline dark:text-emerald-300"
+            >
+              {source.name}
+            </a>
+          ) : (
+            <span>{source.name}</span>
+          )}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+const formatDateLabel = (value?: string | null) => {
+  if (!value) return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+}
+
+const formatAuditStamp = (user?: string | null, timestamp?: string | null) => {
+  const dateLabel = formatDateLabel(timestamp)
+  if (user && dateLabel) return `${user} • ${dateLabel}`
+  if (user) return user
+  return dateLabel
+}
