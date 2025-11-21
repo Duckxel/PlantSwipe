@@ -584,43 +584,30 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         </motion.section>
       </div>
 
-      {/* Second Row - Seasonal Timeline, Habitat Map, Color Moodboard */}
+        {/* Second Row - Color Moodboard, Habitat Map, Seasonal Timeline */}
       <div className="grid gap-3 sm:gap-4 lg:grid-cols-3">
-        {/* Seasonal Timeline */}
-        <motion.section {...SECTION_ANIMATION} transition={{ duration: 0.4, delay: 0.08 }} className="lg:col-span-1 relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
-          <div className="relative space-y-3 sm:space-y-4">
-            <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-300">
-              <Wind className="h-4 w-4 sm:h-5 sm:w-5" />
-              <span className="text-[10px] sm:text-xs uppercase tracking-widest">Seasonal Timeline</span>
-            </div>
-            <div className="h-48 sm:h-60">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={timelineData} stackOffset="expand">
-                  <CartesianGrid stroke="rgba(120,113,108,0.16)" vertical={false} />
-                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 9 }} />
-                  <YAxis hide domain={[0, 3]} />
-                  <RechartsTooltip content={<TimelineTooltip />} cursor={{ fill: 'rgba(15,118,110,0.08)' }} />
-                  <Bar dataKey="flowering" stackId="timeline" fill={TIMELINE_COLORS.flowering} radius={[8, 8, 0, 0]} />
-                  <Bar dataKey="fruiting" stackId="timeline" fill={TIMELINE_COLORS.fruiting} />
-                  <Bar dataKey="sowing" stackId="timeline" fill={TIMELINE_COLORS.sowing} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="flex flex-wrap gap-3 sm:gap-4 text-[10px] sm:text-xs text-stone-600 dark:text-stone-400">
-              {Object.entries(TIMELINE_COLORS).map(([label, color]) => (
-                <span key={label} className="flex items-center gap-1.5 sm:gap-2">
-                  <span className="h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
-                  {label.charAt(0).toUpperCase() + label.slice(1)}
-                </span>
-              ))}
-            </div>
-          </div>
-        </motion.section>
+          {/* Color Moodboard */}
+          {palette.length > 0 && (
+            <motion.section {...SECTION_ANIMATION} transition={{ duration: 0.4, delay: 0.08 }} className={`${habitats.length > 0 ? 'lg:col-span-1' : 'lg:col-span-2'} relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6`}>
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
+              <div className="relative space-y-3 sm:space-y-4">
+                <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
+                  <Palette className="h-4 w-4 sm:h-5 sm:w-5" />
+                  <span className="text-[10px] sm:text-xs uppercase tracking-widest">Color Moodboard</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3">
+                  {palette.map((color, idx) => {
+                    const colorLabel = color.name || `Color ${idx + 1}`
+                    return <ColorSwatchCard key={`${colorLabel}-${idx}`} color={color} />
+                  })}
+                </div>
+              </div>
+            </motion.section>
+          )}
 
         {/* Habitat Map */}
         {habitats.length > 0 && (
-          <motion.section {...SECTION_ANIMATION} transition={{ duration: 0.4, delay: 0.11 }} className={`${palette.length > 0 ? 'lg:col-span-1' : 'lg:col-span-2'} rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br from-sky-100/80 via-white/80 to-emerald-100/80 p-4 sm:p-6 dark:bg-gradient-to-br dark:from-[#03191b]/90 dark:via-[#04263d]/85 dark:to-[#071321]/90`}>
+            <motion.section {...SECTION_ANIMATION} transition={{ duration: 0.4, delay: 0.11 }} className={`${palette.length > 0 ? 'lg:col-span-1' : 'lg:col-span-2'} rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br from-sky-100/80 via-white/80 to-emerald-100/80 p-4 sm:p-6 dark:bg-gradient-to-br dark:from-[#03191b]/90 dark:via-[#04263d]/85 dark:to-[#071321]/90`}>
             <div className="space-y-3 sm:space-y-4">
               <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
                 <MapPin className="h-4 w-4 sm:h-5 sm:w-5" />
@@ -661,24 +648,37 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
           </motion.section>
         )}
 
-        {/* Color Moodboard */}
-        {palette.length > 0 && (
-          <motion.section {...SECTION_ANIMATION} transition={{ duration: 0.4, delay: 0.14 }} className={`${habitats.length > 0 ? 'lg:col-span-1' : 'lg:col-span-2'} relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6`}>
+          {/* Seasonal Timeline */}
+          <motion.section {...SECTION_ANIMATION} transition={{ duration: 0.4, delay: 0.14 }} className="lg:col-span-1 relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
             <div className="relative space-y-3 sm:space-y-4">
-              <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
-                <Palette className="h-4 w-4 sm:h-5 sm:w-5" />
-                <span className="text-[10px] sm:text-xs uppercase tracking-widest">Color Moodboard</span>
+              <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-300">
+                <Wind className="h-4 w-4 sm:h-5 sm:w-5" />
+                <span className="text-[10px] sm:text-xs uppercase tracking-widest">Seasonal Timeline</span>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3">
-                {palette.map((color, idx) => {
-                  const colorLabel = color.name || `Color ${idx + 1}`
-                  return <ColorSwatchCard key={`${colorLabel}-${idx}`} color={color} />
-                })}
+              <div className="h-48 sm:h-60">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={timelineData} stackOffset="expand">
+                    <CartesianGrid stroke="rgba(120,113,108,0.16)" vertical={false} />
+                    <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 9 }} />
+                    <YAxis hide domain={[0, 3]} />
+                    <RechartsTooltip content={<TimelineTooltip />} cursor={{ fill: 'rgba(15,118,110,0.08)' }} />
+                    <Bar dataKey="flowering" stackId="timeline" fill={TIMELINE_COLORS.flowering} radius={[8, 8, 0, 0]} />
+                    <Bar dataKey="fruiting" stackId="timeline" fill={TIMELINE_COLORS.fruiting} />
+                    <Bar dataKey="sowing" stackId="timeline" fill={TIMELINE_COLORS.sowing} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex flex-wrap gap-3 sm:gap-4 text-[10px] sm:text-xs text-stone-600 dark:text-stone-400">
+                {Object.entries(TIMELINE_COLORS).map(([label, color]) => (
+                  <span key={label} className="flex items-center gap-1.5 sm:gap-2">
+                    <span className="h-2 w-2 sm:h-2.5 sm:w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+                    {label.charAt(0).toUpperCase() + label.slice(1)}
+                  </span>
+                ))}
               </div>
             </div>
           </motion.section>
-        )}
       </div>
 
       {/* Info Cards Section - Full width for better mobile experience */}
