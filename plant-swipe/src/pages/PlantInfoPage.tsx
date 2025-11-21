@@ -456,7 +456,26 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
     plant.identity?.season?.slice(0, 2).join(' • '),
   ].filter(Boolean) as string[]
   const palette = plant.identity?.colors?.length ? plant.identity.colors : []
-  const infoSections = [
+    const usageItems = [
+      { label: 'Utility', value: plant.utility?.join(', ') || 'Ornamental', icon: <Palette className="h-3.5 w-3.5" /> },
+    ]
+    const hasComestibleUtility = plant.utility?.some((u) => u?.toLowerCase() === 'comestible')
+    const comestiblePartsValue = plant.comestiblePart?.length ? plant.comestiblePart.join(', ') : null
+    const shouldShowComestibleParts = hasComestibleUtility || Boolean(comestiblePartsValue)
+    if (shouldShowComestibleParts) {
+      usageItems.push({
+        label: 'Comestible Parts',
+        value: comestiblePartsValue || 'Not specified',
+        icon: <Leaf className="h-3.5 w-3.5" />,
+      })
+    }
+    usageItems.push({
+      label: 'Recipes',
+      value: plant.usage?.recipesIdeas?.slice(0, 2).join(', ') || 'Seasonal teas',
+      icon: <Droplets className="h-3.5 w-3.5" />,
+    })
+
+    const infoSections = [
     {
       title: 'Care Highlights',
       icon: <Droplets className="h-4 w-4" />,
@@ -469,11 +488,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
     {
       title: 'Usage & Flavor',
       icon: <Leaf className="h-4 w-4" />,
-      items: [
-        { label: 'Utility', value: plant.utility?.join(', ') || 'Ornamental', icon: <Palette className="h-3.5 w-3.5" /> },
-        { label: 'Comestible Parts', value: plant.comestiblePart?.join(', ') || 'Not specified', icon: <Leaf className="h-3.5 w-3.5" /> },
-        { label: 'Recipes', value: plant.usage?.recipesIdeas?.slice(0, 2).join(', ') || 'Seasonal teas', icon: <Droplets className="h-3.5 w-3.5" /> },
-      ],
+        items: usageItems,
     },
     {
       title: 'Ecology',
