@@ -731,15 +731,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         
         // Save current language translation if not English
         if (language && language !== 'en') {
-          const dbLifeCycle = lifeCycleEnum.toDb(plantToSave.identity?.lifeCycle)
-          const dbSeasons = seasonEnum.toDbArray(plantToSave.identity?.season)
-          const dbLivingSpace = livingSpaceEnum.toDb(plantToSave.identity?.livingSpace)
-          const dbMaintenance = maintenanceLevelEnum.toDb(plantToSave.identity?.maintenanceLevel)
-          const dbToxicityHuman = toxicityEnum.toDb(plantToSave.identity?.toxicityHuman)
-          const dbToxicityPets = toxicityEnum.toDb(plantToSave.identity?.toxicityPets)
-          const dbHabitat = habitatEnum.toDbArray(plantToSave.plantCare?.habitat)
-          const primarySource = sources[0]
-          
           const currentLanguageTranslation = {
             plant_id: savedId,
             language: language,
@@ -749,18 +740,18 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             family: plantToSave.identity?.family || null,
             overview: plantToSave.identity?.overview || null,
             promotion_month: normalizedPromotionMonth,
-            life_cycle: dbLifeCycle || null,
+            life_cycle: normalizedLifeCycle || null,
             season: normalizedIdentitySeasons,
             foliage_persistance: normalizeFoliagePersistanceForDb(plantToSave.identity?.foliagePersistance),
-            toxicity_human: dbToxicityHuman || null,
-            toxicity_pets: dbToxicityPets || null,
+            toxicity_human: normalizedToxicityHuman || null,
+            toxicity_pets: normalizedToxicityPets || null,
             allergens: plantToSave.identity?.allergens || [],
             symbolism: plantToSave.identity?.symbolism || [],
-            living_space: dbLivingSpace || null,
+            living_space: normalizedLivingSpace || null,
             composition: normalizeCompositionForDb(plantToSave.identity?.composition),
             maintenance_level: normalizedMaintenance || null,
             origin: plantToSave.plantCare?.origin || [],
-            habitat: dbHabitat,
+            habitat: normalizedHabitat,
             advice_soil: plantToSave.plantCare?.adviceSoil || null,
             advice_mulching: plantToSave.plantCare?.adviceMulching || null,
             advice_fertilizer: plantToSave.plantCare?.adviceFertilizer || null,
