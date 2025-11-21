@@ -428,7 +428,12 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
     const baseScale = 0.45 + (primaryDimension / maxReference) * 0.55
     return clamp(baseScale, 0.35, 1.08) * 1.45
   }, [primaryDimension])
-  const habitats = plant.plantCare?.habitat || []
+    const dimensionLegend = [
+      { label: 'Height', value: height ? `${height} cm` : '—', subLabel: 'Vertical growth' },
+      { label: 'Spread', value: wingspan ? `${wingspan} cm` : '—', subLabel: 'Canopy reach' },
+      { label: 'Spacing', value: spacing ? `${spacing} cm` : '—', subLabel: 'Garden spacing' },
+    ]
+    const habitats = plant.plantCare?.habitat || []
   const activePins = habitats.slice(0, MAP_PIN_POSITIONS.length).map((label, idx) => ({
     ...MAP_PIN_POSITIONS[idx],
     label,
@@ -747,8 +752,17 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                 </div>
               )}
             </div>
-              <div className="relative rounded-2xl border border-emerald-100/70 bg-white/80 p-2 sm:p-3 dark:border-emerald-500/30 dark:bg-[#0f1f1f]/60 min-h-[260px]">
-                <DimensionCube scale={cubeScale} className="h-full w-full" />
+              <div className="grid md:grid-cols-2 gap-3 sm:gap-4 items-stretch">
+                <div className="relative rounded-2xl border border-emerald-100/70 bg-white/80 p-2 sm:p-3 dark:border-emerald-500/30 dark:bg-[#0f1f1f]/60 min-h-[260px]">
+                  <DimensionCube scale={cubeScale} className="h-full w-full" />
+                </div>
+                <div className="flex flex-col gap-2 md:min-h-[260px]">
+                  {dimensionLegend.map((item) => (
+                    <div key={item.label} className="md:flex-1">
+                      <DimensionLegendCard {...item} className="h-full" />
+                    </div>
+                  ))}
+                </div>
               </div>
           </motion.section>
         )}
@@ -963,6 +977,25 @@ const TimelineTooltip = (
     </div>
   )
 }
+
+const DimensionLegendCard: React.FC<{ label: string; value: string; subLabel: string; className?: string }> = ({
+  label,
+  value,
+  subLabel,
+  className,
+}) => (
+  <div
+    className={`rounded-xl border border-emerald-500/30 bg-white/95 px-3.5 sm:px-4 py-2.5 sm:py-3 text-stone-700 shadow-sm backdrop-blur-sm dark:border-emerald-500/40 dark:bg-[#102020]/80 dark:text-emerald-50 ${
+      className || ''
+    }`}
+  >
+    <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-widest text-emerald-700 dark:text-emerald-200">
+      {label}
+    </div>
+    <div className="text-[11px] sm:text-xs text-emerald-600/80 dark:text-emerald-200/80 mb-1">{subLabel}</div>
+    <div className="text-xl sm:text-2xl font-bold text-stone-900 dark:text-white">{value}</div>
+  </div>
+)
 
 const InfoCard: React.FC<{ title: string; icon: React.ReactNode; children: React.ReactNode }> = ({ title, icon, children }) => (
   <Card className="rounded-2xl sm:rounded-3xl h-full border-stone-200/70 dark:border-[#3e3e42]/70">
