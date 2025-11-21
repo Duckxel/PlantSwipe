@@ -295,7 +295,7 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
   }
 }
 
-export const PlantInfoPage: React.FC = () => {
+const PlantInfoPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
   const navigate = useLanguageNavigate()
   const { user, profile, refreshProfile } = useAuth()
@@ -414,8 +414,6 @@ export const PlantInfoPage: React.FC = () => {
     </div>
   )
 }
-
-export default PlantInfoPage
 
 const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
   const careData = React.useMemo(() => buildCareChartData(plant), [plant])
