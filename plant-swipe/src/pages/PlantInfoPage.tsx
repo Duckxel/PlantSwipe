@@ -387,11 +387,7 @@ export const PlantInfoPage: React.FC = () => {
 
   return (
     <>
-      <div className="max-w-6xl mx-auto px-3 sm:px-4 lg:px-6 pt-4 sm:pt-6">
-        <PlantDetails plant={plant} liked={likedIds.includes(plant.id)} onToggleLike={toggleLiked} />
-      </div>
-
-      <div className="max-w-6xl mx-auto mt-4 sm:mt-6 px-3 sm:px-4 lg:px-6 pb-12 sm:pb-16 space-y-4 sm:space-y-6">
+      <div className="max-w-6xl mx-auto px-3 sm:px-4 lg:px-6 pt-4 sm:pt-6 space-y-4 sm:space-y-5">
         <div className="flex flex-wrap items-center gap-2 sm:gap-3 justify-between">
           <Button
             type="button"
@@ -414,6 +410,10 @@ export const PlantInfoPage: React.FC = () => {
             </Button>
           )}
         </div>
+        <PlantDetails plant={plant} liked={likedIds.includes(plant.id)} onToggleLike={toggleLiked} />
+      </div>
+
+      <div className="max-w-6xl mx-auto mt-4 sm:mt-6 px-3 sm:px-4 lg:px-6 pb-12 sm:pb-16">
         <MoreInformationSection plant={plant} />
       </div>
     </>
