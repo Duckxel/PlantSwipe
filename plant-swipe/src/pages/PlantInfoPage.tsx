@@ -867,9 +867,7 @@ const DimensionCube: React.FC<{ scale: number }> = ({ scale }) => {
     let userRotation = 0
     let isDragging = false
     let lastMouseX = 0
-    let lastMouseY = 0
     let lastTouchX = 0
-    let lastTouchY = 0
     const rotationSpeed = 0.005
     const autoRotationSpeed = 0.0012
 
@@ -877,7 +875,6 @@ const DimensionCube: React.FC<{ scale: number }> = ({ scale }) => {
     const handleMouseDown = (e: MouseEvent) => {
       isDragging = true
       lastMouseX = e.clientX
-      lastMouseY = e.clientY
       renderer.domElement.style.cursor = 'grabbing'
     }
 
@@ -886,7 +883,6 @@ const DimensionCube: React.FC<{ scale: number }> = ({ scale }) => {
       const deltaX = e.clientX - lastMouseX
       userRotation += deltaX * rotationSpeed
       lastMouseX = e.clientX
-      lastMouseY = e.clientY
     }
 
     const handleMouseUp = () => {
@@ -899,7 +895,6 @@ const DimensionCube: React.FC<{ scale: number }> = ({ scale }) => {
       if (e.touches.length === 1) {
         isDragging = true
         lastTouchX = e.touches[0].clientX
-        lastTouchY = e.touches[0].clientY
         renderer.domElement.style.cursor = 'grabbing'
       }
     }
@@ -910,7 +905,6 @@ const DimensionCube: React.FC<{ scale: number }> = ({ scale }) => {
       const deltaX = e.touches[0].clientX - lastTouchX
       userRotation += deltaX * rotationSpeed
       lastTouchX = e.touches[0].clientX
-      lastTouchY = e.touches[0].clientY
     }
 
     const handleTouchEnd = () => {
