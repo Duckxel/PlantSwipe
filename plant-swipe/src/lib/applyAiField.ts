@@ -1,6 +1,68 @@
 import type { Plant } from "@/types/plant"
 import { mapFieldToCategory, type PlantFormCategory } from "./plantFormCategories"
-import { expandCompositionFromDb, expandFoliagePersistanceFromDb } from "@/lib/composition"
+import type { EnumTools } from "@/lib/composition"
+import {
+  expandCompositionFromDb,
+  expandFoliagePersistanceFromDb,
+  plantTypeEnum,
+  utilityEnum,
+  comestiblePartEnum,
+  fruitTypeEnum,
+  seasonEnum,
+  lifeCycleEnum,
+  livingSpaceEnum,
+  maintenanceLevelEnum,
+  toxicityEnum,
+  habitatEnum,
+  levelSunEnum,
+  wateringTypeEnum,
+  divisionEnum,
+  soilEnum,
+  mulchingEnum,
+  nutritionNeedEnum,
+  fertilizerEnum,
+  sowTypeEnum,
+  polenizerEnum,
+  conservationStatusEnum,
+} from "@/lib/composition"
+
+type EnumValueResult =
+  | { shouldUpdate: true; value: string | undefined }
+  | { shouldUpdate: false; value?: undefined }
+
+type EnumArrayResult =
+  | { shouldUpdate: true; value: string[] }
+  | { shouldUpdate: false; value?: undefined }
+
+const shouldClearValue = (value: unknown) =>
+  value === null || (typeof value === 'string' && value.trim() === '')
+
+const isExplicitArrayClear = (value: unknown) =>
+  Array.isArray(value) && (value as unknown[]).length === 0
+
+const normalizeEnumValueInput = (enumTool: EnumTools, value: unknown): EnumValueResult => {
+  if (value === undefined) return { shouldUpdate: false }
+  if (shouldClearValue(value)) {
+    return { shouldUpdate: true, value: undefined }
+  }
+  const ui = enumTool.toUi(value)
+  if (ui !== undefined) {
+    return { shouldUpdate: true, value: ui }
+  }
+  return { shouldUpdate: false }
+}
+
+const normalizeEnumArrayInput = (enumTool: EnumTools, value: unknown): EnumArrayResult => {
+  if (value === undefined) return { shouldUpdate: false }
+  const normalized = enumTool.toUiArray(value)
+  if (normalized.length > 0) {
+    return { shouldUpdate: true, value: normalized }
+  }
+  if (isExplicitArrayClear(value) || shouldClearValue(value)) {
+    return { shouldUpdate: true, value: [] }
+  }
+  return { shouldUpdate: false }
+}
 
 export function applyAiFieldToPlant(prev: Plant, fieldKey: string, data: unknown): Plant {
   const next: Plant = { ...prev }
@@ -10,58 +72,145 @@ export function applyAiFieldToPlant(prev: Plant, fieldKey: string, data: unknown
   )
   if (shouldIgnore) return next
 
-    switch (fieldKey) {
+  switch (fieldKey) {
     case 'id':
       return { ...next, id: typeof data === 'string' ? data : next.id }
-    case 'plantType':
-      return { ...next, plantType: typeof data === 'string' ? (data as any) : next.plantType }
-    case 'utility':
-      return { ...next, utility: Array.isArray(data) ? (data as any) : next.utility }
-    case 'comestiblePart':
-      return { ...next, comestiblePart: Array.isArray(data) ? (data as any) : next.comestiblePart }
-    case 'fruitType':
-      return { ...next, fruitType: Array.isArray(data) ? (data as any) : next.fruitType }
+    case 'plantType': {
+      const result = normalizeEnumValueInput(plantTypeEnum as EnumTools, data)
+      if (!result.shouldUpdate) return next
+      return { ...next, plantType: result.value as Plant['plantType'] | undefined }
+    }
+    case 'utility': {
+      const result = normalizeEnumArrayInput(utilityEnum as EnumTools, data)
+      if (!result.shouldUpdate) return next
+      return { ...next, utility: result.value as Plant['utility'] }
+    }
+    case 'comestiblePart': {
+      const result = normalizeEnumArrayInput(comestiblePartEnum as EnumTools, data)
+      if (!result.shouldUpdate) return next
+      return { ...next, comestiblePart: result.value as Plant['comestiblePart'] }
+    }
+    case 'fruitType': {
+      const result = normalizeEnumArrayInput(fruitTypeEnum as EnumTools, data)
+      if (!result.shouldUpdate) return next
+      return { ...next, fruitType: result.value as Plant['fruitType'] }
+    }
     case 'images':
       return { ...next, images: Array.isArray(data) ? (data as any) : next.images }
     case 'colors':
       return { ...next, colors: Array.isArray(data) ? (data as any) : next.colors }
-    case 'seasons':
-      return { ...next, seasons: Array.isArray(data) ? (data as any) : next.seasons }
+    case 'seasons': {
+      const result = normalizeEnumArrayInput(seasonEnum as EnumTools, data)
+      if (!result.shouldUpdate) return next
+      return { ...next, seasons: result.value as Plant['seasons'] }
+    }
     case 'description':
       return { ...next, description: typeof data === 'string' ? data : next.description }
     case 'identity': {
       const payload = { ...(data as Record<string, unknown>) }
       delete (payload as any).colors
-        if (Array.isArray(payload.composition)) {
-          payload.composition = expandCompositionFromDb(payload.composition as string[]) as NonNullable<NonNullable<Plant["identity"]>["composition"]>
-        }
-        if (payload.foliagePersistance !== undefined) {
-          payload.foliagePersistance = expandFoliagePersistanceFromDb(
-            typeof payload.foliagePersistance === 'string'
-              ? payload.foliagePersistance
-              : String(payload.foliagePersistance ?? ''),
-          )
-        }
+      if ('composition' in payload) {
+        payload.composition = expandCompositionFromDb(payload.composition) as any
+      }
+      const lifeCycleResult = normalizeEnumValueInput(lifeCycleEnum as EnumTools, (payload as any).lifeCycle)
+      if (lifeCycleResult.shouldUpdate) {
+        (payload as any).lifeCycle = lifeCycleResult.value
+      }
+      const livingSpaceResult = normalizeEnumValueInput(livingSpaceEnum as EnumTools, (payload as any).livingSpace)
+      if (livingSpaceResult.shouldUpdate) {
+        (payload as any).livingSpace = livingSpaceResult.value
+      }
+      const maintenanceResult = normalizeEnumValueInput(maintenanceLevelEnum as EnumTools, (payload as any).maintenanceLevel)
+      if (maintenanceResult.shouldUpdate) {
+        (payload as any).maintenanceLevel = maintenanceResult.value
+      }
+      const toxicityHumanResult = normalizeEnumValueInput(toxicityEnum as EnumTools, (payload as any).toxicityHuman)
+      if (toxicityHumanResult.shouldUpdate) {
+        (payload as any).toxicityHuman = toxicityHumanResult.value
+      }
+      const toxicityPetsResult = normalizeEnumValueInput(toxicityEnum as EnumTools, (payload as any).toxicityPets)
+      if (toxicityPetsResult.shouldUpdate) {
+        (payload as any).toxicityPets = toxicityPetsResult.value
+      }
+      const seasonResult = normalizeEnumArrayInput(seasonEnum as EnumTools, (payload as any).season)
+      if (seasonResult.shouldUpdate) {
+        (payload as any).season = seasonResult.value
+      }
+      if (payload.foliagePersistance !== undefined) {
+        (payload as any).foliagePersistance = expandFoliagePersistanceFromDb(
+          typeof payload.foliagePersistance === 'string'
+            ? (payload as any).foliagePersistance
+            : String(payload.foliagePersistance ?? ''),
+        )
+      }
       return { ...next, identity: { ...(next.identity || {}), ...payload } }
     }
-    case 'plantCare':
-      return { ...next, plantCare: { ...(next.plantCare || {}), ...(data as Record<string, unknown>) } }
-      case 'growth': {
-        const payload = { ...(data as Record<string, unknown>) }
-        const normalizeMonthsProp = (prop: 'sowingMonth' | 'floweringMonth' | 'fruitingMonth') => {
-          if (prop in payload) {
-            payload[prop] = normalizeMonthArray(payload[prop])
-          }
-        }
-        normalizeMonthsProp('sowingMonth')
-        normalizeMonthsProp('floweringMonth')
-        normalizeMonthsProp('fruitingMonth')
-        return { ...next, growth: { ...(next.growth || {}), ...payload } }
+    case 'plantCare': {
+      const payload = { ...(data as Record<string, unknown>) }
+      const habitatResult = normalizeEnumArrayInput(habitatEnum as EnumTools, (payload as any).habitat)
+      if (habitatResult.shouldUpdate) {
+        (payload as any).habitat = habitatResult.value
       }
+      const levelSunResult = normalizeEnumValueInput(levelSunEnum as EnumTools, (payload as any).levelSun)
+      if (levelSunResult.shouldUpdate) {
+        (payload as any).levelSun = levelSunResult.value
+      }
+      const wateringTypeResult = normalizeEnumArrayInput(wateringTypeEnum as EnumTools, (payload as any).wateringType)
+      if (wateringTypeResult.shouldUpdate) {
+        (payload as any).wateringType = wateringTypeResult.value
+      }
+      const divisionResult = normalizeEnumArrayInput(divisionEnum as EnumTools, (payload as any).division)
+      if (divisionResult.shouldUpdate) {
+        (payload as any).division = divisionResult.value
+      }
+      const soilResult = normalizeEnumArrayInput(soilEnum as EnumTools, (payload as any).soil)
+      if (soilResult.shouldUpdate) {
+        (payload as any).soil = soilResult.value
+      }
+      const mulchingResult = normalizeEnumArrayInput(mulchingEnum as EnumTools, (payload as any).mulching)
+      if (mulchingResult.shouldUpdate) {
+        (payload as any).mulching = mulchingResult.value
+      }
+      const nutritionResult = normalizeEnumArrayInput(nutritionNeedEnum as EnumTools, (payload as any).nutritionNeed)
+      if (nutritionResult.shouldUpdate) {
+        (payload as any).nutritionNeed = nutritionResult.value
+      }
+      const fertilizerResult = normalizeEnumArrayInput(fertilizerEnum as EnumTools, (payload as any).fertilizer)
+      if (fertilizerResult.shouldUpdate) {
+        (payload as any).fertilizer = fertilizerResult.value
+      }
+      return { ...next, plantCare: { ...(next.plantCare || {}), ...payload } }
+    }
+    case 'growth': {
+      const payload = { ...(data as Record<string, unknown>) }
+      const normalizeMonthsProp = (prop: 'sowingMonth' | 'floweringMonth' | 'fruitingMonth') => {
+        if (prop in payload) {
+          payload[prop] = normalizeMonthArray(payload[prop])
+        }
+      }
+      normalizeMonthsProp('sowingMonth')
+      normalizeMonthsProp('floweringMonth')
+      normalizeMonthsProp('fruitingMonth')
+      const sowTypeResult = normalizeEnumArrayInput(sowTypeEnum as EnumTools, (payload as any).sowType)
+      if (sowTypeResult.shouldUpdate) {
+        (payload as any).sowType = sowTypeResult.value
+      }
+        return { ...next, growth: { ...(next.growth || {}), ...payload } }
+    }
     case 'usage':
       return { ...next, usage: { ...(next.usage || {}), ...(data as Record<string, unknown>) } }
-    case 'ecology':
-      return { ...next, ecology: { ...(next.ecology || {}), ...(data as Record<string, unknown>) } }
+    case 'ecology': {
+      const payload = { ...(data as Record<string, unknown>) }
+      const polenizerResult = normalizeEnumArrayInput(polenizerEnum as EnumTools, (payload as any).polenizer)
+      if (polenizerResult.shouldUpdate) {
+        (payload as any).polenizer = polenizerResult.value
+      }
+      const conservationResult = normalizeEnumValueInput(conservationStatusEnum as EnumTools, (payload as any).conservationStatus)
+      if (conservationResult.shouldUpdate) {
+        (payload as any).conservationStatus = conservationResult.value
+      }
+      return { ...next, ecology: { ...(next.ecology || {}), ...payload } }
+    }
     case 'danger':
       return { ...next, danger: { ...(next.danger || {}), ...(data as Record<string, unknown>) } }
     case 'miscellaneous': {
