@@ -507,8 +507,10 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       const medicinalNotes = formatTextValue(usage.adviceMedicinal)
       const infusionNotes = formatTextValue(usage.adviceInfusion)
       const adminCommentary = formatTextValue(meta.adminCommentary)
-      const createdStamp = formatAuditStamp(meta.createdBy, meta.createdAt ?? meta.createdTime)
-      const updatedStamp = formatAuditStamp(meta.updatedBy, meta.updatedAt ?? meta.updatedTime)
+      const createdTimestamp = formatTimestampDetailed(meta.createdAt ?? meta.createdTime)
+      const updatedTimestamp = formatTimestampDetailed(meta.updatedAt ?? meta.updatedTime)
+      const createdByLabel = formatTextValue(meta.createdBy)
+      const updatedByLabel = formatTextValue(meta.updatedBy)
       const aromaDescriptor = formatBooleanDescriptor(usage.aromatherapy, 'Essential oils', 'Not for oils')
       const infusionDescriptor = formatBooleanDescriptor(usage.infusion, 'Infusion ready', 'Not for infusions')
       const melliferousDescriptor = formatBooleanDescriptor(
@@ -684,9 +686,11 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       ])
       const recordItems = filterInfoItems([
         { label: 'Admin Commentary', value: adminCommentary, variant: 'note' },
+        { label: 'Created On', value: createdTimestamp },
+        { label: 'Created By', value: createdByLabel || 'Not recorded' },
+        { label: 'Last Updated On', value: updatedTimestamp },
+        { label: 'Last Updated By', value: updatedByLabel || 'Not recorded' },
         { label: 'Sources', value: formatSourcesList(misc.sources) },
-        { label: 'Created', value: createdStamp },
-        { label: 'Updated', value: updatedStamp },
       ])
       const infoSections = [
         { title: 'Care Highlights', icon: <Droplets className="h-4 w-4" />, items: careHighlights },
@@ -1143,18 +1147,17 @@ const formatSourcesList = (sources?: PlantSource[] | null) => {
   )
 }
 
-const formatDateLabel = (value?: string | null) => {
+const formatTimestampDetailed = (value?: string | null) => {
   if (!value) return null
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
-}
-
-const formatAuditStamp = (user?: string | null, timestamp?: string | null) => {
-  const dateLabel = formatDateLabel(timestamp)
-  if (user && dateLabel) return `${user} • ${dateLabel}`
-  if (user) return user
-  return dateLabel
+  return date.toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 export default PlantInfoPage
