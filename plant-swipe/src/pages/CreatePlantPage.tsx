@@ -938,9 +938,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           name: translatedName,
           given_names: translatedGivenNames,
           scientific_name: plant.identity?.scientificName || null,
-          family: plant.identity?.family
-            ? await translateText(plant.identity.family, target, sourceLang)
-            : plant.identity?.family || null,
+          family: plant.identity?.family || null,
           overview: plant.identity?.overview
             ? await translateText(plant.identity.overview, target, sourceLang)
             : plant.identity?.overview || null,
