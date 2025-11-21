@@ -471,6 +471,20 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       icon: <Droplets className="h-3.5 w-3.5" />,
     })
 
+    const [hoveredMonth, setHoveredMonth] = React.useState<string | null>(null)
+
+    const handleTimelineHover = React.useCallback((state: { activeLabel?: string | number } | undefined) => {
+      if (state?.activeLabel && typeof state.activeLabel === 'string') {
+        setHoveredMonth(state.activeLabel)
+      } else {
+        setHoveredMonth(null)
+      }
+    }, [])
+
+    const clearTimelineHover = React.useCallback(() => {
+      setHoveredMonth(null)
+    }, [])
+
     const infoSections = [
     {
       title: 'Care Highlights',
@@ -550,15 +564,15 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                 </div>
               )}
             </div>
-            <div className="flex flex-col md:flex-row gap-3 sm:gap-4">
-              <div className="relative w-full md:w-1/2 rounded-2xl border border-emerald-100/70 bg-white/80 p-2 sm:p-3 dark:border-emerald-500/30 dark:bg-[#0f1f1f]/60">
-                <div className="relative w-full aspect-square">
-                  <DimensionCube scale={cubeScale} className="h-full w-full" />
-                </div>
+            <div className="grid md:grid-cols-2 gap-3 sm:gap-4 items-stretch">
+              <div className="relative rounded-2xl border border-emerald-100/70 bg-white/80 p-2 sm:p-3 dark:border-emerald-500/30 dark:bg-[#0f1f1f]/60 min-h-[260px]">
+                <DimensionCube scale={cubeScale} className="h-full w-full" />
               </div>
-              <div className="flex-1 flex flex-col gap-2">
+              <div className="flex flex-col gap-2 md:min-h-[260px]">
                 {dimensionLegend.map((item) => (
-                  <DimensionLegendCard key={item.label} {...item} />
+                  <div key={item.label} className="md:flex-1">
+                    <DimensionLegendCard {...item} className="h-full" />
+                  </div>
                 ))}
               </div>
             </div>
@@ -629,27 +643,34 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
           )}
 
           {/* Seasonal Timeline */}
-          <motion.section
-            {...SECTION_ANIMATION}
-            transition={{ duration: 0.4, delay: 0.1 }}
-            className={`${palette.length > 0 ? 'lg:col-span-2' : 'lg:col-span-3'} relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6`}
-          >
+            <motion.section
+              {...SECTION_ANIMATION}
+              transition={{ duration: 0.4, delay: 0.1 }}
+              className={`${palette.length > 0 ? 'lg:col-span-2' : 'lg:col-span-3'} relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6`}
+            >
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
             <div className="relative space-y-3 sm:space-y-4">
-              <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-300">
-                <Wind className="h-4 w-4 sm:h-5 sm:w-5" />
-                <span className="text-[10px] sm:text-xs uppercase tracking-widest">Seasonal Timeline</span>
-              </div>
-              <div className="h-52 sm:h-64">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-300">
+                    <Wind className="h-4 w-4 sm:h-5 sm:w-5" />
+                    <span className="text-[10px] sm:text-xs uppercase tracking-widest">Seasonal Timeline</span>
+                  </div>
+                  {hoveredMonth ? (
+                    <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-200">{hoveredMonth}</span>
+                  ) : (
+                    <span className="text-[10px] uppercase tracking-wide text-stone-400 dark:text-stone-500">Hover a month</span>
+                  )}
+                </div>
+                <div className="h-52 sm:h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={timelineData} stackOffset="expand">
+                      <BarChart data={timelineData} stackOffset="expand" onMouseMove={handleTimelineHover} onMouseLeave={clearTimelineHover}>
                     <CartesianGrid stroke="rgba(120,113,108,0.16)" vertical={false} />
                     <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 9 }} />
                     <YAxis hide domain={[0, 3]} />
                     <RechartsTooltip content={<TimelineTooltip />} cursor={{ fill: 'rgba(15,118,110,0.08)' }} />
-                    <Bar dataKey="sowing" stackId="timeline" fill={TIMELINE_COLORS.sowing} radius={[0, 0, 0, 0]} />
-                    <Bar dataKey="fruiting" stackId="timeline" fill={TIMELINE_COLORS.fruiting} radius={[0, 0, 0, 0]} />
-                    <Bar dataKey="flowering" stackId="timeline" fill={TIMELINE_COLORS.flowering} shape={<RoundedTopBar />} />
+                    <Bar dataKey="sowing" stackId="timeline" fill={TIMELINE_COLORS.sowing} shape={RoundedSowingBar} />
+                    <Bar dataKey="fruiting" stackId="timeline" fill={TIMELINE_COLORS.fruiting} shape={RoundedFruitingBar} />
+                    <Bar dataKey="flowering" stackId="timeline" fill={TIMELINE_COLORS.flowering} shape={RoundedFloweringBar} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -740,15 +761,15 @@ const CareChartTooltip = ({ active, payload: tooltipPayload }: TooltipProps<numb
 }
 
 const TimelineTooltip = (
-  props: TooltipProps<number, string> & { payload?: Array<{ payload?: { flowering: number; fruiting: number; sowing: number; label?: string } }> },
+  props: TooltipProps<number, string> & { payload?: Array<{ payload?: { flowering: number; fruiting: number; sowing: number; month?: string } }> },
 ) => {
   const { active, payload: tooltipPayload } = props
   const data = tooltipPayload && tooltipPayload.length > 0 ? tooltipPayload[0].payload : null
   if (!active || !data) return null
-  const displayLabel = typeof tooltipPayload?.[0]?.payload?.label === 'string' ? tooltipPayload[0].payload?.label! : ''
+  const displayLabel = typeof data?.month === 'string' ? data.month : ''
   return (
     <div className="rounded-xl border border-sky-400/30 bg-white/95 px-3 py-2 text-xs text-stone-700 shadow-lg dark:border-sky-500/40 dark:bg-slate-900/95 dark:text-stone-100">
-      <p className="text-[11px] uppercase tracking-widest text-emerald-600/75">{displayLabel}</p>
+      <p className="text-[11px] uppercase tracking-widest text-emerald-600/75">{displayLabel || '—'}</p>
       <div className="space-y-1 mt-1">
         {Object.entries(data).map(([key, value]) =>
           value ? (
@@ -763,19 +784,38 @@ const TimelineTooltip = (
   )
 }
 
+type TimelineBarPayload = { flowering?: number; fruiting?: number; sowing?: number }
+
 type RoundedBarProps = React.ComponentProps<typeof Rectangle> & {
-  payload?: { flowering?: number }
+  payload?: TimelineBarPayload
+  value?: number
 }
 
-const RoundedTopBar: React.FC<RoundedBarProps> = (props) => {
-  const { payload, ...rest } = props
-  const hasFlowering = (payload?.flowering ?? 0) > 0
-  const radius: [number, number, number, number] = hasFlowering ? [8, 8, 0, 0] : [0, 0, 0, 0]
-  return <Rectangle {...rest} radius={radius} />
+const createRoundedBar = (higherKeys: (keyof TimelineBarPayload)[]) => {
+  const Shape: React.FC<RoundedBarProps> = ({ payload, value, height, ...rest }) => {
+    if ((value ?? 0) <= 0 || (height ?? 0) <= 0) return null
+    const hasHigher = higherKeys.some((key) => (payload?.[key] ?? 0) > 0)
+    const radius: [number, number, number, number] = hasHigher ? [0, 0, 0, 0] : [8, 8, 0, 0]
+    return <Rectangle {...rest} payload={payload} height={height} radius={radius} />
+  }
+  return Shape
 }
 
-const DimensionLegendCard: React.FC<{ label: string; value: string; subLabel: string }> = ({ label, value, subLabel }) => (
-  <div className="rounded-xl border border-emerald-500/30 bg-white/95 px-3.5 sm:px-4 py-2.5 sm:py-3 text-stone-700 shadow-sm backdrop-blur-sm dark:border-emerald-500/40 dark:bg-[#102020]/80 dark:text-emerald-50">
+const RoundedFloweringBar = createRoundedBar([])
+const RoundedFruitingBar = createRoundedBar(['flowering'])
+const RoundedSowingBar = createRoundedBar(['flowering', 'fruiting'])
+
+const DimensionLegendCard: React.FC<{ label: string; value: string; subLabel: string; className?: string }> = ({
+  label,
+  value,
+  subLabel,
+  className,
+}) => (
+  <div
+    className={`rounded-xl border border-emerald-500/30 bg-white/95 px-3.5 sm:px-4 py-2.5 sm:py-3 text-stone-700 shadow-sm backdrop-blur-sm dark:border-emerald-500/40 dark:bg-[#102020]/80 dark:text-emerald-50 ${
+      className || ''
+    }`}
+  >
     <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-widest text-emerald-700 dark:text-emerald-200">
       {label}
     </div>
