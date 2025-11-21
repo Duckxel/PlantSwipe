@@ -381,7 +381,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
         </div>
       )}
 
-      <div className="grid gap-3 sm:gap-4 grid-cols-2 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-y-3 md:gap-y-4 gap-x-2 md:gap-x-3">
         {stats.map((stat) =>
           stat.visible ? (
               <Card key={stat.label} className={`bg-gradient-to-br ${stat.gradient} text-white shadow-lg`}>
