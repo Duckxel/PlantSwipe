@@ -964,20 +964,14 @@ const buildColorSwatches = (plant: Plant): ColorSwatchDescriptor[] => {
   const identityColors: string[] = []
   if (plant.identity?.colors && Array.isArray(plant.identity.colors)) {
     plant.identity.colors.forEach((color) => {
-      if (!color) return
+      if (!color || typeof color !== "object") return
       
       // Handle PlantColor object with name and hexCode
-      if (typeof color === "object" && "name" in color) {
-        const plantColor = color as { name?: string; hexCode?: string }
-        if (plantColor.hexCode && typeof plantColor.hexCode === "string" && plantColor.hexCode.trim().length > 0) {
-          identityColors.push(plantColor.hexCode.trim())
-        } else if (plantColor.name && typeof plantColor.name === "string" && plantColor.name.trim().length > 0) {
-          identityColors.push(plantColor.name.trim())
-        }
-      } 
-      // Handle string fallback
-      else if (typeof color === "string" && color.trim().length > 0) {
-        identityColors.push(color.trim())
+      const plantColor = color as { name?: string; hexCode?: string }
+      if (plantColor.hexCode && typeof plantColor.hexCode === "string" && plantColor.hexCode.trim().length > 0) {
+        identityColors.push(plantColor.hexCode.trim())
+      } else if (plantColor.name && typeof plantColor.name === "string" && plantColor.name.trim().length > 0) {
+        identityColors.push(plantColor.name.trim())
       }
     })
   }
