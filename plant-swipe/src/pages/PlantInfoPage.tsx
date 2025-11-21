@@ -466,7 +466,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
     plant.plantCare?.levelSun,
     plant.ecology?.conservationStatus,
   ].filter(Boolean) as string[]
-  const palette = plant.identity?.colors?.length ? plant.identity.colors : DEFAULT_MOODBOARD
+  const palette = plant.identity?.colors?.length ? plant.identity.colors : []
   const infoSections = [
     {
       title: 'Care Highlights',
@@ -492,7 +492,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       items: [
         { label: 'Habitat', value: habitats.join(', ') || 'Garden adaptable', icon: <MapPin className="h-3.5 w-3.5" /> },
         { label: 'Pollinators', value: plant.ecology?.polenizer?.join(', ') || 'Bee friendly', icon: <Wind className="h-3.5 w-3.5" /> },
-        { label: 'Companions', value: plant.miscellaneous?.companions?.join(', ') || 'Works well with herbs', icon: <Sprout className="h-3.5 w-3.5" /> },
+        { label: 'Ground Effect', value: plant.ecology?.groundEffect || 'Neutral', icon: <Sprout className="h-3.5 w-3.5" /> },
       ],
     },
     {
@@ -519,41 +519,33 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         </p>
       </div>
       
-      {/* Dimensions Section - Full width for mobile */}
-      {(height !== null || wingspan !== null || spacing !== null) && (
-        <div className="space-y-3 sm:space-y-4">
-          <div className="rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-50/70 via-white/60 to-white/10 p-4 sm:p-5 dark:border-emerald-500/30 dark:from-emerald-500/10 dark:via-transparent dark:to-transparent">
-            <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3 mb-4 sm:mb-5">
-              <div>
-                <p className="text-[10px] sm:text-[11px] uppercase tracking-[0.2em] text-emerald-700/70 dark:text-emerald-300/70">3D Dimensions</p>
-                <p className="text-base sm:text-lg font-semibold text-stone-900 dark:text-white">{plant.name}</p>
-              </div>
-              <Badge className="rounded-full border-none bg-emerald-500/20 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-100 backdrop-blur-sm text-[10px] sm:text-xs px-2 sm:px-3 py-0.5 sm:py-1">
-                <Palette className="mr-1 h-3 w-3 sm:h-3.5 sm:w-3.5" /> Interactive
-              </Badge>
-            </div>
-            <div className="grid gap-4 sm:gap-5 lg:grid-cols-[1.2fr,0.8fr]">
-              <div className="space-y-3 sm:space-y-4 order-2 lg:order-1">
-                <div className="relative aspect-square w-full overflow-hidden rounded-2xl sm:rounded-[32px] border border-emerald-500/25 bg-gradient-to-br from-emerald-50/80 via-white/60 to-transparent shadow-[0_18px_50px_rgba(16,185,129,0.2)] dark:border-emerald-500/30 dark:from-emerald-900/30 dark:via-[#0f1f1f]/80 dark:to-transparent">
+      {/* Dynamic Grid Layout - More interesting flow */}
+      <div className="grid gap-3 sm:gap-4 lg:grid-cols-3">
+        
+        {/* 3D Dimensions - Compact card in first column */}
+        {(height !== null || wingspan !== null || spacing !== null) && (
+          <motion.section {...SECTION_ANIMATION} transition={{ duration: 0.4, delay: 0.02 }} className="lg:col-span-1 rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-50/70 via-white/60 to-white/10 p-3 sm:p-4 dark:border-emerald-500/30 dark:from-emerald-500/10 dark:via-transparent dark:to-transparent">
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-xl overflow-hidden border border-emerald-500/25 bg-gradient-to-br from-emerald-50/80 via-white/60 to-transparent shadow-sm dark:border-emerald-500/30 dark:from-emerald-900/30 dark:via-[#0f1f1f]/80 dark:to-transparent">
                   <DimensionCube scale={cubeScale} />
-                  <div className="pointer-events-none absolute inset-2 sm:inset-3 rounded-xl sm:rounded-[28px] border border-white/30 dark:border-emerald-500/30" />
-                  <div className="pointer-events-none absolute inset-x-4 sm:inset-x-6 bottom-2 sm:bottom-3 h-10 sm:h-14 rounded-full bg-emerald-400/30 blur-3xl" />
+                </div>
+                <div>
+                  <p className="text-[9px] sm:text-[10px] uppercase tracking-[0.2em] text-emerald-700/70 dark:text-emerald-300/70">3D View</p>
+                  <p className="text-[10px] sm:text-xs font-semibold text-stone-900 dark:text-white">Dimensions</p>
                 </div>
               </div>
-              <div className="grid gap-2.5 sm:gap-3 order-1 lg:order-2">
-                {dimensionLegend.map((item) => (
-                  <DimensionLegendCard key={item.label} {...item} />
-                ))}
-              </div>
             </div>
-          </div>
-        </div>
-      )}
-      
-      <div className="grid gap-3 sm:gap-4 lg:grid-cols-2">
+            <div className="space-y-2">
+              {dimensionLegend.map((item) => (
+                <DimensionLegendCard key={item.label} {...item} />
+              ))}
+            </div>
+          </motion.section>
+        )}
 
-        {/* Care Chart */}
-        <motion.section {...SECTION_ANIMATION} transition={{ duration: 0.4, delay: 0.05 }} className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6">
+        {/* Care Chart - Spans 2 columns if dimensions exist, otherwise 3 */}
+        <motion.section {...SECTION_ANIMATION} transition={{ duration: 0.4, delay: 0.05 }} className={`${(height !== null || wingspan !== null || spacing !== null) ? 'lg:col-span-2' : 'lg:col-span-3'} relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6`}>
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)] dark:bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.18),_transparent_60%)]" />
           <div className="relative space-y-3 sm:space-y-4">
             <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-300">
@@ -588,9 +580,12 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
             </div>
           </div>
         </motion.section>
+      </div>
 
+      {/* Second Row - Seasonal Timeline, Habitat Map, Color Moodboard */}
+      <div className="grid gap-3 sm:gap-4 lg:grid-cols-3">
         {/* Seasonal Timeline */}
-        <motion.section {...SECTION_ANIMATION} transition={{ duration: 0.4, delay: 0.08 }} className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6">
+        <motion.section {...SECTION_ANIMATION} transition={{ duration: 0.4, delay: 0.08 }} className="lg:col-span-1 relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
           <div className="relative space-y-3 sm:space-y-4">
             <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-300">
@@ -623,7 +618,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
 
         {/* Habitat Map */}
         {habitats.length > 0 && (
-          <motion.section {...SECTION_ANIMATION} transition={{ duration: 0.4, delay: 0.11 }} className="rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br from-sky-100/80 via-white/80 to-emerald-100/80 p-4 sm:p-6 dark:bg-gradient-to-br dark:from-[#03191b]/90 dark:via-[#04263d]/85 dark:to-[#071321]/90">
+          <motion.section {...SECTION_ANIMATION} transition={{ duration: 0.4, delay: 0.11 }} className={`${palette.length > 0 ? 'lg:col-span-1' : 'lg:col-span-2'} rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br from-sky-100/80 via-white/80 to-emerald-100/80 p-4 sm:p-6 dark:bg-gradient-to-br dark:from-[#03191b]/90 dark:via-[#04263d]/85 dark:to-[#071321]/90`}>
             <div className="space-y-3 sm:space-y-4">
               <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
                 <MapPin className="h-4 w-4 sm:h-5 sm:w-5" />
@@ -666,7 +661,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
 
         {/* Color Moodboard */}
         {palette.length > 0 && (
-          <motion.section {...SECTION_ANIMATION} transition={{ duration: 0.4, delay: 0.14 }} className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6">
+          <motion.section {...SECTION_ANIMATION} transition={{ duration: 0.4, delay: 0.14 }} className={`${habitats.length > 0 ? 'lg:col-span-1' : 'lg:col-span-2'} relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6`}>
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
             <div className="relative space-y-3 sm:space-y-4">
               <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
@@ -792,7 +787,8 @@ const DimensionCube: React.FC<{ scale: number }> = ({ scale }) => {
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
     renderer.setPixelRatio(window.devicePixelRatio || 1)
-    renderer.setSize(container.clientWidth, container.clientWidth)
+    const size = Math.min(container.clientWidth, container.clientHeight) || container.clientWidth
+    renderer.setSize(size, size)
     container.appendChild(renderer.domElement)
 
     const scene = new THREE.Scene()
@@ -855,7 +851,8 @@ const DimensionCube: React.FC<{ scale: number }> = ({ scale }) => {
 
     const handleResize = () => {
       if (!container) return
-      renderer.setSize(container.clientWidth, container.clientWidth)
+      const size = Math.min(container.clientWidth, container.clientHeight) || container.clientWidth
+      renderer.setSize(size, size)
       camera.aspect = 1
       camera.updateProjectionMatrix()
     }

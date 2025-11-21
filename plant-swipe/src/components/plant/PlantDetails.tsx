@@ -417,8 +417,8 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
     plant.ecology?.conservationStatus,
   )
   const dangerHasContent = hasSectionData(plant.danger?.pests, plant.danger?.diseases)
+  const hasCompanions = companionDetails.length > 0 || (plant.miscellaneous?.companions?.filter(Boolean) ?? []).length > 0
   const miscHasContent = hasSectionData(
-    companionDetails.length ? companionDetails : plant.miscellaneous?.companions,
     plant.miscellaneous?.tags,
     plant.miscellaneous?.sources,
   )
@@ -914,38 +914,43 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant, liked, onTogg
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        {miscHasContent && (
-          <Section title="Companions & Tags" icon={<Users className="h-4 w-4" />}>
-            <div className="space-y-4">
-              {companionDetails.length > 0 ? (
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {companionDetails.map((companion) => (
-                    <CompanionCard key={companion.id} id={companion.id} name={companion.name} image={companion.image} />
-                  ))}
-                </div>
-              ) : (
-                <FieldRow label="Companions" value={listOrTags(plant.miscellaneous?.companions)} />
-              )}
-              <div className="grid gap-3 sm:grid-cols-2">
-                <FieldRow label="Tags" value={listOrTags(plant.miscellaneous?.tags)} />
-                <FieldRow
-                  label="Sources"
-                  value={(plant.miscellaneous?.sources || []).length ? (
-                    <div className="space-y-2 text-sm">
-                      {(plant.miscellaneous?.sources || []).map((src, idx) => (
-                        <div key={`${src.name}-${idx}`} className="flex flex-col rounded border px-3 py-2 bg-white/70 dark:bg-[#151b15]">
-                          <div className="font-medium">{src.name}</div>
-                          {src.url && (
-                            <a href={src.url} target="_blank" rel="noreferrer" className="text-blue-600 underline break-all">
-                              {src.url}
-                            </a>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  ) : undefined}
-                />
+        {/* Companions Section - Only show if companions exist */}
+        {hasCompanions && (
+          <Section title="Companions" icon={<Users className="h-4 w-4" />}>
+            {companionDetails.length > 0 ? (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {companionDetails.map((companion) => (
+                  <CompanionCard key={companion.id} id={companion.id} name={companion.name} image={companion.image} />
+                ))}
               </div>
+            ) : (
+              <FieldRow label="Companions" value={listOrTags(plant.miscellaneous?.companions)} />
+            )}
+          </Section>
+        )}
+
+        {/* Tags & Sources Section */}
+        {miscHasContent && (
+          <Section title="Tags & Sources" icon={<Info className="h-4 w-4" />}>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FieldRow label="Tags" value={listOrTags(plant.miscellaneous?.tags)} />
+              <FieldRow
+                label="Sources"
+                value={(plant.miscellaneous?.sources || []).length ? (
+                  <div className="space-y-2 text-sm">
+                    {(plant.miscellaneous?.sources || []).map((src, idx) => (
+                      <div key={`${src.name}-${idx}`} className="flex flex-col rounded border px-3 py-2 bg-white/70 dark:bg-[#151b15]">
+                        <div className="font-medium">{src.name}</div>
+                        {src.url && (
+                          <a href={src.url} target="_blank" rel="noreferrer" className="text-blue-600 underline break-all">
+                            {src.url}
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : undefined}
+              />
             </div>
           </Section>
         )}
