@@ -1017,22 +1017,19 @@ const InfoItem: React.FC<{ label: string; value?: React.ReactNode; icon?: React.
 }) => {
   if (value === undefined || value === null) return null
   if (typeof value === 'string' && !value.trim()) return null
-  if (variant === 'note') {
-    return (
-      <div className="py-1 sm:py-1.5">
-        <div className="rounded-2xl border border-sky-200/70 bg-sky-50/90 px-3 py-2.5 text-sky-900 shadow-sm dark:border-sky-500/40 dark:bg-[#0f1f28]/70 dark:text-sky-100">
-          <div className="flex items-center gap-2 text-[10px] sm:text-xs font-semibold uppercase tracking-[0.3em] text-sky-800 dark:text-sky-200">
-            <Info className="h-3.5 w-3.5" />
-            [!NOTE]
-            <span className="text-[9px] sm:text-[10px] font-normal normal-case tracking-normal text-sky-700 dark:text-sky-100">
-              {label}
-            </span>
+    if (variant === 'note') {
+      return (
+        <div className="py-1 sm:py-1.5">
+          <div className="rounded-2xl border border-sky-200/70 bg-sky-50/90 px-3 py-2.5 text-sky-900 shadow-sm dark:border-sky-500/40 dark:bg-[#0f1f28]/70 dark:text-sky-100">
+            <div className="flex items-center gap-2 text-[10px] sm:text-xs font-semibold uppercase tracking-[0.3em] text-sky-800 dark:text-sky-200">
+              <Info className="h-3.5 w-3.5" />
+              <span className="tracking-[0.25em]">{label}</span>
+            </div>
+            <div className="mt-1 text-xs sm:text-sm leading-relaxed text-sky-900 dark:text-sky-100">{value}</div>
           </div>
-          <div className="mt-1 text-xs sm:text-sm leading-relaxed text-sky-900 dark:text-sky-100">{value}</div>
         </div>
-      </div>
-    )
-  }
+      )
+    }
   return (
     <div className="flex items-start gap-2 sm:gap-3 py-1 sm:py-1.5">
       <div className="h-4 w-4 sm:h-5 sm:w-5 rounded-md border border-stone-200 bg-stone-100 flex items-center justify-center flex-shrink-0 mt-0.5 text-stone-600 dark:border-emerald-900/40 dark:bg-[#0f1f28] dark:text-emerald-200">
