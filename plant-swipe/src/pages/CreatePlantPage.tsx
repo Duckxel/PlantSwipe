@@ -931,14 +931,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           const dbToxicityHuman = toxicityEnum.toDb(plant.identity?.toxicityHuman)
           const dbToxicityPets = toxicityEnum.toDb(plant.identity?.toxicityPets)
           const dbHabitat = habitatEnum.toDbArray(plant.plantCare?.habitat)
-          const dbLevelSun = levelSunEnum.toDb(plant.plantCare?.levelSun)
-          const dbWateringType = wateringTypeEnum.toDbArray(plant.plantCare?.wateringType)
-          const dbSoil = soilEnum.toDbArray(plant.plantCare?.soil)
-          const dbMulching = mulchingEnum.toDbArray(plant.plantCare?.mulching)
-          const dbNutritionNeed = nutritionNeedEnum.toDbArray(plant.plantCare?.nutritionNeed)
-          const dbFertilizer = fertilizerEnum.toDbArray(plant.plantCare?.fertilizer)
-          const dbSowType = sowTypeEnum.toDbArray(plant.growth?.sowType)
-          const dbPolenizer = polenizerEnum.toDbArray(plant.ecology?.polenizer)
 
           translatedRows.push({
           plant_id: plant.id,
@@ -989,14 +981,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             ground_effect: plant.ecology?.groundEffect
               ? await translateText(plant.ecology.groundEffect, target, sourceLang)
               : plant.ecology?.groundEffect || null,
-            level_sun: dbLevelSun || null,
-            watering_type: dbWateringType,
-            soil: dbSoil,
-            mulching: dbMulching,
-            nutrition_need: dbNutritionNeed,
-            fertilizer: dbFertilizer,
-            sow_type: dbSowType,
-            polenizer: dbPolenizer,
             admin_commentary: plant.meta?.adminCommentary
             ? await translateText(plant.meta.adminCommentary, target, sourceLang)
             : plant.meta?.adminCommentary || null,
