@@ -7,6 +7,7 @@ import { supabase } from './supabaseClient'
 import type { SupportedLanguage } from './i18n'
 import type { Plant, PlantImage, PlantSeason } from '@/types/plant'
 import { getPrimaryPhotoUrl, normalizePlantPhotos } from '@/lib/photos'
+import { monthSlugToNumber, monthSlugsToNumbers } from '@/lib/months'
 import {
   expandCompositionFromDb,
   expandFoliagePersistanceFromDb,
@@ -434,21 +435,22 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
           return acc
         }, {} as Record<string, string>)
 
-        const plant: Plant = {
-          id: String(basePlant.id),
-          name: translation.name || basePlant.name || '',
-          plantType: (plantTypeEnum.toUi(basePlant.plant_type) as Plant["plantType"]) || undefined,
-          utility: utilityEnum.toUiArray(basePlant.utility) as Plant["utility"],
-          comestiblePart: comestiblePartEnum.toUiArray(basePlant.comestible_part) as Plant["comestiblePart"],
-          fruitType: fruitTypeEnum.toUiArray(basePlant.fruit_type) as Plant["fruitType"],
-        images,
-        image: primaryImage,
-          identity: {
-          givenNames: translation.given_names || basePlant.given_names || [],
-          scientificName: translation.scientific_name || basePlant.scientific_name || undefined,
-          family: translation.family || basePlant.family || undefined,
-          overview: translation.overview || basePlant.overview || undefined,
-            promotionMonth: translation.promotion_month || basePlant.promotion_month || undefined,
+          const plant: Plant = {
+            id: String(basePlant.id),
+            name: translation.name || basePlant.name || '',
+            plantType: (plantTypeEnum.toUi(basePlant.plant_type) as Plant["plantType"]) || undefined,
+            utility: utilityEnum.toUiArray(basePlant.utility) as Plant["utility"],
+            comestiblePart: comestiblePartEnum.toUiArray(basePlant.comestible_part) as Plant["comestiblePart"],
+            fruitType: fruitTypeEnum.toUiArray(basePlant.fruit_type) as Plant["fruitType"],
+            images,
+            image: primaryImage,
+            identity: {
+              givenNames: translation.given_names || basePlant.given_names || [],
+              scientificName: translation.scientific_name || basePlant.scientific_name || undefined,
+              family: translation.family || basePlant.family || undefined,
+              overview: translation.overview || basePlant.overview || undefined,
+              promotionMonth:
+                monthSlugToNumber(translation.promotion_month || basePlant.promotion_month) ?? undefined,
             lifeCycle:
               (lifeCycleEnum.toUi(translation.life_cycle || basePlant.life_cycle) as NonNullable<Plant["identity"]>["lifeCycle"]) ||
               undefined,
@@ -501,10 +503,10 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
             schedules,
           },
         },
-        growth: {
-            sowingMonth: basePlant.sowing_month || [],
-            floweringMonth: basePlant.flowering_month || [],
-            fruitingMonth: basePlant.fruiting_month || [],
+          growth: {
+            sowingMonth: monthSlugsToNumbers(basePlant.sowing_month),
+            floweringMonth: monthSlugsToNumbers(basePlant.flowering_month),
+            fruitingMonth: monthSlugsToNumbers(basePlant.fruiting_month),
           height: basePlant.height_cm || undefined,
           wingspan: basePlant.wingspan_cm || undefined,
           tutoring: basePlant.tutoring || false,

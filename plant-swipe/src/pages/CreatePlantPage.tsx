@@ -15,6 +15,7 @@ import { translateArray, translateText } from "@/lib/deepl"
 import { buildCategoryProgress, createEmptyCategoryProgress, plantFormCategoryOrder, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
 import { useParams } from "react-router-dom"
 import { plantSchema } from "@/lib/plantSchema"
+import { monthNumberToSlug, monthNumbersToSlugs, monthSlugToNumber, monthSlugsToNumbers } from "@/lib/months"
 import {
   expandCompositionFromDb,
   normalizeCompositionForDb,
@@ -51,47 +52,6 @@ const AI_EXCLUDED_FIELDS = new Set(['name', 'image', 'imageurl', 'image_url', 'i
 const IN_PROGRESS_STATUS: PlantMeta['status'] = 'In Progres'
 const SECTION_LOG_LIMIT = 12
 const OPTIONAL_FIELD_EXCEPTIONS = new Set<string>()
-const MONTH_SLUGS = [
-  'january',
-  'february',
-  'march',
-  'april',
-  'may',
-  'june',
-  'july',
-  'august',
-  'september',
-  'october',
-  'november',
-  'december',
-] as const
-
-const monthNumberToSlug = (value?: number | null): string | null => {
-  if (!value) return null
-  const index = value - 1
-  if (index < 0 || index >= MONTH_SLUGS.length) return null
-  return MONTH_SLUGS[index]
-}
-
-const monthNumbersToSlugs = (values?: number[] | null): string[] =>
-  Array.isArray(values)
-    ? values
-        .map((entry) => monthNumberToSlug(entry))
-        .filter((entry): entry is string => Boolean(entry))
-    : []
-
-const monthSlugToNumber = (slug?: string | null): number | null => {
-  if (!slug) return null
-  const index = MONTH_SLUGS.indexOf(slug.toLowerCase() as (typeof MONTH_SLUGS)[number])
-  return index === -1 ? null : index + 1
-}
-
-const monthSlugsToNumbers = (values?: string[] | null): number[] =>
-  Array.isArray(values)
-    ? values
-        .map((entry) => monthSlugToNumber(entry))
-        .filter((entry): entry is number => typeof entry === 'number')
-    : []
 
 const formatStatusForUi = (value?: string | null): PlantMeta['status'] => {
   const map: Record<string, PlantMeta['status']> = {
@@ -359,8 +319,8 @@ async function loadPlant(id: string): Promise<Plant | null> {
       givenNames: data.given_names || [],
       scientificName: data.scientific_name || undefined,
       family: data.family || undefined,
-      overview: data.overview || undefined,
-        promotionMonth: data.promotion_month || undefined,
+        overview: data.overview || undefined,
+        promotionMonth: monthSlugToNumber(data.promotion_month) ?? undefined,
         lifeCycle: (lifeCycleEnum.toUi(data.life_cycle) as NonNullable<Plant["identity"]>["lifeCycle"]) || undefined,
         season: seasonEnum.toUiArray(data.season) as NonNullable<Plant["identity"]>["season"],
         foliagePersistance: expandFoliagePersistanceFromDb(data.foliage_persistance),
@@ -633,6 +593,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         const normalizedSowType = sowTypeEnum.toDbArray(plantToSave.growth?.sowType)
         const normalizedPolenizer = polenizerEnum.toDbArray(plantToSave.ecology?.polenizer)
         const normalizedConservationStatus = conservationStatusEnum.toDb(plantToSave.ecology?.conservationStatus)
+        const normalizedPromotionMonth = monthNumberToSlug(plantToSave.identity?.promotionMonth)
         const payload = {
           id: plantId,
           name: plantToSave.name.trim(),
@@ -640,11 +601,11 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           utility: normalizedUtility,
           comestible_part: normalizedComestible,
           fruit_type: normalizedFruit,
-        given_names: plantToSave.identity?.givenNames || [],
-        scientific_name: plantToSave.identity?.scientificName || null,
-        family: plantToSave.identity?.family || null,
+          given_names: plantToSave.identity?.givenNames || [],
+          scientific_name: plantToSave.identity?.scientificName || null,
+          family: plantToSave.identity?.family || null,
           overview: plantToSave.identity?.overview || null,
-          promotion_month: plantToSave.identity?.promotionMonth || null,
+          promotion_month: normalizedPromotionMonth,
           life_cycle: normalizedLifeCycle || null,
           season: normalizedIdentitySeasons,
           foliage_persistance: normalizeFoliagePersistanceForDb(plantToSave.identity?.foliagePersistance),
@@ -969,7 +930,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           overview: plant.identity?.overview
             ? await translateText(plant.identity.overview, target, sourceLang)
             : plant.identity?.overview || null,
-            promotion_month: plant.identity?.promotionMonth || null,
+            promotion_month: monthNumberToSlug(plant.identity?.promotionMonth),
             life_cycle: dbLifeCycle || null,
             season: dbSeasons,
             foliage_persistance: normalizeFoliagePersistanceForDb(plant.identity?.foliagePersistance),

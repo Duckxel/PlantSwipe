@@ -9,6 +9,7 @@ import { useLanguage, useLanguageNavigate } from '@/lib/i18nRouting'
 import { usePageMetadata } from '@/hooks/usePageMetadata'
 import { Button } from '@/components/ui/button'
 import { ChevronLeft, Pencil } from 'lucide-react'
+import { monthSlugToNumber, monthSlugsToNumbers } from '@/lib/months'
 import {
   expandCompositionFromDb,
   expandFoliagePersistanceFromDb,
@@ -79,8 +80,8 @@ async function fetchPlantWithRelations(id: string): Promise<Plant | null> {
       givenNames: data.given_names || [],
       scientificName: data.scientific_name || undefined,
       family: data.family || undefined,
-      overview: data.overview || undefined,
-        promotionMonth: data.promotion_month || undefined,
+        overview: data.overview || undefined,
+        promotionMonth: monthSlugToNumber(data.promotion_month) ?? undefined,
         lifeCycle: (lifeCycleEnum.toUi(data.life_cycle) as NonNullable<Plant["identity"]>["lifeCycle"]) || undefined,
         season: seasonEnum.toUiArray(data.season) as NonNullable<Plant["identity"]>["season"],
         foliagePersistance: expandFoliagePersistanceFromDb(data.foliage_persistance),
@@ -119,9 +120,9 @@ async function fetchPlantWithRelations(id: string): Promise<Plant | null> {
       },
     },
       growth: {
-        sowingMonth: data.sowing_month || [],
-        floweringMonth: data.flowering_month || [],
-        fruitingMonth: data.fruiting_month || [],
+        sowingMonth: monthSlugsToNumbers(data.sowing_month),
+        floweringMonth: monthSlugsToNumbers(data.flowering_month),
+        fruitingMonth: monthSlugsToNumbers(data.fruiting_month),
         height: data.height_cm || undefined,
         wingspan: data.wingspan_cm || undefined,
         tutoring: data.tutoring || false,
